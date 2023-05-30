@@ -10,6 +10,7 @@
 
 import numpy as np
 import sciris as sc
+from collections import defaultdict
 
 #### PEOPLE/POPULATIONS
 
@@ -73,9 +74,9 @@ class People():
         # This is implemented as People.add_module rather than
         # Module.add_to_people(people) or similar because its primary
         # role is to modify the
-        self.__setattr__(module.name, sc.objdict)
+        self.__setattr__(module.name, sc.objdict())
         for state in module.states:
-            self.__setattr__(state.name, state.new(self.n))
+            self[module.name][state.name] = state.new(self.n)
 
     # These methods provide a single function to call that handles
     # autonomous updates of the people, so it simplifies Sim.run()
@@ -171,34 +172,43 @@ class Module():
     # Base module contains states/attributes that all modules have
     default_pars = {}
 
-    def __init__(self, pars):
-        self.pars = sc.odict()
-        for k,v in self.default_pars:
-            if k in pars:
-                self.pars[k] = pars[k]
-            else:
-                self.pars[k] = v
+    def __init__(self):
+        raise Exception('Modules should not be instantiated but their classes should be used directly')
 
-    def initialize(self, sim):
+    @classmethod
+    def initialize(cls, sim):
         # Add this module to a People instance. This would always involve calling People.add_module
         # but subsequently modules could have their own logic for initializing the default values
         # and initializing any outputs that are required
-        sim.people.add_module(self)
+        sim.people.add_module(cls)
 
-    def update_states_pre(self, people):
+        # Merge parameters
+        if cls.name not in sim.pars:
+            sim.pars[cls.name] = sc.dcp(cls.default_pars)
+        else:
+            for k,v in cls.default_pars.items():
+                if k not in sim.pars[cls.name]:
+                    sim.pars[cls.name][k] = v
+
+
+    @classmethod
+    def update_states_pre(cld, people):
         # Carry out any autonomous state changes at the start of the timestep
         pass
 
-    def update_results(self):
+    @classmethod
+    def update_results(cld):
         pass
 
-    def finalize_results(self):
+    @classmethod
+    def finalize_results(cld):
         pass
 
+    @classmethod
     @property
-    def name(self):
+    def name(cls):
         # The module name is a lower-case version of its class name
-        return self.__class__.name.lower()
+        return cls.__name__.lower()
 
 
 class HIV(Module):
@@ -230,7 +240,7 @@ class HIV(Module):
 
 class Result(np.lib.mixins.NDArrayOperatorsMixin):
     def __init__(self, module, name, n, dtype):
-        self.module = module.name if module else None
+        self.module = module if module else None
         self.name = name
         self.values = np.zeros(n, dtype=dtype)
 
@@ -265,7 +275,8 @@ class Gonorrhea(Module):
     def __init__(self, pars):
         super().__init__(pars)
 
-    def update_states_pre(self, sim):
+    @classmethod
+    def update_states_pre(cls, sim):
         # What if something in here should depend on another module?
         # I guess we could just check for it e.g., 'if HIV in sim.modules' or
         # 'if 'hiv' in sim.people' or something
@@ -273,28 +284,31 @@ class Gonorrhea(Module):
         sim.people.dead[gonorrhea_deaths] = True
         sim.people.ti_dead[gonorrhea_deaths] = sim.ti
 
-
-    def initialize(self, sim):
-        super().initialize(sim)
-
-        # TODO - not a huge fan of having the result key duplicate the Result name
-        sim.results[self.name,'n_susceptible'] = Result(self.name, 'n_susceptible', sim.n, dtype=int)
-        sim.results[self.name,'n_infected'] = Result(self.name, 'n_infected', sim.n, dtype=int)
-        sim.results[self.name,'prevalence'] = Result(self.name, 'prevalence', sim.n, dtype=float)
-        sim.results[self.name,'new_infections'] = Result(self.name, 'n_infected', sim.n, dtype=int)
-
+    @classmethod
+    def initialize(cls, sim):
         # Do any steps in this method depend on what other modules are going to be added? We can inspect
         # them via sim.modules at this point
+        super(Gonorrhea, cls).initialize(sim)
 
-    def update_results(self, sim):
+
+        # TODO - not a huge fan of having the result key duplicate the Result name
+        sim.results[cls.name,'n_susceptible'] = Result(cls.name, 'n_susceptible', sim.n, dtype=int)
+        sim.results[cls.name,'n_infected'] = Result(cls.name, 'n_infected', sim.n, dtype=int)
+        sim.results[cls.name,'prevalence'] = Result(cls.name, 'prevalence', sim.n, dtype=float)
+        sim.results[cls.name,'new_infections'] = Result(cls.name, 'n_infected', sim.n, dtype=int)
+
+
+    @classmethod
+    def update_results(cls, sim):
         # TODO sim.results.gonorrhea.susceptible or sim.results['gonorrhea.susceptible']?
-        sim.results[self.name,'n_susceptible'][sim.ti] = np.count_nonzero(sim.people.gonorrhea.susceptible)
-        sim.results[self.name,'n_infected'][sim.ti] = np.count_nonzero(sim.people.gonorrhea.infected)
-        sim.results[self.name,'prevalence'][sim.ti] = sim.results.gonorrhea.infected[sim.ti] / sim.people.n
-        sim.results[self.name,'new_infections'] = sim.people.gonorrhea.ti_infected == sim.ti
+        sim.results[cls.name,'n_susceptible'][sim.ti] = np.count_nonzero(sim.people.gonorrhea.susceptible)
+        sim.results[cls.name,'n_infected'][sim.ti] = np.count_nonzero(sim.people.gonorrhea.infected)
+        sim.results[cls.name,'prevalence'][sim.ti] = sim.results.gonorrhea.infected[sim.ti] / sim.people.n
+        sim.results[cls.name,'new_infections'] = sim.people.gonorrhea.ti_infected == sim.ti
 
-
-
+    @classmethod
+    def infect(cls, sim):
+        sim.pars['gonorrhea']
 
 class Analyzer():
     # TODO - what if the analyzer depends on a specific variable? How does the analyzer know which modules are required?
@@ -323,6 +337,13 @@ class Analyzer():
 # A module is pre-loaded with parameters EXCLUDING person-generation pars
 
 class Sim():
+
+    default_pars = sc.objdict(
+        n=1000,
+        npts=30,
+        dt=1
+    )
+
     def __init__(self, people=None, modules=None, pars=None, interventions=None, analyzers=None):
         # TODO - clearer options for time units?
         #   ti - index self.ti = 0
@@ -331,14 +352,19 @@ class Sim():
         # date - '20200601'
 
         self.ti = 0
-        self.dt = 1 # could get this from pars of course
 
-        self.pars = pars if pars is not None else sc.objdict()  # What pars are these? Are they by module? Are the parameters consumed when the module is created?
-        self.people = people if people is not None else make_people(self.pars.get('n',1000))
+        self.pars = sc.dcp(self.default_pars)
+        if pars is not None:
+            self.pars.update(pars)
+        self.people = people if people is not None else make_people(self.pars['n'])
         self.modules = sc.promotetolist(modules)
         self.interventions = sc.promotetolist(interventions)
         self.analyzers = sc.promotetolist(analyzers)
         self.results = {}
+
+    @property
+    def t(self):
+        return self.ti*self.dt
 
     @property
     def n(self):
@@ -364,12 +390,12 @@ class Sim():
         self.results.append(res)
 
     def step(self):
-        self.t += self.pars.dt
+        self.ti += self.pars.dt
 
         self.people.update_states_pre(sim)
 
         for module in self.modules:
-            module.infect(self.people)
+            module.infect(self)
 
         self.people.update_results(sim)
 
@@ -378,8 +404,10 @@ class Sim():
 
 # TODO - should the module be stateful or stateless?
 
-people = make_people(1000)
-sim = Sim(people, [Gonorrhea])
-sim.run()
+people = make_people(100)
 
+pars = defaultdict(dict)
+
+sim = Sim(people, [Gonorrhea], pars=pars)
+sim.run()
 
