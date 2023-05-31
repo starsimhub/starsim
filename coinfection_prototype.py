@@ -11,6 +11,7 @@
 import numpy as np
 import sciris as sc
 from collections import defaultdict
+import matplotlib.pyplot as plt
 
 #### PEOPLE/POPULATIONS
 
@@ -25,7 +26,7 @@ class State():
         return np.full(n, dtype=self.dtype, fill_value=self.fill_value)
 
 
-class People():
+class People(sc.prettyobj):
     # TODO - cater to use cases of
     #   - Initial contact networks are independent of modules and we want to pre-generate agents and their contact layers
     #   - Initial contact networks depend on modules, and we need to add the modules before adding subsequent contact layers
@@ -68,12 +69,15 @@ class People():
         self.age[:] = np.random.random(n)
         self.female[:] = np.random.randint(0,2,n)
         self.contacts = sc.odict()  # Dict containing Layer instances
+        self._modules = []
 
     def add_module(self, module):
         # Initialize all of the states associated with a module
         # This is implemented as People.add_module rather than
         # Module.add_to_people(people) or similar because its primary
         # role is to modify the
+        if hasattr(self,module.name):
+            raise Exception(f'Module {module.name} already added')
         self.__setattr__(module.name, sc.objdict())
         for state in module.states:
             self[module.name][state.name] = state.new(self.n)
@@ -91,25 +95,29 @@ class People():
             module.update_states_pre(sim)
 
     def initialize(self, sim):
-        sim.results['n_people'] = Result(None, 'n_people', sim.n, dtype=int)
-        sim.results['new_deaths'] = Result(None, 'new_deaths', sim.n, dtype=int)
+        sim.results['n_people'] = Result(None, 'n_people', sim.npts, dtype=int)
+        sim.results['new_deaths'] = Result(None, 'new_deaths', sim.npts, dtype=int)
 
     def update_results(self, sim):
-        sim.results['new_deaths'] = sim.people.ti_dead == sim.ti
+        sim.results['new_deaths'] = np.count_nonzero(sim.people.ti_dead == sim.ti)
 
         for module in sim.modules:
             module.update_results(sim)
 
     def finalize_results(self, sim):
-        for module in sim.modules:
-            module.finalize_results(sim)
+        pass
+
 
 
 class Layer(sc.odict):
     def __init__(self):
+        super().__init__()
         self.p1 = np.array([], dtype=int)
         self.p2 = np.array([], dtype=int)
         self.beta = np.array([], dtype=float)
+
+    def __repr__(self):
+        return f'<{self.__class__.__name__}, {len(self.members)} members, {len(self.p1)} contacts>'
 
     @property
     def members(self):
@@ -159,14 +167,39 @@ class RandomDynamicSexualLayer(Layer):
         # Then add new relationships for unpartnered people
         self.add_partnerships(people)
 
+class StaticLayer(Layer):
+    # Randomly make some partnerships that don't change over time
+    def __init__(self, people, sex='mf'):
+        super().__init__()
+
+        if sex[0]=='m':
+            p1 = people.indices[people.male]
+        else:
+            p1 = people.indices[~people.male]
+
+        if sex[1]=='f':
+            p2 = people.indices[~people.male]
+        else:
+            p2 = people.indices[people.male]
+
+        self.p1 = p1
+        self.p2 = np.random.choice(p2, len(p1), replace=True)
+        self.beta = np.ones_like(p1)
 
 
 def make_people(n):
     people = People(n)
     people.contacts['random'] = RandomDynamicSexualLayer(people)
+    people.contacts['msm'] = StaticLayer(people,'mm')
+
+    # relationship types, homosexual/heterosexual, births?
+    # do we model pregnancies? track parents? households?
     return people
 
 ##### DISEASE MODULES
+
+# timestep concerns - how to
+
 
 class Module():
     # Base module contains states/attributes that all modules have
@@ -184,24 +217,27 @@ class Module():
 
         # Merge parameters
         if cls.name not in sim.pars:
-            sim.pars[cls.name] = sc.dcp(cls.default_pars)
+            sim.pars[cls.name] = sc.objdict(sc.dcp(cls.default_pars))
         else:
+            if ~isinstance(sim.pars[cls.name], sc.objdict):
+                sim.pars[cls.name] = sc.objdict(sim.pars[cls.name])
             for k,v in cls.default_pars.items():
                 if k not in sim.pars[cls.name]:
                     sim.pars[cls.name][k] = v
 
+        sim.results[cls.name] = sc.objdict()
 
     @classmethod
-    def update_states_pre(cld, people):
+    def update_states_pre(cld, sim):
         # Carry out any autonomous state changes at the start of the timestep
         pass
 
     @classmethod
-    def update_results(cld):
+    def update_results(cls, sim):
         pass
 
     @classmethod
-    def finalize_results(cld):
+    def finalize_results(cls, sim):
         pass
 
     @classmethod
@@ -226,15 +262,13 @@ class HIV(Module):
     }
 
 
-    def __init__(self, pars):
-        super().__init__()
-
-
-    def update_states_pre(self):
+    @classmethod
+    def update_states_pre(cls, sim):
         # TODO - What if something in here should depend on another module?
         pass
 
-    def init_results( sim):
+    @classmethod
+    def init_results(cls, sim):
         pass
 
 
@@ -247,6 +281,7 @@ class Result(np.lib.mixins.NDArrayOperatorsMixin):
     def __getitem__(self, *args, **kwargs):  return self.values.__getitem__(*args, **kwargs)
     def __setitem__(self, *args, **kwargs): return self.values.__setitem__(*args, **kwargs)
     def __len__(self): return len(self.values)
+    def __repr__(self): return f'Result({self.module},{self.name}): {self.values.__repr__()}'
 
     # These methods allow automatic use of functions like np.sum, np.exp, etc.
     # with higher performance in some cases
@@ -265,11 +300,13 @@ class Gonorrhea(Module):
         State('infected', bool, False),
         State('ti_infected', float, 0),
         State('ti_recovered', float, 0),
-        State('ti_dead', float, 0), # Death due to gonorrhea
+        State('ti_dead', float, np.nan), # Death due to gonorrhea
     ]
 
     default_pars = {
-        'dur_inf': 0.1, # not modelling diagnosis or treatment explicitly here
+        'dur_inf': 3, # not modelling diagnosis or treatment explicitly here
+        'p_death': 0.2,
+        'initial': 3,
     }
 
     def __init__(self, pars):
@@ -290,25 +327,55 @@ class Gonorrhea(Module):
         # them via sim.modules at this point
         super(Gonorrhea, cls).initialize(sim)
 
+        # Pick some initially infected agents
+        cls.infect(sim, np.random.choice(sim.people.uid, sim.pars[cls.name]['initial']))
+
+        if 'beta' not in sim.pars[cls.name]:
+            sim.pars[cls.name].beta = sc.objdict({k:1 for k in sim.people.contacts})
 
         # TODO - not a huge fan of having the result key duplicate the Result name
-        sim.results[cls.name,'n_susceptible'] = Result(cls.name, 'n_susceptible', sim.n, dtype=int)
-        sim.results[cls.name,'n_infected'] = Result(cls.name, 'n_infected', sim.n, dtype=int)
-        sim.results[cls.name,'prevalence'] = Result(cls.name, 'prevalence', sim.n, dtype=float)
-        sim.results[cls.name,'new_infections'] = Result(cls.name, 'n_infected', sim.n, dtype=int)
+        sim.results[cls.name]['n_susceptible'] = Result(cls.name, 'n_susceptible', sim.npts, dtype=int)
+        sim.results[cls.name]['n_infected'] = Result(cls.name, 'n_infected', sim.npts, dtype=int)
+        sim.results[cls.name]['prevalence'] = Result(cls.name, 'prevalence', sim.npts, dtype=float)
+        sim.results[cls.name]['new_infections'] = Result(cls.name, 'n_infected', sim.npts, dtype=int)
 
 
     @classmethod
     def update_results(cls, sim):
-        # TODO sim.results.gonorrhea.susceptible or sim.results['gonorrhea.susceptible']?
-        sim.results[cls.name,'n_susceptible'][sim.ti] = np.count_nonzero(sim.people.gonorrhea.susceptible)
-        sim.results[cls.name,'n_infected'][sim.ti] = np.count_nonzero(sim.people.gonorrhea.infected)
-        sim.results[cls.name,'prevalence'][sim.ti] = sim.results.gonorrhea.infected[sim.ti] / sim.people.n
-        sim.results[cls.name,'new_infections'] = sim.people.gonorrhea.ti_infected == sim.ti
+        sim.results[cls.name]['n_susceptible'][sim.ti] = np.count_nonzero(sim.people.gonorrhea.susceptible)
+        sim.results[cls.name]['n_infected'][sim.ti] = np.count_nonzero(sim.people.gonorrhea.infected)
+        sim.results[cls.name]['prevalence'][sim.ti] = sim.results[cls.name].n_infected[sim.ti] / sim.people.n
+        sim.results[cls.name]['new_infections'] = np.count_nonzero(sim.people[cls.name].ti_infected == sim.ti)
 
     @classmethod
-    def infect(cls, sim):
-        sim.pars['gonorrhea']
+    def transmit(cls, sim):
+        for k, layer in sim.people.contacts.items():
+            if k in sim.pars[cls.name]['beta']:
+                rel_trans = (sim.people.gonorrhea.infected & ~sim.people.dead).astype(float)
+                rel_sus = (sim.people.gonorrhea.susceptible & ~sim.people.dead).astype(float)
+                for a,b in [[layer.p1,layer.p2],[layer.p2,layer.p1]]:
+                    # probability of a->b transmission
+                    p_transmit = rel_trans[a]*rel_sus[b]*layer.beta*sim.pars[cls.name]['beta'][k]
+                    cls.infect(sim, b[np.random.random(len(a))<p_transmit])
+
+    @classmethod
+    def infect(cls, sim, uids):
+        sim.people[cls.name].susceptible[uids] = False
+        sim.people[cls.name].infected[uids] = True
+        sim.people[cls.name].ti_infected[uids] = sim.ti
+
+        dur = sim.ti+np.random.poisson(sim.pars[cls.name]['dur_inf']/sim.pars.dt, len(uids))
+        dead = np.random.random(len(uids))<sim.pars[cls.name].p_death
+        sim.people[cls.name].ti_recovered[uids[~dead]] = dur[~dead]
+        sim.people[cls.name].ti_dead[uids[dead]] = dur[dead]
+
+        # if HIV in sim.modules:
+        #     # check CD4 count
+        #     # increase susceptibility where relevant
+
+
+# class MyComplexHIVModel(HIV):
+#     ...
 
 class Analyzer():
     # TODO - what if the analyzer depends on a specific variable? How does the analyzer know which modules are required?
@@ -330,11 +397,6 @@ class Analyzer():
 
 # class ART(Intervention):
 
-
-
-
-# Sanitize modules
-# A module is pre-loaded with parameters EXCLUDING person-generation pars
 
 class Sim():
 
@@ -360,7 +422,11 @@ class Sim():
         self.modules = sc.promotetolist(modules)
         self.interventions = sc.promotetolist(interventions)
         self.analyzers = sc.promotetolist(analyzers)
-        self.results = {}
+        self.results = sc.objdict()
+
+    @property
+    def dt(self):
+        return self.pars['dt']
 
     @property
     def t(self):
@@ -370,9 +436,15 @@ class Sim():
     def n(self):
         return len(self.people)
 
-    def initialize(self):
+    @property
+    def tvec(self):
+        return np.arange(0,self.npts)*self.dt
 
-        self.results = {}
+    @property
+    def npts(self):
+        return self.pars['npts']
+
+    def initialize(self):
 
         self.people.initialize(sim)
         for module in self.modules:
@@ -380,14 +452,13 @@ class Sim():
 
 
     def run(self):
-
         self.initialize()
-
-        for i in range(self.pars.npts):
+        for i in range(self.pars.npts-1):
             self.step()
+        self.people.finalize_results(sim)
 
-        res = self.people.update(t)
-        self.results.append(res)
+        for module in self.modules:
+            module.finalize_results(sim)
 
     def step(self):
         self.ti += self.pars.dt
@@ -395,7 +466,7 @@ class Sim():
         self.people.update_states_pre(sim)
 
         for module in self.modules:
-            module.infect(self)
+            module.transmit(self)
 
         self.people.update_results(sim)
 
@@ -405,9 +476,29 @@ class Sim():
 # TODO - should the module be stateful or stateless?
 
 people = make_people(100)
-
 pars = defaultdict(dict)
-
+pars['gonorrhea']['beta'] = {'random':0.3,'msm':0.5}
 sim = Sim(people, [Gonorrhea], pars=pars)
 sim.run()
+plt.figure()
+plt.plot(sim.tvec, sim.results.gonorrhea.n_infected)
 
+
+# # Custom module by user
+# class Gonorrhea_DR(Gonorrhea):
+#     default_pars = sc.dcp(Gonorrhea.default_pars)
+#     default_pars['p_death'] = 0.3
+#
+# How should coinfection with these two modules be prevented?
+#
+#
+# people = make_people(100)
+# pars = defaultdict(dict)
+# pars['gonorrhea']['beta'] = {'random':0.1,'msm':0.15}
+# pars['gonorrhea_dr']['beta'] = {'random':0.05,'msm':0.1}
+# sim = Sim(people, [Gonorrhea, Gonorrhea_DR], pars=pars)
+# sim.run()
+# plt.figure()
+# plt.plot(sim.tvec, sim.results.gonorrhea.prevalence)
+# plt.plot(sim.tvec, sim.results.gonorrhea_dr.prevalence, color='r')
+# plt.show()
