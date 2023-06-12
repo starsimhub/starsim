@@ -94,3 +94,10 @@ class People(sc.prettyobj):
 
     def finalize_results(self, sim):
         pass
+
+
+def make_people(pars):
+    # A generic function to handle making people via parameters during sim.initialize()
+    # Users could also call this function to pre-generate people using the same routine beforehand
+    # Or otherwise, they can write a custom equivalent of make_people and pass it to the sim directly
+    raise NotImplementedError

@@ -53,28 +53,64 @@ class HIV(Module):
     states = [
         State('susceptible', bool, True),
         State('infected', bool, False),
+        State('ti_infected', float, 0),
         State('on_art', bool, False),
-        State("cd4", float, np.nan),
+        State("cd4", float, 500),
     ]
 
     default_pars = {
         'cd4_min': 100,
         'cd4_max': 500,
-        'cd4_rate': 2,
+        'cd4_rate': 5,
+        'initial': 3,
     }
-
 
     @classmethod
     def update_states_pre(cls, sim):
-        # TODO - What if something in here should depend on another module?
-        pass
+        # Update CD4
+        sim.people.hiv.cd4[~sim.people.dead & sim.people.hiv.infected & sim.people.hiv.on_art] += (sim.pars.hiv.cd4_max - sim.people.hiv.cd4[~sim.people.dead & sim.people.hiv.infected & sim.people.hiv.on_art])/sim.pars.hiv.cd4_rate
+        sim.people.hiv.cd4[~sim.people.dead & sim.people.hiv.infected & ~sim.people.hiv.on_art] += (sim.pars.hiv.cd4_min - sim.people.hiv.cd4[~sim.people.dead & sim.people.hiv.infected & ~sim.people.hiv.on_art])/sim.pars.hiv.cd4_rate
 
     @classmethod
-    def init_results(cls, sim):
-        pass
+    def initialize(cls, sim):
+        super(HIV, cls).initialize(sim)
 
+        # Pick some initially infected agents
+        cls.infect(sim, np.random.choice(sim.people.uid, sim.pars[cls.name]['initial']))
 
+        if 'beta' not in sim.pars[cls.name]:
+            sim.pars[cls.name].beta = sc.objdict({k:1 for k in sim.people.contacts})
 
+        sim.results[cls.name]['n_susceptible'] = Result(cls.name, 'n_susceptible', sim.npts, dtype=int)
+        sim.results[cls.name]['n_infected'] = Result(cls.name, 'n_infected', sim.npts, dtype=int)
+        sim.results[cls.name]['prevalence'] = Result(cls.name, 'prevalence', sim.npts, dtype=float)
+        sim.results[cls.name]['new_infections'] = Result(cls.name, 'n_infected', sim.npts, dtype=int)
+        sim.results[cls.name]['n_art'] = Result(cls.name, 'n_art', sim.npts, dtype=int)
+
+    @classmethod
+    def update_results(cls, sim):
+        sim.results[cls.name]['n_susceptible'][sim.ti] = np.count_nonzero(sim.people.hiv.susceptible)
+        sim.results[cls.name]['n_infected'][sim.ti] = np.count_nonzero(sim.people.hiv.infected)
+        sim.results[cls.name]['prevalence'][sim.ti] = sim.results[cls.name].n_infected[sim.ti] / sim.people.n
+        sim.results[cls.name]['new_infections'] = np.count_nonzero(sim.people[cls.name].ti_infected == sim.ti)
+        sim.results[cls.name]['n_art'] = np.count_nonzero(~sim.people.dead & sim.people[cls.name].on_art)
+
+    @classmethod
+    def transmit(cls, sim):
+        for k, layer in sim.people.contacts.items():
+            if k in sim.pars[cls.name]['beta']:
+                rel_trans = (sim.people[cls.name].infected & ~sim.people.dead).astype(float)
+                rel_sus = (sim.people[cls.name].susceptible & ~sim.people.dead).astype(float)
+                for a,b in [[layer.p1,layer.p2],[layer.p2,layer.p1]]:
+                    # probability of a->b transmission
+                    p_transmit = rel_trans[a]*rel_sus[b]*layer.beta*sim.pars[cls.name]['beta'][k]
+                    cls.infect(sim, b[np.random.random(len(a))<p_transmit])
+
+    @classmethod
+    def infect(cls, sim, uids):
+        sim.people[cls.name].susceptible[uids] = False
+        sim.people[cls.name].infected[uids] = True
+        sim.people[cls.name].ti_infected[uids] = sim.ti
 
 
 class Gonorrhea(Module):
@@ -134,8 +170,8 @@ class Gonorrhea(Module):
     def transmit(cls, sim):
         for k, layer in sim.people.contacts.items():
             if k in sim.pars[cls.name]['beta']:
-                rel_trans = (sim.people.gonorrhea.infected & ~sim.people.dead).astype(float)
-                rel_sus = (sim.people.gonorrhea.susceptible & ~sim.people.dead).astype(float)
+                rel_trans = (sim.people[cls.name].infected & ~sim.people.dead).astype(float)
+                rel_sus = (sim.people[cls.name].susceptible & ~sim.people.dead).astype(float)
                 for a,b in [[layer.p1,layer.p2],[layer.p2,layer.p1]]:
                     # probability of a->b transmission
                     p_transmit = rel_trans[a]*rel_sus[b]*layer.beta*sim.pars[cls.name]['beta'][k]
@@ -156,6 +192,3 @@ class Gonorrhea(Module):
         #     # check CD4 count
         #     # increase susceptibility where relevant
 
-
-# class MyComplexHIVModel(HIV):
-#     ...

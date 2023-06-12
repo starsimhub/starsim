@@ -24,96 +24,52 @@ def make_people(n):
     return people
 
 
-class Sim():
-
-    default_pars = sc.objdict(
-        n=1000,
-        npts=30,
-        dt=1
-    )
-
-    def __init__(self, people=None, modules=None, pars=None, interventions=None, analyzers=None):
-        # TODO - clearer options for time units?
-        #   ti - index self.ti = 0
-        #    t - floating point year e.g., 2020.5
-        #   dt - simulation primary step size (years per step)  # TODO - use-case for model-specific dt?
-        # date - '20200601'
-
-        self.ti = 0
-
-        self.pars = sc.dcp(self.default_pars)
-        if pars is not None:
-            self.pars.update(pars)
-        self.people = people if people is not None else make_people(self.pars['n'])
-        self.modules = sc.promotetolist(modules)
-        self.interventions = sc.promotetolist(interventions)
-        self.analyzers = sc.promotetolist(analyzers)
-        self.results = sc.objdict()
-
-    @property
-    def dt(self):
-        return self.pars['dt']
-
-    @property
-    def t(self):
-        return self.ti*self.dt
-
-    @property
-    def n(self):
-        return len(self.people)
-
-    @property
-    def tvec(self):
-        return np.arange(0,self.npts)*self.dt
-
-    @property
-    def npts(self):
-        return self.pars['npts']
-
-    def initialize(self):
-
-        self.people.initialize(sim)
-        for module in self.modules:
-            module.initialize(sim)
-
-
-    def run(self):
-        self.initialize()
-        for i in range(self.pars.npts-1):
-            self.step()
-        self.people.finalize_results(sim)
-
-        for module in self.modules:
-            module.finalize_results(sim)
-
-    def step(self):
-        self.ti += self.pars.dt
-
-        self.people.update_states_pre(sim)
-
-        for module in self.modules:
-            module.transmit(self)
-
-        self.people.update_results(sim)
-
 
 #######
 
 # TODO - should the module be stateful or stateless?
 
+#### GONORRHEA SIMULATION
+
+# people = make_people(100)
+# pars = defaultdict(dict)
+# pars['gonorrhea']['beta'] = {'random':0.3,'msm':0.5}
+# sim = cs.Sim(people, [cs.Gonorrhea], pars=pars)
+# sim.run()
+# plt.figure()
+# plt.plot(sim.tvec, sim.results.gonorrhea.n_infected)
+
+#### HIV SIMULATION
+
 people = make_people(100)
 pars = defaultdict(dict)
-pars['gonorrhea']['beta'] = {'random':0.3,'msm':0.5}
-sim = Sim(people, [cs.Gonorrhea], pars=pars)
+pars['hiv']['beta'] = {'random':0.3,'msm':0.5}
+sim = cs.Sim(people, [cs.HIV], pars=pars, analyzers=cs.CD4_analyzer())
 sim.run()
 plt.figure()
-plt.plot(sim.tvec, sim.results.gonorrhea.n_infected)
+plt.plot(sim.tvec, sim.results.hiv.n_infected)
+plt.title('HIV number of infections')
+plt.figure()
+plt.plot(sim.tvec,sim.analyzers[0].cd4)
+plt.title('CD4 counts')
 
+people = make_people(100)
+sim = cs.Sim(people, [cs.HIV], pars=pars, interventions=cs.ART([10,20],[20,40]),analyzers=cs.CD4_analyzer())
+sim.run()
+plt.figure()
+plt.plot(sim.tvec,sim.analyzers[0].cd4)
+plt.title('CD4 counts (ART)')
 
-# # Custom module by user
-# class Gonorrhea_DR(Gonorrhea):
-#     default_pars = sc.dcp(Gonorrhea.default_pars)
+#
+#
+# # # Custom module by user
+# class Gonorrhea_DR(cs.Gonorrhea):
+#     default_pars = sc.dcp(cs.Gonorrhea.default_pars)
 #     default_pars['p_death'] = 0.3
+
+    # We need to make it so that infection with Gonorrhea and Gonorrhea_DR is mutually exclusive
+
+
 #
 # How should coinfection with these two modules be prevented?
 #
