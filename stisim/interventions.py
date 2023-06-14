@@ -1,7 +1,7 @@
 import numpy as np
 import sciris as sc
 from .modules import *
-import concept as cs
+import stisim as ss
 
 class Intervention():
 
@@ -41,10 +41,10 @@ class ART(Intervention):
             eligible = ~sim.people.dead & sim.people.hiv.infected & ~sim.people.hiv.on_art
             n_eligible = np.count_nonzero(eligible)
             if n_eligible:
-                inds = np.random.choice(cs.true(eligible), min(n_eligible, n_change), replace=False)
+                inds = np.random.choice(ss.true(eligible), min(n_eligible, n_change), replace=False)
                 sim.people.hiv.on_art[inds] = True
         elif n_change < 0:
             # Take some people off ART
             eligible = ~sim.people.dead & sim.people.hiv.infected & sim.people.hiv.on_art
-            inds = np.random.choice(cs.true(eligible), min(n_change), replace=False)
+            inds = np.random.choice(ss.true(eligible), min(n_change), replace=False)
             sim.people.hiv.on_art[inds] = False

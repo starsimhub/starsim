@@ -12,12 +12,12 @@ import numpy as np
 import sciris as sc
 from collections import defaultdict
 import matplotlib.pyplot as plt
-import concept as cs
+import stisim as ss
 
 def make_people(n):
-    people = cs.People(n)
-    people.contacts['random'] = cs.RandomDynamicSexualLayer(people)
-    people.contacts['msm'] = cs.StaticLayer(people,'mm')
+    people = ss.People(n)
+    people.contacts['random'] = ss.RandomDynamicSexualLayer(people)
+    people.contacts['msm'] = ss.StaticLayer(people, 'mm')
 
     # relationship types, homosexual/heterosexual, births?
     # do we model pregnancies? track parents? households?
@@ -34,7 +34,7 @@ def make_people(n):
 # people = make_people(100)
 # pars = defaultdict(dict)
 # pars['gonorrhea']['beta'] = {'random':0.3,'msm':0.5}
-# sim = cs.Sim(people, [cs.Gonorrhea], pars=pars)
+# sim = ss.Sim(people, [ss.Gonorrhea], pars=pars)
 # sim.run()
 # plt.figure()
 # plt.plot(sim.tvec, sim.results.gonorrhea.n_infected)
@@ -44,7 +44,7 @@ def make_people(n):
 people = make_people(100)
 pars = defaultdict(dict)
 pars['hiv']['beta'] = {'random':0.3,'msm':0.5}
-sim = cs.Sim(people, [cs.HIV], pars=pars, analyzers=cs.CD4_analyzer())
+sim = ss.Sim(people, [ss.HIV], pars=pars, analyzers=ss.CD4_analyzer())
 sim.run()
 plt.figure()
 plt.plot(sim.tvec, sim.results.hiv.n_infected)
@@ -54,12 +54,13 @@ plt.plot(sim.tvec,sim.analyzers[0].cd4)
 plt.title('CD4 counts')
 
 people = make_people(100)
-sim = cs.Sim(people, [cs.HIV], pars=pars, interventions=cs.ART([10,20],[20,40]),analyzers=cs.CD4_analyzer())
+sim = ss.Sim(people, [ss.HIV], pars=pars, interventions=ss.ART([10,20],[20,40]),analyzers=ss.CD4_analyzer())
 sim.run()
 plt.figure()
-plt.plot(sim.tvec,sim.analyzers[0].cd4)
+plt.plot(sim.tvec, sim.analyzers[0].cd4)
 plt.title('CD4 counts (ART)')
 
+print('Done.')
 #
 #
 # # # Custom module by user
