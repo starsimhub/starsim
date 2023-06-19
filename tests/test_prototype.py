@@ -14,6 +14,7 @@ from collections import defaultdict
 import matplotlib.pyplot as plt
 import stisim as ss
 
+
 def make_people(n):
     people = ss.People(n)
     people.contacts['random'] = ss.RandomDynamicSexualLayer(people)
@@ -24,12 +25,11 @@ def make_people(n):
     return people
 
 
-
 #######
 
 # TODO - should the module be stateful or stateless?
 
-#### GONORRHEA SIMULATION
+# GONORRHEA SIMULATION
 
 # people = make_people(100)
 # pars = defaultdict(dict)
@@ -43,18 +43,18 @@ def make_people(n):
 
 people = make_people(100)
 pars = defaultdict(dict)
-pars['hiv']['beta'] = {'random':0.3,'msm':0.5}
-sim = ss.Sim(people, [ss.HIV], pars=pars, analyzers=ss.CD4_analyzer())
+pars['hiv']['beta'] = {'random': 0.3, 'msm': 0.5}
+sim = ss.Sim(people, [ss.HIV, ss.Pregnancy], pars=pars, analyzers=ss.CD4_analyzer())
 sim.run()
 plt.figure()
 plt.plot(sim.tvec, sim.results.hiv.n_infected)
 plt.title('HIV number of infections')
 plt.figure()
-plt.plot(sim.tvec,sim.analyzers[0].cd4)
+plt.plot(sim.tvec, sim.analyzers[0].cd4)
 plt.title('CD4 counts')
 
 people = make_people(100)
-sim = ss.Sim(people, [ss.HIV], pars=pars, interventions=ss.ART([10,20],[20,40]),analyzers=ss.CD4_analyzer())
+sim = ss.Sim(people, [ss.HIV], pars=pars, interventions=ss.ART([10, 20], [20, 40]), analyzers=ss.CD4_analyzer())
 sim.run()
 plt.figure()
 plt.plot(sim.tvec, sim.analyzers[0].cd4)
@@ -68,7 +68,7 @@ print('Done.')
 #     default_pars = sc.dcp(cs.Gonorrhea.default_pars)
 #     default_pars['p_death'] = 0.3
 
-    # We need to make it so that infection with Gonorrhea and Gonorrhea_DR is mutually exclusive
+# We need to make it so that infection with Gonorrhea and Gonorrhea_DR is mutually exclusive
 
 
 #

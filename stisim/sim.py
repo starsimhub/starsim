@@ -78,7 +78,7 @@ class Sim():
             intervention.apply(self)
 
         for module in self.modules:
-            module.transmit(self)
+            module.make_new_cases(self)
 
         self.people.update_results(self)
 
