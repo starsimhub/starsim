@@ -14,6 +14,7 @@ def rsetattr(obj, attr, val):
 def rgetattr(obj, attr, *args):
     def _getattr(obj, attr):
         return getattr(obj, attr, *args)
+
     return functools.reduce(_getattr, [obj] + attr.split('.'))
 
 
@@ -140,17 +141,11 @@ class People(sc.prettyobj):
         if new_total > self._s:
             n_new = max(n, int(self._s / 2))  # Minimum 50% growth
             for state in self.base_states:
-                self._data[state.name] = np.concatenate([self._data[state.name], state.new(n_new)], axis=self._data[state.name].ndim - 1)
+                self._data[state.name] = np.concatenate([self._data[state.name], state.new(n_new)],
+                                                        axis=self._data[state.name].ndim - 1)
             for state_name, state in self.module_states.items():
-                # if bp:
-                #     import traceback;
-                #     traceback.print_exc();
-                #     import pdb;
-                #     pdb.set_trace()
-                # old_val = rgetattr(self, state_name)
-                self._data[state_name] = np.concatenate([self._data[state_name], state.new(n_new)], axis=self._data[state_name].ndim - 1)
-                # val_to_set = np.concatenate([old_val, state.new(n_new)], axis=old_val.ndim - 1)
-                # rsetattr(self, state_name, val_to_set)
+                self._data[state_name] = np.concatenate([self._data[state_name], state.new(n_new)],
+                                                        axis=self._data[state_name].ndim - 1)
             self._s += n_new
         self._n += n
         self._map_arrays()

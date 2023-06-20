@@ -78,3 +78,7 @@ class StaticLayer(Layer):
         self.p1 = p1
         self.p2 = np.random.choice(p2, len(p1), replace=True)
         self.beta = np.ones_like(p1)
+
+
+class Maternal(Layer):
+    pass

@@ -19,6 +19,7 @@ def make_people(n):
     people = ss.People(n)
     people.contacts['random'] = ss.RandomDynamicSexualLayer(people)
     people.contacts['msm'] = ss.StaticLayer(people, 'mm')
+    people.contacts['mc'] = ss.Maternal()
 
     # relationship types, homosexual/heterosexual, births?
     # do we model pregnancies? track parents? households?

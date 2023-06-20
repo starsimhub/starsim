@@ -111,13 +111,7 @@ class HIV(Module):
     def make_new_cases(cls, sim):
         for k, layer in sim.people.contacts.items():
             if k in sim.pars[cls.name]['beta']:
-                try:
-                    rel_trans = (sim.people[cls.name].infected & ~sim.people.dead).astype(float)
-                except:
-                    import traceback;
-                    traceback.print_exc();
-                    import pdb;
-                    pdb.set_trace()
+                rel_trans = (sim.people[cls.name].infected & ~sim.people.dead).astype(float)
                 rel_sus = (sim.people[cls.name].susceptible & ~sim.people.dead).astype(float)
                 for a, b in [[layer.p1, layer.p2], [layer.p2, layer.p1]]:
                     # probability of a->b transmission
@@ -188,6 +182,7 @@ class Gonorrhea(Module):
 
     @classmethod
     def make_new_cases(cls, sim):
+        # Sexual transmission
         for k, layer in sim.people.contacts.items():
             if k in sim.pars[cls.name]['beta']:
                 rel_trans = (sim.people[cls.name].infected & ~sim.people.dead).astype(float)
@@ -196,6 +191,10 @@ class Gonorrhea(Module):
                     # probability of a->b transmission
                     p_transmit = rel_trans[a] * rel_sus[b] * layer.beta * sim.pars[cls.name]['beta'][k]
                     cls.set_prognoses(sim, b[np.random.random(len(a)) < p_transmit])
+
+    # Vertical transmission
+
+
 
     @classmethod
     def set_prognoses(cls, sim, uids):
@@ -242,6 +241,7 @@ class Pregnancy(Module):
 
         # Deliveries
         deliveries = sim.people[cls.name].ti_delivery <= sim.ti
+        new_mothers = ssu.true(deliveries)
         sim.people[cls.name].pregnant[deliveries] = False
         sim.people[cls.name].susceptible[deliveries] = True  # Currently assuming no postpartum window
 
@@ -251,13 +251,7 @@ class Pregnancy(Module):
         if n_births > 0:
             # noinspection PyProtectedMember
             new_inds = sim.people._grow(n_births, bp=True)
-            try:
-                sim.people.uid[new_inds] = new_inds
-            except:
-                import traceback;
-                traceback.print_exc();
-                import pdb;
-                pdb.set_trace()
+            sim.people.uid[new_inds] = new_inds
             sim.people.age[new_inds] = 0
             sim.people.female[new_inds] = np.random.randint(0, 2, n_births)
 
@@ -310,7 +304,6 @@ class Pregnancy(Module):
         sim.people[cls.name].ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
         if len(ssu.true(dead)):
             sim.people[cls.name].ti_dead[uids[dead]] = dur[dead]
-
         return
 
     @classmethod
