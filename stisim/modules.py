@@ -111,7 +111,13 @@ class HIV(Module):
     def make_new_cases(cls, sim):
         for k, layer in sim.people.contacts.items():
             if k in sim.pars[cls.name]['beta']:
-                rel_trans = (sim.people[cls.name].infected & ~sim.people.dead).astype(float)
+                try:
+                    rel_trans = (sim.people[cls.name].infected & ~sim.people.dead).astype(float)
+                except:
+                    import traceback;
+                    traceback.print_exc();
+                    import pdb;
+                    pdb.set_trace()
                 rel_sus = (sim.people[cls.name].susceptible & ~sim.people.dead).astype(float)
                 for a, b in [[layer.p1, layer.p2], [layer.p2, layer.p1]]:
                     # probability of a->b transmission
@@ -123,6 +129,9 @@ class HIV(Module):
         sim.people[cls.name].susceptible[uids] = False
         sim.people[cls.name].infected[uids] = True
         sim.people[cls.name].ti_infected[uids] = sim.ti
+
+        # Check for MTCT - here or in pregnancy module?
+
 
 
 class Gonorrhea(Module):
@@ -208,11 +217,11 @@ class Pregnancy(Module):
 
     # Other, e.g. postpartum, on contraception...
     states = [
-        State('infertile', bool, True),  # Applies to girls and women outside the fertility window
-        State('susceptible', bool, False),  # Applies to girls and women inside the fertility window - needs renaming
+        State('infertile', bool, False),  # Applies to girls and women outside the fertility window
+        State('susceptible', bool, True),  # Applies to girls and women inside the fertility window - needs renaming
         State('pregnant', bool, False),  # Currently pregnant
-        State('ti_pregnant', float, 0),  # Time pregnancy begins
-        State('ti_delivery', float, 0),  # Time of delivery
+        State('ti_pregnant', float, np.nan),  # Time pregnancy begins
+        State('ti_delivery', float, np.nan),  # Time of delivery
         State('ti_dead', float, np.nan),  # Maternal mortality
     ]
 
@@ -220,6 +229,7 @@ class Pregnancy(Module):
         'dur_pregnancy': 0.75,  # Make this a distribution?
         'inci': 0.01,  # Replace this with age-specific rates
         'p_death': 0.02,  # Probability of maternal death. Question, should this be linked to age and/or duration?
+        'p_live_birth': 0.98,  # Probability of a live birth
     }
 
     def __init__(self, pars):
@@ -227,18 +237,35 @@ class Pregnancy(Module):
 
     @classmethod
     def update_states_pre(cls, sim):
-        maternal_deaths = sim.people.pregnancy.ti_dead <= sim.ti
-        sim.people.dead[maternal_deaths] = True
-        sim.people.ti_dead[maternal_deaths] = sim.ti
 
-        # Count how many new births there are
-        new_births = np.count_nonzero(sim.people[cls.name].ti_delivery == sim.ti)
+        cpars = sim.pars[cls.name]
 
-        # Grow the arrays
-        # new_inds = sim.people._grow(new_births)
-        # sim.people.uid[new_inds] = np.arange(sim.people.n, sim.people.n+new_births, dtype=int)
-        # sim.people.age[new_inds] = 0
-        # sim.people.female[new_inds] = np.random.randint(0,2,new_births)
+        # Deliveries
+        deliveries = sim.people[cls.name].ti_delivery <= sim.ti
+        sim.people[cls.name].pregnant[deliveries] = False
+        sim.people[cls.name].susceptible[deliveries] = True  # Currently assuming no postpartum window
+
+        # Births
+        births = ssu.binomial_filter(cpars['p_live_birth'], ssu.true(deliveries))
+        n_births = len(births)
+        if n_births > 0:
+            # noinspection PyProtectedMember
+            new_inds = sim.people._grow(n_births, bp=True)
+            try:
+                sim.people.uid[new_inds] = new_inds
+            except:
+                import traceback;
+                traceback.print_exc();
+                import pdb;
+                pdb.set_trace()
+            sim.people.age[new_inds] = 0
+            sim.people.female[new_inds] = np.random.randint(0, 2, n_births)
+
+        # Maternal deaths
+        maternal_deaths = ssu.true(sim.people.pregnancy.ti_dead <= sim.ti)
+        if len(maternal_deaths):
+            sim.people.dead[maternal_deaths] = True
+            sim.people.ti_dead[maternal_deaths] = sim.ti
 
         return
 
@@ -256,9 +283,7 @@ class Pregnancy(Module):
         # If incidence is non-zero, make some cases
         # Think about how to deal with age/time-varying fertility
         if this_inci > 0:
-
-            # Select UIDs
-            demon_conds = ppl.female & (~ppl.dead) & (~ppl[cls.name].infertile)  # TODO: should infertile be here?
+            demon_conds = ppl.female & (~ppl.dead) & ppl[cls.name].susceptible
             inds_to_choose_from = ssu.true(demon_conds)
             uids = ssu.binomial_filter(this_inci, inds_to_choose_from)
             cls.set_prognoses(sim, uids)
@@ -273,9 +298,18 @@ class Pregnancy(Module):
         Also reconciliation with birth rates
         Q, is this also a good place to check for other conditions and set prognoses for the fetus?
         """
+        cpars = sim.pars[cls.name]
+
         sim.people[cls.name].susceptible[uids] = False
-        sim.people[cls.name].pregnant[uids] = True
+        sim.people.pregnant[uids] = True  # bad to have a module directly modify a people attribute?
         sim.people[cls.name].ti_pregnant[uids] = sim.ti
+
+        # Outcomes for pregnancies
+        dur = np.full(len(uids), sim.ti + cpars['dur_pregnancy'] / sim.pars.dt)
+        dead = np.random.random(len(uids)) < sim.pars[cls.name].p_death
+        sim.people[cls.name].ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
+        if len(ssu.true(dead)):
+            sim.people[cls.name].ti_dead[uids[dead]] = dur[dead]
 
         return
 
