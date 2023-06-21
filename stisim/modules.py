@@ -32,7 +32,7 @@ class Module():
         sim.results[cls.name] = sc.objdict()
 
     @classmethod
-    def update_states_pre(cls, sim):
+    def update_states(cls, sim):
         # Carry out any autonomous state changes at the start of the timestep
         pass
 
@@ -72,7 +72,7 @@ class HIV(Module):
     }
 
     @classmethod
-    def update_states_pre(cls, sim):
+    def update_states(cls, sim):
         # Update CD4
         sim.people.hiv.cd4[~sim.people.dead & sim.people.hiv.infected & sim.people.hiv.on_art] += (
                                                                                                               sim.pars.hiv.cd4_max -
@@ -147,7 +147,7 @@ class Gonorrhea(Module):
         super().__init__(pars)
 
     @classmethod
-    def update_states_pre(cls, sim):
+    def update_states(cls, sim):
         # What if something in here should depend on another module?
         # I guess we could just check for it e.g., 'if HIV in sim.modules' or
         # 'if 'hiv' in sim.people' or something
@@ -235,7 +235,7 @@ class Pregnancy(Module):
         super().__init__(pars)
 
     @classmethod
-    def update_states_pre(cls, sim):
+    def update_states(cls, sim):
 
         cpars = sim.pars[cls.name]
 

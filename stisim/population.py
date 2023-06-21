@@ -81,4 +81,30 @@ class StaticLayer(Layer):
 
 
 class Maternal(Layer):
-    pass
+    def __init__(self, people, dur_pregnancy=0.75, dur_postnatal=0.5):
+        """
+        Initialized empty and filled with pregnancies throughout the simulation
+        """
+        super().__init__()
+        self.dur = np.array([], dtype=float)  # Duration of active connections in the layer
+        self.dur_pregnancy = dur_pregnancy  # Duration of pregnancy. Question, should premature births come in here?
+        self.dur_postnatal = dur_postnatal  # Length of time that mother & baby remain in the contact network post-birth
+        return
+
+    def update(self, people):
+        """
+        Remove connections between mothers and children once the post-natal period has ended.
+        """
+        self.dur = self.dur - people.dt
+        active = self.dur > 0
+        self.p1 = self.p1[active]
+        self.p2 = self.p2[active]
+        self.beta = self.beta[active]
+
+        self.add_connections(people)
+
+        return
+
+    def add_connections(self, people):
+        pass
+

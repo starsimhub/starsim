@@ -110,11 +110,11 @@ class People(sc.prettyobj):
     # these methods. Would it make sense for the base variables like
     # UID, age etc. to be in a Module? Or are they so heavily baked into
     # People that we don't want to separate them out?
-    def update_states_pre(self, sim):
+    def update_states(self, sim):
         self.dead[self.ti_dead <= sim.ti] = True
 
         for module in sim.modules:
-            module.update_states_pre(sim)
+            module.update_states(sim)
 
     def initialize(self, sim):
         sim.results['n_people'] = Result(None, 'n_people', sim.npts, dtype=int)

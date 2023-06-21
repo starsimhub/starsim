@@ -72,7 +72,7 @@ class Sim():
 
     def step(self):
 
-        self.people.update_states_pre(self)
+        self.people.update_states(self)
 
         for intervention in self.interventions:
             intervention.apply(self)
