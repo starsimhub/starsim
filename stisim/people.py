@@ -129,7 +129,7 @@ class People(sc.prettyobj):
     def finalize_results(self, sim):
         pass
 
-    def _grow(self, n, bp=False):
+    def _grow(self, n):
         """
         Increase the number of agents stored
         Automatically reallocate underlying arrays if required

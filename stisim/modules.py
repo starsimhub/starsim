@@ -5,7 +5,7 @@ from .results import Result
 from . import utils as ssu
 
 
-class Module():
+class Module:
     # Base module contains states/attributes that all modules have
     default_pars = {}
 
@@ -212,7 +212,7 @@ class Gonorrhea(Module):
         #     # increase susceptibility where relevant
 
 
-class Pregnancy(Module):
+class Prepartum(Module):
 
     # Other, e.g. postpartum, on contraception...
     states = [
@@ -228,7 +228,6 @@ class Pregnancy(Module):
         'dur_pregnancy': 0.75,  # Make this a distribution?
         'inci': 0.01,  # Replace this with age-specific rates
         'p_death': 0.02,  # Probability of maternal death. Question, should this be linked to age and/or duration?
-        'p_live_birth': 0.98,  # Probability of a live birth
     }
 
     def __init__(self, pars):
@@ -294,9 +293,25 @@ class Pregnancy(Module):
         """
         cpars = sim.pars[cls.name]
 
+        # Change states for the newly pregnant woman
         sim.people[cls.name].susceptible[uids] = False
         sim.people.pregnant[uids] = True  # bad to have a module directly modify a people attribute?
         sim.people[cls.name].ti_pregnant[uids] = sim.ti
+
+        # Add UIDs for the as-yet-unborn agents so we can track prognoses and transmission patterns
+        n_unborn_agents = len(uids)
+        if n_unborn_agents > 0:
+            # Grow the arrays and set properties for the unborn agents
+            # noinspection PyProtectedMember
+            new_inds = sim.people._grow(n_unborn_agents)
+            sim.people.uid[new_inds] = new_inds
+            sim.people.age[new_inds] = -cpars['dur_pregnancy']
+            sim.people.female[new_inds] = np.random.randint(0, 2, n_unborn_agents)
+
+            # Add connections to any vertical transmission layers
+            for lkey, layer in sim.people.contacts.items():
+                if layer.transmission == 'vertical':
+                    layer.add_connections(uids, new_inds)
 
         # Outcomes for pregnancies
         dur = np.full(len(uids), sim.ti + cpars['dur_pregnancy'] / sim.pars.dt)

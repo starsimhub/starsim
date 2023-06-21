@@ -3,11 +3,12 @@ import numpy as np
 
 
 class Layer(sc.odict):
-    def __init__(self):
+    def __init__(self, transmission='horizontal'):
         super().__init__()
         self.p1 = np.array([], dtype=int)
         self.p2 = np.array([], dtype=int)
         self.beta = np.array([], dtype=float)
+        self.transmission = transmission  # "vertical" or "horizontal"
 
     def __repr__(self):
         return f'<{self.__class__.__name__}, {len(self.members)} members, {len(self.p1)} contacts>'
@@ -81,11 +82,11 @@ class StaticLayer(Layer):
 
 
 class Maternal(Layer):
-    def __init__(self, people, dur_pregnancy=0.75, dur_postnatal=0.5):
+    def __init__(self, transmission='vertical', dur_pregnancy=0.75, dur_postnatal=0.5):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
-        super().__init__()
+        super().__init__(transmission=transmission)
         self.dur = np.array([], dtype=float)  # Duration of active connections in the layer
         self.dur_pregnancy = dur_pregnancy  # Duration of pregnancy. Question, should premature births come in here?
         self.dur_postnatal = dur_postnatal  # Length of time that mother & baby remain in the contact network post-birth
@@ -100,11 +101,14 @@ class Maternal(Layer):
         self.p1 = self.p1[active]
         self.p2 = self.p2[active]
         self.beta = self.beta[active]
-
-        self.add_connections(people)
-
         return
 
-    def add_connections(self, people):
-        pass
+    def add_connections(self, mother_inds, unborn_inds):
+        """
+        Add connections between pregnant women and their as-yet-unborn babies
+        """
+        self.p1 = mother_inds
+        self.p2 = unborn_inds
+        self.beta = np.ones_like(mother_inds)
+        return 
 
