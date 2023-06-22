@@ -25,7 +25,7 @@ CLASSIFIERS = [
 ]
 
 setup(
-    name="starsim",
+    name="stisim",
     version=version,
     author="Romesh Abeysuriya, Robyn Stuart, Jamie Cohen, Cliff Kerr, Daniel Klein",
     description="Sexually Transmitted Infections Simulator (STIsim)",
