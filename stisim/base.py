@@ -118,12 +118,12 @@ class ParsObj(FlexPretty):
                 raise TypeError(f'The pars object must be a dict; you supplied a {type(pars)}')
             if not hasattr(self, 'pars'):
                 self.pars = pars
-            # if not create:
-            #     available_keys = list(self.pars.keys())
-            #     mismatches = [key for key in pars.keys() if key not in available_keys]
-            #     if len(mismatches):
-            #         errormsg = f'Key(s) {mismatches} not found; available keys are {available_keys}'
-            #         raise sc.KeyNotFoundError(errormsg)
+            if not create:
+                available_keys = list(self.pars.keys())
+                mismatches = [key for key in pars.keys() if key not in available_keys]
+                if len(mismatches):
+                    errormsg = f'Key(s) {mismatches} not found; available keys are {available_keys}'
+                    raise sc.KeyNotFoundError(errormsg)
             self.pars.update(pars)
         return
 

@@ -165,14 +165,8 @@ class HPV(Module):
         cls.init_pars(sim)
         cls.init_results(sim)
         sim.people.add_module(cls)
-
         cls.init_states(sim)
-
-        # Pick some initially infected agents
-        cls.infect(sim, np.random.choice(sim.people.uid, sim.pars[cls.name]['initial']))
-
-        if 'beta' not in sim.pars[cls.name]:
-            sim.pars[cls.name].beta = sc.objdict({k:1 for k in sim.people.contacts})
+        return
 
     @classmethod
     def init_states(cls, sim):
@@ -320,12 +314,12 @@ class HPV(Module):
         # If cross-immunity values have been provided, process them
         if cls.pars['cross_immunity_sev'] is None or create:
 
-            # Precompute waning - same for all genotypes
-            if cls.pars['use_waning']:
-                imm_decay = sc.dcp(cls.pars['imm_decay'])
-                if 'half_life' in imm_decay.keys():
-                    imm_decay['half_life'] /= sim['dt']
-                cls.pars['imm_kin'] = cls.precompute_waning(t=sim.tvec, pars=imm_decay)
+            # # Precompute waning - same for all genotypes
+            # if cls.pars['use_waning']:
+            #     imm_decay = sc.dcp(cls.pars['imm_decay'])
+            #     if 'half_life' in imm_decay.keys():
+            #         imm_decay['half_life'] /= sim['dt']
+            #     cls.pars['imm_kin'] = cls.precompute_waning(t=sim.tvec, pars=imm_decay)
 
             cls.pars['immunity_map'] = dict()
             # Firstly, initialize immunity matrix with defaults. These are then overwitten with specific values below
@@ -366,14 +360,19 @@ class HPV(Module):
         pass
     @classmethod
     def transmit(cls, sim):
+        eff_condoms = sim.pars[cls.name]['eff_condoms']
+
         for k, layer in sim.people.contacts.items():
+            condoms = layer.pars['condoms']
+            effective_condoms = ssd.default_float(condoms * eff_condoms)
             if k in sim.pars[cls.name]['beta']:
-                rel_trans = (sim.people[cls.name].infected & sim.people.alive).astype(float)
-                rel_sus = (sim.people[cls.name].susceptible & sim.people.alive).astype(float)
-                for a,b in [[layer['f'],layer['m']],[layer['m'],layer['f']]]:
-                    # probability of a->b transmission
-                    p_transmit = rel_trans[a]*rel_sus[b]*sim.pars[cls.name]['beta'][k]
-                    cls.infect(sim, b[np.random.random(len(a))<p_transmit])
+                for g in range(sim.pars[cls.name]['n_genotypes']):
+                    rel_trans = (sim.people[cls.name].infectious[g,:] & sim.people.alive).astype(float)
+                    rel_sus = (sim.people[cls.name].susceptible[g,:] & sim.people.alive).astype(float)
+                    for a,b in [[layer['p1'],layer['p2']],[layer['p2'],layer['p1']]]:
+                        # probability of a->b transmission
+                        p_transmit = rel_trans[a]*sim.people[cls.name].rel_trans[a]*rel_sus[b]*sim.people[cls.name].rel_sus[b]*sim.pars[cls.name]['beta'][k]*(1-effective_condoms)
+                        cls.infect(sim, b[np.random.random(len(a))<p_transmit], g)
 
     @classmethod
     def infect(cls, sim, inds, g, layer=None):
@@ -452,7 +451,7 @@ class HPV(Module):
         # Compute disease progression for females
         if len(f_inds) > 0:
 
-            cls.set_prognoses(sim, f_inds, g) #TODO: make this
+            cls.set_prognoses(sim, f_inds, g)
 
         # Compute infection clearance for males
         if len(m_inds) > 0:
