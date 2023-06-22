@@ -51,24 +51,6 @@ class Module():
         pass
 
     @classmethod
-    def update_connectors(cls, sim):
-        if len(sim.modules)>1:
-            connectors = sim.pars[cls.name]['connectors']
-            if len(connectors)>0:
-                for connector in connectors:
-                    if callable(connector):
-                        connector(sim)
-                    else:
-                        warnmsg = f'Connector must be a callable function'
-                        ssm.warn(warnmsg, die=True)
-            elif sim.t==0: # only raise warning on first timestep
-                warnmsg = f'No connector for {cls.name}'
-                ssm.warn(warnmsg, die=False)
-            else:
-                return
-        return
-
-    @classmethod
     @property
     def name(cls):
         # The module name is a lower-case version of its class name

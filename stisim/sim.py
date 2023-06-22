@@ -330,13 +330,13 @@ class Sim(ssb.BaseSim):
 
         # Update demographics, states, modules, partnerships
         self.people.update_states(t=t, sim=self, year=year) # This ages people, applies deaths, generates new births, and runs modules
+        self.update_connectors()
         for lkey, layer in self.people.contacts.items():
             layer.update(self.people)
 
         for module in self.modules:
             module.transmit(self)
             module.update_results(self)
-            module.update_connectors(self)
 
         # Index for results
         resfreq = int(1 / self['dt'])
@@ -500,6 +500,23 @@ class Sim(ssb.BaseSim):
                 errormsg = f'a layer class must be provided'
                 raise ValueError(errormsg)
 
+        return
+
+    def update_connectors(self):
+        if len(self.modules) > 1:
+            connectors = self['connectors']
+            if len(connectors) > 0:
+                for connector in connectors:
+                    if callable(connector):
+                        connector(self)
+                    else:
+                        warnmsg = f'Connector must be a callable function'
+                        ssm.warn(warnmsg, die=True)
+            elif self.t == 0:  # only raise warning on first timestep
+                warnmsg = f'No connectors in sim'
+                ssm.warn(warnmsg, die=False)
+            else:
+                return
         return
 
 

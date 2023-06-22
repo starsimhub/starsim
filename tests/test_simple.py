@@ -179,14 +179,10 @@ def test_coinfection():
             name='test',
             layer=ss.sspop.DynamicSexualLayer,
         )],
-        hiv=dict(
-            connectors=[gonorrhea_hiv_connector] # this is where/how we provide connectors from HIV to other modules
-        )
+        connectors=[gonorrhea_hiv_connector], # this is where/how we provide connectors from HIV to other modules
     )
 
-
     sim = ss.Sim(pars=pars, modules=[ss.HIV, ss.Gonorrhea])
-    ## An alternative approach would be:
     sim.run()
 
     return
