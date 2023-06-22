@@ -7,9 +7,7 @@ from . import misc as ssm
 
 class Module():
     # Base module contains states/attributes that all modules have
-    default_pars = {
-        'connectors': []
-    }
+    default_pars = {}
     states = [
         State('rel_sus', float, 1),
         State('rel_sev', float, 1),
@@ -72,7 +70,6 @@ class HIV(Module):
         'cd4_rate': 5,
         'initial': 30,
         'eff_condoms': 0.7,
-        'connectors': []
     }
 
     @classmethod
@@ -140,7 +137,6 @@ class Gonorrhea(Module):
         'p_death': 0.2,
         'initial': 3,
         'eff_condoms': 0.7,
-        'connectors': []
     }
 
     def __init__(self, pars):
