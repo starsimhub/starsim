@@ -156,7 +156,22 @@ class HPV(Module):
 
     @classmethod
     def update_states_pre(cls, sim):
-        pass
+
+        # Perform updates that are genotype-specific
+        ng = sim.pars[cls.name]['n_genotypes']
+        for g in range(ng):
+            cls.check_clearance(sim, g) # check for clearance (need to do this first)
+            cls.update_severity(sim, g) # update severity values
+            cls.check_transformation(sim, g)  # check for new transformations
+
+            for key in ['cin1s','cin2s','cin3s','cancers']:  # update flows
+                cls.check_progress(sim, key, g)
+
+        # Perform updates that are not genotype specific
+        cls.check_cancer_deaths(sim)
+
+        sim.people[cls.name].nab_imm[:] = sim.people[cls.name].peak_imm
+        cls.check_immunity(sim.people)
     @classmethod
     def initialize(cls, sim):
 
@@ -817,3 +832,217 @@ class HPV(Module):
             raise NotImplementedError(errormsg)
 
         return output
+
+    @classmethod
+    def check_immunity(cls, people):
+        '''
+        Calculate people's immunity on this timestep from prior infections.
+        As an example, suppose HPV16 and 18 are in the sim, and the cross-immunity matrix is:
+
+            pars['immunity'] = np.array([[1., 0.5],
+                                         [0.3, 1.]])
+
+        This indicates that people who've had HPV18 have 50% protection against getting 16, and
+        people who've had 16 have 30% protection against getting 18.
+        Now suppose we have 3 people, whose immunity levels are
+
+            people.nab_imm = np.array([[0.9, 0.0, 0.0],
+                                   [0.0, 0.7, 0.0]])
+
+        This indicates that person 1 has a prior HPV16 infection, person 2 has a prior HPV18
+        infection, and person 3 has no history of infection.
+
+        In this function, we take the dot product of pars['immunity'] and people.nab_imm to get:
+
+            people.sus_imm = np.array([[0.9 , 0.35, 0.  ],
+                                       [0.27, 0.7 , 0.  ]])
+
+        This indicates that the person 1 has high protection against reinfection with HPV16, and
+        some (30% of 90%) protection against infection with HPV18, and so on.
+
+        '''
+        cross_immunity_sus = people.pars[cls.name]['cross_immunity_sus']  # cross-immunity/own-immunity scalars to be applied to sus immunity level
+        cross_immunity_sev = people.pars[cls.name]['cross_immunity_sev']  # cross-immunity/own-immunity scalars to be applied to sev immunity level
+        sus_imm = np.dot(cross_immunity_sus, people[cls.name].nab_imm)  # Dot product gives immunity to all genotypes
+        sev_imm = np.dot(cross_immunity_sev, people[cls.name].cell_imm)  # Dot product gives immunity to all genotypes
+        people[cls.name].sus_imm[:] = np.minimum(sus_imm, np.ones_like(sus_imm))  # Don't let this be above 1
+        people[cls.name].sev_imm[:] = np.minimum(sev_imm, np.ones_like(sev_imm))  # Don't let this be above 1
+        return
+
+    @classmethod
+    def check_clearance(cls, sim, genotype):
+        '''
+        Check for HPV clearance.
+        '''
+        f_filter_inds = (sim.people[cls.name].is_female_alive & sim.people[cls.name].infectious[genotype, :]).nonzero()[-1]
+        m_filter_inds = (sim.people[cls.name].is_male_alive & sim.people[cls.name].infectious[genotype, :]).nonzero()[-1]
+        f_inds = sim.people[cls.name].check_inds_true(sim.people[cls.name].infectious[genotype, :], sim.people[cls.name].date_clearance[genotype, :],
+                                      filter_inds=f_filter_inds)
+        m_inds = sim.people[cls.name].check_inds_true(sim.people[cls.name].infectious[genotype, :], sim.people[cls.name].date_clearance[genotype, :],
+                                      filter_inds=m_filter_inds)
+        m_cleared_inds = m_inds  # All males clear
+
+        # For females, determine who clears and who controls
+        if sim.pars[cls.name]['hpv_control_prob'] > 0:
+            latent_probs = np.full(len(f_inds), sim.pars[cls.name]['hpv_control_prob'], dtype=ssd.default_float)
+            latent_bools = ssu.binomial_arr(latent_probs)
+            latent_inds = f_inds[latent_bools]
+
+            if len(latent_inds):
+                sim.people[cls.name].susceptible[genotype, latent_inds] = False  # should already be false
+                sim.people[cls.name].infectious[genotype, latent_inds] = False
+                sim.people[cls.name].inactive[genotype, latent_inds] = True
+                sim.people[cls.name].date_clearance[genotype, latent_inds] = np.nan
+
+            f_cleared_inds = f_inds[~latent_bools]
+
+        else:
+            f_cleared_inds = f_inds
+
+        cleared_inds = np.array(m_cleared_inds.tolist() + f_cleared_inds.tolist())
+
+        # Now reset disease states
+        if len(cleared_inds):
+            sim.people[cls.name].susceptible[genotype, cleared_inds] = True
+            sim.people[cls.name].infectious[genotype, cleared_inds] = False
+            sim.people[cls.name].inactive[genotype, cleared_inds] = False  # should already be false
+
+        if len(f_cleared_inds):
+            # female_cleared_inds = np.intersect1d(cleared_inds, self.f_inds) # Only give natural immunity to females
+            cls.update_peak_immunity(f_cleared_inds, imm_pars=sim.pars, imm_source=genotype)  # update immunity
+            sim.people[cls.name].date_reactivated[genotype, f_cleared_inds] = np.nan
+
+        # Whether infection is controlled on not, clear all cell changes and severity markeres
+        sim.people[cls.name].episomal[genotype, f_inds] = False
+        sim.people[cls.name].transformed[genotype, f_inds] = False
+        sim.people[cls.name].sev[genotype, f_inds] = np.nan
+        sim.people[cls.name].date_cin1[genotype, f_inds] = np.nan
+        sim.people[cls.name].date_cin2[genotype, f_inds] = np.nan
+        sim.people[cls.name].date_cin3[genotype, f_inds] = np.nan
+
+    @classmethod
+    def update_severity(cls, sim, genotype):
+        '''
+        Update disease severity for women with infection and update their current severity
+        '''
+        gpars = sim.pars[cls.name]['genotype_pars'][genotype]
+
+        # Only need to update severity for people who with dysplasia underway
+        fg_cin_inds = ssu.true(sim.people[cls.name].is_female & ~np.isnan(sim.people[cls.name].sev[genotype, :]) & sim.people[cls.name].infectious[genotype,
+                                                                                   :])  # Indices of women infected with this genotype who will develop CIN1
+        fg_cin_underway_inds = fg_cin_inds[
+            (sim.t >= sim.people[cls.name].date_cin1[genotype, fg_cin_inds])]  # Indices of women for whom dysplasia is underway
+
+        time_with_dysplasia = (sim.t - sim.people[cls.name].date_cin1[genotype, fg_cin_underway_inds]) * sim.dt
+        rel_sevs = sim.people[cls.name].rel_sev[fg_cin_underway_inds]
+        if (time_with_dysplasia < 0).any() or (np.isnan(time_with_dysplasia)).any():
+            errormsg = 'Time with dysplasia cannot be less than zero or NaN.'
+            raise ValueError(errormsg)
+        if (np.isnan(sim.people[cls.name].date_exposed[genotype, fg_cin_inds])).any():
+            errormsg = f'No date of exposure defined for {ssu.iundefined(sim.people[cls.name].date_exposed[genotype, fg_cin_inds], fg_cin_inds)} on timestep {sim.t}'
+            raise ValueError(errormsg)
+        if (np.isnan(sim.people[cls.name].date_cin1[genotype, fg_cin_inds])).any():
+            errormsg = f'No date of dysplasia onset defined for {ssu.iundefined(sim.people[cls.name].date_cin1[genotype, fg_cin_inds], fg_cin_inds)} on timestep {sim.t}'
+            raise ValueError(errormsg)
+
+        sim.people[cls.name].sev[genotype, fg_cin_underway_inds] = cls.compute_severity(time_with_dysplasia, rel_sev=rel_sevs,
+                                                                          pars=gpars['sev_fn'])
+
+        if (np.isnan(sim.people[cls.name].sev[genotype, fg_cin_underway_inds])).any():
+            errormsg = 'Invalid severity values.'
+            raise ValueError(errormsg)
+
+    @classmethod
+    def check_transformation(cls, sim, genotype):
+        ''' Check for new transformations '''
+        # Only include infectious, episomal females who haven't already cleared infection
+        filter_inds = sim.people[cls.name].true_by_genotype('episomal', genotype)
+        inds = sim.people[cls.name].check_inds(sim.people[cls.name].transformed[genotype, :], sim.people[cls.name].date_transformed[genotype, :],
+                               filter_inds=filter_inds)
+        sim.people[cls.name].transformed[genotype, inds] = True  # Now transformed, cannot clear
+        sim.people[cls.name].date_clearance[genotype, inds] = np.nan  # Remove their clearance dates
+
+    @classmethod
+    def check_progress(cls, sim, what, genotype):
+        ''' Wrapper function for all the new progression checks '''
+        if what == 'cin1s':
+            cls.check_cin1(sim, genotype)
+        elif what == 'cin2s':
+            cls.check_cin2(sim, genotype)
+        elif what == 'cin3s':
+            cls.check_cin3(sim, genotype)
+        elif what == 'cancers':
+            cls.check_cancer(sim, genotype)
+        return
+
+    @classmethod
+    def check_cancer_deaths(cls, sim):
+        pass
+
+    @classmethod
+    def set_severity(cls, sim, param, g):
+        pass
+
+    @classmethod
+    def update_peak_immunity(cls, sim, f_cleared_inds, imm_pars, imm_source):
+        pass
+
+    @classmethod
+    def check_cin1(cls, sim, genotype):
+        ''' Check for new progressions to CIN1 '''
+        # Only include infectious females who haven't already cleared CIN1 or progressed to CIN2
+        filters = sim.people[cls.name].infectious[genotype, :] * sim.people[cls.name].is_female * ~(sim.people[cls.name].date_clearance[genotype, :] <= sim.t) * (
+                    sim.people[cls.name].date_cin2[genotype, :] >= sim.t)
+        filter_inds = filters.nonzero()[0]
+        inds = sim.people[cls.name].check_inds(sim.people[cls.name].cin1[genotype, :], sim.people[cls.name].date_cin1[genotype, :], filter_inds=filter_inds)
+        sim.people[cls.name].cin1[genotype, inds] = True
+        return
+
+
+    @classmethod
+    def check_cin2(cls, sim, genotype):
+        ''' Check for new progressions to CIN2 '''
+        filter_inds = sim.people[cls.name].true_by_genotype('cin1', genotype)
+        inds = sim.people[cls.name].check_inds(sim.people[cls.name].cin2[genotype,:], sim.people[cls.name].date_cin2[genotype,:], filter_inds=filter_inds)
+        sim.people[cls.name].cin2[genotype, inds] = True
+        sim.people[cls.name].cin1[genotype, inds] = False # No longer counted as CIN1
+        return
+
+
+    @classmethod
+    def check_cin3(cls, sim, genotype):
+        ''' Check for new progressions to CIN3 '''
+        filter_inds = sim.people[cls.name].true_by_genotype('cin2', genotype)
+        inds = sim.people[cls.name].check_inds(sim.people[cls.name].cin3[genotype, :],
+                                               sim.people[cls.name].date_cin3[genotype, :], filter_inds=filter_inds)
+        sim.people[cls.name].cin3[genotype, inds] = True
+        sim.people[cls.name].cin2[genotype, inds] = False  # No longer counted as CIN2
+        return
+
+    @classmethod
+    def check_cancer(cls, sim, genotype):
+        ''' Check for new progressions to cancer '''
+        filter_inds = sim.people[cls.name].true('transformed')
+        inds = sim.people[cls.name].check_inds(sim.people[cls.name].cancerous[genotype, :], sim.people[cls.name].date_cancerous[genotype, :], filter_inds=filter_inds)
+
+        # Set infectious states
+        sim.people[cls.name].susceptible[:, inds] = False  # No longer susceptible to any genotype
+        sim.people[cls.name].infectious[:, inds] = False  # No longer counted as infectious with any genotype
+        sim.people[cls.name].inactive[:,inds] = True  # If this person has any other infections from any other genotypes, set them to inactive
+
+        sim.people[cls.name].date_clearance[:, inds] = np.nan  # Remove their clearance dates for all genotypes
+
+        # Deal with dysplasia states and dates
+        for g in range(sim.pars[cls.name].ng):
+            if g != genotype:
+                sim.people[cls.name].date_cancerous[g, inds] = np.nan  # Remove their date of cancer for all genotypes but the one currently causing cancer
+                sim.people[cls.name].date_cin1[g, inds] = np.nan
+                sim.people[cls.name].date_cin2[g, inds] = np.nan
+                sim.people[cls.name].date_cin3[g, inds] = np.nan
+
+        # Set the properties related to cell changes and disease severity markers
+        sim.people[cls.name].cancerous[genotype, inds] = True
+        sim.people[cls.name].episomal[:, inds] = False  # No longer counted as episomal with any genotype
+        sim.people[cls.name].transformed[:, inds] = False  # No longer counted as transformed with any genotype
+        sim.people[cls.name].sev[:,inds] = np.nan  # NOTE: setting this to nan means this people no longer counts as CIN1/2/3, since those categories are based on this value
+        return
