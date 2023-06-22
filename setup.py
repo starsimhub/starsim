@@ -25,12 +25,13 @@ CLASSIFIERS = [
 ]
 
 setup(
-    name="stisim",
+    name="starsim",
     version=version,
     author="Romesh Abeysuriya, Robyn Stuart, Jamie Cohen, Cliff Kerr, Daniel Klein",
     description="Sexually Transmitted Infections Simulator (STIsim)",
     long_description=long_description,
     long_description_content_type="text/x-rst",
+    keywords=["agent-based model", "simulation"],
     platforms=["OS Independent"],
     classifiers=CLASSIFIERS,
     packages=find_packages(),
@@ -41,5 +42,6 @@ setup(
         'pandas>=2.0.0',
         'sciris>=3.0.0',
         'matplotlib',
+        'seaborn',
     ],
 )
