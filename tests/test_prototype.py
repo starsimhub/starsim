@@ -44,7 +44,11 @@ def make_people(n):
 
 people = make_people(100)
 pars = defaultdict(dict)
-pars['hiv']['beta'] = {'random': 0.3, 'msm': 0.5}
+# Set beta. The first entry represents transmission risk from infected p1 -> susceptible p2
+# Need to be careful to get the ordering right. So the set-up here would assume that in the
+# random network, p1 is male and p2 is female. In the MSM network, the values represent the
+# averages across insertive/receptive acts.
+pars['hiv']['beta'] = {'random': [2, 1], 'msm': [19, 19]}  # 
 sim = ss.Sim(people, [ss.HIV, ss.Pregnancy], pars=pars)
 sim.run()
 plt.figure()

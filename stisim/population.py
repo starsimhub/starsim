@@ -1,14 +1,19 @@
+# POPULATIONS AND NETWORKS
+# This file contains the template Layer class and some implementations of particular Layer types.
+
 import sciris as sc
 import numpy as np
 
 
 class Layer(sc.odict):
     def __init__(self, transmission='horizontal'):
+        """
+        """
         super().__init__()
         self.p1 = np.array([], dtype=int)
         self.p2 = np.array([], dtype=int)
-        self.beta = np.array([], dtype=float)
-        self.transmission = transmission  # "vertical" or "horizontal"
+        self.beta = np.array([], dtype=float)  # TBC if we keep beta like this or not
+        self.transmission = transmission  # "vertical" or "horizontal", determines whether transmission is bidirectional
 
     def __repr__(self):
         return f'<{self.__class__.__name__}, {len(self.members)} members, {len(self.p1)} contacts>'
@@ -107,8 +112,11 @@ class Maternal(Layer):
         """
         Add connections between pregnant women and their as-yet-unborn babies
         """
-        self.p1 = mother_inds
-        self.p2 = unborn_inds
-        self.beta = np.ones_like(mother_inds)
-        return 
+        beta = np.ones_like(mother_inds)
+        dur = beta*(self.dur_pregnancy+self.dur_postnatal)
+        self.p1 = np.concatenate([self.p1, mother_inds])
+        self.p2 = np.concatenate([self.p2, unborn_inds])
+        self.beta = np.concatenate([self.beta, beta])
+        self.dur = np.concatenate([self.dur, dur])
+        return
 

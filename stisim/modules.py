@@ -31,6 +31,18 @@ class Module:
 
         sim.results[cls.name] = sc.objdict()
 
+        # Validate parameters
+        cpars = sim.pars[cls.name]
+        if 'beta' not in cpars:
+            cpars.beta = sc.objdict({k: [1, 1] for k in sim.people.contacts})
+        else:
+            # Make sure it's a list format
+            for lkey, betaval in cpars.beta.items():
+                if sc.isnumber(betaval):
+                    old_val = sc.dcp(betaval[k])
+                    cpars.beta[k] = [old_val, old_val]
+
+
     @classmethod
     def update_states(cls, sim):
         # Carry out any autonomous state changes at the start of the timestep
@@ -39,6 +51,17 @@ class Module:
     @classmethod
     def make_new_cases(cls, sim):
         """ Create new cases in the population, using either incidence or network-based transmission """
+        cpars = sim.pars[cls.name]
+        for k, layer in sim.people.contacts.items():
+            if k in cpars['beta']:
+                rel_trans = (sim.people[cls.name].infected & ~sim.people.dead).astype(float)
+                rel_sus = (sim.people[cls.name].susceptible & ~sim.people.dead).astype(float)
+                for a, b, beta in [[layer.p1, layer.p2, cpars.beta[k][0]], [layer.p2, layer.p1, cpars.beta[k][1]]]:
+                    # probability of a->b transmission
+                    p_transmit = rel_trans[a] * rel_sus[b] * layer.beta * beta
+                    new_cases = np.random.random(len(a)) < p_transmit
+                    if new_cases.any():
+                        cls.set_prognoses(sim, b[new_cases])
 
     @classmethod
     def update_results(cls, sim):
@@ -91,7 +114,7 @@ class HIV(Module):
         cls.set_prognoses(sim, np.random.choice(sim.people.uid, sim.pars[cls.name]['initial']))
 
         if 'beta' not in sim.pars[cls.name]:
-            sim.pars[cls.name].beta = sc.objdict({k: 1 for k in sim.people.contacts})
+            sim.pars[cls.name].beta = sc.objdict({k: [1, 1] for k in sim.people.contacts})
 
         sim.results[cls.name]['n_susceptible'] = Result(cls.name, 'n_susceptible', sim.npts, dtype=int)
         sim.results[cls.name]['n_infected'] = Result(cls.name, 'n_infected', sim.npts, dtype=int)
@@ -109,23 +132,13 @@ class HIV(Module):
 
     @classmethod
     def make_new_cases(cls, sim):
-        for k, layer in sim.people.contacts.items():
-            if k in sim.pars[cls.name]['beta']:
-                rel_trans = (sim.people[cls.name].infected & ~sim.people.dead).astype(float)
-                rel_sus = (sim.people[cls.name].susceptible & ~sim.people.dead).astype(float)
-                for a, b in [[layer.p1, layer.p2], [layer.p2, layer.p1]]:
-                    # probability of a->b transmission
-                    p_transmit = rel_trans[a] * rel_sus[b] * layer.beta * sim.pars[cls.name]['beta'][k]
-                    cls.set_prognoses(sim, b[np.random.random(len(a)) < p_transmit])
+        super().make_new_cases(sim)
 
     @classmethod
     def set_prognoses(cls, sim, uids):
         sim.people[cls.name].susceptible[uids] = False
         sim.people[cls.name].infected[uids] = True
         sim.people[cls.name].ti_infected[uids] = sim.ti
-
-        # Check for MTCT - here or in pregnancy module?
-
 
 
 class Gonorrhea(Module):
@@ -161,11 +174,10 @@ class Gonorrhea(Module):
         # them via sim.modules at this point
         super(Gonorrhea, cls).initialize(sim)
 
+        cpars = sim.pars[cls.name]
+
         # Pick some initially infected agents
         cls.set_prognoses(sim, np.random.choice(sim.people.uid, sim.pars[cls.name]['initial']))
-
-        if 'beta' not in sim.pars[cls.name]:
-            sim.pars[cls.name].beta = sc.objdict({k: 1 for k in sim.people.contacts})
 
         # TODO - not a huge fan of having the result key duplicate the Result name
         sim.results[cls.name]['n_susceptible'] = Result(cls.name, 'n_susceptible', sim.npts, dtype=int)
@@ -182,19 +194,7 @@ class Gonorrhea(Module):
 
     @classmethod
     def make_new_cases(cls, sim):
-        # Sexual transmission
-        for k, layer in sim.people.contacts.items():
-            if k in sim.pars[cls.name]['beta']:
-                rel_trans = (sim.people[cls.name].infected & ~sim.people.dead).astype(float)
-                rel_sus = (sim.people[cls.name].susceptible & ~sim.people.dead).astype(float)
-                for a, b in [[layer.p1, layer.p2], [layer.p2, layer.p1]]:
-                    # probability of a->b transmission
-                    p_transmit = rel_trans[a] * rel_sus[b] * layer.beta * sim.pars[cls.name]['beta'][k]
-                    cls.set_prognoses(sim, b[np.random.random(len(a)) < p_transmit])
-
-    # Vertical transmission
-
-
+        super().make_new_cases(sim)
 
     @classmethod
     def set_prognoses(cls, sim, uids):
@@ -212,7 +212,7 @@ class Gonorrhea(Module):
         #     # increase susceptibility where relevant
 
 
-class Prepartum(Module):
+class Pregnancy(Module):
 
     # Other, e.g. postpartum, on contraception...
     states = [
@@ -240,19 +240,8 @@ class Prepartum(Module):
 
         # Deliveries
         deliveries = sim.people[cls.name].ti_delivery <= sim.ti
-        new_mothers = ssu.true(deliveries)
         sim.people[cls.name].pregnant[deliveries] = False
         sim.people[cls.name].susceptible[deliveries] = True  # Currently assuming no postpartum window
-
-        # Births
-        births = ssu.binomial_filter(cpars['p_live_birth'], ssu.true(deliveries))
-        n_births = len(births)
-        if n_births > 0:
-            # noinspection PyProtectedMember
-            new_inds = sim.people._grow(n_births, bp=True)
-            sim.people.uid[new_inds] = new_inds
-            sim.people.age[new_inds] = 0
-            sim.people.female[new_inds] = np.random.randint(0, 2, n_births)
 
         # Maternal deaths
         maternal_deaths = ssu.true(sim.people.pregnancy.ti_dead <= sim.ti)
@@ -273,13 +262,32 @@ class Prepartum(Module):
         ppl = sim.people
         this_inci = cpars['inci']
 
-        # If incidence is non-zero, make some cases
+        # If incidence of pregnancy is non-zero, make some cases
         # Think about how to deal with age/time-varying fertility
         if this_inci > 0:
             demon_conds = ppl.female & (~ppl.dead) & ppl[cls.name].susceptible
             inds_to_choose_from = ssu.true(demon_conds)
             uids = ssu.binomial_filter(this_inci, inds_to_choose_from)
-            cls.set_prognoses(sim, uids)
+
+            # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
+            n_unborn_agents = len(uids)
+            if n_unborn_agents > 0:
+                # Grow the arrays and set properties for the unborn agents
+                # noinspection PyProtectedMember
+                new_inds = sim.people._grow(n_unborn_agents)
+                sim.people.uid[new_inds] = new_inds
+                sim.people.age[new_inds] = -cpars['dur_pregnancy']
+                sim.people.female[new_inds] = np.random.randint(0, 2, n_unborn_agents)
+
+                # Add connections to any vertical transmission layers
+                # Placeholder code to be moved / refactored. The maternal contact network may need to be
+                # handled separately to the sexual networks, TBC how to handle this most elegantly
+                for lkey, layer in sim.people.contacts.items():
+                    if layer.transmission == 'vertical':  # What happens if there's more than one vertical layer?
+                        layer.add_connections(uids, new_inds)
+
+                # Set prognoses for the pregnancies
+                cls.set_prognoses(sim, uids)
 
         return
 
@@ -295,23 +303,8 @@ class Prepartum(Module):
 
         # Change states for the newly pregnant woman
         sim.people[cls.name].susceptible[uids] = False
-        sim.people.pregnant[uids] = True  # bad to have a module directly modify a people attribute?
+        sim.people[cls.name].pregnant[uids] = True  # bad to have a module directly modify a people attribute?
         sim.people[cls.name].ti_pregnant[uids] = sim.ti
-
-        # Add UIDs for the as-yet-unborn agents so we can track prognoses and transmission patterns
-        n_unborn_agents = len(uids)
-        if n_unborn_agents > 0:
-            # Grow the arrays and set properties for the unborn agents
-            # noinspection PyProtectedMember
-            new_inds = sim.people._grow(n_unborn_agents)
-            sim.people.uid[new_inds] = new_inds
-            sim.people.age[new_inds] = -cpars['dur_pregnancy']
-            sim.people.female[new_inds] = np.random.randint(0, 2, n_unborn_agents)
-
-            # Add connections to any vertical transmission layers
-            for lkey, layer in sim.people.contacts.items():
-                if layer.transmission == 'vertical':
-                    layer.add_connections(uids, new_inds)
 
         # Outcomes for pregnancies
         dur = np.full(len(uids), sim.ti + cpars['dur_pregnancy'] / sim.pars.dt)
