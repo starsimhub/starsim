@@ -243,7 +243,7 @@ class Pregnancy(Module):
         super(Pregnancy, cls).initialize(sim)
         sim.results[cls.name]['pregnancies'] = Result(cls.name, 'pregnancies', sim.npts, dtype=int)
         sim.results[cls.name]['births'] = Result(cls.name, 'births', sim.npts, dtype=int)
-        sim['birth_rates'] = None
+        sim['birth_rates'] = None # This turns off birth rates so they only come from this module
         return
 
     @classmethod
