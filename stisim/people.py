@@ -112,6 +112,7 @@ class People(sc.prettyobj):
     # People that we don't want to separate them out?
     def update_states(self, sim):
         self.dead[self.ti_dead <= sim.ti] = True
+        self.age += sim.dt  # ??
 
         for module in sim.modules:
             module.update_states(sim)

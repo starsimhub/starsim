@@ -42,7 +42,6 @@ class Module:
                     old_val = sc.dcp(betaval[k])
                     cpars.beta[k] = [old_val, old_val]
 
-
     @classmethod
     def update_states(cls, sim):
         # Carry out any autonomous state changes at the start of the timestep
@@ -98,13 +97,13 @@ class HIV(Module):
     def update_states(cls, sim):
         # Update CD4
         sim.people.hiv.cd4[~sim.people.dead & sim.people.hiv.infected & sim.people.hiv.on_art] += (
-                                                                                                              sim.pars.hiv.cd4_max -
-                                                                                                              sim.people.hiv.cd4[
-                                                                                                                  ~sim.people.dead & sim.people.hiv.infected & sim.people.hiv.on_art]) / sim.pars.hiv.cd4_rate
+                                                                                                          sim.pars.hiv.cd4_max -
+                                                                                                          sim.people.hiv.cd4[
+                                                                                                              ~sim.people.dead & sim.people.hiv.infected & sim.people.hiv.on_art]) / sim.pars.hiv.cd4_rate
         sim.people.hiv.cd4[~sim.people.dead & sim.people.hiv.infected & ~sim.people.hiv.on_art] += (
-                                                                                                               sim.pars.hiv.cd4_min -
-                                                                                                               sim.people.hiv.cd4[
-                                                                                                                   ~sim.people.dead & sim.people.hiv.infected & ~sim.people.hiv.on_art]) / sim.pars.hiv.cd4_rate
+                                                                                                           sim.pars.hiv.cd4_min -
+                                                                                                           sim.people.hiv.cd4[
+                                                                                                               ~sim.people.dead & sim.people.hiv.infected & ~sim.people.hiv.on_art]) / sim.pars.hiv.cd4_rate
 
     @classmethod
     def initialize(cls, sim):
@@ -122,13 +121,20 @@ class HIV(Module):
         sim.results[cls.name]['new_infections'] = Result(cls.name, 'n_infected', sim.npts, dtype=int)
         sim.results[cls.name]['n_art'] = Result(cls.name, 'n_art', sim.npts, dtype=int)
 
+        # Where to add MTCT results?? In a connector?? Adding here for now
+        sim.results[cls.name]['new_mtct'] = Result(cls.name, 'new_mtct', sim.npts, dtype=int)
+
     @classmethod
     def update_results(cls, sim):
-        sim.results[cls.name]['n_susceptible'][sim.ti] = np.count_nonzero(sim.people.hiv.susceptible)
-        sim.results[cls.name]['n_infected'][sim.ti] = np.count_nonzero(sim.people.hiv.infected)
+        hivppl = sim.people[cls.name]
+
+        sim.results[cls.name]['n_susceptible'][sim.ti] = np.count_nonzero(hivppl.susceptible)
+        sim.results[cls.name]['n_infected'][sim.ti] = np.count_nonzero(hivppl.infected)
         sim.results[cls.name]['prevalence'][sim.ti] = sim.results[cls.name].n_infected[sim.ti] / sim.people.n
-        sim.results[cls.name]['new_infections'] = np.count_nonzero(sim.people[cls.name].ti_infected == sim.ti)
-        sim.results[cls.name]['n_art'] = np.count_nonzero(~sim.people.dead & sim.people[cls.name].on_art)
+        sim.results[cls.name]['new_infections'][sim.ti] = np.count_nonzero(hivppl.ti_infected == sim.ti)
+        sim.results[cls.name]['n_art'][sim.ti] = np.count_nonzero(~sim.people.dead & hivppl.on_art)
+        sim.results[cls.name]['new_mtct'][sim.ti] = np.count_nonzero(
+            (hivppl.ti_infected == sim.ti) & (sim.people.age < 0))  # Hacky
 
     @classmethod
     def make_new_cases(cls, sim):
@@ -213,7 +219,6 @@ class Gonorrhea(Module):
 
 
 class Pregnancy(Module):
-
     # Other, e.g. postpartum, on contraception...
     states = [
         State('infertile', bool, False),  # Applies to girls and women outside the fertility window
@@ -234,14 +239,26 @@ class Pregnancy(Module):
         super().__init__(pars)
 
     @classmethod
+    def initialize(cls, sim):
+        """
+        Results could include a range of birth outcomes e.g. LGA, stillbirths, etc.
+        Still unclear whether this logic should live in the pregnancy module, the
+        individual disease modules, the connectors, or the sim.
+        """
+        super(Pregnancy, cls).initialize(sim)
+        sim.results[cls.name]['pregnancies'] = Result(cls.name, 'pregnancies', sim.npts, dtype=int)
+        sim.results[cls.name]['births'] = Result(cls.name, 'births', sim.npts, dtype=int)
+
+    @classmethod
     def update_states(cls, sim):
 
         cpars = sim.pars[cls.name]
 
         # Deliveries
-        deliveries = sim.people[cls.name].ti_delivery <= sim.ti
+        deliveries = sim.people[cls.name].pregnant & (sim.people[cls.name].ti_delivery <= sim.ti)
         sim.people[cls.name].pregnant[deliveries] = False
         sim.people[cls.name].susceptible[deliveries] = True  # Currently assuming no postpartum window
+        sim.people[cls.name].ti_delivery[deliveries] = sim.ti
 
         # Maternal deaths
         maternal_deaths = ssu.true(sim.people.pregnancy.ti_dead <= sim.ti)
@@ -316,4 +333,7 @@ class Pregnancy(Module):
 
     @classmethod
     def update_results(cls, sim):
-        return
+        mppl = sim.people[cls.name]
+        sim.results[cls.name]['pregnancies'][sim.ti] = np.count_nonzero(mppl.ti_pregnant == sim.ti)
+        sim.results[cls.name]['births'][sim.ti] = np.count_nonzero(mppl.ti_delivery == sim.ti)
+

@@ -47,13 +47,17 @@ pars = defaultdict(dict)
 # Set beta. The first entry represents transmission risk from infected p1 -> susceptible p2
 # Need to be careful to get the ordering right. So the set-up here would assume that in the
 # random network, p1 is male and p2 is female. In the MSM network, the values represent the
-# averages across insertive/receptive acts.
-pars['hiv']['beta'] = {'random': [2, 1], 'msm': [19, 19]}  # 
+# averages across insertive/receptive acts. In the maternal network, p1=mothers, p2=babies.
+pars['hiv']['beta'] = {'random': [0.0008, 0.0004], 'msm': [0.0075, 0.0075], 'maternal': [0.2, 0]}
 sim = ss.Sim(people, [ss.HIV, ss.Pregnancy], pars=pars)
 sim.run()
 plt.figure()
 plt.plot(sim.tvec, sim.results.hiv.n_infected)
 plt.title('HIV number of infections')
+plt.figure()
+plt.plot(sim.tvec, sim.results.hiv.new_mtct)
+plt.title('New MTCT')
+plt.show()
 # plt.figure()
 # plt.plot(sim.tvec, sim.analyzers[0].cd4)
 # plt.title('CD4 counts')
