@@ -182,7 +182,7 @@ def test_coinfection():
         connectors=[gonorrhea_hiv_connector], # this is where/how we provide connectors from HIV to other modules
     )
 
-    sim = ss.Sim(pars=pars, modules=[ss.HIV, ss.Gonorrhea])
+    sim = ss.Sim(pars=pars, modules=[ss.HIV(), ss.Gonorrhea()])
     sim.run()
 
     return
@@ -202,7 +202,7 @@ def test_layers():
         )]
     )
 
-    sim = ss.Sim(pars=pars, modules=[ss.HIV])
+    sim = ss.Sim(pars=pars, modules=[ss.HIV()])
     sim.run()
 
     return
