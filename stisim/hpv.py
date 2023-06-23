@@ -223,7 +223,7 @@ class HPV(Module):
             genotypes = ssu.choose_w(type_dist, len(hpv_inds), unique=False)
 
         for g in range(ng):
-            cls.infect(sim, inds=hpv_inds[genotypes == g], g=g, layer='seed_infection')
+            cls.make_new_cases(sim, inds=hpv_inds[genotypes == g], g=g, layer='seed_infection')
     @classmethod
     def init_pars(cls, sim):
         # Merge parameters
@@ -387,10 +387,10 @@ class HPV(Module):
                     for a,b in [[layer['p1'],layer['p2']],[layer['p2'],layer['p1']]]:
                         # probability of a->b transmission
                         p_transmit = rel_trans[a]*sim.people[cls.name].rel_trans[a]*rel_sus[b]*sim.people[cls.name].rel_sus[b]*sim.pars[cls.name]['beta'][k]*(1-effective_condoms)
-                        cls.infect(sim, b[np.random.random(len(a))<p_transmit], g)
+                        cls.make_new_cases(sim, b[np.random.random(len(a))<p_transmit], g)
 
     @classmethod
-    def infect(cls, sim, inds, g, layer=None):
+    def make_new_cases(cls, sim, inds, g, layer=None):
         '''
                 Infect people and determine their eventual outcomes.
                 Method also deduplicates input arrays in case one agent is infected many times
