@@ -7,6 +7,7 @@ import sciris as sc
 import numpy as np
 import stisim as ss
 import pylab as pl
+import matplotlib.pyplot as plt
 
 #%% Define the tests
 
@@ -214,6 +215,11 @@ def test_pregnant():
 
     sim = ss.Sim(pars=pars, modules=[ss.HIV, ss.Pregnancy])
     sim.run()
+
+    plt.figure()
+    plt.plot(sim.tvec, sim.results.pregnancy.births)
+    plt.title('Births')
+    plt.show()
 
     return
 
