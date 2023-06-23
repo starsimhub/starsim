@@ -205,20 +205,30 @@ def test_layers():
 def test_pregnant():
     sc.heading('Testing out people, network configuration, and pop updating with HIV and pregnancy')
 
+    def gonorrhea_hiv_connector(sim):
+        low_cd4_inds = ss.true(sim.people.hiv.cd4 < 200)
+        sim.people.gonorrhea.rel_sus[low_cd4_inds] = 2 # increase susceptibility to NG among those with low CD4
+        sim.people.gonorrhea.rel_trans[low_cd4_inds] = 2 # increase transmission of NG among those with low CD4
+        return
+
     # Create a simulation with demographics from a given location
     pars = dict(
         start=1995,
         end=2020,
         location='nigeria',
-        networks=[ss.sspop.DynamicSexualLayer(), ss.sspop.Maternal()]
+        networks=[ss.sspop.DynamicSexualLayer(), ss.sspop.Maternal()],
+        connectors=[gonorrhea_hiv_connector],  # this is where/how we provide connectors from HIV to other modules
+
     )
 
-    sim = ss.Sim(pars=pars, modules=[ss.HIV, ss.Pregnancy])
+    sim = ss.Sim(pars=pars, modules=[ss.HIV, ss.Gonorrhea, ss.Pregnancy])
     sim.run()
 
     plt.figure()
-    plt.plot(sim.tvec, sim.results.pregnancy.births)
-    plt.title('Births')
+    plt.plot(sim.tvec, sim.results.hiv.prevalence, label='HIV')
+    plt.plot(sim.tvec, sim.results.gonorrhea.prevalence, label='Gonorrhea')
+    plt.title('HIV/Gonorrhea')
+    plt.legend()
     plt.show()
 
     return
