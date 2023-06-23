@@ -243,7 +243,7 @@ class Pregnancy(Module):
         super(Pregnancy, cls).initialize(sim)
         sim.results[cls.name]['pregnancies'] = Result(cls.name, 'pregnancies', sim.npts, dtype=int)
         sim.results[cls.name]['births'] = Result(cls.name, 'births', sim.npts, dtype=int)
-        sim['birth_rates'] = None # This turns off birth rates so they only come from this module
+        sim['birth_rates'] = None # This turns off birth rates so births only come from this module
         return
 
     @classmethod
@@ -258,7 +258,7 @@ class Pregnancy(Module):
         sim.people[cls.name].ti_delivery[deliveries] = sim.t
 
         # Maternal deaths
-        maternal_deaths = ssu.true(sim.people.pregnancy.ti_dead <= sim.t)
+        maternal_deaths = ssu.true(sim.people[cls.name].ti_dead <= sim.t)
         if len(maternal_deaths):
             sim.people.alive[maternal_deaths] = False
             sim.people.date_dead[maternal_deaths] = sim.t
