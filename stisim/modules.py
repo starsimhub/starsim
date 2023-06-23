@@ -31,6 +31,9 @@ class Module:
 
         sim.results[cls.name] = sc.objdict()
 
+        # Pick some initially infected agents
+        cls.set_prognoses(sim, np.random.choice(sim.people.uid, sim.pars[cls.name]['initial']))
+
         # Validate parameters
         cpars = sim.pars[cls.name]
         if 'beta' not in cpars:
@@ -109,9 +112,6 @@ class HIV(Module):
     def initialize(cls, sim):
         super(HIV, cls).initialize(sim)
 
-        # Pick some initially infected agents
-        cls.set_prognoses(sim, np.random.choice(sim.people.uid, sim.pars[cls.name]['initial']))
-
         if 'beta' not in sim.pars[cls.name]:
             sim.pars[cls.name].beta = sc.objdict({k: [1, 1] for k in sim.people.contacts})
 
@@ -182,9 +182,6 @@ class Gonorrhea(Module):
 
         cpars = sim.pars[cls.name]
 
-        # Pick some initially infected agents
-        cls.set_prognoses(sim, np.random.choice(sim.people.uid, sim.pars[cls.name]['initial']))
-
         # TODO - not a huge fan of having the result key duplicate the Result name
         sim.results[cls.name]['n_susceptible'] = Result(cls.name, 'n_susceptible', sim.npts, dtype=int)
         sim.results[cls.name]['n_infected'] = Result(cls.name, 'n_infected', sim.npts, dtype=int)
@@ -231,8 +228,9 @@ class Pregnancy(Module):
 
     default_pars = {
         'dur_pregnancy': 0.75,  # Make this a distribution?
-        'inci': 0.01,  # Replace this with age-specific rates
+        'inci': 0.03,  # Replace this with age-specific rates
         'p_death': 0.02,  # Probability of maternal death. Question, should this be linked to age and/or duration?
+        'initial': 3,  # Number of women initially pregnant
     }
 
     def __init__(self, pars):

@@ -2,15 +2,17 @@ import sciris as sc
 import numpy as np
 from .people import make_people
 
-class Sim():
 
+class Sim:
     default_pars = sc.objdict(
         n=1000,
         npts=30,
-        dt=1
+        dt=1,
+        birth_rate=0,  # Set to zero by default to produce static populations
+        death_rate=0,
     )
 
-    def __init__(self, people=None, modules=None, pars=None, interventions=None, analyzers=None):
+    def __init__(self, people=None, modules=None, pars=None, interventions=None, analyzers=None, label=None):
         # TODO - clearer options for time units?
         #   ti - index self.ti = 0
         #    t - floating point year e.g., 2020.5
@@ -20,6 +22,7 @@ class Sim():
         self.ti = 0
 
         self.pars = sc.dcp(self.default_pars)
+        self.label = label
         if pars is not None:
             self.pars.update(pars)
         self.people = people if people is not None else make_people(self.pars['n'])
@@ -34,7 +37,7 @@ class Sim():
 
     @property
     def t(self):
-        return self.ti*self.dt
+        return self.ti * self.dt
 
     @property
     def n(self):
@@ -42,7 +45,7 @@ class Sim():
 
     @property
     def tvec(self):
-        return np.arange(0,self.npts)*self.dt
+        return np.arange(0, self.npts) * self.dt
 
     @property
     def npts(self):
@@ -60,7 +63,6 @@ class Sim():
         for analyzer in self.analyzers:
             analyzer.initialize(self)
 
-
     def run(self):
         self.initialize()
         for i in range(self.pars.npts):
@@ -72,6 +74,7 @@ class Sim():
 
     def step(self):
 
+        self.people.update_demography(self)
         self.people.update_states(self)
 
         for intervention in self.interventions:

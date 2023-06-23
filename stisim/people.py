@@ -1,6 +1,7 @@
 import sciris as sc
 import numpy as np
 from .results import Result
+from . import utils as ssu
 import functools
 
 obj_set = object.__setattr__
@@ -39,7 +40,7 @@ class People(sc.prettyobj):
         State('uid', int),  # TODO: will we support removing agents? It could make indexing much more complicated...
         State('age', float),
         State('female', bool, False),
-        State('pregnant', bool, False),
+        State('pregnant', bool, False),  # TODO: remove??
         State('dead', bool, False),
         State('ti_dead', float, np.nan),
         # Time index for death - defaults to natural causes but gets overwritten if they die of something first
@@ -110,10 +111,35 @@ class People(sc.prettyobj):
     # these methods. Would it make sense for the base variables like
     # UID, age etc. to be in a Module? Or are they so heavily baked into
     # People that we don't want to separate them out?
+    def update_demography(self, sim):
+        """
+        Apply births, deaths, and aging
+        """
+        self.age += sim.dt  # Aging
+
+        # Births
+        if sim.pars.birth_rate > 0:
+            demon_conds = self.female & (~self.dead)
+            inds_to_choose_from = ssu.true(demon_conds)
+            uids = ssu.binomial_filter(sim.pars.birth_rate, inds_to_choose_from)
+
+            new_agents = len(uids)
+            if new_agents > 0:
+                # noinspection PyProtectedMember
+                new_inds = sim.people._grow(new_agents)
+                sim.people.uid[new_inds] = new_inds
+                sim.people.age[new_inds] = 0
+                sim.people.female[new_inds] = np.random.randint(0, 2, new_agents)
+
+        # Deaths
+        if sim.pars.death_rate > 0:
+            demon_conds = ~self.dead
+            inds_to_choose_from = ssu.true(demon_conds)
+            uids = ssu.binomial_filter(sim.pars.death_rate, inds_to_choose_from)
+            self.ti_dead[uids] = sim.ti
+
     def update_states(self, sim):
         self.dead[self.ti_dead <= sim.ti] = True
-        self.age += sim.dt  # ??
-
         for module in sim.modules:
             module.update_states(sim)
 
