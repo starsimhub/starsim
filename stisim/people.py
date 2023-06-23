@@ -125,40 +125,41 @@ class People(ssb.BasePeople):
         return
 
 
-    def update_states(self, t, sim, year=None):
+    def update_states(self, t, sim):
         ''' Perform all state updates at the current timestep '''
-
         # Initialize
+        self.init_flows()
         self.t = t
         self.dt = self.pars['dt']
-        self.init_flows()
-
-        # Let people age by one time step
-        self.increment_age()
 
         for module in sim.modules:
-            module.update_states_pre(sim)
+            module.update_states(sim)
 
-        # Perform demographic updates
-        update_freq = max(1, int(self.pars['dt_demog'] / self.pars['dt'])) # Ensure it's an integer not smaller than 1
+        # Perform network updates
+        for lkey, layer in self.contacts.items():
+            layer.update(self)
+
+        return
+
+    def update_demography(self, t, year=None):
+
+        self.increment_age()
+
+        update_freq = max(1, int(self.pars['dt_demog'] / self.pars['dt']))  # Ensure it's an integer not smaller than 1
         if t % update_freq == 0:
-
             # Apply death rates from other causes
-            other_deaths, deaths_female, deaths_male    = self.apply_death_rates(year=year)
-            self.demographic_flows['other_deaths']      = other_deaths
-            self.sex_flows['other_deaths_by_sex'][0]    = deaths_female
-            self.sex_flows['other_deaths_by_sex'][1]    = deaths_male
+            other_deaths, deaths_female, deaths_male = self.apply_death_rates(year=year)
+            self.demographic_flows['other_deaths'] = other_deaths
+            self.sex_flows['other_deaths_by_sex'][0] = deaths_female
+            self.sex_flows['other_deaths_by_sex'][1] = deaths_male
 
-            # Add births
-            ## TODO: check if pregnancy module exists?
+            # Add births if pregnancy not in modules
             new_births = self.add_people(year=year)
             self.demographic_flows['births'] = new_births
 
             # Check migration
             migration = self.check_migration(year=year)
             self.demographic_flows['migration'] = migration
-
-        return
 
 
     #%% Methods for updating state
@@ -228,10 +229,13 @@ class People(ssb.BasePeople):
         assert (year is None) != (new_people is None), 'Must set either year or n_births, not both'
 
         if new_people is None:
-            years = self.pars['birth_rates'][0]
-            rates = self.pars['birth_rates'][1]
-            this_birth_rate = self.pars['rel_birth']*np.interp(year, years, rates)*self.pars['dt_demog']/1e3
-            new_people = sc.randround(this_birth_rate*self.n_alive) # Crude births per 1000
+            if self.pars['birth_rates'] is None: # Births taken care of via pregnancy module
+                new_people = 0
+            else:
+                years = self.pars['birth_rates'][0]
+                rates = self.pars['birth_rates'][1]
+                this_birth_rate = self.pars['rel_birth']*np.interp(year, years, rates)*self.pars['dt_demog']/1e3
+                new_people = sc.randround(this_birth_rate*self.n_alive) # Crude births per 1000
 
         if new_people>0:
             # Generate other characteristics of the new people

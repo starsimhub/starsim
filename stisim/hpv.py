@@ -155,7 +155,7 @@ class HPV(Module):
     pars['cumdysp']         = dict()
 
     @classmethod
-    def update_states_pre(cls, sim):
+    def update_states(cls, sim):
 
         # Perform updates that are genotype-specific
         ng = sim.pars[cls.name]['n_genotypes']
@@ -374,7 +374,7 @@ class HPV(Module):
     def update_results(cls, sim):
         pass
     @classmethod
-    def transmit(cls, sim):
+    def make_new_cases(cls, sim):
         eff_condoms = sim.pars[cls.name]['eff_condoms']
 
         for k, layer in sim.people.contacts.items():

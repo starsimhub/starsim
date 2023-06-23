@@ -326,17 +326,18 @@ class Sim(ssb.BaseSim):
         # Shorten key variables
         t = self.t
         year = self.yearvec[t]
-        tind = self.yearvec[t] - self['start']
 
-        # Update demographics, states, modules, partnerships
-        self.people.update_states(t=t, sim=self, year=year) # This ages people, applies deaths, generates new births, and runs modules
+        # Update states, modules, partnerships
+        self.people.update_states(t=t, sim=self) # This runs modules
         self.update_connectors()
-        for lkey, layer in self.people.contacts.items():
-            layer.update(self.people)
 
         for module in self.modules:
-            module.transmit(self)
+            module.make_new_cases(self)
             module.update_results(self)
+
+        # Do demographic updates
+        # Occurs after running modules in case modeling pregnancies to get migration right
+        self.people.update_demography(t=t, year=year)  # This ages people and does births, deaths, migrations
 
         # Index for results
         resfreq = int(1 / self['dt'])

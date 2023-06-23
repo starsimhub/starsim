@@ -54,6 +54,7 @@ def make_pars(**kwargs):
     pars['use_migration']   = True          # Whether to estimate migration rates to correct the total population size
 
     # Events and interventions
+    pars['connectors']      = sc.autolist()
     pars['interventions']   = sc.autolist() # The interventions present in this simulation; populated by the user
     pars['analyzers']       = sc.autolist() # The functions present in this simulation; populated by the user
     pars['timelimit']       = None # Time limit for the simulation (seconds)

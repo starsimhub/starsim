@@ -35,9 +35,15 @@ class Module():
         # but subsequently modules could have their own logic for initializing the default values
         # and initializing any outputs that are required
         sim.people.add_module(cls)
+
     @classmethod
-    def update_states_pre(cld, sim):
+    def update_states(cld, sim):
         # Carry out any autonomous state changes at the start of the timestep
+        pass
+
+    @classmethod
+    def make_new_cases(cls, sim):
+        # Add new cases of module, through transmission, incidence, etc.
         pass
 
     @classmethod
@@ -73,7 +79,7 @@ class HIV(Module):
     }
 
     @classmethod
-    def update_states_pre(cls, sim):
+    def update_states(cls, sim):
         # Update CD4
         sim.people.hiv.cd4[sim.people.alive & sim.people.hiv.infected & sim.people.hiv.on_art] += (sim.pars.hiv.cd4_max - sim.people.hiv.cd4[sim.people.alive & sim.people.hiv.infected & sim.people.hiv.on_art])/sim.pars.hiv.cd4_rate
         sim.people.hiv.cd4[sim.people.alive & sim.people.hiv.infected & ~sim.people.hiv.on_art] += (sim.pars.hiv.cd4_min - sim.people.hiv.cd4[sim.people.alive & sim.people.hiv.infected & ~sim.people.hiv.on_art])/sim.pars.hiv.cd4_rate
@@ -103,7 +109,7 @@ class HIV(Module):
         sim.results[cls.name]['n_art'] = np.count_nonzero(sim.people.alive & sim.people[cls.name].on_art)
 
     @classmethod
-    def transmit(cls, sim):
+    def make_new_cases(cls, sim):
         eff_condoms = sim.pars[cls.name]['eff_condoms']
 
         for k, layer in sim.people.contacts.items():
@@ -143,18 +149,13 @@ class Gonorrhea(Module):
         super().__init__(pars)
 
     @classmethod
-    def update_states_pre(cls, sim):
-        # What if something in here should depend on another module?
-        # I guess we could just check for it e.g., 'if HIV in sim.modules' or
-        # 'if 'hiv' in sim.people' or something
+    def update_states(cls, sim):
         gonorrhea_deaths = sim.people.gonorrhea.ti_dead <= sim.t
         sim.people.alive[gonorrhea_deaths] = False
         sim.people.date_dead[gonorrhea_deaths] = sim.t
 
     @classmethod
     def initialize(cls, sim):
-        # Do any steps in this method depend on what other modules are going to be added? We can inspect
-        # them via sim.modules at this point
         super(Gonorrhea, cls).initialize(sim)
 
         # Pick some initially infected agents
@@ -178,7 +179,7 @@ class Gonorrhea(Module):
         sim.results[cls.name]['new_infections'] = np.count_nonzero(sim.people[cls.name].ti_infected == sim.t)
 
     @classmethod
-    def transmit(cls, sim):
+    def make_new_cases(cls, sim):
         eff_condoms = sim.pars[cls.name]['eff_condoms']
 
         for k, layer in sim.people.contacts.items():
