@@ -484,22 +484,14 @@ class Sim(ssb.BaseSim):
         return
 
     def init_network(self):
-        for i, network in enumerate(self['network_pars']):
-            if 'name' in network.keys():
-                layer_name = network['name']
+        for i, network in enumerate(self['networks']):
+            if network.label is not None:
+                layer_name = network.label
             else:
                 layer_name = f'layer{i}'
-            if 'pars' in network.keys():
-                network_pars = network['pars']
-            else:
-                network_pars=None
-            if 'layer' in network.keys():
-                layer = network['layer']
-                self.people.contacts[layer_name] = layer(network_pars)
-                self.people.contacts[layer_name].initialize(self.people)
-            else:
-                errormsg = f'a layer class must be provided'
-                raise ValueError(errormsg)
+                network.label = layer_name
+            network.initialize(self.people)
+            self.people.contacts[layer_name] = network
 
         return
 

@@ -1128,7 +1128,7 @@ class Layer(FlexDict):
         layer2 = hpv.Layer(**layer, index=index, self_conn=self_conn, label=layer.label)
     '''
 
-    def __init__(self, *args, label=None, **kwargs):
+    def __init__(self, *args, transmission='horizontal', label=None, **kwargs):
         self.meta = {
             'p1':     ssd.default_int,   # p1
             'p2':     ssd.default_int,   # p2
@@ -1136,7 +1136,9 @@ class Layer(FlexDict):
             'dur':   ssd.default_float, # Duration of partnership
             'start': ssd.default_int, # Date of partnership start
             'end':   ssd.default_float, # Date of partnership end
+            'beta':  ssd.default_float,
         }
+        self.transmission = transmission  # "vertical" or "horizontal", determines whether transmission is bidirectional
         self.basekey = 'p1' # Assign a base key for calculating lengths and performing other operations
         self.label = label
 
@@ -1157,6 +1159,9 @@ class Layer(FlexDict):
             self[key] = np.ones(len(self), dtype=self.meta[key])
 
         return
+
+    def initialize(self):
+        pass
 
     def __len__(self):
         try:

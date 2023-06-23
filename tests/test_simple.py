@@ -175,10 +175,7 @@ def test_coinfection():
         start=1995,
         end=2020,
         location='nigeria',
-        network_pars=[dict(
-            name='test',
-            layer=ss.sspop.DynamicSexualLayer,
-        )],
+        networks = [ss.sspop.DynamicSexualLayer()],
         connectors=[gonorrhea_hiv_connector], # this is where/how we provide connectors from HIV to other modules
     )
 
@@ -196,13 +193,26 @@ def test_layers():
         start=1995,
         end=2020,
         location='nigeria',
-        network_pars=[dict(
-            name='test',
-            layer=ss.sspop.DynamicSexualLayer,
-        )]
+        networks = [ss.sspop.DynamicSexualLayer()],
     )
 
     sim = ss.Sim(pars=pars, modules=[ss.HIV])
+    sim.run()
+
+    return
+
+def test_pregnant():
+    sc.heading('Testing out people, network configuration, and pop updating with HIV and pregnancy')
+
+    # Create a simulation with demographics from a given location
+    pars = dict(
+        start=1995,
+        end=2020,
+        location='nigeria',
+        networks=[ss.sspop.DynamicSexualLayer(), ss.sspop.Maternal()]
+    )
+
+    sim = ss.Sim(pars=pars, modules=[ss.HIV, ss.Pregnancy])
     sim.run()
 
     return
@@ -222,7 +232,8 @@ if __name__ == '__main__':
 
     # sim = test_layers()
 
-    sim = test_coinfection()
+    # sim = test_coinfection()
+    sim = test_pregnant()
 
     sc.toc(T)
     print('Done.')

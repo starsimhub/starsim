@@ -66,7 +66,7 @@ def make_pars(**kwargs):
                                         [.12, .10, .09, .09, .08, .08, .06, .06, .06, .06, .05, .04, .04, .03, .02, .01, 0.005, 0.005,   0]])
 
     # Network parameters, generally initialized after the population has been constructed
-    pars['network_pars']    = sc.autolist() # Network types and parameters
+    pars['networks']    = sc.autolist() # Network types and parameters
     pars['geostructure']    = 1     # Defines how many geographic clusters there should be in the simulated population
     pars['debut']           = dict(f=dict(dist='normal', par1=15.0, par2=2.1), # Location-specific data should be used here if possible
                                    m=dict(dist='normal', par1=17.6, par2=1.8))
