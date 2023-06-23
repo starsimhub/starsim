@@ -150,7 +150,8 @@ class People(ssb.BasePeople):
             self.sex_flows['other_deaths_by_sex'][1]    = deaths_male
 
             # Add births
-            new_births = self.add_births(year=year)
+            ## TODO: check if pregnancy module exists?
+            new_births = self.add_people(year=year)
             self.demographic_flows['births'] = new_births
 
             # Check migration
@@ -215,7 +216,7 @@ class People(ssb.BasePeople):
         return other_deaths, deaths_female, deaths_male
 
 
-    def add_births(self, year=None, new_births=None, ages=0):
+    def add_people(self, year=None, new_people=None, ages=0):
         '''
         Add more people to the population
 
@@ -224,26 +225,26 @@ class People(ssb.BasePeople):
         current `People` instance.
         '''
 
-        assert (year is None) != (new_births is None), 'Must set either year or n_births, not both'
+        assert (year is None) != (new_people is None), 'Must set either year or n_births, not both'
 
-        if new_births is None:
+        if new_people is None:
             years = self.pars['birth_rates'][0]
             rates = self.pars['birth_rates'][1]
             this_birth_rate = self.pars['rel_birth']*np.interp(year, years, rates)*self.pars['dt_demog']/1e3
-            new_births = sc.randround(this_birth_rate*self.n_alive) # Crude births per 1000
+            new_people = sc.randround(this_birth_rate*self.n_alive) # Crude births per 1000
 
-        if new_births>0:
+        if new_people>0:
             # Generate other characteristics of the new people
-            uids, sexes, debuts = sspop.set_static_demog(new_n=new_births, existing_n=len(self), pars=self.pars)
+            uids, sexes, debuts = sspop.set_static_demog(new_n=new_people, existing_n=len(self), pars=self.pars)
             # Grow the arrays`
-            new_inds = self._grow(new_births)
+            new_inds = self._grow(new_people)
             self.uid[new_inds]          = uids
             self.age[new_inds]          = ages
             self.sex[new_inds]          = sexes
             self.debut[new_inds]        = debuts
 
 
-        return new_births*self.pars['pop_scale']
+        return new_people*self.pars['pop_scale']
 
 
     def check_migration(self, year=None):
@@ -286,7 +287,7 @@ class People(ssb.BasePeople):
             ages_to_add = ssu.true(difference>0) # Ages where we have too few, need to apply imigration
             n_to_add = difference[ages_to_add] # Determine number of agents to add for each age
             ages_to_add_list = np.repeat(ages_to_add, n_to_add)
-            self.add_births(new_births=len(ages_to_add_list), ages=np.array(ages_to_add_list))
+            self.add_people(new_people=len(ages_to_add_list), ages=np.array(ages_to_add_list))
 
             # Remove people
             remove_frac = n_to_remove / count_ages[ages_to_remove]
