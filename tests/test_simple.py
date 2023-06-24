@@ -231,6 +231,11 @@ def test_pregnant():
     plt.legend()
     plt.show()
 
+    plt.figure()
+    plt.plot(sim.tvec, sim.results.pregnancy.births)
+    plt.title('Births')
+    plt.show()
+
     return
 
 

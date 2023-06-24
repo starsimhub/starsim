@@ -5,6 +5,7 @@ from .results import Result
 from . import defaults as ssd
 from . import misc as ssm
 from . import utils as ssu
+from . import population as sspop
 
 class Module():
     # Base module contains states/attributes that all modules have
@@ -256,6 +257,14 @@ class Pregnancy(Module):
         sim.people[cls.name].pregnant[deliveries] = False
         sim.people[cls.name].susceptible[deliveries] = True  # Currently assuming no postpartum window
         sim.people[cls.name].ti_delivery[deliveries] = sim.t
+
+        delivery_inds = ssu.true(deliveries)
+        if len(delivery_inds):
+            for _, layer in sim.people.contacts.items():
+                if isinstance(layer, sspop.Maternal):
+                    new_birth_inds = layer.find_contacts(delivery_inds)
+                    new_births = len(new_birth_inds) * sim['pop_scale']
+                    sim.people.demographic_flows['births'] = new_births
 
         # Maternal deaths
         maternal_deaths = ssu.true(sim.people[cls.name].ti_dead <= sim.t)
