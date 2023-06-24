@@ -298,7 +298,7 @@ class Pregnancy(Module):
         # If incidence of pregnancy is non-zero, make some cases
         # Think about how to deal with age/time-varying fertility
         if this_inci > 0:
-            demon_conds = ppl.is_female & ppl.alive & ppl[cls.name].susceptible
+            demon_conds = ppl.is_female & ppl.is_active & ppl[cls.name].susceptible
             inds_to_choose_from = ssu.true(demon_conds)
             uids = ssu.binomial_filter(this_inci, inds_to_choose_from)
 
@@ -306,7 +306,6 @@ class Pregnancy(Module):
             n_unborn_agents = len(uids)
             if n_unborn_agents > 0:
                 # Grow the arrays and set properties for the unborn agents
-                # noinspection PyProtectedMember
                 new_inds = sim.people._grow(n_unborn_agents)
                 sim.people.uid[new_inds] = new_inds
                 sim.people.age[new_inds] = -cpars['dur_pregnancy']
@@ -340,7 +339,7 @@ class Pregnancy(Module):
 
         # Change states for the newly pregnant woman
         sim.people[cls.name].susceptible[uids] = False
-        sim.people[cls.name].pregnant[uids] = True  # bad to have a module directly modify a people attribute?
+        sim.people[cls.name].pregnant[uids] = True
         sim.people[cls.name].ti_pregnant[uids] = sim.t
 
         # Outcomes for pregnancies
