@@ -219,13 +219,16 @@ class Pregnancy(Module):
         State('infertile', bool, False),  # Applies to girls and women outside the fertility window
         State('susceptible', bool, True),  # Applies to girls and women inside the fertility window - needs renaming
         State('pregnant', bool, False),  # Currently pregnant
+        State('postpartum', bool, False),  # Currently post-partum
         State('ti_pregnant', float, np.nan),  # Time pregnancy begins
         State('ti_delivery', float, np.nan),  # Time of delivery
+        State('ti_postpartum', float, np.nan),  # Time postpartum ends
         State('ti_dead', float, np.nan),  # Maternal mortality
     ]
 
     default_pars = {
         'dur_pregnancy': 0.75,  # Make this a distribution?
+        'dur_postpartum': 0.5,  # Make this a distribution?
         'inci': 0.03,  # Replace this with age-specific rates
         'p_death': 0.02,  # Probability of maternal death. Question, should this be linked to age and/or duration?
         'initial': 3,  # Number of women initially pregnant
@@ -255,8 +258,15 @@ class Pregnancy(Module):
         # Deliveries
         deliveries = sim.people[cls.name].pregnant & (sim.people[cls.name].ti_delivery <= sim.t)
         sim.people[cls.name].pregnant[deliveries] = False
-        sim.people[cls.name].susceptible[deliveries] = True  # Currently assuming no postpartum window
+        sim.people[cls.name].postpartum[deliveries] = True
+        sim.people[cls.name].susceptible[deliveries] = False
         sim.people[cls.name].ti_delivery[deliveries] = sim.t
+
+        # Postpartum
+        postpartum = ~sim.people[cls.name].pregnant & (sim.people[cls.name].ti_postpartum <= sim.t)
+        sim.people[cls.name].postpartum[postpartum] = False
+        sim.people[cls.name].susceptible[postpartum] = True
+        sim.people[cls.name].ti_postpartum[postpartum] = sim.t
 
         delivery_inds = ssu.true(deliveries)
         if len(delivery_inds):
@@ -288,7 +298,7 @@ class Pregnancy(Module):
         # If incidence of pregnancy is non-zero, make some cases
         # Think about how to deal with age/time-varying fertility
         if this_inci > 0:
-            demon_conds = ppl.is_female & (ppl.alive) & ppl[cls.name].susceptible
+            demon_conds = ppl.is_female & ppl.alive & ppl[cls.name].susceptible
             inds_to_choose_from = ssu.true(demon_conds)
             uids = ssu.binomial_filter(this_inci, inds_to_choose_from)
 
@@ -337,6 +347,9 @@ class Pregnancy(Module):
         dur = np.full(len(uids), sim.t + cpars['dur_pregnancy'] / sim.pars.dt)
         dead = np.random.random(len(uids)) < sim.pars[cls.name].p_death
         sim.people[cls.name].ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
+        dur_post_partum = np.full(len(uids), dur + cpars['dur_postpartum'] / sim.pars.dt)
+        sim.people[cls.name].ti_postpartum[uids] = dur_post_partum
+
         if len(ssu.true(dead)):
             sim.people[cls.name].ti_dead[uids[dead]] = dur[dead]
         return

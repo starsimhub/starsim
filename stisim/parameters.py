@@ -32,15 +32,15 @@ def make_pars(**kwargs):
     pars = sc.objdict()
 
     # Population parameters
-    pars['n_agents']        = 10e3      # Number of agents
-    pars['total_pop']       = None      # If defined, used for calculating the scale factor
-    pars['pop_scale']       = None      # How much to scale the population
-    pars['location']        = 'nigeria' # What location to load data from -- default Nigeria
-    pars['lx']              = None      # Proportion of people alive at the beginning of age interval x
-    pars['birth_rates']     = None      # Birth rates, loaded below
-    pars['death_rates']     = None      # Death rates, loaded below
-    pars['rel_birth']       = 1.0       # Birth rate scale factor
-    pars['rel_death']       = 1.0       # Death rate scale factor
+    pars['n_agents']        = 10e3          # Number of agents
+    pars['total_pop']       = None          # If defined, used for calculating the scale factor
+    pars['pop_scale']       = None          # How much to scale the population
+    pars['location']        = 'nigeria'     # What location to load data from -- default Nigeria
+    pars['lx']              = None          # Proportion of people alive at the beginning of age interval x
+    pars['birth_rates']     = None          # Birth rates, loaded below
+    pars['death_rates']     = None          # Death rates, loaded below
+    pars['rel_birth']       = 1.0           # Birth rate scale factor
+    pars['rel_death']       = 1.0           # Death rate scale factor
 
     # Simulation parameters
     pars['start']           = 1995.         # Start of the simulation
@@ -57,17 +57,17 @@ def make_pars(**kwargs):
     pars['connectors']      = sc.autolist()
     pars['interventions']   = sc.autolist() # The interventions present in this simulation; populated by the user
     pars['analyzers']       = sc.autolist() # The functions present in this simulation; populated by the user
-    pars['timelimit']       = None # Time limit for the simulation (seconds)
-    pars['stopping_func']   = None # A function to call to stop the sim partway through
+    pars['timelimit']       = None          # Time limit for the simulation (seconds)
+    pars['stopping_func']   = None          # A function to call to stop the sim partway through
 
     # Population distribution of the World Standard Population, used to calculate age-standardised rates (ASR)
-    pars['age_bin_edges']        = np.array( [  0,   5,  10,  15,  20,  25,  30,  35,  40,  45,  50,  55,  60,  65,  70,  75,    80,    85, 100])
+    pars['age_bin_edges']   = np.array( [  0,   5,  10,  15,  20,  25,  30,  35,  40,  45,  50,  55,  60,  65,  70,  75,    80,    85, 100])
     pars['standard_pop']    = np.array([pars['age_bin_edges'],
                                         [.12, .10, .09, .09, .08, .08, .06, .06, .06, .06, .05, .04, .04, .03, .02, .01, 0.005, 0.005,   0]])
 
     # Network parameters, generally initialized after the population has been constructed
-    pars['networks']    = sc.autolist() # Network types and parameters
-    pars['geostructure']    = 1     # Defines how many geographic clusters there should be in the simulated population
+    pars['networks']        = sc.autolist() # Network types and parameters
+    pars['geostructure']    = 1             # Defines how many geographic clusters there should be in the simulated population
     pars['debut']           = dict(f=dict(dist='normal', par1=15.0, par2=2.1), # Location-specific data should be used here if possible
                                    m=dict(dist='normal', par1=17.6, par2=1.8))
 
