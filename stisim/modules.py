@@ -255,14 +255,14 @@ class Pregnancy(Module):
 
         cpars = sim.pars[cls.name]
 
-        # Deliveries
+        # Check for new deliveries
         deliveries = sim.people[cls.name].pregnant & (sim.people[cls.name].ti_delivery <= sim.t)
         sim.people[cls.name].pregnant[deliveries] = False
         sim.people[cls.name].postpartum[deliveries] = True
         sim.people[cls.name].susceptible[deliveries] = False
         sim.people[cls.name].ti_delivery[deliveries] = sim.t
 
-        # Postpartum
+        # Check for new kids emerging from post-partum
         postpartum = ~sim.people[cls.name].pregnant & (sim.people[cls.name].ti_postpartum <= sim.t)
         sim.people[cls.name].postpartum[postpartum] = False
         sim.people[cls.name].susceptible[postpartum] = True
