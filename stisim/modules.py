@@ -320,7 +320,8 @@ class Pregnancy(Module):
                 # handled separately to the sexual networks, TBC how to handle this most elegantly
                 for lkey, layer in sim.people.contacts.items():
                     if layer.transmission == 'vertical':  # What happens if there's more than one vertical layer?
-                        layer.add_connections(uids, new_inds, dur=cpars['dur_pregnancy']+cpars['dur_postpartum'])
+                        durs = np.full((n_unborn_agents), fill_value=cpars['dur_pregnancy']+cpars['dur_postpartum'])
+                        layer.add_connections(uids, new_inds, dur=durs)
 
                 # Set prognoses for the pregnancies
                 cls.set_prognoses(sim, uids)
