@@ -359,14 +359,12 @@ class DynamicSexualLayer(ssb.Layer):
 
 
 class Maternal(ssb.Layer):
-    def __init__(self, transmission='vertical', dur_pregnancy=0.75, dur_postnatal=0.5):
+    def __init__(self, transmission='vertical'):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
         super().__init__(transmission=transmission)
         self.dur = np.array([], dtype=float)  # Duration of active connections in the layer
-        self.dur_pregnancy = dur_pregnancy  # Duration of pregnancy. Question, should premature births come in here?
-        self.dur_postnatal = dur_postnatal  # Length of time that mother & baby remain in the contact network post-birth
         return
 
     def update(self, people):
@@ -375,12 +373,11 @@ class Maternal(ssb.Layer):
     def initialize(self, people):
         pass
 
-    def add_connections(self, mother_inds, unborn_inds):
+    def add_connections(self, mother_inds, unborn_inds, dur):
         """
         Add connections between pregnant women and their as-yet-unborn babies
         """
         beta = np.ones_like(mother_inds)
-        dur = beta*(self.dur_pregnancy+self.dur_postnatal)
         self['p1'] = np.concatenate([self['p1'], mother_inds])
         self['p2'] = np.concatenate([self['p2'], unborn_inds])
         self['beta'] = np.concatenate([self['beta'], beta])

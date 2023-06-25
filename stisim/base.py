@@ -1153,10 +1153,11 @@ class Layer(FlexDict):
         for key,value in kwargs.items():
             self[key] = np.array(value, dtype=self.meta.get(key))
 
-        # Set acts if not provided
-        key = 'acts'
-        if key not in kwargs.keys():
-            self[key] = np.ones(len(self), dtype=self.meta[key])
+        # Set beta and acts if not provided
+        keys = ['beta', 'acts']
+        for key in keys:
+            if key not in kwargs.keys():
+                self[key] = np.ones(len(self), dtype=self.meta[key])
 
         return
 
