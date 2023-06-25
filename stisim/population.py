@@ -368,7 +368,11 @@ class Maternal(ssb.Layer):
         return
 
     def update(self, people):
-        pass
+        # Set beta to 0 for women who complete post-partum period
+        # Keep connections for now, might want to consider removing
+        self['dur'] = self['dur'] - people.dt
+        inactive = self['dur'] <= 0
+        self['beta'][inactive] = 0
 
     def initialize(self, people):
         pass
