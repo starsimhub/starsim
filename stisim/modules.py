@@ -7,17 +7,23 @@ from . import utils as ssu
 from . import population as sspop
 
 
+def state_dict(*args):
+    return sc.objdict({state.name:state for state in args})
+
+
 class Module(sc.prettyobj):
     # Base module contains states/attributes that all modules have
-    default_pars = {}
-    states = [
-        State('rel_sus', float, 1),
-        State('rel_sev', float, 1),
-        State('rel_trans', float, 1),
-    ]
     
     def __init__(self, pars=None):
-        pass
+        self.default_pars = sc.mergedicts(pars)
+        self.states = state_dict(
+            State('rel_sus', float, 1),
+            State('rel_sev', float, 1),
+            State('rel_trans', float, 1),
+        )
+        self.results = {}
+        return
+    
     
     def initialize(self, sim):
         # Merge parameters
@@ -61,27 +67,32 @@ class Module(sc.prettyobj):
 
 
 class HIV(Module):
-    states_to_set = [
-        State('susceptible', bool, True),
-        State('infected', bool, False),
-        State('ti_infected', float, 0),
-        State('on_art', bool, False),
-        State('cd4', float, 500),
-    ]
-
-    default_pars = {
-        'cd4_min': 100,
-        'cd4_max': 500,
-        'cd4_rate': 5,
-        'initial': 30,
-        'eff_condoms': 0.7,
-    }
+    
+    def __init__(self, pars=None):
+        super().__init__(pars)
+        self.states_to_set = state_dict(
+            State('susceptible', bool, True),
+            State('infected', bool, False),
+            State('ti_infected', float, 0),
+            State('on_art', bool, False),
+            State('cd4', float, 500),
+        )
+    
+        self.default_pars = sc.mergedicts({
+            'cd4_min': 100,
+            'cd4_max': 500,
+            'cd4_rate': 5,
+            'initial': 30,
+            'eff_condoms': 0.7,
+        }, self.default_pars)
+        return
 
     
     def update_states(self, sim):
         # Update CD4
         sim.people.hiv.cd4[sim.people.alive & sim.people.hiv.infected & sim.people.hiv.on_art] += (sim.pars.hiv.cd4_max - sim.people.hiv.cd4[sim.people.alive & sim.people.hiv.infected & sim.people.hiv.on_art])/sim.pars.hiv.cd4_rate
         sim.people.hiv.cd4[sim.people.alive & sim.people.hiv.infected & ~sim.people.hiv.on_art] += (sim.pars.hiv.cd4_min - sim.people.hiv.cd4[sim.people.alive & sim.people.hiv.infected & ~sim.people.hiv.on_art])/sim.pars.hiv.cd4_rate
+        return
 
     
     def initialize(self, sim):
@@ -131,24 +142,27 @@ class HIV(Module):
         sim.people[self.name].infected[uids] = True
         sim.people[self.name].ti_infected[uids] = sim.t
 
+
+
 class Gonorrhea(Module):
-    states_to_set = [
-        State('susceptible', bool, True),
-        State('infected', bool, False),
-        State('ti_infected', float, 0),
-        State('ti_recovered', float, 0),
-        State('ti_dead', float, np.nan), # Death due to gonorrhea
-    ]
 
-    default_pars = {
-        'dur_inf': 3, # not modelling diagnosis or treatment explicitly here
-        'p_death': 0.2,
-        'initial': 3,
-        'eff_condoms': 0.7,
-    }
+    def __init__(self, pars=None):
+        super().__init__(pars)
+        self.states_to_set = state_dict(
+            State('susceptible', bool, True),
+            State('infected', bool, False),
+            State('ti_infected', float, 0),
+            State('ti_recovered', float, 0),
+            State('ti_dead', float, np.nan), # Death due to gonorrhea
+        )
 
-    # def __init__(self, pars=None):
-    #     super().__init__(pars)
+        self.default_pars = sc.mergedicts({
+            'dur_inf': 3, # not modelling diagnosis or treatment explicitly here
+            'p_death': 0.2,
+            'initial': 3,
+            'eff_condoms': 0.7,
+        }, self.default_pars)
+        return
 
     
     def update_states(self, sim):
@@ -158,6 +172,7 @@ class Gonorrhea(Module):
         gonorrhea_deaths = sim.people.gonorrhea.ti_dead <= sim.t
         sim.people.alive[gonorrhea_deaths] = False
         sim.people.date_dead[gonorrhea_deaths] = sim.t
+        return
 
     
     def initialize(self, sim):
@@ -216,28 +231,29 @@ class Gonorrhea(Module):
 
 
 class Pregnancy(Module):
-    # Other, e.g. postpartum, on contraception...
-    states_to_set = [
-        State('infertile', bool, False),  # Applies to girls and women outside the fertility window
-        State('susceptible', bool, True),  # Applies to girls and women inside the fertility window - needs renaming
-        State('pregnant', bool, False),  # Currently pregnant
-        State('postpartum', bool, False),  # Currently post-partum
-        State('ti_pregnant', float, np.nan),  # Time pregnancy begins
-        State('ti_delivery', float, np.nan),  # Time of delivery
-        State('ti_postpartum', float, np.nan),  # Time postpartum ends
-        State('ti_dead', float, np.nan),  # Maternal mortality
-    ]
 
-    default_pars = {
-        'dur_pregnancy': 0.75,  # Make this a distribution?
-        'dur_postpartum': 0.5,  # Make this a distribution?
-        'inci': 0.03,  # Replace this with age-specific rates
-        'p_death': 0.02,  # Probability of maternal death. Question, should this be linked to age and/or duration?
-        'initial': 3,  # Number of women initially pregnant
-    }
+    def __init__(self, pars=None):
+        super().__init__(pars)
+        # Other, e.g. postpartum, on contraception...
+        self.states_to_set = state_dict(
+            State('infertile', bool, False),  # Applies to girls and women outside the fertility window
+            State('susceptible', bool, True),  # Applies to girls and women inside the fertility window - needs renaming
+            State('pregnant', bool, False),  # Currently pregnant
+            State('postpartum', bool, False),  # Currently post-partum
+            State('ti_pregnant', float, np.nan),  # Time pregnancy begins
+            State('ti_delivery', float, np.nan),  # Time of delivery
+            State('ti_postpartum', float, np.nan),  # Time postpartum ends
+            State('ti_dead', float, np.nan),  # Maternal mortality
+        )
 
-    # def __init__(self, pars=None):
-    #     super().__init__(pars)
+        self.default_pars = sc.mergedicts({
+            'dur_pregnancy': 0.75,  # Make this a distribution?
+            'dur_postpartum': 0.5,  # Make this a distribution?
+            'inci': 0.03,  # Replace this with age-specific rates
+            'p_death': 0.02,  # Probability of maternal death. Question, should this be linked to age and/or duration?
+            'initial': 3,  # Number of women initially pregnant
+        }, self.default_pars)
+        return
 
 
     def initialize(self, sim):
@@ -254,8 +270,6 @@ class Pregnancy(Module):
 
 
     def update_states(self, sim):
-
-        cpars = sim.pars[self.name]
 
         # Check for new deliveries
         deliveries = sim.people[self.name].pregnant & (sim.people[self.name].ti_delivery <= sim.t)

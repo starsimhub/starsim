@@ -69,7 +69,7 @@ class People(ssb.BasePeople):
         if hasattr(self, module.name):
             raise Exception(f'Module {module.name} already added')
         self.__setattr__(module.name, sc.objdict())
-        for state in module.states_to_set + module.states:
+        for state in module.states_to_set.values() + module.states.values():
             combined_name = module.name + '.' + state.name
             self.state_names += combined_name
             self.module_states[combined_name] = state
