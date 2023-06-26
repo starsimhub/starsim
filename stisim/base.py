@@ -265,9 +265,9 @@ class BaseSim(ParsObj):
         if pars:
 
             # Handle other special parameters
-            if pars.get('location'):
-                location = pars['location']
-                pars['birth_rates'], pars['death_rates'] = sspar.get_births_deaths(location=location) # Set birth and death rates
+            # if pars.get('location'):
+            #     location = pars['location']
+            #     pars['birth_rates'], pars['death_rates'] = sspar.get_births_deaths(location=location) # Set birth and death rates # TODO: this should not be here
             # Call update_pars() for ParsObj
             super().update_pars(pars=pars, create=create)
 

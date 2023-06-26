@@ -191,24 +191,28 @@ class People(ssb.BasePeople):
         '''
 
         death_pars = self.pars['death_rates']
-        all_years = np.array(list(death_pars.keys()))
-        base_year = all_years[0]
-        age_bins = death_pars[base_year]['m'][:,0]
-        age_inds = np.digitize(self.age, age_bins)-1
-        death_probs = np.empty(len(self), dtype=ssd.default_float)
-        year_ind = sc.findnearest(all_years, year)
-        nearest_year = all_years[year_ind]
-        mx_f = death_pars[nearest_year]['f'][:,1]*self.pars['dt_demog']
-        mx_m = death_pars[nearest_year]['m'][:,1]*self.pars['dt_demog']
-
-        death_probs[self.is_female] = mx_f[age_inds[self.is_female]]
-        death_probs[self.is_male] = mx_m[age_inds[self.is_male]]
-        death_probs[self.age>100] = 1 # Just remove anyone >100
-        death_probs[~self.alive] = 0
-        death_probs *= self.pars['rel_death'] # Adjust overall death probabilities
-
-        # Get indices of people who die of other causes
-        death_inds = ssu.true(ssu.binomial_arr(death_probs))
+        if death_pars:
+            all_years = np.array(list(death_pars.keys()))
+            base_year = all_years[0]
+            age_bins = death_pars[base_year]['m'][:,0]
+            age_inds = np.digitize(self.age, age_bins)-1
+            death_probs = np.empty(len(self), dtype=ssd.default_float)
+            year_ind = sc.findnearest(all_years, year)
+            nearest_year = all_years[year_ind]
+            mx_f = death_pars[nearest_year]['f'][:,1]*self.pars['dt_demog']
+            mx_m = death_pars[nearest_year]['m'][:,1]*self.pars['dt_demog']
+    
+            death_probs[self.is_female] = mx_f[age_inds[self.is_female]]
+            death_probs[self.is_male] = mx_m[age_inds[self.is_male]]
+            death_probs[self.age>100] = 1 # Just remove anyone >100
+            death_probs[~self.alive] = 0
+            death_probs *= self.pars['rel_death'] # Adjust overall death probabilities
+    
+            # Get indices of people who die of other causes
+            death_inds = ssu.true(ssu.binomial_arr(death_probs))
+        else:
+            death_inds = np.array([], dtype=int)
+            
         deaths_female = self.scale_flows(ssu.true(self.is_female[death_inds]))
         deaths_male = self.scale_flows(ssu.true(self.is_male[death_inds]))
         other_deaths = self.remove_people(death_inds, cause='other') # Apply deaths
