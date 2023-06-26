@@ -8,20 +8,23 @@ from . import population as sspop
 
 
 def state_dict(*args):
-    return sc.objdict({state.name:state for state in args})
+    return sc.objdict({state.name:state for state in args}) # TODO: use dictobj instead, probably
+
+def omerge(*args, **kwargs):
+    return sc.objdict(sc.mergedicts(*args, **kwargs))
 
 
 class Module(sc.prettyobj):
     # Base module contains states/attributes that all modules have
     
     def __init__(self, pars=None):
-        self.pars = sc.mergedicts(pars)
+        self.pars = omerge(pars)
         self.states = state_dict(
             State('rel_sus', float, 1),
             State('rel_sev', float, 1),
             State('rel_trans', float, 1),
         )
-        self.results = {}
+        self.results = sc.objdict()
         return
     
     
@@ -70,13 +73,13 @@ class HIV(Module):
             State('cd4', float, 500),
         )
     
-        self.pars = {
+        self.pars = omerge({
             'cd4_min': 100,
             'cd4_max': 500,
             'cd4_rate': 5,
             'initial': 30,
             'eff_condoms': 0.7,
-        } | self.pars
+        }, self.pars)
         return
 
     
@@ -148,12 +151,12 @@ class Gonorrhea(Module):
             State('ti_dead', float, np.nan), # Death due to gonorrhea
         )
 
-        self.pars = {
+        self.pars = omerge({
             'dur_inf': 3, # not modelling diagnosis or treatment explicitly here
             'p_death': 0.2,
             'initial': 3,
             'eff_condoms': 0.7,
-        } | self.pars
+        }, self.pars)
         return
 
     
@@ -238,13 +241,13 @@ class Pregnancy(Module):
             State('ti_dead', float, np.nan),  # Maternal mortality
         )
 
-        self.pars = {
+        self.pars = omerge({
             'dur_pregnancy': 0.75,  # Make this a distribution?
             'dur_postpartum': 0.5,  # Make this a distribution?
             'inci': 0.03,  # Replace this with age-specific rates
             'p_death': 0.02,  # Probability of maternal death. Question, should this be linked to age and/or duration?
             'initial': 3,  # Number of women initially pregnant
-        } | self.pars
+        }, self.pars)
         return
 
 
