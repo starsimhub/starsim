@@ -38,13 +38,11 @@ class Module(sc.prettyobj):
         # and initializing any outputs that are required
         sim.people.add_module(self)
     
-    @classmethod
-    def update_states(cld, sim):
+    def update_states(self, sim):
         # Carry out any autonomous state changes at the start of the timestep
         pass
 
-    @classmethod
-    def make_new_cases(cls, sim):
+    def make_new_cases(self, sim):
         # Add new cases of module, through transmission, incidence, etc.
         pass
 
@@ -239,36 +237,36 @@ class Pregnancy(Module):
     def __init__(self, pars):
         super().__init__(pars)
 
-    @classmethod
-    def initialize(cls, sim):
+
+    def initialize(self, sim):
         """
         Results could include a range of birth outcomes e.g. LGA, stillbirths, etc.
         Still unclear whether this logic should live in the pregnancy module, the
         individual disease modules, the connectors, or the sim.
         """
-        super(Pregnancy, cls).initialize(sim)
-        sim.results[cls.name]['pregnancies'] = Result(cls.name, 'pregnancies', sim.npts, dtype=int)
-        sim.results[cls.name]['births'] = Result(cls.name, 'births', sim.npts, dtype=int)
+        super(Pregnancy, self).initialize(sim)
+        sim.results[self.name]['pregnancies'] = Result(self.name, 'pregnancies', sim.npts, dtype=int)
+        sim.results[self.name]['births'] = Result(self.name, 'births', sim.npts, dtype=int)
         sim['birth_rates'] = None # This turns off birth rates so births only come from this module
         return
 
-    @classmethod
-    def update_states(cls, sim):
 
-        cpars = sim.pars[cls.name]
+    def update_states(self, sim):
+
+        cpars = sim.pars[self.name]
 
         # Check for new deliveries
-        deliveries = sim.people[cls.name].pregnant & (sim.people[cls.name].ti_delivery <= sim.t)
-        sim.people[cls.name].pregnant[deliveries] = False
-        sim.people[cls.name].postpartum[deliveries] = True
-        sim.people[cls.name].susceptible[deliveries] = False
-        sim.people[cls.name].ti_delivery[deliveries] = sim.t
+        deliveries = sim.people[self.name].pregnant & (sim.people[self.name].ti_delivery <= sim.t)
+        sim.people[self.name].pregnant[deliveries] = False
+        sim.people[self.name].postpartum[deliveries] = True
+        sim.people[self.name].susceptible[deliveries] = False
+        sim.people[self.name].ti_delivery[deliveries] = sim.t
 
         # Check for new kids emerging from post-partum
-        postpartum = ~sim.people[cls.name].pregnant & (sim.people[cls.name].ti_postpartum <= sim.t)
-        sim.people[cls.name].postpartum[postpartum] = False
-        sim.people[cls.name].susceptible[postpartum] = True
-        sim.people[cls.name].ti_postpartum[postpartum] = sim.t
+        postpartum = ~sim.people[self.name].pregnant & (sim.people[self.name].ti_postpartum <= sim.t)
+        sim.people[self.name].postpartum[postpartum] = False
+        sim.people[self.name].susceptible[postpartum] = True
+        sim.people[self.name].ti_postpartum[postpartum] = sim.t
 
         delivery_inds = ssu.true(deliveries)
         if len(delivery_inds):
@@ -279,28 +277,28 @@ class Pregnancy(Module):
                     sim.people.demographic_flows['births'] = new_births
 
         # Maternal deaths
-        maternal_deaths = ssu.true(sim.people[cls.name].ti_dead <= sim.t)
+        maternal_deaths = ssu.true(sim.people[self.name].ti_dead <= sim.t)
         if len(maternal_deaths):
             sim.people.alive[maternal_deaths] = False
             sim.people.date_dead[maternal_deaths] = sim.t
 
         return
 
-    @classmethod
-    def make_new_cases(cls, sim):
+
+    def make_new_cases(self, sim):
         """
         Select people to make pregnancy using incidence data
         This should use ASFR data from https://population.un.org/wpp/Download/Standard/Fertility/
         """
         # Abbreviate key variables
-        cpars = sim.pars[cls.name]
+        cpars = sim.pars[self.name]
         ppl = sim.people
         this_inci = cpars['inci']
 
         # If incidence of pregnancy is non-zero, make some cases
         # Think about how to deal with age/time-varying fertility
         if this_inci > 0:
-            demon_conds = ppl.is_female & ppl.is_active & ppl[cls.name].susceptible
+            demon_conds = ppl.is_female & ppl.is_active & ppl[self.name].susceptible
             inds_to_choose_from = ssu.true(demon_conds)
             uids = ssu.binomial_filter(this_inci, inds_to_choose_from)
 
@@ -326,38 +324,38 @@ class Pregnancy(Module):
                         layer.add_connections(uids, new_inds, dur=durs)
 
                 # Set prognoses for the pregnancies
-                cls.set_prognoses(sim, uids)
+                self.set_prognoses(sim, uids)
 
         return
 
-    @classmethod
-    def set_prognoses(cls, sim, uids):
+
+    def set_prognoses(self, sim, uids):
         """
         Make pregnancies
         Add miscarriage/termination logic here
         Also reconciliation with birth rates
         Q, is this also a good place to check for other conditions and set prognoses for the fetus?
         """
-        cpars = sim.pars[cls.name]
+        cpars = sim.pars[self.name]
 
         # Change states for the newly pregnant woman
-        sim.people[cls.name].susceptible[uids] = False
-        sim.people[cls.name].pregnant[uids] = True
-        sim.people[cls.name].ti_pregnant[uids] = sim.t
+        sim.people[self.name].susceptible[uids] = False
+        sim.people[self.name].pregnant[uids] = True
+        sim.people[self.name].ti_pregnant[uids] = sim.t
 
         # Outcomes for pregnancies
         dur = np.full(len(uids), sim.t + cpars['dur_pregnancy'] / sim.pars.dt)
-        dead = np.random.random(len(uids)) < sim.pars[cls.name].p_death
-        sim.people[cls.name].ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
+        dead = np.random.random(len(uids)) < sim.pars[self.name].p_death
+        sim.people[self.name].ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
         dur_post_partum = np.full(len(uids), dur + cpars['dur_postpartum'] / sim.pars.dt)
-        sim.people[cls.name].ti_postpartum[uids] = dur_post_partum
+        sim.people[self.name].ti_postpartum[uids] = dur_post_partum
 
         if len(ssu.true(dead)):
-            sim.people[cls.name].ti_dead[uids[dead]] = dur[dead]
+            sim.people[self.name].ti_dead[uids[dead]] = dur[dead]
         return
 
-    @classmethod
-    def update_results(cls, sim):
-        mppl = sim.people[cls.name]
-        sim.results[cls.name]['pregnancies'][sim.t] = np.count_nonzero(mppl.ti_pregnant == sim.t)
-        sim.results[cls.name]['births'][sim.t] = np.count_nonzero(mppl.ti_delivery == sim.t)
+
+    def update_results(self, sim):
+        mppl = sim.people[self.name]
+        sim.results[self.name]['pregnancies'][sim.t] = np.count_nonzero(mppl.ti_pregnant == sim.t)
+        sim.results[self.name]['births'][sim.t] = np.count_nonzero(mppl.ti_delivery == sim.t)
