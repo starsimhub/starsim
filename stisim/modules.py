@@ -3,7 +3,6 @@ import numpy as np
 from .defaults import State
 from .results import Result
 from . import defaults as ssd
-from . import misc as ssm
 from . import utils as ssu
 from . import population as sspop
 

@@ -10,7 +10,6 @@ from . import utils as ssu
 from . import defaults as ssd
 from . import base as ssb
 from . import population as sspop
-from . import parameters as sspar
 
 
 __all__ = ['People']
@@ -66,8 +65,8 @@ class People(ssb.BasePeople):
         # Initialize all of the states associated with a module
         # This is implemented as People.add_module rather than
         # Module.add_to_people(people) or similar because its primary
-        # role is to modify the
-        if hasattr(self,module.name):
+        # role is to modify the People object
+        if hasattr(self, module.name):
             raise Exception(f'Module {module.name} already added')
         self.__setattr__(module.name, sc.objdict())
         for state in module.states_to_set + module.states:

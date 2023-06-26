@@ -4,17 +4,14 @@ Define core Sim classes
 
 # Imports
 import numpy as np
-import pandas as pd
 import sciris as sc
 from . import base as ssb
 from . import misc as ssm
-from . import defaults as ssd
 from . import utils as ssu
 from . import population as sspop
 from . import parameters as sspar
 from . import interventions as ssi
 from . import analyzers as ssa
-from .settings import options as sso
 
 
 # Define the model
