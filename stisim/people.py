@@ -61,12 +61,12 @@ class People(ssb.BasePeople):
         self.kwargs = kwargs
         return
 
-    def add_module(self, module):
+    def add_module(self, module, force=False):
         # Initialize all of the states associated with a module
         # This is implemented as People.add_module rather than
         # Module.add_to_people(people) or similar because its primary
         # role is to modify the People object
-        if hasattr(self, module.name):
+        if hasattr(self, module.name)and not force:
             raise Exception(f'Module {module.name} already added')
         self.__setattr__(module.name, sc.objdict())
         for state in module.states_to_set.values() + module.states.values():
@@ -74,7 +74,7 @@ class People(ssb.BasePeople):
             self.state_names += combined_name
             self.module_states[combined_name] = state
             self._data[combined_name] = state.new(self.pars, self._n, module=module.name)
-        self._map_arrays()
+        self._map_arrays() # TODO: do not remap all arrays every time a module is added
         return
 
 

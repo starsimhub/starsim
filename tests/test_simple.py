@@ -6,7 +6,7 @@ Simple tests
 import sciris as sc
 import numpy as np
 import stisim as ss
-import pylab as pl
+import pylab as pl # TODO: reconcile pl and plt
 import matplotlib.pyplot as plt
 
 #%% Define the tests
@@ -236,7 +236,7 @@ def test_pregnant():
     plt.title('Births')
     plt.show()
 
-    return
+    return sim
 
 
 

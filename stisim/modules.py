@@ -15,7 +15,7 @@ class Module(sc.prettyobj):
     # Base module contains states/attributes that all modules have
     
     def __init__(self, pars=None):
-        self.default_pars = sc.mergedicts(pars)
+        self.pars = sc.mergedicts(pars)
         self.states = state_dict(
             State('rel_sus', float, 1),
             State('rel_sev', float, 1),
@@ -27,16 +27,8 @@ class Module(sc.prettyobj):
     
     def initialize(self, sim):
         # Merge parameters
-        if self.name not in sim.pars:
-            sim.pars[self.name] = sc.objdict(sc.dcp(self.default_pars))
-        else:
-            if ~isinstance(sim.pars[self.name], sc.objdict):
-                sim.pars[self.name] = sc.objdict(sim.pars[self.name])
-            for k,v in self.default_pars.items():
-                if k not in sim.pars[self.name]:
-                    sim.pars[self.name][k] = v
-
-        sim.results[self.name] = sc.objdict()
+        sim.pars[self.name] = self.pars
+        sim.results[self.name] = self.results
 
         # Add this module to a People instance. This would always involve calling People.add_module
         # but subsequently modules could have their own logic for initializing the default values
@@ -78,13 +70,13 @@ class HIV(Module):
             State('cd4', float, 500),
         )
     
-        self.default_pars = sc.mergedicts({
+        self.pars = {
             'cd4_min': 100,
             'cd4_max': 500,
             'cd4_rate': 5,
             'initial': 30,
             'eff_condoms': 0.7,
-        }, self.default_pars)
+        } | self.pars
         return
 
     
@@ -156,12 +148,12 @@ class Gonorrhea(Module):
             State('ti_dead', float, np.nan), # Death due to gonorrhea
         )
 
-        self.default_pars = sc.mergedicts({
+        self.pars = {
             'dur_inf': 3, # not modelling diagnosis or treatment explicitly here
             'p_death': 0.2,
             'initial': 3,
             'eff_condoms': 0.7,
-        }, self.default_pars)
+        } | self.pars
         return
 
     
@@ -246,13 +238,13 @@ class Pregnancy(Module):
             State('ti_dead', float, np.nan),  # Maternal mortality
         )
 
-        self.default_pars = sc.mergedicts({
+        self.pars = {
             'dur_pregnancy': 0.75,  # Make this a distribution?
             'dur_postpartum': 0.5,  # Make this a distribution?
             'inci': 0.03,  # Replace this with age-specific rates
             'p_death': 0.02,  # Probability of maternal death. Question, should this be linked to age and/or duration?
             'initial': 3,  # Number of women initially pregnant
-        }, self.default_pars)
+        } | self.pars
         return
 
 
