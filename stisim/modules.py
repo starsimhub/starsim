@@ -59,13 +59,13 @@ class HIV(Module):
     
     def __init__(self, pars=None):
         super().__init__(pars)
-        self.states_to_set = ssu.named_dict(
+        self.states = ssu.omerge(ssu.named_dict(
             State('susceptible', bool, True),
             State('infected', bool, False),
             State('ti_infected', float, 0),
             State('on_art', bool, False),
             State('cd4', float, 500),
-        )
+        ), self.states)
     
         self.pars = ssu.omerge({
             'cd4_min': 100,
@@ -137,13 +137,13 @@ class Gonorrhea(Module):
 
     def __init__(self, pars=None):
         super().__init__(pars)
-        self.states_to_set = ssu.named_dict(
+        self.states = ssu.omerge(ssu.named_dict(
             State('susceptible', bool, True),
             State('infected', bool, False),
             State('ti_infected', float, 0),
             State('ti_recovered', float, 0),
             State('ti_dead', float, np.nan), # Death due to gonorrhea
-        )
+        ), self.states)
 
         self.pars = ssu.omerge({
             'dur_inf': 3, # not modelling diagnosis or treatment explicitly here
@@ -224,7 +224,7 @@ class Pregnancy(Module):
     def __init__(self, pars=None):
         super().__init__(pars)
         # Other, e.g. postpartum, on contraception...
-        self.states_to_set = ssu.named_dict(
+        self.states = ssu.omerge(ssu.named_dict(
             State('infertile', bool, False),  # Applies to girls and women outside the fertility window
             State('susceptible', bool, True),  # Applies to girls and women inside the fertility window - needs renaming
             State('pregnant', bool, False),  # Currently pregnant
@@ -233,7 +233,7 @@ class Pregnancy(Module):
             State('ti_delivery', float, np.nan),  # Time of delivery
             State('ti_postpartum', float, np.nan),  # Time postpartum ends
             State('ti_dead', float, np.nan),  # Maternal mortality
-        )
+        ), self.states)
 
         self.pars = ssu.omerge({
             'dur_pregnancy': 0.75,  # Make this a distribution?
