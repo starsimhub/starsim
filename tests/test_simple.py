@@ -185,7 +185,7 @@ def test_coinfection():
     sim = ss.Sim(pars=pars, modules=[ss.HIV(), ss.Gonorrhea()])
     sim.run()
 
-    return
+    return sim
 
 
 def test_layers():
@@ -205,7 +205,7 @@ def test_layers():
     sim = ss.Sim(pars=pars, modules=[ss.HIV()])
     sim.run()
 
-    return
+    return sim
 
 
 
