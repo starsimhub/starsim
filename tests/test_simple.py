@@ -221,7 +221,7 @@ def test_pregnant():
 
     )
 
-    sim = ss.Sim(pars=pars, modules=[ss.HIV, ss.Gonorrhea, ss.Pregnancy])
+    sim = ss.Sim(pars=pars, modules=[ss.HIV(), ss.Gonorrhea(), ss.Pregnancy()])
     sim.run()
 
     plt.figure()

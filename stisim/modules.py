@@ -17,7 +17,7 @@ class Module(sc.prettyobj):
         State('rel_trans', float, 1),
     ]
     
-    def __init__(self):
+    def __init__(self, pars=None):
         pass
     
     def initialize(self, sim):
@@ -234,8 +234,8 @@ class Pregnancy(Module):
         'initial': 3,  # Number of women initially pregnant
     }
 
-    def __init__(self, pars):
-        super().__init__(pars)
+    # def __init__(self, pars=None):
+    #     super().__init__(pars)
 
 
     def initialize(self, sim):
