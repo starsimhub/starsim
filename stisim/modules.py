@@ -113,8 +113,11 @@ class HIV(Module):
         eff_condoms = sim.pars[self.name]['eff_condoms']
 
         for k, layer in sim.people.contacts.items():
-            condoms = layer.pars['condoms']
-            effective_condoms = ssd.default_float(condoms * eff_condoms)
+            if layer.transmission == 'vertical':
+                effective_condoms = 1
+            else:
+                condoms = layer.pars['condoms']
+                effective_condoms = ssd.default_float(condoms * eff_condoms)
             if k in sim.pars[self.name]['beta']:
                 rel_trans = (sim.people[self.name].infected & sim.people.alive).astype(float)
                 rel_sus = (sim.people[self.name].susceptible & sim.people.alive).astype(float)
