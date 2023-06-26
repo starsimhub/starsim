@@ -131,7 +131,7 @@ class People(ssb.BasePeople):
         self.t = t
         self.dt = self.pars['dt']
 
-        for module in sim.modules:
+        for module in sim.modules.values():
             module.update_states(sim)
 
         # Perform network updates

@@ -7,19 +7,13 @@ from . import utils as ssu
 from . import population as sspop
 
 
-def state_dict(*args):
-    return sc.objdict({state.name:state for state in args}) # TODO: use dictobj instead, probably
-
-def omerge(*args, **kwargs):
-    return sc.objdict(sc.mergedicts(*args, **kwargs))
-
 
 class Module(sc.prettyobj):
     # Base module contains states/attributes that all modules have
     
     def __init__(self, pars=None):
-        self.pars = omerge(pars)
-        self.states = state_dict(
+        self.pars = ssu.omerge(pars)
+        self.states = ssu.named_dict(
             State('rel_sus', float, 1),
             State('rel_sev', float, 1),
             State('rel_trans', float, 1),
@@ -65,7 +59,7 @@ class HIV(Module):
     
     def __init__(self, pars=None):
         super().__init__(pars)
-        self.states_to_set = state_dict(
+        self.states_to_set = ssu.named_dict(
             State('susceptible', bool, True),
             State('infected', bool, False),
             State('ti_infected', float, 0),
@@ -73,7 +67,7 @@ class HIV(Module):
             State('cd4', float, 500),
         )
     
-        self.pars = omerge({
+        self.pars = ssu.omerge({
             'cd4_min': 100,
             'cd4_max': 500,
             'cd4_rate': 5,
@@ -143,7 +137,7 @@ class Gonorrhea(Module):
 
     def __init__(self, pars=None):
         super().__init__(pars)
-        self.states_to_set = state_dict(
+        self.states_to_set = ssu.named_dict(
             State('susceptible', bool, True),
             State('infected', bool, False),
             State('ti_infected', float, 0),
@@ -151,7 +145,7 @@ class Gonorrhea(Module):
             State('ti_dead', float, np.nan), # Death due to gonorrhea
         )
 
-        self.pars = omerge({
+        self.pars = ssu.omerge({
             'dur_inf': 3, # not modelling diagnosis or treatment explicitly here
             'p_death': 0.2,
             'initial': 3,
@@ -230,7 +224,7 @@ class Pregnancy(Module):
     def __init__(self, pars=None):
         super().__init__(pars)
         # Other, e.g. postpartum, on contraception...
-        self.states_to_set = state_dict(
+        self.states_to_set = ssu.named_dict(
             State('infertile', bool, False),  # Applies to girls and women outside the fertility window
             State('susceptible', bool, True),  # Applies to girls and women inside the fertility window - needs renaming
             State('pregnant', bool, False),  # Currently pregnant
@@ -241,7 +235,7 @@ class Pregnancy(Module):
             State('ti_dead', float, np.nan),  # Maternal mortality
         )
 
-        self.pars = omerge({
+        self.pars = ssu.omerge({
             'dur_pregnancy': 0.75,  # Make this a distribution?
             'dur_postpartum': 0.5,  # Make this a distribution?
             'inci': 0.03,  # Replace this with age-specific rates

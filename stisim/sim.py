@@ -28,9 +28,9 @@ class Sim(ssb.BaseSim):
         self.data          = None     # The data
         self.popdict       = popdict  # The population dictionary
         self.people        = people   # People object
-        self.modules       = sc.promotetolist(modules)  # List of modules to simulate
+        self.modules       = ssu.named_dict(modules)  # List of modules to simulate
         self.t             = None     # The current time in the simulation (during execution); outside of sim.step(), its value corresponds to next timestep to be computed
-        self.results       = {}       # For storing results
+        self.results       = sc.objdict()       # For storing results
         self.summary       = None     # For storing a summary of the results
         self.initialized   = False    # Whether initialization is complete
         self.complete      = False    # Whether a simulation has completed running
@@ -77,7 +77,7 @@ class Sim(ssb.BaseSim):
         self.init_people(reset=reset, **kwargs) # Create all the people (the heaviest step)
         self.init_network()
         self.init_results()
-        for module in self.modules:
+        for module in self.modules.values():
             module.initialize(self)
         self.init_analyzers()
         self.validate_layer_pars()
@@ -328,7 +328,7 @@ class Sim(ssb.BaseSim):
         self.people.update_states(t=t, sim=self) # This runs modules
         self.update_connectors()
 
-        for module in self.modules:
+        for module in self.modules.values():
             module.make_new_cases(self)
             module.update_results(self)
 
