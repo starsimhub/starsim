@@ -16,9 +16,8 @@ __all__ = []
 
 def named_dict(arg=None, *args):
     ''' Create an objdict based on object names '''
-    args = sc.mergelists(arg, args, coerce='tuple') # Must be a better way
-    print('hi', args)
-    return sc.objdict({arg.name:arg for arg in args}) # TODO: use dictobj instead, probably
+    args = sc.mergelists(arg, args, coerce='tuple') # TODO: Must be a better way, I just forgot
+    return sc.objdict({arg.name:arg for arg in args}) # TODO: use dictobj instead for performance, probably
 
 def omerge(*args, **kwargs):
     ''' Merge things into an objdict '''
