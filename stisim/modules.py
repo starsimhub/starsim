@@ -210,7 +210,7 @@ class Pregnancy(Module):
         super(Pregnancy, self).initialize(sim)
         sim.results[self.name]['pregnancies'] = Result(self.name, 'pregnancies', sim.npts, dtype=int)
         sim.results[self.name]['births'] = Result(self.name, 'births', sim.npts, dtype=int)
-        sim['birth_rates'] = None  # This turns off birth rates so births only come from this module
+        sim['birth_rates'] = None  # This turns off birth rate pars so births only come from this module
         return
 
     def update_states(self, sim):

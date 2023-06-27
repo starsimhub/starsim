@@ -3,12 +3,8 @@ Defines the People class and functions associated with making people
 """
 
 # %% Imports
-import numpy as np
 import sciris as sc
-from . import utils as ssu
-from . import settings as sss
 from . import base as ssb
-from . import population as sspop
 
 __all__ = ['People']
 

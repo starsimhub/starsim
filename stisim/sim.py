@@ -1,6 +1,6 @@
-'''
+"""
 Define core Sim classes
-'''
+"""
 
 # Imports
 import numpy as np
@@ -17,16 +17,12 @@ from . import analyzers as ssa
 # Define the model
 class Sim(ssb.BaseSim):
 
-    def __init__(self, pars=None, datafile=None, label=None, popfile=None, popdict=None, people=None, modules=None,
+    def __init__(self, pars=None, label=None, people=None, modules=None,
                  version=None, **kwargs):
 
         # Set attributes
         self.label         = label    # The label/name of the simulation
         self.created       = None     # The datetime the sim was created
-        self.datafile      = datafile # The name of the data file
-        self.popfile       = popfile  # The population file
-        self.data          = None     # The data
-        self.popdict       = popdict  # The population dictionary
         self.people        = people   # People object
         self.modules       = ssu.named_dict(modules)  # List of modules to simulate
         self.t             = None     # The current time in the simulation (during execution); outside of sim.step(), its value corresponds to next timestep to be computed
@@ -44,16 +40,7 @@ class Sim(ssb.BaseSim):
         default_pars['location'] = None # Don't load the default location here
         super().__init__(default_pars) # Initialize and set the parameters as attributes
 
-        # Load data, including datafile that are used to create additional optional parameters
-        self.load_data(datafile) # Load the data, if provided
-
         # Update parameters
-        if pars is None:
-            pars = dict(location=default_location)
-        else:
-            if not pars.get('location') or pars['location'] is None:
-                pars['location'] = default_location
-
         self.update_pars(pars, **kwargs)   # Update the parameters
 
         return

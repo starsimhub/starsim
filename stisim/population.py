@@ -1,5 +1,7 @@
 '''
-Defines functions for making the population.
+Networks that connect people within a population
+TODO: rename this file networks.py?
+TODO: a network within the model is currently called a layer. Rename?
 '''
 
 # %% Imports

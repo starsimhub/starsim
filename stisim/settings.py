@@ -149,7 +149,7 @@ class Options(sc.objdict):
 
         optdesc.style = 'Set the default plotting style -- options are "STIsim" and "simple" plus those in ' \
                         'pl.style.available; see also options.rc '
-        options.style = os.getenv('STISIM_STYLE', 'starsim')
+        options.style = os.getenv('STISIM_STYLE', 'stisim')
 
         optdesc.dpi = 'Set the default DPI -- the larger this is, the larger the figures will be'
         options.dpi = int(os.getenv('STISIM_DPI', pl.rcParams['figure.dpi']))
@@ -362,14 +362,14 @@ class Options(sc.objdict):
             entry.current = sc.indent(n=n, width=None, text=sc.pp(self[key], output=True)).rstrip()
             entry.default = sc.indent(n=n, width=None, text=sc.pp(self.orig_options[key], output=True)).rstrip()
             if not key.startswith('rc'):
-                entry.variable = f'STARSIM_{key.upper()}'  # NB, hard-coded above!
+                entry.variable = f'STISIM_{key.upper()}'  # NB, hard-coded above!
             else:
                 entry.variable = 'No environment variable'
             entry.desc = sc.indent(n=n, text=self.optdesc[key])
             optdict[key] = entry
 
         # Convert to a dataframe for nice printing
-        print('starsim global options ("Environment" = name of corresponding environment variable):')
+        print('stisim global options ("Environment" = name of corresponding environment variable):')
         for k, key, entry in optdict.enumitems():
             sc.heading(f'{k}. {key}', spaces=0, spacesafter=0)
             changestr = '' if entry.current == entry.default else ' (modified)'
@@ -510,7 +510,7 @@ class Options(sc.objdict):
         # Handle other keywords
         for key, value in kwargs.items():
             if key not in pl.rcParams:
-                errormsg = f'Key "{key}" does not match any value in Starsim options or pl.rcParams'
+                errormsg = f'Key "{key}" does not match any value in STIsim options or pl.rcParams'
                 raise sc.KeyNotFoundError(errormsg)
             elif value is not None:
                 rc[key] = value
@@ -523,11 +523,11 @@ class Options(sc.objdict):
 
     def use_style(self, **kwargs):
         """
-        Shortcut to set starsim's current style as the global default.
+        Shortcut to set stisim's current style as the global default.
 
         **Example**::
 
-            ss.options.use_style() # Set starsim options as default
+            ss.options.use_style() # Set stisim options as default
             pl.figure()
             pl.plot([1,3,7])
 
@@ -560,8 +560,8 @@ def load_fonts(folder=None, rebuild=False, verbose=False, **kwargs):
         name = 'Mulish'
         fm.findfont(name, fallback_to_default=False)  # Raise an exception if the font isn't found
         rc_simple['font.family'] = name  # Need to set both
-        rc_starsim['font.family'] = name
-        if verbose: print(f'Default starsim font reset to "{name}"')
+        rc_stisim['font.family'] = name
+        if verbose: print(f'Default STIsim font reset to "{name}"')
     except Exception as E:
         if verbose: print(f'Could not find font {name}: {str(E)}')
 
