@@ -83,8 +83,10 @@ class People(ssb.BasePeople):
         self.age[self.alive] += self.dt
         return
 
-    def update_states(self, t, sim):
+    def update_states(self, sim):
         """ Perform all state updates at the current timestep """
+
+        self.dead[self.ti_dead <= sim.ti] = True
 
         for module in sim.modules.values():
             module.update_states(sim)
@@ -94,3 +96,4 @@ class People(ssb.BasePeople):
             layer.update(self)
 
         return
+
