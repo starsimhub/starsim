@@ -8,10 +8,11 @@ import sciris as sc
 import functools
 from . import utils as ssu
 from . import misc as ssm
+from . import settings as sss
 from .version import __version__
 
 # Specify all externally visible classes this file defines
-__all__ = ['ParsObj', 'BaseSim', 'BasePeople', 'FlexDict']
+__all__ = ['ParsObj', 'BaseSim', 'State', 'BasePeople', 'FlexDict']
 
 # Default object getter/setter
 obj_set = object.__setattr__
@@ -364,6 +365,87 @@ class BaseSim(ParsObj):
 
 # %% Define people classes
 
+class State(sc.prettyobj):
+    def __init__(self, name, dtype, fill_value=0, shape=None, label=None, color=None):
+        """
+        Args:
+            name: name of the result as used in the model
+            dtype: datatype
+            fill_value: default value for this state upon model initialization
+            shape: If not none, set to match a string in `pars` containing the dimensionality
+            label: text used to construct labels for the result for displaying on plots and other outputs
+            color: color (used for plotting stocks)
+        """
+        self.name = name
+        self.dtype = dtype
+        self.fill_value = fill_value
+        self.shape = shape
+        self.label = label or name
+        return
+
+    @property
+    def ndim(self):
+        return len(sc.tolist(self.shape)) + 1
+
+    def new(self, pars, n, module=None):
+        shape = sc.tolist(self.shape)
+        if module is not None:
+            if len(shape) and shape[0] in pars[module].keys():
+                pars = pars[module]
+        shape = [pars[s] for s in shape]
+        shape.append(n)  # We always want to have shape n
+        return np.full(shape, dtype=self.dtype, fill_value=self.fill_value)
+
+
+# class PeopleMeta(sc.prettyobj):
+#     """ For storing all the keys relating to a person and people """
+#
+#     # (attribute, nrows, dtype, default value)
+#     # If the default value is None, then the array will not be initialized - this is faster and can
+#     # be used for variables where the People object explicitly supplies the values e.g. age
+#
+#     def __init__(self):
+#         # Set the properties of a person
+#         self.person = [
+#             State('uid', default_int),  # Int
+#             State('age', default_float, np.nan),  # Float
+#             State('sex', default_float, np.nan),  # Float
+#             State('debut', default_float, np.nan),  # Float
+#             State('scale', default_float, 1.0),  # Float
+#         ]
+#
+#         #  The following section consists of all the boolean states
+#
+#         # The following three groupings are all mutually exclusive and collectively exhaustive.
+#         self.alive_states = [
+#             # States related to whether or not the person is alive or dead
+#             State('alive', bool, True, label='Population'),  # For recording population sizes
+#             State('dead_other', bool, False, label='Cumulative deaths from other causes'),
+#             State('emigrated', bool, False, label='Emigrated'),  # Emigrated
+#         ]
+#
+#     # Collection of states for which we store associated dates
+#     @property
+#     def date_states(self):
+#         return [state for state in self.alive_states if not state.fill_value]
+#
+#     # Set dates
+#     @property
+#     def dates(self):
+#         dates = [State(f'date_{state.name}', default_float, np.nan, shape=state.shape) for state in self.date_states]
+#         dates += [
+#             State('date_dead', default_float, np.nan)
+#         ]
+#         return dates
+#
+#     def validate(self):
+#         """
+#         TODO check that states are valid
+#         """
+#         return
+
+
+
 class BasePeople(FlexPretty):
     """
     A class to handle all the boilerplate for people -- note that as with the
@@ -383,7 +465,6 @@ class BasePeople(FlexPretty):
         self.set_pars(pars)
         self.version = __version__  # Store version info
         self.contacts = None
-        self.t = 0  # Keep current simulation time
 
         # Private variables relating to dynamic allocation
         self._data = dict()
@@ -394,7 +475,7 @@ class BasePeople(FlexPretty):
         return
 
     def initialize(self):
-        ''' Initialize underlying storage and map arrays '''
+        """ Initialize underlying storage and map arrays """
         for state in self.meta.states_to_set:
             self._data[state.name] = state.new(self.pars, self._n)
         self._map_arrays()
@@ -402,7 +483,7 @@ class BasePeople(FlexPretty):
         return
 
     def __len__(self):
-        ''' Length of people '''
+        """ Length of people """
         try:
             arr = getattr(self, base_key)
             return len(arr)
@@ -411,14 +492,14 @@ class BasePeople(FlexPretty):
             return 0
 
     def _len_arrays(self):
-        ''' Length of underlying arrays '''
+        """ Length of underlying arrays """
         return len(self._data[base_key])
 
     def set_pars(self, pars=None):
-        '''
+        """
         Re-link the parameters stored in the people object to the sim containing it,
         and perform some basic validation.
-        '''
+        """
         orig_pars = self.__dict__.get('pars')  # Get the current parameters using dict's get method
         if pars is None:
             if orig_pars is not None:  # If it has existing parameters, use them
@@ -444,13 +525,13 @@ class BasePeople(FlexPretty):
         return
 
     def validate(self, sim_pars=None, verbose=False):
-        '''
+        """
         Perform validation on the People object.
 
         Args:
             sim_pars (dict): dictionary of parameters from the sim to ensure they match the current People object
             verbose (bool): detail to print
-        '''
+        """
 
         # Check that parameters match
         if sim_pars is not None:
@@ -463,7 +544,7 @@ class BasePeople(FlexPretty):
                     if sim_v != ppl_v:
                         mismatches[key] = sc.objdict(sim=sim_v, people=ppl_v)
             if len(mismatches):
-                errormsg = 'Validation failed due to the following mismatches between the sim and the people parameters:\n'
+                errormsg = 'Validation failed due to mismatches between the sim and the people parameters:\n'
                 for k, v in mismatches.items():
                     errormsg += f'  {k}: sim={v.sim}, people={v.people}'
                 raise ValueError(errormsg)
@@ -480,12 +561,12 @@ class BasePeople(FlexPretty):
         return
 
     def lock(self):
-        ''' Lock the people object to prevent keys from being added '''
+        """ Lock the people object to prevent keys from being added """
         self._lock = True
         return
 
     def unlock(self):
-        ''' Unlock the people object to allow keys to be added '''
+        """ Unlock the people object to allow keys to be added """
         self._lock = False
         return
 
@@ -519,7 +600,7 @@ class BasePeople(FlexPretty):
         Set main simulation attributes to be views of the underlying data
 
         This method should be called whenever the number of agents required changes
-        (regardless of whether or not the underlying arrays have been resized)
+        (regardless of whether the underlying arrays have been resized)
         """
 
         row_inds = slice(None, self._n)
@@ -537,38 +618,28 @@ class BasePeople(FlexPretty):
         return
 
     def __getitem__(self, key):
-        ''' Allow people['attr'] instead of getattr(people, 'attr')
+        """ Allow people['attr'] instead of getattr(people, 'attr')
             If the key is an integer, alias `people.person()` to return a `Person` instance
-        '''
+        """
         if isinstance(key, int):
             return self.person(key)
         else:
             return self.__getattribute__(key)
 
     def __setitem__(self, key, value):
-        ''' Ditto '''
+        """ Ditto """
         if self._lock and key not in self.__dict__:  # pragma: no cover
             errormsg = f'Key "{key}" is not a current attribute of people, and the people object is locked; see people.unlock()'
             raise AttributeError(errormsg)
         return self.__setattr__(key, value)
 
-    # def __setattr__(self, attr, value):
-    #     ''' Ditto '''
-    #     if hasattr(self, '_data') and attr in self._data:
-    #         # Prevent accidentally overwriting a view with an actual array - if this happens, the updated values will
-    #         # be lost the next time the arrays are resized
-    #         raise Exception('Cannot assign directly to a dynamic array view - must index into the view instead e.g. `people.uid[:]=`')
-    #     else:   # If not initialized, rely on the default behavior
-    #         obj_set(self, attr, value)
-    #     return
-
     def __iter__(self):
-        ''' Iterate over people '''
+        """ Iterate over people """
         for i in range(len(self)):
             yield self[i]
 
     def __add__(self, people2):
-        ''' Combine two people arrays '''
+        """ Combine two people arrays """
         newpeople = sc.dcp(self)
         keys = list(self.keys())
         for key in keys:
@@ -591,37 +662,19 @@ class BasePeople(FlexPretty):
 
         return newpeople
 
-    def addtoself(self, people2):
-        ''' Combine two people arrays, avoiding dcp '''
-        keys = list(self.keys())
-        for key in keys:
-            npval = self[key]
-            p2val = people2[key]
-            if npval.ndim == 1:
-                self.set(key, np.concatenate([npval, p2val], axis=0), die=False)  # Allow size mismatch
-            elif npval.ndim == 2:
-                self.set(key, np.concatenate([npval, p2val], axis=1), die=False)
-            else:
-                errormsg = f'Not sure how to combine arrays of {npval.ndim} dimensions for {key}'
-                raise NotImplementedError(errormsg)
-
-        # Reassign UIDs so they're unique
-        self.set('uid', np.arange(len(self)))
-
-        return
 
     def __radd__(self, people2):
-        ''' Allows sum() to work correctly '''
+        """ Allows sum() to work correctly """
         if not people2:
             return self
         else:
             return self.__add__(people2)
 
     def _brief(self):
-        '''
+        """
         Return a one-line description of the people -- used internally and by repr();
         see people.brief() for the user version.
-        '''
+        """
         try:
             string = f'People(n={len(self):0n})'
         except Exception as E:  # pragma: no cover
@@ -629,12 +682,15 @@ class BasePeople(FlexPretty):
             string += f'Warning, sim appears to be malformed:\n{str(E)}'
         return string
 
-    def set(self, key, value, die=True):
-        self[key][:] = value[
-                       :]  # nb. this will raise an exception the shapes don't match, and will automatically cast the value to the existing type
+    def set(self, key, value):
+        """
+        Set values. Note that this will raise an exception the shapes don't match,
+        and will automatically cast the value to the existing type
+        """
+        self[key][:] = value[:]
 
     def get(self, key):
-        ''' Convenience method -- key can be string or list of strings '''
+        """ Convenience method -- key can be string or list of strings """
         if isinstance(key, str):
             return self[key]
         elif isinstance(key, list):
@@ -644,84 +700,53 @@ class BasePeople(FlexPretty):
             return arr
 
     @property
-    def is_female(self):
-        ''' Boolean array of everyone female '''
-        return self.sex == 0
-
-    @property
-    def is_female_alive(self):
-        ''' Boolean array of everyone female and alive'''
-        return ((1 - self.sex) * self.alive).astype(bool)
-
-    @property
-    def is_male(self):
-        ''' Boolean array of everyone male '''
-        return self.sex == 1
-
-    @property
-    def is_male_alive(self):
-        ''' Boolean array of everyone male and alive'''
-        return (self.sex * self.alive).astype(bool)
-
-    @property
     def f_inds(self):
-        ''' Indices of everyone female '''
-        return self.true('is_female')
+        """ Indices of everyone female """
+        return self.true('female')
 
     @property
     def m_inds(self):
-        ''' Indices of everyone male '''
-        return self.true('is_male')
+        """ Indices of everyone male """
+        return self.false('female')
 
     @property
     def int_age(self):
-        ''' Return ages as an integer '''
-        return np.array(self.age, dtype=np.int64)
+        """ Return ages as an integer """
+        return np.array(self.age, dtype=sss.default_int)
 
     @property
     def round_age(self):
-        ''' Rounds age up to the next highest integer'''
+        """ Rounds age up to the next highest integer"""
         return np.array(np.ceil(self.age))
 
     @property
-    def dt_age(self):
-        ''' Return ages rounded to the nearest whole timestep '''
-        dt = self['pars']['dt']
-        return np.round(self.age * 1 / dt) / (1 / dt)
-
-    @property
-    def is_active(self):
-        ''' Boolean array of everyone sexually active i.e. past debut '''
-        return ((self.age > self.debut) * (self.alive)).astype(bool)
-
-    @property
     def alive_inds(self):
-        ''' Indices of everyone alive '''
+        """ Indices of everyone alive """
         return self.true('alive')
 
     @property
     def n_alive(self):
-        ''' Number of people alive '''
+        """ Number of people alive """
         return len(self.alive_inds)
 
     def true(self, key):
-        ''' Return indices matching the condition '''
+        """ Return indices matching the condition """
         return self[key].nonzero()[-1]
 
     def false(self, key):
-        ''' Return indices not matching the condition '''
+        """ Return indices not matching the condition """
         return (~self[key]).nonzero()[-1]
 
     def defined(self, key):
-        ''' Return indices of people who are not-nan '''
+        """ Return indices of people who are not-nan """
         return (~np.isnan(self[key])).nonzero()[0]
 
     def undefined(self, key):
-        ''' Return indices of people who are nan '''
+        """ Return indices of people who are nan """
         return np.isnan(self[key]).nonzero()[0]
 
     def count(self, key, weighted=True):
-        ''' Count the number of people for a given key '''
+        """ Count the number of people for a given key """
         inds = self[key].nonzero()[0]
         if weighted:
             out = self.scale[inds].sum()
@@ -730,7 +755,7 @@ class BasePeople(FlexPretty):
         return out
 
     def count_any(self, key, weighted=True):
-        ''' Count the number of people for a given key for a 2D array if any value matches '''
+        """ Count the number of people for a given key for a 2D array if any value matches """
         inds = self[key].sum(axis=0).nonzero()[0]
         if weighted:
             out = self.scale[inds].sum()
