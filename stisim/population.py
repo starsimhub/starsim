@@ -8,7 +8,6 @@ import sciris as sc
 from . import utils as ssu
 from . import misc as ssm
 from . import data as ssdata
-from . import defaults as ssd
 from . import people as ssppl
 from . import base as ssb
 

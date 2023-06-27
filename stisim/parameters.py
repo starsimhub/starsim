@@ -8,7 +8,6 @@ import pandas as pd
 from .settings import options as sso # For setting global options
 from . import misc as ssm
 from . import utils as ssu
-from . import defaults as ssd
 from . import population as sspop
 from .data import loaders as ssdata
 

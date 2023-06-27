@@ -8,7 +8,6 @@ import sciris as sc
 import functools
 from . import utils as ssu
 from . import misc as ssm
-from . import defaults as ssd
 from .version import __version__
 
 # Specify all externally visible classes this file defines

@@ -1,6 +1,5 @@
 from .version import __version__, __versiondate__, __license__
 from .settings      import *
-from .defaults      import *
 from .misc          import *
 from .parameters    import *
 from .utils         import *

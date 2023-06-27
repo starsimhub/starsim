@@ -1,18 +1,18 @@
 import sciris as sc
 import numpy as np
-from .defaults import State
+from .people import State
 from .results import Result
 from .modules import Module
-from . import defaults as ssd
+from . import settings as sss
 from . import utils as ssu
 
 class HPV(Module):
 
     states = [
-        State('sev', ssd.default_float, np.nan, shape='n_genotypes'),  # Severity of infection, taking values between 0-1
-        State('rel_sev', ssd.default_float, 1.0),  # Individual relative risk for rate severe disease growth
-        State('rel_sus', ssd.default_float, 1.0),  # Individual relative risk for acquiring infection (does not vary by genotype)
-        State('rel_imm', ssd.default_float, 1.0),  # Individual relative level of immunity acquired from infection clearance/vaccination
+        State('sev', sss.default_float, np.nan, shape='n_genotypes'),  # Severity of infection, taking values between 0-1
+        State('rel_sev', sss.default_float, 1.0),  # Individual relative risk for rate severe disease growth
+        State('rel_sus', sss.default_float, 1.0),  # Individual relative risk for acquiring infection (does not vary by genotype)
+        State('rel_imm', sss.default_float, 1.0),  # Individual relative level of immunity acquired from infection clearance/vaccination
     ]
 
     alive_states = [
