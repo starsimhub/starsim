@@ -574,7 +574,7 @@ options = Options()
 
 # Default for precision
 # Used in various places throughout the code, generally as:
-#   import hpvsim.settings as hps
+#   import stisim.settings as sss
 #   arr = np.full(100, 0, hps.default_float)
 result_float = np.float64  # Always use float64 for results, for simplicity
 if options.precision == 32:
