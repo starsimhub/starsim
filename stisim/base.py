@@ -1,6 +1,6 @@
-'''
+"""
 Base classes for *sim models
-'''
+"""
 
 import numpy as np
 import pandas as pd
@@ -9,16 +9,14 @@ import functools
 from . import utils as ssu
 from . import misc as ssm
 from . import defaults as ssd
-from . import parameters as sspar
 from .version import __version__
-
 
 # Specify all externally visible classes this file defines
 __all__ = ['ParsObj', 'Result', 'BaseSim', 'BasePeople', 'FlexDict']
 
 # Default object getter/setter
 obj_set = object.__setattr__
-base_key = 'uid' # Define the key used by default for getting length, etc.
+base_key = 'uid'  # Define the key used by default for getting length, etc.
 
 
 def rsetattr(obj, attr, val):
@@ -32,16 +30,17 @@ def rgetattr(obj, attr, *args):
 
     return functools.reduce(_getattr, [obj] + attr.split('.'))
 
-#%% Define simulation classes
+
+# %% Define simulation classes
 
 class FlexPretty(sc.prettyobj):
-    '''
+    """
     A class that supports multiple different display options: namely obj.brief()
     for a one-line description and obj.disp() for a full description.
-    '''
+    """
 
     def __repr__(self):
-        ''' Use brief repr by default '''
+        """ Use brief repr by default """
         try:
             string = self._brief()
         except Exception as E:
@@ -50,11 +49,11 @@ class FlexPretty(sc.prettyobj):
         return string
 
     def _disp(self):
-        ''' Verbose output -- use Sciris' pretty repr by default '''
+        """ Verbose output -- use Sciris' pretty repr by default """
         return sc.prepr(self)
 
     def disp(self, output=False):
-        ''' Print or output verbose representation of the object '''
+        """ Print or output verbose representation of the object """
         string = self._disp()
         if not output:
             print(string)
@@ -62,11 +61,11 @@ class FlexPretty(sc.prettyobj):
             return string
 
     def _brief(self):
-        ''' Brief output -- use a one-line output, a la Python's default '''
+        """ Brief output -- use a one-line output, a la Python's default """
         return sc.objectid(self)
 
     def brief(self, output=False):
-        ''' Print or output a brief representation of the object '''
+        """ Print or output a brief representation of the object """
         string = self._brief()
         if not output:
             print(string)
@@ -75,17 +74,16 @@ class FlexPretty(sc.prettyobj):
 
 
 class ParsObj(FlexPretty):
-    '''
+    """
     A class based around performing operations on a self.pars dict.
-    '''
+    """
 
     def __init__(self, pars):
         self.update_pars(pars, create=True)
         return
 
-
     def __getitem__(self, key):
-        ''' Allow sim['par_name'] instead of sim.pars['par_name'] '''
+        """ Allow sim['par_name'] instead of sim.pars['par_name'] """
         try:
             return self.pars[key]
         except:
@@ -93,9 +91,8 @@ class ParsObj(FlexPretty):
             errormsg = f'Key "{key}" not found; available keys:\n{all_keys}'
             raise sc.KeyNotFoundError(errormsg)
 
-
     def __setitem__(self, key, value):
-        ''' Ditto '''
+        """ Ditto """
         if key in self.pars:
             self.pars[key] = value
         else:
@@ -104,15 +101,14 @@ class ParsObj(FlexPretty):
             raise sc.KeyNotFoundError(errormsg)
         return
 
-
     def update_pars(self, pars=None, create=False):
-        '''
+        """
         Update internal dict with new pars.
 
         Args:
             pars (dict): the parameters to update (if None, do nothing)
             create (bool): if create is False, then raise a KeyNotFoundError if the key does not already exist
-        '''
+        """
         if pars is not None:
             if not isinstance(pars, dict):
                 raise TypeError(f'The pars object must be a dict; you supplied a {type(pars)}')
@@ -135,7 +131,7 @@ class Result(object):
     Args:
         name (str): name of this result, e.g. new_infections
         npts (int): if values is None, precreate it to be of this length
-        scale (bool): whether or not the value scales by population scale factor
+        scale (bool): whether the value scales by population scale factor
         color (str/arr): default color for plotting (hex or RGB notation)
 
     **Example**::
@@ -147,11 +143,11 @@ class Result(object):
     '''
 
     def __init__(self, name=None, npts=None, scale=True, color=None, n_rows=0, n_copies=0):
-        self.name =  name  # Name of this result
-        self.scale = scale # Whether or not to scale the result by the scale factor
+        self.name = name  # Name of this result
+        self.scale = scale  # Whether or not to scale the result by the scale factor
         if color is None:
             color = '#000000'
-        self.color = color # Default color
+        self.color = color  # Default color
         if npts is None:
             npts = 0
         npts = int(npts)
@@ -163,23 +159,22 @@ class Result(object):
         else:
             self.values = np.zeros(npts, dtype=ssd.result_float)
 
-        self.low  = None
+        self.low = None
         self.high = None
         return
 
     def __eq__(self, other):
-        return self.npts == other.npts and np.all(self.values == other.values)  and self.scale == other.scale
+        return self.npts == other.npts and np.all(self.values == other.values) and self.scale == other.scale
 
     def __repr__(self):
         ''' Use pretty repr, like sc.prettyobj, but displaying full values '''
-        output  = sc.prepr(self, skip=['values', 'low', 'high'], use_repr=False)
+        output = sc.prepr(self, skip=['values', 'low', 'high'], use_repr=False)
         output += 'values:\n' + repr(self.values)
         if self.low is not None:
             output += '\nlow:\n' + repr(self.low)
         if self.high is not None:
             output += '\nhigh:\n' + repr(self.high)
         return output
-
 
     def __getitem__(self, key):
         ''' To allow e.g. result['high'] instead of result.high, and result[5] instead of result.values[5] '''
@@ -189,7 +184,6 @@ class Result(object):
             output = self.values.__getitem__(key)
         return output
 
-
     def __setitem__(self, key, value):
         ''' To allow e.g. result[:] = 1 instead of result.values[:] = 1 '''
         if isinstance(key, str):
@@ -198,11 +192,9 @@ class Result(object):
             self.values.__setitem__(key, value)
         return
 
-
     def __len__(self):
         ''' To allow len(result) instead of len(result.values) '''
         return len(self.values)
-
 
     def __sum__(self):
         ''' To allow sum(result) instead of result.values.sum() '''
@@ -245,9 +237,8 @@ class BaseSim(ParsObj):
     '''
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs) # Initialize and set the parameters as attributes
+        super().__init__(*args, **kwargs)  # Initialize and set the parameters as attributes
         return
-
 
     def _disp(self):
         '''
@@ -256,14 +247,12 @@ class BaseSim(ParsObj):
         '''
         return sc.prepr(self)
 
-
     def update_pars(self, pars=None, create=False, **kwargs):
         ''' Ensure that metaparameters get used properly before being updated '''
 
         # Merge everything together
         pars = sc.mergedicts(pars, kwargs)
         if pars:
-
             # Handle other special parameters
             # if pars.get('location'):
             #     location = pars['location']
@@ -273,20 +262,17 @@ class BaseSim(ParsObj):
 
         return
 
-
     @property
     def n(self):
         ''' Count the number of people -- if it fails, assume none '''
-        try: # By default, the length of the people dict
+        try:  # By default, the length of the people dict
             return len(self.people)
         except:  # pragma: no cover # If it's None or missing
             return 0
 
-
     def copy(self):
         ''' Returns a deep copy of the sim '''
         return sc.dcp(self)
-
 
     def export_results(self, for_json=True, filename=None, indent=2, *args, **kwargs):
         '''
@@ -307,25 +293,25 @@ class BaseSim(ParsObj):
 
         '''
 
-        if not self.results_ready: # pragma: no cover
+        if not self.results_ready:  # pragma: no cover
             errormsg = 'Please run the sim before exporting the results'
             raise RuntimeError(errormsg)
 
         resdict = {}
-        resdict['t'] = self.results['t'] # Assume that there is a key for time
+        resdict['t'] = self.results['t']  # Assume that there is a key for time
 
         if for_json:
             resdict['timeseries_keys'] = self.result_keys()
-        for key,res in self.results.items():
+        for key, res in self.results.items():
             if isinstance(res, Result):
                 resdict[key] = res.values
                 if res.low is not None:
-                    resdict[key+'_low'] = res.low
+                    resdict[key + '_low'] = res.low
                 if res.high is not None:
-                    resdict[key+'_high'] = res.high
+                    resdict[key + '_high'] = res.high
             elif for_json:
                 if key == 'date':
-                    resdict[key] = [str(d) for d in res] # Convert dates to strings
+                    resdict[key] = [str(d) for d in res]  # Convert dates to strings
                 else:
                     if isinstance(res, np.ndarray) and (res.ndim == 1):
                         resdict[key] = res
@@ -334,7 +320,6 @@ class BaseSim(ParsObj):
         if filename is not None:
             sc.savejson(filename=filename, obj=resdict, indent=indent, *args, **kwargs)
         return resdict
-
 
     def export_pars(self, filename=None, indent=2, *args, **kwargs):
         '''
@@ -358,7 +343,6 @@ class BaseSim(ParsObj):
         if filename is not None:
             sc.savejson(filename=filename, obj=pardict, indent=indent, *args, **kwargs)
         return pardict
-
 
     def to_json(self, filename=None, keys=None, tostring=False, indent=2, verbose=False, *args, **kwargs):
         '''
@@ -406,7 +390,7 @@ class BaseSim(ParsObj):
                     d['summary'] = dict(sc.dcp(self.summary))
                 else:
                     d['summary'] = 'Summary not available (Sim has not yet been run)'
-            else: # pragma: no cover
+            else:  # pragma: no cover
                 try:
                     d[key] = sc.sanitizejson(getattr(self, key))
                 except Exception as E:
@@ -420,7 +404,6 @@ class BaseSim(ParsObj):
 
         return output
 
-
     def to_df(self, date_index=False):
         '''
         Export results to a pandas dataframe
@@ -429,15 +412,14 @@ class BaseSim(ParsObj):
             date_index  (bool): if True, use the date as the index
         '''
         resdict = self.export_results(for_json=False)
-        resdict = {k:v for k,v in resdict.items() if v.ndim == 1}
+        resdict = {k: v for k, v in resdict.items() if v.ndim == 1}
         df = pd.DataFrame.from_dict(resdict)
         df['year'] = self.res_yearvec
-        new_columns = ['t','year'] + df.columns[1:-1].tolist() # Get column order
-        df = df.reindex(columns=new_columns) # Reorder so 't' and 'date' are first
+        new_columns = ['t', 'year'] + df.columns[1:-1].tolist()  # Get column order
+        df = df.reindex(columns=new_columns)  # Reorder so 't' and 'date' are first
         if date_index:
             df = df.set_index('year')
         return df
-
 
     def shrink(self, skip_attrs=None, in_place=True):
         '''
@@ -464,14 +446,13 @@ class BaseSim(ParsObj):
                 setattr(self, attr, None)
         else:
             shrunken = object.__new__(self.__class__)
-            shrunken.__dict__ = {k:(v if k not in skip_attrs else None) for k,v in self.__dict__.items()}
+            shrunken.__dict__ = {k: (v if k not in skip_attrs else None) for k, v in self.__dict__.items()}
 
         # Don't return if in place
         if in_place:
             return
         else:
             return shrunken
-
 
     def save(self, filename=None, keep_people=None, skip_attrs=None, **kwargs):
         '''
@@ -500,7 +481,7 @@ class BaseSim(ParsObj):
         if filename is None:
             filename = self.simfile
         filename = sc.makefilepath(filename=filename, **kwargs)
-        self.filename = filename # Store the actual saved filename
+        self.filename = filename  # Store the actual saved filename
 
         # Handle the shrinkage and save
         if skip_attrs or not keep_people:
@@ -511,43 +492,42 @@ class BaseSim(ParsObj):
 
         return filename
 
-
     @staticmethod
     def load(filename, *args, **kwargs):
         '''
         Load from disk from a gzipped pickle.
         '''
         sim = ssm.load(filename, *args, **kwargs)
-        if not isinstance(sim, BaseSim): # pragma: no cover
+        if not isinstance(sim, BaseSim):  # pragma: no cover
             errormsg = f'Cannot load object of {type(sim)} as a Sim object'
             raise TypeError(errormsg)
         return sim
-
 
     def _get_ia(self, which, label=None, partial=False, as_list=False, as_inds=False, die=True, first=False):
         ''' Helper method for get_interventions() and get_analyzers(); see get_interventions() docstring '''
 
         # Handle inputs
-        if which not in ['interventions', 'analyzers']: # pragma: no cover
+        if which not in ['interventions', 'analyzers']:  # pragma: no cover
             errormsg = f'This method is only defined for interventions and analyzers, not "{which}"'
             raise ValueError(errormsg)
 
-        ia_list = sc.tolist(self.analyzers if which=='analyzers' else self.interventions) # List of interventions or analyzers
-        n_ia = len(ia_list) # Number of interventions/analyzers
+        ia_list = sc.tolist(
+            self.analyzers if which == 'analyzers' else self.interventions)  # List of interventions or analyzers
+        n_ia = len(ia_list)  # Number of interventions/analyzers
 
-        if label == 'summary': # Print a summary of the interventions
+        if label == 'summary':  # Print a summary of the interventions
             df = pd.DataFrame(columns=['ind', 'label', 'type'])
-            for ind,ia_obj in enumerate(ia_list):
+            for ind, ia_obj in enumerate(ia_list):
                 df = df.append(dict(ind=ind, label=str(ia_obj.label), type=type(ia_obj)), ignore_index=True)
             print(f'Summary of {which}:')
             print(df)
             return
 
-        else: # Standard usage case
-            position = 0 if first else -1 # Choose either the first or last element
-            if label is None: # Get all interventions if no label is supplied, e.g. sim.get_interventions()
+        else:  # Standard usage case
+            position = 0 if first else -1  # Choose either the first or last element
+            if label is None:  # Get all interventions if no label is supplied, e.g. sim.get_interventions()
                 label = np.arange(n_ia)
-            if isinstance(label, np.ndarray): # Allow arrays to be provided
+            if isinstance(label, np.ndarray):  # Allow arrays to be provided
                 label = label.tolist()
             labels = sc.promotetolist(label)
 
@@ -556,38 +536,38 @@ class BaseSim(ParsObj):
             match_inds = []
             for label in labels:
                 if sc.isnumber(label):
-                    matches.append(ia_list[label]) # This will raise an exception if an invalid index is given
-                    label = n_ia + label if label<0 else label # Convert to a positive number
+                    matches.append(ia_list[label])  # This will raise an exception if an invalid index is given
+                    label = n_ia + label if label < 0 else label  # Convert to a positive number
                     match_inds.append(label)
                 elif sc.isstring(label) or isinstance(label, type):
-                    for ind,ia_obj in enumerate(ia_list):
+                    for ind, ia_obj in enumerate(ia_list):
                         if sc.isstring(label) and ia_obj.label == label or (partial and (label in str(ia_obj.label))):
                             matches.append(ia_obj)
                             match_inds.append(ind)
                         elif isinstance(label, type) and isinstance(ia_obj, label):
                             matches.append(ia_obj)
                             match_inds.append(ind)
-                else: # pragma: no cover
+                else:  # pragma: no cover
                     errormsg = f'Could not interpret label type "{type(label)}": should be str, int, list, or {which} class'
                     raise TypeError(errormsg)
 
             # Parse the output options
             if as_inds:
                 output = match_inds
-            elif as_list: # Used by get_interventions()
+            elif as_list:  # Used by get_interventions()
                 output = matches
             else:
-                if len(matches) == 0: # pragma: no cover
+                if len(matches) == 0:  # pragma: no cover
                     if die:
                         errormsg = f'No {which} matching "{label}" were found'
                         raise ValueError(errormsg)
                     else:
                         output = None
                 else:
-                    output = matches[position] # Return either the first or last match (usually), used by get_intervention()
+                    output = matches[
+                        position]  # Return either the first or last match (usually), used by get_intervention()
 
             return output
-
 
     def get_interventions(self, label=None, partial=False, as_inds=False):
         '''
@@ -602,7 +582,6 @@ class BaseSim(ParsObj):
         '''
         return self._get_ia('interventions', label=label, partial=partial, as_inds=as_inds, as_list=True)
 
-
     def get_intervention(self, label=None, partial=False, first=False, die=True):
         '''
         Like get_interventions(), find the matching intervention(s) by label,
@@ -615,8 +594,8 @@ class BaseSim(ParsObj):
             first (bool): if true, return first matching intervention (otherwise, return last)
             die (bool): whether to raise an exception if no intervention is found
         '''
-        return self._get_ia('interventions', label=label, partial=partial, first=first, die=die, as_inds=False, as_list=False)
-
+        return self._get_ia('interventions', label=label, partial=partial, first=first, die=die, as_inds=False,
+                            as_list=False)
 
     def get_analyzers(self, label=None, partial=False, as_inds=False):
         '''
@@ -624,15 +603,15 @@ class BaseSim(ParsObj):
         '''
         return self._get_ia('analyzers', label=label, partial=partial, as_list=True, as_inds=as_inds)
 
-
     def get_analyzer(self, label=None, partial=False, first=False, die=True):
         '''
         Same as get_intervention(), but for analyzers.
         '''
-        return self._get_ia('analyzers', label=label, partial=partial, first=first, die=die, as_inds=False, as_list=False)
+        return self._get_ia('analyzers', label=label, partial=partial, first=first, die=die, as_inds=False,
+                            as_list=False)
 
 
-#%% Define people classes
+# %% Define people classes
 
 class BasePeople(FlexPretty):
     '''
@@ -643,28 +622,27 @@ class BasePeople(FlexPretty):
 
     def __init__(self, pars):
         ''' Initialize essential attributes used for filtering '''
-        
+
         # Set meta attribute here, because BasePeople methods expect it to exist
         self.meta = ssd.PeopleMeta()  # Store list of keys and dtypes
         self.meta.validate()
 
         # Define lock attribute here, since BasePeople.lock()/unlock() requires it
-        self._lock = False # Prevent further modification of keys
+        self._lock = False  # Prevent further modification of keys
 
         # Load other attributes
         self.set_pars(pars)
-        self.version = __version__ # Store version info
+        self.version = __version__  # Store version info
         self.contacts = None
-        self.t = 0 # Keep current simulation time
+        self.t = 0  # Keep current simulation time
 
         # Private variables relating to dynamic allocation
         self._data = dict()
         self._n = self.pars['n_agents']  # Number of agents (initial)
-        self._s = self._n # Underlying array sizes
-        self._inds = None # No filtering indices
-        
-        return
+        self._s = self._n  # Underlying array sizes
+        self._inds = None  # No filtering indices
 
+        return
 
     def initialize(self):
         ''' Initialize underlying storage and map arrays '''
@@ -674,7 +652,6 @@ class BasePeople(FlexPretty):
         self['uid'][:] = np.arange(self.pars['n_agents'])
         return
 
-
     def __len__(self):
         ''' Length of people '''
         try:
@@ -683,30 +660,28 @@ class BasePeople(FlexPretty):
         except Exception as E:
             print(f'Warning: could not get length of People (could not get self.{base_key}: {E})')
             return 0
-    
-    
+
     def _len_arrays(self):
         ''' Length of underlying arrays '''
         return len(self._data[base_key])
-
 
     def set_pars(self, pars=None):
         '''
         Re-link the parameters stored in the people object to the sim containing it,
         and perform some basic validation.
         '''
-        orig_pars = self.__dict__.get('pars') # Get the current parameters using dict's get method
+        orig_pars = self.__dict__.get('pars')  # Get the current parameters using dict's get method
         if pars is None:
-            if orig_pars is not None: # If it has existing parameters, use them
+            if orig_pars is not None:  # If it has existing parameters, use them
                 pars = orig_pars
             else:
                 pars = {}
-        elif sc.isnumber(pars): # Interpret as a population size
-            pars = {'n_agents':pars} # Ensure it's a dictionary
+        elif sc.isnumber(pars):  # Interpret as a population size
+            pars = {'n_agents': pars}  # Ensure it's a dictionary
 
         # Copy from old parameters to new parameters
         if isinstance(orig_pars, dict):
-            for k,v in orig_pars.items():
+            for k, v in orig_pars.items():
                 if k not in pars:
                     pars[k] = v
 
@@ -716,9 +691,8 @@ class BasePeople(FlexPretty):
             raise sc.KeyNotFoundError(errormsg)
         pars['n_agents'] = int(pars['n_agents'])
         pars.setdefault('location', None)
-        self.pars = pars # Actually store the pars
+        self.pars = pars  # Actually store the pars
         return
-
 
     def validate(self, sim_pars=None, verbose=False):
         '''
@@ -732,7 +706,7 @@ class BasePeople(FlexPretty):
         # Check that parameters match
         if sim_pars is not None:
             mismatches = {}
-            keys = ['n_agents', 'location'] # These are the keys used in generating the population
+            keys = ['n_agents', 'location']  # These are the keys used in generating the population
             for key in keys:
                 sim_v = sim_pars.get(key)
                 ppl_v = self.pars.get(key)
@@ -741,7 +715,7 @@ class BasePeople(FlexPretty):
                         mismatches[key] = sc.objdict(sim=sim_v, people=ppl_v)
             if len(mismatches):
                 errormsg = 'Validation failed due to the following mismatches between the sim and the people parameters:\n'
-                for k,v in mismatches.items():
+                for k, v in mismatches.items():
                     errormsg += f'  {k}: sim={v.sim}, people={v.people}'
                 raise ValueError(errormsg)
 
@@ -750,18 +724,16 @@ class BasePeople(FlexPretty):
         for key in self.keys():
             if self[key].ndim == 1:
                 actual_len = len(self[key])
-            if actual_len != expected_len: # pragma: no cover
+            if actual_len != expected_len:  # pragma: no cover
                 errormsg = f'Length of key "{key}" did not match population size ({actual_len} vs. {expected_len})'
                 raise IndexError(errormsg)
 
         return
 
-
     def lock(self):
         ''' Lock the people object to prevent keys from being added '''
         self._lock = True
         return
-
 
     def unlock(self):
         ''' Unlock the people object to allow keys to be added '''
@@ -782,7 +754,8 @@ class BasePeople(FlexPretty):
         if new_total > self._s:
             n_new = max(n, int(self._s / 2))  # Minimum 50% growth
             for state in self.meta.states_to_set:
-                self._data[state.name] = np.concatenate([self._data[state.name], state.new(self.pars, n_new)], axis=self._data[state.name].ndim-1)
+                self._data[state.name] = np.concatenate([self._data[state.name], state.new(self.pars, n_new)],
+                                                        axis=self._data[state.name].ndim - 1)
             for state_name, state in self.module_states.items():
                 self._data[state_name] = np.concatenate([self._data[state_name], state.new(self.pars, n_new)],
                                                         axis=self._data[state_name].ndim - 1)
@@ -791,7 +764,6 @@ class BasePeople(FlexPretty):
         self._map_arrays()
         new_inds = np.arange(orig_n, self._n)
         return new_inds
-
 
     def _map_arrays(self):
         """
@@ -815,7 +787,6 @@ class BasePeople(FlexPretty):
 
         return
 
-
     def __getitem__(self, key):
         ''' Allow people['attr'] instead of getattr(people, 'attr')
             If the key is an integer, alias `people.person()` to return a `Person` instance
@@ -825,14 +796,12 @@ class BasePeople(FlexPretty):
         else:
             return self.__getattribute__(key)
 
-
     def __setitem__(self, key, value):
         ''' Ditto '''
-        if self._lock and key not in self.__dict__: # pragma: no cover
+        if self._lock and key not in self.__dict__:  # pragma: no cover
             errormsg = f'Key "{key}" is not a current attribute of people, and the people object is locked; see people.unlock()'
             raise AttributeError(errormsg)
         return self.__setattr__(key, value)
-
 
     # def __setattr__(self, attr, value):
     #     ''' Ditto '''
@@ -844,12 +813,10 @@ class BasePeople(FlexPretty):
     #         obj_set(self, attr, value)
     #     return
 
-
     def __iter__(self):
         ''' Iterate over people '''
         for i in range(len(self)):
             yield self[i]
-
 
     def __add__(self, people2):
         ''' Combine two people arrays '''
@@ -859,7 +826,7 @@ class BasePeople(FlexPretty):
             npval = newpeople[key]
             p2val = people2[key]
             if npval.ndim == 1:
-                newpeople.set(key, np.concatenate([npval, p2val], axis=0), die=False) # Allow size mismatch
+                newpeople.set(key, np.concatenate([npval, p2val], axis=0), die=False)  # Allow size mismatch
             elif npval.ndim == 2:
                 newpeople.set(key, np.concatenate([npval, p2val], axis=1), die=False)
             else:
@@ -882,7 +849,7 @@ class BasePeople(FlexPretty):
             npval = self[key]
             p2val = people2[key]
             if npval.ndim == 1:
-                self.set(key, np.concatenate([npval, p2val], axis=0), die=False) # Allow size mismatch
+                self.set(key, np.concatenate([npval, p2val], axis=0), die=False)  # Allow size mismatch
             elif npval.ndim == 2:
                 self.set(key, np.concatenate([npval, p2val], axis=1), die=False)
             else:
@@ -896,9 +863,10 @@ class BasePeople(FlexPretty):
 
     def __radd__(self, people2):
         ''' Allows sum() to work correctly '''
-        if not people2: return self
-        else:           return self.__add__(people2)
-
+        if not people2:
+            return self
+        else:
+            return self.__add__(people2)
 
     def _brief(self):
         '''
@@ -906,16 +874,15 @@ class BasePeople(FlexPretty):
         see people.brief() for the user version.
         '''
         try:
-            string   = f'People(n={len(self):0n})'
-        except Exception as E: # pragma: no cover
+            string = f'People(n={len(self):0n})'
+        except Exception as E:  # pragma: no cover
             string = sc.objectid(self)
             string += f'Warning, sim appears to be malformed:\n{str(E)}'
         return string
 
-
     def set(self, key, value, die=True):
-        self[key][:] = value[:] # nb. this will raise an exception the shapes don't match, and will automatically cast the value to the existing type
-
+        self[key][:] = value[
+                       :]  # nb. this will raise an exception the shapes don't match, and will automatically cast the value to the existing type
 
     def get(self, key):
         ''' Convenience method -- key can be string or list of strings '''
@@ -923,10 +890,9 @@ class BasePeople(FlexPretty):
             return self[key]
         elif isinstance(key, list):
             arr = np.zeros((len(self), len(key)))
-            for k,ky in enumerate(key):
-                arr[:,k] = self[ky]
+            for k, ky in enumerate(key):
+                arr[:, k] = self[ky]
             return arr
-
 
     @property
     def is_female(self):
@@ -936,7 +902,7 @@ class BasePeople(FlexPretty):
     @property
     def is_female_alive(self):
         ''' Boolean array of everyone female and alive'''
-        return ((1-self.sex) * self.alive).astype(bool)
+        return ((1 - self.sex) * self.alive).astype(bool)
 
     @property
     def is_male(self):
@@ -972,23 +938,23 @@ class BasePeople(FlexPretty):
     def dt_age(self):
         ''' Return ages rounded to the nearest whole timestep '''
         dt = self['pars']['dt']
-        return np.round(self.age*1/dt) / (1/dt)
+        return np.round(self.age * 1 / dt) / (1 / dt)
 
     @property
     def is_active(self):
         ''' Boolean array of everyone sexually active i.e. past debut '''
-        return ((self.age>self.debut) * (self.alive)).astype(bool)
+        return ((self.age > self.debut) * (self.alive)).astype(bool)
 
     @property
     def alive_inds(self):
         ''' Indices of everyone alive '''
         return self.true('alive')
-    
+
     @property
     def n_alive(self):
         ''' Number of people alive '''
         return len(self.alive_inds)
-    
+
     def true(self, key):
         ''' Return indices matching the condition '''
         return self[key].nonzero()[-1]
@@ -1013,7 +979,7 @@ class BasePeople(FlexPretty):
         else:
             out = len(inds)
         return out
-    
+
     def count_any(self, key, weighted=True):
         ''' Count the number of people for a given key for a 2D array if any value matches '''
         inds = self[key].sum(axis=0).nonzero()[0]
@@ -1031,7 +997,7 @@ class BasePeople(FlexPretty):
         ''' Get the available contact keys -- try contacts  '''
         try:
             keys = list(self.contacts.keys())
-        except: # If not fully initialized
+        except:  # If not fully initialized
             keys = []
         return keys
 
@@ -1041,17 +1007,17 @@ class BasePeople(FlexPretty):
 
     def to_df(self):
         ''' Convert to a Pandas dataframe '''
-        df = pd.DataFrame.from_dict({key:self[key] for key in self.keys()})
+        df = pd.DataFrame.from_dict({key: self[key] for key in self.keys()})
         return df
 
     def to_arr(self):
         ''' Return as numpy array '''
         arr = np.empty((len(self), len(self.keys())), dtype=ssd.default_float)
-        for k,key in enumerate(self.keys()):
+        for k, key in enumerate(self.keys()):
             if key == 'uid':
-                arr[:,k] = np.arange(len(self))
+                arr[:, k] = np.arange(len(self))
             else:
-                arr[:,k] = self[key]
+                arr[:, k] = self[key]
         return arr
 
     def to_list(self):
@@ -1070,11 +1036,11 @@ class FlexDict(dict):
         try:
             return super().__getitem__(key)
         except KeyError as KE:
-            try: # Assume it's an integer
+            try:  # Assume it's an integer
                 dictkey = self.keys()[key]
                 return self[dictkey]
             except:
-                raise sc.KeyNotFoundError(KE) # Raise the original error
+                raise sc.KeyNotFoundError(KE)  # Raise the original error
 
     def keys(self):
         return list(super().keys())
@@ -1130,27 +1096,27 @@ class Layer(FlexDict):
 
     def __init__(self, *args, transmission='horizontal', label=None, **kwargs):
         self.meta = {
-            'p1':     ssd.default_int,   # p1
-            'p2':     ssd.default_int,   # p2
-            'acts':  ssd.default_float, # Default number of acts for this contact type
-            'dur':   ssd.default_float, # Duration of partnership
-            'start': ssd.default_int, # Date of partnership start
-            'end':   ssd.default_float, # Date of partnership end
-            'beta':  ssd.default_float,
+            'p1': ssd.default_int,  # p1
+            'p2': ssd.default_int,  # p2
+            'acts': ssd.default_float,  # Default number of acts for this contact type
+            'dur': ssd.default_float,  # Duration of partnership
+            'start': ssd.default_int,  # Date of partnership start
+            'end': ssd.default_float,  # Date of partnership end
+            'beta': ssd.default_float,
         }
         self.transmission = transmission  # "vertical" or "horizontal", determines whether transmission is bidirectional
-        self.basekey = 'p1' # Assign a base key for calculating lengths and performing other operations
+        self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
         self.label = label
 
         # Handle args
         kwargs = sc.mergedicts(*args, kwargs)
 
         # Initialize the keys of the layers
-        for key,dtype in self.meta.items():
+        for key, dtype in self.meta.items():
             self[key] = np.empty((0,), dtype=dtype)
 
         # Set data, if provided
-        for key,value in kwargs.items():
+        for key, value in kwargs.items():
             self[key] = np.array(value, dtype=self.meta.get(key))
 
         # Set beta and acts if not provided
@@ -1167,7 +1133,7 @@ class Layer(FlexDict):
     def __len__(self):
         try:
             return len(self[self.basekey])
-        except: # pragma: no cover
+        except:  # pragma: no cover
             return 0
 
     def __repr__(self):
@@ -1175,7 +1141,7 @@ class Layer(FlexDict):
         namestr = self.__class__.__name__
         labelstr = f'"{self.label}"' if self.label else '<no label>'
         keys_str = ', '.join(self.keys())
-        output = f'{namestr}({labelstr}, {keys_str})\n' # e.g. Layer("r", f, m, beta)
+        output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Layer("r", f, m, beta)
         output += self.to_df().__repr__()
         return output
 
@@ -1210,15 +1176,16 @@ class Layer(FlexDict):
         do not.
         '''
         n = len(self[self.basekey])
-        for key,dtype in self.meta.items():
+        for key, dtype in self.meta.items():
             if dtype:
                 actual = self[key].dtype
                 expected = dtype
                 if actual != expected:
-                    self[key] = np.array(self[key], dtype=expected) # Probably harmless, so try to convert to correct type
+                    self[key] = np.array(self[key],
+                                         dtype=expected)  # Probably harmless, so try to convert to correct type
             actual_n = len(self[key])
             if n != actual_n:
-                errormsg = f'Expecting length {n} for layer key "{key}"; got {actual_n}' # We can't fix length mismatches
+                errormsg = f'Expecting length {n} for layer key "{key}"; got {actual_n}'  # We can't fix length mismatches
                 raise TypeError(errormsg)
         return
 
@@ -1231,9 +1198,9 @@ class Layer(FlexDict):
         '''
         output = {}
         for key in self.meta_keys():
-            output[key] = self[key][inds] # Copy to the output object
+            output[key] = self[key][inds]  # Copy to the output object
             if remove:
-                self[key] = np.delete(self[key], inds) # Remove from the original
+                self[key] = np.delete(self[key], inds)  # Remove from the original
         return output
 
     def pop_inds(self, inds):
@@ -1255,11 +1222,11 @@ class Layer(FlexDict):
         '''
         for key in self.keys():
             new_arr = contacts[key]
-            n_curr = len(self[key]) # Current number of contacts
-            n_new = len(new_arr) # New contacts to add
-            n_total = n_curr + n_new # New size
-            self[key] = np.resize(self[key], n_total) # Resize to make room, preserving dtype
-            self[key][n_curr:] = new_arr # Copy contacts into the layer
+            n_curr = len(self[key])  # Current number of contacts
+            n_new = len(new_arr)  # New contacts to add
+            n_total = n_curr + n_new  # New size
+            self[key] = np.resize(self[key], n_total)  # Resize to make room, preserving dtype
+            self[key][n_curr:] = new_arr  # Copy contacts into the layer
         return
 
     def to_df(self):
@@ -1275,7 +1242,7 @@ class Layer(FlexDict):
             self[key] = df[key].to_numpy()
         return self
 
-    def to_graph(self): # pragma: no cover
+    def to_graph(self):  # pragma: no cover
         '''
         Convert to a networkx DiGraph
 
@@ -1287,7 +1254,7 @@ class Layer(FlexDict):
             nx.draw(G)
         '''
         import networkx as nx
-        data = [np.array(self[k], dtype=dtype).tolist() for k,dtype in [('p1', int), ('p2', int), ('beta', float)]]
+        data = [np.array(self[k], dtype=dtype).tolist() for k, dtype in [('p1', int), ('p2', int), ('beta', float)]]
         G = nx.DiGraph()
         G.add_weighted_edges_from(zip(*data), weight='beta')
         nx.set_edge_attributes(G, self.label, name='layer')
