@@ -141,6 +141,9 @@ class BaseSim(ParsObj):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)  # Initialize and set the parameters as attributes
+        self.filename = None
+        self.initialized = None
+        self.results_ready = None
         return
 
     def _disp(self):
@@ -162,165 +165,14 @@ class BaseSim(ParsObj):
 
     @property
     def n(self):
-        ''' Count the number of people -- if it fails, assume none '''
+        """ Count the number of people -- if it fails, assume none """
         try:  # By default, the length of the people dict
             return len(self.people)
         except:  # pragma: no cover # If it's None or missing
             return 0
 
-    def copy(self):
-        ''' Returns a deep copy of the sim '''
-        return sc.dcp(self)
-
-    def export_results(self, for_json=True, filename=None, indent=2, *args, **kwargs):
-        '''
-        Convert results to dict -- see also to_json().
-
-        The results written to Excel must have a regular table shape, whereas
-        for the JSON output, arbitrary data shapes are supported.
-
-        Args:
-            for_json (bool): if False, only data associated with Result objects will be included in the converted output
-            filename (str): filename to save to; if None, do not save
-            indent (int): indent (int): if writing to file, how many indents to use per nested level
-            args (list): passed to savejson()
-            kwargs (dict): passed to savejson()
-
-        Returns:
-            resdict (dict): dictionary representation of the results
-
-        '''
-
-        if not self.results_ready:  # pragma: no cover
-            errormsg = 'Please run the sim before exporting the results'
-            raise RuntimeError(errormsg)
-
-        resdict = {}
-        resdict['t'] = self.results['t']  # Assume that there is a key for time
-
-        if for_json:
-            resdict['timeseries_keys'] = self.result_keys()
-        for key, res in self.results.items():
-            if isinstance(res, Result):
-                resdict[key] = res.values
-                if res.low is not None:
-                    resdict[key + '_low'] = res.low
-                if res.high is not None:
-                    resdict[key + '_high'] = res.high
-            elif for_json:
-                if key == 'date':
-                    resdict[key] = [str(d) for d in res]  # Convert dates to strings
-                else:
-                    if isinstance(res, np.ndarray) and (res.ndim == 1):
-                        resdict[key] = res
-                    else:
-                        print(f'WARNING: skipping {key} from export since not 1D array')
-        if filename is not None:
-            sc.savejson(filename=filename, obj=resdict, indent=indent, *args, **kwargs)
-        return resdict
-
-    def export_pars(self, filename=None, indent=2, *args, **kwargs):
-        '''
-        Return parameters for JSON export -- see also to_json().
-
-        This method is required so that interventions can specify
-        their JSON-friendly representation.
-
-        Args:
-            filename (str): filename to save to; if None, do not save
-            indent (int): indent (int): if writing to file, how many indents to use per nested level
-            args (list): passed to savejson()
-            kwargs (dict): passed to savejson()
-
-        Returns:
-            pardict (dict): a dictionary containing all the parameter values
-        '''
-        pardict = {}
-        for key in self.pars.keys():
-            pardict[key] = self.pars[key]
-        if filename is not None:
-            sc.savejson(filename=filename, obj=pardict, indent=indent, *args, **kwargs)
-        return pardict
-
-    def to_json(self, filename=None, keys=None, tostring=False, indent=2, verbose=False, *args, **kwargs):
-        '''
-        Export results and parameters as JSON.
-
-        Args:
-            filename (str): if None, return string; else, write to file
-            keys (str or list): attributes to write to json (default: results, parameters, and summary)
-            tostring (bool): if not writing to file, whether to write to string (alternative is sanitized dictionary)
-            indent (int): if writing to file, how many indents to use per nested level
-            verbose (bool): detail to print
-            args (list): passed to savejson()
-            kwargs (dict): passed to savejson()
-
-        Returns:
-            A unicode string containing a JSON representation of the results,
-            or writes the JSON file to disk
-
-        **Examples**::
-
-            json = sim.to_json()
-            sim.to_json('results.json')
-            sim.to_json('summary.json', keys='summary')
-        '''
-
-        # Handle keys
-        if keys is None:
-            keys = ['results', 'pars']
-        keys = sc.promotetolist(keys)
-
-        # Convert to JSON-compatible format
-        d = {}
-        for key in keys:
-            if key == 'results':
-                if self.results_ready:
-                    resdict = self.export_results(for_json=True)
-                    d['results'] = resdict
-                else:
-                    d['results'] = 'Results not available (Sim has not yet been run)'
-            elif key in ['pars', 'parameters']:
-                pardict = self.export_pars()
-                d['parameters'] = pardict
-            elif key == 'summary':
-                if self.results_ready:
-                    d['summary'] = dict(sc.dcp(self.summary))
-                else:
-                    d['summary'] = 'Summary not available (Sim has not yet been run)'
-            else:  # pragma: no cover
-                try:
-                    d[key] = sc.sanitizejson(getattr(self, key))
-                except Exception as E:
-                    errormsg = f'Could not convert "{key}" to JSON: {str(E)}; continuing...'
-                    print(errormsg)
-
-        if filename is None:
-            output = sc.jsonify(d, tostring=tostring, indent=indent, verbose=verbose, *args, **kwargs)
-        else:
-            output = sc.savejson(filename=filename, obj=d, indent=indent, *args, **kwargs)
-
-        return output
-
-    def to_df(self, date_index=False):
-        '''
-        Export results to a pandas dataframe
-
-        Args:
-            date_index  (bool): if True, use the date as the index
-        '''
-        resdict = self.export_results(for_json=False)
-        resdict = {k: v for k, v in resdict.items() if v.ndim == 1}
-        df = pd.DataFrame.from_dict(resdict)
-        df['year'] = self.res_yearvec
-        new_columns = ['t', 'year'] + df.columns[1:-1].tolist()  # Get column order
-        df = df.reindex(columns=new_columns)  # Reorder so 't' and 'date' are first
-        if date_index:
-            df = df.set_index('year')
-        return df
-
     def shrink(self, skip_attrs=None, in_place=True):
-        '''
+        """
         "Shrinks" the simulation by removing the people and other memory-intensive
         attributes (e.g., some interventions and analyzers), and returns a copy of
         the "shrunken" simulation. Used to reduce the memory required for RAM or
@@ -328,12 +180,12 @@ class BaseSim(ParsObj):
 
         Args:
             skip_attrs (list): a list of attributes to skip (remove) in order to perform the shrinking; default "people"
-            in_palce (bool): whether to perform the shrinking in place (default), or return a shrunken copy instead
+            in_place (bool): whether to perform the shrinking in place (default), or return a shrunken copy instead
 
         Returns:
             shrunken (Sim): a Sim object with the listed attributes removed
-        '''
-        # By default, skip people (~90% of memory), the popdict (which is usually empty anyway), and _orig_pars (which is just a backup)
+        """
+        # By default, skip people (~90% of memory), popdict, and _orig_pars (which is just a backup)
         if skip_attrs is None:
             skip_attrs = ['popdict', 'people', '_orig_pars']
 
@@ -353,11 +205,13 @@ class BaseSim(ParsObj):
             return shrunken
 
     def save(self, filename=None, keep_people=None, skip_attrs=None, **kwargs):
-        '''
+        """
         Save to disk as a gzipped pickle.
 
         Args:
             filename (str or None): the name or path of the file to save to; if None, uses stored
+            keep_people (bool or None): whether to keep the people
+            skip_attrs (list): attributes to skip saving
             kwargs: passed to sc.makefilepath()
 
         Returns:
@@ -366,9 +220,9 @@ class BaseSim(ParsObj):
         **Example**::
 
             sim.save() # Saves to a .sim file
-        '''
+        """
 
-        # Set keep_people based on whether or not we're in the middle of a run
+        # Set keep_people based on whether we're in the middle of a run
         if keep_people is None:
             if self.initialized and not self.results_ready:
                 keep_people = True
@@ -392,9 +246,9 @@ class BaseSim(ParsObj):
 
     @staticmethod
     def load(filename, *args, **kwargs):
-        '''
+        """
         Load from disk from a gzipped pickle.
-        '''
+        """
         sim = ssm.load(filename, *args, **kwargs)
         if not isinstance(sim, BaseSim):  # pragma: no cover
             errormsg = f'Cannot load object of {type(sim)} as a Sim object'
@@ -402,7 +256,7 @@ class BaseSim(ParsObj):
         return sim
 
     def _get_ia(self, which, label=None, partial=False, as_list=False, as_inds=False, die=True, first=False):
-        ''' Helper method for get_interventions() and get_analyzers(); see get_interventions() docstring '''
+        """ Helper method for get_interventions() and get_analyzers(); see get_interventions() docstring """
 
         # Handle inputs
         if which not in ['interventions', 'analyzers']:  # pragma: no cover
@@ -468,7 +322,7 @@ class BaseSim(ParsObj):
             return output
 
     def get_interventions(self, label=None, partial=False, as_inds=False):
-        '''
+        """
         Find the matching intervention(s) by label, index, or type. If None, return
         all interventions. If the label provided is "summary", then print a summary
         of the interventions (index, label, type).
@@ -477,11 +331,11 @@ class BaseSim(ParsObj):
             label (str, int, Intervention, list): the label, index, or type of intervention to get; if a list, iterate over one of those types
             partial (bool): if true, return partial matches (e.g. 'beta' will match all beta interventions)
             as_inds (bool): if true, return matching indices instead of the actual interventions
-        '''
+        """
         return self._get_ia('interventions', label=label, partial=partial, as_inds=as_inds, as_list=True)
 
     def get_intervention(self, label=None, partial=False, first=False, die=True):
-        '''
+        """
         Like get_interventions(), find the matching intervention(s) by label,
         index, or type. If more than one intervention matches, return the last
         by default. If no label is provided, return the last intervention in the list.
@@ -491,20 +345,20 @@ class BaseSim(ParsObj):
             partial (bool): if true, return partial matches (e.g. 'beta' will match all beta interventions)
             first (bool): if true, return first matching intervention (otherwise, return last)
             die (bool): whether to raise an exception if no intervention is found
-        '''
+        """
         return self._get_ia('interventions', label=label, partial=partial, first=first, die=die, as_inds=False,
                             as_list=False)
 
     def get_analyzers(self, label=None, partial=False, as_inds=False):
-        '''
+        """
         Same as get_interventions(), but for analyzers.
-        '''
+        """
         return self._get_ia('analyzers', label=label, partial=partial, as_list=True, as_inds=as_inds)
 
     def get_analyzer(self, label=None, partial=False, first=False, die=True):
-        '''
+        """
         Same as get_intervention(), but for analyzers.
-        '''
+        """
         return self._get_ia('analyzers', label=label, partial=partial, first=first, die=die, as_inds=False,
                             as_list=False)
 
