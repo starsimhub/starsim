@@ -746,14 +746,25 @@ class Layer(FlexDict):
     """
 
     def __init__(self, *args, transmission='horizontal', label=None, **kwargs):
-        self.p1 = np.array([], dtype=sss.default_int)
-        self.p2 = np.array([], dtype=sss.default_int)
-        self.beta = np.array([], dtype=sss.default_float)
+        self.meta = {
+            'p1':   sss.default_int,
+            'p2':   sss.default_int,
+            'beta': sss.default_float,
+        }
         self.transmission = transmission  # "vertical" or "horizontal", determines whether transmission is bidirectional
         self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
         self.label = label
 
-        return
+        # Handle args
+        kwargs = sc.mergedicts(*args, kwargs)
+
+        # Initialize the keys of the layers
+        for key, dtype in self.meta.items():
+            self[key] = np.empty((0,), dtype=dtype)
+
+        # Set data, if provided
+        for key, value in kwargs.items():
+            self[key] = np.array(value, dtype=self.meta.get(key))
 
     def initialize(self):
         pass
