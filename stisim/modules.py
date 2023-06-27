@@ -48,11 +48,24 @@ class Module(sc.prettyobj):
         pass
 
     def make_new_cases(self, sim):
-        # Add new cases of module, through transmission, incidence, etc.
-        pass
+        """ Add new cases of module, through transmission, incidence, etc. """
+        pars = sim.pars[self.name]
+        for k, layer in sim.people.contacts.items():
+            if k in pars['beta']:
+                rel_trans = (sim.people[self.name].infected & ~sim.people.dead).astype(float)
+                rel_sus = (sim.people[self.name].susceptible & ~sim.people.dead).astype(float)
+                for a, b, beta in [[layer['p1'], layer['p2'], pars['beta'][k][0]], [layer.p2, layer.p1, pars['beta'][k][1]]]:
+                    # probability of a->b transmission
+                    p_transmit = rel_trans[a] * rel_sus[b] * layer['beta'] * beta
+                    new_cases = np.random.random(len(a)) < p_transmit
+                    if new_cases.any():
+                        self.set_prognoses(sim, b[new_cases])
 
     def update_results(self, sim):
-        pass
+        sim.results[self.name]['n_susceptible'][sim.t] = np.count_nonzero(sim.people[self.name].susceptible)
+        sim.results[self.name]['n_infected'][sim.t] = np.count_nonzero(sim.people[self.name].infected)
+        sim.results[self.name]['prevalence'][sim.t] = sim.results[self.name].n_infected[sim.t] / sim.people.n
+        sim.results[self.name]['new_infections'] = np.count_nonzero(sim.people[self.name].ti_infected == sim.t)
 
     def finalize_results(self, sim):
         pass
@@ -96,40 +109,17 @@ class HIV(Module):
         sim.results[self.name]['n_art'] = Result(self.name, 'n_art', sim.npts, dtype=int)
     
     def update_results(self, sim):
-        sim.results[self.name]['n_susceptible'][sim.t] = np.count_nonzero(sim.people.hiv.susceptible)
-        sim.results[self.name]['n_infected'][sim.t] = np.count_nonzero(sim.people.hiv.infected)
-        sim.results[self.name]['prevalence'][sim.t] = sim.results[self.name].n_infected[sim.t] / sim.people.n
-        sim.results[self.name]['new_infections'] = np.count_nonzero(sim.people[self.name].ti_infected == sim.t)
+        super(HIV, self).update_results(sim)
         sim.results[self.name]['n_art'] = np.count_nonzero(sim.people.alive & sim.people[self.name].on_art)
 
-    
     def make_new_cases(self, sim):
         eff_condoms = sim.pars[self.name]['eff_condoms']
-
-        for k, layer in sim.people.contacts.items():
-
-            if layer.transmission == 'vertical':
-                effective_condoms = 1
-            else:
-                condoms = layer.pars['condoms']
-                effective_condoms = sss.default_float(condoms * eff_condoms)
-
-            if k in sim.pars[self.name]['beta']:
-
-                rel_trans = (sim.people[self.name].infected & sim.people.alive).astype(float)
-                rel_sus = (sim.people[self.name].susceptible & sim.people.alive).astype(float)
-
-                for a, b, beta in [[layer['p1'], layer['p2'], layer[]],[layer['p2'],layer['p1']]]:
-                    # probability of a->b transmission
-                    p_transmit = layer['beta']*rel_trans[a]*sim.people[self.name].rel_trans[a]*rel_sus[b]*sim.people[self.name].rel_sus[b]*sim.pars[self.name]['beta'][k]*(1-effective_condoms)
-                    self.set_prognoses(sim, b[np.random.random(len(a))<p_transmit])
-
+        super().make_new_cases(sim)
     
     def set_prognoses(self, sim, uids):
         sim.people[self.name].susceptible[uids] = False
         sim.people[self.name].infected[uids] = True
         sim.people[self.name].ti_infected[uids] = sim.t
-
 
 
 class Gonorrhea(Module):
@@ -151,7 +141,6 @@ class Gonorrhea(Module):
             'eff_condoms': 0.7,
         }, self.pars)
         return
-
     
     def update_states(self, sim):
         # What if something in here should depend on another module?
@@ -162,58 +151,24 @@ class Gonorrhea(Module):
         sim.people.date_dead[gonorrhea_deaths] = sim.t
         return
 
-    
     def initialize(self, sim):
         # Do any steps in this method depend on what other modules are going to be added? We can inspect
         # them via sim.modules at this point
         super(Gonorrhea, self).initialize(sim)
-
-        # Pick some initially infected agents
-        self.set_prognoses(sim, np.random.choice(sim.people.uid, sim.pars[self.name]['initial']))
-
-        if 'beta' not in sim.pars[self.name]:
-            sim.pars[self.name].beta = sc.objdict({k:1 for k in sim.people.contacts})
-
-        # TODO - not a huge fan of having the result key duplicate the Result name
-        sim.results[self.name]['n_susceptible'] = Result(self.name, 'n_susceptible', sim.npts, dtype=int)
-        sim.results[self.name]['n_infected'] = Result(self.name, 'n_infected', sim.npts, dtype=int)
-        sim.results[self.name]['prevalence'] = Result(self.name, 'prevalence', sim.npts, dtype=float)
-        sim.results[self.name]['new_infections'] = Result(self.name, 'n_infected', sim.npts, dtype=int)
-
-
     
     def update_results(self, sim):
-        sim.results[self.name]['n_susceptible'][sim.t] = np.count_nonzero(sim.people.gonorrhea.susceptible)
-        sim.results[self.name]['n_infected'][sim.t] = np.count_nonzero(sim.people.gonorrhea.infected)
-        sim.results[self.name]['prevalence'][sim.t] = sim.results[self.name].n_infected[sim.t] / sim.people._n
-        sim.results[self.name]['new_infections'] = np.count_nonzero(sim.people[self.name].ti_infected == sim.t)
-
+        super(Gonorrhea, self).update_results(sim)
     
     def make_new_cases(self, sim):
-        eff_condoms = sim.pars[self.name]['eff_condoms']
+        super(Gonorrhea, self).make_new_cases(sim)
 
-        for k, layer in sim.people.contacts.items():
-            if layer.transmission == 'vertical':
-                effective_condoms = 1
-            else:
-                condoms = layer.pars['condoms']
-                effective_condoms = ssd.default_float(condoms * eff_condoms)
-            if k in sim.pars[self.name]['beta']:
-                rel_trans = (sim.people[self.name].infected & sim.people.alive).astype(float)
-                rel_sus = (sim.people[self.name].susceptible & sim.people.alive).astype(float)
-                for a,b in [[layer['p1'],layer['p2']],[layer['p2'],layer['p1']]]:
-                    # probability of a->b transmission
-                    p_transmit = layer['beta']*rel_trans[a]*sim.people[self.name].rel_trans[a]*rel_sus[b]*sim.people[self.name].rel_sus[b]*sim.pars[self.name]['beta'][k]*(1-effective_condoms)
-                    self.set_prognoses(sim, b[np.random.random(len(a))<p_transmit])
-
-    
     def set_prognoses(self, sim, uids):
         sim.people[self.name].susceptible[uids] = False
         sim.people[self.name].infected[uids] = True
         sim.people[self.name].ti_infected[uids] = sim.t
 
         dur = sim.t+np.random.poisson(sim.pars[self.name]['dur_inf']/sim.pars.dt, len(uids))
-        dead = np.random.random(len(uids))<sim.pars[self.name].p_death
+        dead = np.random.random(len(uids)) < sim.pars[self.name].p_death
         sim.people[self.name].ti_recovered[uids[~dead]] = dur[~dead]
         sim.people[self.name].ti_dead[uids[dead]] = dur[dead]
 
