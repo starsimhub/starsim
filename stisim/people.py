@@ -1,9 +1,8 @@
-'''
-Defines the People class and functions associated with making people and handling
-the transitions between states (e.g., from susceptible to infected).
-'''
+"""
+Defines the People class and functions associated with making people
+"""
 
-#%% Imports
+# %% Imports
 import numpy as np
 import sciris as sc
 from . import utils as ssu
@@ -11,8 +10,91 @@ from . import defaults as ssd
 from . import base as ssb
 from . import population as sspop
 
-
 __all__ = ['People']
+
+
+# %% Define all properties of people
+
+class State(sc.prettyobj):
+    def __init__(self, name, dtype, fill_value=0, shape=None, label=None, color=None):
+        """
+        Args:
+            name: name of the result as used in the model
+            dtype: datatype
+            fill_value: default value for this state upon model initialization
+            shape: If not none, set to match a string in `pars` containing the dimensionality
+            label: text used to construct labels for the result for displaying on plots and other outputs
+            color: color (used for plotting stocks)
+        """
+        self.name = name
+        self.dtype = dtype
+        self.fill_value = fill_value
+        self.shape = shape
+        self.label = label or name
+        self.color = color
+        return
+
+    @property
+    def ndim(self):
+        return len(sc.tolist(self.shape)) + 1
+
+    def new(self, pars, n, module=None):
+        shape = sc.tolist(self.shape)
+        if module is not None:
+            if len(shape) and shape[0] in pars[module].keys():
+                pars = pars[module]
+        shape = [pars[s] for s in shape]
+        shape.append(n)  # We always want to have shape n
+        return np.full(shape, dtype=self.dtype, fill_value=self.fill_value)
+
+
+class PeopleMeta(sc.prettyobj):
+    """ For storing all the keys relating to a person and people """
+
+    # (attribute, nrows, dtype, default value)
+    # If the default value is None, then the array will not be initialized - this is faster and can
+    # be used for variables where the People object explicitly supplies the values e.g. age
+
+    def __init__(self):
+        # Set the properties of a person
+        self.person = [
+            State('uid', default_int),  # Int
+            State('age', default_float, np.nan),  # Float
+            State('sex', default_float, np.nan),  # Float
+            State('debut', default_float, np.nan),  # Float
+            State('scale', default_float, 1.0),  # Float
+        ]
+
+        #  The following section consists of all the boolean states
+
+        # The following three groupings are all mutually exclusive and collectively exhaustive.
+        self.alive_states = [
+            # States related to whether or not the person is alive or dead
+            State('alive', bool, True, label='Population'),  # For recording population sizes
+            State('dead_other', bool, False, label='Cumulative deaths from other causes'),
+            State('emigrated', bool, False, label='Emigrated'),  # Emigrated
+        ]
+
+    # Collection of states for which we store associated dates
+    @property
+    def date_states(self):
+        return [state for state in self.alive_states if not state.fill_value]
+
+    # Set dates
+    @property
+    def dates(self):
+        dates = [State(f'date_{state.name}', default_float, np.nan, shape=state.shape) for state in self.date_states]
+        dates += [
+            State('date_dead', default_float, np.nan)
+        ]
+        return dates
+
+    def validate(self):
+        """
+        TODO check that states are valid
+        """
+        return
+
 
 class People(ssb.BasePeople):
     '''
@@ -38,8 +120,8 @@ class People(ssb.BasePeople):
         sim = ss.Sim()
         ppl2 = ss.People(sim.pars)
     '''
-    
-    #%% Basic methods
+
+    # %% Basic methods
 
     def __init__(self, pars, strict=True, pop_trend=None, pop_age_trend=None, **kwargs):
         '''
@@ -48,14 +130,14 @@ class People(ssb.BasePeople):
         super().__init__(pars)
         self.pop_trend = pop_trend
         self.pop_age_trend = pop_age_trend
-        self.age_bin_edges = self.pars['age_bin_edges'] # Age bins for age results
-        self.contacts = sc.objdict() # Create
+        self.age_bin_edges = self.pars['age_bin_edges']  # Age bins for age results
+        self.contacts = sc.objdict()  # Create
         self._modules = []
         self.module_states = sc.objdict()
         self.state_names = sc.autolist([state.name for state in self.meta.states_to_set])
 
         if strict:
-            self.lock() # If strict is true, stop further keys from being set (does not affect attributes)
+            self.lock()  # If strict is true, stop further keys from being set (does not affect attributes)
 
         self.initialized = False
         self.kwargs = kwargs
@@ -66,7 +148,7 @@ class People(ssb.BasePeople):
         # This is implemented as People.add_module rather than
         # Module.add_to_people(people) or similar because its primary
         # role is to modify the People object
-        if hasattr(self, module.name)and not force:
+        if hasattr(self, module.name) and not force:
             raise Exception(f'Module {module.name} already added')
         self.__setattr__(module.name, sc.objdict())
         for state in module.states.values():
@@ -74,9 +156,8 @@ class People(ssb.BasePeople):
             self.state_names += combined_name
             self.module_states[combined_name] = state
             self._data[combined_name] = state.new(self.pars, self._n, module=module.name)
-        self._map_arrays() # TODO: do not remap all arrays every time a module is added
+        self._map_arrays()  # TODO: do not remap all arrays every time a module is added
         return
-
 
     def init_flows(self):
         ''' Initialize flows to be zero '''
@@ -84,7 +165,7 @@ class People(ssb.BasePeople):
         dem_keys = ['births', 'other_deaths', 'migration']
         by_sex_keys = ['other_deaths_by_sex']
         self.demographic_flows = {f'{key}': 0 for key in dem_keys}
-        self.sex_flows         = {f'{key}': np.zeros(2, dtype=df) for key in by_sex_keys}
+        self.sex_flows = {f'{key}': np.zeros(2, dtype=df) for key in by_sex_keys}
         return
 
     def scale_flows(self, inds):
@@ -99,30 +180,28 @@ class People(ssb.BasePeople):
         self.age[self.alive] += self.dt
         return
 
-
     def initialize(self, sim_pars=None):
         ''' Perform initializations '''
-        super().initialize() # Initialize states
+        super().initialize()  # Initialize states
         kwargs = self.kwargs
 
         # Handle all other values, e.g. age
-        for key,value in kwargs.items():
+        for key, value in kwargs.items():
             if self._lock:
                 self.set(key, value)
             elif key in self._data:
                 self[key][:] = value
             else:
                 self[key] = value
-        
+
         # Set the scale factor
         self.scale[:] = sim_pars['pop_scale']
 
         # Additional validation
-        self.validate(sim_pars=sim_pars) # First, check that essential-to-match parameters match
+        self.validate(sim_pars=sim_pars)  # First, check that essential-to-match parameters match
         self.initialized = True
 
         return
-
 
     def update_states(self, t, sim):
         ''' Perform all state updates at the current timestep '''
@@ -160,8 +239,7 @@ class People(ssb.BasePeople):
             migration = self.check_migration(year=year)
             self.demographic_flows['migration'] = migration
 
-
-    #%% Methods for updating state
+    # %% Methods for updating state
     def check_inds(self, current, date, filter_inds=None):
         ''' Return indices for which the current state is false and which meet the date criterion '''
         if filter_inds is None:
@@ -169,9 +247,8 @@ class People(ssb.BasePeople):
         else:
             not_current = ssu.ifalsei(current, filter_inds)
         has_date = ssu.idefinedi(date, not_current)
-        inds     = ssu.itrue(self.t >= date[has_date], has_date)
+        inds = ssu.itrue(self.t >= date[has_date], has_date)
         return inds
-
 
     def check_inds_true(self, current, date, filter_inds=None):
         ''' Return indices for which the current state is true and which meet the date criterion '''
@@ -180,9 +257,8 @@ class People(ssb.BasePeople):
         else:
             current_inds = ssu.itruei(current, filter_inds)
         has_date = ssu.idefinedi(date, current_inds)
-        inds     = ssu.itrue(self.t >= date[has_date], has_date)
+        inds = ssu.itrue(self.t >= date[has_date], has_date)
         return inds
-
 
     def apply_death_rates(self, year=None):
         '''
@@ -194,31 +270,30 @@ class People(ssb.BasePeople):
         if death_pars:
             all_years = np.array(list(death_pars.keys()))
             base_year = all_years[0]
-            age_bins = death_pars[base_year]['m'][:,0]
-            age_inds = np.digitize(self.age, age_bins)-1
+            age_bins = death_pars[base_year]['m'][:, 0]
+            age_inds = np.digitize(self.age, age_bins) - 1
             death_probs = np.empty(len(self), dtype=ssd.default_float)
             year_ind = sc.findnearest(all_years, year)
             nearest_year = all_years[year_ind]
-            mx_f = death_pars[nearest_year]['f'][:,1]*self.pars['dt_demog']
-            mx_m = death_pars[nearest_year]['m'][:,1]*self.pars['dt_demog']
-    
+            mx_f = death_pars[nearest_year]['f'][:, 1] * self.pars['dt_demog']
+            mx_m = death_pars[nearest_year]['m'][:, 1] * self.pars['dt_demog']
+
             death_probs[self.is_female] = mx_f[age_inds[self.is_female]]
             death_probs[self.is_male] = mx_m[age_inds[self.is_male]]
-            death_probs[self.age>100] = 1 # Just remove anyone >100
+            death_probs[self.age > 100] = 1  # Just remove anyone >100
             death_probs[~self.alive] = 0
-            death_probs *= self.pars['rel_death'] # Adjust overall death probabilities
-    
+            death_probs *= self.pars['rel_death']  # Adjust overall death probabilities
+
             # Get indices of people who die of other causes
             death_inds = ssu.true(ssu.binomial_arr(death_probs))
         else:
             death_inds = np.array([], dtype=int)
-            
+
         deaths_female = self.scale_flows(ssu.true(self.is_female[death_inds]))
         deaths_male = self.scale_flows(ssu.true(self.is_male[death_inds]))
-        other_deaths = self.remove_people(death_inds, cause='other') # Apply deaths
+        other_deaths = self.remove_people(death_inds, cause='other')  # Apply deaths
 
         return other_deaths, deaths_female, deaths_male
-
 
     def add_people(self, year=None, new_people=None, ages=0):
         '''
@@ -232,27 +307,25 @@ class People(ssb.BasePeople):
         assert (year is None) != (new_people is None), 'Must set either year or n_births, not both'
 
         if new_people is None:
-            if self.pars['birth_rates'] is None: # Births taken care of via pregnancy module
+            if self.pars['birth_rates'] is None:  # Births taken care of via pregnancy module
                 new_people = 0
             else:
                 years = self.pars['birth_rates'][0]
                 rates = self.pars['birth_rates'][1]
-                this_birth_rate = self.pars['rel_birth']*np.interp(year, years, rates)*self.pars['dt_demog']/1e3
-                new_people = sc.randround(this_birth_rate*self.n_alive) # Crude births per 1000
+                this_birth_rate = self.pars['rel_birth'] * np.interp(year, years, rates) * self.pars['dt_demog'] / 1e3
+                new_people = sc.randround(this_birth_rate * self.n_alive)  # Crude births per 1000
 
-        if new_people>0:
+        if new_people > 0:
             # Generate other characteristics of the new people
             uids, sexes, debuts = sspop.set_static_demog(new_n=new_people, existing_n=len(self), pars=self.pars)
             # Grow the arrays`
             new_inds = self._grow(new_people)
-            self.uid[new_inds]          = uids
-            self.age[new_inds]          = ages
-            self.sex[new_inds]          = sexes
-            self.debut[new_inds]        = debuts
+            self.uid[new_inds] = uids
+            self.age[new_inds] = ages
+            self.sex[new_inds] = sexes
+            self.debut[new_inds] = debuts
 
-
-        return new_people*self.pars['pop_scale']
-
+        return new_people * self.pars['pop_scale']
 
     def check_migration(self, year=None):
         """
@@ -276,32 +349,34 @@ class People(ssb.BasePeople):
                 return 0
             elif year > data_max:
                 return 0
-            if sim_start < data_min: # Figure this out later, can't use n_agents then
+            if sim_start < data_min:  # Figure this out later, can't use n_agents then
                 errormsg = 'Starting the sim earlier than the data is not hard, but has not been done yet'
                 raise NotImplementedError(errormsg)
 
             # Do basic calculations
             data_pop0 = np.interp(sim_start, data_years, data_pop)
-            scale = sim_pop0 / data_pop0 # Scale factor
+            scale = sim_pop0 / data_pop0  # Scale factor
             alive_inds = ssu.true(self.alive)
-            alive_ages = self.age[alive_inds].astype(int) # Return ages for everyone level 0 and alive
-            count_ages = np.bincount(alive_ages, minlength=age_dist_data.shape[0]) # Bin and count them
-            expected = age_dist_data['PopTotal'].values*scale # Compute how many of each age we would expect in population
-            difference = (expected-count_ages).astype(int) # Compute difference between expected and simulated for each age
-            n_migrate = np.sum(difference) # Compute total migrations (in and out)
-            ages_to_remove = ssu.true(difference<0) # Ages where we have too many, need to apply emigration
-            n_to_remove = difference[ages_to_remove] # Determine number of agents to remove for each age
-            ages_to_add = ssu.true(difference>0) # Ages where we have too few, need to apply imigration
-            n_to_add = difference[ages_to_add] # Determine number of agents to add for each age
+            alive_ages = self.age[alive_inds].astype(int)  # Return ages for everyone level 0 and alive
+            count_ages = np.bincount(alive_ages, minlength=age_dist_data.shape[0])  # Bin and count them
+            expected = age_dist_data[
+                           'PopTotal'].values * scale  # Compute how many of each age we would expect in population
+            difference = (expected - count_ages).astype(
+                int)  # Compute difference between expected and simulated for each age
+            n_migrate = np.sum(difference)  # Compute total migrations (in and out)
+            ages_to_remove = ssu.true(difference < 0)  # Ages where we have too many, need to apply emigration
+            n_to_remove = difference[ages_to_remove]  # Determine number of agents to remove for each age
+            ages_to_add = ssu.true(difference > 0)  # Ages where we have too few, need to apply imigration
+            n_to_add = difference[ages_to_add]  # Determine number of agents to add for each age
             ages_to_add_list = np.repeat(ages_to_add, n_to_add)
             self.add_people(new_people=len(ages_to_add_list), ages=np.array(ages_to_add_list))
 
             # Remove people
             remove_frac = n_to_remove / count_ages[ages_to_remove]
             remove_probs = np.zeros(len(self))
-            for ind,rf in enumerate(remove_frac):
+            for ind, rf in enumerate(remove_frac):
                 age = ages_to_remove[ind]
-                inds_this_age = ssu.true((self.age>=age) * (self.age<age+1) * self.alive)
+                inds_this_age = ssu.true((self.age >= age) * (self.age < age + 1) * self.alive)
                 remove_probs[inds_this_age] = -rf
             migrate_inds = ssu.choose_w(remove_probs, -n_to_remove.sum())
             self.remove_people(migrate_inds, cause='emigration')  # Remove people
@@ -309,10 +384,9 @@ class People(ssb.BasePeople):
         else:
             n_migrate = 0
 
-        return n_migrate*self.pars['pop_scale'] # These are not indices, so they scale differently
+        return n_migrate * self.pars['pop_scale']  # These are not indices, so they scale differently
 
-
-    #%% Methods to make events occur (death, others TBC)
+    # %% Methods to make events occur (death, others TBC)
 
     def remove_people(self, inds, cause=None):
         ''' Remove people - used for death and migration '''
@@ -330,4 +404,3 @@ class People(ssb.BasePeople):
         self.alive[inds] = False
 
         return self.scale_flows(inds)
-
