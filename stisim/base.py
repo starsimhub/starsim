@@ -795,35 +795,15 @@ class Layer(FlexDict):
     """
 
     def __init__(self, *args, transmission='horizontal', label=None, **kwargs):
-        self.meta = {
-            'p1': sss.default_int,  # p1
-            'p2': sss.default_int,  # p2
-            'acts': sss.default_float,  # Default number of acts for this contact type
-            'dur': sss.default_float,  # Duration of partnership
-            'start': sss.default_int,  # Date of partnership start
-            'end': sss.default_float,  # Date of partnership end
-            'beta': sss.default_float,
-        }
+        self.meta = dict(
+            p1=sss.default_int,
+            p2=sss.default_int,
+            beta=sss.default_float,
+        )
+        self.meta_keys = self.meta.keys()
         self.transmission = transmission  # "vertical" or "horizontal", determines whether transmission is bidirectional
         self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
         self.label = label
-
-        # Handle args
-        kwargs = sc.mergedicts(*args, kwargs)
-
-        # Initialize the keys of the layers
-        for key, dtype in self.meta.items():
-            self[key] = np.empty((0,), dtype=dtype)
-
-        # Set data, if provided
-        for key, value in kwargs.items():
-            self[key] = np.array(value, dtype=self.meta.get(key))
-
-        # Set beta and acts if not provided
-        keys = ['beta', 'acts']
-        for key in keys:
-            if key not in kwargs.keys():
-                self[key] = np.ones(len(self), dtype=self.meta[key])
 
         return
 
@@ -850,11 +830,10 @@ class Layer(FlexDict):
 
         Args:
             item: Person index
-
         Returns: True if person index appears in any interactions
 
         """
-        return (item in self['f']) or (item in self['m'])
+        return (item in self['p1']) or (item in self['p2'])
 
     @property
     def members(self):
@@ -862,71 +841,6 @@ class Layer(FlexDict):
         Return sorted array of all members
         """
         return np.unique([self['p1'], self['p2']])
-
-    def meta_keys(self):
-        """ Return the keys for the layer's meta information -- i.e., f, m, beta, any others """
-        return self.meta.keys()
-
-    def validate(self, force=True):
-        """
-        Check the integrity of the layer: right types, right lengths.
-
-        If dtype is incorrect, try to convert automatically; if length is incorrect,
-        do not.
-        """
-        n = len(self[self.basekey])
-        for key, dtype in self.meta.items():
-            if dtype:
-                actual = self[key].dtype
-                expected = dtype
-                if actual != expected:
-                    self[key] = np.array(self[key],
-                                         dtype=expected)  # Probably harmless, so try to convert to correct type
-            actual_n = len(self[key])
-            if n != actual_n:
-                errormsg = f'Expecting length {n} for layer key "{key}"; got {actual_n}'  # We can't fix length mismatches
-                raise TypeError(errormsg)
-        return
-
-    def get_inds(self, inds, remove=False):
-        '''
-        Get the specified indices from the edgelist and return them as a dict.
-
-        Args:
-            inds (int, array, slice): the indices to be removed
-        '''
-        output = {}
-        for key in self.meta_keys():
-            output[key] = self[key][inds]  # Copy to the output object
-            if remove:
-                self[key] = np.delete(self[key], inds)  # Remove from the original
-        return output
-
-    def pop_inds(self, inds):
-        '''
-        "Pop" the specified indices from the edgelist and return them as a dict.
-        Returns in the right format to be used with layer.append().
-
-        Args:
-            inds (int, array, slice): the indices to be removed
-        '''
-        return self.get_inds(inds, remove=True)
-
-    def append(self, contacts):
-        """
-        Append contacts to the current layer.
-
-        Args:
-            contacts (dict): a dictionary of arrays with keys f,m,beta, as returned from layer.pop_inds()
-        """
-        for key in self.keys():
-            new_arr = contacts[key]
-            n_curr = len(self[key])  # Current number of contacts
-            n_new = len(new_arr)  # New contacts to add
-            n_total = n_curr + n_new  # New size
-            self[key] = np.resize(self[key], n_total)  # Resize to make room, preserving dtype
-            self[key][n_curr:] = new_arr  # Copy contacts into the layer
-        return
 
     def find_contacts(self, inds, as_array=True):
         """
