@@ -15,11 +15,30 @@ is used to refer to the choices made (e.g., DPI=150).
 import os
 import pylab as pl
 import sciris as sc
+import numpy as np
 import matplotlib.font_manager as fm
 
-# Only the class instance is public
+# Specify all externally visible classes this file defines
 __all__ = ['options']
 
+# Define simple plotting options -- similar to Matplotlib default
+rc_simple = {
+    'axes.axisbelow':    True, # So grids show up behind
+    'axes.spines.right': False,
+    'axes.spines.top':   False,
+    'figure.facecolor':  'white',
+    'font.family':       'sans-serif', # Replaced with Mulish in load_fonts() if import succeeds
+    'legend.frameon':    False,
+}
+
+# Define default plotting options -- based on Seaborn
+rc_stisim_extra = {
+    'axes.facecolor': '#f2f2ff',
+    'axes.grid':      True,
+    'grid.color':     'white',
+    'grid.linewidth': 1,
+}
+rc_stisim = sc.mergedicts(rc_simple, rc_stisim_extra)
 
 # %% Define the options class
 
@@ -162,33 +181,32 @@ class Options(sc.objdict):
 
         optdesc.rc = 'Matplotlib rc (run control) style parameters used during plotting -- usually set automatically ' \
                      'by "style" option'
-        options.rc = sc.dcp(rc_starsim)
+        options.rc = sc.dcp(rc_stisim)
 
         optdesc.warnings = 'How warnings are handled: options are "warn" (default), "print", and "error"'
-        options.warnings = str(os.getenv('STARSIM_WARNINGS', 'warn'))
+        options.warnings = str(os.getenv('STISIM_WARNINGS', 'warn'))
 
         optdesc.sep = 'Set thousands seperator for text output'
-        options.sep = str(os.getenv('STARSIM_SEP', ','))
+        options.sep = str(os.getenv('STISIM_SEP', ','))
 
         optdesc.precision = 'Set arithmetic precision -- 32-bit by default for efficiency'
-        options.precision = int(os.getenv('STARSIM_PRECISION', 32))
+        options.precision = int(os.getenv('STISIM_PRECISION', 32))
 
         return optdesc, options
 
     def set(self, key=None, value=None, use=False, **kwargs):
-        '''
+        """
         Actually change the style. See ``ss.options.help()`` for more information.
 
         Args:
-            key    (str):    the parameter to modify, or 'defaults' to reset everything to default values
+            key    (str):    the parameter to modify, or 'defaults' to reset everything to default
             value  (varies): the value to specify; use None or 'default' to reset to default
+            use (bool): whether to use the chosen style
             kwargs (dict):   if supplied, set multiple key-value pairs
 
         **Example**::
             ss.options.set(dpi=50) # Equivalent to ss.options(dpi=50)
-        '''
-
-        reload_required = False
+        """
 
         # Reset to defaults
         if key in ['default', 'defaults']:
@@ -201,7 +219,7 @@ class Options(sc.objdict):
         # Handle Jupyter
         if 'jupyter' in kwargs.keys() and kwargs['jupyter']:
             jupyter = kwargs['jupyter']
-            if jupyter == True:
+            if jupyter:
                 jupyter = 'retina'  # Default option for True
             try:
                 if not os.environ.get(
@@ -261,7 +279,7 @@ class Options(sc.objdict):
         return
 
     def set_matplotlib_global(self, key, value):
-        ''' Set a global option for Matplotlib -- not for users '''
+        """ Set a global option for Matplotlib -- not for users """
         if value:  # Don't try to reset any of these to a None value
             if key == 'fontsize':
                 pl.rcParams['font.size'] = value
@@ -276,7 +294,7 @@ class Options(sc.objdict):
         return
 
     def context(self, **kwargs):
-        '''
+        """
         Alias to set() for non-plotting options, for use in a "with" block.
 
         Note: for plotting options, use ``ss.options.with_style()``, which is linked
@@ -297,7 +315,7 @@ class Options(sc.objdict):
             with ss.options.with_style(dpi=50):
                 ss.Sim().run().plot()
 
-        '''
+        """
 
         # Store current settings
         on_entry = {k: self[k] for k in kwargs.keys()}
@@ -308,18 +326,18 @@ class Options(sc.objdict):
         return self
 
     def get_default(self, key):
-        ''' Helper function to get the original default options '''
+        """ Helper function to get the original default options """
         return self.orig_options[key]
 
     def changed(self, key):
-        ''' Check if current setting has been changed from default '''
+        """ Check if current setting has been changed from default """
         if key in self.orig_options:
             return self[key] != self.orig_options[key]
         else:
             return None
 
     def help(self, detailed=False, output=False):
-        '''
+        """
         Print information about options.
 
         Args:
@@ -329,7 +347,7 @@ class Options(sc.objdict):
         **Example**::
 
             ss.options.help(detailed=True)
-        '''
+        """
 
         # If not detailed, just print the docstring for ss.options
         if not detailed:
@@ -379,13 +397,13 @@ class Options(sc.objdict):
             return
 
     def load(self, filename, verbose=True, **kwargs):
-        '''
+        """
         Load current settings from a JSON file.
 
         Args:
             filename (str): file to load
             kwargs (dict): passed to ``sc.loadjson()``
-        '''
+        """
         json = sc.loadjson(filename=filename, **kwargs)
         current = self.to_dict()
         new = {k: v for k, v in json.items() if v != current[k]}  # Don't reset keys that haven't changed
@@ -394,33 +412,33 @@ class Options(sc.objdict):
         return
 
     def save(self, filename, verbose=True, **kwargs):
-        '''
+        """
         Save current settings as a JSON file.
 
         Args:
             filename (str): file to save to
             kwargs (dict): passed to ``sc.savejson()``
-        '''
+        """
         json = self.to_dict()
         output = sc.savejson(filename=filename, obj=json, **kwargs)
         if verbose: print(f'Settings saved to {filename}')
         return output
 
     def _handle_style(self, style=None, reset=False, copy=True):
-        ''' Helper function to handle logic for different styles '''
+        """ Helper function to handle logic for different styles """
         rc = self.rc  # By default, use current
         if isinstance(style, dict):  # If an rc-like object is supplied directly
             rc = sc.dcp(style)
         elif style is not None:  # Usual use case
             stylestr = str(style).lower()
-            if stylestr in ['default', 'starsim', 'house']:
-                rc = sc.dcp(rc_starsim)
-            elif stylestr in ['simple', 'starsim_simple', 'plain', 'clean']:
+            if stylestr in ['default', 'stisim', 'house']:
+                rc = sc.dcp(rc_stisim)
+            elif stylestr in ['simple', 'stisim_simple', 'plain', 'clean']:
                 rc = sc.dcp(rc_simple)
             elif style in pl.style.library:
                 rc = sc.dcp(pl.style.library[style])
             else:
-                errormsg = f'Style "{style}"; not found; options are "starsim" (default), "simple", plus:\n{sc.newlinejoin(pl.style.available)}'
+                errormsg = f'Style "{style}"; not found; options are "stisim" (default), "simple", plus:\n{sc.newlinejoin(pl.style.available)} '
                 raise ValueError(errormsg)
         if reset:
             self.rc = rc
@@ -429,7 +447,7 @@ class Options(sc.objdict):
         return rc
 
     def with_style(self, style_args=None, use=False, **kwargs):
-        '''
+        """
         Combine all Matplotlib style information, and either apply it directly
         or create a style context.
 
@@ -449,7 +467,7 @@ class Options(sc.objdict):
             - ``dpi``:       the figure DPI
             - ``font``:      font (typeface)
             - ``fontsize``:  font size
-            - ``grid``:      whether or not to plot gridlines
+            - ``grid``:      whether to plot gridlines
             - ``facecolor``: color of the axes behind the plot
             - any of the entries in ``pl.rParams``
 
@@ -457,7 +475,7 @@ class Options(sc.objdict):
 
             with ss.options.with_style(dpi=300): # Use default options, but higher DPI
                 pl.plot([1,3,6])
-        '''
+        """
         # Handle inputs
         rc = sc.dcp(self.rc)  # Make a local copy of the currently used settings
         kwargs = sc.mergedicts(style_args, kwargs)
@@ -504,7 +522,7 @@ class Options(sc.objdict):
             return pl.style.context(sc.dcp(rc))
 
     def use_style(self, **kwargs):
-        '''
+        """
         Shortcut to set starsim's current style as the global default.
 
         **Example**::
@@ -516,12 +534,12 @@ class Options(sc.objdict):
             pl.style.use('seaborn-whitegrid') # to something else
             pl.figure()
             pl.plot([3,1,4])
-        '''
+        """
         return self.with_style(use=True, **kwargs)
 
 
 def load_fonts(folder=None, rebuild=False, verbose=False, **kwargs):
-    '''
+    """
     Helper function to load custom fonts for plotting -- (usually) not for the user.
 
     Note: if fonts don't load, try running ``ss.settings.load_fonts(rebuild=True)``,
@@ -531,7 +549,7 @@ def load_fonts(folder=None, rebuild=False, verbose=False, **kwargs):
         folder (str): the folder to add fonts from
         rebuild (bool): whether to rebuild the font cache
         verbose (bool): whether to print out progress/errors
-    '''
+    """
 
     if folder is None:
         folder = str(sc.thisdir(__file__, aspath=True) / 'data' / 'assets')
@@ -552,3 +570,20 @@ def load_fonts(folder=None, rebuild=False, verbose=False, **kwargs):
 
 # Create the options on module load, and load the fonts
 options = Options()
+
+
+# Default for precision
+# Used in various places throughout the code, generally as:
+#   import hpvsim.settings as hps
+#   arr = np.full(100, 0, hps.default_float)
+result_float = np.float64  # Always use float64 for results, for simplicity
+if options.precision == 32:
+    default_float = np.float32
+    default_int = np.int32
+elif options.precision == 64:  # pragma: no cover
+    default_float = np.float64
+    default_int = np.int64
+else:
+    raise NotImplementedError(f'Precision must be either 32 bit or 64 bit, not {options.precision}')
+
+

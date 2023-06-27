@@ -18,7 +18,7 @@ __all__ = ['load', 'save']
 
 def load(*args, **kwargs):
     """
-    Convenience method for sc.loadobj()
+    Convenience method for sc.loadobj() which also compares versions
 
     Args:
         args (list): passed to sc.loadobj()
