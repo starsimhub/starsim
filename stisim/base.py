@@ -842,7 +842,6 @@ class Layer(FlexDict):
         labelstr = f'"{self.label}"' if self.label else '<no label>'
         keys_str = ', '.join(self.keys())
         output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Layer("r", f, m, beta)
-        output += self.to_df().__repr__()
         return output
 
     def __contains__(self, item):
