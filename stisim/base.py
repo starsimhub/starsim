@@ -365,18 +365,16 @@ class BaseSim(ParsObj):
 # %% Define people classes
 
 class BasePeople(FlexPretty):
-    '''
+    """
     A class to handle all the boilerplate for people -- note that as with the
     BaseSim vs Sim classes, everything interesting happens in the People class,
     whereas this class exists to handle the less interesting implementation details.
-    '''
+    """
 
-    def __init__(self, pars):
-        ''' Initialize essential attributes used for filtering '''
+    def __init__(self, pars, *args, **kwargs):
+        """ Initialize essential attributes """
 
-        # Set meta attribute here, because BasePeople methods expect it to exist
-        self.meta = ssd.PeopleMeta()  # Store list of keys and dtypes
-        self.meta.validate()
+        super().__init__(*args, **kwargs)
 
         # Define lock attribute here, since BasePeople.lock()/unlock() requires it
         self._lock = False  # Prevent further modification of keys

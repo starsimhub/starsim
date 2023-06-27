@@ -48,52 +48,52 @@ class State(sc.prettyobj):
         return np.full(shape, dtype=self.dtype, fill_value=self.fill_value)
 
 
-class PeopleMeta(sc.prettyobj):
-    """ For storing all the keys relating to a person and people """
-
-    # (attribute, nrows, dtype, default value)
-    # If the default value is None, then the array will not be initialized - this is faster and can
-    # be used for variables where the People object explicitly supplies the values e.g. age
-
-    def __init__(self):
-        # Set the properties of a person
-        self.person = [
-            State('uid', default_int),  # Int
-            State('age', default_float, np.nan),  # Float
-            State('sex', default_float, np.nan),  # Float
-            State('debut', default_float, np.nan),  # Float
-            State('scale', default_float, 1.0),  # Float
-        ]
-
-        #  The following section consists of all the boolean states
-
-        # The following three groupings are all mutually exclusive and collectively exhaustive.
-        self.alive_states = [
-            # States related to whether or not the person is alive or dead
-            State('alive', bool, True, label='Population'),  # For recording population sizes
-            State('dead_other', bool, False, label='Cumulative deaths from other causes'),
-            State('emigrated', bool, False, label='Emigrated'),  # Emigrated
-        ]
-
-    # Collection of states for which we store associated dates
-    @property
-    def date_states(self):
-        return [state for state in self.alive_states if not state.fill_value]
-
-    # Set dates
-    @property
-    def dates(self):
-        dates = [State(f'date_{state.name}', default_float, np.nan, shape=state.shape) for state in self.date_states]
-        dates += [
-            State('date_dead', default_float, np.nan)
-        ]
-        return dates
-
-    def validate(self):
-        """
-        TODO check that states are valid
-        """
-        return
+# class PeopleMeta(sc.prettyobj):
+#     """ For storing all the keys relating to a person and people """
+#
+#     # (attribute, nrows, dtype, default value)
+#     # If the default value is None, then the array will not be initialized - this is faster and can
+#     # be used for variables where the People object explicitly supplies the values e.g. age
+#
+#     def __init__(self):
+#         # Set the properties of a person
+#         self.person = [
+#             State('uid', default_int),  # Int
+#             State('age', default_float, np.nan),  # Float
+#             State('sex', default_float, np.nan),  # Float
+#             State('debut', default_float, np.nan),  # Float
+#             State('scale', default_float, 1.0),  # Float
+#         ]
+#
+#         #  The following section consists of all the boolean states
+#
+#         # The following three groupings are all mutually exclusive and collectively exhaustive.
+#         self.alive_states = [
+#             # States related to whether or not the person is alive or dead
+#             State('alive', bool, True, label='Population'),  # For recording population sizes
+#             State('dead_other', bool, False, label='Cumulative deaths from other causes'),
+#             State('emigrated', bool, False, label='Emigrated'),  # Emigrated
+#         ]
+#
+#     # Collection of states for which we store associated dates
+#     @property
+#     def date_states(self):
+#         return [state for state in self.alive_states if not state.fill_value]
+#
+#     # Set dates
+#     @property
+#     def dates(self):
+#         dates = [State(f'date_{state.name}', default_float, np.nan, shape=state.shape) for state in self.date_states]
+#         dates += [
+#             State('date_dead', default_float, np.nan)
+#         ]
+#         return dates
+#
+#     def validate(self):
+#         """
+#         TODO check that states are valid
+#         """
+#         return
 
 
 class People(ssb.BasePeople):
