@@ -56,6 +56,8 @@ class Sim(ssb.BaseSim):
         """
         self.ti = 0  # The current time index
         self.validate_pars() # Ensure parameters have valid values
+        self.validate_dt()
+        self.init_time_vecs() # Initialise time vecs
         ssu.set_seed(self['rand_seed']) # Reset the random seed before the population is created
         self.init_interventions()
         self.init_people(reset=reset, **kwargs) # Create all the people (the heaviest step)
@@ -97,6 +99,23 @@ class Sim(ssb.BaseSim):
         return
 
 
+    def validate_dt(self):
+        '''
+        Check that 1/dt is an integer value, otherwise results and time vectors will have mismatching shapes.
+        init_results explicitly makes this assumption by casting resfrequency = int(1/dt).
+        '''
+        dt = self['dt']
+        reciprocal = 1.0 / dt   # Compute the reciprocal of dt
+        if not reciprocal.is_integer():  # Check if reciprocal is not a whole (integer) number
+            # Round the reciprocal
+            reciprocal = int(reciprocal)
+            rounded_dt = 1.0 / reciprocal
+            self['dt'] = rounded_dt
+            if self['verbose']:
+                warnmsg = f"Warning: Provided time step dt: {dt} resulted in a non-integer number of steps/year. Rounded to {rounded_dt}."
+                print(warnmsg)
+
+
     def validate_pars(self):
         '''
         Some parameters can take multiple types; this makes them consistent.
@@ -130,12 +149,6 @@ class Sim(ssb.BaseSim):
                 errormsg = 'You must supply one of n_years and end."'
                 raise ValueError(errormsg)
 
-        # Construct other things that keep track of time
-        self.years      = sc.inclusiverange(self['start'],self['end'])
-        self.yearvec    = sc.inclusiverange(start=self['start'], stop=self['end']+1-self['dt'], step=self['dt']) # Includes all the timepoints in the last year
-        self.npts       = len(self.yearvec)
-        self.tvec       = np.arange(self.npts)
-
         # Handle verbose
         if self['verbose'] == 'brief':
             self['verbose'] = -1
@@ -144,8 +157,18 @@ class Sim(ssb.BaseSim):
             raise ValueError(errormsg)
 
         return
-    
-    
+
+    def init_time_vecs(self):
+        '''
+        Construct vectors things that keep track of time
+        '''
+        self.years = sc.inclusiverange(self['start'], self['end'])
+        self.yearvec = sc.inclusiverange(start=self['start'], stop=self['end'] + 1 - self['dt'],
+                                         step=self['dt'])  # Includes all the timepoints in the last year
+        self.npts = len(self.yearvec)
+        self.tvec = np.arange(self.npts)
+
+
     def init_interventions(self):
         ''' Initialize and validate the interventions '''
 
