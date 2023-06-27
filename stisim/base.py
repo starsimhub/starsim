@@ -366,7 +366,7 @@ class BaseSim(ParsObj):
 # %% Define people classes
 
 class State(sc.prettyobj):
-    def __init__(self, name, dtype, fill_value=0, shape=None, label=None, color=None):
+    def __init__(self, name, dtype, fill_value=0, shape=None, label=None):
         """
         Args:
             name: name of the result as used in the model
@@ -374,7 +374,6 @@ class State(sc.prettyobj):
             fill_value: default value for this state upon model initialization
             shape: If not none, set to match a string in `pars` containing the dimensionality
             label: text used to construct labels for the result for displaying on plots and other outputs
-            color: color (used for plotting stocks)
         """
         self.name = name
         self.dtype = dtype
@@ -387,12 +386,8 @@ class State(sc.prettyobj):
     def ndim(self):
         return len(sc.tolist(self.shape)) + 1
 
-    def new(self, pars, n, module=None):
+    def new(self, n):
         shape = sc.tolist(self.shape)
-        if module is not None:
-            if len(shape) and shape[0] in pars[module].keys():
-                pars = pars[module]
-        shape = [pars[s] for s in shape]
         shape.append(n)  # We always want to have shape n
         return np.full(shape, dtype=self.dtype, fill_value=self.fill_value)
 
@@ -445,7 +440,6 @@ class State(sc.prettyobj):
 #         return
 
 
-
 class BasePeople(FlexPretty):
     """
     A class to handle all the boilerplate for people -- note that as with the
@@ -453,7 +447,7 @@ class BasePeople(FlexPretty):
     whereas this class exists to handle the less interesting implementation details.
     """
 
-    def __init__(self, pars, *args, **kwargs):
+    def __init__(self, n, initialize=True, *args, **kwargs):
         """ Initialize essential attributes """
 
         super().__init__(*args, **kwargs)
@@ -464,31 +458,33 @@ class BasePeople(FlexPretty):
             State('age', float),
             State('female', bool, False),
             State('dead', bool, False),
-            State('ti_dead', float, np.nan),  # Time index for death - defaults to natural causes but gets overwritten if they die of something first
+            State('ti_dead', float, np.nan),  # Time index for death
         ]
 
         # Define lock attribute here, since BasePeople.lock()/unlock() requires it
         self._lock = False  # Prevent further modification of keys
 
         # Load other attributes
-        self.set_pars(pars)
         self.version = __version__  # Store version info
         self.contacts = None
 
         # Private variables relating to dynamic allocation
         self._data = dict()
-        self._n = self.pars['n_agents']  # Number of agents (initial)
+        self._n = n  # Number of agents (initial)
         self._s = self._n  # Underlying array sizes
         self._inds = None  # No filtering indices
+
+        # Fully initalize
+        if initialize: self.initialize()
 
         return
 
     def initialize(self):
         """ Initialize underlying storage and map arrays """
         for state in self.states:
-            self._data[state.name] = state.new(self.pars, self._n)
+            self._data[state.name] = state.new(self._n)
         self._map_arrays()
-        self['uid'][:] = np.arange(self.pars['n_agents'])
+        self['uid'][:] = np.arange(self._n)
         return
 
     def __len__(self):
@@ -503,71 +499,6 @@ class BasePeople(FlexPretty):
     def _len_arrays(self):
         """ Length of underlying arrays """
         return len(self._data[base_key])
-
-    def set_pars(self, pars=None):
-        """
-        Re-link the parameters stored in the people object to the sim containing it,
-        and perform some basic validation.
-        """
-        orig_pars = self.__dict__.get('pars')  # Get the current parameters using dict's get method
-        if pars is None:
-            if orig_pars is not None:  # If it has existing parameters, use them
-                pars = orig_pars
-            else:
-                pars = {}
-        elif sc.isnumber(pars):  # Interpret as a population size
-            pars = {'n_agents': pars}  # Ensure it's a dictionary
-
-        # Copy from old parameters to new parameters
-        if isinstance(orig_pars, dict):
-            for k, v in orig_pars.items():
-                if k not in pars:
-                    pars[k] = v
-
-        # Do minimal validation -- needed here since n_agents should be converted to an int when first set
-        if 'n_agents' not in pars:
-            errormsg = f'The parameter "n_agents" must be included in a population; keys supplied were:\n{sc.newlinejoin(pars.keys())}'
-            raise sc.KeyNotFoundError(errormsg)
-        pars['n_agents'] = int(pars['n_agents'])
-        pars.setdefault('location', None)
-        self.pars = pars  # Actually store the pars
-        return
-
-    def validate(self, sim_pars=None, verbose=False):
-        """
-        Perform validation on the People object.
-
-        Args:
-            sim_pars (dict): dictionary of parameters from the sim to ensure they match the current People object
-            verbose (bool): detail to print
-        """
-
-        # Check that parameters match
-        if sim_pars is not None:
-            mismatches = {}
-            keys = ['n_agents', 'location']  # These are the keys used in generating the population
-            for key in keys:
-                sim_v = sim_pars.get(key)
-                ppl_v = self.pars.get(key)
-                if sim_v is not None and ppl_v is not None:
-                    if sim_v != ppl_v:
-                        mismatches[key] = sc.objdict(sim=sim_v, people=ppl_v)
-            if len(mismatches):
-                errormsg = 'Validation failed due to mismatches between the sim and the people parameters:\n'
-                for k, v in mismatches.items():
-                    errormsg += f'  {k}: sim={v.sim}, people={v.people}'
-                raise ValueError(errormsg)
-
-        # Check that the length of each array is consistent
-        expected_len = len(self)
-        for key in self.keys():
-            if self[key].ndim == 1:
-                actual_len = len(self[key])
-            if actual_len != expected_len:  # pragma: no cover
-                errormsg = f'Length of key "{key}" did not match population size ({actual_len} vs. {expected_len})'
-                raise IndexError(errormsg)
-
-        return
 
     def lock(self):
         """ Lock the people object to prevent keys from being added """
@@ -638,7 +569,7 @@ class BasePeople(FlexPretty):
     def __setitem__(self, key, value):
         """ Ditto """
         if self._lock and key not in self.__dict__:  # pragma: no cover
-            errormsg = f'Key "{key}" is not a current attribute of people, and the people object is locked; see people.unlock()'
+            errormsg = f'Key "{key}" is not an attribute of people and the people object is locked; see people.unlock()'
             raise AttributeError(errormsg)
         return self.__setattr__(key, value)
 
@@ -670,7 +601,6 @@ class BasePeople(FlexPretty):
         newpeople.set('uid', np.arange(len(newpeople)))
 
         return newpeople
-
 
     def __radd__(self, people2):
         """ Allows sum() to work correctly """
@@ -773,29 +703,16 @@ class BasePeople(FlexPretty):
         return out
 
     def keys(self):
-        ''' Returns keys for all non-derived properties of the people object '''
-        return [state.name for state in self.meta.states_to_set]
-
-    def layer_keys(self):
-        ''' Get the available contact keys -- try contacts  '''
-        try:
-            keys = list(self.contacts.keys())
-        except:  # If not fully initialized
-            keys = []
-        return keys
+        """ Returns keys for all non-derived properties of the people object """
+        return [state.name for state in self.states]
 
     def indices(self):
-        ''' The indices of each people array '''
+        """ The indices of each people array """
         return np.arange(len(self))
 
-    def to_df(self):
-        ''' Convert to a Pandas dataframe '''
-        df = pd.DataFrame.from_dict({key: self[key] for key in self.keys()})
-        return df
-
     def to_arr(self):
-        ''' Return as numpy array '''
-        arr = np.empty((len(self), len(self.keys())), dtype=ssd.default_float)
+        """ Return as numpy array """
+        arr = np.empty((len(self), len(self.keys())), dtype=sss.default_float)
         for k, key in enumerate(self.keys()):
             if key == 'uid':
                 arr[:, k] = np.arange(len(self))
@@ -804,18 +721,18 @@ class BasePeople(FlexPretty):
         return arr
 
     def to_list(self):
-        ''' Return all people as a list '''
+        """ Return all people as a list """
         return list(self)
 
 
 class FlexDict(dict):
-    '''
+    """
     A dict that allows more flexible element access: in addition to obj['a'],
     also allow obj[0]. Lightweight implementation of the Sciris odict class.
-    '''
+    """
 
     def __getitem__(self, key):
-        ''' Lightweight odict -- allow indexing by number, with low performance '''
+        """ Lightweight odict -- allow indexing by number, with low performance """
         try:
             return super().__getitem__(key)
         except KeyError as KE:
@@ -836,7 +753,7 @@ class FlexDict(dict):
 
 
 class Layer(FlexDict):
-    '''
+    """
     A small class holding a single layer of contact edges (connections) between people.
 
     The input is typically arrays including: person 1 of the connection, person 2 of
@@ -875,17 +792,17 @@ class Layer(FlexDict):
         index = np.arange(n)
         self_conn = p1 == p2
         layer2 = hpv.Layer(**layer, index=index, self_conn=self_conn, label=layer.label)
-    '''
+    """
 
     def __init__(self, *args, transmission='horizontal', label=None, **kwargs):
         self.meta = {
-            'p1': ssd.default_int,  # p1
-            'p2': ssd.default_int,  # p2
-            'acts': ssd.default_float,  # Default number of acts for this contact type
-            'dur': ssd.default_float,  # Duration of partnership
-            'start': ssd.default_int,  # Date of partnership start
-            'end': ssd.default_float,  # Date of partnership end
-            'beta': ssd.default_float,
+            'p1': sss.default_int,  # p1
+            'p2': sss.default_int,  # p2
+            'acts': sss.default_float,  # Default number of acts for this contact type
+            'dur': sss.default_float,  # Duration of partnership
+            'start': sss.default_int,  # Date of partnership start
+            'end': sss.default_float,  # Date of partnership end
+            'beta': sss.default_float,
         }
         self.transmission = transmission  # "vertical" or "horizontal", determines whether transmission is bidirectional
         self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
@@ -920,7 +837,7 @@ class Layer(FlexDict):
             return 0
 
     def __repr__(self):
-        ''' Convert to a dataframe for printing '''
+        """ Convert to a dataframe for printing """
         namestr = self.__class__.__name__
         labelstr = f'"{self.label}"' if self.label else '<no label>'
         keys_str = ', '.join(self.keys())
@@ -948,16 +865,16 @@ class Layer(FlexDict):
         return np.unique([self['p1'], self['p2']])
 
     def meta_keys(self):
-        ''' Return the keys for the layer's meta information -- i.e., f, m, beta, any others '''
+        """ Return the keys for the layer's meta information -- i.e., f, m, beta, any others """
         return self.meta.keys()
 
     def validate(self, force=True):
-        '''
+        """
         Check the integrity of the layer: right types, right lengths.
 
         If dtype is incorrect, try to convert automatically; if length is incorrect,
         do not.
-        '''
+        """
         n = len(self[self.basekey])
         for key, dtype in self.meta.items():
             if dtype:
@@ -997,12 +914,12 @@ class Layer(FlexDict):
         return self.get_inds(inds, remove=True)
 
     def append(self, contacts):
-        '''
+        """
         Append contacts to the current layer.
 
         Args:
             contacts (dict): a dictionary of arrays with keys f,m,beta, as returned from layer.pop_inds()
-        '''
+        """
         for key in self.keys():
             new_arr = contacts[key]
             n_curr = len(self[key])  # Current number of contacts
@@ -1011,37 +928,6 @@ class Layer(FlexDict):
             self[key] = np.resize(self[key], n_total)  # Resize to make room, preserving dtype
             self[key][n_curr:] = new_arr  # Copy contacts into the layer
         return
-
-    def to_df(self):
-        ''' Convert to dataframe '''
-        df = pd.DataFrame.from_dict(self)
-        return df
-
-    def from_df(self, df, keys=None):
-        ''' Convert from a dataframe '''
-        if keys is None:
-            keys = self.meta_keys()
-        for key in keys:
-            self[key] = df[key].to_numpy()
-        return self
-
-    def to_graph(self):  # pragma: no cover
-        '''
-        Convert to a networkx DiGraph
-
-        **Example**::
-
-            import networkx as nx
-            sim = hpv.Sim(n_agents=20, pop_type='hybrid').run()
-            G = sim.people.contacts['h'].to_graph()
-            nx.draw(G)
-        '''
-        import networkx as nx
-        data = [np.array(self[k], dtype=dtype).tolist() for k, dtype in [('p1', int), ('p2', int), ('beta', float)]]
-        G = nx.DiGraph()
-        G.add_weighted_edges_from(zip(*data), weight='beta')
-        nx.set_edge_attributes(G, self.label, name='layer')
-        return G
 
     def find_contacts(self, inds, as_array=True):
         """
@@ -1078,7 +964,7 @@ class Layer(FlexDict):
         # Find the contacts
         contact_inds = ssu.find_contacts(self['p1'], self['p2'], inds)
         if as_array:
-            contact_inds = np.fromiter(contact_inds, dtype=ssd.default_int)
+            contact_inds = np.fromiter(contact_inds, dtype=sss.default_int)
             contact_inds.sort()  # Sorting ensures that the results are reproducible for a given seed as well as being identical to previous versions of HPVsim
 
         return contact_inds
