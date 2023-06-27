@@ -453,13 +453,13 @@ class BasePeople(FlexPretty):
         super().__init__(*args, **kwargs)
 
         # Define states that every People instance has, regardless of which modules are enabled
-        self.states = [
+        self.states = ssu.named_dict(
             State('uid', int),  # TODO: will we support removing agents? It could make indexing much more complicated...
             State('age', float),
             State('female', bool, False),
             State('dead', bool, False),
             State('ti_dead', float, np.nan),  # Time index for death
-        ]
+        )
 
         # Define lock attribute here, since BasePeople.lock()/unlock() requires it
         self._lock = False  # Prevent further modification of keys
@@ -523,7 +523,7 @@ class BasePeople(FlexPretty):
         new_total = orig_n + n
         if new_total > self._s:
             n_new = max(n, int(self._s / 2))  # Minimum 50% growth
-            for state in self.meta.states_to_set:
+            for state in self.states:
                 self._data[state.name] = np.concatenate([self._data[state.name], state.new(self.pars, n_new)],
                                                         axis=self._data[state.name].ndim - 1)
             for state_name, state in self.module_states.items():
