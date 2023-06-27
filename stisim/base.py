@@ -12,7 +12,7 @@ from . import settings as sss
 from .version import __version__
 
 # Specify all externally visible classes this file defines
-__all__ = ['ParsObj', 'BaseSim', 'State', 'BasePeople', 'FlexDict']
+__all__ = ['ParsObj', 'BaseSim', 'State', 'BasePeople', 'FlexDict', 'Layer']
 
 # Default object getter/setter
 obj_set = object.__setattr__
@@ -720,10 +720,7 @@ class Layer(FlexDict):
     Args:
         p1 (array): an array of N connections, representing people on one side of the connection
         p2 (array): an array of people on the other side of the connection
-        acts (array): an array of number of acts per timestep for each connection
-        dur (array): duration of the connection
-        start (array): start time of the connection
-        end (array): end time of the connection
+        beta (array): an array representing relative transmissibility for this layer - TODO, do we need this?
         label (str): the name of the layer (optional)
         kwargs (dict): other keys copied directly into the layer
 
@@ -749,12 +746,9 @@ class Layer(FlexDict):
     """
 
     def __init__(self, *args, transmission='horizontal', label=None, **kwargs):
-        self.meta = dict(
-            p1=sss.default_int,
-            p2=sss.default_int,
-            beta=sss.default_float,
-        )
-        self.meta_keys = self.meta.keys()
+        self.p1 = np.array([], dtype=sss.default_int)
+        self.p2 = np.array([], dtype=sss.default_int)
+        self.beta = np.array([], dtype=sss.default_float)
         self.transmission = transmission  # "vertical" or "horizontal", determines whether transmission is bidirectional
         self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
         self.label = label

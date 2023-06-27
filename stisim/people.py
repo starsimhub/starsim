@@ -78,14 +78,10 @@ class People(ssb.BasePeople):
         """
         return self.scale[inds].sum()
 
-    def increment_age(self):
-        """ Let people age by one timestep """
-        self.age[self.alive] += self.dt
-        return
-
     def update_states(self, sim):
         """ Perform all state updates at the current timestep """
 
+        self.age[~self.dead] += sim.dt
         self.dead[self.ti_dead <= sim.ti] = True
 
         for module in sim.modules.values():
