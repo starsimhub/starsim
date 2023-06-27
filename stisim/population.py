@@ -2,170 +2,32 @@
 Defines functions for making the population.
 '''
 
-#%% Imports
+# %% Imports
 import numpy as np
 import sciris as sc
 from . import utils as ssu
-from . import misc as ssm
-from . import data as ssdata
-from . import people as ssppl
 from . import base as ssb
+from . import settings as sss
 
 
 # Specify all externally visible functions this file defines
-__all__ = ['make_people']
-
-
-def make_people(sim, popdict=None, reset=False, verbose=None, use_age_data=False, # TODO: re-enable age data
-                sex_ratio=0.5, dt_round_age=True, **kwargs):
-    '''
-    Make the people for the simulation.
-
-    Args:
-        sim      (Sim)  : the simulation object; population parameters are taken from the sim object
-        popdict  (any)  : if supplied, use this population dictionary instead of generating a new one; can be a dict or People object
-        reset    (bool) : whether to force population creation even if self.popdict/self.people exists
-        verbose  (bool) : level of detail to print
-        use_age_data (bool):
-        sex_ratio (bool):
-        dt_round_age (bool): whether to round people's ages to the nearest timestep (default true)
-
-    Returns:
-        people (People): people
-    '''
-
-    # Set inputs and defaults
-    n_agents = int(sim['n_agents']) # Shorten
-    total_pop = None # Optionally created but always returned
-    pop_trend = None # Populated later if location is specified
-    pop_age_trend = None
-
-    if verbose is None:
-        verbose = sim['verbose']
-    dt = sim['dt'] # Timestep
-
-    # If a people object or popdict is supplied, use it
-    if sim.people and not reset:
-        sim.people.initialize(sim_pars=sim.pars)
-        return sim.people, total_pop # If it's already there, just return
-    elif sim.popdict and popdict is None:
-        popdict = sim.popdict # Use stored one
-        sim.popdict = None # Once loaded, remove
-
-    if popdict is None:
-
-        n_agents = int(sim['n_agents']) # Number of people
-        total_pop = None
-
-        # Load age data by country if available, or use defaults.
-        # Other demographic data like mortality and fertility are also available by
-        # country, but these are loaded directly into the sim since they are not
-        # stored as part of the people.
-        location = sim['location']
-        if sim['verbose']:
-            print(f'Loading location-specific data for "{location}"')
-        if use_age_data:
-            try:
-                age_data = ssdata.get_age_distribution(location, year=sim['start'])
-                pop_trend = ssdata.get_total_pop(location)
-                total_pop = sum(age_data[:, 2])  # Return the total population
-                pop_age_trend = ssdata.get_age_distribution_over_time(location)
-            except ValueError as E:
-                warnmsg = f'Could not load age data for requested location "{location}" ({str(E)})'
-                ssm.warn(warnmsg, die=True)
-        else:
-            max_age = 101
-            a1 = np.arange(max_age)
-            a2 = a1 + 1
-            num = np.ones(max_age)
-            age_data = np.vstack([a1, a2, num]).T
-
-        uids, sexes, debut = set_static_demog(n_agents, pars=sim.pars, sex_ratio=sex_ratio)
-
-        # Set ages, rounding to nearest timestep if requested
-        age_data_min   = age_data[:,0]
-        age_data_max   = age_data[:,1]
-        age_data_range = age_data_max - age_data_min
-        age_data_prob   = age_data[:,2]
-        age_data_prob   /= age_data_prob.sum() # Ensure it sums to 1
-        age_bins        = ssu.n_multinomial(age_data_prob, n_agents) # Choose age bins
-        if dt_round_age:
-            ages = age_data_min[age_bins] + np.random.randint(age_data_range[age_bins]/dt)*dt # Uniformly distribute within this age bin
-        else:
-            ages = age_data_min[age_bins] + age_data_range[age_bins]*np.random.random(n_agents) # Uniformly distribute within this age bin
-
-        # Store output
-        popdict = {}
-        popdict['uid'] = uids
-        popdict['age'] = ages
-        popdict['sex'] = sexes
-        popdict['debut'] = debut
-
-    else:
-        ages = popdict['age']
-
-    # Do minimal validation and create the people
-    validate_popdict(popdict, sim.pars, verbose=verbose)
-    people = ssppl.People(sim.pars, pop_trend=pop_trend, pop_age_trend=pop_age_trend, **popdict) # List for storing the people
-
-    sc.printv(f'Created {n_agents} agents, average age {ages.mean():0.2f} years', 2, verbose)
-
-    return people, total_pop
-
-
-def set_static_demog(new_n, existing_n=0, pars=None, sex_ratio=0.5):
-    '''
-    Set static population characteristics that do not change over time.
-    Can be used when adding new births, in which case the existing popsize can be given.
-    '''
-    uid             = np.arange(existing_n, existing_n+new_n, dtype=ssd.default_int)
-    sex             = np.random.binomial(1, sex_ratio, new_n)
-    debut           = np.full(new_n, np.nan, dtype=ssd.default_float)
-    debut[sex==1]   = ssu.sample(**pars['debut']['m'], size=sum(sex))
-    debut[sex==0]   = ssu.sample(**pars['debut']['f'], size=new_n-sum(sex))
-
-    return uid, sex, debut
-
-
-def validate_popdict(popdict, pars, verbose=True):
-    '''
-    Check that the popdict is the correct type, has the correct keys, and has
-    the correct length
-    '''
-
-    # Check it's the right type
-    try:
-        popdict.keys() # Although not used directly, this is used in the error message below, and is a good proxy for a dict-like object
-    except Exception as E:
-        errormsg = f'The popdict should be a dictionary or hpv.People object, but instead is {type(popdict)}'
-        raise TypeError(errormsg) from E
-
-    # Check keys and lengths
-    required_keys = ['uid', 'age', 'sex', 'debut']
-    popdict_keys = popdict.keys()
-    n_agents = pars['n_agents']
-    for key in required_keys:
-
-        if key not in popdict_keys:
-            errormsg = f'Could not find required key "{key}" in popdict; available keys are: {sc.strjoin(popdict.keys())}'
-            sc.KeyNotFoundError(errormsg)
-
-        actual_size = len(popdict[key])
-        if actual_size != n_agents:
-            errormsg = f'Could not use supplied popdict since key {key} has length {actual_size}, but all keys must have length {n_agents}'
-            raise ValueError(errormsg)
-
-        isnan = np.isnan(popdict[key]).sum()
-        if isnan:
-            errormsg = f'Population not fully created: {isnan:,} NaNs found in {key}.'
-            raise ValueError(errormsg)
-
-    return
+__all__ = ['DynamicSexualLayer', 'Maternal']
 
 
 class DynamicSexualLayer(ssb.Layer):
     def __init__(self, pars=None):
-        super().__init__()
+
+        key_dict = {
+            'p1': sss.default_int,
+            'p2': sss.default_int,
+            'dur': sss.default_float,
+            'acts': sss.default_float,
+            'start': sss.default_float,
+            'beta': sss.default_float,
+        }
+
+        # Call init for the base class, which sets all the keys
+        super().__init__(key_dict=key_dict)
 
         # Define default parameters
         self.pars = dict()
@@ -182,11 +44,11 @@ class DynamicSexualLayer(ssb.Layer):
         self.get_layer_probs()
 
     def initialize(self, people):
-        self.add_partnerships(people)
+        self.add_pairs(people, ti=0)
 
     def update_pars(self, pars):
         if pars is not None:
-            for k,v in pars.items():
+            for k, v in pars.items():
                 self.pars[k] = v
         return
 
@@ -228,12 +90,12 @@ class DynamicSexualLayer(ssb.Layer):
 
         return
 
-    def add_partnerships(self, people):
+    def add_pairs(self, people, ti=0):
 
-        is_female = people.is_female
-        is_active = people.is_active
-        f_active = is_female & is_active
-        m_active = ~is_female & is_active
+        female = people.female
+        active = people.active
+        f_active = female & active
+        m_active = ~female & active
 
         # Compute number of partners
         f_partnered_inds, f_partnered_counts = np.unique(self['p1'], return_counts=True)
@@ -331,13 +193,12 @@ class DynamicSexualLayer(ssb.Layer):
         retired_vals = 0
 
         # Set values and return
-        scaled_acts = np.full(len(acts), np.nan, dtype=ssd.default_float)
+        scaled_acts = np.full(len(acts), np.nan, dtype=sss.default_float)
         scaled_acts[below_peak_inds] = below_peak_vals
         scaled_acts[above_peak_inds] = above_peak_vals
         scaled_acts[retired_inds] = retired_vals
-        start = np.array([people.t] * n_partnerships, dtype=ssd.default_float)
-        end = start + dur/people.pars['dt']
-        beta = np.ones((n_partnerships))
+        start = np.array([ti] * n_partnerships, dtype=sss.default_float)
+        beta = np.ones(n_partnerships)
 
         new_contacts = dict(
             p1=p1,
@@ -345,44 +206,44 @@ class DynamicSexualLayer(ssb.Layer):
             dur=dur,
             acts=acts,
             start=start,
-            end=end,
             beta=beta
         )
         self.append(new_contacts)
         return
 
-    def update(self, people):
+    def update(self, people, ti=None, dt=None):
         # First remove any relationships due to end
-        self['dur'] = self['dur'] - people.dt
+        self['dur'] = self['dur'] - dt
         active = self['dur'] > 0
         for key in self.meta.keys():
             self[key] = self[key][active]
 
         # Then add new relationships
-        self.add_partnerships(people)
+        self.add_pairs(people, ti=ti)
         return
 
 
 class Maternal(ssb.Layer):
-    def __init__(self, transmission='vertical'):
+    def __init__(self, key_dict=None, transmission='vertical'):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
-        super().__init__(transmission=transmission)
-        self.dur = np.array([], dtype=float)  # Duration of active connections in the layer
+        key_dict = sc.mergedicts({'dur': sss.default_float}, key_dict)
+        super().__init__(key_dict=key_dict, transmission=transmission)
         return
 
-    def update(self, people):
+    def update(self, people, dt=None):
         # Set beta to 0 for women who complete post-partum period
         # Keep connections for now, might want to consider removing
-        self['dur'] = self['dur'] - people.dt
+        self['dur'] = self['dur'] - dt
         inactive = self['dur'] <= 0
         self['beta'][inactive] = 0
 
     def initialize(self, people):
+        """ No pairs added upon initialization """
         pass
 
-    def add_connections(self, mother_inds, unborn_inds, dur):
+    def add_pairs(self, mother_inds, unborn_inds, dur):
         """
         Add connections between pregnant women and their as-yet-unborn babies
         """

@@ -431,6 +431,8 @@ class BasePeople(FlexPretty):
             self._data[state_name] = state.new(self._n)
         self._map_arrays()
         self['uid'][:] = np.arange(self._n)
+        self['age'][:] = np.random.random(size=self._n)*100
+        self['female'][:] = np.random.choice([False, True], size=self._n)
 
         # Define lock attribute here, since BasePeople.lock()/unlock() requires it
         self._lock = False  # Prevent further modification of keys
@@ -508,7 +510,7 @@ class BasePeople(FlexPretty):
             else:
                 errormsg = 'Can only operate on 1D or 2D arrays'
                 raise TypeError(errormsg)
-            
+
         return
 
     def __getitem__(self, key):
@@ -745,12 +747,13 @@ class Layer(FlexDict):
         layer2 = hpv.Layer(**layer, index=index, self_conn=self_conn, label=layer.label)
     """
 
-    def __init__(self, *args, transmission='horizontal', label=None, **kwargs):
-        self.meta = {
-            'p1':   sss.default_int,
-            'p2':   sss.default_int,
+    def __init__(self, *args, key_dict=None, transmission='horizontal', label=None, **kwargs):
+        default_keys = {
+            'p1': sss.default_int,
+            'p2': sss.default_int,
             'beta': sss.default_float,
         }
+        self.meta = sc.mergedicts(default_keys, key_dict)
         self.transmission = transmission  # "vertical" or "horizontal", determines whether transmission is bidirectional
         self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
         self.label = label
@@ -781,6 +784,7 @@ class Layer(FlexDict):
         labelstr = f'"{self.label}"' if self.label else '<no label>'
         keys_str = ', '.join(self.keys())
         output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Layer("r", f, m, beta)
+        output += self.to_df().__repr__()
         return output
 
     def __contains__(self, item):
@@ -789,8 +793,8 @@ class Layer(FlexDict):
 
         Args:
             item: Person index
-        Returns: True if person index appears in any interactions
 
+        Returns: True if person index appears in any interactions
         """
         return (item in self['p1']) or (item in self['p2'])
 
@@ -800,6 +804,84 @@ class Layer(FlexDict):
         Return sorted array of all members
         """
         return np.unique([self['p1'], self['p2']])
+
+    def meta_keys(self):
+        """ Return the keys for the layer's meta information """
+        return self.meta.keys()
+
+    def validate(self, force=True):
+        """
+        Check the integrity of the layer: right types, right lengths.
+
+        If dtype is incorrect, try to convert automatically; if length is incorrect,
+        do not.
+        """
+        n = len(self[self.basekey])
+        for key, dtype in self.meta.items():
+            if dtype:
+                actual = self[key].dtype
+                expected = dtype
+                if actual != expected:
+                    self[key] = np.array(self[key],
+                                         dtype=expected)  # Probably harmless, so try to convert to correct type
+            actual_n = len(self[key])
+            if n != actual_n:
+                errormsg = f'Expecting length {n} for layer key "{key}"; got {actual_n}'  # We can't fix length mismatches
+                raise TypeError(errormsg)
+        return
+
+    def get_inds(self, inds, remove=False):
+        """
+        Get the specified indices from the edgelist and return them as a dict.
+        Args:
+            inds (int, array, slice): the indices to find
+            remove (bool): whether to remove the indices
+        """
+        output = {}
+        for key in self.meta_keys():
+            output[key] = self[key][inds]  # Copy to the output object
+            if remove:
+                self[key] = np.delete(self[key], inds)  # Remove from the original
+        return output
+
+    def pop_inds(self, inds):
+        """
+        "Pop" the specified indices from the edgelist and return them as a dict.
+        Returns arguments in the right format to be used with layer.append().
+
+        Args:
+            inds (int, array, slice): the indices to be removed
+        """
+        return self.get_inds(inds, remove=True)
+
+    def append(self, contacts):
+        """
+        Append contacts to the current layer.
+
+        Args:
+            contacts (dict): a dictionary of arrays with keys f,m,beta, as returned from layer.pop_inds()
+        """
+        for key in self.keys():
+            new_arr = contacts[key]
+            n_curr = len(self[key])  # Current number of contacts
+            n_new = len(new_arr)  # New contacts to add
+            n_total = n_curr + n_new  # New size
+            self[key] = np.resize(self[key], n_total)  # Resize to make room, preserving dtype
+            self[key][n_curr:] = new_arr  # Copy contacts into the layer
+        return
+
+    def to_df(self):
+        """ Convert to dataframe """
+        df = pd.DataFrame.from_dict(self)
+        return df
+
+    def from_df(self, df, keys=None):
+        """ Convert from a dataframe """
+        if keys is None:
+            keys = self.meta_keys()
+        for key in keys:
+            self[key] = df[key].to_numpy()
+        return self
 
     def find_contacts(self, inds, as_array=True):
         """
@@ -836,10 +918,14 @@ class Layer(FlexDict):
         # Find the contacts
         contact_inds = ssu.find_contacts(self['p1'], self['p2'], inds)
         if as_array:
-            contact_inds = np.fromiter(contact_inds, dtype=sss.default_int)
+            contact_inds = np.fromiter(contact_inds, dtype=ssd.default_int)
             contact_inds.sort()  # Sorting ensures that the results are reproducible for a given seed as well as being identical to previous versions of HPVsim
 
         return contact_inds
 
+    def add_pairs(self):
+        pass
+
     def update(self):
         pass
+
