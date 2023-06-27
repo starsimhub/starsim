@@ -7,11 +7,11 @@ from . import utils as ssu
 from . import population as sspop
 
 
-
 class Module(sc.prettyobj):
     # Base module contains states/attributes that all modules have
     
-    def __init__(self, pars=None):
+    def __init__(self, pars=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.pars = ssu.omerge(pars)
         self.states = ssu.named_dict(
             State('rel_sus', float, 1),
@@ -20,8 +20,7 @@ class Module(sc.prettyobj):
         )
         self.results = sc.objdict()
         return
-    
-    
+
     def initialize(self, sim):
         # Merge parameters
         sim.pars[self.name] = self.pars
@@ -31,6 +30,18 @@ class Module(sc.prettyobj):
         # but subsequently modules could have their own logic for initializing the default values
         # and initializing any outputs that are required
         sim.people.add_module(self)
+
+        # Pick some initially infected agents
+        self.set_prognoses(sim, np.random.choice(sim.people.uid, sim.pars[self.name]['initial']))
+
+        if 'beta' not in sim.pars[self.name]:
+            sim.pars[self.name].beta = sc.objdict({k: [1, 1] for k in sim.people.contacts})
+
+        sim.results[self.name]['n_susceptible'] = Result(self.name, 'n_susceptible', sim.npts, dtype=int)
+        sim.results[self.name]['n_infected'] = Result(self.name, 'n_infected', sim.npts, dtype=int)
+        sim.results[self.name]['prevalence'] = Result(self.name, 'prevalence', sim.npts, dtype=float)
+        sim.results[self.name]['new_infections'] = Result(self.name, 'n_infected', sim.npts, dtype=int)
+
     
     def update_states(self, sim):
         # Carry out any autonomous state changes at the start of the timestep
@@ -40,15 +51,12 @@ class Module(sc.prettyobj):
         # Add new cases of module, through transmission, incidence, etc.
         pass
 
-    
     def update_results(self, sim):
         pass
 
-    
     def finalize_results(self, sim):
         pass
 
-    
     @property
     def name(self):
         # The module name is a lower-case version of its class name
@@ -76,34 +84,21 @@ class HIV(Module):
         }, self.pars)
         return
 
-    
     def update_states(self, sim):
         # Update CD4
-        sim.people.hiv.cd4[sim.people.alive & sim.people.hiv.infected & sim.people.hiv.on_art] += (sim.pars.hiv.cd4_max - sim.people.hiv.cd4[sim.people.alive & sim.people.hiv.infected & sim.people.hiv.on_art])/sim.pars.hiv.cd4_rate
-        sim.people.hiv.cd4[sim.people.alive & sim.people.hiv.infected & ~sim.people.hiv.on_art] += (sim.pars.hiv.cd4_min - sim.people.hiv.cd4[sim.people.alive & sim.people.hiv.infected & ~sim.people.hiv.on_art])/sim.pars.hiv.cd4_rate
+        hivppl = sim.people.hiv
+        hivppl.cd4[sim.people.alive & hivppl.infected & hivppl.on_art] += (sim.pars.hiv.cd4_max - hivppl.cd4[sim.people.alive & hivppl.infected & hivppl.on_art])/sim.pars.hiv.cd4_rate
+        hivppl.cd4[sim.people.alive & hivppl.infected & ~hivppl.on_art] += (sim.pars.hiv.cd4_min - hivppl.cd4[sim.people.alive & hivppl.infected & ~hivppl.on_art])/sim.pars.hiv.cd4_rate
         return
 
-    
     def initialize(self, sim):
         super(HIV, self).initialize(sim)
-
-        # Pick some initially infected agents
-        self.set_prognoses(sim, np.random.choice(sim.people.uid, sim.pars[self.name]['initial']))
-
-        if 'beta' not in sim.pars[self.name]:
-            sim.pars[self.name].beta = sc.objdict({k:1 for k in sim.people.contacts})
-
-        sim.results[self.name]['n_susceptible'] = Result(self.name, 'n_susceptible', sim.npts, dtype=int)
-        sim.results[self.name]['n_infected'] = Result(self.name, 'n_infected', sim.npts, dtype=int)
-        sim.results[self.name]['prevalence'] = Result(self.name, 'prevalence', sim.npts, dtype=float)
-        sim.results[self.name]['new_infections'] = Result(self.name, 'n_infected', sim.npts, dtype=int)
         sim.results[self.name]['n_art'] = Result(self.name, 'n_art', sim.npts, dtype=int)
-
     
     def update_results(self, sim):
         sim.results[self.name]['n_susceptible'][sim.t] = np.count_nonzero(sim.people.hiv.susceptible)
         sim.results[self.name]['n_infected'][sim.t] = np.count_nonzero(sim.people.hiv.infected)
-        sim.results[self.name]['prevalence'][sim.t] = sim.results[self.name].n_infected[sim.t] / sim.people._n
+        sim.results[self.name]['prevalence'][sim.t] = sim.results[self.name].n_infected[sim.t] / sim.people.n
         sim.results[self.name]['new_infections'] = np.count_nonzero(sim.people[self.name].ti_infected == sim.t)
         sim.results[self.name]['n_art'] = np.count_nonzero(sim.people.alive & sim.people[self.name].on_art)
 
@@ -112,15 +107,19 @@ class HIV(Module):
         eff_condoms = sim.pars[self.name]['eff_condoms']
 
         for k, layer in sim.people.contacts.items():
+
             if layer.transmission == 'vertical':
                 effective_condoms = 1
             else:
                 condoms = layer.pars['condoms']
-                effective_condoms = ssd.default_float(condoms * eff_condoms)
+                effective_condoms = sss.default_float(condoms * eff_condoms)
+
             if k in sim.pars[self.name]['beta']:
+
                 rel_trans = (sim.people[self.name].infected & sim.people.alive).astype(float)
                 rel_sus = (sim.people[self.name].susceptible & sim.people.alive).astype(float)
-                for a,b in [[layer['p1'],layer['p2']],[layer['p2'],layer['p1']]]:
+
+                for a, b, beta in [[layer['p1'], layer['p2'], layer[]],[layer['p2'],layer['p1']]]:
                     # probability of a->b transmission
                     p_transmit = layer['beta']*rel_trans[a]*sim.people[self.name].rel_trans[a]*rel_sus[b]*sim.people[self.name].rel_sus[b]*sim.pars[self.name]['beta'][k]*(1-effective_condoms)
                     self.set_prognoses(sim, b[np.random.random(len(a))<p_transmit])
