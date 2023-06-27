@@ -1,5 +1,5 @@
-'''
-Define options for starsim.
+"""
+Define options for STIsim.
 All options should be set using set() or directly, e.g.::
 
     ss.options(font_size=18)
@@ -10,7 +10,7 @@ To reset default options, use::
 
 Note: "options" is used to refer to the choices available (e.g., DPI), while "settings"
 is used to refer to the choices made (e.g., DPI=150).
-'''
+"""
 
 import os
 import pylab as pl
@@ -21,33 +21,11 @@ import matplotlib.font_manager as fm
 __all__ = ['options']
 
 
-#%% General settings
-
-
-# Define simple plotting options -- similar to Matplotlib default
-rc_simple = {
-    'axes.axisbelow':    True, # So grids show up behind
-    'axes.spines.right': False,
-    'axes.spines.top':   False,
-    'figure.facecolor':  'white',
-    'font.family':       'sans-serif', # Replaced with Mulish in load_fonts() if import succeeds
-    'legend.frameon':    False,
-}
-
-# Define default plotting options -- based on Seaborn
-rc_starsim = sc.mergedicts(rc_simple, {
-    'axes.facecolor': '#f2f2ff',
-    'axes.grid':      True,
-    'grid.color':     'white',
-    'grid.linewidth': 1,
-})
-
-
-#%% Define the options class
+# %% Define the options class
 
 class Options(sc.objdict):
-    '''
-    Set options for starsim.
+    """
+    Set options for STIsim.
 
     Use ``ss.options.set('defaults')`` to reset all values to default, or ``ss.options.set(dpi='default')``
     to reset one parameter to default. See ``ss.options.help(detailed=True)`` for
@@ -74,52 +52,47 @@ class Options(sc.objdict):
     **Examples**::
 
         ss.options(dpi=150) # Larger size
-        ss.options(style='simple', font='Rosario') # Change to the "simple" starsim style with a custom font
+        ss.options(style='simple', font='Rosario') # Change to the "simple" STIsim style with a custom font
         ss.options.set(fontsize=18, show=False, backend='agg', precision=64) # Multiple changes
         ss.options(interactive=False) # Turn off interactive plots
         ss.options(jupyter=True) # Defaults for Jupyter
         ss.options('defaults') # Reset to default options
 
-    '''
+    """
 
     def __init__(self):
         super().__init__()
-        optdesc, options = self.get_orig_options() # Get the options
-        self.update(options) # Update this object with them
-        self.setattribute('optdesc', optdesc) # Set the description as an attribute, not a dict entry
-        self.setattribute('orig_options', sc.dcp(options)) # Copy the default options
+        optdesc, options = self.get_orig_options()  # Get the options
+        self.update(options)  # Update this object with them
+        self.setattribute('optdesc', optdesc)  # Set the description as an attribute, not a dict entry
+        self.setattribute('orig_options', sc.dcp(options))  # Copy the default options
         return
 
-
     def __call__(self, *args, **kwargs):
-        '''Allow ``ss.options(dpi=150)`` instead of ``ss.options.set(dpi=150)`` '''
+        """Allow ``ss.options(dpi=150)`` instead of ``ss.options.set(dpi=150)`` """
         return self.set(*args, **kwargs)
 
-
     def to_dict(self):
-        ''' Pull out only the settings from the options object '''
-        return {k:v for k,v in self.items()}
-
+        """ Pull out only the settings from the options object """
+        return {k: v for k, v in self.items()}
 
     def __repr__(self):
-        ''' Brief representation '''
+        """ Brief representation """
         output = sc.objectid(self)
-        output += 'starsim options (see also ss.options.disp()):\n'
+        output += 'STIsim options (see also ss.options.disp()):\n'
         output += sc.pp(self.to_dict(), output=True)
         return output
 
-
     def __enter__(self):
-        ''' Allow to be used in a with block '''
+        """ Allow to be used in a with block """
         return self
 
-
     def __exit__(self, *args, **kwargs):
-        ''' Allow to be used in a with block '''
+        """ Allow to be used in a with block """
         try:
             reset = {}
-            for k,v in self.on_entry.items():
-                if self[k] != v: # Only reset settings that have changed
+            for k, v in self.on_entry.items():
+                if self[k] != v:  # Only reset settings that have changed
                     reset[k] = v
             self.set(**reset)
             self.delattribute('on_entry')
@@ -128,65 +101,67 @@ class Options(sc.objdict):
             raise AttributeError(errormsg) from E
         return
 
-
     def disp(self):
-        ''' Detailed representation '''
-        output = 'starsim options (see also ss.options.help()):\n'
-        keylen = 10 # Maximum key length  -- "interactive"
-        for k,v in self.items():
+        """ Detailed representation """
+        output = 'STIsim options (see also ss.options.help()):\n'
+        keylen = 10  # Maximum key length  -- "interactive"
+        for k, v in self.items():
             keystr = sc.colorize(f'  {k:>{keylen}s}: ', fg='cyan', output=True)
             reprstr = sc.pp(v, output=True)
-            reprstr = sc.indent(n=keylen+4, text=reprstr, width=None)
+            reprstr = sc.indent(n=keylen + 4, text=reprstr, width=None)
             output += f'{keystr}{reprstr}'
         print(output)
         return
 
-
     @staticmethod
     def get_orig_options():
-        '''
-        Set the default options for starsim -- not to be called by the user, use
+        """
+        Set the default options for STIsim -- not to be called by the user, use
         ``ss.options.set('defaults')`` instead.
-        '''
+        """
 
         # Options acts like a class, but is actually an objdict for simplicity
-        optdesc = sc.objdict() # Help for the options
-        options = sc.objdict() # The options
+        optdesc = sc.objdict()  # Help for the options
+        options = sc.objdict()  # The options
 
-        optdesc.verbose = 'Set default level of verbosity (i.e. logging detail): e.g., 0.1 is an update every 10 simulated timesteps'
-        options.verbose = float(os.getenv('STARSIM_VERBOSE', 0.1))
+        optdesc.verbose = 'Set default level of verbosity (i.e. logging detail): e.g., 0.1 is an update every 10 ' \
+                          'simulated timesteps.'
+        options.verbose = float(os.getenv('STISIM_VERBOSE', 0.1))
 
-        optdesc.style = 'Set the default plotting style -- options are "starsim" and "simple" plus those in pl.style.available; see also options.rc'
-        options.style = os.getenv('STARSIM_STYLE', 'starsim')
+        optdesc.style = 'Set the default plotting style -- options are "STIsim" and "simple" plus those in ' \
+                        'pl.style.available; see also options.rc '
+        options.style = os.getenv('STISIM_STYLE', 'starsim')
 
         optdesc.dpi = 'Set the default DPI -- the larger this is, the larger the figures will be'
-        options.dpi = int(os.getenv('STARSIM_DPI', pl.rcParams['figure.dpi']))
+        options.dpi = int(os.getenv('STISIM_DPI', pl.rcParams['figure.dpi']))
 
         optdesc.font = 'Set the default font family (e.g., sans-serif or Arial)'
-        options.font = os.getenv('STARSIM_FONT', pl.rcParams['font.family'])
+        options.font = os.getenv('STISIM_FONT', pl.rcParams['font.family'])
 
         optdesc.fontsize = 'Set the default font size'
-        options.fontsize = int(os.getenv('STARSIM_FONT_SIZE', pl.rcParams['font.size']))
+        options.fontsize = int(os.getenv('STISIM_FONT_SIZE', pl.rcParams['font.size']))
 
         optdesc.interactive = 'Convenience method to set figure backend, showing, and closing behavior'
-        options.interactive = os.getenv('STARSIM_INTERACTIVE', True)
+        options.interactive = os.getenv('STISIM_INTERACTIVE', True)
 
-        optdesc.jupyter = 'Convenience method to set common settings for Jupyter notebooks: set to "retina" or "widget" (default) to set backend'
-        options.jupyter = os.getenv('STARSIM_JUPYTER', False)
+        optdesc.jupyter = 'Convenience method to set common settings for Jupyter notebooks: set to "retina" or ' \
+                          '"widget" (default) to set backend '
+        options.jupyter = os.getenv('STISIM_JUPYTER', False)
 
         optdesc.show = 'Set whether or not to show figures (i.e. call pl.show() automatically)'
-        options.show = int(os.getenv('STARSIM_SHOW', True))
+        options.show = int(os.getenv('STISIM_SHOW', True))
 
         optdesc.close = 'Set whether or not to close figures (i.e. call pl.close() automatically)'
-        options.close = int(os.getenv('STARSIM_CLOSE', False))
+        options.close = int(os.getenv('STISIM_CLOSE', False))
 
         optdesc.returnfig = 'Set whether or not to return figures from plotting functions'
-        options.returnfig = int(os.getenv('STARSIM_RETURNFIG', True))
+        options.returnfig = int(os.getenv('STISIM_RETURNFIG', True))
 
         optdesc.backend = 'Set the Matplotlib backend (use "agg" for non-interactive)'
-        options.backend = os.getenv('STARSIM_BACKEND', pl.get_backend())
+        options.backend = os.getenv('STISIM_BACKEND', pl.get_backend())
 
-        optdesc.rc = 'Matplotlib rc (run control) style parameters used during plotting -- usually set automatically by "style" option'
+        optdesc.rc = 'Matplotlib rc (run control) style parameters used during plotting -- usually set automatically ' \
+                     'by "style" option'
         options.rc = sc.dcp(rc_starsim)
 
         optdesc.warnings = 'How warnings are handled: options are "warn" (default), "print", and "error"'
@@ -199,7 +174,6 @@ class Options(sc.objdict):
         options.precision = int(os.getenv('STARSIM_PRECISION', 32))
 
         return optdesc, options
-
 
     def set(self, key=None, value=None, use=False, **kwargs):
         '''
@@ -218,23 +192,24 @@ class Options(sc.objdict):
 
         # Reset to defaults
         if key in ['default', 'defaults']:
-            kwargs = self.orig_options # Reset everything to default
+            kwargs = self.orig_options  # Reset everything to default
 
         # Handle other keys
         elif key is not None:
-            kwargs = sc.mergedicts(kwargs, {key:value})
+            kwargs = sc.mergedicts(kwargs, {key: value})
 
         # Handle Jupyter
         if 'jupyter' in kwargs.keys() and kwargs['jupyter']:
             jupyter = kwargs['jupyter']
             if jupyter == True:
-                jupyter = 'retina' # Default option for True
-            try: 
-                if not os.environ.get('SPHINX_BUILD'): # Custom check implemented in conf.py to skip this if we're inside Sphinx
-                    if jupyter == 'retina': # This makes plots much nicer, but isn't available on all systems
+                jupyter = 'retina'  # Default option for True
+            try:
+                if not os.environ.get(
+                        'SPHINX_BUILD'):  # Custom check implemented in conf.py to skip this if we're inside Sphinx
+                    if jupyter == 'retina':  # This makes plots much nicer, but isn't available on all systems
                         import matplotlib_inline
                         matplotlib_inline.backend_inline.set_matplotlib_formats('retina')
-                    elif jupyter in ['widget', 'interactive']: # Or use interactive
+                    elif jupyter in ['widget', 'interactive']:  # Or use interactive
                         from IPython import get_ipython
                         magic = get_ipython().magic
                         magic('%matplotlib widget')
@@ -255,12 +230,12 @@ class Options(sc.objdict):
                 kwargs['backend'] = 'agg'
 
         # Reset options
-        for key,value in kwargs.items():
+        for key, value in kwargs.items():
 
             # Handle deprecations
-            rename = {'font_size': 'fontsize', 'font_family':'font'}
+            rename = {'font_size': 'fontsize', 'font_family': 'font'}
             if key in rename.keys():
-                from . import misc as ssm # Here to avoid circular import
+                from . import misc as ssm  # Here to avoid circular import
                 oldkey = key
                 key = rename[oldkey]
                 warnmsg = f'Key "{oldkey}" is deprecated, please use "{key}" instead'
@@ -285,17 +260,20 @@ class Options(sc.objdict):
 
         return
 
-
     def set_matplotlib_global(self, key, value):
         ''' Set a global option for Matplotlib -- not for users '''
-        if value: # Don't try to reset any of these to a None value
-            if   key == 'fontsize': pl.rcParams['font.size']   = value
-            elif key == 'font':     pl.rcParams['font.family'] = value
-            elif key == 'dpi':      pl.rcParams['figure.dpi']  = value
-            elif key == 'backend':  pl.switch_backend(value)
-            else: raise KeyError(f'Key {key} not found')
+        if value:  # Don't try to reset any of these to a None value
+            if key == 'fontsize':
+                pl.rcParams['font.size'] = value
+            elif key == 'font':
+                pl.rcParams['font.family'] = value
+            elif key == 'dpi':
+                pl.rcParams['figure.dpi'] = value
+            elif key == 'backend':
+                pl.switch_backend(value)
+            else:
+                raise KeyError(f'Key {key} not found')
         return
-
 
     def context(self, **kwargs):
         '''
@@ -322,18 +300,16 @@ class Options(sc.objdict):
         '''
 
         # Store current settings
-        on_entry = {k:self[k] for k in kwargs.keys()}
+        on_entry = {k: self[k] for k in kwargs.keys()}
         self.setattribute('on_entry', on_entry)
 
         # Make changes
         self.set(**kwargs)
         return self
 
-
     def get_default(self, key):
         ''' Helper function to get the original default options '''
         return self.orig_options[key]
-
 
     def changed(self, key):
         ''' Check if current setting has been changed from default '''
@@ -341,7 +317,6 @@ class Options(sc.objdict):
             return self[key] != self.orig_options[key]
         else:
             return None
-
 
     def help(self, detailed=False, output=False):
         '''
@@ -361,7 +336,7 @@ class Options(sc.objdict):
             print(self.__doc__)
             return
 
-        n = 15 # Size of indent
+        n = 15  # Size of indent
         optdict = sc.objdict()
         for key in self.orig_options.keys():
             entry = sc.objdict()
@@ -369,7 +344,7 @@ class Options(sc.objdict):
             entry.current = sc.indent(n=n, width=None, text=sc.pp(self[key], output=True)).rstrip()
             entry.default = sc.indent(n=n, width=None, text=sc.pp(self.orig_options[key], output=True)).rstrip()
             if not key.startswith('rc'):
-                entry.variable = f'STARSIM_{key.upper()}' # NB, hard-coded above!
+                entry.variable = f'STARSIM_{key.upper()}'  # NB, hard-coded above!
             else:
                 entry.variable = 'No environment variable'
             entry.desc = sc.indent(n=n, text=self.optdesc[key])
@@ -403,7 +378,6 @@ class Options(sc.objdict):
         else:
             return
 
-
     def load(self, filename, verbose=True, **kwargs):
         '''
         Load current settings from a JSON file.
@@ -414,11 +388,10 @@ class Options(sc.objdict):
         '''
         json = sc.loadjson(filename=filename, **kwargs)
         current = self.to_dict()
-        new = {k:v for k,v in json.items() if v != current[k]} # Don't reset keys that haven't changed
+        new = {k: v for k, v in json.items() if v != current[k]}  # Don't reset keys that haven't changed
         self.set(**new)
         if verbose: print(f'Settings loaded from {filename}')
         return
-
 
     def save(self, filename, verbose=True, **kwargs):
         '''
@@ -433,13 +406,12 @@ class Options(sc.objdict):
         if verbose: print(f'Settings saved to {filename}')
         return output
 
-
     def _handle_style(self, style=None, reset=False, copy=True):
         ''' Helper function to handle logic for different styles '''
-        rc = self.rc # By default, use current
-        if isinstance(style, dict): # If an rc-like object is supplied directly
+        rc = self.rc  # By default, use current
+        if isinstance(style, dict):  # If an rc-like object is supplied directly
             rc = sc.dcp(style)
-        elif style is not None: # Usual use case
+        elif style is not None:  # Usual use case
             stylestr = str(style).lower()
             if stylestr in ['default', 'starsim', 'house']:
                 rc = sc.dcp(rc_starsim)
@@ -455,7 +427,6 @@ class Options(sc.objdict):
         if copy:
             rc = sc.dcp(rc)
         return rc
-
 
     def with_style(self, style_args=None, use=False, **kwargs):
         '''
@@ -488,7 +459,7 @@ class Options(sc.objdict):
                 pl.plot([1,3,6])
         '''
         # Handle inputs
-        rc = sc.dcp(self.rc) # Make a local copy of the currently used settings
+        rc = sc.dcp(self.rc)  # Make a local copy of the currently used settings
         kwargs = sc.mergedicts(style_args, kwargs)
 
         # Handle style, overwiting existing
@@ -498,7 +469,7 @@ class Options(sc.objdict):
         def pop_keywords(sourcekeys, rckey):
             ''' Helper function to handle input arguments '''
             sourcekeys = sc.tolist(sourcekeys)
-            key = sourcekeys[0] # Main key
+            key = sourcekeys[0]  # Main key
             value = None
             changed = self.changed(key)
             if changed:
@@ -519,7 +490,7 @@ class Options(sc.objdict):
         pop_keywords('facecolor', rckey='axes.facecolor')
 
         # Handle other keywords
-        for key,value in kwargs.items():
+        for key, value in kwargs.items():
             if key not in pl.rcParams:
                 errormsg = f'Key "{key}" does not match any value in Starsim options or pl.rcParams'
                 raise sc.KeyNotFoundError(errormsg)
@@ -531,7 +502,6 @@ class Options(sc.objdict):
             return pl.style.use(sc.dcp(rc))
         else:
             return pl.style.context(sc.dcp(rc))
-
 
     def use_style(self, **kwargs):
         '''
@@ -570,8 +540,8 @@ def load_fonts(folder=None, rebuild=False, verbose=False, **kwargs):
     # Try to find the font, and if it succeeds, update the styles
     try:
         name = 'Mulish'
-        fm.findfont(name, fallback_to_default=False) # Raise an exception if the font isn't found
-        rc_simple['font.family']  = name # Need to set both
+        fm.findfont(name, fallback_to_default=False)  # Raise an exception if the font isn't found
+        rc_simple['font.family'] = name  # Need to set both
         rc_starsim['font.family'] = name
         if verbose: print(f'Default starsim font reset to "{name}"')
     except Exception as E:
