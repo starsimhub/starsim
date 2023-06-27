@@ -17,7 +17,7 @@ from . import base as ssb
 __all__ = ['make_people']
 
 
-def make_people(sim, popdict=None, reset=False, verbose=None, use_age_data=True,
+def make_people(sim, popdict=None, reset=False, verbose=None, use_age_data=False, # TODO: re-enable age data
                 sex_ratio=0.5, dt_round_age=True, **kwargs):
     '''
     Make the people for the simulation.
@@ -74,6 +74,12 @@ def make_people(sim, popdict=None, reset=False, verbose=None, use_age_data=True,
             except ValueError as E:
                 warnmsg = f'Could not load age data for requested location "{location}" ({str(E)})'
                 ssm.warn(warnmsg, die=True)
+        else:
+            max_age = 101
+            a1 = np.arange(max_age)
+            a2 = a1 + 1
+            num = np.ones(max_age)
+            age_data = np.vstack([a1, a2, num]).T
 
         uids, sexes, debut = set_static_demog(n_agents, pars=sim.pars, sex_ratio=sex_ratio)
 

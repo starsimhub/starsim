@@ -103,7 +103,7 @@ class PeopleMeta(sc.prettyobj):
         ]
         return dates
 
-    # States to set when creating people
+    # States to set when creating people # TODO -- can probably remove?
     @property
     def states_to_set(self):
         return self.person + self.alive_states + self.dates

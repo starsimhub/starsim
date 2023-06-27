@@ -11,7 +11,22 @@ import sciris as sc # For additional utilities
 # What functions are externally visible -- note, this gets populated in each section below
 __all__ = []
 
- #%% The core functions
+
+#%% Helper functions
+
+def named_dict(arg=None, *args):
+    ''' Create an objdict based on object names '''
+    args = sc.mergelists(arg, args, coerce='tuple') # TODO: Must be a better way, I just forgot
+    return sc.objdict({arg.name:arg for arg in args}) # TODO: use dictobj instead for performance, probably
+
+def omerge(*args, **kwargs):
+    ''' Merge things into an objdict '''
+    return sc.objdict(sc.mergedicts(*args, **kwargs))
+
+
+
+
+#%% The core functions
 def unique(arr):
     '''
     Find the unique elements and counts in an array.

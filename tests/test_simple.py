@@ -6,7 +6,7 @@ Simple tests
 import sciris as sc
 import numpy as np
 import stisim as ss
-import pylab as pl
+import pylab as pl # TODO: reconcile pl and plt
 import matplotlib.pyplot as plt
 
 #%% Define the tests
@@ -180,10 +180,10 @@ def test_coinfection():
         connectors=[gonorrhea_hiv_connector], # this is where/how we provide connectors from HIV to other modules
     )
 
-    sim = ss.Sim(pars=pars, modules=[ss.HIV, ss.Gonorrhea])
+    sim = ss.Sim(pars=pars, modules=[ss.HIV(), ss.Gonorrhea()])
     sim.run()
 
-    return
+    return sim
 
 
 def test_layers():
@@ -197,10 +197,10 @@ def test_layers():
         networks = [ss.sspop.DynamicSexualLayer()],
     )
 
-    sim = ss.Sim(pars=pars, modules=[ss.HIV])
+    sim = ss.Sim(pars=pars, modules=[ss.HIV()])
     sim.run()
 
-    return
+    return sim
 
 def test_pregnant():
     sc.heading('Testing out people, network configuration, and pop updating with HIV and pregnancy')
@@ -221,7 +221,7 @@ def test_pregnant():
 
     )
 
-    sim = ss.Sim(pars=pars, modules=[ss.HIV, ss.Gonorrhea, ss.Pregnancy])
+    sim = ss.Sim(pars=pars, modules=[ss.HIV(), ss.Gonorrhea(), ss.Pregnancy()])
     sim.run()
 
     plt.figure()
@@ -236,7 +236,7 @@ def test_pregnant():
     plt.title('Births')
     plt.show()
 
-    return
+    return sim
 
 
 
