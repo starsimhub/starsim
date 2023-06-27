@@ -21,43 +21,40 @@ class Sim(ssb.BaseSim):
                  version=None, **kwargs):
 
         # Set attributes
-        self.label         = label    # The label/name of the simulation
-        self.created       = None     # The datetime the sim was created
-        self.people        = people   # People object
-        self.modules       = ssu.named_dict(modules)  # List of modules to simulate
-        self.t             = None     # The current time in the simulation (during execution); outside of sim.step(), its value corresponds to next timestep to be computed
-        self.results       = sc.objdict()       # For storing results
-        self.summary       = None     # For storing a summary of the results
-        self.initialized   = False    # Whether initialization is complete
-        self.complete      = False    # Whether a simulation has completed running
+        self.label = label    # The label/name of the simulation
+        self.created = None     # The datetime the sim was created
+        self.people = people   # People object
+        self.modules = ssu.named_dict(modules)  # List of modules to simulate
+        self.results = sc.objdict()       # For storing results
+        self.summary = None     # For storing a summary of the results
+        self.initialized = False    # Whether initialization is complete
+        self.complete = False    # Whether a simulation has completed running
         self.results_ready = False    # Whether results are ready
-        self._default_ver  = version  # Default version of parameters used
-        self._orig_pars    = None     # Store original parameters to optionally restore at the end of the simulation
+        self._default_ver = version  # Default version of parameters used
+        self._orig_pars = None     # Store original parameters to optionally restore at the end of the simulation
+
+        # Time indexing
+        self.ti = None  # The time index, e.g. 0, 1, 2
+        self.t = None   # The year, e.g. 2015.2
 
         # Make default parameters (using values from parameters.py)
-        default_pars = sspar.make_pars(version=version) # Start with default pars
-        default_location = sc.dcp(default_pars['location']) # Pull out the default location here
-        default_pars['location'] = None # Don't load the default location here
-        super().__init__(default_pars) # Initialize and set the parameters as attributes
+        default_pars = sspar.make_pars(version=version)  # Start with default pars
+        super().__init__(default_pars)  # Initialize and set the parameters as attributes
 
         # Update parameters
         self.update_pars(pars, **kwargs)   # Update the parameters
 
         return
 
-
-    def load_data(self, datafile=None, **kwargs):
-        ''' Load the data to calibrate against, if provided '''
-        if datafile is not None: # If a data file is provided, load it
-            self.data = ssm.load_data(datafile=datafile, check_date=True, **kwargs)
-        return
-
+    @property
+    def dt(self):
+        return self.pars['dt']
 
     def initialize(self, reset=False, **kwargs):
-        '''
+        """
         Perform all initializations on the sim.
-        '''
-        self.t = 0  # The current time index
+        """
+        self.ti = 0  # The current time index
         self.validate_pars() # Ensure parameters have valid values
         ssu.set_seed(self['rand_seed']) # Reset the random seed before the population is created
         self.init_interventions()
