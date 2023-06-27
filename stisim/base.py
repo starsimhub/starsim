@@ -12,7 +12,7 @@ from . import defaults as ssd
 from .version import __version__
 
 # Specify all externally visible classes this file defines
-__all__ = ['ParsObj', 'Result', 'BaseSim', 'BasePeople', 'FlexDict']
+__all__ = ['ParsObj', 'BaseSim', 'BasePeople', 'FlexDict']
 
 # Default object getter/setter
 obj_set = object.__setattr__
@@ -78,7 +78,8 @@ class ParsObj(FlexPretty):
     A class based around performing operations on a self.pars dict.
     """
 
-    def __init__(self, pars):
+    def __init__(self, pars, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.update_pars(pars, create=True)
         return
 
@@ -124,106 +125,8 @@ class ParsObj(FlexPretty):
         return
 
 
-class Result(object):
-    '''
-    Stores a single result -- by default, acts like an array.
-
-    Args:
-        name (str): name of this result, e.g. new_infections
-        npts (int): if values is None, precreate it to be of this length
-        scale (bool): whether the value scales by population scale factor
-        color (str/arr): default color for plotting (hex or RGB notation)
-
-    **Example**::
-
-        import starsim as ss
-        r1 = ss.Result(name='test1', npts=10)
-        r1[:5] = 20
-        print(r1.values)
-    '''
-
-    def __init__(self, name=None, npts=None, scale=True, color=None, n_rows=0, n_copies=0):
-        self.name = name  # Name of this result
-        self.scale = scale  # Whether or not to scale the result by the scale factor
-        if color is None:
-            color = '#000000'
-        self.color = color  # Default color
-        if npts is None:
-            npts = 0
-        npts = int(npts)
-
-        if n_rows > 0:
-            self.values = np.zeros((n_rows, npts), dtype=ssd.result_float)
-            if n_copies > 0:
-                self.values = np.zeros((n_copies, n_rows, npts), dtype=ssd.result_float)
-        else:
-            self.values = np.zeros(npts, dtype=ssd.result_float)
-
-        self.low = None
-        self.high = None
-        return
-
-    def __eq__(self, other):
-        return self.npts == other.npts and np.all(self.values == other.values) and self.scale == other.scale
-
-    def __repr__(self):
-        ''' Use pretty repr, like sc.prettyobj, but displaying full values '''
-        output = sc.prepr(self, skip=['values', 'low', 'high'], use_repr=False)
-        output += 'values:\n' + repr(self.values)
-        if self.low is not None:
-            output += '\nlow:\n' + repr(self.low)
-        if self.high is not None:
-            output += '\nhigh:\n' + repr(self.high)
-        return output
-
-    def __getitem__(self, key):
-        ''' To allow e.g. result['high'] instead of result.high, and result[5] instead of result.values[5] '''
-        if isinstance(key, str):
-            output = getattr(self, key)
-        else:
-            output = self.values.__getitem__(key)
-        return output
-
-    def __setitem__(self, key, value):
-        ''' To allow e.g. result[:] = 1 instead of result.values[:] = 1 '''
-        if isinstance(key, str):
-            setattr(self, key, value)
-        else:
-            self.values.__setitem__(key, value)
-        return
-
-    def __len__(self):
-        ''' To allow len(result) instead of len(result.values) '''
-        return len(self.values)
-
-    def __sum__(self):
-        ''' To allow sum(result) instead of result.values.sum() '''
-        return self.values.sum()
-
-    # Numpy methods
-    def sum(self):
-        ''' To allow result.sum() instead of result.values.sum() '''
-        return self.values.sum()
-
-    def mean(self):
-        ''' To allow result.mean() instead of result.values.mean() '''
-        return self.values.mean()
-
-    def median(self):
-        ''' To allow result.median() instead of result.values.median() '''
-        return self.values.median()
-
-    @property
-    def npts(self):
-        return len(self.values)
-
-    @property
-    def shape(self):
-        return self.values.shape
-
-
 def set_metadata(obj, **kwargs):
-    ''' Set standard metadata for an object '''
+    """ Set standard metadata for an object """
     obj.created = kwargs.get('created', sc.now())
     obj.version = kwargs.get('version', __version__)
     obj.git_info = kwargs.get('git_info', ssm.git_info())
@@ -231,33 +134,28 @@ def set_metadata(obj, **kwargs):
 
 
 class BaseSim(ParsObj):
-    '''
+    """
     The BaseSim class stores various methods useful for the Sim that are not directly
     related to simulating.
-    '''
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)  # Initialize and set the parameters as attributes
         return
 
     def _disp(self):
-        '''
+        """
         Print a verbose display of the sim object. Used by repr(). See sim.disp()
         for the user version. Equivalent to sc.prettyobj().
-        '''
+        """
         return sc.prepr(self)
 
     def update_pars(self, pars=None, create=False, **kwargs):
-        ''' Ensure that metaparameters get used properly before being updated '''
+        """ Ensure that metaparameters get used properly before being updated """
 
         # Merge everything together
         pars = sc.mergedicts(pars, kwargs)
         if pars:
-            # Handle other special parameters
-            # if pars.get('location'):
-            #     location = pars['location']
-            #     pars['birth_rates'], pars['death_rates'] = sspar.get_births_deaths(location=location) # Set birth and death rates # TODO: this should not be here
-            # Call update_pars() for ParsObj
             super().update_pars(pars=pars, create=create)
 
         return
