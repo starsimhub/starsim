@@ -8,7 +8,7 @@ from .people        import *
 from .population    import *
 from .sim           import *
 from .modules       import *
-from .hpv           import *
+# from .hpv           import *
 
 
 # Import the version and print the license

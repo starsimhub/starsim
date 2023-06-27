@@ -1,6 +1,6 @@
 import sciris as sc
 import numpy as np
-from .people import State
+from .base import State
 from .results import Result
 from .modules import Module
 from . import settings as sss
