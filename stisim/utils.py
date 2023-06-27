@@ -12,6 +12,8 @@ __all__ = []
 
 
 # %% Helper functions
+__all__ += ['named_dict', 'omerge']
+
 
 def named_dict(arg=None, *args):
     """ Create an objdict based on object names """

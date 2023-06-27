@@ -392,6 +392,16 @@ class State(sc.prettyobj):
         return np.full(shape, dtype=self.dtype, fill_value=self.fill_value)
 
 
+base_states = ssu.named_dict(
+    State('uid', sss.default_int),
+    State('age', sss.default_float),
+    State('female', bool, False),
+    State('dead', bool, False),
+    State('ti_dead', sss.default_float, np.nan),  # Time index for death
+    State('scale', sss.default_float, 1.0),
+)
+
+
 class BasePeople(FlexPretty):
     """
     A class to handle all the boilerplate for people -- note that as with the
@@ -399,34 +409,36 @@ class BasePeople(FlexPretty):
     whereas this class exists to handle the less interesting implementation details.
     """
 
-    def __init__(self, n, *args, **kwargs):
+    def __init__(self, n, states=None, *args, **kwargs):
         """ Initialize essential attributes """
 
         super().__init__(*args, **kwargs)
         self.version = __version__  # Store version info
 
         # Initialize states, contacts, modules
-        self.states = ssu.named_dict(State('uid', sss.default_int))
+        self.states = sc.mergedicts(base_states, states)
         self.contacts = sc.odict()
         self._modules = sc.autolist()
-
-        # Define lock attribute here, since BasePeople.lock()/unlock() requires it
-        self._lock = False  # Prevent further modification of keys
 
         # Private variables relating to dynamic allocation
         self._data = dict()
         self._n = n  # Number of agents (initial)
         self._s = self._n  # Underlying array sizes
         self._inds = None  # No filtering indices
-        return
 
-    def initialize(self):
-        """ Initialize underlying storage and map arrays """
+        # Initialize underlying storage and map arrays
         for state_name, state in self.states.items():
             self._data[state_name] = state.new(self._n)
         self._map_arrays()
         self['uid'][:] = np.arange(self._n)
+
+        # Define lock attribute here, since BasePeople.lock()/unlock() requires it
+        self._lock = False  # Prevent further modification of keys
+
         return
+
+    def initialize(self):
+        pass
 
     def __len__(self):
         """ Length of people """
@@ -473,17 +485,21 @@ class BasePeople(FlexPretty):
         new_inds = np.arange(orig_n, self._n)
         return new_inds
 
-    def _map_arrays(self):
+    def _map_arrays(self, keys=None):
         """
         Set main simulation attributes to be views of the underlying data
 
         This method should be called whenever the number of agents required changes
         (regardless of whether the underlying arrays have been resized)
         """
-
         row_inds = slice(None, self._n)
 
-        for k in self.states.keys():
+        # Handle keys
+        if keys is None: keys = self.states.keys()
+        keys = sc.tolist(keys)
+
+        # Map arrays for selected keys
+        for k in keys:
             arr = self._data[k]
             if arr.ndim == 1:
                 rsetattr(self, k, arr[row_inds])
@@ -492,7 +508,7 @@ class BasePeople(FlexPretty):
             else:
                 errormsg = 'Can only operate on 1D or 2D arrays'
                 raise TypeError(errormsg)
-
+            
         return
 
     def __getitem__(self, key):
