@@ -17,7 +17,7 @@ __all__ = ['People']
 
 
 class People(ssb.BasePeople):
-    '''
+    """
     A class to perform all the operations on the people
     This class is usually created automatically by the sim. The only required input
     argument is the population size, but typically the full parameters dictionary
@@ -30,41 +30,43 @@ class People(ssb.BasePeople):
 
     Args:
         pars (dict): the sim parameters, e.g. sim.pars -- alternatively, if a number, interpreted as n_agents
-        strict (bool): whether or not to only create keys that are already in self.meta.person; otherwise, let any key be set
+        strict (bool): whether to only create keys that are already in self.meta.person; otherwise, let any key be set
         pop_trend (dataframe): a dataframe of years and population sizes, if available
         kwargs (dict): the actual data, e.g. from a popdict, being specified
 
     **Examples**::
-
-        ppl1 = ss.People(2000)
-        sim = ss.Sim()
-        ppl2 = ss.People(sim.pars)
-    '''
+        ppl = ss.People(2000)
+    """
 
     # %% Basic methods
 
-    def __init__(self, pars, strict=True, pop_trend=None, pop_age_trend=None, **kwargs):
-        '''
-        Initialize with pars
-        '''
-        super().__init__(pars)
-        self.pop_trend = pop_trend
-        self.pop_age_trend = pop_age_trend
-        self.age_bin_edges = self.pars['age_bin_edges']  # Age bins for age results
-        self.contacts = sc.objdict()  # Create
-        self._modules = []
-        self.module_states = sc.objdict()
-        self.state_names = sc.autolist([state.name for state in self.meta.states_to_set])
+    def __init__(self, n, strict=True, **kwargs):
+        """
+        Initialize
+        """
+        self.kwargs = kwargs
+        super().__init__(n)
+
+        self.states = sc.mergedicts(
+            self.states,
+            ssu.named_dict(
+                ssb.State('uid', sss.default_int),
+                ssb.State('age', sss.default_float),
+                ssb.State('female', bool, False),
+                ssb.State('dead', bool, False),
+                ssb.State('ti_dead', sss.default_float, np.nan),  # Time index for death
+                ssb.State('scale', sss.default_float, 1.0),
+            )
+        )
 
         if strict:
             self.lock()  # If strict is true, stop further keys from being set (does not affect attributes)
 
         self.initialized = False
-        self.kwargs = kwargs
         return
 
     def add_module(self, module, force=False):
-        # Initialize all of the states associated with a module
+        # Initialize all the states associated with a module
         # This is implemented as People.add_module rather than
         # Module.add_to_people(people) or similar because its primary
         # role is to modify the People object
@@ -80,8 +82,8 @@ class People(ssb.BasePeople):
         return
 
     def init_flows(self):
-        ''' Initialize flows to be zero '''
-        df = ssd.default_float
+        """ Initialize flows to be zero """
+        df = sss.default_float
         dem_keys = ['births', 'other_deaths', 'migration']
         by_sex_keys = ['other_deaths_by_sex']
         self.demographic_flows = {f'{key}': 0 for key in dem_keys}
@@ -101,26 +103,8 @@ class People(ssb.BasePeople):
         return
 
     def initialize(self, sim_pars=None):
-        ''' Perform initializations '''
+        """ Perform initializations """
         super().initialize()  # Initialize states
-        kwargs = self.kwargs
-
-        # Handle all other values, e.g. age
-        for key, value in kwargs.items():
-            if self._lock:
-                self.set(key, value)
-            elif key in self._data:
-                self[key][:] = value
-            else:
-                self[key] = value
-
-        # Set the scale factor
-        self.scale[:] = sim_pars['pop_scale']
-
-        # Additional validation
-        self.validate(sim_pars=sim_pars)  # First, check that essential-to-match parameters match
-        self.initialized = True
-
         return
 
     def update_states(self, t, sim):

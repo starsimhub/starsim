@@ -2,31 +2,29 @@
 Numerical utilities
 '''
 
-#%% Housekeeping
+# %% Housekeeping
 
-import numpy as np # For numerics
-import sciris as sc # For additional utilities
-
+import numpy as np  # For numerics
+import sciris as sc  # For additional utilities
 
 # What functions are externally visible -- note, this gets populated in each section below
 __all__ = []
 
 
-#%% Helper functions
+# %% Helper functions
 
 def named_dict(arg=None, *args):
-    ''' Create an objdict based on object names '''
-    args = sc.mergelists(arg, args, coerce='tuple') # TODO: Must be a better way, I just forgot
-    return sc.objdict({arg.name:arg for arg in args}) # TODO: use dictobj instead for performance, probably
+    """ Create an objdict based on object names """
+    args = sc.mergelists(arg, args, coerce='tuple')  # TODO: Must be a better way, I just forgot
+    return sc.objdict({arg.name: arg for arg in args})  # TODO: use dictobj instead for performance, probably
+
 
 def omerge(*args, **kwargs):
-    ''' Merge things into an objdict '''
+    """ Merge things into an objdict """
     return sc.objdict(sc.mergedicts(*args, **kwargs))
 
 
-
-
-#%% The core functions
+# %% The core functions
 def unique(arr):
     '''
     Find the unique elements and counts in an array.
@@ -38,7 +36,8 @@ def unique(arr):
     counts = counts[unique]
     return unique, counts
 
-def find_contacts(p1, p2, inds): # pragma: no cover
+
+def find_contacts(p1, p2, inds):  # pragma: no cover
     """
     Numba for Layer.find_contacts()
 
@@ -56,10 +55,11 @@ def find_contacts(p1, p2, inds): # pragma: no cover
     return pairing_partners
 
 
-
-#%% Sampling and seed methods
+# %% Sampling and seed methods
 
 __all__ += ['sample', 'get_pdf', 'set_seed']
+
+
 def sample(dist=None, par1=None, par2=None, size=None, **kwargs):
     '''
     Draw a sample from the distribution specified by the input. The available
@@ -125,33 +125,41 @@ def sample(dist=None, par1=None, par2=None, size=None, **kwargs):
 
     # Compute distribution parameters and draw samples
     # NB, if adding a new distribution, also add to choices above
-    if   dist in ['unif', 'uniform']: samples = np.random.uniform(low=par1, high=par2, size=size, **kwargs)
-    elif dist in ['norm', 'normal']:  samples = np.random.normal(loc=par1, scale=par2, size=size, **kwargs)
-    elif dist == 'normal_pos':        samples = np.abs(np.random.normal(loc=par1, scale=par2, size=size, **kwargs))
-    elif dist == 'normal_int':        samples = np.round(np.abs(np.random.normal(loc=par1, scale=par2, size=size, **kwargs)))
-    elif dist == 'poisson':           samples = n_poisson(rate=par1, n=size, **kwargs) # Use Numba version below for speed
-    elif dist == 'neg_binomial':      samples = n_neg_binomial(rate=par1, dispersion=par2, n=size, **kwargs) # Use custom version below
-    elif dist == 'beta':              samples = np.random.beta(a=par1, b=par2, size=size, **kwargs)
-    elif dist == 'gamma':             samples = np.random.gamma(shape=par1, scale=par2, size=size, **kwargs)
+    if dist in ['unif', 'uniform']:
+        samples = np.random.uniform(low=par1, high=par2, size=size, **kwargs)
+    elif dist in ['norm', 'normal']:
+        samples = np.random.normal(loc=par1, scale=par2, size=size, **kwargs)
+    elif dist == 'normal_pos':
+        samples = np.abs(np.random.normal(loc=par1, scale=par2, size=size, **kwargs))
+    elif dist == 'normal_int':
+        samples = np.round(np.abs(np.random.normal(loc=par1, scale=par2, size=size, **kwargs)))
+    elif dist == 'poisson':
+        samples = n_poisson(rate=par1, n=size, **kwargs)  # Use Numba version below for speed
+    elif dist == 'neg_binomial':
+        samples = n_neg_binomial(rate=par1, dispersion=par2, n=size, **kwargs)  # Use custom version below
+    elif dist == 'beta':
+        samples = np.random.beta(a=par1, b=par2, size=size, **kwargs)
+    elif dist == 'gamma':
+        samples = np.random.gamma(shape=par1, scale=par2, size=size, **kwargs)
     elif dist in ['lognorm', 'lognormal', 'lognorm_int', 'lognormal_int']:
-        if (sc.isnumber(par1) and par1>0) or (sc.checktype(par1,'arraylike') and (par1>0).all()):
-            mean  = np.log(par1**2 / np.sqrt(par2**2 + par1**2)) # Computes the mean of the underlying normal distribution
-            sigma = np.sqrt(np.log(par2**2/par1**2 + 1)) # Computes sigma for the underlying normal distribution
+        if (sc.isnumber(par1) and par1 > 0) or (sc.checktype(par1, 'arraylike') and (par1 > 0).all()):
+            mean = np.log(
+                par1 ** 2 / np.sqrt(par2 ** 2 + par1 ** 2))  # Computes the mean of the underlying normal distribution
+            sigma = np.sqrt(np.log(par2 ** 2 / par1 ** 2 + 1))  # Computes sigma for the underlying normal distribution
             samples = np.random.lognormal(mean=mean, sigma=sigma, size=size, **kwargs)
         else:
             samples = np.zeros(size)
         if '_int' in dist:
             samples = np.round(samples)
-    elif dist == 'beta_mean': # Calculate a and b using mean (par1) and variance (par2) https://stats.stackexchange.com/questions/12232/calculating-the-parameters-of-a-beta-distribution-using-the-mean-and-variance
-        a       = ((1 - par1)/par2 - 1/par1) * par1**2
-        b       = a * (1 / par1 - 1)
+    elif dist == 'beta_mean':  # Calculate a and b using mean (par1) and variance (par2) https://stats.stackexchange.com/questions/12232/calculating-the-parameters-of-a-beta-distribution-using-the-mean-and-variance
+        a = ((1 - par1) / par2 - 1 / par1) * par1 ** 2
+        b = a * (1 / par1 - 1)
         samples = np.random.beta(a=a, b=b, size=size, **kwargs)
     else:
         errormsg = f'The selected distribution "{dist}" is not implemented; choices are: {sc.newlinejoin(choices)}'
         raise NotImplementedError(errormsg)
 
     return samples
-
 
 
 def get_pdf(dist=None, par1=None, par2=None):
@@ -161,7 +169,7 @@ def get_pdf(dist=None, par1=None, par2=None):
     symptom-to-swab for testing. For example, for Washington State, these values
     are dist='lognormal', par1=10, par2=170.
     '''
-    import scipy.stats as sps # Import here since slow
+    import scipy.stats as sps  # Import here since slow
 
     choices = [
         'none',
@@ -174,9 +182,9 @@ def get_pdf(dist=None, par1=None, par2=None):
     elif dist == 'uniform':
         pdf = sps.uniform(loc=par1, scale=par2)
     elif dist == 'lognormal':
-        mean  = np.log(par1**2 / np.sqrt(par2 + par1**2)) # Computes the mean of the underlying normal distribution
-        sigma = np.sqrt(np.log(par2/par1**2 + 1)) # Computes sigma for the underlying normal distribution
-        pdf   = sps.lognorm(sigma, loc=-0.5, scale=np.exp(mean))
+        mean = np.log(par1 ** 2 / np.sqrt(par2 + par1 ** 2))  # Computes the mean of the underlying normal distribution
+        sigma = np.sqrt(np.log(par2 / par1 ** 2 + 1))  # Computes sigma for the underlying normal distribution
+        pdf = sps.lognorm(sigma, loc=-0.5, scale=np.exp(mean))
     else:
         choicestr = '\n'.join(choices)
         errormsg = f'The selected distribution "{dist}" is not implemented; choices are: {choicestr}'
@@ -196,14 +204,15 @@ def set_seed(seed=None):
     # Dies if a float is given
     if seed is not None:
         seed = int(seed)
-    np.random.seed(seed) # If None, reinitializes it
+    np.random.seed(seed)  # If None, reinitializes it
     return
 
 
-#%% Probabilities -- mostly not jitted since performance gain is minimal
+# %% Probabilities -- mostly not jitted since performance gain is minimal
 
 __all__ += ['n_binomial', 'binomial_filter', 'binomial_arr', 'n_multinomial',
             'poisson', 'n_poisson', 'n_neg_binomial', 'choose', 'choose_r', 'choose_w']
+
 
 def n_binomial(prob, n):
     '''
@@ -259,7 +268,7 @@ def binomial_arr(prob_arr):
     return np.random.random(prob_arr.shape) < prob_arr
 
 
-def n_multinomial(probs, n): # No speed gain from Numba
+def n_multinomial(probs, n):  # No speed gain from Numba
     '''
     An array of multinomial trials.
 
@@ -306,7 +315,7 @@ def n_poisson(rate, n):
     return np.random.poisson(rate, n)
 
 
-def n_neg_binomial(rate, dispersion, n, step=1): # Numba not used due to incompatible implementation
+def n_neg_binomial(rate, dispersion, n, step=1):  # Numba not used due to incompatible implementation
     '''
     An array of negative binomial trials. See ss.sample() for more explanation.
 
@@ -322,8 +331,8 @@ def n_neg_binomial(rate, dispersion, n, step=1): # Numba not used due to incompa
         outcomes = ss.n_neg_binomial(1, 100, 20) # 20 negative binomial trials with mean 1 and dispersion still roughly equal to mean (approximately Poisson)
     '''
     nbn_n = dispersion
-    nbn_p = dispersion/(rate/step + dispersion)
-    samples = np.random.negative_binomial(n=nbn_n, p=nbn_p, size=n)*step
+    nbn_p = dispersion / (rate / step + dispersion)
+    samples = np.random.negative_binomial(n=nbn_n, p=nbn_p, size=n) * step
     return samples
 
 
@@ -357,7 +366,7 @@ def choose_r(max_n, n):
     return np.random.choice(max_n, n, replace=True)
 
 
-def choose_w(probs, n, unique=True): # No performance gain from Numba
+def choose_w(probs, n, unique=True):  # No performance gain from Numba
     '''
     Choose n items (e.g. people), each with a probability from the distribution probs.
 
@@ -374,18 +383,17 @@ def choose_w(probs, n, unique=True): # No performance gain from Numba
     n_choices = len(probs)
     n_samples = int(n)
     probs_sum = probs.sum()
-    if probs_sum: # Weight is nonzero, rescale
-        probs = probs/probs_sum
-    else: # Weights are all zero, choose uniformly
-        probs = np.ones(n_choices)/n_choices
-    return np.random.choice(n_choices, n_samples, p=probs, replace=not(unique))
+    if probs_sum:  # Weight is nonzero, rescale
+        probs = probs / probs_sum
+    else:  # Weights are all zero, choose uniformly
+        probs = np.ones(n_choices) / n_choices
+    return np.random.choice(n_choices, n_samples, p=probs, replace=not (unique))
 
 
+# %% Simple array operations
 
-#%% Simple array operations
-
-__all__ += ['true',   'false',   'defined',   'undefined',
-            'itrue',  'ifalse',  'idefined',  'iundefined',
+__all__ += ['true', 'false', 'defined', 'undefined',
+            'itrue', 'ifalse', 'idefined', 'iundefined',
             'itruei', 'ifalsei', 'idefinedi', 'iundefinedi',
             'dtround', 'find_cutoff']
 
@@ -507,7 +515,6 @@ def iundefined(arr, inds):
     return inds[np.isnan(arr)]
 
 
-
 def itruei(arr, inds):
     '''
     Returns the indices that are true in the array -- name is short for indices[true[indices]]
@@ -582,9 +589,9 @@ def dtround(arr, dt, ceil=True):
         dtround = ss.dtround(np.array([0.23,0.61,20.53]),ceil=True) # Returns array([0.4, 0.8, 20.6])
     '''
     if ceil:
-        return np.ceil(arr * (1/dt)) / (1/dt)
+        return np.ceil(arr * (1 / dt)) / (1 / dt)
     else:
-        return np.round(arr * (1/dt)) / (1/dt)
+        return np.round(arr * (1 / dt)) / (1 / dt)
 
 
 def find_cutoff(duration_cutoffs, duration):
@@ -606,9 +613,9 @@ def get_asymptotes(k, x_infl, s, ttc=25):
     '''
     Get upper asymptotes for logistic functions
     '''
-    term1 = (1 + np.exp(k*(x_infl-ttc)))**s # Note, this is 1 for most parameter combinations
-    term2 = (1 + np.exp(k*x_infl))**s
-    u_asymp_num = term1*(1-term2)
+    term1 = (1 + np.exp(k * (x_infl - ttc))) ** s  # Note, this is 1 for most parameter combinations
+    term2 = (1 + np.exp(k * x_infl)) ** s
+    u_asymp_num = term1 * (1 - term2)
     u_asymp_denom = term1 - term2
     u_asymp = u_asymp_num / u_asymp_denom
     l_asymp = term1 / (term1 - term2)
@@ -627,7 +634,7 @@ def logf3(x, k, x_infl, s, ttc=25):
          ttc (time to cancer): x value for which the curve passess through 1. For x values beyond this, the function returns 1
     '''
     l_asymp, u_asymp = get_asymptotes(k, x_infl, s, ttc)
-    return np.minimum(1, l_asymp + (u_asymp-l_asymp)/(1+np.exp(k*(x_infl-x)))**s)
+    return np.minimum(1, l_asymp + (u_asymp - l_asymp) / (1 + np.exp(k * (x_infl - x))) ** s)
 
 
 def logf2(x, k, x_infl, ttc=25):
@@ -648,9 +655,9 @@ def invlogf3(y, k, x_infl, s, ttc=25):
     Inverse of logf3; see definition there for arguments
     '''
     l_asymp, u_asymp = get_asymptotes(k, x_infl, s, ttc)
-    part1 = np.log((u_asymp-l_asymp)/(y-l_asymp))/s
-    part2 = np.log(np.exp(part1)-1)
-    final = 1/k * (k*x_infl - part2)
+    part1 = np.log((u_asymp - l_asymp) / (y - l_asymp)) / s
+    part2 = np.log(np.exp(part1) - 1)
+    final = 1 / k * (k * x_infl - part2)
     return final
 
 
@@ -673,9 +680,10 @@ def indef_int_logf2(x, k, x_infl, ttc=25):
     '''
     Indefinite integral of logf2; see definition there for arguments
     '''
-    num = np.exp(-x_infl*k)*(np.exp(k*ttc)+np.exp(x_infl*k))*((np.exp(x_infl*k)+1)*np.log(np.exp(k*x)+np.exp(x_infl*k))-k*x)
-    denom = k*(np.exp(k*ttc)-1)
-    return num/denom
+    num = np.exp(-x_infl * k) * (np.exp(k * ttc) + np.exp(x_infl * k)) * (
+                (np.exp(x_infl * k) + 1) * np.log(np.exp(k * x) + np.exp(x_infl * k)) - k * x)
+    denom = k * (np.exp(k * ttc) - 1)
+    return num / denom
 
 
 def intlogf2(upper, k, x_infl, ttc=25):
@@ -723,4 +731,4 @@ def transform_prob(tp, dysp):
           = 1/2 * dysp**3
     '''
     # return 1-np.power(1-tp, ((dysp*100)**2))
-    return 1-np.power(1-tp, 0.5*((dysp*100)**3))
+    return 1 - np.power(1 - tp, 0.5 * ((dysp * 100) ** 3))

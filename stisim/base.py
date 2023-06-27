@@ -388,56 +388,8 @@ class State(sc.prettyobj):
 
     def new(self, n):
         shape = sc.tolist(self.shape)
-        shape.append(n)  # We always want to have shape n
+        shape.append(n)
         return np.full(shape, dtype=self.dtype, fill_value=self.fill_value)
-
-
-# class PeopleMeta(sc.prettyobj):
-#     """ For storing all the keys relating to a person and people """
-#
-#     # (attribute, nrows, dtype, default value)
-#     # If the default value is None, then the array will not be initialized - this is faster and can
-#     # be used for variables where the People object explicitly supplies the values e.g. age
-#
-#     def __init__(self):
-#         # Set the properties of a person
-#         self.person = [
-#             State('uid', default_int),  # Int
-#             State('age', default_float, np.nan),  # Float
-#             State('sex', default_float, np.nan),  # Float
-#             State('debut', default_float, np.nan),  # Float
-#             State('scale', default_float, 1.0),  # Float
-#         ]
-#
-#         #  The following section consists of all the boolean states
-#
-#         # The following three groupings are all mutually exclusive and collectively exhaustive.
-#         self.alive_states = [
-#             # States related to whether or not the person is alive or dead
-#             State('alive', bool, True, label='Population'),  # For recording population sizes
-#             State('dead_other', bool, False, label='Cumulative deaths from other causes'),
-#             State('emigrated', bool, False, label='Emigrated'),  # Emigrated
-#         ]
-#
-#     # Collection of states for which we store associated dates
-#     @property
-#     def date_states(self):
-#         return [state for state in self.alive_states if not state.fill_value]
-#
-#     # Set dates
-#     @property
-#     def dates(self):
-#         dates = [State(f'date_{state.name}', default_float, np.nan, shape=state.shape) for state in self.date_states]
-#         dates += [
-#             State('date_dead', default_float, np.nan)
-#         ]
-#         return dates
-#
-#     def validate(self):
-#         """
-#         TODO check that states are valid
-#         """
-#         return
 
 
 class BasePeople(FlexPretty):
@@ -447,42 +399,31 @@ class BasePeople(FlexPretty):
     whereas this class exists to handle the less interesting implementation details.
     """
 
-    def __init__(self, n, initialize=True, *args, **kwargs):
+    def __init__(self, n, *args, **kwargs):
         """ Initialize essential attributes """
 
         super().__init__(*args, **kwargs)
+        self.version = __version__  # Store version info
 
-        # Define states that every People instance has, regardless of which modules are enabled
-        self.states = ssu.named_dict(
-            State('uid', int),  # TODO: will we support removing agents? It could make indexing much more complicated...
-            State('age', float),
-            State('female', bool, False),
-            State('dead', bool, False),
-            State('ti_dead', float, np.nan),  # Time index for death
-        )
+        # Initialize states, contacts, modules
+        self.states = ssu.named_dict(State('uid', sss.default_int))
+        self.contacts = sc.odict()
+        self._modules = sc.autolist()
 
         # Define lock attribute here, since BasePeople.lock()/unlock() requires it
         self._lock = False  # Prevent further modification of keys
-
-        # Load other attributes
-        self.version = __version__  # Store version info
-        self.contacts = None
 
         # Private variables relating to dynamic allocation
         self._data = dict()
         self._n = n  # Number of agents (initial)
         self._s = self._n  # Underlying array sizes
         self._inds = None  # No filtering indices
-
-        # Fully initalize
-        if initialize: self.initialize()
-
         return
 
     def initialize(self):
         """ Initialize underlying storage and map arrays """
-        for state in self.states:
-            self._data[state.name] = state.new(self._n)
+        for state_name, state in self.states.items():
+            self._data[state_name] = state.new(self._n)
         self._map_arrays()
         self['uid'][:] = np.arange(self._n)
         return
@@ -526,9 +467,6 @@ class BasePeople(FlexPretty):
             for state in self.states:
                 self._data[state.name] = np.concatenate([self._data[state.name], state.new(self.pars, n_new)],
                                                         axis=self._data[state.name].ndim - 1)
-            for state_name, state in self.module_states.items():
-                self._data[state_name] = np.concatenate([self._data[state_name], state.new(self.pars, n_new)],
-                                                        axis=self._data[state_name].ndim - 1)
             self._s += n_new
         self._n += n
         self._map_arrays()
@@ -545,7 +483,7 @@ class BasePeople(FlexPretty):
 
         row_inds = slice(None, self._n)
 
-        for k in self.state_names:
+        for k in self.states.keys():
             arr = self._data[k]
             if arr.ndim == 1:
                 rsetattr(self, k, arr[row_inds])
