@@ -2,7 +2,6 @@ import sciris as sc
 import numpy as np
 from .base import State
 from .results import Result
-from . import settings as sss
 from . import utils as ssu
 from . import population as sspop
 
@@ -34,15 +33,16 @@ class Module(sc.prettyobj):
         # Pick some initially infected agents
         self.set_prognoses(sim, np.random.choice(sim.people.uid, sim.pars[self.name]['initial']))
 
+        # Validate pars
         if 'beta' not in sim.pars[self.name]:
             sim.pars[self.name].beta = sc.objdict({k: [1, 1] for k in sim.people.contacts})
 
+        # Initialize results
         sim.results[self.name]['n_susceptible'] = Result(self.name, 'n_susceptible', sim.npts, dtype=int)
         sim.results[self.name]['n_infected'] = Result(self.name, 'n_infected', sim.npts, dtype=int)
         sim.results[self.name]['prevalence'] = Result(self.name, 'prevalence', sim.npts, dtype=float)
         sim.results[self.name]['new_infections'] = Result(self.name, 'n_infected', sim.npts, dtype=int)
 
-    
     def update_states(self, sim):
         # Carry out any autonomous state changes at the start of the timestep
         pass
@@ -54,12 +54,15 @@ class Module(sc.prettyobj):
             if k in pars['beta']:
                 rel_trans = (sim.people[self.name].infected & ~sim.people.dead).astype(float)
                 rel_sus = (sim.people[self.name].susceptible & ~sim.people.dead).astype(float)
-                for a, b, beta in [[layer['p1'], layer['p2'], pars['beta'][k][0]], [layer.p2, layer.p1, pars['beta'][k][1]]]:
+                for a, b, beta in [[layer['p1'], layer['p2'], pars['beta'][k][0]], [layer['p2'], layer['p1'], pars['beta'][k][1]]]:
                     # probability of a->b transmission
                     p_transmit = rel_trans[a] * rel_sus[b] * layer['beta'] * beta
                     new_cases = np.random.random(len(a)) < p_transmit
                     if new_cases.any():
                         self.set_prognoses(sim, b[new_cases])
+
+    def set_prognoses(self, sim, uids):
+        pass
 
     def update_results(self, sim):
         sim.results[self.name]['n_susceptible'][sim.t] = np.count_nonzero(sim.people[self.name].susceptible)
@@ -113,7 +116,7 @@ class HIV(Module):
         sim.results[self.name]['n_art'] = np.count_nonzero(sim.people.alive & sim.people[self.name].on_art)
 
     def make_new_cases(self, sim):
-        eff_condoms = sim.pars[self.name]['eff_condoms']
+        # eff_condoms = sim.pars[self.name]['eff_condoms'] # TODO figure out how to add this
         super().make_new_cases(sim)
     
     def set_prognoses(self, sim, uids):
@@ -198,7 +201,6 @@ class Pregnancy(Module):
         }, self.pars)
         return
 
-
     def initialize(self, sim):
         """
         Results could include a range of birth outcomes e.g. LGA, stillbirths, etc.
@@ -208,9 +210,8 @@ class Pregnancy(Module):
         super(Pregnancy, self).initialize(sim)
         sim.results[self.name]['pregnancies'] = Result(self.name, 'pregnancies', sim.npts, dtype=int)
         sim.results[self.name]['births'] = Result(self.name, 'births', sim.npts, dtype=int)
-        sim['birth_rates'] = None # This turns off birth rates so births only come from this module
+        sim['birth_rates'] = None  # This turns off birth rates so births only come from this module
         return
-
 
     def update_states(self, sim):
 
@@ -231,8 +232,8 @@ class Pregnancy(Module):
         if len(delivery_inds):
             for _, layer in sim.people.contacts.items():
                 if isinstance(layer, sspop.Maternal):
-                    new_birth_inds = layer.find_contacts(delivery_inds)
-                    new_births = len(new_birth_inds) * sim['pop_scale']
+                    # new_birth_inds = layer.find_contacts(delivery_inds)  # Don't think we need this?
+                    new_births = len(delivery_inds) * sim['pop_scale']
                     sim.people.demographic_flows['births'] = new_births
 
         # Maternal deaths
@@ -242,7 +243,6 @@ class Pregnancy(Module):
             sim.people.date_dead[maternal_deaths] = sim.t
 
         return
-
 
     def make_new_cases(self, sim):
         """
@@ -268,25 +268,20 @@ class Pregnancy(Module):
                 new_inds = sim.people._grow(n_unborn_agents)
                 sim.people.uid[new_inds] = new_inds
                 sim.people.age[new_inds] = -cpars['dur_pregnancy']
-                sex = np.random.binomial(1, 0.5, n_unborn_agents)
-                debut = np.full(n_unborn_agents, np.nan, dtype=ssd.default_float)
-                debut[sex == 1] = ssu.sample(**sim.pars['debut']['m'], size=sum(sex))
-                debut[sex == 0] = ssu.sample(**sim.pars['debut']['f'], size=n_unborn_agents - sum(sex))
-                sim.people.debut[new_inds] = debut
+                sim.people.female[new_inds] = np.random.choice([True, False], size=n_unborn_agents)
 
                 # Add connections to any vertical transmission layers
                 # Placeholder code to be moved / refactored. The maternal contact network may need to be
                 # handled separately to the sexual networks, TBC how to handle this most elegantly
                 for lkey, layer in sim.people.contacts.items():
                     if layer.transmission == 'vertical':  # What happens if there's more than one vertical layer?
-                        durs = np.full((n_unborn_agents), fill_value=cpars['dur_pregnancy']+cpars['dur_postpartum'])
+                        durs = np.full(n_unborn_agents, fill_value=cpars['dur_pregnancy']+cpars['dur_postpartum'])
                         layer.add_connections(uids, new_inds, dur=durs)
 
                 # Set prognoses for the pregnancies
                 self.set_prognoses(sim, uids)
 
         return
-
 
     def set_prognoses(self, sim, uids):
         """
@@ -295,7 +290,7 @@ class Pregnancy(Module):
         Also reconciliation with birth rates
         Q, is this also a good place to check for other conditions and set prognoses for the fetus?
         """
-        cpars = sim.pars[self.name]
+        pars = sim.pars[self.name]
 
         # Change states for the newly pregnant woman
         sim.people[self.name].susceptible[uids] = False
@@ -303,16 +298,15 @@ class Pregnancy(Module):
         sim.people[self.name].ti_pregnant[uids] = sim.t
 
         # Outcomes for pregnancies
-        dur = np.full(len(uids), sim.t + cpars['dur_pregnancy'] / sim.pars.dt)
+        dur = np.full(len(uids), sim.t + pars['dur_pregnancy'] / sim.pars.dt)
         dead = np.random.random(len(uids)) < sim.pars[self.name].p_death
         sim.people[self.name].ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
-        dur_post_partum = np.full(len(uids), dur + cpars['dur_postpartum'] / sim.pars.dt)
+        dur_post_partum = np.full(len(uids), dur + pars['dur_postpartum'] / sim.pars.dt)
         sim.people[self.name].ti_postpartum[uids] = dur_post_partum
 
         if len(ssu.true(dead)):
             sim.people[self.name].ti_dead[uids[dead]] = dur[dead]
         return
-
 
     def update_results(self, sim):
         mppl = sim.people[self.name]
