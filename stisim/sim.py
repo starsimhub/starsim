@@ -37,7 +37,6 @@ class Sim(ssb.BaseSim):
 
         # Time indexing
         self.ti = None  # The time index, e.g. 0, 1, 2
-        self.year = None  # The year, e.g. 2015.2
         self.yearvec = None
         self.tivec = None
         self.npts = None
@@ -181,8 +180,8 @@ class Sim(ssb.BaseSim):
         """
         self.yearvec = sc.inclusiverange(start=self['start'], stop=self['end'] + 1 - self['dt'],
                                          step=self['dt'])  # Includes all the timepoints in the last year
-        self.tivec = np.arange(self.npts)
         self.npts = len(self.yearvec)
+        self.tivec = np.arange(self.npts)
 
     def init_people(self, popdict=None, reset=False, verbose=None, **kwargs):
         """
@@ -208,21 +207,26 @@ class Sim(ssb.BaseSim):
             self.people = ssppl.People(self['n_agents'], kwargs)  # This just assigns UIDs and length
 
         # If a popdict has not been supplied, we can make one from location data
-        if popdict is None and self['location'] is not None:
-            total_pop, popdict = ssppl.make_popdict(n=self['n_agents'], location=self['location'], verbose=self['verbose'])
+        if popdict is None:
+            if self['location'] is not None:
+                # Check where to get total_pop from
+                if self['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
+                    errormsg = 'You can either define total_pop explicitly or via the location, but not both'
+                    raise ValueError(errormsg)
+                total_pop, popdict = ssppl.make_popdict(n=self['n_agents'], location=self['location'], verbose=self['verbose'])
 
-        # Figure out the scale factors
-        if self['total_pop'] is not None and total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
-            errormsg = 'You can either define total_pop explicitly or via the location, but not both'
-            raise ValueError(errormsg)
-        elif total_pop is None and self['total_pop'] is not None:
-            total_pop = self['total_pop']
-
-        if self['pop_scale'] is None:
-            if total_pop is None:
-                self['pop_scale'] = 1.0
             else:
-                self['pop_scale'] = total_pop / self['n_agents']
+                if self['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
+                    total_pop = self['total_pop']
+                else:
+                    if self['pop_scale'] is not None:
+                        total_pop = self['pop_scale'] * self['n_agents']
+                    else:
+                        total_pop = self['n_agents']
+
+        self['total_pop'] = total_pop
+        if self['pop_scale'] is None:
+            self['pop_scale'] = total_pop / self['n_agents']
 
         # Finish initialization
         self.people.initialize(popdict=popdict)  # Fully initialize the people

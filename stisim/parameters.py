@@ -29,6 +29,7 @@ def make_pars(**kwargs):
     pars['n_agents']        = 10e3          # Number of agents
     pars['total_pop']       = 10e3          # If defined, used for calculating the scale factor
     pars['pop_scale']       = None          # How much to scale the population
+    pars['location']        = None          # What demographics to use
     pars['birth_rates']     = None          # Birth rates, loaded below
     pars['death_rates']     = None          # Death rates, loaded below
     pars['rel_birth']       = 1.0           # Birth rate scale factor

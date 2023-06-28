@@ -79,9 +79,8 @@ def test_networkss():
 def test_microsim():
     sc.heading('Testing basic sim')
 
-    states = ss.named_dict(ss.State('active', bool, True))
-    ppl = ss.People(100, states=states)
-    ppl.contacts['random'] = ss.DynamicSexualNetwork()
+    ppl = ss.People(100)
+    ppl.contacts['random'] = ss.simple_sexual()
 
     pars = defaultdict(dict)
     pars['hiv']['beta'] = {'random': 0.3}
@@ -116,7 +115,16 @@ if __name__ == '__main__':
     # parsobj = test_parsobj()
     # ppl = test_people()
     # nw1, nw2, nw3, nw4 = test_networks()
-    sim = test_microsim()
+    # sim = test_microsim()
+    ppl = ss.People(100)
+    ppl.contacts['random'] = ss.simple_sexual()
+
+    # pars = defaultdict(dict)
+    # pars['hiv']['beta'] = {'random': 0.3}
+
+    sim = ss.Sim(people=ppl, modules=[ss.HIV, ss.Pregnancy])
+    sim.initialize()
+    # sim.run()
 
     sc.toc(T)
     print('Done.')

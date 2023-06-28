@@ -15,6 +15,56 @@ from . import settings as sss
 __all__ = ['simple_sexual', 'hpv_network', 'maternal']
 
 
+class simple_sexual(ssb.Network):
+    # Randomly pair males and females with variable relationship durations
+    def __init__(self, mean_dur=5):
+        key_dict = {
+            'p1': sss.default_int,
+            'p2': sss.default_int,
+            'dur': sss.default_float,
+            'beta': sss.default_float,
+        }
+
+        # Call init for the base class, which sets all the keys
+        super().__init__(key_dict=key_dict)
+
+        # Set other parameters
+        self.mean_dur = mean_dur
+
+    def initialize(self, people):
+        self.add_pairs(people, ti=0)
+
+    def add_pairs(self, people, ti=None):
+        # Find unpartnered males and females - could in principle check other contact layers too
+        # by having the People object passed in here
+
+        available_m = np.setdiff1d(people.indices[people.male], self.members)
+        available_f = np.setdiff1d(people.indices[~people.male], self.members)
+
+        if len(available_m) <= len(available_f):
+            p1 = available_m
+            p2 = np.random.choice(available_f, len(p1), replace=False)
+        else:
+            p2 = available_f
+            p1 = np.random.choice(available_m, len(p2), replace=False)
+
+        beta = np.ones_like(p1)
+        dur = np.random.randn(len(p1)) * self.mean_dur
+        self['p1'] = np.concatenate([self['p1'], p1])
+        self['p2'] = np.concatenate([self['p2'], p2])
+        self['beta'] = np.concatenate([self['beta'], beta])
+        self['dur'] = np.concatenate([self['dur'], dur])
+
+    def update(self, people):
+        # First remove any relationships due to end
+        self['dur'] = self['dur'] - people.dt
+        active = self.dur > 0
+        self['p1'] = self['p1'][active]
+        self['p2'] = self['p2'][active]
+        self['beta'] = self['beta'][active]
+
+        # Then add new relationships for unpartnered people
+        self.add_partnerships(people)
 
 
 class hpv_network(ssb.Network):
