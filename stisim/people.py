@@ -5,6 +5,9 @@ Defines the People class and functions associated with making people
 # %% Imports
 import sciris as sc
 from . import base as ssb
+from . import misc as ssm
+from .data import loaders as ssdata
+
 
 __all__ = ['People']
 
@@ -42,13 +45,12 @@ class People(ssb.BasePeople):
         """
         super().__init__(n, states=states)
         if strict: self.lock()  # If strict is true, stop further keys from being set (does not affect attributes)
-        self.initialized = False
         self.kwargs = kwargs
         return
 
-    def initialize(self):
+    def initialize(self, popdict=None):
         """ Perform initializations """
-        super().initialize()  # Initialize states
+        super().initialize(popdict=popdict)  # Initialize states
         return
 
     def add_module(self, module, force=False):
@@ -89,3 +91,74 @@ class People(ssb.BasePeople):
 
         return
 
+
+def make_popdict(n=None, location=None, verbose=None, sex_ratio=0.5):
+    """ Create a location-specific population dictionary """
+
+    # Initialize total pop size
+    total_pop = None
+
+    # Load age data for this location if available
+    if verbose:
+        print(f'Loading location-specific data for "{location}"')
+    try:
+        age_data = ssdata.get_age_distribution(location, year=sim['start'])
+        pop_trend = ssdata.get_total_pop(location)
+        total_pop = sum(age_data[:, 2])  # Return the total population
+        pop_age_trend = ssdata.get_age_distribution_over_time(location)
+    except ValueError as E:
+        warnmsg = f'Could not load age data for requested location "{location}" ({str(E)})'
+        ssm.warn(warnmsg, die=True)
+
+    uids, sexes, debuts = set_static(n_agents, sex_ratio=sex_ratio)
+
+    # Set ages, rounding to nearest timestep if requested
+    age_data_min = age_data[:, 0]
+    age_data_max = age_data[:, 1]
+    age_data_range = age_data_max - age_data_min
+    age_data_prob = age_data[:, 2]
+    age_data_prob /= age_data_prob.sum()  # Ensure it sums to 1
+    age_bins = hpu.n_multinomial(age_data_prob, n_agents)  # Choose age bins
+    if dt_round_age:
+        ages = age_data_min[age_bins] + np.random.randint(
+            age_data_range[age_bins] / dt) * dt  # Uniformly distribute within this age bin
+    else:
+        ages = age_data_min[age_bins] + age_data_range[age_bins] * np.random.random(
+            n_agents)  # Uniformly distribute within this age bin
+
+    # Store output
+    popdict = {}
+    popdict['uid'] = uids
+    popdict['age'] = ages
+    popdict['sex'] = sexes
+    popdict['debut'] = debuts
+    popdict['rel_sev'] = rel_sev
+    popdict['partners'] = partners
+
+    is_active = ages > debuts
+    is_female = sexes == 0
+
+    # Create the contacts
+    lkeys = sim['partners'].keys()  # TODO: consider a more robust way to do this
+    if microstructure in ['random', 'default']:
+        contacts = dict()
+        current_partners = np.zeros((len(lkeys), n_agents))
+        lno = 0
+        for lkey in lkeys:
+            contacts[lkey], current_partners, _, _ = make_contacts(
+                lno=lno, tind=0, partners=partners[lno, :], current_partners=current_partners,
+                sexes=sexes, ages=ages, debuts=debuts, is_female=is_female, is_active=is_active,
+                mixing=sim['mixing'][lkey], layer_probs=sim['layer_probs'][lkey], cross_layer=sim['cross_layer'],
+                pref_weight=100, durations=sim['dur_pship'][lkey], acts=sim['acts'][lkey],
+                age_act_pars=sim['age_act_pars'][lkey], **kwargs
+            )
+            lno += 1
+
+    else:
+        errormsg = f'Microstructure type "{microstructure}" not found; choices are random or TBC'
+        raise NotImplementedError(errormsg)
+
+    popdict['contacts'] = contacts
+    popdict['current_partners'] = current_partners
+
+    return popdict

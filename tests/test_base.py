@@ -86,13 +86,25 @@ def test_microsim():
     pars = defaultdict(dict)
     pars['hiv']['beta'] = {'random': 0.3}
 
-    sim = ss.Sim(ppl, [ss.HIV, ss.Pregnancy], pars=pars)
+    sim = ss.Sim(people=ppl, modules=[ss.HIV, ss.Pregnancy], pars=pars)
     sim.run()
     plt.figure()
     plt.plot(sim.tvec, sim.results.hiv.n_infected)
     plt.title('HIV number of infections')
     plt.show()
     return sim
+
+def test_sim_construction():
+
+    # Make people first and feed them in
+    ppl = ss.People(100)
+
+    # Get the sim to make people
+    sim = ss.Sim()
+    sim.initialize()  # Makes the people
+
+    return
+
 
 
 # %% Run as a script
@@ -102,9 +114,9 @@ if __name__ == '__main__':
 
     # Run tests
     # parsobj = test_parsobj()
-    # ppl = test_people()
+    ppl = test_people()
     # layer1, layer2, layer3, layer4 = test_layers()
-    sim = test_microsim()
+    # sim = test_microsim()
 
     sc.toc(T)
     print('Done.')

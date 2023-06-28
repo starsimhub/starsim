@@ -396,6 +396,7 @@ base_states = ssu.named_dict(
     State('uid', sss.default_int),
     State('age', sss.default_float),
     State('female', bool, False),
+    State('debut', sss.default_float),
     State('dead', bool, False),
     State('ti_dead', sss.default_float, np.nan),  # Time index for death
     State('scale', sss.default_float, 1.0),
@@ -413,6 +414,7 @@ class BasePeople(FlexPretty):
         """ Initialize essential attributes """
 
         super().__init__(*args, **kwargs)
+        self.initialized = False
         self.version = __version__  # Store version info
 
         # Initialize states, contacts, modules
@@ -431,16 +433,23 @@ class BasePeople(FlexPretty):
             self._data[state_name] = state.new(self._n)
         self._map_arrays()
         self['uid'][:] = np.arange(self._n)
-        self['age'][:] = np.random.random(size=self._n)*100
-        self['female'][:] = np.random.choice([False, True], size=self._n)
 
         # Define lock attribute here, since BasePeople.lock()/unlock() requires it
         self._lock = False  # Prevent further modification of keys
 
         return
 
-    def initialize(self):
-        pass
+    def initialize(self, popdict=None):
+        """ Initialize people by setting their attributes """
+        if popdict is None:
+            self['age'][:] = np.random.random(size=self.n) * 100
+            self['female'][:] = np.random.choice([False, True], size=self.n)
+        else:
+            # Use random defaults
+            self['age'][:] = popdict['age']
+            self['female'][:] = popdict['female']
+        self.initialized = True
+        return
 
     def __len__(self):
         """ Length of people """
@@ -534,37 +543,6 @@ class BasePeople(FlexPretty):
         for i in range(len(self)):
             yield self[i]
 
-    def __add__(self, people2):
-        """ Combine two people arrays """
-        newpeople = sc.dcp(self)
-        keys = list(self.keys())
-        for key in keys:
-            npval = newpeople[key]
-            p2val = people2[key]
-            if npval.ndim == 1:
-                newpeople.set(key, np.concatenate([npval, p2val], axis=0), die=False)  # Allow size mismatch
-            elif npval.ndim == 2:
-                newpeople.set(key, np.concatenate([npval, p2val], axis=1), die=False)
-            else:
-                errormsg = f'Not sure how to combine arrays of {npval.ndim} dimensions for {key}'
-                raise NotImplementedError(errormsg)
-
-        # Validate
-        newpeople.pars['n_agents'] += people2.pars['n_agents']
-        newpeople.validate()
-
-        # Reassign UIDs so they're unique
-        newpeople.set('uid', np.arange(len(newpeople)))
-
-        return newpeople
-
-    def __radd__(self, people2):
-        """ Allows sum() to work correctly """
-        if not people2:
-            return self
-        else:
-            return self.__add__(people2)
-
     def _brief(self):
         """
         Return a one-line description of the people -- used internally and by repr();
@@ -595,6 +573,11 @@ class BasePeople(FlexPretty):
             return arr
 
     @property
+    def alive(self):
+        """ Alive boolean """
+        return ~self.dead
+
+    @property
     def f_inds(self):
         """ Indices of everyone female """
         return self.true('female')
@@ -603,6 +586,11 @@ class BasePeople(FlexPretty):
     def m_inds(self):
         """ Indices of everyone male """
         return self.false('female')
+
+    @property
+    def active(self):
+        """ Indices of everyone sexually active  """
+        return (self.debut > self.age) & self.alive
 
     @property
     def int_age(self):
@@ -928,4 +916,3 @@ class Layer(FlexDict):
 
     def update(self):
         pass
-
