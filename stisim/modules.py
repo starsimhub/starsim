@@ -35,7 +35,7 @@ class Module(sc.prettyobj):
 
         # Validate pars
         if 'beta' not in sim.pars[self.name]:
-            sim.pars[self.name].beta = sc.objdict({k: [1, 1] for k in sim.people.contacts})
+            sim.pars[self.name].beta = sc.objdict({k: [1, 1] for k in sim.people.networks})
 
         # Initialize results
         sim.results[self.name]['n_susceptible'] = Result(self.name, 'n_susceptible', sim.npts, dtype=int)
@@ -50,7 +50,7 @@ class Module(sc.prettyobj):
     def make_new_cases(self, sim):
         """ Add new cases of module, through transmission, incidence, etc. """
         pars = sim.pars[self.name]
-        for k, layer in sim.people.contacts.items():
+        for k, layer in sim.people.networks.items():
             if k in pars['beta']:
                 rel_trans = (sim.people[self.name].infected & ~sim.people.dead).astype(float)
                 rel_sus = (sim.people[self.name].susceptible & ~sim.people.dead).astype(float)
@@ -233,7 +233,7 @@ class Pregnancy(Module):
 
         delivery_inds = ssu.true(deliveries)
         if len(delivery_inds):
-            for _, layer in sim.people.contacts.items():
+            for _, layer in sim.people.networks.items():
                 if isinstance(layer, sspop.maternal):
                     # new_birth_inds = layer.find_contacts(delivery_inds)  # Don't think we need this?
                     new_births = len(delivery_inds) * sim['pop_scale']
@@ -274,9 +274,9 @@ class Pregnancy(Module):
                 sim.people.female[new_inds] = np.random.choice([True, False], size=n_unborn_agents)
 
                 # Add connections to any vertical transmission layers
-                # Placeholder code to be moved / refactored. The maternal contact network may need to be
+                # Placeholder code to be moved / refactored. The maternal network may need to be
                 # handled separately to the sexual networks, TBC how to handle this most elegantly
-                for lkey, layer in sim.people.contacts.items():
+                for lkey, layer in sim.people.networks.items():
                     if layer.transmission == 'vertical':  # What happens if there's more than one vertical layer?
                         durs = np.full(n_unborn_agents, fill_value=cpars['dur_pregnancy']+cpars['dur_postpartum'])
                         layer.add_connections(uids, new_inds, dur=durs)

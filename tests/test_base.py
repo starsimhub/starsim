@@ -38,17 +38,19 @@ def test_people():
     ppl = ss.BasePeople(100)  # BasePeople
     del ppl
 
-    # Possible to initialize people with extra states
+    # Possible to initialize people with extra states, e.g. a geolocation
     extra_states = ss.named_dict(
-        ss.State('debut', float),
+        ss.StochState('geolocation', int, distdict=dict(dist='choice', par1=[1, 2, 3])),
     )
-    ppl = ss.People(100, states=extra_states)  # BasePeople
+    ppl = ss.People(100, states=extra_states)
+
+    # Possible to add a module to people outside a sim (not typical workflow)
     ppl.add_module(ss.HIV())
 
     return ppl
 
 
-def test_networkss():
+def test_networks():
 
     # Make completely abstract layers
     n = 10_000
@@ -59,17 +61,14 @@ def test_networkss():
     nw1 = ss.Network(p1=p1, p2=p2, beta=beta, label='rand')
     nw2 = ss.Network(dict(p1=p1, p2=p2, beta=beta), label='rand')  # Alternate method
 
-    # Make people with some extra states, then make a dynamic sexual layer and update it
-    states = ss.named_dict(
-        ss.State('debut', float),
-        ss.State('active', bool, True),
-    )
-    ppl = ss.People(100, states=states)  # BasePeople
-    nw3 = ss.DynamicSexualNetwork()
-    nw3.initialize(ppl)  # Initialize with ti=0
-    nw3.update(ppl, ti=1, dt=1)  # Update with a timestep of 1 and
+    # Make people, then make a dynamic sexual layer and update it
+    ppl = ss.People(100)  # BasePeople
+    ppl.initialize()  # This seems to be necessary, although not completely clear why...
+    nw3 = ss.hpv_network()
+    nw3.initialize(ppl)
+    nw3.update(ppl, ti=1, dt=1)  # Update by providing a timestep & current time index
 
-    nw4 = ss.Maternal()
+    nw4 = ss.maternal()
     nw4.initialize(ppl)
     nw4.add_pairs(mother_inds=[1, 2, 3], unborn_inds=[100, 101, 102], dur=[1, 1, 1])
 
@@ -80,12 +79,9 @@ def test_microsim():
     sc.heading('Testing basic sim')
 
     ppl = ss.People(100)
-    ppl.contacts['random'] = ss.simple_sexual()
-
-    pars = defaultdict(dict)
-    pars['hiv']['beta'] = {'random': 0.3}
-
-    sim = ss.Sim(people=ppl, modules=[ss.HIV, ss.Pregnancy], pars=pars)
+    ppl.networks['random'] = ss.simple_sexual()
+    sim = ss.Sim(people=ppl, modules=[ss.HIV(), ss.Pregnancy()])
+    sim.initialize()
     sim.run()
     plt.figure()
     plt.plot(sim.tvec, sim.results.hiv.n_infected)
@@ -93,16 +89,12 @@ def test_microsim():
     plt.show()
     return sim
 
-def test_sim_construction():
+def test_ppl_construction():
 
-    # Make people first and feed them in
-    ppl = ss.People(100)
+    sim = ss.Sim(networks=[ss.simple_sexual()], modules=[ss.HIV(), ss.Pregnancy()])
+    sim.initialize()
 
-    # Get the sim to make people
-    sim = ss.Sim()
-    sim.initialize()  # Makes the people
-
-    return
+    return sim
 
 
 
@@ -115,16 +107,8 @@ if __name__ == '__main__':
     # parsobj = test_parsobj()
     # ppl = test_people()
     # nw1, nw2, nw3, nw4 = test_networks()
-    # sim = test_microsim()
-    ppl = ss.People(100)
-    ppl.contacts['random'] = ss.simple_sexual()
-
-    # pars = defaultdict(dict)
-    # pars['hiv']['beta'] = {'random': 0.3}
-
-    sim = ss.Sim(people=ppl, modules=[ss.HIV(), ss.Pregnancy()])
-    sim.initialize()
-    sim.run()
+    sim1 = test_microsim()
+    # sim = test_ppl_construction()
 
     sc.toc(T)
     print('Done.')

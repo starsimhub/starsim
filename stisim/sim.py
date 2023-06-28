@@ -20,13 +20,14 @@ from .results import Result
 class Sim(ssb.BaseSim):
 
     def __init__(self, pars=None, label=None, people=None, popdict=None, modules=None,
-                 version=None, **kwargs):
+                 networks=None, version=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
         self.people = people  # People object
         self.popdict = popdict  # popdict used to create people
+        self.networks = networks  # List of provided networks
         self.modules = ssu.named_dict(modules)  # List of modules to simulate
         self.results = sc.objdict()  # For storing results
         self.summary = None  # For storing a summary of the results
@@ -100,7 +101,7 @@ class Sim(ssb.BaseSim):
         Attempt to retrieve the current network names
         """
         try:
-            keys = list(self.people['contacts'].keys())  # Get keys from acts
+            keys = list(self.people['networks'].keys())  # Get keys from acts
         except:  # pragma: no cover
             keys = []
         return keys
@@ -112,7 +113,7 @@ class Sim(ssb.BaseSim):
 
         if self.people is not None:
             modules = len(self.modules) > 0
-            pop_keys = set(self.people.contacts.keys())
+            pop_keys = set(self.people.networks.keys())
             if modules and not len(pop_keys):
                 warnmsg = f'Warning: your simulation has {len(self.modules)} modules but no contact layers.'
                 ssm.warn(warnmsg, die=False)
@@ -186,7 +187,9 @@ class Sim(ssb.BaseSim):
 
     def init_people(self, popdict=None, reset=False, verbose=None, **kwargs):
         """
-        Create the people.
+        Initialize people within the sim
+        Sometimes the people are provided, in which case this just adds a few sim properties to them.
+        Other time people are not provided and this method makes them.
         Args:
             popdict         (any):  pre-generated people of various formats.
             reset           (bool): whether to regenerate the people even if they already exist
@@ -230,21 +233,26 @@ class Sim(ssb.BaseSim):
             self['pop_scale'] = total_pop / self['n_agents']
 
         # Finish initialization
-        self.people.initialize(popdict=popdict)  # Fully initialize the people
+        if not self.people.initialized:
+            self.people.initialize(popdict=popdict)  # Fully initialize the people
+
+        # Add time attributes
+        self.people.ti = self.ti
+        self.people.dt = self.dt
 
         return self
 
     def init_network(self):
         """ Initialize networks if these have been provided separately from the people """
 
-        for key,network in self.people.contacts.items():
+        for key, network in self.people.networks.items():
             if network.label is not None:
                 layer_name = network.label
             else:
                 layer_name = key
                 network.label = layer_name
             network.initialize(self.people)
-            self.people.contacts[layer_name] = network
+            self.people.networks[layer_name] = network
 
         return
 

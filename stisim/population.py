@@ -56,9 +56,10 @@ class simple_sexual(ssb.Network):
         self['beta'] = np.concatenate([self['beta'], beta])
         self['dur'] = np.concatenate([self['dur'], dur])
 
-    def update(self, people, ti):
+    def update(self, people, dt=None):
+        if dt is None: dt = people.dt
         # First remove any relationships due to end
-        self['dur'] = self['dur'] - ti
+        self['dur'] = self['dur'] - dt
         active = self['dur'] > 0
         self['p1'] = self['p1'][active]
         self['p2'] = self['p2'][active]
@@ -267,6 +268,8 @@ class hpv_network(ssb.Network):
         return
 
     def update(self, people, ti=None, dt=None):
+        if ti is None: ti = people.ti
+        if dt is None: dt = people.dt
         # First remove any relationships due to end
         self['dur'] = self['dur'] - dt
         active = self['dur'] > 0
@@ -288,6 +291,7 @@ class maternal(ssb.Network):
         return
 
     def update(self, people, dt=None):
+        if dt is None: dt = people.dt
         # Set beta to 0 for women who complete post-partum period
         # Keep connections for now, might want to consider removing
         self['dur'] = self['dur'] - dt

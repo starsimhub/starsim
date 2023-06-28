@@ -12,7 +12,7 @@ from . import settings as sss
 from .version import __version__
 
 # Specify all externally visible classes this file defines
-__all__ = ['ParsObj', 'BaseSim', 'State', 'BasePeople', 'FlexDict', 'Network']
+__all__ = ['ParsObj', 'BaseSim', 'State', 'StochState', 'BasePeople', 'FlexDict', 'Network']
 
 # Default object getter/setter
 obj_set = object.__setattr__
@@ -392,6 +392,18 @@ class State(sc.prettyobj):
         return np.full(shape, dtype=self.dtype, fill_value=self.fill_value)
 
 
+class StochState(State):
+    def __init__(self, name, dtype, distdict=None, **kwargs):
+        super().__init__(name, dtype, kwargs)
+        self.distdict = distdict
+        return
+
+    def new(self, n):
+        shape = sc.tolist(self.shape)
+        shape.append(n)
+        return ssu.sample(**self.distdict, size=tuple(shape))
+
+
 base_states = ssu.named_dict(
     State('uid', sss.default_int),
     State('age', sss.default_float),
@@ -417,9 +429,9 @@ class BasePeople(FlexPretty):
         self.initialized = False
         self.version = __version__  # Store version info
 
-        # Initialize states, contacts, modules
+        # Initialize states, networks, modules
         self.states = sc.mergedicts(base_states, states)
-        self.contacts = sc.odict()
+        self.networks = sc.odict()
         self._modules = sc.autolist()
 
         # Private variables relating to dynamic allocation
@@ -491,8 +503,8 @@ class BasePeople(FlexPretty):
         new_total = orig_n + n
         if new_total > self._s:
             n_new = max(n, int(self._s / 2))  # Minimum 50% growth
-            for state in self.states:
-                self._data[state.name] = np.concatenate([self._data[state.name], state.new(self.pars, n_new)],
+            for state in self.states.values():
+                self._data[state.name] = np.concatenate([self._data[state.name], state.new(n_new)],
                                                         axis=self._data[state.name].ndim - 1)
             self._s += n_new
         self._n += n
@@ -594,7 +606,7 @@ class BasePeople(FlexPretty):
     @property
     def active(self):
         """ Indices of everyone sexually active  """
-        return (self.debut > self.age) & self.alive
+        return (self.age >= self.debut) & self.alive
 
     @property
     def int_age(self):
@@ -759,6 +771,11 @@ class Network(FlexDict):
         for key, value in kwargs.items():
             self[key] = np.array(value, dtype=self.meta.get(key))
             self.initialized = True
+
+    @property
+    def name(self):
+        # The module name is a lower-case version of its class name
+        return self.__class__.__name__.lower()
 
     def initialize(self):
         pass
