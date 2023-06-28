@@ -56,8 +56,8 @@ def test_networkss():
     p1 = np.random.randint(n_people, size=n)
     p2 = np.random.randint(n_people, size=n)
     beta = np.ones(n)
-    layer1 = ss.Network(p1=p1, p2=p2, beta=beta, label='rand')
-    layer2 = ss.Network(dict(p1=p1, p2=p2, beta=beta), label='rand')  # Alternate method
+    nw1 = ss.Network(p1=p1, p2=p2, beta=beta, label='rand')
+    nw2 = ss.Network(dict(p1=p1, p2=p2, beta=beta), label='rand')  # Alternate method
 
     # Make people with some extra states, then make a dynamic sexual layer and update it
     states = ss.named_dict(
@@ -65,15 +65,15 @@ def test_networkss():
         ss.State('active', bool, True),
     )
     ppl = ss.People(100, states=states)  # BasePeople
-    layer3 = ss.DynamicSexualNetwork()
-    layer3.initialize(ppl)  # Initialize with ti=0
-    layer3.update(ppl, ti=1, dt=1)  # Update with a timestep of 1 and
+    nw3 = ss.DynamicSexualNetwork()
+    nw3.initialize(ppl)  # Initialize with ti=0
+    nw3.update(ppl, ti=1, dt=1)  # Update with a timestep of 1 and
 
-    layer4 = ss.Maternal()
-    layer4.initialize(ppl)
-    layer4.add_pairs(mother_inds=[1, 2, 3], unborn_inds=[100, 101, 102], dur=[1, 1, 1])
+    nw4 = ss.Maternal()
+    nw4.initialize(ppl)
+    nw4.add_pairs(mother_inds=[1, 2, 3], unborn_inds=[100, 101, 102], dur=[1, 1, 1])
 
-    return layer1, layer2, layer3, layer4
+    return nw1, nw2, nw3, nw4
 
 
 def test_microsim():
@@ -81,7 +81,7 @@ def test_microsim():
 
     states = ss.named_dict(ss.State('active', bool, True))
     ppl = ss.People(100, states=states)
-    ppl.contacts['random'] = ss.DynamicSexualLayer()
+    ppl.contacts['random'] = ss.DynamicSexualNetwork()
 
     pars = defaultdict(dict)
     pars['hiv']['beta'] = {'random': 0.3}

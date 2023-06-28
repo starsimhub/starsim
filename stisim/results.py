@@ -7,10 +7,10 @@ import numpy as np
 
 
 class Result(np.lib.mixins.NDArrayOperatorsMixin):
-    def __init__(self, module, name, n, dtype):
-        self.module = module if module else None
+    def __init__(self, name, module, shape, dtype):
         self.name = name
-        self.values = np.zeros(n, dtype=dtype)
+        self.module = module if module else None
+        self.values = np.zeros(shape, dtype=dtype)
 
     def __getitem__(self, *args, **kwargs):  return self.values.__getitem__(*args, **kwargs)
 

@@ -79,7 +79,7 @@ class People(ssb.BasePeople):
         """
         return self.scale[inds].sum()
 
-    def update_states(self, sim):
+    def update_states(self, sim, ti):
         """ Perform all state updates at the current timestep """
 
         self.age[~self.dead] += sim.dt

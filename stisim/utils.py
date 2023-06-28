@@ -28,11 +28,11 @@ def omerge(*args, **kwargs):
 
 # %% The core functions
 def unique(arr):
-    '''
+    """
     Find the unique elements and counts in an array.
     Equivalent to np.unique(return_counts=True) but ~5x faster, and
     only works for arrays of positive integers.
-    '''
+    """
     counts = np.bincount(arr.ravel())
     unique = np.flatnonzero(counts)
     counts = counts[unique]

@@ -109,7 +109,7 @@ class HIV(Module):
 
     def initialize(self, sim):
         super(HIV, self).initialize(sim)
-        sim.results[self.name]['n_art'] = Result(self.name, 'n_art', sim.npts, dtype=int)
+        sim.results[self.name]['n_art'] = Result('n_art', self.name, sim.npts, dtype=int)
     
     def update_results(self, sim):
         super(HIV, self).update_results(sim)
@@ -208,8 +208,8 @@ class Pregnancy(Module):
         individual disease modules, the connectors, or the sim.
         """
         super(Pregnancy, self).initialize(sim)
-        sim.results[self.name]['pregnancies'] = Result(self.name, 'pregnancies', sim.npts, dtype=int)
-        sim.results[self.name]['births'] = Result(self.name, 'births', sim.npts, dtype=int)
+        sim.results[self.name]['pregnancies'] = Result('pregnancies', self.name, sim.npts, dtype=int)
+        sim.results[self.name]['births'] = Result('births', self.name, sim.npts, dtype=int)
         sim['birth_rates'] = None  # This turns off birth rate pars so births only come from this module
         return
 
