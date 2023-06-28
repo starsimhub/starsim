@@ -234,7 +234,7 @@ class Pregnancy(Module):
         delivery_inds = ssu.true(deliveries)
         if len(delivery_inds):
             for _, layer in sim.people.contacts.items():
-                if isinstance(layer, sspop.Maternal):
+                if isinstance(layer, sspop.maternal):
                     # new_birth_inds = layer.find_contacts(delivery_inds)  # Don't think we need this?
                     new_births = len(delivery_inds) * sim['pop_scale']
                     sim.people.demographic_flows['births'] = new_births

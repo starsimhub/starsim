@@ -63,6 +63,7 @@ class simple_sexual(ssb.Network):
         self['p1'] = self['p1'][active]
         self['p2'] = self['p2'][active]
         self['beta'] = self['beta'][active]
+        self['dur'] = self['dur'][active]
 
         # Then add new relationships for unpartnered people
         self.add_pairs(people)
