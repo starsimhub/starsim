@@ -7,6 +7,7 @@ import numpy as np
 import sciris as sc
 from . import base as ssb
 from . import misc as ssm
+from . import settings as sss
 from . import utils as ssu
 from . import people as ssppl
 from . import parameters as sspar
@@ -235,11 +236,12 @@ class Sim(ssb.BaseSim):
 
     def init_network(self):
         """ Initialize networks if these have been provided separately from the people """
-        for i, network in enumerate(self['networks']):
+
+        for key,network in self.people.contacts.items():
             if network.label is not None:
                 layer_name = network.label
             else:
-                layer_name = f'layer{i}'
+                layer_name = key
                 network.label = layer_name
             network.initialize(self.people)
             self.people.contacts[layer_name] = network
@@ -252,9 +254,9 @@ class Sim(ssb.BaseSim):
         """
         # Make results
         results = ssu.named_dict(
-            Result('births', None, self.npts),
-            Result('deaths', None, self.npts),
-            Result('n_alive', None, self.npts),
+            Result('births', None, self.npts, sss.default_float),
+            Result('deaths', None, self.npts, sss.default_float),
+            Result('n_alive', None, self.npts, sss.default_int),
         )
 
         # Final items
@@ -361,13 +363,10 @@ class Sim(ssb.BaseSim):
         if until is None: until = self.npts
         if until > self.npts:
             errormsg = f'Requested to run until t={until} but the simulation end is ti={self.npts}'
-        if self.t >= until:  # NB. At the start, self.t is None so this check must occur after initialization
-            errormsg = f'Simulation is currently at t={self.t}, requested to run until ti={until} which has already been reached'
+        if self.ti >= until:  # NB. At the start, self.t is None so this check must occur after initialization
+            errormsg = f'Simulation is currently at t={self.ti}, requested to run until ti={until} which has already been reached'
         if self.complete:
             errormsg = 'Simulation is already complete (call sim.initialize() to re-run)'
-        if self.people.ti not in [self.ti,
-                                 self.ti - 1]:  # Depending on how the sim stopped, either of these states are possible
-            errormsg = f'The simulation has been run independently from the people (t={self.ti}, people.t={self.people.ti}): if this is intentional, manually set sim.people.t = sim.t. Remember to save the people object before running the sim.'
         if errormsg:
             raise AlreadyRunError(errormsg)
 
@@ -395,7 +394,7 @@ class Sim(ssb.BaseSim):
                     sc.heading(string)
                 elif verbose > 0:
                     if not (self.ti % int(1.0 / verbose)):
-                        sc.progressbar(self.t + 1, self.npts, label=string, length=20, newline=True)
+                        sc.progressbar(self.ti + 1, self.npts, label=string, length=20, newline=True)
 
             # Actually run the model
             self.step()

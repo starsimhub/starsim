@@ -108,7 +108,7 @@ class HIV(Module):
         return
 
     def initialize(self, sim):
-        super(HIV, self).initialize(sim)
+        Module.initialize(self, sim)
         sim.results[self.name]['n_art'] = Result('n_art', self.name, sim.npts, dtype=int)
     
     def update_results(self, sim):
@@ -122,7 +122,7 @@ class HIV(Module):
     def set_prognoses(self, sim, uids):
         sim.people[self.name].susceptible[uids] = False
         sim.people[self.name].infected[uids] = True
-        sim.people[self.name].ti_infected[uids] = sim.t
+        sim.people[self.name].ti_infected[uids] = sim.ti
 
 
 class Gonorrhea(Module):
@@ -157,7 +157,7 @@ class Gonorrhea(Module):
     def initialize(self, sim):
         # Do any steps in this method depend on what other modules are going to be added? We can inspect
         # them via sim.modules at this point
-        super(Gonorrhea, self).initialize(sim)
+        Module.initialize(self, sim)
     
     def update_results(self, sim):
         super(Gonorrhea, self).update_results(sim)
@@ -180,6 +180,8 @@ class Pregnancy(Module):
 
     def __init__(self, pars=None):
         super().__init__(pars)
+
+
         # Other, e.g. postpartum, on contraception...
         self.states = ssu.omerge(ssu.named_dict(
             State('infertile', bool, False),  # Applies to girls and women outside the fertility window
@@ -199,6 +201,7 @@ class Pregnancy(Module):
             'p_death': 0.02,  # Probability of maternal death. Question, should this be linked to age and/or duration?
             'initial': 3,  # Number of women initially pregnant
         }, self.pars)
+
         return
 
     def initialize(self, sim):
@@ -207,7 +210,7 @@ class Pregnancy(Module):
         Still unclear whether this logic should live in the pregnancy module, the
         individual disease modules, the connectors, or the sim.
         """
-        super(Pregnancy, self).initialize(sim)
+        Module.initialize(self, sim)
         sim.results[self.name]['pregnancies'] = Result('pregnancies', self.name, sim.npts, dtype=int)
         sim.results[self.name]['births'] = Result('births', self.name, sim.npts, dtype=int)
         sim['birth_rates'] = None  # This turns off birth rate pars so births only come from this module
@@ -216,17 +219,17 @@ class Pregnancy(Module):
     def update_states(self, sim):
 
         # Check for new deliveries
-        deliveries = sim.people[self.name].pregnant & (sim.people[self.name].ti_delivery <= sim.t)
+        deliveries = sim.people[self.name].pregnant & (sim.people[self.name].ti_delivery <= sim.ti)
         sim.people[self.name].pregnant[deliveries] = False
         sim.people[self.name].postpartum[deliveries] = True
         sim.people[self.name].susceptible[deliveries] = False
-        sim.people[self.name].ti_delivery[deliveries] = sim.t
+        sim.people[self.name].ti_delivery[deliveries] = sim.ti
 
         # Check for new kids emerging from post-partum
-        postpartum = ~sim.people[self.name].pregnant & (sim.people[self.name].ti_postpartum <= sim.t)
+        postpartum = ~sim.people[self.name].pregnant & (sim.people[self.name].ti_postpartum <= sim.ti)
         sim.people[self.name].postpartum[postpartum] = False
         sim.people[self.name].susceptible[postpartum] = True
-        sim.people[self.name].ti_postpartum[postpartum] = sim.t
+        sim.people[self.name].ti_postpartum[postpartum] = sim.ti
 
         delivery_inds = ssu.true(deliveries)
         if len(delivery_inds):
@@ -237,10 +240,10 @@ class Pregnancy(Module):
                     sim.people.demographic_flows['births'] = new_births
 
         # Maternal deaths
-        maternal_deaths = ssu.true(sim.people[self.name].ti_dead <= sim.t)
+        maternal_deaths = ssu.true(sim.people[self.name].ti_dead <= sim.ti)
         if len(maternal_deaths):
             sim.people.alive[maternal_deaths] = False
-            sim.people.date_dead[maternal_deaths] = sim.t
+            sim.people.date_dead[maternal_deaths] = sim.ti
 
         return
 
@@ -295,13 +298,13 @@ class Pregnancy(Module):
         # Change states for the newly pregnant woman
         sim.people[self.name].susceptible[uids] = False
         sim.people[self.name].pregnant[uids] = True
-        sim.people[self.name].ti_pregnant[uids] = sim.t
+        sim.people[self.name].ti_pregnant[uids] = sim.ti
 
         # Outcomes for pregnancies
-        dur = np.full(len(uids), sim.t + pars['dur_pregnancy'] / sim.pars.dt)
+        dur = np.full(len(uids), sim.ti + pars['dur_pregnancy'] / sim.pars.dt)
         dead = np.random.random(len(uids)) < sim.pars[self.name].p_death
         sim.people[self.name].ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
-        dur_post_partum = np.full(len(uids), dur + pars['dur_postpartum'] / sim.pars.dt)
+        dur_post_partum = np.full(len(uids), dur + pars['dur_postpartum'] / sim.dt)
         sim.people[self.name].ti_postpartum[uids] = dur_post_partum
 
         if len(ssu.true(dead)):

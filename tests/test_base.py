@@ -122,9 +122,9 @@ if __name__ == '__main__':
     # pars = defaultdict(dict)
     # pars['hiv']['beta'] = {'random': 0.3}
 
-    sim = ss.Sim(people=ppl, modules=[ss.HIV, ss.Pregnancy])
+    sim = ss.Sim(people=ppl, modules=[ss.HIV(), ss.Pregnancy()])
     sim.initialize()
-    # sim.run()
+    sim.run()
 
     sc.toc(T)
     print('Done.')

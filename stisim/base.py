@@ -460,6 +460,10 @@ class BasePeople(FlexPretty):
             print(f'Warning: could not get length of People (could not get self.{base_key}: {E})')
             return 0
 
+    @property
+    def n(self):
+        return len(self)
+
     def _len_arrays(self):
         """ Length of underlying arrays """
         return len(self._data[base_key])
@@ -742,6 +746,7 @@ class Network(FlexDict):
         self.transmission = transmission  # "vertical" or "horizontal", determines whether transmission is bidirectional
         self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
         self.label = label
+        self.initialized = False
 
         # Handle args
         kwargs = sc.mergedicts(*args, kwargs)
@@ -753,6 +758,7 @@ class Network(FlexDict):
         # Set data, if provided
         for key, value in kwargs.items():
             self[key] = np.array(value, dtype=self.meta.get(key))
+            self.initialized = True
 
     def initialize(self):
         pass

@@ -38,8 +38,9 @@ class simple_sexual(ssb.Network):
         # Find unpartnered males and females - could in principle check other contact layers too
         # by having the People object passed in here
 
-        available_m = np.setdiff1d(people.indices[people.male], self.members)
-        available_f = np.setdiff1d(people.indices[~people.male], self.members)
+
+        available_m = np.setdiff1d(people.uid[~people.female], self.members)
+        available_f = np.setdiff1d(people.uid[people.female], self.members)
 
         if len(available_m) <= len(available_f):
             p1 = available_m
@@ -49,7 +50,7 @@ class simple_sexual(ssb.Network):
             p1 = np.random.choice(available_m, len(p2), replace=False)
 
         beta = np.ones_like(p1)
-        dur = np.random.randn(len(p1)) * self.mean_dur
+        dur = np.random.poisson(self.mean_dur, len(p1))
         self['p1'] = np.concatenate([self['p1'], p1])
         self['p2'] = np.concatenate([self['p2'], p2])
         self['beta'] = np.concatenate([self['beta'], beta])
