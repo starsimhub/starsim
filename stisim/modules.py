@@ -65,10 +65,10 @@ class Module(sc.prettyobj):
         pass
 
     def update_results(self, sim):
-        sim.results[self.name]['n_susceptible'][sim.t] = np.count_nonzero(sim.people[self.name].susceptible)
-        sim.results[self.name]['n_infected'][sim.t] = np.count_nonzero(sim.people[self.name].infected)
-        sim.results[self.name]['prevalence'][sim.t] = sim.results[self.name].n_infected[sim.t] / sim.people.n
-        sim.results[self.name]['new_infections'] = np.count_nonzero(sim.people[self.name].ti_infected == sim.t)
+        sim.results[self.name]['n_susceptible'][sim.ti] = np.count_nonzero(sim.people[self.name].susceptible)
+        sim.results[self.name]['n_infected'][sim.ti] = np.count_nonzero(sim.people[self.name].infected)
+        sim.results[self.name]['prevalence'][sim.ti] = sim.results[self.name].n_infected[sim.ti] / sim.people.n
+        sim.results[self.name]['new_infections'] = np.count_nonzero(sim.people[self.name].ti_infected == sim.ti)
 
     def finalize_results(self, sim):
         pass
@@ -260,7 +260,7 @@ class Pregnancy(Module):
         # If incidence of pregnancy is non-zero, make some cases
         # Think about how to deal with age/time-varying fertility
         if this_inci > 0:
-            demon_conds = ppl.is_female & ppl.is_active & ppl[self.name].susceptible
+            demon_conds = ppl.female & ppl.active & ppl[self.name].susceptible
             inds_to_choose_from = ssu.true(demon_conds)
             uids = ssu.binomial_filter(this_inci, inds_to_choose_from)
 
@@ -313,5 +313,5 @@ class Pregnancy(Module):
 
     def update_results(self, sim):
         mppl = sim.people[self.name]
-        sim.results[self.name]['pregnancies'][sim.t] = np.count_nonzero(mppl.ti_pregnant == sim.t)
-        sim.results[self.name]['births'][sim.t] = np.count_nonzero(mppl.ti_delivery == sim.t)
+        sim.results[self.name]['pregnancies'][sim.ti] = np.count_nonzero(mppl.ti_pregnant == sim.ti)
+        sim.results[self.name]['births'][sim.ti] = np.count_nonzero(mppl.ti_delivery == sim.ti)

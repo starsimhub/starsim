@@ -79,7 +79,7 @@ class People(ssb.BasePeople):
         """
         return self.scale[inds].sum()
 
-    def update_states(self, sim, ti):
+    def update_states(self, sim):
         """ Perform all state updates at the current timestep """
 
         self.age[~self.dead] += sim.dt
@@ -90,7 +90,7 @@ class People(ssb.BasePeople):
 
         # Perform network updates
         for lkey, layer in self.contacts.items():
-            layer.update(self)
+            layer.update(self, sim.ti)
 
         return
 

@@ -56,16 +56,16 @@ class simple_sexual(ssb.Network):
         self['beta'] = np.concatenate([self['beta'], beta])
         self['dur'] = np.concatenate([self['dur'], dur])
 
-    def update(self, people):
+    def update(self, people, ti):
         # First remove any relationships due to end
-        self['dur'] = self['dur'] - people.dt
-        active = self.dur > 0
+        self['dur'] = self['dur'] - ti
+        active = self['dur'] > 0
         self['p1'] = self['p1'][active]
         self['p2'] = self['p2'][active]
         self['beta'] = self['beta'][active]
 
         # Then add new relationships for unpartnered people
-        self.add_partnerships(people)
+        self.add_pairs(people)
 
 
 class hpv_network(ssb.Network):

@@ -312,7 +312,7 @@ class Sim(ssb.BaseSim):
             raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
 
         # Update states, modules, partnerships
-        self.people.update_states(sim=self, ti=self.ti)  # This runs modules
+        self.people.update_states(sim=self)  # This runs modules
         self.update_connectors()
 
         for module in self.modules.values():
@@ -436,7 +436,7 @@ class Sim(ssb.BaseSim):
                     else:
                         warnmsg = f'Connector must be a callable function'
                         ssm.warn(warnmsg, die=True)
-            elif self.t == 0:  # only raise warning on first timestep
+            elif self.ti == 0:  # only raise warning on first timestep
                 warnmsg = f'No connectors in sim'
                 ssm.warn(warnmsg, die=False)
             else:
