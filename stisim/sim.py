@@ -423,6 +423,7 @@ class Sim(ssb.BaseSim):
         return
 
     def update_connectors(self):
+        """ To do: move this to people? """
         if len(self.modules) > 1:
             connectors = self['connectors']
             if len(connectors) > 0:
@@ -441,10 +442,10 @@ class Sim(ssb.BaseSim):
 
 
 class AlreadyRunError(RuntimeError):
-    '''
+    """
     This error is raised if a simulation is run in such a way that no timesteps
     will be taken. This error is a distinct type so that it can be safely caught
     and ignored if required, but it is anticipated that most of the time, calling
     :py:func:`Sim.run` and not taking any timesteps, would be an inadvertent error.
-    '''
+    """
     pass

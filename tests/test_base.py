@@ -114,9 +114,9 @@ if __name__ == '__main__':
 
     # Run tests
     # parsobj = test_parsobj()
-    ppl = test_people()
-    nw1, nw2, nw3, nw4 = test_networks()
-    # sim = test_microsim()
+    # ppl = test_people()
+    # nw1, nw2, nw3, nw4 = test_networks()
+    sim = test_microsim()
 
     sc.toc(T)
     print('Done.')

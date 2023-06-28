@@ -12,10 +12,12 @@ from . import settings as sss
 
 
 # Specify all externally visible functions this file defines
-__all__ = ['DynamicSexualNetwork', 'Maternal']
+__all__ = ['simple_sexual', 'hpv_network', 'maternal']
 
 
-class DynamicSexualNetwork(ssb.Network):
+
+
+class hpv_network(ssb.Network):
     def __init__(self, pars=None):
 
         key_dict = {
@@ -224,7 +226,7 @@ class DynamicSexualNetwork(ssb.Network):
         return
 
 
-class Maternal(ssb.Network):
+class maternal(ssb.Network):
     def __init__(self, key_dict=None, transmission='vertical'):
         """
         Initialized empty and filled with pregnancies throughout the simulation
