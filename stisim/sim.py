@@ -77,7 +77,7 @@ class Sim(ssb.BaseSim):
 
         # Initialize the core sim components
         self.init_people(popdict=popdict, reset=reset, **kwargs)  # Create all the people (the heaviest step)
-        self.init_network()
+        self.init_networks()
         self.init_results()
         for module in self.modules.values():
             module.initialize(self)
@@ -242,8 +242,14 @@ class Sim(ssb.BaseSim):
 
         return self
 
-    def init_network(self):
+    def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
+
+        # One possible workflow is that users will provide a location and a set of networks but not people.
+        # This means networks will be stored in self['networks'] and we'll need to copy them to the people.
+        if self.people.networks is None or len(self.people.networks) == 0:
+            if self['networks'] is not None:
+                self.people.networks = ssu.named_dict(self['networks'])
 
         for key, network in self.people.networks.items():
             if network.label is not None:
@@ -321,7 +327,7 @@ class Sim(ssb.BaseSim):
 
         # Update states, modules, partnerships
         self.people.update_states(sim=self)  # This runs modules
-        self.update_connectors()
+        # self.update_connectors()  # TODO: add this when ready
 
         for module in self.modules.values():
             module.make_new_cases(self)

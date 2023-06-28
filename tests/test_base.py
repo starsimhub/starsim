@@ -76,7 +76,7 @@ def test_networks():
 
 
 def test_microsim():
-    sc.heading('Testing basic sim')
+    sc.heading('Test making people and providing them to a sim')
 
     ppl = ss.People(100)
     ppl.networks['random'] = ss.simple_sexual()
@@ -84,15 +84,21 @@ def test_microsim():
     sim.initialize()
     sim.run()
     plt.figure()
-    plt.plot(sim.tvec, sim.results.hiv.n_infected)
+    plt.plot(sim.tivec, sim.results.hiv.n_infected)
     plt.title('HIV number of infections')
     plt.show()
     return sim
 
 def test_ppl_construction():
 
-    sim = ss.Sim(networks=[ss.simple_sexual()], modules=[ss.HIV(), ss.Pregnancy()])
+    pars = {'networks': [ss.simple_sexual()]}
+    sim = ss.Sim(pars=pars, modules=[ss.HIV(), ss.Pregnancy()])
     sim.initialize()
+    sim.run()
+    plt.figure()
+    plt.plot(sim.tivec, sim.results.hiv.n_infected)
+    plt.title('HIV number of infections')
+    plt.show()
 
     return sim
 
@@ -104,11 +110,11 @@ if __name__ == '__main__':
     T = sc.tic()
 
     # Run tests
-    # parsobj = test_parsobj()
-    # ppl = test_people()
-    # nw1, nw2, nw3, nw4 = test_networks()
+    parsobj = test_parsobj()
+    ppl = test_people()
+    nw1, nw2, nw3, nw4 = test_networks()
     sim1 = test_microsim()
-    # sim = test_ppl_construction()
+    sim2 = test_ppl_construction()
 
     sc.toc(T)
     print('Done.')

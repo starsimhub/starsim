@@ -69,7 +69,7 @@ class People(ssb.BasePeople):
             combined_name = module.name + '.' + state_name
             self._data[combined_name] = state.new(self._n)
             self._map_arrays(keys=combined_name)
-            self.states[state_name] = state
+            self.states[combined_name] = state
 
         return
 

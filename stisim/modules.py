@@ -243,7 +243,7 @@ class Pregnancy(Module):
         maternal_deaths = ssu.true(sim.people[self.name].ti_dead <= sim.ti)
         if len(maternal_deaths):
             sim.people.alive[maternal_deaths] = False
-            sim.people.date_dead[maternal_deaths] = sim.ti
+            sim.people.ti_dead[maternal_deaths] = sim.ti
 
         return
 

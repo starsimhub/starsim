@@ -254,7 +254,7 @@ if __name__ == '__main__':
     # sim = test_layers()
 
     # sim = test_coinfection()
-    sim = test_pregnant()
+    # sim = test_pregnant()
 
     sc.toc(T)
     print('Done.')

@@ -503,9 +503,9 @@ class BasePeople(FlexPretty):
         new_total = orig_n + n
         if new_total > self._s:
             n_new = max(n, int(self._s / 2))  # Minimum 50% growth
-            for state in self.states.values():
-                self._data[state.name] = np.concatenate([self._data[state.name], state.new(n_new)],
-                                                        axis=self._data[state.name].ndim - 1)
+            for state_name, state in self.states.items():
+                self._data[state_name] = np.concatenate([self._data[state_name], state.new(n_new)],
+                                                        axis=self._data[state_name].ndim - 1)
             self._s += n_new
         self._n += n
         self._map_arrays()
