@@ -1,7 +1,6 @@
 '''
 Networks that connect people within a population
 TODO: rename this file networks.py?
-TODO: a network within the model is currently called a layer. Rename?
 '''
 
 # %% Imports
@@ -13,10 +12,10 @@ from . import settings as sss
 
 
 # Specify all externally visible functions this file defines
-__all__ = ['DynamicSexualLayer', 'Maternal']
+__all__ = ['DynamicSexualNetwork', 'Maternal']
 
 
-class DynamicSexualLayer(ssb.Layer):
+class DynamicSexualNetwork(ssb.Network):
     def __init__(self, pars=None):
 
         key_dict = {
@@ -225,7 +224,7 @@ class DynamicSexualLayer(ssb.Layer):
         return
 
 
-class Maternal(ssb.Layer):
+class Maternal(ssb.Network):
     def __init__(self, key_dict=None, transmission='vertical'):
         """
         Initialized empty and filled with pregnancies throughout the simulation

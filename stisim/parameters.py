@@ -53,7 +53,7 @@ def make_pars(**kwargs):
     pars['stopping_func']   = None          # A function to call to stop the sim partway through
 
     # Network parameters, generally initialized after the population has been constructed
-    pars['networks']        = sc.autolist() # Network types and parameters
+    pars['networks']        = sc.autolist()  # Network types and parameters
     pars['geostructure']    = 1  # Defines how many geographic clusters there should be in the simulated population
     pars['debut']           = dict(f=dict(dist='normal', par1=15.0, par2=2.0),
                                    m=dict(dist='normal', par1=17.5, par2=2.0))

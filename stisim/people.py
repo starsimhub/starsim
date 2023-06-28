@@ -4,15 +4,18 @@ Defines the People class and functions associated with making people
 
 # %% Imports
 import sciris as sc
+import numpy as np
 from . import base as ssb
 from . import misc as ssm
+from . import utils as ssu
+from . import settings as sss
 from .data import loaders as ssdata
 
 
-__all__ = ['People']
+__all__ = ['People', 'make_popdict']
 
 
-# %% Define all properties of people
+# %% Main people class
 
 
 class People(ssb.BasePeople):
@@ -92,7 +95,23 @@ class People(ssb.BasePeople):
         return
 
 
-def make_popdict(n=None, location=None, verbose=None, sex_ratio=0.5):
+# %% Helper functions to create popdicts
+
+def set_static(new_n, existing_n=0, pars=None, f_ratio=0.5):
+    """
+    Set static population characteristics that do not change over time.
+    Can be used when adding new births, in which case the existing popsize can be given.
+    """
+    uid = np.arange(existing_n, existing_n+new_n, dtype=sss.default_int)
+    female = np.random.choice([True, False], size=new_n, p=f_ratio)
+    n_females = len(ssu.true(female))
+    debut = np.full(new_n, np.nan, dtype=sss.default_float)
+    debut[female] = ssu.sample(**pars['debut']['m'], size=n_females)
+    debut[~female] = ssu.sample(**pars['debut']['f'], size=new_n-n_females)
+    return uid, female, debut
+
+
+def make_popdict(n=None, location=None, year=None, verbose=None, f_ratio=0.5, dt_round_age=True, dt=None):
     """ Create a location-specific population dictionary """
 
     # Initialize total pop size
@@ -102,15 +121,13 @@ def make_popdict(n=None, location=None, verbose=None, sex_ratio=0.5):
     if verbose:
         print(f'Loading location-specific data for "{location}"')
     try:
-        age_data = ssdata.get_age_distribution(location, year=sim['start'])
-        pop_trend = ssdata.get_total_pop(location)
+        age_data = ssdata.get_age_distribution(location, year=year)
         total_pop = sum(age_data[:, 2])  # Return the total population
-        pop_age_trend = ssdata.get_age_distribution_over_time(location)
     except ValueError as E:
         warnmsg = f'Could not load age data for requested location "{location}" ({str(E)})'
         ssm.warn(warnmsg, die=True)
 
-    uids, sexes, debuts = set_static(n_agents, sex_ratio=sex_ratio)
+    uid, female, debut = set_static(n, f_ratio=f_ratio)
 
     # Set ages, rounding to nearest timestep if requested
     age_data_min = age_data[:, 0]
@@ -118,47 +135,18 @@ def make_popdict(n=None, location=None, verbose=None, sex_ratio=0.5):
     age_data_range = age_data_max - age_data_min
     age_data_prob = age_data[:, 2]
     age_data_prob /= age_data_prob.sum()  # Ensure it sums to 1
-    age_bins = hpu.n_multinomial(age_data_prob, n_agents)  # Choose age bins
+    age_bins = ssu.n_multinomial(age_data_prob, n)  # Choose age bins
     if dt_round_age:
         ages = age_data_min[age_bins] + np.random.randint(
             age_data_range[age_bins] / dt) * dt  # Uniformly distribute within this age bin
     else:
-        ages = age_data_min[age_bins] + age_data_range[age_bins] * np.random.random(
-            n_agents)  # Uniformly distribute within this age bin
+        ages = age_data_min[age_bins] + age_data_range[age_bins] * np.random.random(n)  # Uniform  within this age bin
 
     # Store output
-    popdict = {}
-    popdict['uid'] = uids
-    popdict['age'] = ages
-    popdict['sex'] = sexes
-    popdict['debut'] = debuts
-    popdict['rel_sev'] = rel_sev
-    popdict['partners'] = partners
+    popdict = dict(
+        uid=uid,
+        age=ages,
+        female=female
+    )
 
-    is_active = ages > debuts
-    is_female = sexes == 0
-
-    # Create the contacts
-    lkeys = sim['partners'].keys()  # TODO: consider a more robust way to do this
-    if microstructure in ['random', 'default']:
-        contacts = dict()
-        current_partners = np.zeros((len(lkeys), n_agents))
-        lno = 0
-        for lkey in lkeys:
-            contacts[lkey], current_partners, _, _ = make_contacts(
-                lno=lno, tind=0, partners=partners[lno, :], current_partners=current_partners,
-                sexes=sexes, ages=ages, debuts=debuts, is_female=is_female, is_active=is_active,
-                mixing=sim['mixing'][lkey], layer_probs=sim['layer_probs'][lkey], cross_layer=sim['cross_layer'],
-                pref_weight=100, durations=sim['dur_pship'][lkey], acts=sim['acts'][lkey],
-                age_act_pars=sim['age_act_pars'][lkey], **kwargs
-            )
-            lno += 1
-
-    else:
-        errormsg = f'Microstructure type "{microstructure}" not found; choices are random or TBC'
-        raise NotImplementedError(errormsg)
-
-    popdict['contacts'] = contacts
-    popdict['current_partners'] = current_partners
-
-    return popdict
+    return total_pop, popdict

@@ -48,7 +48,7 @@ def test_people():
     return ppl
 
 
-def test_layers():
+def test_networkss():
 
     # Make completely abstract layers
     n = 10_000
@@ -56,8 +56,8 @@ def test_layers():
     p1 = np.random.randint(n_people, size=n)
     p2 = np.random.randint(n_people, size=n)
     beta = np.ones(n)
-    layer1 = ss.Layer(p1=p1, p2=p2, beta=beta, label='rand')
-    layer2 = ss.Layer(dict(p1=p1, p2=p2, beta=beta), label='rand')  # Alternate method
+    layer1 = ss.Network(p1=p1, p2=p2, beta=beta, label='rand')
+    layer2 = ss.Network(dict(p1=p1, p2=p2, beta=beta), label='rand')  # Alternate method
 
     # Make people with some extra states, then make a dynamic sexual layer and update it
     states = ss.named_dict(
@@ -65,7 +65,7 @@ def test_layers():
         ss.State('active', bool, True),
     )
     ppl = ss.People(100, states=states)  # BasePeople
-    layer3 = ss.DynamicSexualLayer()
+    layer3 = ss.DynamicSexualNetwork()
     layer3.initialize(ppl)  # Initialize with ti=0
     layer3.update(ppl, ti=1, dt=1)  # Update with a timestep of 1 and
 
@@ -115,7 +115,7 @@ if __name__ == '__main__':
     # Run tests
     # parsobj = test_parsobj()
     ppl = test_people()
-    # layer1, layer2, layer3, layer4 = test_layers()
+    nw1, nw2, nw3, nw4 = test_networks()
     # sim = test_microsim()
 
     sc.toc(T)

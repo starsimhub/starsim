@@ -12,7 +12,7 @@ from . import settings as sss
 from .version import __version__
 
 # Specify all externally visible classes this file defines
-__all__ = ['ParsObj', 'BaseSim', 'State', 'BasePeople', 'FlexDict', 'Layer']
+__all__ = ['ParsObj', 'BaseSim', 'State', 'BasePeople', 'FlexDict', 'Network']
 
 # Default object getter/setter
 obj_set = object.__setattr__
@@ -696,23 +696,20 @@ class FlexDict(dict):
         return list(super().items())
 
 
-class Layer(FlexDict):
+class Network(FlexDict):
     """
-    A small class holding a single layer of contact edges (connections) between people.
+    A small class holding a single network of contact edges (connections) between people.
 
     The input is typically arrays including: person 1 of the connection, person 2 of
     the connection, the weight of the connection, the duration and start/end times of
     the connection. Connections are undirected; each person is both a source and sink.
 
-    This class is usually not invoked directly by the user, but instead is called
-    as part of the population creation.
-
     Args:
         p1 (array): an array of N connections, representing people on one side of the connection
         p2 (array): an array of people on the other side of the connection
-        beta (array): an array representing relative transmissibility for this layer - TODO, do we need this?
-        label (str): the name of the layer (optional)
-        kwargs (dict): other keys copied directly into the layer
+        beta (array): an array representing relative transmissibility for this network - TODO, do we need this?
+        label (str): the name of the network (optional)
+        kwargs (dict): other keys copied directly into the network
 
     Note that all arguments (except for label) must be arrays of the same length,
     although not all have to be supplied at the time of creation (they must all
@@ -726,13 +723,13 @@ class Layer(FlexDict):
         p1 = np.random.randint(n_people, size=n)
         p2 = np.random.randint(n_people, size=n)
         beta = np.ones(n)
-        layer = hpv.Layer(p1=p1, p2=p2, beta=beta, label='rand')
-        layer = hpv.Layer(dict(p1=p1, p2=p2, beta=beta), label='rand') # Alternate method
+        network = ss.Network(p1=p1, p2=p2, beta=beta, label='rand')
+        network = ss.Network(dict(p1=p1, p2=p2, beta=beta), label='rand') # Alternate method
 
-        # Convert one layer to another with extra columns
+        # Convert one network to another with extra columns
         index = np.arange(n)
         self_conn = p1 == p2
-        layer2 = hpv.Layer(**layer, index=index, self_conn=self_conn, label=layer.label)
+        network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
     """
 
     def __init__(self, *args, key_dict=None, transmission='horizontal', label=None, **kwargs):
@@ -749,7 +746,7 @@ class Layer(FlexDict):
         # Handle args
         kwargs = sc.mergedicts(*args, kwargs)
 
-        # Initialize the keys of the layers
+        # Initialize the keys of the network
         for key, dtype in self.meta.items():
             self[key] = np.empty((0,), dtype=dtype)
 
@@ -771,13 +768,13 @@ class Layer(FlexDict):
         namestr = self.__class__.__name__
         labelstr = f'"{self.label}"' if self.label else '<no label>'
         keys_str = ', '.join(self.keys())
-        output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Layer("r", f, m, beta)
+        output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", f, m, beta)
         output += self.to_df().__repr__()
         return output
 
     def __contains__(self, item):
         """
-        Check if a person is present in a layer
+        Check if a person is present in a network
 
         Args:
             item: Person index
@@ -794,12 +791,12 @@ class Layer(FlexDict):
         return np.unique([self['p1'], self['p2']])
 
     def meta_keys(self):
-        """ Return the keys for the layer's meta information """
+        """ Return the keys for the network's meta information """
         return self.meta.keys()
 
     def validate(self, force=True):
         """
-        Check the integrity of the layer: right types, right lengths.
+        Check the integrity of the network: right types, right lengths.
 
         If dtype is incorrect, try to convert automatically; if length is incorrect,
         do not.
@@ -814,7 +811,7 @@ class Layer(FlexDict):
                                          dtype=expected)  # Probably harmless, so try to convert to correct type
             actual_n = len(self[key])
             if n != actual_n:
-                errormsg = f'Expecting length {n} for layer key "{key}"; got {actual_n}'  # We can't fix length mismatches
+                errormsg = f'Expecting length {n} for network key "{key}"; got {actual_n}'  # We can't fix length mismatches
                 raise TypeError(errormsg)
         return
 
@@ -835,7 +832,7 @@ class Layer(FlexDict):
     def pop_inds(self, inds):
         """
         "Pop" the specified indices from the edgelist and return them as a dict.
-        Returns arguments in the right format to be used with layer.append().
+        Returns arguments in the right format to be used with network.append().
 
         Args:
             inds (int, array, slice): the indices to be removed
@@ -844,10 +841,10 @@ class Layer(FlexDict):
 
     def append(self, contacts):
         """
-        Append contacts to the current layer.
+        Append contacts to the current network.
 
         Args:
-            contacts (dict): a dictionary of arrays with keys f,m,beta, as returned from layer.pop_inds()
+            contacts (dict): a dictionary of arrays with keys f,m,beta, as returned from network.pop_inds()
         """
         for key in self.keys():
             new_arr = contacts[key]
@@ -855,7 +852,7 @@ class Layer(FlexDict):
             n_new = len(new_arr)  # New contacts to add
             n_total = n_curr + n_new  # New size
             self[key] = np.resize(self[key], n_total)  # Resize to make room, preserving dtype
-            self[key][n_curr:] = new_arr  # Copy contacts into the layer
+            self[key][n_curr:] = new_arr  # Copy contacts into the network
         return
 
     def to_df(self):
@@ -875,10 +872,10 @@ class Layer(FlexDict):
         """
         Find all contacts of the specified people
 
-        For some purposes (e.g. contact tracing) it's necessary to find all of the contacts
-        associated with a subset of the people in this layer. Since contacts are bidirectional
+        For some purposes (e.g. contact tracing) it's necessary to find all the contacts
+        associated with a subset of the people in this network. Since contacts are bidirectional
         it's necessary to check both P1 and P2 for the target indices. The return type is a Set
-        so that there is no duplication of indices (otherwise if the Layer has explicit
+        so that there is no duplication of indices (otherwise if the Network has explicit
         symmetric interactions, they could appear multiple times). This is also for performance so
         that the calling code doesn't need to perform its own unique() operation. Note that
         this cannot be used for cases where multiple connections count differently than a single
@@ -891,7 +888,7 @@ class Layer(FlexDict):
         Returns:
             contact_inds (array): a set of indices for pairing partners
 
-        Example: If there were a layer with
+        Example: If there were a network with
         - P1 = [1,2,3,4]
         - P2 = [2,3,1,4]
         Then find_contacts([1,3]) would return {1,2,3}
