@@ -102,11 +102,11 @@ def test_microsim():
 
 def test_ppl_construction():
 
-    pars = {'networks': [ss.simple_sexual()], 'n_agents': 100}
-    gon = ss.Gonorrhea()
-    gon.pars['beta'] = {'simple_sexual': [0.08, 0.04]}
+    sim_pars = {'networks': [ss.simple_sexual()], 'n_agents': 100}
+    gon_pars = {'beta': {'simple_sexual': [0.08, 0.04]}}
+    gon = ss.Gonorrhea(pars=gon_pars)
 
-    sim = ss.Sim(pars=pars, modules=[gon])
+    sim = ss.Sim(pars=sim_pars, modules=[gon])
     sim.initialize()
     sim.run()
     plt.figure()
