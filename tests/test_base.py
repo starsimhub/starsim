@@ -91,7 +91,7 @@ def test_microsim():
 
 def test_ppl_construction():
 
-    pars = {'networks': [ss.simple_sexual()]}
+    pars = {'networks': [ss.simple_sexual()], 'n_agents': 100}
     sim = ss.Sim(pars=pars, modules=[ss.HIV(), ss.Pregnancy()])
     sim.initialize()
     sim.run()
