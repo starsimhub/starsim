@@ -6,4 +6,4 @@ __all__ = ['__version__', '__versiondate__', '__license__']
 
 __version__ = '0.0.2'
 __versiondate__ = '2023-06-29'
-__license__ = f'STIsim {__version__} ({__versiondate__}) — © 2023 by TBC'
+__license__ = f'STIsim {__version__} ({__versiondate__}) — © 2023 by IDM'
