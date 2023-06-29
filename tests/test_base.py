@@ -124,10 +124,10 @@ if __name__ == '__main__':
     T = sc.tic()
 
     # Run tests
-    # parsobj = test_parsobj()
-    # ppl = test_people()
-    # nw1, nw2, nw3, nw4 = test_networks()
-    # sim1 = test_microsim()
+    parsobj = test_parsobj()
+    ppl = test_people()
+    nw1, nw2, nw3, nw4 = test_networks()
+    sim1 = test_microsim()
     sim2 = test_ppl_construction()
 
     sc.toc(T)
