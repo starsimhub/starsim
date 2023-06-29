@@ -8,6 +8,7 @@ import numpy as np
 import stisim as ss
 from collections import defaultdict
 import pytest
+from stisim import utils as ssu
 import matplotlib.pyplot as plt
 
 
@@ -79,8 +80,13 @@ def test_microsim():
     sc.heading('Test making people and providing them to a sim')
 
     ppl = ss.People(100)
-    ppl.networks['random'] = ss.simple_sexual()
-    sim = ss.Sim(people=ppl, modules=[ss.HIV(), ss.Pregnancy()])
+    ppl.networks = ssu.named_dict(ss.simple_sexual())
+
+    # Make modules
+    hiv = ss.HIV()
+    hiv.pars['beta'] = {'simple_sexual': [], 'maternal': []}
+
+    sim = ss.Sim(people=ppl, modules=[hiv, ss.Pregnancy()])
     sim.initialize()
     sim.run()
     plt.figure()

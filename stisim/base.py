@@ -431,7 +431,7 @@ class BasePeople(FlexPretty):
 
         # Initialize states, networks, modules
         self.states = sc.mergedicts(base_states, states)
-        self.networks = sc.odict()
+        self.networks = ssu.named_dict()
         self._modules = sc.autolist()
 
         # Private variables relating to dynamic allocation
