@@ -80,30 +80,38 @@ def test_microsim():
     sc.heading('Test making people and providing them to a sim')
 
     ppl = ss.People(100)
-    ppl.networks = ssu.named_dict(ss.simple_sexual())
+    ppl.networks = ssu.named_dict(ss.simple_sexual(), ss.maternal())
 
-    # Make modules
+    # Make HIV module
     hiv = ss.HIV()
-    hiv.pars['beta'] = {'simple_sexual': [], 'maternal': []}
+    # Set beta. The first entry represents transmission risk from infected p1 -> susceptible p2
+    # Need to be careful to get the ordering right. The set-up here assumes that in the simple
+    # sexual  network, p1 is male and p2 is female. In the maternal network, p1=mothers, p2=babies.
+    hiv.pars['beta'] = {'simple_sexual': [0.0008, 0.0004], 'maternal': [0.2, 0]}
 
     sim = ss.Sim(people=ppl, modules=[hiv, ss.Pregnancy()])
     sim.initialize()
     sim.run()
+
     plt.figure()
     plt.plot(sim.tivec, sim.results.hiv.n_infected)
     plt.title('HIV number of infections')
     plt.show()
+
     return sim
 
 def test_ppl_construction():
 
     pars = {'networks': [ss.simple_sexual()], 'n_agents': 100}
-    sim = ss.Sim(pars=pars, modules=[ss.HIV(), ss.Pregnancy()])
+    gon = ss.Gonorrhea()
+    gon.pars['beta'] = {'simple_sexual': [0.08, 0.04]}
+
+    sim = ss.Sim(pars=pars, modules=[gon])
     sim.initialize()
     sim.run()
     plt.figure()
-    plt.plot(sim.tivec, sim.results.hiv.n_infected)
-    plt.title('HIV number of infections')
+    plt.plot(sim.tivec, sim.results.gonorrhea.n_infected)
+    plt.title('Number of gonorrhea infections')
     plt.show()
 
     return sim
@@ -116,10 +124,10 @@ if __name__ == '__main__':
     T = sc.tic()
 
     # Run tests
-    parsobj = test_parsobj()
-    ppl = test_people()
-    nw1, nw2, nw3, nw4 = test_networks()
-    sim1 = test_microsim()
+    # parsobj = test_parsobj()
+    # ppl = test_people()
+    # nw1, nw2, nw3, nw4 = test_networks()
+    # sim1 = test_microsim()
     sim2 = test_ppl_construction()
 
     sc.toc(T)

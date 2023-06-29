@@ -149,9 +149,9 @@ class Gonorrhea(Module):
         # What if something in here should depend on another module?
         # I guess we could just check for it e.g., 'if HIV in sim.modules' or
         # 'if 'hiv' in sim.people' or something
-        gonorrhea_deaths = sim.people.gonorrhea.ti_dead <= sim.t
+        gonorrhea_deaths = sim.people.gonorrhea.ti_dead <= sim.ti
         sim.people.alive[gonorrhea_deaths] = False
-        sim.people.date_dead[gonorrhea_deaths] = sim.t
+        sim.people.ti_dead[gonorrhea_deaths] = sim.ti
         return
 
     def initialize(self, sim):
@@ -168,9 +168,9 @@ class Gonorrhea(Module):
     def set_prognoses(self, sim, uids):
         sim.people[self.name].susceptible[uids] = False
         sim.people[self.name].infected[uids] = True
-        sim.people[self.name].ti_infected[uids] = sim.t
+        sim.people[self.name].ti_infected[uids] = sim.ti
 
-        dur = sim.t+np.random.poisson(sim.pars[self.name]['dur_inf']/sim.pars.dt, len(uids))
+        dur = sim.ti+np.random.poisson(sim.pars[self.name]['dur_inf']/sim.pars.dt, len(uids))
         dead = np.random.random(len(uids)) < sim.pars[self.name].p_death
         sim.people[self.name].ti_recovered[uids[~dead]] = dur[~dead]
         sim.people[self.name].ti_dead[uids[dead]] = dur[dead]
@@ -237,7 +237,7 @@ class Pregnancy(Module):
                 if isinstance(layer, sspop.maternal):
                     # new_birth_inds = layer.find_contacts(delivery_inds)  # Don't think we need this?
                     new_births = len(delivery_inds) * sim['pop_scale']
-                    sim.people.demographic_flows['births'] = new_births
+                    # sim.people.demographic_flows['births'] = new_births
 
         # Maternal deaths
         maternal_deaths = ssu.true(sim.people[self.name].ti_dead <= sim.ti)
@@ -279,7 +279,7 @@ class Pregnancy(Module):
                 for lkey, layer in sim.people.networks.items():
                     if layer.transmission == 'vertical':  # What happens if there's more than one vertical layer?
                         durs = np.full(n_unborn_agents, fill_value=cpars['dur_pregnancy']+cpars['dur_postpartum'])
-                        layer.add_connections(uids, new_inds, dur=durs)
+                        layer.add_pairs(uids, new_inds, dur=durs)
 
                 # Set prognoses for the pregnancies
                 self.set_prognoses(sim, uids)
