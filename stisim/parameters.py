@@ -5,8 +5,8 @@ Set parameters
 import numpy as np
 import sciris as sc
 from .settings import options as sso  # For setting global options
-from . import misc as ssm
-from .data import loaders as ssdata
+# from . import misc as ssm
+# from .data import loaders as ssdata
 
 __all__ = ['make_pars']
 
