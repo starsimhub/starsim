@@ -1,6 +1,5 @@
 '''
 Networks that connect people within a population
-TODO: rename this file networks.py?
 '''
 
 # %% Imports
