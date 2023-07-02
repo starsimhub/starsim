@@ -3,7 +3,7 @@ import numpy as np
 from .base import State
 from .results import Result
 from . import utils as ssu
-from . import population as sspop
+from . import networks as ssnet
 
 
 class Module(sc.prettyobj):
@@ -234,7 +234,7 @@ class Pregnancy(Module):
         delivery_inds = ssu.true(deliveries)
         if len(delivery_inds):
             for _, layer in sim.people.networks.items():
-                if isinstance(layer, sspop.maternal):
+                if isinstance(layer, ssnet.maternal):
                     # new_birth_inds = layer.find_contacts(delivery_inds)  # Don't think we need this?
                     new_births = len(delivery_inds) * sim['pop_scale']
                     # sim.people.demographic_flows['births'] = new_births

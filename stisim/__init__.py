@@ -5,7 +5,7 @@ from .parameters    import *
 from .utils         import *
 from .base          import *
 from .people        import *
-from .population    import *
+from .networks      import *
 from .sim           import *
 from .modules       import *
 # from .hpv           import *
