@@ -101,7 +101,18 @@ class People(ssb.BasePeople):
 def set_static(new_n, existing_n=0, pars=None, f_ratio=0.5):
     """
     Set static population characteristics that do not change over time.
-    Can be used when adding new births, in which case the existing popsize can be given.
+    This function can be used when adding new births, in which case the existing popsize can be given as `existing_n`.
+
+    Arguments:
+        new_n (int): Number of new individuals to add to the population.
+        existing_n (int, optional): Number of existing individuals in the population. Default is 0.
+        pars (dict, optional): Dictionary of parameters. Default is None.
+        f_ratio (float, optional): Female ratio in the population. Default is 0.5.
+
+    Returns:
+        uid (ndarray, int): unique identifiers for the individuals.
+        female (ndarray, bool): array indicating whether an individual is female or not.
+        debut (ndarray, bool): array indicating the debut value for each individual.
     """
     uid = np.arange(existing_n, existing_n+new_n, dtype=sss.default_int)
     female = np.random.choice([True, False], size=new_n, p=f_ratio)
