@@ -37,7 +37,6 @@ class simple_sexual(ssb.Network):
         # Find unpartnered males and females - could in principle check other contact layers too
         # by having the People object passed in here
 
-
         available_m = np.setdiff1d(people.uid[~people.female], self.members)
         available_f = np.setdiff1d(people.uid[people.female], self.members)
 

@@ -101,7 +101,7 @@ class Sim(ssb.BaseSim):
         Attempt to retrieve the current network names
         """
         try:
-            keys = list(self.people['networks'].keys())  # Get keys from acts
+            keys = list(self.people['networks'].keys())
         except:  # pragma: no cover
             keys = []
         return keys
@@ -133,7 +133,7 @@ class Sim(ssb.BaseSim):
             rounded_dt = 1.0 / reciprocal
             self['dt'] = rounded_dt
             if self['verbose']:
-                warnmsg = f"Warning: Provided time step dt: {dt} resulted in a non-integer number of steps/year. Rounded to {rounded_dt}."
+                warnmsg = f"Warning: Provided time step dt: {dt} resulted in a non-integer number of steps per year. Rounded to {rounded_dt}."
                 print(warnmsg)
 
     def validate_pars(self):
@@ -308,7 +308,7 @@ class Sim(ssb.BaseSim):
             if isinstance(analyzer, type) and issubclass(analyzer, ssa.Analyzer):
                 analyzer = analyzer()  # Convert from a class to an instance of a class
             if not (isinstance(analyzer, ssa.Analyzer) or callable(analyzer)):
-                errormsg = f'Analyzer {analyzer} does not seem to be a valid analyzer: must be a function or hpv.Analyzer subclass'
+                errormsg = f'Analyzer {analyzer} does not seem to be a valid analyzer: must be a function or Analyzer subclass'
                 raise TypeError(errormsg)
             self.analyzers += analyzer  # Add it in
 

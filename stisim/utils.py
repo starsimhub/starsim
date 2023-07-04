@@ -41,7 +41,7 @@ def unique(arr):
 
 def find_contacts(p1, p2, inds):  # pragma: no cover
     """
-    Numba for Network.find_contacts()
+    Variation on Network.find_contacts() that avoids sorting.
 
     A set is returned here rather than a sorted array so that custom tracing interventions can efficiently
     add extra people. For a version with sorting by default, see Network.find_contacts(). Indices must be

@@ -170,7 +170,7 @@ class Gonorrhea(Module):
         sim.people[self.name].infected[uids] = True
         sim.people[self.name].ti_infected[uids] = sim.ti
 
-        dur = sim.ti+np.random.poisson(sim.pars[self.name]['dur_inf']/sim.pars.dt, len(uids))
+        dur = sim.ti + np.random.poisson(sim.pars[self.name]['dur_inf']/sim.pars.dt, len(uids))
         dead = np.random.random(len(uids)) < sim.pars[self.name].p_death
         sim.people[self.name].ti_recovered[uids[~dead]] = dur[~dead]
         sim.people[self.name].ti_dead[uids[dead]] = dur[dead]

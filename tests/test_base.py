@@ -6,7 +6,6 @@ Test objects from base.py
 import sciris as sc
 import numpy as np
 import stisim as ss
-from collections import defaultdict
 import pytest
 from stisim import utils as ssu
 import matplotlib.pyplot as plt
@@ -54,11 +53,11 @@ def test_people():
 def test_networks():
 
     # Make completely abstract layers
-    n = 10_000
+    n_edges = 10_000
     n_people = 1000
-    p1 = np.random.randint(n_people, size=n)
-    p2 = np.random.randint(n_people, size=n)
-    beta = np.ones(n)
+    p1 = np.random.randint(n_people, size=n_edges)
+    p2 = np.random.randint(n_people, size=n_edges)
+    beta = np.ones(n_edges)
     nw1 = ss.Network(p1=p1, p2=p2, beta=beta, label='rand')
     nw2 = ss.Network(dict(p1=p1, p2=p2, beta=beta), label='rand')  # Alternate method
 

@@ -192,9 +192,7 @@ def help(pattern=None, source=False, ignorecase=True, flags=None, context=False,
         ss.help('contact', ignorecase=False, context=True)
         ss.help('lognormal', source=True, context=True)
     """
-    defaultmsg = '''
-Help is coming.
-'''
+    defaultmsg = '''Help is coming.'''
     # No pattern is provided, print out default help message
     if pattern is None:
         print(defaultmsg)
