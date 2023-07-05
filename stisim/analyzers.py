@@ -1,4 +1,4 @@
-from .modules import *
+from .pathogens import *
 
 
 class Analyzer:

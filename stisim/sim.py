@@ -19,8 +19,8 @@ from .results import Result
 # Define the model
 class Sim(ssb.BaseSim):
 
-    def __init__(self, pars=None, label=None, people=None, popdict=None, modules=None,
-                 networks=None, version=None, **kwargs):
+    def __init__(self, pars=None, label=None, people=None, popdict=None, pathogens=None,
+                 modules=None, networks=None, version=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
@@ -29,6 +29,7 @@ class Sim(ssb.BaseSim):
         self.popdict = popdict  # popdict used to create people
         self.networks = networks  # List of provided networks
         self.modules = ssu.named_dict(modules)  # List of modules to simulate
+        self.pathogens = ssu.named_dict(pathogens)  # List of pathogens to simulate
         self.results = sc.objdict()  # For storing results
         self.summary = None  # For storing a summary of the results
         self.initialized = False  # Whether initialization is complete
@@ -79,6 +80,7 @@ class Sim(ssb.BaseSim):
         self.init_people(popdict=popdict, reset=reset, **kwargs)  # Create all the people (the heaviest step)
         self.init_networks()
         self.init_results()
+        self.init_pathogens()
         self.init_modules()
         self.init_interventions()
         self.init_analyzers()
@@ -111,10 +113,10 @@ class Sim(ssb.BaseSim):
         """
 
         if self.people is not None:
-            modules = len(self.modules) > 0
+            pathogens = len(self.pathogens) > 0
             pop_keys = set(self.people.networks.keys())
-            if modules and not len(pop_keys):
-                warnmsg = f'Warning: your simulation has {len(self.modules)} modules but no contact layers.'
+            if pathogens and not len(pop_keys):
+                warnmsg = f'Warning: your simulation has {len(self.pathogens)} pathogens but no contact layers.'
                 ssm.warn(warnmsg, die=False)
 
         return
@@ -241,6 +243,13 @@ class Sim(ssb.BaseSim):
 
         return self
 
+    def init_pathogens(self):
+        """ Initialize pathogens to be simulated """
+        for pathogen in self.pathogens.values():
+            pathogen.initialize(self)
+        return
+
+
     def init_modules(self):
         """ Initialize modules to be simulated """
         for module in self.modules.values():
@@ -330,12 +339,12 @@ class Sim(ssb.BaseSim):
         if self.complete:
             raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
 
-        # Update states, modules, partnerships
+        # Update states, pathogens, partnerships
         self.update_demographics()
-        self.update_health_states()
+        self.update_modules()
         self.update_networks()
         # self.update_connectors()  # TODO: add this when ready
-        self.update_modules()
+        self.update_pathogens()
 
         # Tidy up
         self.ti += 1
@@ -444,7 +453,7 @@ class Sim(ssb.BaseSim):
         return
 
     def update_connectors(self):
-        if len(self.modules) > 1:
+        if len(self.pathogens) > 1:
             connectors = self['connectors']
             if len(connectors) > 0:
                 for connector in connectors:
@@ -460,18 +469,20 @@ class Sim(ssb.BaseSim):
                 return
         return
 
-    def update_health_states(self):
-        for module in self.modules.values(): # Other health states progress (disease states or pregnancy stages)
-            module.update_states(self)
-
     def update_networks(self):
         # Perform network updates
         for lkey, layer in self.people.networks.items():
             layer.update(self.people)
 
+    def update_pathogens(self):
+        for pathogen in self.pathogens.values():
+            pathogen.update_states(self)
+            pathogen.make_new_cases(self)
+            pathogen.update_results(self)
+
     def update_modules(self):
         for module in self.modules.values():
-            module.make_new_cases(self)
+            module.update_module(self)
             module.update_results(self)
 
     def update_demographics(self):
