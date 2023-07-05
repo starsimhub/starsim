@@ -31,7 +31,8 @@ class Module(sc.prettyobj):
         sim.people.add_module(self)
 
         # Pick some initially infected agents
-        self.set_prognoses(sim, np.random.choice(sim.people.uid, sim.pars[self.name]['initial']))
+        uids = self.make_init_cases(sim)
+        self.set_prognoses(sim, uids)
 
         # Validate pars
         if 'beta' not in sim.pars[self.name]:
@@ -63,6 +64,9 @@ class Module(sc.prettyobj):
 
     def set_prognoses(self, sim, uids):
         pass
+
+    def make_init_cases(self, sim):
+        return np.random.choice(sim.people.uid, sim.pars[self.name]['initial'])
 
     def update_results(self, sim):
         sim.results[self.name]['n_susceptible'][sim.ti] = np.count_nonzero(sim.people[self.name].susceptible)
@@ -110,7 +114,8 @@ class HIV(Module):
     def initialize(self, sim):
         Module.initialize(self, sim)
         sim.results[self.name]['n_art'] = Result('n_art', self.name, sim.npts, dtype=int)
-    
+
+
     def update_results(self, sim):
         super(HIV, self).update_results(sim)
         sim.results[self.name]['n_art'] = np.count_nonzero(sim.people.alive & sim.people[self.name].on_art)
