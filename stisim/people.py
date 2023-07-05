@@ -1,103 +1,164 @@
+"""
+Defines the People class and functions associated with making people
+"""
+
+# %% Imports
 import sciris as sc
 import numpy as np
-from .results import Result
+from . import base as ssb
+from . import misc as ssm
+from . import utils as ssu
+from . import settings as sss
+# from .data import loaders as ssdata
 
 
-class State():
-    # Simplified version of hpvsim.State()
-    def __init__(self, name, dtype, fill_value=0):
-        self.name = name
-        self.dtype = dtype
-        self.fill_value = fill_value
-
-    def new(self, n):
-        return np.full(n, dtype=self.dtype, fill_value=self.fill_value)
+__all__ = ['People', 'make_popdict']
 
 
-class People(sc.prettyobj):
-    # TODO - cater to use cases of
-    #   - Initial contact networks are independent of modules and we want to pre-generate agents and their contact layers
-    #   - Initial contact networks depend on modules, and we need to add the modules before adding subsequent contact layers
+# %% Main people class
 
-    # Define states that every People instance has, regardless of which modules are enabled
-    base_states = [
-        State('uid', int), # TODO: will we support removing agents? It could make indexing much more complicated...
-        State('age', float),
-        State('female', bool, False),
-        State('dead', bool, False),
-        State('ti_dead', float, np.nan), # Time index for death - defaults to natural causes but gets overwritten if they die of something first
-    ]
 
-    def __len__(self):
-        return len(self.uid)
+class People(ssb.BasePeople):
+    """
+    A class to perform all the operations on the people
+    This class is usually created automatically by the sim. The only required input
+    argument is the population size, but typically the full parameters dictionary
+    will get passed instead since it will be needed before the People object is
+    initialized.
 
-    def __getitem__(self, key):
-        return self.__getattribute__(key)
+    Note that this class handles the mechanics of updating the actual people, while
+    ``ss.BasePeople`` takes care of housekeeping (saving, loading, exporting, etc.).
+    Please see the BasePeople class for additional methods.
 
-    def __setitem__(self, key, value):
-        return self.__setattr__(key, value)
+    Args:
+        pars (dict): the sim parameters, e.g. sim.pars -- alternatively, if a number, interpreted as n_agents
+        strict (bool): whether to only create keys that are already in self.meta.person; otherwise, let any key be set
+        pop_trend (dataframe): a dataframe of years and population sizes, if available
+        kwargs (dict): the actual data, e.g. from a popdict, being specified
 
-    @property
-    def male(self):
-        return ~self.female
+    **Examples**::
+        ppl = ss.People(2000)
+    """
 
-    @property
-    def n(self):
-        return len(self)
+    # %% Basic methods
 
-    @property
-    def indices(self):
-        return self.uid
+    def __init__(self, n, states=None, strict=True, **kwargs):
+        """
+        Initialize
+        """
+        super().__init__(n, states=states)
+        if strict: self.lock()  # If strict is true, stop further keys from being set (does not affect attributes)
+        self.kwargs = kwargs
+        return
 
-    def __init__(self, n):
-        # TODO - where is the right place to change how the initial population is generated?
-        for state in self.base_states:
-            self.__setattr__(state.name, state.new(n))
-        self.uid[:] = np.arange(n)
-        self.age[:] = np.random.random(n)
-        self.female[:] = np.random.randint(0,2,n)
-        self.contacts = sc.odict()  # Dict containing Layer instances
-        self._modules = []
+    def initialize(self, popdict=None):
+        """ Perform initializations """
+        super().initialize(popdict=popdict)  # Initialize states
+        return
 
-    def add_module(self, module):
-        # Initialize all of the states associated with a module
+    def add_module(self, module, force=False):
+        # Initialize all the states associated with a module
         # This is implemented as People.add_module rather than
         # Module.add_to_people(people) or similar because its primary
-        # role is to modify the
-        if hasattr(self,module.name):
+        # role is to modify the People object
+        if hasattr(self, module.name) and not force:
             raise Exception(f'Module {module.name} already added')
         self.__setattr__(module.name, sc.objdict())
-        for state in module.states:
-            self[module.name][state.name] = state.new(self.n)
 
-    # These methods provide a single function to call that handles
-    # autonomous updates of the people, so it simplifies Sim.run()
-    # However it's a little hacky that People and Module both define
-    # these methods. Would it make sense for the base variables like
-    # UID, age etc. to be in a Module? Or are they so heavily baked into
-    # People that we don't want to separate them out?
-    def update_states_pre(self, sim):
+        for state_name, state in module.states.items():
+            combined_name = module.name + '.' + state_name
+            self._data[combined_name] = state.new(self._n)
+            self._map_arrays(keys=combined_name)
+            self.states[combined_name] = state
+
+        return
+
+    def scale_flows(self, inds):
+        """
+        Return the scaled versions of the flows -- replacement for len(inds)
+        followed by scale factor multiplication
+        """
+        return self.scale[inds].sum()
+
+    def update_states(self, sim):
+        """ Perform all state updates at the current timestep """
+
+        self.age[~self.dead] += sim.dt
         self.dead[self.ti_dead <= sim.ti] = True
 
-        for module in sim.modules:
-            module.update_states_pre(sim)
+        for module in sim.modules.values():
+            module.update_states(sim)
 
-    def initialize(self, sim):
-        sim.results['n_people'] = Result(None, 'n_people', sim.npts, dtype=int)
-        sim.results['new_deaths'] = Result(None, 'new_deaths', sim.npts, dtype=int)
+        # Perform network updates
+        for lkey, layer in self.networks.items():
+            layer.update(self)
 
-    def update_results(self, sim):
-        sim.results['new_deaths'] = np.count_nonzero(sim.people.ti_dead == sim.ti)
-
-        for module in sim.modules:
-            module.update_results(sim)
-
-    def finalize_results(self, sim):
-        pass
+        return
 
 
-def make_people(pars):
-    # A generic function to handle making people via parameters during sim.initialize()
-    # Users could also call this function to pre-generate people using the same routine beforehand
-    # Or otherwise, they can write a custom equivalent of make_people and pass it to the sim directly
-    raise NotImplementedError
+# %% Helper functions to create popdicts
+
+def set_static(new_n, existing_n=0, pars=None, f_ratio=0.5):
+    """
+    Set static population characteristics that do not change over time.
+    This function can be used when adding new births, in which case the existing popsize can be given as `existing_n`.
+
+    Arguments:
+        new_n (int): Number of new individuals to add to the population.
+        existing_n (int, optional): Number of existing individuals in the population. Default is 0.
+        pars (dict, optional): Dictionary of parameters. Default is None.
+        f_ratio (float, optional): Female ratio in the population. Default is 0.5.
+
+    Returns:
+        uid (ndarray, int): unique identifiers for the individuals.
+        female (ndarray, bool): array indicating whether an individual is female or not.
+        debut (ndarray, bool): array indicating the debut value for each individual.
+    """
+    uid = np.arange(existing_n, existing_n+new_n, dtype=sss.default_int)
+    female = np.random.choice([True, False], size=new_n, p=f_ratio)
+    n_females = len(ssu.true(female))
+    debut = np.full(new_n, np.nan, dtype=sss.default_float)
+    debut[female] = ssu.sample(**pars['debut']['m'], size=n_females)
+    debut[~female] = ssu.sample(**pars['debut']['f'], size=new_n-n_females)
+    return uid, female, debut
+
+
+def make_popdict(n=None, location=None, year=None, verbose=None, f_ratio=0.5, dt_round_age=True, dt=None):
+    """ Create a location-specific population dictionary """
+
+    # Initialize total pop size
+    total_pop = None
+
+    # Load age data for this location if available
+    if verbose:
+        print(f'Loading location-specific data for "{location}"')
+    try:
+        age_data = ssdata.get_age_distribution(location, year=year)
+        total_pop = sum(age_data[:, 2])  # Return the total population
+    except ValueError as E:
+        warnmsg = f'Could not load age data for requested location "{location}" ({str(E)})'
+        ssm.warn(warnmsg, die=True)
+
+    uid, female, debut = set_static(n, f_ratio=f_ratio)
+
+    # Set ages, rounding to nearest timestep if requested
+    age_data_min = age_data[:, 0]
+    age_data_max = age_data[:, 1]
+    age_data_range = age_data_max - age_data_min
+    age_data_prob = age_data[:, 2]
+    age_data_prob /= age_data_prob.sum()  # Ensure it sums to 1
+    age_bins = ssu.n_multinomial(age_data_prob, n)  # Choose age bins
+    if dt_round_age:
+        ages = age_data_min[age_bins] + np.random.randint(
+            age_data_range[age_bins] / dt) * dt  # Uniformly distribute within this age bin
+    else:
+        ages = age_data_min[age_bins] + age_data_range[age_bins] * np.random.random(n)  # Uniform  within this age bin
+
+    # Store output
+    popdict = dict(
+        uid=uid,
+        age=ages,
+        female=female
+    )
+
+    return total_pop, popdict

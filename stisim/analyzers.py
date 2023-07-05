@@ -1,9 +1,7 @@
-import numpy as np
-import sciris as sc
 from .modules import *
 
-class Analyzer():
 
+class Analyzer:
     requires = []
 
     # TODO - what if the analyzer depends on a specific variable? How does the analyzer know which modules are required?
@@ -20,10 +18,11 @@ class Analyzer():
         pass
 
 
-
 class CD4_analyzer(Analyzer):
-
     requires = [HIV]
+
+    def __init__(self):
+        self.cd4 = None
 
     def initialize(self, sim):
         super().initialize(sim)
