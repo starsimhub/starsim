@@ -301,7 +301,7 @@ class Pregnancy(Module):
         sim.people[self.name].ti_pregnant[uids] = sim.ti
 
         # Outcomes for pregnancies
-        dur = np.full(len(uids), sim.ti + pars['dur_pregnancy'] / sim.pars.dt)
+        dur = np.full(len(uids), sim.ti + pars['dur_pregnancy'] / sim.dt)
         dead = np.random.random(len(uids)) < sim.pars[self.name].p_death
         sim.people[self.name].ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
         dur_post_partum = np.full(len(uids), dur + pars['dur_postpartum'] / sim.dt)
