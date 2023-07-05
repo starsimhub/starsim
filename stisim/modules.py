@@ -38,7 +38,7 @@ class Module(sc.prettyobj):
 
     @property
     def name(self):
-        # The pathogen name is a lower-case version of its class name
+        # The module name is a lower-case version of its class name
         return self.__class__.__name__.lower()
 
 
