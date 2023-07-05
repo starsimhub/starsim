@@ -80,20 +80,11 @@ class People(ssb.BasePeople):
         """
         return self.scale[inds].sum()
 
-    def update_states(self, sim):
-        """ Perform all state updates at the current timestep """
+    def update_vital_dynamics(self, dt, ti):
+        """ Perform vital dynamic updates at the current timestep """
 
-        self.age[~self.dead] += sim.dt
-        self.dead[self.ti_dead <= sim.ti] = True
-
-        for module in sim.modules.values():
-            module.update_states(sim)
-
-        # Perform network updates
-        for lkey, layer in self.networks.items():
-            layer.update(self)
-
-        return
+        self.age[~self.dead] += dt
+        self.dead[self.ti_dead <= ti] = True
 
 
 # %% Helper functions to create popdicts

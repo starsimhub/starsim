@@ -326,12 +326,11 @@ class Sim(ssb.BaseSim):
             raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
 
         # Update states, modules, partnerships
-        self.people.update_states(sim=self)  # This runs modules
+        self.update_demographics()
+        self.update_health_states()
+        self.update_networks()
         # self.update_connectors()  # TODO: add this when ready
-
-        for module in self.modules.values():
-            module.make_new_cases(self)
-            module.update_results(self)
+        self.update_modules()
 
         # Tidy up
         self.ti += 1
@@ -456,6 +455,23 @@ class Sim(ssb.BaseSim):
             else:
                 return
         return
+
+    def update_health_states(self):
+        for module in self.modules.values(): # Other health states progress (disease states or pregnancy stages)
+            module.update_states(self)
+
+    def update_networks(self):
+        # Perform network updates
+        for lkey, layer in self.people.networks.items():
+            layer.update(self.people)
+
+    def update_modules(self):
+        for module in self.modules.values():
+            module.make_new_cases(self)
+            module.update_results(self)
+
+    def update_demographics(self):
+        self.people.update_vital_dynamics(dt=self.dt, ti=self.ti)
 
 
 class AlreadyRunError(RuntimeError):
