@@ -186,7 +186,6 @@ class Pregnancy(Module):
     def __init__(self, pars=None):
         super().__init__(pars)
 
-
         # Other, e.g. postpartum, on contraception...
         self.states = ssu.omerge(ssu.named_dict(
             State('infertile', bool, False),  # Applies to girls and women outside the fertility window
@@ -230,19 +229,11 @@ class Pregnancy(Module):
         sim.people[self.name].susceptible[deliveries] = False
         sim.people[self.name].ti_delivery[deliveries] = sim.ti
 
-        # Check for new kids emerging from post-partum
+        # Check for new women emerging from post-partum
         postpartum = ~sim.people[self.name].pregnant & (sim.people[self.name].ti_postpartum <= sim.ti)
         sim.people[self.name].postpartum[postpartum] = False
         sim.people[self.name].susceptible[postpartum] = True
         sim.people[self.name].ti_postpartum[postpartum] = sim.ti
-
-        delivery_inds = ssu.true(deliveries)
-        if len(delivery_inds):
-            for _, layer in sim.people.networks.items():
-                if isinstance(layer, ssnet.maternal):
-                    # new_birth_inds = layer.find_contacts(delivery_inds)  # Don't think we need this?
-                    new_births = len(delivery_inds) * sim['pop_scale']
-                    # sim.people.demographic_flows['births'] = new_births
 
         # Maternal deaths
         maternal_deaths = ssu.true(sim.people[self.name].ti_dead <= sim.ti)
