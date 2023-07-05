@@ -79,8 +79,7 @@ class Sim(ssb.BaseSim):
         self.init_people(popdict=popdict, reset=reset, **kwargs)  # Create all the people (the heaviest step)
         self.init_networks()
         self.init_results()
-        for module in self.modules.values():
-            module.initialize(self)
+        self.init_modules()
         self.init_interventions()
         self.init_analyzers()
         self.validate_layer_pars()
@@ -241,6 +240,12 @@ class Sim(ssb.BaseSim):
         self.people.dt = self.dt
 
         return self
+
+    def init_modules(self):
+        """ Initialize modules to be simulated """
+        for module in self.modules.values():
+            module.initialize(self)
+        return
 
     def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
