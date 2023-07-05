@@ -439,7 +439,6 @@ class Sim(ssb.BaseSim):
         return
 
     def update_connectors(self):
-        """ To do: move this to people? """
         if len(self.modules) > 1:
             connectors = self['connectors']
             if len(connectors) > 0:
