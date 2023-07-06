@@ -53,10 +53,7 @@ class simple_sexual(ssb.Network):
         self['p2'] = np.concatenate([self['p2'], p2])
         self['beta'] = np.concatenate([self['beta'], beta])
         self['dur'] = np.concatenate([self['dur'], dur])
-        people.current_partners[p1] += 1
-        people.current_partners[p2] += 1
-        people.lifetime_partners[p1] += 1
-        people.lifetime_partners[p2] += 1
+        self.update_partner_count(people, np.append(p1, p2))
 
     def update(self, people, dt=None):
         if dt is None: dt = people.dt
@@ -64,7 +61,7 @@ class simple_sexual(ssb.Network):
         self['dur'] = self['dur'] - dt
         active = self['dur'] > 0
         inactive = np.append(self['p1'][~active], self['p2'][~active])
-        people.current_partners[inactive] -= 1
+        self.update_partner_count(people, inactive, add=False)
 
         self['p1'] = self['p1'][active]
         self['p2'] = self['p2'][active]
@@ -268,10 +265,7 @@ class hpv_network(ssb.Network):
             beta=beta
         )
         self.append(new_contacts)
-        people.current_partners[p1] += 1
-        people.current_partners[p2] += 1
-        people.lifetime_partners[p1] += 1
-        people.lifetime_partners[p2] += 1
+        self.update_partner_count(people, np.append(p1, p2))
         return
 
     def update(self, people, ti=None, dt=None):
@@ -281,7 +275,7 @@ class hpv_network(ssb.Network):
         self['dur'] = self['dur'] - dt
         active = self['dur'] > 0
         inactive = np.append(self['p1'][~active], self['p2'][~active])
-        people.current_partners[inactive] -= 1
+        self.update_partner_count(people, inactive, add=False)
         for key in self.meta.keys():
             self[key] = self[key][active]
 

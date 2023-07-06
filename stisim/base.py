@@ -774,6 +774,13 @@ class Network(FlexDict):
             self[key] = np.array(value, dtype=self.meta.get(key))
             self.initialized = True
 
+    def update_partner_count(self, people, uids, add=True):
+        if add:
+            people.current_partners[uids] += 1
+            people.lifetime_partners[uids] += 1
+        else:
+            people.current_partners[uids] -= 1
+
     @property
     def name(self):
         # The module name is a lower-case version of its class name
