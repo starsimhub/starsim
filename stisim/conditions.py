@@ -79,6 +79,14 @@ class Pathogen(HealthCondition):
         sim.results[self.name]['prevalence'] = Result(self.name, 'prevalence', sim.npts, dtype=float)
         sim.results[self.name]['new_infections'] = Result(self.name, 'n_infected', sim.npts, dtype=int)
 
+    def update(self, sim):
+        """
+        Perform all updates
+        """
+        self.update_states(sim)
+        self.make_new_cases(sim)
+        self.update_results(sim)
+
     def update_states(self, sim):
         # Carry out any autonomous state changes at the start of the timestep
         pass
