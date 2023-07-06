@@ -284,7 +284,6 @@ class Sim(ssb.BaseSim):
 
         return
 
-
     def init_interventions(self):
         """ Initialize and validate the interventions """
 
@@ -350,15 +349,22 @@ class Sim(ssb.BaseSim):
         self.people.update_demographics(dt=self.dt, ti=self.ti)
 
     def update_networks(self):
-        # Perform network updates
+        """
+        Update networks
+        TODO: resolve where the networks live - sim.networks (akin to sim.modules), sim.people.networks, both?
+        """
         for layer in self.people.networks.values():
             layer.update(self.people)
 
     def update_modules(self):
+        """
+        Update modules
+        """
         for module in self.modules.values():
             module.update(self)
 
     def update_connectors(self):
+        """ Update connectors """
         if len(self.modules) > 1:
             connectors = self['connectors']
             if len(connectors) > 0:
