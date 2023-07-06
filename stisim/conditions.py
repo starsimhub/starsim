@@ -25,8 +25,16 @@ class HealthCondition(sc.prettyobj):
         # but subsequently conditions could have their own logic for initializing the default values
         # and initializing any outputs that are required
         sim.people.add_condition(self)
-
-    def update_condition(self, sim):
+        
+    def update(self, sim):
+        """
+        Perform all updates
+        """
+        self.update_states(sim)
+        self.make_new_cases(sim)
+        self.update_results(sim)
+   
+    def update_states(self, sim):
         # Carry out any autonomous state changes at the start of the timestep
         pass
 
@@ -40,6 +48,9 @@ class HealthCondition(sc.prettyobj):
     def name(self):
         # The condition name is a lower-case version of its class name
         return self.__class__.__name__.lower()
+
+    def make_new_cases(self, sim):
+        pass
 
 
 class Pathogen(HealthCondition):
