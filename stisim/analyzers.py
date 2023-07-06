@@ -1,4 +1,4 @@
-from .modules import *
+from .conditions import *
 
 
 class Analyzer:

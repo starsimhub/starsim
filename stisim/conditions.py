@@ -21,12 +21,12 @@ class HealthCondition(sc.prettyobj):
         sim.pars[self.name] = self.pars
         sim.results[self.name] = self.results
 
-        # Add this module to a People instance. This would always involve calling People.add_module
-        # but subsequently modules could have their own logic for initializing the default values
+        # Add this condition to a People instance. This would always involve calling People.add_condition
+        # but subsequently conditions could have their own logic for initializing the default values
         # and initializing any outputs that are required
-        sim.people.add_module(self)
+        sim.people.add_condition(self)
 
-    def update_module(self, sim):
+    def update_condition(self, sim):
         # Carry out any autonomous state changes at the start of the timestep
         pass
 
@@ -38,7 +38,7 @@ class HealthCondition(sc.prettyobj):
 
     @property
     def name(self):
-        # The module name is a lower-case version of its class name
+        # The condition name is a lower-case version of its class name
         return self.__class__.__name__.lower()
 
 
@@ -63,7 +63,7 @@ class Pathogen(HealthCondition):
         # Add this pathogen to a People instance. This would always involve calling People.add_pathogen
         # but subsequently pathogens could have their own logic for initializing the default values
         # and initializing any outputs that are required
-        sim.people.add_module(self)
+        sim.people.add_condition(self)
 
         # Pick some initially infected agents
         uids = self.make_init_cases(sim)

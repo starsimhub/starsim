@@ -1,6 +1,6 @@
 import numpy as np
 import sciris as sc
-from .modules import *
+from .conditions import *
 import stisim as ss
 
 class Intervention():

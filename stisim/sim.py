@@ -20,7 +20,7 @@ from .results import Result
 class Sim(ssb.BaseSim):
 
     def __init__(self, pars=None, label=None, people=None, popdict=None,
-                 health_conditions=None, networks=None, version=None, **kwargs):
+                 conditions=None, networks=None, version=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
@@ -28,7 +28,7 @@ class Sim(ssb.BaseSim):
         self.people = people  # People object
         self.popdict = popdict  # popdict used to create people
         self.networks = networks  # List of provided networks
-        self.health_conditions = ssu.named_dict(health_conditions)  # List of modules to simulate
+        self.conditions = ssu.named_dict(conditions)  # List of modules to simulate
         self.results = sc.objdict()  # For storing results
         self.summary = None  # For storing a summary of the results
         self.initialized = False  # Whether initialization is complete
@@ -79,7 +79,7 @@ class Sim(ssb.BaseSim):
         self.init_people(popdict=popdict, reset=reset, **kwargs)  # Create all the people (the heaviest step)
         self.init_networks()
         self.init_results()
-        self.init_health_conditions()
+        self.init_conditions()
         self.init_interventions()
         self.init_analyzers()
         self.validate_layer_pars()
@@ -242,9 +242,9 @@ class Sim(ssb.BaseSim):
         return self
 
 
-    def init_health_conditions(self):
+    def init_conditions(self):
         """ Initialize health conditions to be simulated """
-        for health_condition in self.health_conditions.values():
+        for health_condition in self.conditions.values():
             health_condition.initialize(self)
         return
 
@@ -333,7 +333,7 @@ class Sim(ssb.BaseSim):
 
         # Update states, pathogens, partnerships
         self.update_demographics()
-        self.update_health_conditions()
+        self.update_conditions()
         self.update_networks()
         # self.update_connectors()  # TODO: add this when ready
 
@@ -465,8 +465,8 @@ class Sim(ssb.BaseSim):
         for lkey, layer in self.people.networks.items():
             layer.update(self.people)
 
-    def update_health_conditions(self):
-        for health_condition in self.health_conditions.values():
+    def update_conditions(self):
+        for health_condition in self.conditions.values():
             health_condition.update_states(self)
             health_condition.make_new_cases(self)
             health_condition.update_results(self)
