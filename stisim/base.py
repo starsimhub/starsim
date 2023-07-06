@@ -607,8 +607,8 @@ class BasePeople(FlexPretty):
 
     @property
     def active(self):
-        """ Indices of everyone sexually active  """
-        return (self.current_partners > 0) & self.alive
+        """ Indices of everyone (ever) sexually active  """
+        return (self.lifetime_partners > 0) & self.alive
 
     @property
     def int_age(self):
