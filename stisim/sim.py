@@ -216,7 +216,7 @@ class Sim(ssb.BaseSim):
                 if self['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
                     errormsg = 'You can either define total_pop explicitly or via the location, but not both'
                     raise ValueError(errormsg)
-                total_pop, popdict = ssppl.make_popdict(n=self['n_agents'], location=self['location'], verbose=self['verbose'])
+                total_pop, popdict = ssppl.make_popdict(n=self['n_agents'], location=self['location'], verbose=self['verbose'], dt=self.dt)
 
             else:
                 if self['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location

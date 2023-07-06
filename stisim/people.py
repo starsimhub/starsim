@@ -9,7 +9,7 @@ from . import base as ssb
 from . import misc as ssm
 from . import utils as ssu
 from . import settings as sss
-# from .data import loaders as ssdata
+from .data import loaders as ssdata
 
 
 __all__ = ['People', 'make_popdict']
@@ -89,7 +89,7 @@ class People(ssb.BasePeople):
 
 # %% Helper functions to create popdicts
 
-def set_static(new_n, existing_n=0, pars=None, f_ratio=0.5):
+def set_static(new_n, existing_n=0, f_ratio=0.5):
     """
     Set static population characteristics that do not change over time.
     This function can be used when adding new births, in which case the existing popsize can be given as `existing_n`.
@@ -106,12 +106,8 @@ def set_static(new_n, existing_n=0, pars=None, f_ratio=0.5):
         debut (ndarray, bool): array indicating the debut value for each individual.
     """
     uid = np.arange(existing_n, existing_n+new_n, dtype=sss.default_int)
-    female = np.random.choice([True, False], size=new_n, p=f_ratio)
-    n_females = len(ssu.true(female))
-    debut = np.full(new_n, np.nan, dtype=sss.default_float)
-    debut[female] = ssu.sample(**pars['debut']['m'], size=n_females)
-    debut[~female] = ssu.sample(**pars['debut']['f'], size=new_n-n_females)
-    return uid, female, debut
+    female = np.random.binomial(1, f_ratio, new_n)
+    return uid, female
 
 
 def make_popdict(n=None, location=None, year=None, verbose=None, f_ratio=0.5, dt_round_age=True, dt=None):
@@ -130,7 +126,7 @@ def make_popdict(n=None, location=None, year=None, verbose=None, f_ratio=0.5, dt
         warnmsg = f'Could not load age data for requested location "{location}" ({str(E)})'
         ssm.warn(warnmsg, die=True)
 
-    uid, female, debut = set_static(n, f_ratio=f_ratio)
+    uid, female = set_static(n, f_ratio=f_ratio)
 
     # Set ages, rounding to nearest timestep if requested
     age_data_min = age_data[:, 0]

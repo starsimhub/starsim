@@ -115,6 +115,20 @@ def test_ppl_construction():
 
     return sim
 
+def test_loc():
+
+    sim_pars = {'n_agents': 100, 'location': 'nigeria'}
+
+    sim = ss.Sim(pars=sim_pars)
+    sim.initialize()
+    sim.run()
+    plt.figure()
+    plt.plot(sim.tivec, sim.results.n_alive)
+    plt.title('Number alive')
+    plt.show()
+
+    return sim
+
 
 
 # %% Run as a script
@@ -128,6 +142,7 @@ if __name__ == '__main__':
     nw1, nw2, nw3, nw4 = test_networks()
     sim1 = test_microsim()
     sim2 = test_ppl_construction()
+    sim3 = test_loc()
 
     sc.toc(T)
     print('Done.')

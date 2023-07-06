@@ -7,6 +7,7 @@ import pandas as pd
 import sciris as sc
 import functools
 from . import utils as ssu
+from . import parameters as ssp
 from . import misc as ssm
 from . import settings as sss
 from .version import __version__
@@ -159,6 +160,9 @@ class BaseSim(ParsObj):
         # Merge everything together
         pars = sc.mergedicts(pars, kwargs)
         if pars:
+            if pars.get('location'):
+                location = pars['location']
+                pars['birth_rates'], pars['death_rates'] = ssp.get_births_deaths(location=location) # Set birth and death rates
             super().update_pars(pars=pars, create=create)
 
         return
@@ -926,7 +930,7 @@ class Network(FlexDict):
         # Find the contacts
         contact_inds = ssu.find_contacts(self['p1'], self['p2'], inds)
         if as_array:
-            contact_inds = np.fromiter(contact_inds, dtype=ssd.default_int)
+            contact_inds = np.fromiter(contact_inds, dtype=sss.default_int)
             contact_inds.sort()  # Sorting ensures that the results are reproducible for a given seed as well as being identical to previous versions of HPVsim
 
         return contact_inds

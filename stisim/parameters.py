@@ -5,8 +5,8 @@ Set parameters
 import numpy as np
 import sciris as sc
 from .settings import options as sso  # For setting global options
-# from . import misc as ssm
-# from .data import loaders as ssdata
+from . import misc as ssm
+from .data import loaders as ssdata
 
 __all__ = ['make_pars']
 
@@ -27,7 +27,7 @@ def make_pars(**kwargs):
 
     # Population parameters
     pars['n_agents']        = 10e3          # Number of agents
-    pars['total_pop']       = 10e3          # If defined, used for calculating the scale factor
+    pars['total_pop']       = None          # If defined, used for calculating the scale factor
     pars['pop_scale']       = None          # How much to scale the population
     pars['location']        = None          # What demographics to use - NOT CURRENTLY FUNCTIONAL
     pars['birth_rates']     = None          # Birth rates, loaded below
@@ -64,27 +64,27 @@ def make_pars(**kwargs):
     return pars
 
 
-# def get_births_deaths(location, verbose=1, by_sex=True, overall=False, die=True):
-#     """
-#     Get mortality and fertility data by location if provided, or use default
-#
-#     Args:
-#         location (str):  location
-#         verbose (bool):  whether to print progress
-#         by_sex   (bool): whether to get sex-specific death rates (default true)
-#         overall  (bool): whether to get overall values ie not disaggregated by sex (default false)
-#
-#     Returns:
-#         lx (dict): dictionary keyed by sex, storing arrays of lx - the number of people who survive to age x
-#         birth_rates (arr): array of crude birth rates by year
-#     """
-#
-#     if verbose:
-#         print(f'Loading location-specific demographic data for "{location}"')
-#     try:
-#         death_rates = ssdata.get_death_rates(location=location, by_sex=by_sex, overall=overall)
-#         birth_rates = ssdata.get_birth_rates(location=location)
-#         return birth_rates, death_rates
-#     except ValueError as E:
-#         warnmsg = f'Could not load demographic data for requested location "{location}" ({str(E)})'
-#         ssm.warn(warnmsg, die=die)
+def get_births_deaths(location, verbose=1, by_sex=True, overall=False, die=True):
+    """
+    Get mortality and fertility data by location if provided, or use default
+
+    Args:
+        location (str):  location
+        verbose (bool):  whether to print progress
+        by_sex   (bool): whether to get sex-specific death rates (default true)
+        overall  (bool): whether to get overall values ie not disaggregated by sex (default false)
+
+    Returns:
+        lx (dict): dictionary keyed by sex, storing arrays of lx - the number of people who survive to age x
+        birth_rates (arr): array of crude birth rates by year
+    """
+
+    if verbose:
+        print(f'Loading location-specific demographic data for "{location}"')
+    try:
+        death_rates = ssdata.get_death_rates(location=location, by_sex=by_sex, overall=overall)
+        birth_rates = ssdata.get_birth_rates(location=location)
+        return birth_rates, death_rates
+    except ValueError as E:
+        warnmsg = f'Could not load demographic data for requested location "{location}" ({str(E)})'
+        ssm.warn(warnmsg, die=die)
