@@ -31,7 +31,8 @@ class Module(sc.prettyobj):
         sim.people.add_module(self)
 
         # Pick some initially infected agents
-        self.set_prognoses(sim, np.random.choice(sim.people.uid, sim.pars[self.name]['initial']))
+        uids = self.make_init_cases(sim)
+        self.set_prognoses(sim, uids)
 
         # Validate pars
         if 'beta' not in sim.pars[self.name]:
@@ -42,6 +43,14 @@ class Module(sc.prettyobj):
         sim.results[self.name]['n_infected'] = Result(self.name, 'n_infected', sim.npts, dtype=int)
         sim.results[self.name]['prevalence'] = Result(self.name, 'prevalence', sim.npts, dtype=float)
         sim.results[self.name]['new_infections'] = Result(self.name, 'n_infected', sim.npts, dtype=int)
+
+    def update(self, sim):
+        """
+        Perform all updates
+        """
+        self.update_states(sim)
+        self.make_new_cases(sim)
+        self.update_results(sim)
 
     def update_states(self, sim):
         # Carry out any autonomous state changes at the start of the timestep
@@ -63,6 +72,9 @@ class Module(sc.prettyobj):
 
     def set_prognoses(self, sim, uids):
         pass
+
+    def make_init_cases(self, sim):
+        return np.random.choice(sim.people.uid, sim.pars[self.name]['initial'])
 
     def update_results(self, sim):
         sim.results[self.name]['n_susceptible'][sim.ti] = np.count_nonzero(sim.people[self.name].susceptible)
@@ -110,7 +122,8 @@ class HIV(Module):
     def initialize(self, sim):
         Module.initialize(self, sim)
         sim.results[self.name]['n_art'] = Result('n_art', self.name, sim.npts, dtype=int)
-    
+
+
     def update_results(self, sim):
         super(HIV, self).update_results(sim)
         sim.results[self.name]['n_art'] = np.count_nonzero(sim.people.alive & sim.people[self.name].on_art)
@@ -181,7 +194,6 @@ class Pregnancy(Module):
     def __init__(self, pars=None):
         super().__init__(pars)
 
-
         # Other, e.g. postpartum, on contraception...
         self.states = ssu.omerge(ssu.named_dict(
             State('infertile', bool, False),  # Applies to girls and women outside the fertility window
@@ -225,19 +237,11 @@ class Pregnancy(Module):
         sim.people[self.name].susceptible[deliveries] = False
         sim.people[self.name].ti_delivery[deliveries] = sim.ti
 
-        # Check for new kids emerging from post-partum
+        # Check for new women emerging from post-partum
         postpartum = ~sim.people[self.name].pregnant & (sim.people[self.name].ti_postpartum <= sim.ti)
         sim.people[self.name].postpartum[postpartum] = False
         sim.people[self.name].susceptible[postpartum] = True
         sim.people[self.name].ti_postpartum[postpartum] = sim.ti
-
-        delivery_inds = ssu.true(deliveries)
-        if len(delivery_inds):
-            for _, layer in sim.people.networks.items():
-                if isinstance(layer, ssnet.maternal):
-                    # new_birth_inds = layer.find_contacts(delivery_inds)  # Don't think we need this?
-                    new_births = len(delivery_inds) * sim['pop_scale']
-                    # sim.people.demographic_flows['births'] = new_births
 
         # Maternal deaths
         maternal_deaths = ssu.true(sim.people[self.name].ti_dead <= sim.ti)
@@ -301,7 +305,7 @@ class Pregnancy(Module):
         sim.people[self.name].ti_pregnant[uids] = sim.ti
 
         # Outcomes for pregnancies
-        dur = np.full(len(uids), sim.ti + pars['dur_pregnancy'] / sim.pars.dt)
+        dur = np.full(len(uids), sim.ti + pars['dur_pregnancy'] / sim.dt)
         dead = np.random.random(len(uids)) < sim.pars[self.name].p_death
         sim.people[self.name].ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
         dur_post_partum = np.full(len(uids), dur + pars['dur_postpartum'] / sim.dt)

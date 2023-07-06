@@ -79,8 +79,7 @@ class Sim(ssb.BaseSim):
         self.init_people(popdict=popdict, reset=reset, **kwargs)  # Create all the people (the heaviest step)
         self.init_networks()
         self.init_results()
-        for module in self.modules.values():
-            module.initialize(self)
+        self.init_modules()
         self.init_interventions()
         self.init_analyzers()
         self.validate_layer_pars()
@@ -242,6 +241,12 @@ class Sim(ssb.BaseSim):
 
         return self
 
+    def init_modules(self):
+        """ Initialize modules to be simulated """
+        for module in self.modules.values():
+            module.initialize(self)
+        return
+
     def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
 
@@ -278,7 +283,6 @@ class Sim(ssb.BaseSim):
         self.results_ready = False
 
         return
-
 
     def init_interventions(self):
         """ Initialize and validate the interventions """
@@ -326,18 +330,55 @@ class Sim(ssb.BaseSim):
             raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
 
         # Update states, modules, partnerships
-        self.people.update_states(sim=self)  # This runs modules
+        self.update_demographics()
+        self.update_networks()
+        self.update_modules()
         # self.update_connectors()  # TODO: add this when ready
-
-        for module in self.modules.values():
-            module.make_new_cases(self)
-            module.update_results(self)
 
         # Tidy up
         self.ti += 1
         if self.ti == self.npts:
             self.complete = True
 
+        return
+
+    def update_demographics(self):
+        """
+        TODO: decide whether this method is needed
+        """
+        self.people.update_demographics(dt=self.dt, ti=self.ti)
+
+    def update_networks(self):
+        """
+        Update networks
+        TODO: resolve where the networks live - sim.networks (akin to sim.modules), sim.people.networks, both?
+        """
+        for layer in self.people.networks.values():
+            layer.update(self.people)
+
+    def update_modules(self):
+        """
+        Update modules
+        """
+        for module in self.modules.values():
+            module.update(self)
+
+    def update_connectors(self):
+        """ Update connectors """
+        if len(self.modules) > 1:
+            connectors = self['connectors']
+            if len(connectors) > 0:
+                for connector in connectors:
+                    if callable(connector):
+                        connector(self)
+                    else:
+                        warnmsg = f'Connector must be a callable function'
+                        ssm.warn(warnmsg, die=True)
+            elif self.ti == 0:  # only raise warning on first timestep
+                warnmsg = f'No connectors in sim'
+                ssm.warn(warnmsg, die=False)
+            else:
+                return
         return
 
     def run(self, until=None, reset_seed=True, verbose=None):
@@ -437,24 +478,6 @@ class Sim(ssb.BaseSim):
         self.results = sc.objdict(
             self.results)  # Convert results to a odicts/objdict to allow e.g. sim.results.diagnoses
 
-        return
-
-    def update_connectors(self):
-        """ To do: move this to people? """
-        if len(self.modules) > 1:
-            connectors = self['connectors']
-            if len(connectors) > 0:
-                for connector in connectors:
-                    if callable(connector):
-                        connector(self)
-                    else:
-                        warnmsg = f'Connector must be a callable function'
-                        ssm.warn(warnmsg, die=True)
-            elif self.ti == 0:  # only raise warning on first timestep
-                warnmsg = f'No connectors in sim'
-                ssm.warn(warnmsg, die=False)
-            else:
-                return
         return
 
 
