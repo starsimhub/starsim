@@ -19,8 +19,8 @@ from .results import Result
 # Define the model
 class Sim(ssb.BaseSim):
 
-    def __init__(self, pars=None, label=None, people=None, popdict=None, pathogens=None,
-                 modules=None, networks=None, version=None, **kwargs):
+    def __init__(self, pars=None, label=None, people=None, popdict=None,
+                 health_conditions=None, networks=None, version=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
@@ -28,8 +28,7 @@ class Sim(ssb.BaseSim):
         self.people = people  # People object
         self.popdict = popdict  # popdict used to create people
         self.networks = networks  # List of provided networks
-        self.modules = ssu.named_dict(modules)  # List of modules to simulate
-        self.pathogens = ssu.named_dict(pathogens)  # List of pathogens to simulate
+        self.health_conditions = ssu.named_dict(health_conditions)  # List of modules to simulate
         self.results = sc.objdict()  # For storing results
         self.summary = None  # For storing a summary of the results
         self.initialized = False  # Whether initialization is complete
@@ -80,8 +79,7 @@ class Sim(ssb.BaseSim):
         self.init_people(popdict=popdict, reset=reset, **kwargs)  # Create all the people (the heaviest step)
         self.init_networks()
         self.init_results()
-        self.init_pathogens()
-        self.init_modules()
+        self.init_health_conditions()
         self.init_interventions()
         self.init_analyzers()
         self.validate_layer_pars()
@@ -243,17 +241,11 @@ class Sim(ssb.BaseSim):
 
         return self
 
-    def init_pathogens(self):
-        """ Initialize pathogens to be simulated """
-        for pathogen in self.pathogens.values():
-            pathogen.initialize(self)
-        return
 
-
-    def init_modules(self):
-        """ Initialize modules to be simulated """
-        for module in self.modules.values():
-            module.initialize(self)
+    def init_health_conditions(self):
+        """ Initialize health conditions to be simulated """
+        for health_condition in self.health_conditions.values():
+            health_condition.initialize(self)
         return
 
     def init_networks(self):
@@ -341,10 +333,9 @@ class Sim(ssb.BaseSim):
 
         # Update states, pathogens, partnerships
         self.update_demographics()
-        self.update_modules()
+        self.update_health_conditions()
         self.update_networks()
         # self.update_connectors()  # TODO: add this when ready
-        self.update_pathogens()
 
         # Tidy up
         self.ti += 1
@@ -474,16 +465,12 @@ class Sim(ssb.BaseSim):
         for lkey, layer in self.people.networks.items():
             layer.update(self.people)
 
-    def update_pathogens(self):
-        for pathogen in self.pathogens.values():
-            pathogen.update_states(self)
-            pathogen.make_new_cases(self)
-            pathogen.update_results(self)
+    def update_health_conditions(self):
+        for health_condition in self.health_conditions.values():
+            health_condition.update_states(self)
+            health_condition.make_new_cases(self)
+            health_condition.update_results(self)
 
-    def update_modules(self):
-        for module in self.modules.values():
-            module.update_module(self)
-            module.update_results(self)
 
     def update_demographics(self):
         self.people.update_vital_dynamics(dt=self.dt, ti=self.ti)

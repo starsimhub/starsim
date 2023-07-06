@@ -7,7 +7,6 @@ from .base          import *
 from .people        import *
 from .networks      import *
 from .sim           import *
-from .pathogens     import *
 from .modules       import *
 # from .hpv           import *
 

@@ -56,23 +56,6 @@ class People(ssb.BasePeople):
         super().initialize(popdict=popdict)  # Initialize states
         return
 
-    def add_pathogen(self, pathogen, force=False):
-        # Initialize all the states associated with a pathogen
-        # This is implemented as People.add_pathogen rather than
-        # Pathogen.add_to_people(people) or similar because its primary
-        # role is to modify the People object
-        if hasattr(self, pathogen.name) and not force:
-            raise Exception(f'Pathogen {pathogen.name} already added')
-        self.__setattr__(pathogen.name, sc.objdict())
-
-        for state_name, state in pathogen.states.items():
-            combined_name = pathogen.name + '.' + state_name
-            self._data[combined_name] = state.new(self._n)
-            self._map_arrays(keys=combined_name)
-            self.states[combined_name] = state
-
-        return
-
     def add_module(self, module, force=False):
         # Initialize all the states associated with a module
         # This is implemented as People.add_module rather than

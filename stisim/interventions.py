@@ -1,6 +1,6 @@
 import numpy as np
 import sciris as sc
-from .pathogens import *
+from .modules import *
 import stisim as ss
 
 class Intervention():
