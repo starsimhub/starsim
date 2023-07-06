@@ -80,7 +80,7 @@ class People(ssb.BasePeople):
         """
         return self.scale[inds].sum()
 
-    def update_vital_dynamics(self, dt, ti):
+    def update_demographics(self, dt, ti):
         """ Perform vital dynamic updates at the current timestep """
 
         self.age[~self.dead] += dt

@@ -284,7 +284,6 @@ class Sim(ssb.BaseSim):
 
         return
 
-
     def init_interventions(self):
         """ Initialize and validate the interventions """
 
@@ -332,16 +331,54 @@ class Sim(ssb.BaseSim):
 
         # Update states, modules, partnerships
         self.update_demographics()
-        self.update_health_states()
         self.update_networks()
-        # self.update_connectors()  # TODO: add this when ready
         self.update_modules()
+        # self.update_connectors()  # TODO: add this when ready
 
         # Tidy up
         self.ti += 1
         if self.ti == self.npts:
             self.complete = True
 
+        return
+
+    def update_demographics(self):
+        """
+        TODO: decide whether this method is needed
+        """
+        self.people.update_demographics(dt=self.dt, ti=self.ti)
+
+    def update_networks(self):
+        """
+        Update networks
+        TODO: resolve where the networks live - sim.networks (akin to sim.modules), sim.people.networks, both?
+        """
+        for layer in self.people.networks.values():
+            layer.update(self.people)
+
+    def update_modules(self):
+        """
+        Update modules
+        """
+        for module in self.modules.values():
+            module.update(self)
+
+    def update_connectors(self):
+        """ Update connectors """
+        if len(self.modules) > 1:
+            connectors = self['connectors']
+            if len(connectors) > 0:
+                for connector in connectors:
+                    if callable(connector):
+                        connector(self)
+                    else:
+                        warnmsg = f'Connector must be a callable function'
+                        ssm.warn(warnmsg, die=True)
+            elif self.ti == 0:  # only raise warning on first timestep
+                warnmsg = f'No connectors in sim'
+                ssm.warn(warnmsg, die=False)
+            else:
+                return
         return
 
     def run(self, until=None, reset_seed=True, verbose=None):
@@ -442,40 +479,6 @@ class Sim(ssb.BaseSim):
             self.results)  # Convert results to a odicts/objdict to allow e.g. sim.results.diagnoses
 
         return
-
-    def update_connectors(self):
-        if len(self.modules) > 1:
-            connectors = self['connectors']
-            if len(connectors) > 0:
-                for connector in connectors:
-                    if callable(connector):
-                        connector(self)
-                    else:
-                        warnmsg = f'Connector must be a callable function'
-                        ssm.warn(warnmsg, die=True)
-            elif self.ti == 0:  # only raise warning on first timestep
-                warnmsg = f'No connectors in sim'
-                ssm.warn(warnmsg, die=False)
-            else:
-                return
-        return
-
-    def update_health_states(self):
-        for module in self.modules.values(): # Other health states progress (disease states or pregnancy stages)
-            module.update_states(self)
-
-    def update_networks(self):
-        # Perform network updates
-        for lkey, layer in self.people.networks.items():
-            layer.update(self.people)
-
-    def update_modules(self):
-        for module in self.modules.values():
-            module.make_new_cases(self)
-            module.update_results(self)
-
-    def update_demographics(self):
-        self.people.update_vital_dynamics(dt=self.dt, ti=self.ti)
 
 
 class AlreadyRunError(RuntimeError):
