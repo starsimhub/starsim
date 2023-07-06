@@ -28,7 +28,7 @@ class Sim(ssb.BaseSim):
         self.people = people  # People object
         self.popdict = popdict  # popdict used to create people
         self.networks = networks  # List of provided networks
-        self.conditions = ssu.named_dict(conditions)  # List of modules to simulate
+        self.conditions = ssu.named_dict(conditions)  # List of conditions to simulate
         self.results = sc.objdict()  # For storing results
         self.summary = None  # For storing a summary of the results
         self.initialized = False  # Whether initialization is complete
@@ -240,7 +240,6 @@ class Sim(ssb.BaseSim):
         self.people.dt = self.dt
 
         return self
-
 
     def init_conditions(self):
         """ Initialize health conditions to be simulated """
