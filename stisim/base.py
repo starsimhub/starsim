@@ -12,7 +12,7 @@ from . import settings as sss
 from .version import __version__
 
 # Specify all externally visible classes this file defines
-__all__ = ['ParsObj', 'BaseSim', 'State', 'StochState', 'BasePeople', 'FlexDict']#, 'Network']
+__all__ = ['ParsObj', 'BaseSim', 'State', 'StochState', 'BasePeople', 'FlexDict']
 
 # Default object getter/setter
 obj_set = object.__setattr__
