@@ -123,7 +123,6 @@ class HIV(Module):
         Module.initialize(self, sim)
         sim.results[self.name]['n_art'] = Result('n_art', self.name, sim.npts, dtype=int)
 
-
     def update_results(self, sim):
         super(HIV, self).update_results(sim)
         sim.results[self.name]['n_art'] = np.count_nonzero(sim.people.alive & sim.people[self.name].on_art)
