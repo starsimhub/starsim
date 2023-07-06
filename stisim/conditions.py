@@ -90,18 +90,6 @@ class Pathogen(Condition):
         sim.results[self.name]['prevalence'] = Result(self.name, 'prevalence', sim.npts, dtype=float)
         sim.results[self.name]['new_infections'] = Result(self.name, 'n_infected', sim.npts, dtype=int)
 
-    def update(self, sim):
-        """
-        Perform all updates
-        """
-        self.update_states(sim)
-        self.make_new_cases(sim)
-        self.update_results(sim)
-
-    def update_states(self, sim):
-        # Carry out any autonomous state changes at the start of the timestep
-        pass
-
     def make_new_cases(self, sim):
         """ Add new cases of pathogen, through transmission, incidence, etc. """
         pars = sim.pars[self.name]
@@ -235,7 +223,7 @@ class Gonorrhea(Pathogen):
         sim.people[self.name].ti_dead[uids[dead]] = dur[dead]
 
 
-class Pregnancy(HealthCondition):
+class Pregnancy(Condition):
 
     def __init__(self, pars=None):
         super().__init__(pars)
@@ -268,7 +256,7 @@ class Pregnancy(HealthCondition):
         Still unclear whether this logic should live in the pregnancy module, the
         individual disease modules, the connectors, or the sim.
         """
-        HealthCondition.initialize(self, sim)
+        Condition.initialize(self, sim)
         sim.results[self.name]['pregnancies'] = Result('pregnancies', self.name, sim.npts, dtype=int)
         sim.results[self.name]['births'] = Result('births', self.name, sim.npts, dtype=int)
         sim['birth_rates'] = None  # This turns off birth rate pars so births only come from this module
