@@ -6,8 +6,8 @@ from . import utils as ssu
 from . import networks as ssnet
 
 
-class HealthCondition(sc.prettyobj):
-    # Base health condition contains states/attributes
+class Condition(sc.prettyobj):
+    # Base condition contains states/attributes
 
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -53,7 +53,7 @@ class HealthCondition(sc.prettyobj):
         pass
 
 
-class Pathogen(HealthCondition):
+class Pathogen(Condition):
     # Base pathogen contains states/attributes that all pathogens have
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__(*args, **kwargs)

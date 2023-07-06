@@ -7,7 +7,7 @@ from .base          import *
 from .people        import *
 from .networks      import *
 from .sim           import *
-from .conditions       import *
+from .conditions    import *
 # from .hpv           import *
 
 

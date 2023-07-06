@@ -244,8 +244,8 @@ class Sim(ssb.BaseSim):
 
     def init_conditions(self):
         """ Initialize health conditions to be simulated """
-        for health_condition in self.conditions.values():
-            health_condition.initialize(self)
+        for condition in self.conditions.values():
+            condition.initialize(self)
         return
 
     def init_networks(self):
