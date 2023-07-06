@@ -45,7 +45,7 @@ def test_people():
     ppl = ss.People(100, states=extra_states)
 
     # Possible to add a pathogen to people outside a sim (not typical workflow)
-    ppl.add_pathogen(ss.HIV())
+    ppl.add_condition(ss.HIV())
 
     return ppl
 
@@ -64,9 +64,9 @@ def test_networks():
     # Make people, then make a dynamic sexual layer and update it
     ppl = ss.People(100)  # BasePeople
     ppl.initialize()  # This seems to be necessary, although not completely clear why...
-    nw3 = ss.hpv_network()
+    nw3 = ss.simple_sexual()
     nw3.initialize(ppl)
-    nw3.update(ppl, ti=1, dt=1)  # Update by providing a timestep & current time index
+    nw3.update(ppl, dt=1)  # Update by providing a timestep & current time index
 
     nw4 = ss.maternal()
     nw4.initialize(ppl)
@@ -88,7 +88,7 @@ def test_microsim():
     # sexual  network, p1 is male and p2 is female. In the maternal network, p1=mothers, p2=babies.
     hiv.pars['beta'] = {'simple_sexual': [0.0008, 0.0004], 'maternal': [0.2, 0]}
 
-    sim = ss.Sim(people=ppl, pathogens=[hiv], modules=[ss.Pregnancy()])
+    sim = ss.Sim(people=ppl, conditions=[hiv, ss.Pregnancy()])
     sim.initialize()
     sim.run()
 
@@ -105,7 +105,7 @@ def test_ppl_construction():
     gon_pars = {'beta': {'simple_sexual': [0.08, 0.04]}}
     gon = ss.Gonorrhea(pars=gon_pars)
 
-    sim = ss.Sim(pars=sim_pars, pathogens=[gon])
+    sim = ss.Sim(pars=sim_pars, conditions=[gon])
     sim.initialize()
     sim.run()
     plt.figure()

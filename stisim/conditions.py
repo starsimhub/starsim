@@ -157,7 +157,7 @@ class HIV(Pathogen):
 
     def make_new_cases(self, sim):
         # eff_condoms = sim.pars[self.name]['eff_condoms'] # TODO figure out how to add this
-        super().make_new_cases(sim)
+        super(HIV, self).make_new_cases(sim)
     
     def set_prognoses(self, sim, uids):
         sim.people[self.name].susceptible[uids] = False
@@ -249,7 +249,7 @@ class Pregnancy(HealthCondition):
         Still unclear whether this logic should live in the pregnancy module, the
         individual disease modules, the connectors, or the sim.
         """
-        Pathogen.initialize(self, sim)
+        HealthCondition.initialize(self, sim)
         sim.results[self.name]['pregnancies'] = Result('pregnancies', self.name, sim.npts, dtype=int)
         sim.results[self.name]['births'] = Result('births', self.name, sim.npts, dtype=int)
         sim['birth_rates'] = None  # This turns off birth rate pars so births only come from this module

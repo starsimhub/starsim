@@ -408,7 +408,9 @@ base_states = ssu.named_dict(
     State('uid', sss.default_int),
     State('age', sss.default_float),
     State('female', bool, False),
-    State('debut', sss.default_float),
+    # State('debut', sss.default_float),
+    State('current_partners', sss.default_int, 0),
+    State('lifetime_partners', sss.default_int, 0),
     State('dead', bool, False),
     State('ti_dead', sss.default_float, np.nan),  # Time index for death
     State('scale', sss.default_float, 1.0),
@@ -606,7 +608,7 @@ class BasePeople(FlexPretty):
     @property
     def active(self):
         """ Indices of everyone sexually active  """
-        return (self.age >= self.debut) & self.alive
+        return (self.current_partners > 0) & self.alive
 
     @property
     def int_age(self):

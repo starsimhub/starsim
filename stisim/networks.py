@@ -53,12 +53,19 @@ class simple_sexual(ssb.Network):
         self['p2'] = np.concatenate([self['p2'], p2])
         self['beta'] = np.concatenate([self['beta'], beta])
         self['dur'] = np.concatenate([self['dur'], dur])
+        people.current_partners[p1] += 1
+        people.current_partners[p2] += 1
+        people.lifetime_partners[p1] += 1
+        people.lifetime_partners[p2] += 1
 
     def update(self, people, dt=None):
         if dt is None: dt = people.dt
         # First remove any relationships due to end
         self['dur'] = self['dur'] - dt
         active = self['dur'] > 0
+        inactive = np.append(self['p1'][~active], self['p2'][~active])
+        people.current_partners[inactive] -= 1
+
         self['p1'] = self['p1'][active]
         self['p2'] = self['p2'][active]
         self['beta'] = self['beta'][active]
@@ -131,7 +138,7 @@ class hpv_network(ssb.Network):
 
         participation = np.array([
                 [ 0,  5,    10,    15,   20,   25,   30,   35,    40,    45,    50,    55,    60,    65,    70,    75],
-                [ 0,  0,  0.10,   0.7,  0.8,  0.6,  0.6,  0.4,   0.1,  0.05, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001], # Share of females of each age newly having casual relationships
+                [ 0,  0,  0.001,   0.7,  0.8,  0.6,  0.6,  0.4,   0.1,  0.05, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001], # Share of females of each age newly having casual relationships
                 [ 0,  0,  0.05,   0.7,  0.8,  0.6,  0.6,  0.4,   0.4,   0.3,   0.1,  0.05,  0.01,  0.01, 0.001, 0.001]], # Share of males of each age newly having casual relationships
             )
 
@@ -147,9 +154,7 @@ class hpv_network(ssb.Network):
     def add_pairs(self, people, ti=0):
 
         female = people.female
-        active = people.active
-        f_active = female & active
-        m_active = ~female & active
+        male = ~female
 
         # Compute number of partners
         f_partnered_inds, f_partnered_counts = np.unique(self['p1'], return_counts=True)
@@ -159,8 +164,8 @@ class hpv_network(ssb.Network):
         current_partners[m_partnered_inds] = m_partnered_counts
         partners = ssu.sample(**self.pars['partners'], size=len(people)) + 1
         underpartnered = current_partners < partners  # Indices of underpartnered people
-        f_eligible = f_active & underpartnered
-        m_eligible = m_active & underpartnered
+        f_eligible = female & underpartnered
+        m_eligible = male & underpartnered
 
         # Bin the agents by age
         bins = self.pars['participation'][0, :]  # Extract age bins

@@ -111,10 +111,10 @@ class Sim(ssb.BaseSim):
         """
 
         if self.people is not None:
-            pathogens = len(self.pathogens) > 0
+            conditions = len(self.conditions) > 0
             pop_keys = set(self.people.networks.keys())
-            if pathogens and not len(pop_keys):
-                warnmsg = f'Warning: your simulation has {len(self.pathogens)} pathogens but no contact layers.'
+            if conditions and not len(pop_keys):
+                warnmsg = f'Warning: your simulation has {len(self.conditions)} conditions but no contact layers.'
                 ssm.warn(warnmsg, die=False)
 
         return
