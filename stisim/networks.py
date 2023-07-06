@@ -268,6 +268,10 @@ class hpv_network(ssb.Network):
             beta=beta
         )
         self.append(new_contacts)
+        people.current_partners[p1] += 1
+        people.current_partners[p2] += 1
+        people.lifetime_partners[p1] += 1
+        people.lifetime_partners[p2] += 1
         return
 
     def update(self, people, ti=None, dt=None):
@@ -276,6 +280,8 @@ class hpv_network(ssb.Network):
         # First remove any relationships due to end
         self['dur'] = self['dur'] - dt
         active = self['dur'] > 0
+        inactive = np.append(self['p1'][~active], self['p2'][~active])
+        people.current_partners[inactive] -= 1
         for key in self.meta.keys():
             self[key] = self[key][active]
 
