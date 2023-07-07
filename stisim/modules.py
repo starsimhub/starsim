@@ -30,15 +30,29 @@ class Module(sc.prettyobj):
         # and initializing any outputs that are required
         sim.people.add_module(self)
 
-        # Pick some initially infected agents
-        uids = self.make_init_cases(sim)
-        self.set_prognoses(sim, uids)
+        # Initialization steps
+        self.validate_pars(sim)
+        self.init_states(sim)
+        self.init_results(sim)
 
-        # Validate pars
+    def validate_pars(self, sim):
+        """
+        Perform any parameter validation
+        """
         if 'beta' not in sim.pars[self.name]:
             sim.pars[self.name].beta = sc.objdict({k: [1, 1] for k in sim.people.networks})
 
-        # Initialize results
+    def init_states(self, sim):
+        """
+        Initialize states. This could involve passing in a full set of initial conditions, or using init_prev, or other
+        """
+        initial_cases = np.random.choice(sim.people.uid, sim.pars[self.name]['initial'])
+        self.set_prognoses(sim, initial_cases)
+
+    def init_results(self, sim):
+        """
+        Initialize results. TODO, should these be stored in the module or just added directly to the sim?
+        """
         sim.results[self.name]['n_susceptible'] = Result(self.name, 'n_susceptible', sim.npts, dtype=int)
         sim.results[self.name]['n_infected'] = Result(self.name, 'n_infected', sim.npts, dtype=int)
         sim.results[self.name]['prevalence'] = Result(self.name, 'prevalence', sim.npts, dtype=float)
@@ -72,9 +86,6 @@ class Module(sc.prettyobj):
 
     def set_prognoses(self, sim, uids):
         pass
-
-    def make_init_cases(self, sim):
-        return np.random.choice(sim.people.uid, sim.pars[self.name]['initial'])
 
     def update_results(self, sim):
         sim.results[self.name]['n_susceptible'][sim.ti] = np.count_nonzero(sim.people[self.name].susceptible)
@@ -119,10 +130,9 @@ class HIV(Module):
         hivppl.cd4[sim.people.alive & hivppl.infected & ~hivppl.on_art] += (sim.pars.hiv.cd4_min - hivppl.cd4[sim.people.alive & hivppl.infected & ~hivppl.on_art])/sim.pars.hiv.cd4_rate
         return
 
-    def initialize(self, sim):
-        Module.initialize(self, sim)
+    def init_results(self, sim):
+        Module.init_results(self, sim)
         sim.results[self.name]['n_art'] = Result('n_art', self.name, sim.npts, dtype=int)
-
 
     def update_results(self, sim):
         super(HIV, self).update_results(sim)
@@ -167,11 +177,6 @@ class Gonorrhea(Module):
         sim.people.ti_dead[gonorrhea_deaths] = sim.ti
         return
 
-    def initialize(self, sim):
-        # Do any steps in this method depend on what other modules are going to be added? We can inspect
-        # them via sim.modules at this point
-        Module.initialize(self, sim)
-    
     def update_results(self, sim):
         super(Gonorrhea, self).update_results(sim)
     
@@ -217,18 +222,23 @@ class Pregnancy(Module):
         return
 
     def initialize(self, sim):
+        Module.initialize(self, sim)
+        sim['birth_rates'] = None  # This turns off birth rate pars so births only come from this module
+
+    def init_results(self, sim):
         """
         Results could include a range of birth outcomes e.g. LGA, stillbirths, etc.
         Still unclear whether this logic should live in the pregnancy module, the
         individual disease modules, the connectors, or the sim.
         """
-        Module.initialize(self, sim)
         sim.results[self.name]['pregnancies'] = Result('pregnancies', self.name, sim.npts, dtype=int)
         sim.results[self.name]['births'] = Result('births', self.name, sim.npts, dtype=int)
-        sim['birth_rates'] = None  # This turns off birth rate pars so births only come from this module
         return
 
     def update_states(self, sim):
+        """
+        Update states
+        """
 
         # Check for new deliveries
         deliveries = sim.people[self.name].pregnant & (sim.people[self.name].ti_delivery <= sim.ti)
