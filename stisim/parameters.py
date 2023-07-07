@@ -12,21 +12,50 @@ __all__ = ['make_default_pars']
 
 
 class PrettyParameter(sc.prettyobj):
-    def __init__(self, name, dtype, fill_value=0, shape=None, label=None):
+    def __init__(self, name, dtype, default_value=0, ptype="required", valid_range=None, category=None, validator=None, label=None,
+                 has_been_validated=False, nondefault=False, enabled=True):
         """
         Args:
-            name: name of the result as used in the model
-            dtype: datatype
-            fill_value: default value for this state upon model initialization
-            shape: If not none, set to match a string in `pars` containing the dimensionality
-            label: text used to construct labels for the result for displaying on plots and other outputs
+            name: (str) name of the parameter
+            dtype: (type) datatype
+            ptype: (str) parameter type, three values "required", "optional", "derived"
+            category: (str) what component or module this parameter belongs to (ie, sim, people, network) -- may not be necessary
+            valid_range (list, tuple, dict?): the range of validity (numerical), or the valid set (categorical)
+            validator: (callable) function that validates the parameter value
+            default_value:  default value for this state upon initialization
+            has_been_validated: (bool) whether the parameter has passed validation
+            enabled: (bool) whether the parameter is not available (ie, because a module/disease/ is not available)
+            nondefault: (bool) whether user has modified from default parameter
+            label: (str) text used to construct labels for the result for displaying on plots and other outputs
         """
         self.name = name
         self.dtype = dtype
-        self.fill_value = fill_value
-        self.shape = shape
+        self.ptype = ptype
+        self.category = category
+        self.valid_range = valid_range
+        self.has_been_validated = has_been_validated
+        self.nondefault = nondefault
+        self.enabled = enabled
+        self.default_value = default_value
         self.label = label or name
         return
+
+    def validate(self):
+        """
+        Perform basic validation
+        :return:
+        """
+        pass
+
+    def update(self):
+        """Update parameter value"""
+        pass
+
+    def display(self):
+        """
+        A pretty way of displaying this parameter
+        """
+        pass
 
 
 
@@ -36,6 +65,10 @@ def make_default_pars(**kwargs):
     internally rather than called by the user; e.g. typical use would be to do
     sim = ss.Sim() and then inspect sim.pars, rather than calling this function
     directly.
+
+    #NOTE: current pars is acting as a more general inputs structure to the simulation, rather than
+    as model parameters -- though it may be a matter of semantics what we categorise as parameters.
+    Parameters are inputs but not all inputs are parameters?
 
     Args:
         kwargs        (dict): any additional kwargs are interpreted as parameter names
