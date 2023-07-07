@@ -31,9 +31,9 @@ class Module(sc.prettyobj):
         sim.people.add_module(self)
 
         # Initialization steps
-        self.validate_pars()
-        self.init_states()
-        self.init_results()
+        self.validate_pars(sim)
+        self.init_states(sim)
+        self.init_results(sim)
 
     def validate_pars(self, sim):
         """
