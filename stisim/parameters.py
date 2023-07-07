@@ -8,7 +8,7 @@ from .settings import options as sso  # For setting global options
 # from . import misc as ssm
 # from .data import loaders as ssdata
 
-__all__ = ['make_pars']
+__all__ = ['make_default_pars']
 
 
 class PrettyParameter(sc.prettyobj):
@@ -30,7 +30,7 @@ class PrettyParameter(sc.prettyobj):
 
 
 
-def make_pars(**kwargs):
+def make_default_pars(**kwargs):
     """
     Create the parameters for the simulation. Typically, this function is used
     internally rather than called by the user; e.g. typical use would be to do
