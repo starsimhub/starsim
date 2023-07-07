@@ -13,7 +13,7 @@ __all__ = ['make_default_pars']
 
 class PrettyParameter(sc.prettyobj):
     def __init__(self, name, dtype, default_value=0, ptype="required", valid_range=None, category=None, validator=None, label=None,
-                 has_been_validated=False, nondefault=False, enabled=True):
+                 description="#TODO Document me", units="dimensionless",  has_been_validated=False, nondefault=False, enabled=True):
         """
         Args:
             name: (str) name of the parameter
@@ -38,6 +38,8 @@ class PrettyParameter(sc.prettyobj):
         self.enabled = enabled
         self.default_value = default_value
         self.label = label or name
+        self.description = description
+        self.units = units
         return
 
     def validate(self):
@@ -58,6 +60,11 @@ class PrettyParameter(sc.prettyobj):
         pass
 
 
+
+class ParameterInt():
+    pass
+
+class ParameterFloat():
 
 def make_default_pars(**kwargs):
     """
