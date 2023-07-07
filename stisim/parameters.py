@@ -5,15 +5,18 @@ Set parameters
 import numpy as np
 import sciris as sc
 from .settings import options as sso  # For setting global options
+
 # from . import misc as ssm
 # from .data import loaders as ssdata
 
-__all__ = ['make_default_pars']
+__all__ = ['make_default_pars', 'BaseParameter']
 
 
-class PrettyParameter(sc.prettyobj):
-    def __init__(self, name, dtype, default_value=0, ptype="required", valid_range=None, category=None, validator=None, label=None,
-                 description="#TODO Document me", units="dimensionless",  has_been_validated=False, nondefault=False, enabled=True):
+class BaseParameter(sc.prettyobj):
+    def __init__(self, name, dtype, default_value=0, ptype="required", valid_range=None, category=None, validator=None,
+                 label=None,
+                 description="#TODO Document me", units="dimensionless", has_been_validated=False, nondefault=False,
+                 enabled=True):
         """
         Args:
             name: (str) name of the parameter
@@ -23,6 +26,7 @@ class PrettyParameter(sc.prettyobj):
             valid_range (list, tuple, dict?): the range of validity (numerical), or the valid set (categorical)
             validator: (callable) function that validates the parameter value
             default_value:  default value for this state upon initialization
+            value: curent value of this instance
             has_been_validated: (bool) whether the parameter has passed validation
             enabled: (bool) whether the parameter is not available (ie, because a module/disease/ is not available)
             nondefault: (bool) whether user has modified from default parameter
@@ -33,6 +37,7 @@ class PrettyParameter(sc.prettyobj):
         self.ptype = ptype
         self.category = category
         self.valid_range = valid_range
+        self.validator = validator
         self.has_been_validated = has_been_validated
         self.nondefault = nondefault
         self.enabled = enabled
@@ -40,31 +45,85 @@ class PrettyParameter(sc.prettyobj):
         self.label = label or name
         self.description = description
         self.units = units
-        return
+        self.value = default_value
+
+        if self.validator is not None:
+            self.validate()
 
     def validate(self):
         """
-        Perform basic validation
-        :return:
+        Method to validate parameter values
+
+        Returns
+        -------
+        bool or raise a value error if validation fails
+
         """
-        pass
+        # Perform parameter specific validation defined in self.validator
+        if self.validator is not None:
+            if not callable(self.validator):
+                raise ValueError("Validator is not callable.")
+            if not self.validator.__call__(self.value):
+                raise ValueError(f"Parameter failed validation.")
+        else:
+            wrnmsg = f"No validator provided. Will try to perform basic validation."
+            print(wrnmsg)
+        # Perform basic
+        if self.valid_range is None:
+            #TODO: maybe we should say something if there's no valid_range
+            pass
+        elif (isinstance(self.valid_range, tuple) and
+              len(self.valid_range) == 2):
+            vmin, vmax = self.valid_range
+            if self.value < vmin or self.value > vmax:
+                # Assumes valid range is a closed interval [vmin, vmax]
+                errmsg = f"Value {self.value} is outside the valid range [{vmin}, {vmax}]."
+                raise ValueError(errmsg)
+        elif isinstance(self.valid_range, list):  # Works for numerical and categorical sets
+            if self.value not in self.valid_range:
+                errmsg = f"Value {self.value} is not in the allowed list [{self.valid_range}]."
+                raise ValueError(errmsg)
+        else:
+            raise ValueError("Bad valid_range specification.")
 
-    def update(self):
-        """Update parameter value"""
-        pass
+        return True
 
-    def display(self):
+    def update(self, new_value):
         """
-        A pretty way of displaying this parameter
+        Update parameter value with new_value
         """
-        pass
+        self.value = new_value
+        self.validate()
 
 
+class ParameterInt(BaseParameter):
+    def __init__(self, name, dtype, default_value=0, ptype="required", valid_range=None, category=None, validator=None,
+                 label=None, description="#TODO Document me", units="dimensionless", has_been_validated=False,
+                 nondefault=False, enabled=True):
+        super().__init__(name, dtype, default_value, ptype, valid_range, category, validator, label, description,
+                         units, has_been_validated, nondefault, enabled)
 
-class ParameterInt():
     pass
 
+
 class ParameterFloat():
+
+    def to(self, new_unit):
+        # Implement unit conversion logic here
+        pass
+
+    pass
+
+
+class ParameterRange():
+    # valid_range
+    pass
+
+
+class ParameterCategorical():
+    # allowed_values
+    pass
+
 
 def make_default_pars(**kwargs):
     """
@@ -85,43 +144,44 @@ def make_default_pars(**kwargs):
     pars = sc.objdict()
 
     # Population parameters
-    pars['n_agents']        = 10e3          # Number of agents
-    pars['total_pop']       = 10e3          # If defined, used for calculating the scale factor
-    pars['pop_scale']       = None          # How much to scale the population
-    pars['location']        = None          # What demographics to use - NOT CURRENTLY FUNCTIONAL
-    pars['birth_rates']     = None          # Birth rates, loaded below
-    pars['death_rates']     = None          # Death rates, loaded below
-    pars['rel_birth']       = 1.0           # Birth rate scale factor
-    pars['rel_death']       = 1.0           # Death rate scale factor
+    pars['n_agents'] = 10e3  # Number of agents
+    pars['total_pop'] = 10e3  # If defined, used for calculating the scale factor
+    pars['pop_scale'] = None  # How much to scale the population
+    pars['location'] = None  # What demographics to use - NOT CURRENTLY FUNCTIONAL
+    pars['birth_rates'] = None  # Birth rates, loaded below
+    pars['death_rates'] = None  # Death rates, loaded below
+    pars['rel_birth'] = 1.0  # Birth rate scale factor
+    pars['rel_death'] = 1.0  # Death rate scale factor
 
     # Simulation parameters
-    pars['start']           = 1995.         # Start of the simulation
-    pars['end']             = None          # End of the simulation
-    pars['n_years']         = 35            # Number of years to run, if end isn't specified. Note that this includes burn-in
-    pars['burnin']          = 25            # Number of years of burnin. NB, this is doesn't affect the start and end dates of the simulation, but it is possible remove these years from plots
-    pars['dt']              = 1.0           # Timestep (in years)
-    pars['dt_demog']        = 1.0           # Timestep for demographic updates (in years)
-    pars['rand_seed']       = 1             # Random seed, if None, don't reset
-    pars['verbose']         = sso.verbose   # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
-    pars['use_migration']   = True          # Whether to estimate migration rates to correct the total population size
+    pars['start'] = 1995.  # Start of the simulation
+    pars['end'] = None  # End of the simulation
+    pars['n_years'] = 35  # Number of years to run, if end isn't specified. Note that this includes burn-in
+    pars[
+        'burnin'] = 25  # Number of years of burnin. NB, this is doesn't affect the start and end dates of the simulation, but it is possible remove these years from plots
+    pars['dt'] = 1.0  # Timestep (in years)
+    pars['dt_demog'] = 1.0  # Timestep for demographic updates (in years)
+    pars['rand_seed'] = 1  # Random seed, if None, don't reset
+    pars[
+        'verbose'] = sso.verbose  # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
+    pars['use_migration'] = True  # Whether to estimate migration rates to correct the total population size
 
     # Events and interventions
-    pars['connectors']      = sc.autolist()
-    pars['interventions']   = sc.autolist() # The interventions present in this simulation; populated by the user
-    pars['analyzers']       = sc.autolist() # The functions present in this simulation; populated by the user
-    pars['timelimit']       = None          # Time limit for the simulation (seconds)
-    pars['stopping_func']   = None          # A function to call to stop the sim partway through
+    pars['connectors'] = sc.autolist()
+    pars['interventions'] = sc.autolist()  # The interventions present in this simulation; populated by the user
+    pars['analyzers'] = sc.autolist()  # The functions present in this simulation; populated by the user
+    pars['timelimit'] = None  # Time limit for the simulation (seconds)
+    pars['stopping_func'] = None  # A function to call to stop the sim partway through
 
     # Network parameters, generally initialized after the population has been constructed
-    pars['networks']        = sc.autolist()  # Network types and parameters
-    pars['debut']           = dict(f=dict(dist='normal', par1=15.0, par2=2.0),
-                                   m=dict(dist='normal', par1=17.5, par2=2.0))
+    pars['networks'] = sc.autolist()  # Network types and parameters
+    pars['debut'] = dict(f=dict(dist='normal', par1=15.0, par2=2.0),
+                         m=dict(dist='normal', par1=17.5, par2=2.0))
 
     # Update with any supplied parameter values and generate things that need to be generated
     pars.update(kwargs)
 
     return pars
-
 
 # def get_births_deaths(location, verbose=1, by_sex=True, overall=False, die=True):
 #     """
