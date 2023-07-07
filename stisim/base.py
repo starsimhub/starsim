@@ -80,6 +80,7 @@ class ParsObj(FlexPretty):
 
     def __init__(self, pars, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.pars = None
         self.update_pars(pars, create=True)
         return
 
