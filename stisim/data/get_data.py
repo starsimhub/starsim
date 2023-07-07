@@ -1,10 +1,10 @@
 '''
 Download data needed for STIsim.
 
-Typically, this is done automatically: on load, HPVsim checks if the data are already
+Typically, this is done automatically: on load, STIsim checks if the data are already
 downloaded, and if not, downloads them using the quick_download() function. The
 "slow download" functions supply the files that are usually zipped and stored in
-a separate repository, hpvsim_data.
+a separate repository, starsim_data.
 
 To ensure the data is updated, update the data_version parameter below.
 '''
