@@ -11,6 +11,25 @@ from .settings import options as sso  # For setting global options
 __all__ = ['make_pars']
 
 
+class PrettyParameter(sc.prettyobj):
+    def __init__(self, name, dtype, fill_value=0, shape=None, label=None):
+        """
+        Args:
+            name: name of the result as used in the model
+            dtype: datatype
+            fill_value: default value for this state upon model initialization
+            shape: If not none, set to match a string in `pars` containing the dimensionality
+            label: text used to construct labels for the result for displaying on plots and other outputs
+        """
+        self.name = name
+        self.dtype = dtype
+        self.fill_value = fill_value
+        self.shape = shape
+        self.label = label or name
+        return
+
+
+
 def make_pars(**kwargs):
     """
     Create the parameters for the simulation. Typically, this function is used
