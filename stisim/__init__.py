@@ -2,6 +2,7 @@ from .version import __version__, __versiondate__, __license__
 from .settings      import *
 from .misc          import *
 from .parameters    import *
+from .default_parameters import *
 from .utils         import *
 from .base          import *
 from .people        import *
