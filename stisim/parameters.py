@@ -41,7 +41,7 @@ class ParameterSet(ParsObj):
 
 
 class BaseParameter(sc.prettyobj):
-    def __init__(self, name, dtype, default_value=0, ptype="required", valid_range=None, category=None, validator=None,
+    def __init__(self, name, dtype, default_value=0, value=None, ptype="required", valid_range=None, category=None, validator=None,
                  label=None, description="#TODO Document me", units="dimensionless",
                  has_been_validated=False, nondefault=False, enabled=True):
         """
@@ -72,7 +72,7 @@ class BaseParameter(sc.prettyobj):
         self.label = label or name
         self.description = description
         self.units = units
-        self.value = default_value
+        self.value = value or default_value # If value is not specified at instantiation, use default
         self.default_value = default_value
 
     def validate(self):
@@ -132,6 +132,19 @@ class BaseParameter(sc.prettyobj):
         if not self.value == self.default_value:
             self.nondefault = True
 
+
+class ParameterMapper():
+    """
+    Class to map a dictionary
+    pars = {'n_agents':10, 'rand_seed': 42}
+
+    to a parameter set
+
+    pars = {'n_agents': BaseParemeter(value=42), 'rand_seed': BaseParameter(value=42)}
+
+    Merge default and user defined dictionaries, give priority to user defined values
+    """
+    pass
 
 class ParameterInt(BaseParameter):
     pass
