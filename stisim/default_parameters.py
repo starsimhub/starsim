@@ -6,7 +6,7 @@ import sciris as sc
 from .settings import options as sso  # For setting global options
 from .parameters import BaseParameter, ParameterSet
 
-__all__ = ['make_default_pars', 'default_pars_dict', 'get_default_parameter', 'build_pars']
+__all__ = ['make_default_pars', 'make_default_parset', 'default_pars_dict', 'get_default_parameter', 'build_pars']
 
 
 def make_default_pars(**kwargs):
@@ -15,6 +15,13 @@ def make_default_pars(**kwargs):
     """
     pars = build_pars(default_pars_dict())
     return pars
+
+
+def make_default_parset():
+    """
+    NOTE: return the default parameter dictionary as a ParameterSet.
+    """
+    return ParameterSet(build_pars(default_pars_dict()))
 
 
 def default_pars_dict():
@@ -260,7 +267,7 @@ def default_pars_dict():
             'dtype': float,
             'default_value': 1.0,
             'ptype': 'required',
-            'valid_range': (2**-3, 1.0),
+            'valid_range': (2 ** -3, 1.0),
             'category': ["simulation", "people"],
             'validator': None,
             'label': None,
