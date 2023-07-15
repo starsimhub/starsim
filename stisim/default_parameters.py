@@ -10,11 +10,18 @@ __all__ = ['make_default_pars', 'default_pars_dict', 'get_default_parameter', 'b
 
 
 def make_default_pars(**kwargs):
+    """
+    TODO: reenable used of kwargs if applicable
+    """
     pars = build_pars(default_pars_dict())
     return pars
 
 
 def default_pars_dict():
+    """
+    TODO: Provisional way of defining default parameters, need to shorten or
+    provide it as a default ParameterSet
+    """
     default_parameters = {
         'n_agents': {
             'name': 'n_agents',
@@ -22,7 +29,7 @@ def default_pars_dict():
             'default_value': 10e3,
             'ptype': 'required',
             'valid_range': (2, None),
-            'category': ["simulation", "people", "network"],
+            'category': ["simulation", "people", "networks"],
             'validator': None,
             'label': None,
             'description': 'Number of agents.',
@@ -37,7 +44,7 @@ def default_pars_dict():
             'default_value': 10e3,
             'ptype': 'optional',
             'valid_range': None,
-            'category': ["simulation", "people", "network"],
+            'category': ["simulation", "people", "networks"],
             'validator': None,
             'label': None,
             'description': 'Number of people in the real-world population.',
@@ -144,7 +151,7 @@ def default_pars_dict():
                                   m=dict(dist='normal', par1=17.5, par2=2.0)),
             'ptype': 'required',
             'valid_range': None,
-            'category': ["people", "network"],
+            'category': ["people", "networks"],
             'validator': None,
             'label': None,
             'description': 'Distributions of demographic sexual debut ages for males and females.',
@@ -226,8 +233,8 @@ def default_pars_dict():
             'description': 'Initial period of time (in years) during which the simulation is allowed to reach a '
                            'stable state. Any transient dynamics due to imperfect initial conditions is discared, '
                            'ensuring subsequent analysis focuses on meaningful and unbiased results. '
-                           'This is does not affect the start and end dates of the simulation, but it is possible '
-                           'remove these years from plots',
+                           'If start and end dates are provided, then these burnin years are added to the total '
+                           'simulation duration, and are removed from plots.',
             'units': 'dimensionless',
             'has_been_validated': False,
             'nondefault': False,
@@ -253,7 +260,7 @@ def default_pars_dict():
             'dtype': float,
             'default_value': 1.0,
             'ptype': 'required',
-            'valid_range': (2 ** -3, 1.0),
+            'valid_range': (2**-3, 1.0),
             'category': ["simulation", "people"],
             'validator': None,
             'label': None,
@@ -284,7 +291,7 @@ def default_pars_dict():
             'default_value': sc.autolist(),
             'ptype': 'required',
             'valid_range': None,
-            'category': None,
+            'category': ["simulation", "connectors"],
             'validator': None,
             'label': None,
             'description': 'The connectors present in this simulation; populated by the user',
@@ -299,7 +306,7 @@ def default_pars_dict():
             'default_value': sc.autolist(),
             'ptype': 'required',
             'valid_range': None,
-            'category': None,
+            'category': ["simulation", "interventions"],
             'validator': None,
             'label': None,
             'description': 'The interventions present in this simulation; populated by the user.',
@@ -314,7 +321,7 @@ def default_pars_dict():
             'default_value': sc.autolist(),
             'ptype': 'required',
             'valid_range': None,
-            'category': None,
+            'category': ["simulation", "analyzers"],
             'validator': None,
             'label': None,
             'description': 'The analyzers present in this simulation; populated by the user.',
@@ -329,7 +336,7 @@ def default_pars_dict():
             'default_value': None,
             'ptype': 'optional',
             'valid_range': None,
-            'category': None,
+            'category': ["simulation"],
             'validator': None,
             'label': None,
             'description': 'Time limit for the simulation (seconds).',
@@ -344,7 +351,7 @@ def default_pars_dict():
             'default_value': None,
             'ptype': 'optional',
             'valid_range': None,
-            'category': None,
+            'category': ["simulation"],
             'validator': None,
             'label': None,
             'description': 'A function to call to stop the simulation partway through.',
@@ -359,7 +366,7 @@ def default_pars_dict():
             'default_value': sc.autolist(),
             'ptype': 'required',
             'valid_range': None,
-            'category': None,
+            'category': ["simulation", "network"],
             'validator': None,
             'label': None,
             'description': 'Network types and parameters',
