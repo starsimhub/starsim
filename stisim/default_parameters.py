@@ -6,10 +6,15 @@ import sciris as sc
 from .settings import options as sso  # For setting global options
 from .parameters import BaseParameter
 
-__all__ = ['use_default_parameters', 'get_default_parameter']
+__all__ = ['make_default_pars', 'default_pars_dict', 'get_default_parameter', 'build_pars']
 
 
-def use_default_parameters():
+def make_default_pars(**kwargs):
+    pars = build_pars(default_pars_dict())
+    return pars
+
+
+def default_pars_dict():
     default_parameters = {
         'n_agents': {
             'name': 'n_agents',
@@ -41,7 +46,6 @@ def use_default_parameters():
             'nondefault': False,
             'enabled': True
         },
-
         'pop_scale': {
             'name': 'pop_scale',
             'dtype': float,
@@ -58,7 +62,6 @@ def use_default_parameters():
             'nondefault': False,
             'enabled': True
         },
-
         'location': {
             'name': 'location',
             'dtype': None,
@@ -138,7 +141,7 @@ def use_default_parameters():
             'name': 'debut',
             'dtype': dict,
             'default_value':dict(f=dict(dist='normal', par1=15.0, par2=2.0),
-                                 m=dict(dist='normal', par1=17.5, par2=2.0))
+                                 m=dict(dist='normal', par1=17.5, par2=2.0)),
             'ptype': 'required',
             'valid_range': None,
             'category': ["people", "network"],
@@ -170,7 +173,7 @@ def use_default_parameters():
             'dtype': float,
             'default_value': 1995.0,
             'ptype': 'required',
-            'valid_range': None,
+            'valid_range': (1900.0, None),
             'category': ["simulation"],
             'validator': None,
             'label': None,
@@ -185,7 +188,7 @@ def use_default_parameters():
             'dtype': float,
             'default_value': None,
             'ptype': 'optional',
-            'valid_range': None,
+            'valid_range': (None, 2100.0),
             'category': ["simulation"],
             'validator': None,
             'label': None,
@@ -380,15 +383,13 @@ def use_default_parameters():
             'has_been_validated': False,
             'nondefault': False,
             'enabled': True
-        },
-
+        }
     }
-
     return default_parameters
 
 
-def get_default_parameter(default_pars_dict, parameter_name):
-    return default_pars_dict.get(parameter_name, {})
+def get_default_parameter(default_pars, parameter_name):
+    return default_pars.get(parameter_name, {})
 
 
 def build_pars(input_pars):
