@@ -10,15 +10,12 @@ __all__ = ['BaseParameter', 'ParameterSet']
 
 class ParameterSet(ParsObj):
     """
+    TODO: write method to aggregate parameters according to their 'category' attribute
+    TODO: check that parameter items are instances of Parameter, or maybe not as it
+          already does a try/except
     A derived class of ParsObj where __getitem__ returns pars[key].value
                                      __setitem__ sets    pars[key].update(value)
     """
-
-    # def __init__(self, pars, *args, **kwargs):
-    #     super().__init__(*args, **kwargs)
-    #     self.pars = pars
-    #     self.update_pars(pars, create=True)
-    #     return
 
     def __getitem__(self, key):
         """ Return the value of pars[key] """
@@ -30,7 +27,7 @@ class ParameterSet(ParsObj):
             raise sc.KeyNotFoundError(errormsg)
 
     def __setitem__(self, key, value):
-        """ Ditto """
+        """ Set or update the value of pars[key] """
         if key in self.pars:
             self.pars[key].update(value)
         else:
@@ -39,12 +36,36 @@ class ParameterSet(ParsObj):
             raise sc.KeyNotFoundError(errormsg)
         return
 
+    def __getattr__(self, key):
+        """
+        Access a single parameter in self.pars with dot notation
+        ie, pars = stisim.make_default_pars()
+            parset = stisim.ParameterSet(pars)
+            parset.n_agents
+
+        Args:
+            key (str): The key in self.pars.
+
+        Returns:
+            A BaseParameter instance so we can access all its attributes.
+
+        """
+        if key in self.pars:
+            return self.pars[key]
+        else:
+            all_keys = '\n'.join(list(self.pars.keys()))
+            errormsg = f'Key "{key}" not found; available keys:\n{all_keys}'
+            raise sc.KeyNotFoundError(errormsg)
+
 
 class BaseParameter(sc.prettyobj):
-    def __init__(self, name, dtype, default_value=0, value=None, ptype="required", valid_range=None, category=None, validator=None,
+    def __init__(self, name, dtype, default_value=0, value=None, ptype="required", valid_range=None, category=None,
+                 validator=None,
                  label=None, description="#TODO Document me", units="dimensionless",
                  has_been_validated=False, nondefault=False, enabled=True):
         """
+        TODO: - use dtype and ptypes (ie, validate them)
+
         Args:
             name: (str) name of the parameter
             dtype: (type) datatype
@@ -72,7 +93,7 @@ class BaseParameter(sc.prettyobj):
         self.label = label or name
         self.description = description
         self.units = units
-        self.value = value or default_value # If value is not specified at instantiation, use default
+        self.value = value or default_value  # If value is not specified at instantiation, use default
         self.default_value = default_value
 
     def validate(self):
@@ -91,9 +112,9 @@ class BaseParameter(sc.prettyobj):
             if not self.validator.__call__(self.value):
                 raise ValueError(f"Parameter failed validation.")
             self.has_been_validated = True
-        else:
-            wrnmsg = f"No validator provided. Will try to perform basic validation."
-            print(wrnmsg)
+        # else:
+        #     wrnmsg = f"No validator provided. Will try to perform basic validation."
+        #     print(wrnmsg)
         # Perform basic validation
         if self.valid_range is None:
             # TODO: maybe we should say something if there's no valid_range
@@ -145,6 +166,7 @@ class ParameterMapper():
     Merge default and user defined dictionaries, give priority to user defined values
     """
     pass
+
 
 class ParameterInt(BaseParameter):
     pass
