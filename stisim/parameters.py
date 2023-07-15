@@ -5,11 +5,44 @@ Set parameters
 import numpy as np
 import sciris as sc
 from .settings import options as sso  # For setting global options
+from .base import ParsObj
 
 # from . import misc as ssm
 # from .data import loaders as ssdata
 
-__all__ = ['BaseParameter']
+__all__ = ['BaseParameter', 'ParameterSet']
+
+
+class ParameterSet(ParsObj):
+    """
+    A derived class of ParsObj where __getitem__ returns pars[key].value
+                                     __setitem__ sets    pars[key].update(value)
+    """
+
+    # def __init__(self, pars, *args, **kwargs):
+    #     super().__init__(*args, **kwargs)
+    #     self.pars = pars
+    #     self.update_pars(pars, create=True)
+    #     return
+
+    def __getitem__(self, key):
+        """ Return the value of pars[key] """
+        try:
+            return self.pars[key].value
+        except KeyError:
+            all_keys = '\n'.join(list(self.pars.keys()))
+            errormsg = f'Key "{key}" not found; available keys:\n{all_keys}'
+            raise sc.KeyNotFoundError(errormsg)
+
+    def __setitem__(self, key, value):
+        """ Ditto """
+        if key in self.pars:
+            self.pars[key].update(value)
+        else:
+            all_keys = '\n'.join(list(self.pars.keys()))
+            errormsg = f'Key "{key}" not found; available keys:\n{all_keys}'
+            raise sc.KeyNotFoundError(errormsg)
+        return
 
 
 class BaseParameter(sc.prettyobj):
@@ -62,10 +95,11 @@ class BaseParameter(sc.prettyobj):
                 raise ValueError("Validator is not callable.")
             if not self.validator.__call__(self.value):
                 raise ValueError(f"Parameter failed validation.")
+            self.has_been_validated = True
         else:
             wrnmsg = f"No validator provided. Will try to perform basic validation."
             print(wrnmsg)
-        # Perform basic
+        # Perform basic validation
         if self.valid_range is None:
             # TODO: maybe we should say something if there's no valid_range
             pass
@@ -77,13 +111,14 @@ class BaseParameter(sc.prettyobj):
             if vmax is not None and self.value > vmax:
                 errmsg = f"Value {self.value} is above the maximum valid value {vmax}."
                 raise ValueError(errmsg)
+            self.has_been_validated = True
         elif isinstance(self.valid_range, list):  # Works for numerical and categorical sets
             if self.value not in self.valid_range:
                 errmsg = f"Value {self.value} is not in the allowed list [{self.valid_range}]."
                 raise ValueError(errmsg)
+            self.has_been_validated = True
         else:
             raise ValueError("Bad valid_range specification.")
-
         return True
 
     def update(self, new_value):
@@ -96,7 +131,7 @@ class BaseParameter(sc.prettyobj):
 
     def compare_to_default(self):
         """
-        Check if current value is default_value for this parameter.
+        Check if current value is identical to default_value for this parameter.
         Useful to compare how a model deviates from default parameters.
         """
         if not self.value == self.default_value:
@@ -104,12 +139,6 @@ class BaseParameter(sc.prettyobj):
 
 
 class ParameterInt(BaseParameter):
-    def __init__(self, name, dtype, default_value=0, ptype="required", valid_range=None, category=None, validator=None,
-                 label=None, description="#TODO Document me", units="dimensionless", has_been_validated=False,
-                 nondefault=False, enabled=True):
-        super().__init__(name, dtype, default_value, ptype, valid_range, category, validator, label, description,
-                         units, has_been_validated, nondefault, enabled)
-
     pass
 
 
@@ -130,87 +159,3 @@ class ParameterRange():
 class ParameterCategorical():
     # allowed_values
     pass
-
-
-# def make_default_pars(**kwargs):
-#     """
-#     Create the parameters for the simulation. Typically, this function is used
-#     internally rather than called by the user; e.g. typical use would be to do
-#     sim = ss.Sim() and then inspect sim.pars, rather than calling this function
-#     directly.
-#
-#     #NOTE: current pars is acting as a more general inputs structure to the simulation, rather than
-#     as model parameters -- though it may be a matter of semantics what we categorise as parameters.
-#     Parameters are inputs but not all inputs are parameters?
-#
-#     Args:
-#         kwargs        (dict): any additional kwargs are interpreted as parameter names
-#     Returns:
-#         pars (dict): the parameters of the simulation
-#     """
-#     pars = sc.objdict()
-#
-#     # Population parameters
-#     pars['n_agents'] = 10e3  # Number of agents
-#     pars['total_pop'] = 10e3  # If defined, used for calculating the scale factor
-#     pars['pop_scale'] = None  # How much to scale the population
-#     pars['location'] = None  # What demographics to use - NOT CURRENTLY FUNCTIONAL
-#     pars['birth_rates'] = None  # Birth rates, loaded below
-#     pars['death_rates'] = None  # Death rates, loaded below
-#     pars['rel_birth'] = 1.0  # Birth rate scale factor
-#     pars['rel_death'] = 1.0  # Death rate scale factor
-#
-#     # Simulation parameters
-#     pars['start'] = 1995.  # Start of the simulation
-#     pars['end'] = None  # End of the simulation
-#     pars['n_years'] = 35  # Number of years to run, if end isn't specified. Note that this includes burn-in
-#     pars[
-#         'burnin'] = 25  # Number of years of burnin. NB, this is doesn't affect the start and end dates of the simulation, but it is possible remove these years from plots
-#     pars['dt'] = 1.0  # Timestep (in years)
-#     pars['dt_demog'] = 1.0  # Timestep for demographic updates (in years)
-#     pars['rand_seed'] = 1  # Random seed, if None, don't reset
-#     pars[
-#         'verbose'] = sso.verbose  # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
-#     pars['use_migration'] = True  # Whether to estimate migration rates to correct the total population size
-#
-#     # Events and interventions
-#     pars['connectors'] = sc.autolist()
-#     pars['interventions'] = sc.autolist()  # The interventions present in this simulation; populated by the user
-#     pars['analyzers'] = sc.autolist()  # The functions present in this simulation; populated by the user
-#     pars['timelimit'] = None  # Time limit for the simulation (seconds)
-#     pars['stopping_func'] = None  # A function to call to stop the sim partway through
-#
-#     # Network parameters, generally initialized after the population has been constructed
-#     pars['networks'] = sc.autolist()  # Network types and parameters
-#     pars['debut'] = dict(f=dict(dist='normal', par1=15.0, par2=2.0),
-#                          m=dict(dist='normal', par1=17.5, par2=2.0))
-#
-#     # Update with any supplied parameter values and generate things that need to be generated
-#     pars.update(kwargs)
-#
-#     return pars
-
-# def get_births_deaths(location, verbose=1, by_sex=True, overall=False, die=True):
-#     """
-#     Get mortality and fertility data by location if provided, or use default
-#
-#     Args:
-#         location (str):  location
-#         verbose (bool):  whether to print progress
-#         by_sex   (bool): whether to get sex-specific death rates (default true)
-#         overall  (bool): whether to get overall values ie not disaggregated by sex (default false)
-#
-#     Returns:
-#         lx (dict): dictionary keyed by sex, storing arrays of lx - the number of people who survive to age x
-#         birth_rates (arr): array of crude birth rates by year
-#     """
-#
-#     if verbose:
-#         print(f'Loading location-specific demographic data for "{location}"')
-#     try:
-#         death_rates = ssdata.get_death_rates(location=location, by_sex=by_sex, overall=overall)
-#         birth_rates = ssdata.get_birth_rates(location=location)
-#         return birth_rates, death_rates
-#     except ValueError as E:
-#         warnmsg = f'Could not load demographic data for requested location "{location}" ({str(E)})'
-#         ssm.warn(warnmsg, die=die)
