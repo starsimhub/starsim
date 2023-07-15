@@ -47,8 +47,6 @@ class BaseParameter(sc.prettyobj):
         self.units = units
         self.value = default_value
 
-        if self.validator is not None:
-            self.validate()
 
     def validate(self):
         """
@@ -72,12 +70,13 @@ class BaseParameter(sc.prettyobj):
         if self.valid_range is None:
             #TODO: maybe we should say something if there's no valid_range
             pass
-        elif (isinstance(self.valid_range, tuple) and
-              len(self.valid_range) == 2):
+        elif isinstance(self.valid_range, tuple) and len(self.valid_range) == 2:
             vmin, vmax = self.valid_range
-            if self.value < vmin or self.value > vmax:
-                # Assumes valid range is a closed interval [vmin, vmax]
-                errmsg = f"Value {self.value} is outside the valid range [{vmin}, {vmax}]."
+            if vmin is not None and self.value < vmin:
+                errmsg = f"Value {self.value} is below the minimum valid value {vmin}."
+                raise ValueError(errmsg)
+            if vmax is not None and self.value > vmax:
+                errmsg = f"Value {self.value} is above the maximum valid value {vmax}."
                 raise ValueError(errmsg)
         elif isinstance(self.valid_range, list):  # Works for numerical and categorical sets
             if self.value not in self.valid_range:
