@@ -162,8 +162,7 @@ def make_default_pars(**kwargs):
     pars['dt'] = 1.0  # Timestep (in years)
     pars['dt_demog'] = 1.0  # Timestep for demographic updates (in years)
     pars['rand_seed'] = 1  # Random seed, if None, don't reset
-    pars[
-        'verbose'] = sso.verbose  # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
+    pars['verbose'] = sso.verbose  # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
     pars['use_migration'] = True  # Whether to estimate migration rates to correct the total population size
 
     # Events and interventions
