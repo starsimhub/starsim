@@ -15,7 +15,7 @@ import pytest
 class TestParsObj:
     @pytest.fixture
     def pars_obj(self):
-        return stisim.ParsObj({'key1': 1, 'key2': 2})
+        return ss.ParsObj({'key1': 1, 'key2': 2})
 
     def test_getitem_existing_key(self, pars_obj):
         assert pars_obj['key1'] == 1
