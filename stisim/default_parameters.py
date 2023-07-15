@@ -21,7 +21,7 @@ def default_pars_dict():
             'dtype': int,
             'default_value': 10e3,
             'ptype': 'required',
-            'valid_range': None,
+            'valid_range': (2, None),
             'category': ["simulation", "people", "network"],
             'validator': None,
             'label': None,
