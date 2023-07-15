@@ -117,7 +117,7 @@ class ParsObj(FlexPretty):
             if not hasattr(self, 'pars'):
                 self.pars = pars
             if self.pars is None:
-                self.pars = pars
+                self.pars = dict()
             if not create:
                 available_keys = list(self.pars.keys())
                 mismatches = [key for key in pars.keys() if key not in available_keys]
