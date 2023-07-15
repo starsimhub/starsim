@@ -2,13 +2,8 @@
 Set parameters
 """
 
-import numpy as np
 import sciris as sc
-from .settings import options as sso  # For setting global options
 from .base import ParsObj
-
-# from . import misc as ssm
-# from .data import loaders as ssdata
 
 __all__ = ['BaseParameter', 'ParameterSet']
 
