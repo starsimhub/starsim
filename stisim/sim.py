@@ -10,6 +10,7 @@ from . import misc as ssm
 from . import settings as sss
 from . import utils as ssu
 from . import people as ssppl
+from . import default_parameters as ssdpar
 from . import parameters as sspar
 from . import interventions as ssi
 from . import analyzers as ssa
@@ -43,12 +44,15 @@ class Sim(ssb.BaseSim):
         self.tivec = None
         self.npts = None
 
+        # TODO: handle whether parameters are dictionaries or parameter sets --
         # Make default parameters (using values from parameters.py)
-        default_pars = sspar.make_pars(version=version)  # Start with default pars
+        default_pars = ssdpar.make_default_pars() # Start with default parametrs
         super().__init__(default_pars)  # Initialize and set the parameters as attributes
 
         # Update parameters
         self.update_pars(pars, **kwargs)  # Update the parameters
+        # To parameter set
+        self.pars = sspar.to_parameterset(user_parameters=self.pars)
 
         # Initialize other quantities
         self.interventions = None
@@ -82,7 +86,9 @@ class Sim(ssb.BaseSim):
         self.init_modules()
         self.init_interventions()
         self.init_analyzers()
-        self.validate_layer_pars()
+        self.validate_network_pars()
+        # self.validate_connector_pars()
+        # self.validate_intervention_pars()
 
         # Reset the random seed to the default run seed, so that if the simulation is run with
         # reset_seed=False right after initialization, it will still produce the same output
@@ -95,7 +101,7 @@ class Sim(ssb.BaseSim):
 
         return self
 
-    def layer_keys(self):
+    def network_keys(self):
         """
         Attempt to retrieve the current network names
         """
@@ -105,7 +111,7 @@ class Sim(ssb.BaseSim):
             keys = []
         return keys
 
-    def validate_layer_pars(self):
+    def validate_network_pars(self):
         """
         Check if there is a contact network
         """
@@ -114,7 +120,7 @@ class Sim(ssb.BaseSim):
             modules = len(self.modules) > 0
             pop_keys = set(self.people.networks.keys())
             if modules and not len(pop_keys):
-                warnmsg = f'Warning: your simulation has {len(self.modules)} modules but no contact layers.'
+                warnmsg = f'Warning: your simulation has {len(self.modules)} modules but no contact networks.'
                 ssm.warn(warnmsg, die=False)
 
         return
@@ -258,12 +264,12 @@ class Sim(ssb.BaseSim):
 
         for key, network in self.people.networks.items():
             if network.label is not None:
-                layer_name = network.label
+                network_name = network.label
             else:
-                layer_name = key
-                network.label = layer_name
+                network_name = key
+                network.label = network_name
             network.initialize(self.people)
-            self.people.networks[layer_name] = network
+            self.people.networks[network_name] = network
 
         return
 
@@ -353,8 +359,8 @@ class Sim(ssb.BaseSim):
         Update networks
         TODO: resolve where the networks live - sim.networks (akin to sim.modules), sim.people.networks, both?
         """
-        for layer in self.people.networks.values():
-            layer.update(self.people)
+        for network in self.people.networks.values():
+            network.update(self.people)
 
     def update_modules(self):
         """
