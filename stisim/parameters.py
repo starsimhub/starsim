@@ -59,7 +59,7 @@ class ParameterSet(ParsObj):
 
 
 class BaseParameter(sc.prettyobj):
-    def __init__(self, name, dtype, default_value=0, value=None, ptype="required", valid_range=None, category=None,
+    def __init__(self, name, dtype, default_value, value=None, ptype="required", valid_range=None, category=None,
                  validator=None,
                  label=None, description="#TODO Document me", units="dimensionless",
                  has_been_validated=False, nondefault=False, enabled=True):
@@ -189,7 +189,7 @@ class ParameterMapper:
 
         # Iterate over default parameters and map them to ParameterSet
         for key, value in parameter_dict.items():
-            parameter_dict[key] = BaseParameter(default_value=value, name=key)
+            parameter_dict[key] = BaseParameter(key, type(value), value)
 
         # Convert merged parameters into ParameterSet
         parameter_set = ParameterSet(parameter_dict)
@@ -216,7 +216,7 @@ def to_parameterset(default_parameters=None, user_parameters=None, **kwargs) -> 
 
     # Iterate over default parameters and map them to ParameterSet
     for key, value in parameter_dict.items():
-        parameter_dict[key] = BaseParameter(default_value=value, name=key)
+        parameter_dict[key] = BaseParameter(key, type(value), value)
 
     # Convert merged parameters into ParameterSet
     parameter_set = ParameterSet(parameter_dict)
