@@ -5,7 +5,7 @@ Set parameters
 import sciris as sc
 from .base import ParsObj
 
-__all__ = ['BaseParameter', 'ParameterSet']
+__all__ = ['BaseParameter', 'ParameterSet', 'ParameterMapper', 'to_parameterset']
 
 
 class ParameterSet(ParsObj):
@@ -75,7 +75,7 @@ class BaseParameter(sc.prettyobj):
             validator: (callable) function that validates the parameter value
             label: (str) text used to construct labels for the result for displaying on plots and other outputs
             description: (str) human-readbale text describing what this parameter is about, maybe bibliographic references.
-            default_value:  default value for this state upon initialization
+            default_value:  default value for this state upon initialization, and store this value to optionally restore defaults.
             value: curent value of this instance
             has_been_validated: (bool) whether the parameter has passed validation
             enabled: (bool) whether the parameter is not available (ie, because a module/disease/ is not available)
@@ -153,19 +153,74 @@ class BaseParameter(sc.prettyobj):
         if not self.value == self.default_value:
             self.nondefault = True
 
+    def restore_defaults(self):
+        """
+        Restore default parameters
 
-class ParameterMapper():
+        """
+        pass
+
+
+class ParameterMapper:
     """
-    Class to map a dictionary
-    pars = {'n_agents':10, 'rand_seed': 42}
-
-    to a parameter set
-
-    pars = {'n_agents': BaseParemeter(value=42), 'rand_seed': BaseParameter(value=42)}
-
-    Merge default and user defined dictionaries, give priority to user defined values
+    Class to map a dictionary or pair of dictionaries to a parameter set.
     """
-    pass
+
+    def __init__(self, default_parameters=None, user_parameters=None):
+        """
+        Initialize the ParameterMapper with default parameters and user-defined parameters.
+
+        Args:
+            default_parameters (dict, optional): Default parameter dictionary.
+            user_parameters (dict, optional): User-defined parameter dictionary.
+        """
+        self.default_parameters = default_parameters or {}
+        self.user_parameters = user_parameters or {}
+
+    def map_parameters(self, **kwargs):
+        """
+        Map the parameters to a ParameterSet.
+        **kwargs for sc.mergedict()
+        Returns:
+            ParameterSet: A ParameterSet instance with mapped parameters.
+        """
+        # Merge default and user parameters
+        parameter_dict = sc.mergedicts(self.default_parameters, self.user_parameters, kwargs)
+
+        # Iterate over default parameters and map them to ParameterSet
+        for key, value in parameter_dict.items():
+            parameter_dict[key] = BaseParameter(default_value=value, name=key)
+
+        # Convert merged parameters into ParameterSet
+        parameter_set = ParameterSet(parameter_dict)
+        return parameter_set
+
+
+def to_parameterset(default_parameters=None, user_parameters=None, **kwargs) -> ParameterSet:
+    """
+    Convert a dictionary or multiple to a ParameterSet.
+
+    Args:
+        default_parameters (dict, optional): Default parameter dictionary.
+        user_parameters (dict, optional): User-defined parameter dictionary.
+        **kwargs: Additional parameters for sc.mergedicts
+
+    Returns:
+        ParameterSet: A ParameterSet instance with mapped parameters.
+    """
+    # Merge default and user parameters if both are provided
+    if default_parameters and user_parameters:
+        parameter_dict = sc.mergedicts(default_parameters, user_parameters, kwargs)
+    else:
+        parameter_dict = default_parameters or user_parameters or {}
+
+    # Iterate over default parameters and map them to ParameterSet
+    for key, value in parameter_dict.items():
+        parameter_dict[key] = BaseParameter(default_value=value, name=key)
+
+    # Convert merged parameters into ParameterSet
+    parameter_set = ParameterSet(parameter_dict)
+    return parameter_set
 
 
 class ParameterInt(BaseParameter):
