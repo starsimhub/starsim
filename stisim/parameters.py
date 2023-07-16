@@ -17,6 +17,9 @@ class ParameterSet(ParsObj):
                                      __setitem__ sets    pars[key].update(value)
     """
 
+    def __iter__(self):
+        return iter(self.pars.keys())
+
     def __getitem__(self, key):
         """ Return the value of pars[key] """
         try:
@@ -57,6 +60,10 @@ class ParameterSet(ParsObj):
             errormsg = f'Key "{key}" not found; available keys:\n{all_keys}'
             raise sc.KeyNotFoundError(errormsg)
 
+    @property
+    def keys(self):
+        """  """
+        return self.pars.keys()
 
 class BaseParameter(sc.prettyobj):
     def __init__(self, name, dtype, default_value, value=None, ptype="required", valid_range=None, category=None,
