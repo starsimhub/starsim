@@ -5,16 +5,242 @@ Networks that connect people within a population
 # %% Imports
 import numpy as np
 import sciris as sc
+import pandas as pd
 from . import utils as ssu
 from . import base as ssb
 from . import settings as sss
 
 
 # Specify all externally visible functions this file defines
-__all__ = ['simple_sexual', 'hpv_network', 'maternal']
+__all__ = ['Network', 'simple_sexual', 'hpv_network', 'maternal']
+
+class Network(ssb.FlexDict):
+    """
+    A small class holding a single network of contact edges (connections) between people.
+
+    The input is typically arrays including: person 1 of the connection, person 2 of
+    the connection, the weight of the connection, the duration and start/end times of
+    the connection. Connections are undirected; each person is both a source and sink.
+
+    Args:
+        p1 (array): an array of N connections, representing people on one side of the connection
+        p2 (array): an array of people on the other side of the connection
+        beta (array): an array representing relative transmissibility for this network - TODO, do we need this?
+        label (str): the name of the network (optional)
+        kwargs (dict): other keys copied directly into the network
+
+    Note that all arguments (except for label) must be arrays of the same length,
+    although not all have to be supplied at the time of creation (they must all
+    be the same at the time of initialization, though, or else validation will fail).
+
+    **Examples**::
+
+        # Generate an average of 10 contacts for 1000 people
+        n = 10_000
+        n_people = 1000
+        p1 = np.random.randint(n_people, size=n)
+        p2 = np.random.randint(n_people, size=n)
+        beta = np.ones(n)
+        network = ss.Network(p1=p1, p2=p2, beta=beta, label='rand')
+        network = ss.Network(dict(p1=p1, p2=p2, beta=beta), label='rand') # Alternate method
+
+        # Convert one network to another with extra columns
+        index = np.arange(n)
+        self_conn = p1 == p2
+        network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
+    """
+
+    def __init__(self, *args, key_dict=None, transmission='horizontal', label=None, **kwargs):
+        default_keys = {
+            'p1': sss.default_int,
+            'p2': sss.default_int,
+            'beta': sss.default_float,
+        }
+        self.meta = sc.mergedicts(default_keys, key_dict)
+        self.transmission = transmission  # "vertical" or "horizontal", determines whether transmission is bidirectional
+        self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
+        self.label = label
+        self.initialized = False
+
+        # Handle args
+        kwargs = sc.mergedicts(*args, kwargs)
+
+        # Initialize the keys of the network
+        for key, dtype in self.meta.items():
+            self[key] = np.empty((0,), dtype=dtype)
+
+        # Set data, if provided
+        for key, value in kwargs.items():
+            self[key] = np.array(value, dtype=self.meta.get(key))
+            self.initialized = True
+
+    @property
+    def name(self):
+        # The module name is a lower-case version of its class name
+        return self.__class__.__name__.lower()
+
+    def initialize(self):
+        pass
+
+    def __len__(self):
+        try:
+            return len(self[self.basekey])
+        except:  # pragma: no cover
+            return 0
+
+    def __repr__(self):
+        """ Convert to a dataframe for printing """
+        namestr = self.__class__.__name__
+        labelstr = f'"{self.label}"' if self.label else '<no label>'
+        keys_str = ', '.join(self.keys())
+        output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", f, m, beta)
+        output += self.to_df().__repr__()
+        return output
+
+    def __contains__(self, item):
+        """
+        Check if a person is present in a network
+
+        Args:
+            item: Person index
+
+        Returns: True if person index appears in any interactions
+        """
+        return (item in self['p1']) or (item in self['p2'])
+
+    @property
+    def members(self):
+        """
+        Return sorted array of all members
+        """
+        return np.unique([self['p1'], self['p2']])
+
+    def meta_keys(self):
+        """ Return the keys for the network's meta information """
+        return self.meta.keys()
+
+    def validate(self, force=True):
+        """
+        Check the integrity of the network: right types, right lengths.
+
+        If dtype is incorrect, try to convert automatically; if length is incorrect,
+        do not.
+        """
+        n = len(self[self.basekey])
+        for key, dtype in self.meta.items():
+            if dtype:
+                actual = self[key].dtype
+                expected = dtype
+                if actual != expected:
+                    self[key] = np.array(self[key],
+                                         dtype=expected)  # Probably harmless, so try to convert to correct type
+            actual_n = len(self[key])
+            if n != actual_n:
+                errormsg = f'Expecting length {n} for network key "{key}"; got {actual_n}'  # We can't fix length mismatches
+                raise TypeError(errormsg)
+        return
+
+    def get_inds(self, inds, remove=False):
+        """
+        Get the specified indices from the edgelist and return them as a dict.
+        Args:
+            inds (int, array, slice): the indices to find
+            remove (bool): whether to remove the indices
+        """
+        output = {}
+        for key in self.meta_keys():
+            output[key] = self[key][inds]  # Copy to the output object
+            if remove:
+                self[key] = np.delete(self[key], inds)  # Remove from the original
+        return output
+
+    def pop_inds(self, inds):
+        """
+        "Pop" the specified indices from the edgelist and return them as a dict.
+        Returns arguments in the right format to be used with network.append().
+
+        Args:
+            inds (int, array, slice): the indices to be removed
+        """
+        return self.get_inds(inds, remove=True)
+
+    def append(self, contacts):
+        """
+        Append contacts to the current network.
+
+        Args:
+            contacts (dict): a dictionary of arrays with keys f,m,beta, as returned from network.pop_inds()
+        """
+        for key in self.keys():
+            new_arr = contacts[key]
+            n_curr = len(self[key])  # Current number of contacts
+            n_new = len(new_arr)  # New contacts to add
+            n_total = n_curr + n_new  # New size
+            self[key] = np.resize(self[key], n_total)  # Resize to make room, preserving dtype
+            self[key][n_curr:] = new_arr  # Copy contacts into the network
+        return
+
+    def to_df(self):
+        """ Convert to dataframe """
+        df = pd.DataFrame.from_dict(self)
+        return df
+
+    def from_df(self, df, keys=None):
+        """ Convert from a dataframe """
+        if keys is None:
+            keys = self.meta_keys()
+        for key in keys:
+            self[key] = df[key].to_numpy()
+        return self
+
+    def find_contacts(self, inds, as_array=True):
+        """
+        Find all contacts of the specified people
+
+        For some purposes (e.g. contact tracing) it's necessary to find all the contacts
+        associated with a subset of the people in this network. Since contacts are bidirectional
+        it's necessary to check both P1 and P2 for the target indices. The return type is a Set
+        so that there is no duplication of indices (otherwise if the Network has explicit
+        symmetric interactions, they could appear multiple times). This is also for performance so
+        that the calling code doesn't need to perform its own unique() operation. Note that
+        this cannot be used for cases where multiple connections count differently than a single
+        infection, e.g. exposure risk.
+
+        Args:
+            inds (array): indices of people whose contacts to return
+            as_array (bool): if true, return as sorted array (otherwise, return as unsorted set)
+
+        Returns:
+            contact_inds (array): a set of indices for pairing partners
+
+        Example: If there were a network with
+        - P1 = [1,2,3,4]
+        - P2 = [2,3,1,4]
+        Then find_contacts([1,3]) would return {1,2,3}
+        """
+
+        # Check types
+        if not isinstance(inds, np.ndarray):
+            inds = sc.promotetoarray(inds)
+        if inds.dtype != np.int64:  # pragma: no cover # This is int64 since indices often come from hpv.true(), which returns int64
+            inds = np.array(inds, dtype=np.int64)
+
+        # Find the contacts
+        contact_inds = ssu.find_contacts(self['p1'], self['p2'], inds)
+        if as_array:
+            contact_inds = np.fromiter(contact_inds, dtype=sss.default_int)
+            contact_inds.sort()  # Sorting ensures that the results are reproducible for a given seed as well as being identical to previous versions of HPVsim
+
+        return contact_inds
+
+    def add_pairs(self):
+        pass
+
+    def update(self):
+        pass
 
 
-class simple_sexual(ssb.Network):
+class simple_sexual(Network):
     # Randomly pair males and females with variable relationship durations
     def __init__(self, mean_dur=5):
         key_dict = {
@@ -68,7 +294,7 @@ class simple_sexual(ssb.Network):
         self.add_pairs(people)
 
 
-class hpv_network(ssb.Network):
+class hpv_network(Network):
     def __init__(self, pars=None):
 
         key_dict = {
@@ -258,7 +484,7 @@ class hpv_network(ssb.Network):
             p1=p1,
             p2=p2,
             dur=dur,
-            acts=acts,
+            acts=scaled_acts,
             start=start,
             beta=beta
         )
@@ -279,7 +505,7 @@ class hpv_network(ssb.Network):
         return
 
 
-class maternal(ssb.Network):
+class maternal(Network):
     def __init__(self, key_dict=None, transmission='vertical'):
         """
         Initialized empty and filled with pregnancies throughout the simulation
