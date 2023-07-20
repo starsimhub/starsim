@@ -46,12 +46,12 @@ class Sim(ssb.BaseSim):
 
         # TODO: handle whether parameters are dictionaries or parameter sets --
         # Make default parameters (using values from parameters.py)
-        default_pars = ssdpar.make_default_pars() # Start with default parametrs
-        super().__init__(default_pars)  # Initialize and set the parameters as attributes
+        default_pars = ssdpar.make_default_pars() # Start with default parameter dictionary, not parameter set
+        super().__init__(default_pars)            # Initialize and set the parameters as attributes
 
         # Update parameters
         self.update_pars(pars, **kwargs)  # Update the parameters
-        # To parameter set
+        # Convert to parameter set
         self.pars = sspar.to_parameterset(user_parameters=self.pars)
 
         # Initialize other quantities
@@ -74,7 +74,7 @@ class Sim(ssb.BaseSim):
         """
         # Validation and initialization
         self.ti = 0  # The current time index
-        self.validate_pars()  # Ensure parameters have valid values
+        self.validate_inputs()  # Ensure parameters have valid values
         self.validate_dt()
         self.init_time_vecs()  # Initialize time vecs
         ssu.set_seed(self['rand_seed'])  # Reset the random seed before the population is created
@@ -138,47 +138,44 @@ class Sim(ssb.BaseSim):
             rounded_dt = 1.0 / reciprocal
             self['dt'] = rounded_dt
             if self['verbose']:
-                warnmsg = f"Warning: Provided time step dt: {dt} resulted in a non-integer number of steps per year. Rounded to {rounded_dt}."
+                warnmsg = f"Warning: Provided time step dt: {dt} resulted in a non-integer number of steps per year. " \
+                          f"Rounded to {rounded_dt}. "
                 print(warnmsg)
 
-    def validate_pars(self):
+    def validate_inputs(self):
         """
-        Some parameters can take multiple types; this makes them consistent.
+        Validate input arguments to the Sim object.
+        # TODO: can expand validation logic, based on 'ptype' attribute (required/derived/optional?)
         """
-        # Handle n_agents
-        if self['n_agents'] is not None:
-            self['n_agents'] = int(self['n_agents'])
-        else:
-            if self.people is not None:
-                self['n_agents'] = len(self.people)
-            else:
-                if self.popdict is not None:
-                    self['n_agents'] = len(self.popdict)
-                else:
-                    errormsg = 'Must supply n_agents, a people object, or a popdict'
-                    raise ValueError(errormsg)
-
-        # Handle end and n_years
-        if self['end']:
-            self['n_years'] = int(self['end'] - self['start'])
-            if self['n_years'] <= 0:
-                errormsg = f"Number of years must be >0, but you supplied start={str(self['start'])} and " \
-                           f"end={str(self['end'])}, which gives n_years={self['n_years']}"
-                raise ValueError(errormsg)
-        else:
-            if self['n_years']:
-                self['end'] = self['start'] + self['n_years']
-            else:
-                errormsg = 'You must supply one of n_years and end."'
-                raise ValueError(errormsg)
-
-        # Handle verbose
-        if self['verbose'] == 'brief':
-            self['verbose'] = -1
-        if not sc.isnumber(self['verbose']):  # pragma: no cover
-            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self["verbose"])} "{self["verbose"]}"'
+        # Handle inputs related to simulation nodal/agent domain
+        if self.people is not None:
+            self['n_agents'] = len(self.people)
+        elif self.popdict is not None:
+            self['n_agents'] = len(self.popdict)
+        self.pars.n_agents.validate()  # This will cast n_agents to int if it's not
+        if self['n_agents'] is None:
+            # If n_agents is still None, we have a problem
+            errormsg = 'Must supply n_agents, a people object, or a popdict'
             raise ValueError(errormsg)
 
+        # Handle inputs related to simulation temporal domain (start, end and duration/n_years)
+        if self.pars['end']:
+            self.pars['n_years'] = int(self.pars['end'] - self.pars['start'])
+            if self.pars['n_years'] <= 0:
+                errormsg = f"Number of years must be > 0, but you supplied start={str(self.pars['start'])} and " \
+                           f"end={str(self.pars['end'])}, which gives n_years={self.pars['n_years']}"
+                raise ValueError(errormsg)
+        else:
+            if not self.pars['n_years']:
+                errormsg = 'You must supply one of n_years and end."'
+                raise ValueError(errormsg)
+            self.pars['end'] = self.pars['start'] + self.pars['n_years']
+        self.pars['n_years'].validate()
+
+        # Handle verbose, the transformation below could be handled by a Parameter instance?
+        if self['verbose'] == 'brief':
+            self['verbose'] = -1
+        self.pars.verbose.validate()
         return
 
     def init_time_vecs(self):
