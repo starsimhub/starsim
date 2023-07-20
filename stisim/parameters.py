@@ -120,7 +120,6 @@ class BaseParameter(sc.prettyobj):
         bool or raise a value error if validation fails
 
         """
-
         # Perform parameter specific validation defined in self.validator
         if self.validator is not None:
             if not callable(self.validator):
@@ -129,17 +128,15 @@ class BaseParameter(sc.prettyobj):
                 raise ValueError(f"Parameter failed validation.")
 
         # Perform range validation
-        self.validate_range()
+        if self.valid_range is not None:
+            self.validate_range()
         # Perform type validation
         self.validate_type()
         # Set attribute
         self.has_been_validated = True
 
     def validate_range(self):
-        if self.valid_range is None:
-            # TODO: maybe we should say something if there's no valid_range
-            pass
-        elif isinstance(self.valid_range, tuple) and len(self.valid_range) == 2:
+        if isinstance(self.valid_range, tuple) and len(self.valid_range) == 2:
             vmin, vmax = self.valid_range
             if vmin is not None and self.value < vmin:
                 errmsg = f"Value {self.value} is below the minimum valid value {vmin}."
@@ -156,6 +153,11 @@ class BaseParameter(sc.prettyobj):
         else:
             raise ValueError("Bad valid_range specification.")
         return True
+
+    def validate_type(self):
+        if not isinstance(self.value, self.dtype):
+            errmsg = f"Value {self.value} is not of the correct type [{self.dtype}]."
+            raise ValueError(errmsg)
 
     def update(self, new_value):
         """
