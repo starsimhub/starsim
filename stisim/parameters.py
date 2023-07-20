@@ -11,6 +11,7 @@ __all__ = ['BaseParameter', 'ParameterSet', 'ParameterMapper', 'to_parameterset'
 class ParameterSet(ParsObj):
     """
     TODO: write method to aggregate parameters according to their 'category' attribute
+    TODO: hand
     TODO: check that parameter items are instances of Parameter, or maybe not as it
           already does a try/except
     A derived class of ParsObj where __getitem__ returns pars[key].value
@@ -65,6 +66,7 @@ class ParameterSet(ParsObj):
         """  """
         return self.pars.keys()
 
+
 class BaseParameter(sc.prettyobj):
     def __init__(self, name, dtype, default_value, value=None, ptype="required", valid_range=None, category=None,
                  validator=None,
@@ -103,6 +105,12 @@ class BaseParameter(sc.prettyobj):
         self.value = value or default_value  # If value is not specified at instantiation, use default
         self.default_value = default_value
 
+    # def __sub__(self, other):
+    #     if isinstance(other, BaseParameter):
+    #         return self.value - other.value
+    #     else:
+    #         raise TypeError("Unsupported operand type for subtraction.")
+
     def validate(self):
         """
         Method to validate parameter values
@@ -112,17 +120,22 @@ class BaseParameter(sc.prettyobj):
         bool or raise a value error if validation fails
 
         """
+
         # Perform parameter specific validation defined in self.validator
         if self.validator is not None:
             if not callable(self.validator):
                 raise ValueError("Validator is not callable.")
             if not self.validator.__call__(self.value):
                 raise ValueError(f"Parameter failed validation.")
-            self.has_been_validated = True
-        # else:
-        #     wrnmsg = f"No validator provided. Will try to perform basic validation."
-        #     print(wrnmsg)
-        # Perform basic validation
+
+        # Perform range validation
+        self.validate_range()
+        # Perform type validation
+        self.validate_type()
+        # Set attribute
+        self.has_been_validated = True
+
+    def validate_range(self):
         if self.valid_range is None:
             # TODO: maybe we should say something if there's no valid_range
             pass
@@ -192,12 +205,12 @@ class ParameterMapper:
             ParameterSet: A ParameterSet instance with mapped parameters.
         """
         # Merge default and user parameters
-        parameter_dict = sc.mergedicts(self.default_parameters, self.user_parameters, kwargs)
+        merged_dict = sc.mergedicts(self.default_parameters, self.user_parameters, kwargs)
 
         # Iterate over default parameters and map them to ParameterSet
-        for key, value in parameter_dict.items():
+        parameter_dict = sc.objdict()
+        for key, value in merged_dict.items():
             parameter_dict[key] = BaseParameter(key, type(value), value)
-
         # Convert merged parameters into ParameterSet
         parameter_set = ParameterSet(parameter_dict)
         return parameter_set
@@ -216,17 +229,19 @@ def to_parameterset(default_parameters=None, user_parameters=None, **kwargs) -> 
         ParameterSet: A ParameterSet instance with mapped parameters.
     """
     # Merge default and user parameters if both are provided
+    import ipdb;
+    ipdb.set_trace()
     if default_parameters and user_parameters:
-        parameter_dict = sc.mergedicts(default_parameters, user_parameters, kwargs)
+        merged_dict = sc.mergedicts(default_parameters, user_parameters, kwargs)
     else:
-        parameter_dict = default_parameters or user_parameters or {}
+        merged_dict = default_parameters or user_parameters or {}
 
-    # Iterate over default parameters and map them to ParameterSet
-    for key, value in parameter_dict.items():
-        parameter_dict[key] = BaseParameter(key, type(value), value)
-
-    # Convert merged parameters into ParameterSet
-    parameter_set = ParameterSet(parameter_dict)
+        # Iterate over default parameters and map them to ParameterSet
+        parameter_dict = sc.objdict()
+        for key, value in merged_dict.items():
+            parameter_dict[key] = BaseParameter(key, type(value), value)
+        # Convert merged parameters into ParameterSet
+        parameter_set = ParameterSet(parameter_dict)
     return parameter_set
 
 
