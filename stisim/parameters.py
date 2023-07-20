@@ -128,13 +128,13 @@ class BaseParameter(sc.prettyobj):
 
         # Perform range validation
         if self.valid_range is not None:
-            self.validate_range()
+            self.validate_in_range()
         # Perform type validation
         self.validate_type()
         # Set attribute
         self.has_been_validated = True
 
-    def validate_range(self):
+    def validate_in_range(self):
         if isinstance(self.valid_range, tuple) and len(self.valid_range) == 2:
             vmin, vmax = self.valid_range
             if vmin is not None and self.value < vmin:
