@@ -6,7 +6,8 @@ import sciris as sc
 from .settings import options as sso  # For setting global options
 from .parameters import BaseParameter, ParameterSet
 
-__all__ = ['make_default_pars', 'build_default_pars', 'make_default_parset', 'default_pars_dict', 'get_default_parameter', 'build_pars']
+__all__ = ['make_default_pars', 'build_default_pars', 'make_default_parset', 'default_pars_dict',
+           'get_default_parameter', 'build_pars']
 
 
 def build_default_pars(**kwargs):
@@ -384,12 +385,12 @@ def default_pars_dict():
         },
         'verbose': {
             'name': 'verbose',
-            'dtype': float,
+            'dtype': (float, str, int),
             'default_value': sso.verbose,
             'ptype': 'required',
-            'valid_range': [0, 0.1, 1, 2],
+            'valid_range': [-1, 0, 0.1, 1, 2],
             'category': ["other"],
-            'validator': None,
+            'validator': validator_verbose,
             'label': None,
             'description': 'Whether or not to display information during the run -- options are 0 (silent), '
                            '0.1 (some; default), 1 (default), 2 (everything)',
@@ -400,6 +401,10 @@ def default_pars_dict():
         }
     }
     return default_parameters
+
+
+def default_parset_dict():
+    pass
 
 
 def get_default_parameter(default_pars, parameter_name):
@@ -478,6 +483,7 @@ def make_default_pars(**kwargs):
 
     return pars
 
+
 # def get_births_deaths(location, verbose=1, by_sex=True, overall=False, die=True):
 #     """
 #     Get mortality and fertility data by location if provided, or use default
@@ -502,3 +508,9 @@ def make_default_pars(**kwargs):
 #     except ValueError as E:
 #         warnmsg = f'Could not load demographic data for requested location "{location}" ({str(E)})'
 #         ssm.warn(warnmsg, die=die)
+
+
+def validator_verbose(value):
+    if not sc.isnumber(value):  # pragma: no cover
+        errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(value)} "{value}"'
+        raise ValueError(errormsg)
