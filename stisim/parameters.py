@@ -11,7 +11,6 @@ __all__ = ['BaseParameter', 'ParameterSet', 'ParameterMapper', 'to_parameterset'
 class ParameterSet(ParsObj):
     """
     TODO: write method to aggregate parameters according to their 'category' attribute
-    TODO: hand
     TODO: check that parameter items are instances of Parameter, or maybe not as it
           already does a try/except
     A derived class of ParsObj where __getitem__ returns pars[key].value
@@ -144,15 +143,12 @@ class BaseParameter(sc.prettyobj):
             if vmax is not None and self.value > vmax:
                 errmsg = f"Value {self.value} is above the maximum valid value {vmax}."
                 raise ValueError(errmsg)
-            self.has_been_validated = True
         elif isinstance(self.valid_range, list):  # Works for numerical and categorical sets
             if self.value not in self.valid_range:
                 errmsg = f"Value {self.value} is not in the allowed list [{self.valid_range}]."
                 raise ValueError(errmsg)
-            self.has_been_validated = True
         else:
             raise ValueError("Bad valid_range specification.")
-        return True
 
     def validate_type(self):
         if not isinstance(self.value, self.dtype):
@@ -231,8 +227,6 @@ def to_parameterset(default_parameters=None, user_parameters=None, **kwargs) -> 
         ParameterSet: A ParameterSet instance with mapped parameters.
     """
     # Merge default and user parameters if both are provided
-    import ipdb;
-    ipdb.set_trace()
     if default_parameters and user_parameters:
         merged_dict = sc.mergedicts(default_parameters, user_parameters, kwargs)
     else:
