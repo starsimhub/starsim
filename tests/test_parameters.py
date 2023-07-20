@@ -53,9 +53,8 @@ class TestParsObj:
 def test_microsim():
     sc.heading('Test sim with default parameters')
     # NOTE: NOT FUNCTIONAL YET
-    pars = ss.make_default_pars()
-    parset = ss.ParameterSet(pars)
-    sim = ss.Sim(pars=parset)
+    sim_pars = {'networks': [ss.simple_sexual()], 'n_agents': 100}
+    sim = ss.Sim(pars=sim_pars)
     sim.initialize()
     sim.run()
 

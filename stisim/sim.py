@@ -170,7 +170,7 @@ class Sim(ssb.BaseSim):
                 errormsg = 'You must supply one of n_years and end."'
                 raise ValueError(errormsg)
             self.pars['end'] = self.pars['start'] + self.pars['n_years']
-        self.pars['n_years'].validate()
+        self.pars.n_years.validate()
 
         # Handle verbose, the transformation below could be handled by a Parameter instance?
         if self['verbose'] == 'brief':

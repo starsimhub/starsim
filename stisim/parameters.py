@@ -130,7 +130,7 @@ class BaseParameter(sc.prettyobj):
         if self.valid_range is not None:
             self.validate_in_range()
         # Perform type validation
-        self.validate_type()
+        #self.validate_type()
         # Set attribute
         self.has_been_validated = True
 
