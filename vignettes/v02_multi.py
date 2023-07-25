@@ -82,7 +82,7 @@ sim = ss.Sim(modules=[ss.syphylis(), ss.hiv()])
 syph_pars = dict(init_prev=0.02)
 hiv_pars = dict(init_prev=0.02)
 syph = ss.syphilis(pars=syph_pars)
-hiv = ss.syphilis(pars=hiv_pars)
+hiv = ss.hiv(pars=hiv_pars)
 sim = ss.Sim(modules=[syph, hiv])
 sim.initialize()  # Adds modules and parameters
 # Parameters can be read like a conditional probability, i.e. prob(transmitting hiv | syphilis infection) = 2
