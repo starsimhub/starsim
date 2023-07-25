@@ -1,5 +1,5 @@
 """
-Vignette 10: Custom results
+Vignette 10: Custom people
 """
 
 import stisim as ss
@@ -85,3 +85,15 @@ sim = ss.Sim(people=ppl,
 
 # Accessing and utilising custom attributes
 sim.ppl.plot_state(['fertilty_rate', 'has_access_to_medical_care')
+
+
+##################
+# @robynstuart
+##################
+# See example in v09_custom_networks.py, i.e.
+is_fsw = ss.StochState('fsw', bool, distdict=dict(dist='choice', par1=[1, 0], par2=[0.05, 0.95]))
+is_client = ss.StochState('client', bool, distdict=dict(dist='choice', par1=[1, 0], par2=[0.15, 0.85]))
+ppl = ss.People(100, states=[is_fsw, is_client])
+sex_work = sex_work()  # Question: what constraints are there on this? Must it be a ss.Network or could it be anything?
+syph = ss.syphilis()
+sim = ss.Sim(people=ppl, networks=['mf', sex_work], modules=syph)

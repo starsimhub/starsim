@@ -1,5 +1,10 @@
 """
-Vignette 08: Custom resultss
+Vignette 09: Custom networks
+TO RESOLVE:
+    - what should the default networks be?
+    - how should network participation be specified? e.g. not everyone will participate in the MSM or FSW networks
+    - what should happen if network properties depend on disease attributes? (e.g. Romesh's example)
+    - what should happen if the network depends on custom people attributes?
 """
 
 import stisim as ss
