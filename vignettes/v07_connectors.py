@@ -1,10 +1,7 @@
 """
 Vignette 07: Custom connectors
-
-DECISIONS:
-    - all examples follow similar syntax for specifying more than one disease
 TO RESOLVE:
-    - what are the default connectors?
+    - any other example for how to do this?
 """
 import stisim as ss
 
