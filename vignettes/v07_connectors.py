@@ -34,7 +34,7 @@ hiv_pars = dict(
     syphilis={'rel_trans': complex_connector},
 )
 syph = ss.syphilis(pars=syph_pars)
-hiv = ss.syphilis(pars=hiv_pars)
+hiv = ss.hiv(pars=hiv_pars)
 sim = ss.Sim(modules=[syph, hiv])
 
 # Case 3: creating even more complex connectors
