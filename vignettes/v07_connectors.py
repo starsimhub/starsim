@@ -1,9 +1,36 @@
 """
 Vignette 07: Custom connectors
 TO RESOLVE:
+- do we need a custom connector class?
     - any other example for how to do this?
 """
 import stisim as ss
+
+
+##################
+# @pausz
+##################
+
+# Create instances of STIsim modules
+hiv = ss.HIV()
+gonorrhea = ss.Gonorrhea()
+modules = [hiv, gonorrhea]
+
+# Create a connector with the two modules
+connector = ss.Connector([hiv, gonorrhea])
+
+# Define interactions between the modules
+def custom_interaction_1():
+    pass
+def custom_interaction_2():
+    pass
+
+connector.add_interaction('interaction_1', source_module, target_module, custom_interaction_1)
+connector.add_interaction('interaction_2', source_module, target_module, custom_interaction_2)
+# The connector class would have a method apply_interactions() called by sim.
+
+# Run the simulation using the connected modules
+sim = ss.Sim(modules=[hiv, gonorrhea], connectors=connector)
 
 ##################
 # @robynstuart
