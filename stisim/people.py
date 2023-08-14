@@ -74,9 +74,9 @@ base_key = 'uid'  # Define the key used by default for getting length, etc.
 
 class BasePeople(sc.prettyobj):
     """
-    A class to handle all the boilerplate for people -- note that as with the
-    BaseSim vs Sim classes, everything interesting happens in the People class,
-    whereas this class exists to handle the less interesting implementation details.
+    A class to handle all the boilerplate for people -- everything interesting 
+    happens in the People class, whereas this class exists to handle the less 
+    interesting implementation details.
     """
 
     def __init__(self, n, states=None, *args, **kwargs):
@@ -101,16 +101,7 @@ class BasePeople(sc.prettyobj):
 
     def __len__(self):
         """ Length of people """
-        try:
-            arr = getattr(self, base_key)
-            return len(arr)
-        except Exception as E:
-            print(f'Warning: could not get length of People (could not get self.{base_key}: {E})')
-            return 0
-
-    @property
-    def n(self):
-        return len(self)
+        return len(self[base_key])
 
     def _len_arrays(self):
         """ Length of underlying arrays """
@@ -207,9 +198,6 @@ class BasePeople(sc.prettyobj):
         for i in range(len(self)):
             yield self[i]
             
-            
-    # CK: additional methods
-    
     @property
     def active(self):
         """ Indices of everyone sexually active  """
@@ -219,6 +207,7 @@ class BasePeople(sc.prettyobj):
     def alive(self):
         """ Alive boolean """
         return ~self.dead
+
 
 
 class People(BasePeople):
