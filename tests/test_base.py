@@ -13,10 +13,10 @@ import matplotlib.pyplot as plt
 # %% Define the tests
 
 def test_people():
-    sc.heading('Testing base people object')
+    sc.heading('Testing people object')
 
     # Base people contains only the states defined in base.base_states
-    ppl = ss.BasePeople(100)  # BasePeople
+    ppl = ss.People(100)  # BasePeople
     del ppl
 
     # Possible to initialize people with extra states, e.g. a geolocation

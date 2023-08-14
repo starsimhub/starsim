@@ -89,7 +89,7 @@ class Module(sc.prettyobj):
     def update_results(self, sim):
         sim.results[self.name]['n_susceptible'][sim.ti] = np.count_nonzero(sim.people[self.name].susceptible)
         sim.results[self.name]['n_infected'][sim.ti] = np.count_nonzero(sim.people[self.name].infected)
-        sim.results[self.name]['prevalence'][sim.ti] = sim.results[self.name].n_infected[sim.ti] / sim.people.n
+        sim.results[self.name]['prevalence'][sim.ti] = sim.results[self.name].n_infected[sim.ti] / len(sim.people)
         sim.results[self.name]['new_infections'] = np.count_nonzero(sim.people[self.name].ti_infected == sim.ti)
 
     def finalize_results(self, sim):

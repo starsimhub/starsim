@@ -79,26 +79,6 @@ class BasePeople(sc.prettyobj):
     interesting implementation details.
     """
 
-    def __init__(self, n, states=None, *args, **kwargs):
-        """ Initialize essential attributes """
-
-        super().__init__(*args, **kwargs)
-        
-
-        return
-
-    def initialize(self, popdict=None):
-        """ Initialize people by setting their attributes """
-        if popdict is None:
-            self['age'][:] = np.random.random(size=self.n) * 100
-            self['female'][:] = np.random.choice([False, True], size=self.n)
-        else:
-            # Use random defaults
-            self['age'][:] = popdict['age']
-            self['female'][:] = popdict['female']
-        self.initialized = True
-        return
-
     def __len__(self):
         """ Length of people """
         return len(self[base_key])
@@ -268,8 +248,15 @@ class People(BasePeople):
 
 
     def initialize(self, popdict=None):
-        """ Perform initializations """
-        super().initialize(popdict=popdict)  # Initialize states
+        """ Initialize people by setting their attributes """
+        if popdict is None:
+            self['age'][:] = np.random.random(size=len(self)) * 100
+            self['female'][:] = np.random.choice([False, True], size=len(self))
+        else:
+            # Use random defaults
+            self['age'][:] = popdict['age']
+            self['female'][:] = popdict['female']
+        self.initialized = True
         return
 
 
