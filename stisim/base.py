@@ -33,47 +33,7 @@ def rgetattr(obj, attr, *args):
 
 # %% Define simulation classes
 
-class FlexPretty(sc.prettyobj):
-    """
-    A class that supports multiple different display options: namely obj.brief()
-    for a one-line description and obj.disp() for a full description.
-    """
-
-    def __repr__(self):
-        """ Use brief repr by default """
-        try:
-            string = self._brief()
-        except Exception as E:
-            string = sc.objectid(self)
-            string += f'Warning, something went wrong printing object:\n{str(E)}'
-        return string
-
-    def _disp(self):
-        """ Verbose output -- use Sciris' pretty repr by default """
-        return sc.prepr(self)
-
-    def disp(self, output=False):
-        """ Print or output verbose representation of the object """
-        string = self._disp()
-        if not output:
-            print(string)
-        else:
-            return string
-
-    def _brief(self):
-        """ Brief output -- use a one-line output, a la Python's default """
-        return sc.objectid(self)
-
-    def brief(self, output=False):
-        """ Print or output a brief representation of the object """
-        string = self._brief()
-        if not output:
-            print(string)
-        else:
-            return string
-
-
-class ParsObj(FlexPretty):
+class ParsObj(sc.prettyobj):
     """
     A class based around performing operations on a self.pars dict.
     """
@@ -102,27 +62,7 @@ class ParsObj(FlexPretty):
             raise sc.KeyNotFoundError(errormsg)
         return
 
-    def update_pars(self, pars=None, create=False):
-        """
-        Update internal dict with new pars.
 
-        Args:
-            pars (dict): the parameters to update (if None, do nothing)
-            create (bool): if create is False, then raise a KeyNotFoundError if the key does not already exist
-        """
-        if pars is not None:
-            if not isinstance(pars, dict):
-                raise TypeError(f'The pars object must be a dict; you supplied a {type(pars)}')
-            if not hasattr(self, 'pars'):
-                self.pars = pars
-            if not create:
-                available_keys = list(self.pars.keys())
-                mismatches = [key for key in pars.keys() if key not in available_keys]
-                if len(mismatches):
-                    errormsg = f'Key(s) {mismatches} not found; available keys are {available_keys}'
-                    raise sc.KeyNotFoundError(errormsg)
-            self.pars.update(pars)
-        return
 
 
 def set_metadata(obj, **kwargs):
@@ -141,9 +81,7 @@ class BaseSim(ParsObj):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)  # Initialize and set the parameters as attributes
-        self.filename = None
-        self.initialized = None
-        self.results_ready = None
+
         return
 
     def _disp(self):
@@ -159,7 +97,7 @@ class BaseSim(ParsObj):
         # Merge everything together
         pars = sc.mergedicts(pars, kwargs)
         if pars:
-            super().update_pars(pars=pars, create=create)
+            self.pars.update_pars(pars=pars, create=create)
 
         return
 
@@ -415,7 +353,7 @@ base_states = ssu.named_dict(
 )
 
 
-class BasePeople(FlexPretty):
+class BasePeople(sc.prettyobj):
     """
     A class to handle all the boilerplate for people -- note that as with the
     BaseSim vs Sim classes, everything interesting happens in the People class,

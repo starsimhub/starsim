@@ -5,7 +5,6 @@ Define core Sim classes
 # Imports
 import numpy as np
 import sciris as sc
-from . import base as ssb
 from . import misc as ssm
 from . import settings as sss
 from . import utils as ssu
@@ -17,7 +16,7 @@ from .results import Result
 
 
 # Define the model
-class Sim(ssb.BaseSim):
+class Sim:
 
     def __init__(self, pars=None, label=None, people=None, popdict=None, modules=None,
                  networks=None, version=None, **kwargs):
@@ -42,13 +41,14 @@ class Sim(ssb.BaseSim):
         self.yearvec = None
         self.tivec = None
         self.npts = None
+        
+        self.filename = None
+        self.initialized = None
+        self.results_ready = None
 
         # Make default parameters (using values from parameters.py)
-        default_pars = sspar.make_pars(version=version)  # Start with default pars
-        super().__init__(default_pars)  # Initialize and set the parameters as attributes
-
-        # Update parameters
-        self.update_pars(pars, **kwargs)  # Update the parameters
+        self.pars = sspar.make_pars()  # Start with default pars
+        self.pars.update_pars(**kwargs)  # Update the parameters
 
         # Initialize other quantities
         self.interventions = None
@@ -73,7 +73,7 @@ class Sim(ssb.BaseSim):
         self.validate_pars()  # Ensure parameters have valid values
         self.validate_dt()
         self.init_time_vecs()  # Initialize time vecs
-        ssu.set_seed(self['rand_seed'])  # Reset the random seed before the population is created
+        ssu.set_seed(self.pars['rand_seed'])  # Reset the random seed before the population is created
 
         # Initialize the core sim components
         self.init_people(popdict=popdict, reset=reset, **kwargs)  # Create all the people (the heaviest step)
@@ -86,7 +86,7 @@ class Sim(ssb.BaseSim):
 
         # Reset the random seed to the default run seed, so that if the simulation is run with
         # reset_seed=False right after initialization, it will still produce the same output
-        ssu.set_seed(self['rand_seed'] + 1)
+        ssu.set_seed(self.pars['rand_seed'] + 1)
 
         # Final steps
         self.initialized = True
@@ -130,8 +130,8 @@ class Sim(ssb.BaseSim):
             # Round the reciprocal
             reciprocal = int(reciprocal)
             rounded_dt = 1.0 / reciprocal
-            self['dt'] = rounded_dt
-            if self['verbose']:
+            self.pars['dt'] = rounded_dt
+            if self.pars['verbose']:
                 warnmsg = f"Warning: Provided time step dt: {dt} resulted in a non-integer number of steps per year. Rounded to {rounded_dt}."
                 print(warnmsg)
 
@@ -140,37 +140,37 @@ class Sim(ssb.BaseSim):
         Some parameters can take multiple types; this makes them consistent.
         """
         # Handle n_agents
-        if self['n_agents'] is not None:
-            self['n_agents'] = int(self['n_agents'])
+        if self.pars['n_agents'] is not None:
+            self.pars['n_agents'] = int(self.pars['n_agents'])
         else:
             if self.people is not None:
-                self['n_agents'] = len(self.people)
+                self.pars['n_agents'] = len(self.people)
             else:
                 if self.popdict is not None:
-                    self['n_agents'] = len(self.popdict)
+                    self.pars['n_agents'] = len(self.popdict)
                 else:
                     errormsg = 'Must supply n_agents, a people object, or a popdict'
                     raise ValueError(errormsg)
 
         # Handle end and n_years
-        if self['end']:
-            self['n_years'] = int(self['end'] - self['start'])
-            if self['n_years'] <= 0:
-                errormsg = f"Number of years must be >0, but you supplied start={str(self['start'])} and " \
-                           f"end={str(self['end'])}, which gives n_years={self['n_years']}"
+        if self.pars['end']:
+            self.pars['n_years'] = int(self.pars['end'] - self.pars['start'])
+            if self.pars['n_years'] <= 0:
+                errormsg = f"Number of years must be >0, but you supplied start={str(self.pars['start'])} and " \
+                           f"end={str(self.pars['end'])}, which gives n_years={self.pars['n_years']}"
                 raise ValueError(errormsg)
         else:
-            if self['n_years']:
-                self['end'] = self['start'] + self['n_years']
+            if self.pars['n_years']:
+                self.pars['end'] = self.pars['start'] + self.pars['n_years']
             else:
                 errormsg = 'You must supply one of n_years and end."'
                 raise ValueError(errormsg)
 
         # Handle verbose
-        if self['verbose'] == 'brief':
-            self['verbose'] = -1
-        if not sc.isnumber(self['verbose']):  # pragma: no cover
-            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self["verbose"])} "{self["verbose"]}"'
+        if self.pars['verbose'] == 'brief':
+            self.pars['verbose'] = -1
+        if not sc.isnumber(self.pars['verbose']):  # pragma: no cover
+            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self.pars["verbose"])} "{self.pars["verbose"]}"'
             raise ValueError(errormsg)
 
         return
@@ -179,8 +179,8 @@ class Sim(ssb.BaseSim):
         """
         Construct vectors things that keep track of time
         """
-        self.yearvec = sc.inclusiverange(start=self['start'], stop=self['end'] + 1 - self['dt'],
-                                         step=self['dt'])  # Includes all the timepoints in the last year
+        self.yearvec = sc.inclusiverange(start=self.pars['start'], stop=self.pars['end'] + 1 - self.pars['dt'],
+                                         step=self.pars['dt'])  # Includes all the timepoints in the last year
         self.npts = len(self.yearvec)
         self.tivec = np.arange(self.npts)
 
@@ -198,38 +198,38 @@ class Sim(ssb.BaseSim):
 
         # Handle inputs
         if verbose is None:
-            verbose = self['verbose']
+            verbose = self.pars['verbose']
         if verbose > 0:
             resetstr = ''
             if self.people:
                 resetstr = ' (resetting people)' if reset else ' (warning: not resetting sim.people)'
-            print(f'Initializing sim{resetstr} with {self["n_agents"]:0n} agents')
+            print(f'Initializing sim{resetstr} with {self.pars["n_agents"]:0n} agents')
 
         # If people have not been supplied, make them
         if self.people is None:
-            self.people = ssppl.People(self['n_agents'], kwargs)  # This just assigns UIDs and length
+            self.people = ssppl.People(self.pars['n_agents'], kwargs)  # This just assigns UIDs and length
 
         # If a popdict has not been supplied, we can make one from location data
         if popdict is None:
-            if self['location'] is not None:
+            if self.pars['location'] is not None:
                 # Check where to get total_pop from
-                if self['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
+                if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
                     errormsg = 'You can either define total_pop explicitly or via the location, but not both'
                     raise ValueError(errormsg)
-                total_pop, popdict = ssppl.make_popdict(n=self['n_agents'], location=self['location'], verbose=self['verbose'])
+                total_pop, popdict = ssppl.make_popdict(n=self.pars['n_agents'], location=self.pars['location'], verbose=self.pars['verbose'])
 
             else:
-                if self['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
-                    total_pop = self['total_pop']
+                if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
+                    total_pop = self.pars['total_pop']
                 else:
-                    if self['pop_scale'] is not None:
-                        total_pop = self['pop_scale'] * self['n_agents']
+                    if self.pars['pop_scale'] is not None:
+                        total_pop = self.pars['pop_scale'] * self.pars['n_agents']
                     else:
-                        total_pop = self['n_agents']
+                        total_pop = self.pars['n_agents']
 
-        self['total_pop'] = total_pop
-        if self['pop_scale'] is None:
-            self['pop_scale'] = total_pop / self['n_agents']
+        self.pars['total_pop'] = total_pop
+        if self.pars['pop_scale'] is None:
+            self.pars['pop_scale'] = total_pop / self.pars['n_agents']
 
         # Finish initialization
         if not self.people.initialized:
@@ -251,10 +251,10 @@ class Sim(ssb.BaseSim):
         """ Initialize networks if these have been provided separately from the people """
 
         # One possible workflow is that users will provide a location and a set of networks but not people.
-        # This means networks will be stored in self['networks'] and we'll need to copy them to the people.
+        # This means networks will be stored in self.pars['networks'] and we'll need to copy them to the people.
         if self.people.networks is None or len(self.people.networks) == 0:
-            if self['networks'] is not None:
-                self.people.networks = ssu.named_dict(self['networks'])
+            if self.pars['networks'] is not None:
+                self.people.networks = ssu.named_dict(self.pars['networks'])
 
         for key, network in self.people.networks.items():
             if network.label is not None:
@@ -288,7 +288,7 @@ class Sim(ssb.BaseSim):
         """ Initialize and validate the interventions """
 
         # Translate the intervention specs into actual interventions
-        for i, intervention in enumerate(self['interventions']):
+        for i, intervention in enumerate(self.pars['interventions']):
             if isinstance(intervention, type) and issubclass(intervention, ssi.Intervention):
                 intervention = intervention()  # Convert from a class to an instance of a class
             if isinstance(intervention, ssi.Intervention):
@@ -308,7 +308,7 @@ class Sim(ssb.BaseSim):
         self.analyzers = sc.autolist()
 
         # Interpret analyzers
-        for ai, analyzer in enumerate(self['analyzers']):
+        for ai, analyzer in enumerate(self.pars['analyzers']):
             if isinstance(analyzer, type) and issubclass(analyzer, ssa.Analyzer):
                 analyzer = analyzer()  # Convert from a class to an instance of a class
             if not (isinstance(analyzer, ssa.Analyzer) or callable(analyzer)):
@@ -366,7 +366,7 @@ class Sim(ssb.BaseSim):
     def update_connectors(self):
         """ Update connectors """
         if len(self.modules) > 1:
-            connectors = self['connectors']
+            connectors = self.pars['connectors']
             if len(connectors) > 0:
                 for connector in connectors:
                     if callable(connector):
@@ -391,7 +391,7 @@ class Sim(ssb.BaseSim):
             self._orig_pars = sc.dcp(self.pars)  # Create a copy of the parameters to restore after the run
 
         if verbose is None:
-            verbose = self['verbose']
+            verbose = self.pars['verbose']
 
         if reset_seed:
             # Reset the RNG. The primary use case (and why it defaults to True) is to ensure that
@@ -411,7 +411,7 @@ class Sim(ssb.BaseSim):
             # The seed is offset by 1 to avoid drawing the same random numbers as those used for population generation,
             # otherwise the first set of random numbers in the model (e.g., deaths) will be correlated with the first
             # set of random numbers drawn in population generation (e.g., sex)
-            ssu.set_seed(self['rand_seed'] + 1)
+            ssu.set_seed(self.pars['rand_seed'] + 1)
 
         # Check for AlreadyRun errors
         errormsg = None
@@ -430,12 +430,12 @@ class Sim(ssb.BaseSim):
 
             # Check if we were asked to stop
             elapsed = T.toc(output=True)
-            if self['timelimit'] and elapsed > self['timelimit']:
+            if self.pars['timelimit'] and elapsed > self.pars['timelimit']:
                 sc.printv(
-                    f"Time limit ({self['timelimit']} s) exceeded; call sim.finalize() to compute results if desired",
+                    f"Time limit ({self.pars['timelimit']} s) exceeded; call sim.finalize() to compute results if desired",
                     1, verbose)
                 return
-            elif self['stopping_func'] and self['stopping_func'](self):
+            elif self.pars['stopping_func'] and self.pars['stopping_func'](self):
                 sc.printv(
                     "Stopping function terminated the simulation; call sim.finalize() to compute results if desired", 1,
                     verbose)

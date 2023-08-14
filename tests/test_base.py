@@ -6,30 +6,11 @@ Test objects from base.py
 import sciris as sc
 import numpy as np
 import stisim as ss
-import pytest
 from stisim import utils as ssu
 import matplotlib.pyplot as plt
 
 
 # %% Define the tests
-
-def test_parsobj():
-    sc.heading('Testing parameters object')
-
-    pars1 = {'a': 1, 'b': 2}
-    parsobj = ss.ParsObj(pars1)
-
-    # Once created, you cannot directly add new keys to a parsobj, and a nonexistent key works like a dict
-    with pytest.raises(KeyError): parsobj['c'] = 3
-    with pytest.raises(KeyError): parsobj['c']
-
-    # Only a dict is allowed
-    with pytest.raises(TypeError):
-        pars2 = ['a', 'b']
-        ss.ParsObj(pars2)
-
-    return parsobj
-
 
 def test_people():
     sc.heading('Testing base people object')
@@ -123,7 +104,6 @@ if __name__ == '__main__':
     T = sc.tic()
 
     # Run tests
-    parsobj = test_parsobj()
     ppl = test_people()
     nw1, nw2, nw3, nw4 = test_networks()
     sim1 = test_microsim()

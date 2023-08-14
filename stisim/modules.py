@@ -223,7 +223,7 @@ class Pregnancy(Module):
 
     def initialize(self, sim):
         Module.initialize(self, sim)
-        sim['birth_rates'] = None  # This turns off birth rate pars so births only come from this module
+        sim.pars['birth_rates'] = None  # This turns off birth rate pars so births only come from this module
 
     def init_results(self, sim):
         """
