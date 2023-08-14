@@ -3,7 +3,6 @@ Base classes for *sim models
 """
 
 import numpy as np
-import pandas as pd
 import sciris as sc
 import functools
 from . import utils as ssu
@@ -12,7 +11,7 @@ from . import settings as sss
 from .version import __version__
 
 # Specify all externally visible classes this file defines
-__all__ = ['ParsObj', 'BaseSim', 'State', 'StochState', 'BasePeople', 'FlexDict']
+__all__ = ['State', 'StochState', 'BasePeople']
 
 # Default object getter/setter
 obj_set = object.__setattr__
@@ -33,37 +32,6 @@ def rgetattr(obj, attr, *args):
 
 # %% Define simulation classes
 
-class ParsObj(sc.prettyobj):
-    """
-    A class based around performing operations on a self.pars dict.
-    """
-
-    def __init__(self, pars, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.update_pars(pars, create=True)
-        return
-
-    def __getitem__(self, key):
-        """ Allow sim['par_name'] instead of sim.pars['par_name'] """
-        try:
-            return self.pars[key]
-        except:
-            all_keys = '\n'.join(list(self.pars.keys()))
-            errormsg = f'Key "{key}" not found; available keys:\n{all_keys}'
-            raise sc.KeyNotFoundError(errormsg)
-
-    def __setitem__(self, key, value):
-        """ Ditto """
-        if key in self.pars:
-            self.pars[key] = value
-        else:
-            all_keys = '\n'.join(list(self.pars.keys()))
-            errormsg = f'Key "{key}" not found; available keys:\n{all_keys}'
-            raise sc.KeyNotFoundError(errormsg)
-        return
-
-
-
 
 def set_metadata(obj, **kwargs):
     """ Set standard metadata for an object """
@@ -73,232 +41,6 @@ def set_metadata(obj, **kwargs):
     return
 
 
-class BaseSim(ParsObj):
-    """
-    The BaseSim class stores various methods useful for the Sim that are not directly
-    related to simulating.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)  # Initialize and set the parameters as attributes
-
-        return
-
-    def _disp(self):
-        """
-        Print a verbose display of the sim object. Used by repr(). See sim.disp()
-        for the user version. Equivalent to sc.prettyobj().
-        """
-        return sc.prepr(self)
-
-    def update_pars(self, pars=None, create=False, **kwargs):
-        """ Ensure that metaparameters get used properly before being updated """
-
-        # Merge everything together
-        pars = sc.mergedicts(pars, kwargs)
-        if pars:
-            self.pars.update_pars(pars=pars, create=create)
-
-        return
-
-    @property
-    def n(self):
-        """ Count the number of people -- if it fails, assume none """
-        try:  # By default, the length of the people dict
-            return len(self.people)
-        except:  # pragma: no cover # If it's None or missing
-            return 0
-
-    def shrink(self, skip_attrs=None, in_place=True):
-        """
-        "Shrinks" the simulation by removing the people and other memory-intensive
-        attributes (e.g., some interventions and analyzers), and returns a copy of
-        the "shrunken" simulation. Used to reduce the memory required for RAM or
-        for saved files.
-
-        Args:
-            skip_attrs (list): a list of attributes to skip (remove) in order to perform the shrinking; default "people"
-            in_place (bool): whether to perform the shrinking in place (default), or return a shrunken copy instead
-
-        Returns:
-            shrunken (Sim): a Sim object with the listed attributes removed
-        """
-        # By default, skip people (~90% of memory), popdict, and _orig_pars (which is just a backup)
-        if skip_attrs is None:
-            skip_attrs = ['popdict', 'people', '_orig_pars']
-
-        # Create the new object, and copy original dict, skipping the skipped attributes
-        if in_place:
-            shrunken = self
-            for attr in skip_attrs:
-                setattr(self, attr, None)
-        else:
-            shrunken = object.__new__(self.__class__)
-            shrunken.__dict__ = {k: (v if k not in skip_attrs else None) for k, v in self.__dict__.items()}
-
-        # Don't return if in place
-        if in_place:
-            return
-        else:
-            return shrunken
-
-    def save(self, filename=None, keep_people=None, skip_attrs=None, **kwargs):
-        """
-        Save to disk as a gzipped pickle.
-
-        Args:
-            filename (str or None): the name or path of the file to save to; if None, uses stored
-            keep_people (bool or None): whether to keep the people
-            skip_attrs (list): attributes to skip saving
-            kwargs: passed to sc.makefilepath()
-
-        Returns:
-            filename (str): the validated absolute path to the saved file
-
-        **Example**::
-
-            sim.save() # Saves to a .sim file
-        """
-
-        # Set keep_people based on whether we're in the middle of a run
-        if keep_people is None:
-            if self.initialized and not self.results_ready:
-                keep_people = True
-            else:
-                keep_people = False
-
-        # Handle the filename
-        if filename is None:
-            filename = self.simfile
-        filename = sc.makefilepath(filename=filename, **kwargs)
-        self.filename = filename  # Store the actual saved filename
-
-        # Handle the shrinkage and save
-        if skip_attrs or not keep_people:
-            obj = self.shrink(skip_attrs=skip_attrs, in_place=False)
-        else:
-            obj = self
-        ssm.save(filename=filename, obj=obj)
-
-        return filename
-
-    @staticmethod
-    def load(filename, *args, **kwargs):
-        """
-        Load from disk from a gzipped pickle.
-        """
-        sim = ssm.load(filename, *args, **kwargs)
-        if not isinstance(sim, BaseSim):  # pragma: no cover
-            errormsg = f'Cannot load object of {type(sim)} as a Sim object'
-            raise TypeError(errormsg)
-        return sim
-
-    def _get_ia(self, which, label=None, partial=False, as_list=False, as_inds=False, die=True, first=False):
-        """ Helper method for get_interventions() and get_analyzers(); see get_interventions() docstring """
-
-        # Handle inputs
-        if which not in ['interventions', 'analyzers']:  # pragma: no cover
-            errormsg = f'This method is only defined for interventions and analyzers, not "{which}"'
-            raise ValueError(errormsg)
-
-        ia_list = sc.tolist(
-            self.analyzers if which == 'analyzers' else self.interventions)  # List of interventions or analyzers
-        n_ia = len(ia_list)  # Number of interventions/analyzers
-
-        if label == 'summary':  # Print a summary of the interventions
-            df = pd.DataFrame(columns=['ind', 'label', 'type'])
-            for ind, ia_obj in enumerate(ia_list):
-                df = df.append(dict(ind=ind, label=str(ia_obj.label), type=type(ia_obj)), ignore_index=True)
-            print(f'Summary of {which}:')
-            print(df)
-            return
-
-        else:  # Standard usage case
-            position = 0 if first else -1  # Choose either the first or last element
-            if label is None:  # Get all interventions if no label is supplied, e.g. sim.get_interventions()
-                label = np.arange(n_ia)
-            if isinstance(label, np.ndarray):  # Allow arrays to be provided
-                label = label.tolist()
-            labels = sc.promotetolist(label)
-
-            # Calculate the matches
-            matches = []
-            match_inds = []
-            for label in labels:
-                if sc.isnumber(label):
-                    matches.append(ia_list[label])  # This will raise an exception if an invalid index is given
-                    label = n_ia + label if label < 0 else label  # Convert to a positive number
-                    match_inds.append(label)
-                elif sc.isstring(label) or isinstance(label, type):
-                    for ind, ia_obj in enumerate(ia_list):
-                        if sc.isstring(label) and ia_obj.label == label or (partial and (label in str(ia_obj.label))):
-                            matches.append(ia_obj)
-                            match_inds.append(ind)
-                        elif isinstance(label, type) and isinstance(ia_obj, label):
-                            matches.append(ia_obj)
-                            match_inds.append(ind)
-                else:  # pragma: no cover
-                    errormsg = f'Could not interpret label type "{type(label)}": should be str, int, list, or {which} class'
-                    raise TypeError(errormsg)
-
-            # Parse the output options
-            if as_inds:
-                output = match_inds
-            elif as_list:  # Used by get_interventions()
-                output = matches
-            else:
-                if len(matches) == 0:  # pragma: no cover
-                    if die:
-                        errormsg = f'No {which} matching "{label}" were found'
-                        raise ValueError(errormsg)
-                    else:
-                        output = None
-                else:
-                    output = matches[
-                        position]  # Return either the first or last match (usually), used by get_intervention()
-
-            return output
-
-    def get_interventions(self, label=None, partial=False, as_inds=False):
-        """
-        Find the matching intervention(s) by label, index, or type. If None, return
-        all interventions. If the label provided is "summary", then print a summary
-        of the interventions (index, label, type).
-
-        Args:
-            label (str, int, Intervention, list): the label, index, or type of intervention to get; if a list, iterate over one of those types
-            partial (bool): if true, return partial matches (e.g. 'beta' will match all beta interventions)
-            as_inds (bool): if true, return matching indices instead of the actual interventions
-        """
-        return self._get_ia('interventions', label=label, partial=partial, as_inds=as_inds, as_list=True)
-
-    def get_intervention(self, label=None, partial=False, first=False, die=True):
-        """
-        Like get_interventions(), find the matching intervention(s) by label,
-        index, or type. If more than one intervention matches, return the last
-        by default. If no label is provided, return the last intervention in the list.
-
-        Args:
-            label (str, int, Intervention, list): the label, index, or type of intervention to get; if a list, iterate over one of those types
-            partial (bool): if true, return partial matches (e.g. 'beta' will match all beta interventions)
-            first (bool): if true, return first matching intervention (otherwise, return last)
-            die (bool): whether to raise an exception if no intervention is found
-        """
-        return self._get_ia('interventions', label=label, partial=partial, first=first, die=die, as_inds=False,
-                            as_list=False)
-
-    def get_analyzers(self, label=None, partial=False, as_inds=False):
-        """
-        Same as get_interventions(), but for analyzers.
-        """
-        return self._get_ia('analyzers', label=label, partial=partial, as_list=True, as_inds=as_inds)
-
-    def get_analyzer(self, label=None, partial=False, first=False, die=True):
-        """
-        Same as get_intervention(), but for analyzers.
-        """
-        return self._get_ia('analyzers', label=label, partial=partial, first=first, die=die, as_inds=False,
-                            as_list=False)
 
 
 # %% Define people classes
@@ -621,30 +363,3 @@ class BasePeople(sc.prettyobj):
     def to_list(self):
         """ Return all people as a list """
         return list(self)
-
-
-class FlexDict(dict):
-    """
-    A dict that allows more flexible element access: in addition to obj['a'],
-    also allow obj[0]. Lightweight implementation of the Sciris odict class.
-    """
-
-    def __getitem__(self, key):
-        """ Lightweight odict -- allow indexing by number, with low performance """
-        try:
-            return super().__getitem__(key)
-        except KeyError as KE:
-            try:  # Assume it's an integer
-                dictkey = self.keys()[key]
-                return self[dictkey]
-            except:
-                raise sc.KeyNotFoundError(KE)  # Raise the original error
-
-    def keys(self):
-        return list(super().keys())
-
-    def values(self):
-        return list(super().values())
-
-    def items(self):
-        return list(super().items())

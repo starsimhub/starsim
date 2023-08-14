@@ -7,14 +7,13 @@ import numpy as np
 import sciris as sc
 import pandas as pd
 from . import utils as ssu
-from . import base as ssb
 from . import settings as sss
 
 
 # Specify all externally visible functions this file defines
 __all__ = ['Network', 'simple_sexual', 'hpv_network', 'maternal']
 
-class Network(ssb.FlexDict):
+class Network(sc.objdict):
     """
     A small class holding a single network of contact edges (connections) between people.
 
@@ -171,7 +170,7 @@ class Network(ssb.FlexDict):
         Args:
             contacts (dict): a dictionary of arrays with keys f,m,beta, as returned from network.pop_inds()
         """
-        for key in self.keys():
+        for key in self.meta.keys():
             new_arr = contacts[key]
             n_curr = len(self[key])  # Current number of contacts
             n_new = len(new_arr)  # New contacts to add
