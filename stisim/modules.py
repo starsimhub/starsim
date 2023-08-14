@@ -1,9 +1,8 @@
 import sciris as sc
 import numpy as np
-from .base import State
+from .people import State
 from .results import Result
 from . import utils as ssu
-from . import networks as ssnet
 
 
 class Module(sc.prettyobj):

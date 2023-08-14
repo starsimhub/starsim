@@ -9,10 +9,65 @@ from . import base as ssb
 from . import misc as ssm
 from . import utils as ssu
 from . import settings as sss
-# from .data import loaders as ssdata
+from .version import __version__
 
 
-__all__ = ['People', 'make_popdict']
+__all__ = ['State', 'People', 'make_popdict']
+
+
+#%% States
+
+class State(sc.prettyobj):
+    def __init__(self, name, dtype, fill_value=0, shape=None, distdict=None, label=None):
+        """
+        Args:
+            name: name of the result as used in the model
+            dtype: datatype
+            fill_value: default value for this state upon model initialization
+            shape: If not none, set to match a string in `pars` containing the dimensionality
+            label: text used to construct labels for the result for displaying on plots and other outputs
+        """
+        self.name = name
+        self.dtype = dtype
+        self.fill_value = fill_value
+        self.shape = shape
+        self.distdict = distdict
+        self.is_dist = distdict is not None # Set this by default, but allow it to be overridden
+        self.label = label or name
+        return
+
+    @property
+    def ndim(self):
+        return len(sc.tolist(self.shape)) + 1
+    
+    def new(self, n):
+        if self.is_dist:
+            return self.new_dist(n)
+        else:
+            return self.new_scalar(n)
+
+    def new_scalar(self, n):
+        shape = sc.tolist(self.shape)
+        shape.append(n)
+        out = np.full(shape, dtype=self.dtype, fill_value=self.fill_value)
+        return out
+    
+    def new_dist(self, n):
+        shape = sc.tolist(self.shape)
+        shape.append(n)
+        out = ssu.sample(**self.distdict, size=tuple(shape))
+        return out
+
+
+base_states = ssu.named_dict(
+    State('uid', int),
+    State('age', float),
+    State('female', bool, False),
+    State('debut', float),
+    State('dead', bool, False),
+    State('ti_dead', float, np.nan),  # Time index for death
+    State('scale', float, 1.0),
+)
 
 
 # %% Main people class
@@ -46,15 +101,40 @@ class People(ssb.BasePeople):
         """
         Initialize
         """
-        super().__init__(n, states=states)
+        
+        self.initialized = False
+        self.version = __version__  # Store version info
+
+        # Initialize states, networks, modules
+        self.states = sc.mergedicts(base_states, states)
+        self.networks = ssu.named_dict()
+        self._modules = sc.autolist()
+
+        # Private variables relating to dynamic allocation
+        self._data = dict()
+        self._n = n  # Number of agents (initial)
+        self._s = self._n  # Underlying array sizes
+        self._inds = None  # No filtering indices
+
+        # Initialize underlying storage and map arrays
+        for state_name, state in self.states.items():
+            self._data[state_name] = state.new(self._n)
+        self._map_arrays()
+        self['uid'][:] = np.arange(self._n)
+
+        # Define lock attribute here, since BasePeople.lock()/unlock() requires it
+        self._lock = False  # Prevent further modification of keys
+        
         if strict: self.lock()  # If strict is true, stop further keys from being set (does not affect attributes)
         self.kwargs = kwargs
         return
+
 
     def initialize(self, popdict=None):
         """ Perform initializations """
         super().initialize(popdict=popdict)  # Initialize states
         return
+
 
     def add_module(self, module, force=False):
         # Initialize all the states associated with a module
@@ -73,12 +153,14 @@ class People(ssb.BasePeople):
 
         return
 
+
     def scale_flows(self, inds):
         """
         Return the scaled versions of the flows -- replacement for len(inds)
         followed by scale factor multiplication
         """
         return self.scale[inds].sum()
+
 
     def update_demographics(self, dt, ti):
         """ Perform vital dynamic updates at the current timestep """

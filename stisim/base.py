@@ -5,13 +5,10 @@ Base classes for *sim models
 import numpy as np
 import sciris as sc
 import functools
-from . import utils as ssu
-from . import misc as ssm
 from . import settings as sss
-from .version import __version__
 
 # Specify all externally visible classes this file defines
-__all__ = ['State', 'BasePeople']
+__all__ = ['BasePeople']
 
 # Default object getter/setter
 obj_set = object.__setattr__
@@ -33,69 +30,13 @@ def rgetattr(obj, attr, *args):
 # %% Define simulation classes
 
 
-def set_metadata(obj, **kwargs):
-    """ Set standard metadata for an object """
-    obj.created = kwargs.get('created', sc.now())
-    obj.version = kwargs.get('version', __version__)
-    obj.git_info = kwargs.get('git_info', ssm.git_info())
-    return
 
 
 
 
 # %% Define people classes
 
-class State(sc.prettyobj):
-    def __init__(self, name, dtype, fill_value=0, shape=None, distdict=None, label=None):
-        """
-        Args:
-            name: name of the result as used in the model
-            dtype: datatype
-            fill_value: default value for this state upon model initialization
-            shape: If not none, set to match a string in `pars` containing the dimensionality
-            label: text used to construct labels for the result for displaying on plots and other outputs
-        """
-        self.name = name
-        self.dtype = dtype
-        self.fill_value = fill_value
-        self.shape = shape
-        self.distdict = distdict
-        self.is_dist = distdict is not None # Set this by default, but allow it to be overridden
-        self.label = label or name
-        return
 
-    @property
-    def ndim(self):
-        return len(sc.tolist(self.shape)) + 1
-    
-    def new(self, n):
-        if self.is_dist:
-            return self.new_dist(n)
-        else:
-            return self.new_scalar(n)
-
-    def new_scalar(self, n):
-        shape = sc.tolist(self.shape)
-        shape.append(n)
-        out = np.full(shape, dtype=self.dtype, fill_value=self.fill_value)
-        return out
-    
-    def new_dist(self, n):
-        shape = sc.tolist(self.shape)
-        shape.append(n)
-        out = ssu.sample(**self.distdict, size=tuple(shape))
-        return out
-
-
-base_states = ssu.named_dict(
-    State('uid', sss.default_int),
-    State('age', sss.default_float),
-    State('female', bool, False),
-    State('debut', sss.default_float),
-    State('dead', bool, False),
-    State('ti_dead', sss.default_float, np.nan),  # Time index for death
-    State('scale', sss.default_float, 1.0),
-)
 
 
 class BasePeople(sc.prettyobj):
@@ -109,28 +50,7 @@ class BasePeople(sc.prettyobj):
         """ Initialize essential attributes """
 
         super().__init__(*args, **kwargs)
-        self.initialized = False
-        self.version = __version__  # Store version info
-
-        # Initialize states, networks, modules
-        self.states = sc.mergedicts(base_states, states)
-        self.networks = ssu.named_dict()
-        self._modules = sc.autolist()
-
-        # Private variables relating to dynamic allocation
-        self._data = dict()
-        self._n = n  # Number of agents (initial)
-        self._s = self._n  # Underlying array sizes
-        self._inds = None  # No filtering indices
-
-        # Initialize underlying storage and map arrays
-        for state_name, state in self.states.items():
-            self._data[state_name] = state.new(self._n)
-        self._map_arrays()
-        self['uid'][:] = np.arange(self._n)
-
-        # Define lock attribute here, since BasePeople.lock()/unlock() requires it
-        self._lock = False  # Prevent further modification of keys
+        
 
         return
 
