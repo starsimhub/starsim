@@ -8,12 +8,6 @@ from .networks      import *
 from .sim           import *
 from .modules       import *
 
-
 # Import the version and print the license
 if options.verbose:
     print(__license__)
-
-
-# Set the root directory for the codebase
-import pathlib
-rootdir = pathlib.Path(__file__).parent
