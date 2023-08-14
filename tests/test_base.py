@@ -21,7 +21,7 @@ def test_people():
 
     # Possible to initialize people with extra states, e.g. a geolocation
     extra_states = ss.named_dict(
-        ss.StochState('geolocation', int, distdict=dict(dist='choice', par1=[1, 2, 3])),
+        ss.State('geolocation', int, distdict=dict(dist='choice', par1=[1, 2, 3])),
     )
     ppl = ss.People(100, states=extra_states)
 

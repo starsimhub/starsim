@@ -11,7 +11,7 @@ from . import settings as sss
 from .version import __version__
 
 # Specify all externally visible classes this file defines
-__all__ = ['State', 'StochState', 'BasePeople']
+__all__ = ['State', 'BasePeople']
 
 # Default object getter/setter
 obj_set = object.__setattr__
@@ -46,7 +46,7 @@ def set_metadata(obj, **kwargs):
 # %% Define people classes
 
 class State(sc.prettyobj):
-    def __init__(self, name, dtype, fill_value=0, shape=None, label=None):
+    def __init__(self, name, dtype, fill_value=0, shape=None, distdict=None, label=None):
         """
         Args:
             name: name of the result as used in the model
@@ -59,29 +59,32 @@ class State(sc.prettyobj):
         self.dtype = dtype
         self.fill_value = fill_value
         self.shape = shape
+        self.distdict = distdict
+        self.is_dist = distdict is not None # Set this by default, but allow it to be overridden
         self.label = label or name
         return
 
     @property
     def ndim(self):
         return len(sc.tolist(self.shape)) + 1
-
+    
     def new(self, n):
+        if self.is_dist:
+            return self.new_dist(n)
+        else:
+            return self.new_scalar(n)
+
+    def new_scalar(self, n):
         shape = sc.tolist(self.shape)
         shape.append(n)
-        return np.full(shape, dtype=self.dtype, fill_value=self.fill_value)
-
-
-class StochState(State):
-    def __init__(self, name, dtype, distdict=None, **kwargs):
-        super().__init__(name, dtype, kwargs)
-        self.distdict = distdict
-        return
-
-    def new(self, n):
+        out = np.full(shape, dtype=self.dtype, fill_value=self.fill_value)
+        return out
+    
+    def new_dist(self, n):
         shape = sc.tolist(self.shape)
         shape.append(n)
-        return ssu.sample(**self.distdict, size=tuple(shape))
+        out = ssu.sample(**self.distdict, size=tuple(shape))
+        return out
 
 
 base_states = ssu.named_dict(
