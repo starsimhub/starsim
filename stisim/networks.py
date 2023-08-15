@@ -170,7 +170,7 @@ class Network(sc.objdict):
         Args:
             contacts (dict): a dictionary of arrays with keys f,m,beta, as returned from network.pop_inds()
         """
-        for key in self.meta.keys():
+        for key in self.meta_keys():
             new_arr = contacts[key]
             n_curr = len(self[key])  # Current number of contacts
             n_new = len(new_arr)  # New contacts to add
@@ -178,10 +178,15 @@ class Network(sc.objdict):
             self[key] = np.resize(self[key], n_total)  # Resize to make room, preserving dtype
             self[key][n_curr:] = new_arr  # Copy contacts into the network
         return
+    
+    def to_dict(self):
+        """ Convert to dictionary """
+        d = {k:self[k] for k in self.meta_keys()}
+        return d
 
     def to_df(self):
         """ Convert to dataframe """
-        df = pd.DataFrame.from_dict(self)
+        df = sc.dataframe.from_dict(self.to_dict())
         return df
 
     def from_df(self, df, keys=None):

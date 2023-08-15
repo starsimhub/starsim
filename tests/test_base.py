@@ -10,6 +10,9 @@ from stisim import utils as ssu
 import matplotlib.pyplot as plt
 
 
+print('hi i am', sc.options.get('backend'))
+
+
 # %% Define the tests
 
 def test_people():
