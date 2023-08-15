@@ -9,20 +9,22 @@ import functools
 from . import utils as ssu
 from .version import __version__
 
-
 __all__ = ['State', 'BasePeople', 'People']
 
 
-#%% States
+# %% States
 
 class State(sc.prettyobj):
-    def __init__(self, name, dtype, fill_value=0, shape=None, distdict=None, label=None):
+    def __init__(self, name, dtype, fill_value=0, shape=None, distdict=None, eligibility=None, na_val=False,
+                 label=None):
         """
         Args:
             name: name of the result as used in the model
             dtype: datatype
             fill_value: default value for this state upon model initialization
             shape: If not none, set to match a string in `pars` containing the dimensionality
+            distdict: dictionary with distribution definition
+            eligibility:
             label: text used to construct labels for the result for displaying on plots and other outputs
         """
         self.name = name
@@ -30,27 +32,48 @@ class State(sc.prettyobj):
         self.fill_value = fill_value
         self.shape = shape
         self.distdict = distdict
-        self.is_dist = distdict is not None # Set this by default, but allow it to be overridden
+        self.eligibility = eligibility
+        self.na_val = na_val
+        self.is_dist = distdict is not None  # Set this by default, but allow it to be overridden
         self.label = label or name
         return
 
     @property
     def ndim(self):
         return len(sc.tolist(self.shape)) + 1
-    
-    def new(self, n):
-        if self.is_dist:
-            return self.new_dist(n)
-        else:
-            return self.new_scalar(n)
 
-    def new_scalar(self, n):
+    def get_eligibility(self, people):
+        """ Get a boolean array of the people who are eligibile to assume this state """
+        if self.eligibility is None:
+            return np.full(len(people), True, dtype=bool)
+        elif callable(self.eligibility):
+            eligible = self.eligibility(people)
+        elif isinstance(self.eligibility, str):
+            eligible = people[self.eligibility]
+        return eligible
+
+    def new(self, n, people=None):
+        if people is not None:
+            full_out = self.new_scalar(n, fill_value=self.na_val)
+            inds = ssu.true(self.get_eligibility(people))
+            defined_vals = self.new(len(inds))
+            full_out[inds] = defined_vals
+            return full_out
+
+        else:
+            if self.is_dist:
+                return self.new_dist(n)
+            else:
+                return self.new_scalar(n)
+
+    def new_scalar(self, n, fill_value=None):
+        if fill_value is None: fill_value = self.fill_value
         shape = sc.tolist(self.shape)
         shape.append(n)
-        out = np.full(shape, dtype=self.dtype, fill_value=self.fill_value)
+        out = np.full(shape, dtype=self.dtype, fill_value=fill_value)
         return out
-    
-    def new_dist(self, n):
+
+    def new_dist(self, n, inds=None):
         shape = sc.tolist(self.shape)
         shape.append(n)
         out = ssu.sample(**self.distdict, size=tuple(shape))
@@ -60,17 +83,17 @@ class State(sc.prettyobj):
 base_states = ssu.named_dict(
     State('uid', int),
     State('age', float),
-    State('female', bool, False),
+    State('female', bool, distdict=dict(dist='choice', par1=[True, False], par2=[0.5, 0.5])),
     State('debut', float),
     State('dead', bool, False),
     State('ti_dead', float, np.nan),  # Time index for death
     State('scale', float, 1.0),
 )
 
-
 # %% Main people class
 
 base_key = 'uid'  # Define the key used by default for getting length, etc.
+
 
 class BasePeople(sc.prettyobj):
     """
@@ -111,7 +134,11 @@ class BasePeople(sc.prettyobj):
         if new_total > self._s:
             n_new = max(n, int(self._s / 2))  # Minimum 50% growth
             for state_name, state in self.states.items():
-                self._data[state_name] = np.concatenate([self._data[state_name], state.new(n_new)],
+                if state.eligibility is not None:
+                    inds = ssu.true(self[state.eligibility])
+                else:
+                    inds = None
+                self._data[state_name] = np.concatenate([self._data[state_name], state.new(n_new, inds)],
                                                         axis=self._data[state_name].ndim - 1)
             self._s += n_new
         self._n += n
@@ -126,18 +153,18 @@ class BasePeople(sc.prettyobj):
         This method should be called whenever the number of agents required changes
         (regardless of whether the underlying arrays have been resized)
         """
-        
+
         # CK: consider refactor
         def rsetattr(obj, attr, val):
             pre, _, post = attr.rpartition('.')
             return setattr(rgetattr(obj, pre) if pre else obj, post, val)
 
-
         def rgetattr(obj, attr, *args):
             def _getattr(obj, attr):
                 return getattr(obj, attr, *args)
+
             return functools.reduce(_getattr, [obj] + attr.split('.'))
-        
+
         row_inds = slice(None, self._n)
 
         # Handle keys
@@ -177,17 +204,21 @@ class BasePeople(sc.prettyobj):
         """ Iterate over people """
         for i in range(len(self)):
             yield self[i]
-            
+
     @property
     def active(self):
         """ Indices of everyone sexually active  """
         return (self.age >= self.debut) & self.alive
-    
+
+    @property
+    def male(self):
+        """ Indices of males  """
+        return ~self.female
+
     @property
     def alive(self):
         """ Alive boolean """
         return ~self.dead
-
 
 
 class People(BasePeople):
@@ -218,11 +249,14 @@ class People(BasePeople):
         """
         Initialize
         """
-        
+
         self.initialized = False
         self.version = __version__  # Store version info
 
         # Initialize states, networks, modules
+        if states is not None:
+            if not sc.isiterable(states):
+                states = ssu.named_dict(states)
         self.states = sc.mergedicts(base_states, states)
         self.networks = ssu.named_dict()
         self._modules = sc.autolist()
@@ -241,11 +275,10 @@ class People(BasePeople):
 
         # Define lock attribute here, since BasePeople.lock()/unlock() requires it
         self._lock = False  # Prevent further modification of keys
-        
+
         if strict: self.lock()  # If strict is true, stop further keys from being set (does not affect attributes)
         self.kwargs = kwargs
         return
-
 
     def initialize(self, popdict=None):
         """ Initialize people by setting their attributes """
@@ -259,6 +292,34 @@ class People(BasePeople):
         self.initialized = True
         return
 
+    def add_state(self, name, dtype, fill_value=0, shape=None, distdict=None,
+                  eligibility=None, na_val=0, label=None):
+        """
+        Add a state to people. Most useful when adding a state whose value depends on other states,
+        e.g. MSM, FSW, clients.
+
+        Examples:
+             ppl = ss.People(100) # Create people
+             ppl.add_state('rural', bool) # Add flag for rural, all False by default
+
+            ppl = ss.People(100) # Create people
+            fsw_distdict = dict(dist='choice', par1=[1, 0], par2=[0.15, 0.85]) # Let 15% of the female population be FSW
+            ppl.add_state('fsw', bool, eligibility='female', distdict=fsw_distdict, na_val=False)
+
+            ppl = ss.People(100)
+            fsw_eligible = lambda ppl: (ppl.age>20) & (ppl.age<30) & ppl.female
+            ppl.add_state('fsw', bool, eligibility=fsw_eligible, distdict=fsw_distdict, na_val=False)
+        """
+        # Define state and add
+        state = State(name, dtype, fill_value=fill_value, shape=shape, distdict=distdict,
+                      eligibility=eligibility, na_val=na_val, label=label)
+        self.states[name] = state
+
+        # Add to data and map arrays
+        self._data[name] = state.new(self._n, people=self)
+        self._map_arrays(name)
+
+        return
 
     def add_module(self, module, force=False):
         # Initialize all the states associated with a module
@@ -277,7 +338,6 @@ class People(BasePeople):
 
         return
 
-
     def scale_flows(self, inds):
         """
         Return the scaled versions of the flows -- replacement for len(inds)
@@ -285,13 +345,11 @@ class People(BasePeople):
         """
         return self.scale[inds].sum()
 
-
     def update_demographics(self, dt, ti):
         """ Perform vital dynamic updates at the current timestep """
 
         self.age[~self.dead] += dt
         self.dead[self.ti_dead <= ti] = True
-
 
 # %% Helper functions to create popdicts
 
