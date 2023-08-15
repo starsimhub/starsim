@@ -1,0 +1,16 @@
+#!/bin/bash
+# Run all tests and check coverage
+
+export SCIRIS_BACKEND='agg' # Don't open up figures
+
+echo 'Running tests...'
+pytest -v test_*.py -n auto --cov-config=.coveragerc --cov=../stisim --durations=0
+
+echo 'Creating HTML report...'
+coverage html
+
+echo 'Printing report...'
+coverage report
+
+echo 'Report location:'
+echo "`pwd`/htmlcov/index.html"

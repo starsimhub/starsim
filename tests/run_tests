@@ -1,0 +1,6 @@
+#!/bin/bash
+# Run the integration tests.
+# Be sure to install the test requirements first!
+#    pip install -r requirements.txt
+
+pytest test_*.py -n auto --ignore=manual --durations=0
