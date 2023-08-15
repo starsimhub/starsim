@@ -1,9 +1,8 @@
 import sciris as sc
 import numpy as np
-from .base import State
+from .people import State
 from .results import Result
 from . import utils as ssu
-from . import networks as ssnet
 
 
 class Module(sc.prettyobj):
@@ -90,7 +89,7 @@ class Module(sc.prettyobj):
     def update_results(self, sim):
         sim.results[self.name]['n_susceptible'][sim.ti] = np.count_nonzero(sim.people[self.name].susceptible)
         sim.results[self.name]['n_infected'][sim.ti] = np.count_nonzero(sim.people[self.name].infected)
-        sim.results[self.name]['prevalence'][sim.ti] = sim.results[self.name].n_infected[sim.ti] / sim.people.n
+        sim.results[self.name]['prevalence'][sim.ti] = sim.results[self.name].n_infected[sim.ti] / len(sim.people)
         sim.results[self.name]['new_infections'] = np.count_nonzero(sim.people[self.name].ti_infected == sim.ti)
 
     def finalize_results(self, sim):
@@ -223,7 +222,7 @@ class Pregnancy(Module):
 
     def initialize(self, sim):
         Module.initialize(self, sim)
-        sim['birth_rates'] = None  # This turns off birth rate pars so births only come from this module
+        sim.pars['birth_rates'] = None  # This turns off birth rate pars so births only come from this module
 
     def init_results(self, sim):
         """

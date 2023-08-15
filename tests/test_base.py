@@ -6,41 +6,22 @@ Test objects from base.py
 import sciris as sc
 import numpy as np
 import stisim as ss
-import pytest
 from stisim import utils as ssu
 import matplotlib.pyplot as plt
 
 
 # %% Define the tests
 
-def test_parsobj():
-    sc.heading('Testing parameters object')
-
-    pars1 = {'a': 1, 'b': 2}
-    parsobj = ss.ParsObj(pars1)
-
-    # Once created, you cannot directly add new keys to a parsobj, and a nonexistent key works like a dict
-    with pytest.raises(KeyError): parsobj['c'] = 3
-    with pytest.raises(KeyError): parsobj['c']
-
-    # Only a dict is allowed
-    with pytest.raises(TypeError):
-        pars2 = ['a', 'b']
-        ss.ParsObj(pars2)
-
-    return parsobj
-
-
 def test_people():
-    sc.heading('Testing base people object')
+    sc.heading('Testing people object')
 
     # Base people contains only the states defined in base.base_states
-    ppl = ss.BasePeople(100)  # BasePeople
+    ppl = ss.People(100)  # BasePeople
     del ppl
 
     # Possible to initialize people with extra states, e.g. a geolocation
     extra_states = ss.named_dict(
-        ss.StochState('geolocation', int, distdict=dict(dist='choice', par1=[1, 2, 3])),
+        ss.State('geolocation', int, distdict=dict(dist='choice', par1=[1, 2, 3])),
     )
     ppl = ss.People(100, states=extra_states)
 
@@ -95,7 +76,6 @@ def test_microsim():
     plt.figure()
     plt.plot(sim.tivec, sim.results.hiv.n_infected)
     plt.title('HIV number of infections')
-    plt.show()
 
     return sim
 
@@ -111,7 +91,6 @@ def test_ppl_construction():
     plt.figure()
     plt.plot(sim.tivec, sim.results.gonorrhea.n_infected)
     plt.title('Number of gonorrhea infections')
-    plt.show()
 
     return sim
 
@@ -123,7 +102,6 @@ if __name__ == '__main__':
     T = sc.tic()
 
     # Run tests
-    parsobj = test_parsobj()
     ppl = test_people()
     nw1, nw2, nw3, nw4 = test_networks()
     sim1 = test_microsim()
