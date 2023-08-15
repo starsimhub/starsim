@@ -5,7 +5,6 @@ Miscellaneous functions that do not belong anywhere else
 import re
 import inspect
 import warnings
-import numpy as np
 import sciris as sc
 import collections as co
 from . import version as ss

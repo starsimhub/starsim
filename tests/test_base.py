@@ -76,7 +76,6 @@ def test_microsim():
     plt.figure()
     plt.plot(sim.tivec, sim.results.hiv.n_infected)
     plt.title('HIV number of infections')
-    plt.show()
 
     return sim
 
@@ -92,7 +91,6 @@ def test_ppl_construction():
     plt.figure()
     plt.plot(sim.tivec, sim.results.gonorrhea.n_infected)
     plt.title('Number of gonorrhea infections')
-    plt.show()
 
     return sim
 
