@@ -8,6 +8,7 @@ import sciris as sc
 import pandas as pd
 from . import utils as ssu
 from . import settings as sss
+from . import people as ssppl
 
 
 # Specify all externally visible functions this file defines
@@ -50,11 +51,14 @@ class Network(sc.objdict):
     """
 
     def __init__(self, *args, key_dict=None, transmission='horizontal', label=None, **kwargs):
+
         default_keys = {
             'p1': sss.default_int,
             'p2': sss.default_int,
             'beta': sss.default_float,
         }
+
+        self.states = ssu.named_dict()
         self.meta = sc.mergedicts(default_keys, key_dict)
         self.transmission = transmission  # "vertical" or "horizontal", determines whether transmission is bidirectional
         self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
@@ -297,6 +301,45 @@ class simple_sexual(Network):
         # Then add new relationships for unpartnered people
         self.add_pairs(people)
 
+
+class msm(Network):
+    """ MSM Network """
+    def __init__(self, pars):
+        key_dict = {
+            'p1': sss.default_int,
+            'p2': sss.default_int,
+            'dur': sss.default_float,
+            'beta': sss.default_float,
+        }
+
+        # Set pars
+        self.pars = ssu.omerge({
+            'prop_msm': 0.1,
+            'dur': dict(dist='lognormal', par1=4, par2=4),  # Relationship duration
+            'dur_btwn': dict(dist='lognormal', par1=0.5, par2=2),  # Lag between relationships
+            'partners': dict(dist='poisson', par1=0.05),  # Concurrency metric
+        }, self.pars)
+
+        # Set states
+        msm_distdict = dict(dist='choice', par1=[True, False], par2=[self.pars['prop_msm'], 1-self.pars['prop_msm']])
+        self.states = ssu.omerge(ssu.named_dict(
+            ssppl.State('msm', bool, distdict=msm_distdict, eligibility='male'),
+        ), self.states)
+
+        # Call init for the base class, which sets all the keys
+        super().__init__(key_dict=key_dict)
+
+        # Set other parameters
+        self.pars = pars
+
+    def initialize(self, people):
+        pass
+
+    def add_pairs(self, people, ti=None):
+        pass
+
+    def update(self, people, dt=None):
+        pass
 
 class hpv_network(Network):
     def __init__(self, pars=None):
