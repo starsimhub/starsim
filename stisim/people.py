@@ -24,7 +24,8 @@ class State(sc.prettyobj):
             fill_value: default value for this state upon model initialization
             shape: If not none, set to match a string in `pars` containing the dimensionality
             distdict: dictionary with distribution definition
-            eligibility:
+            eligibility: string/callable which defines the people who are eligible to assume this state
+            na_val: value of this state for people who are not eligible for it (default False)
             label: text used to construct labels for the result for displaying on plots and other outputs
         """
         self.name = name
@@ -43,7 +44,7 @@ class State(sc.prettyobj):
         return len(sc.tolist(self.shape)) + 1
 
     def get_eligibility(self, people):
-        """ Get a boolean array of the people who are eligibile to assume this state """
+        """ Get a boolean array of the people who are eligible to assume this state """
         if self.eligibility is None:
             return np.full(len(people), True, dtype=bool)
         elif callable(self.eligibility):
@@ -73,7 +74,7 @@ class State(sc.prettyobj):
         out = np.full(shape, dtype=self.dtype, fill_value=fill_value)
         return out
 
-    def new_dist(self, n, inds=None):
+    def new_dist(self, n):
         shape = sc.tolist(self.shape)
         shape.append(n)
         out = ssu.sample(**self.distdict, size=tuple(shape))
@@ -134,11 +135,7 @@ class BasePeople(sc.prettyobj):
         if new_total > self._s:
             n_new = max(n, int(self._s / 2))  # Minimum 50% growth
             for state_name, state in self.states.items():
-                if state.eligibility is not None:
-                    inds = ssu.true(self[state.eligibility])
-                else:
-                    inds = None
-                self._data[state_name] = np.concatenate([self._data[state_name], state.new(n_new, inds)],
+                self._data[state_name] = np.concatenate([self._data[state_name], state.new(n_new, people=self)],
                                                         axis=self._data[state_name].ndim - 1)
             self._s += n_new
         self._n += n
