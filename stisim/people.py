@@ -289,7 +289,7 @@ class People(BasePeople):
         self.initialized = True
         return
 
-    def add_state(self, name, dtype, fill_value=0, shape=None, distdict=None,
+    def add_state(self, state=None, name=None, dtype=None, fill_value=0, shape=None, distdict=None,
                   eligibility=None, na_val=0, label=None):
         """
         Add a state to people. Most useful when adding a state whose value depends on other states,
@@ -308,8 +308,9 @@ class People(BasePeople):
             ppl.add_state('fsw', bool, eligibility=fsw_eligible, distdict=fsw_distdict, na_val=False)
         """
         # Define state and add
-        state = State(name, dtype, fill_value=fill_value, shape=shape, distdict=distdict,
-                      eligibility=eligibility, na_val=na_val, label=label)
+        if state is None:
+            state = State(name, dtype, fill_value=fill_value, shape=shape, distdict=distdict,
+                          eligibility=eligibility, na_val=na_val, label=label)
         self.states[name] = state
 
         # Add to data and map arrays
@@ -330,6 +331,20 @@ class People(BasePeople):
         for state_name, state in module.states.items():
             combined_name = module.name + '.' + state_name
             self._data[combined_name] = state.new(self._n)
+            self._map_arrays(keys=combined_name)
+            self.states[combined_name] = state
+
+        return
+
+    def add_network(self, network, force=False):
+        # Initialize all the states associated with a network
+        if hasattr(self, network.name) and not force:
+            raise Exception(f'Module {network.name} already added')
+        self.__setattr__(network.name, sc.objdict())
+
+        for state_name, state in network.states.items():
+            combined_name = network.name + '.' + state_name
+            self._data[combined_name] = state.new(self._n, self)
             self._map_arrays(keys=combined_name)
             self.states[combined_name] = state
 

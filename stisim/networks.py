@@ -10,13 +10,14 @@ from . import utils as ssu
 from . import settings as sss
 from . import people as ssppl
 
-
 # Specify all externally visible functions this file defines
-__all__ = ['Network', 'simple_sexual', 'hpv_network', 'maternal']
+__all__ = ['Network', 'simple_sexual', 'msm', 'hpv_network', 'maternal']
+
 
 class Network(sc.objdict):
     """
-    A small class holding a single network of contact edges (connections) between people.
+    A class holding a single network of contact edges (connections) between people,
+    as well as methods for updating these.
 
     The input is typically arrays including: person 1 of the connection, person 2 of
     the connection, the weight of the connection, the duration and start/end times of
@@ -58,6 +59,7 @@ class Network(sc.objdict):
             'beta': sss.default_float,
         }
 
+        self.pars = sc.objdict()
         self.states = ssu.named_dict()
         self.meta = sc.mergedicts(default_keys, key_dict)
         self.transmission = transmission  # "vertical" or "horizontal", determines whether transmission is bidirectional
@@ -79,7 +81,7 @@ class Network(sc.objdict):
 
     @property
     def name(self):
-        # The module name is a lower-case version of its class name
+        # The network name is a lower-case version of its class name
         return self.__class__.__name__.lower()
 
     def initialize(self):
@@ -93,7 +95,7 @@ class Network(sc.objdict):
 
     def __repr__(self):
         """ Convert to a dataframe for printing """
-        namestr = self.__class__.__name__
+        namestr = self.name
         labelstr = f'"{self.label}"' if self.label else '<no label>'
         keys_str = ', '.join(self.keys())
         output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", f, m, beta)
@@ -182,10 +184,10 @@ class Network(sc.objdict):
             self[key] = np.resize(self[key], n_total)  # Resize to make room, preserving dtype
             self[key][n_curr:] = new_arr  # Copy contacts into the network
         return
-    
+
     def to_dict(self):
         """ Convert to dictionary """
-        d = {k:self[k] for k in self.meta_keys()}
+        d = {k: self[k] for k in self.meta_keys()}
         return d
 
     def to_df(self):
@@ -304,7 +306,8 @@ class simple_sexual(Network):
 
 class msm(Network):
     """ MSM Network """
-    def __init__(self, pars):
+
+    def __init__(self, pars=None):
         key_dict = {
             'p1': sss.default_int,
             'p2': sss.default_int,
@@ -312,34 +315,65 @@ class msm(Network):
             'beta': sss.default_float,
         }
 
-        # Set pars
-        self.pars = ssu.omerge({
-            'prop_msm': 0.1,
-            'dur': dict(dist='lognormal', par1=4, par2=4),  # Relationship duration
-            'dur_btwn': dict(dist='lognormal', par1=0.5, par2=2),  # Lag between relationships
-            'partners': dict(dist='poisson', par1=0.05),  # Concurrency metric
-        }, self.pars)
-
-        # Set states
-        msm_distdict = dict(dist='choice', par1=[True, False], par2=[self.pars['prop_msm'], 1-self.pars['prop_msm']])
-        self.states = ssu.omerge(ssu.named_dict(
-            ssppl.State('msm', bool, distdict=msm_distdict, eligibility='male'),
-        ), self.states)
-
         # Call init for the base class, which sets all the keys
         super().__init__(key_dict=key_dict)
 
-        # Set other parameters
-        self.pars = pars
+        # Set pars
+        self.pars = sc.objdict({
+            'prop_msm': 0.1,
+            'prop_bisexual': 0.5,  # Proportion of MSM who also partner with women
+            'dur': dict(dist='lognormal', par1=4, par2=4),  # Relationship duration
+            'debut': dict(dist='lognormal', par1=20, par2=4),  # Debut
+            'dur_btwn': dict(dist='lognormal', par1=0.5, par2=2),  # Lag between relationships
+            'partners': dict(dist='poisson', par1=0.05),  # Concurrency metric
+        })
+
+        # Set states
+        msm_distdict = dict(dist='choice', par1=[True, False], par2=[self.pars['prop_msm'], 1 - self.pars['prop_msm']])
+        bi_distdict = dict(dist='choice', par1=[True, False],
+                           par2=[self.pars['prop_bisexual'], 1 - self.pars['prop_bisexual']])
+        is_msm = lambda people: people.msm.participant  # TODO: improve this
+
+        self.states = ssu.named_dict(
+            ssppl.State('participant', bool, distdict=msm_distdict, eligibility='male'),
+            ssppl.State('debut', float, distdict=self.pars['debut'], eligibility=is_msm),
+            ssppl.State('bisexual', bool, distdict=bi_distdict, eligibility=is_msm),
+        )
 
     def initialize(self, people):
-        pass
+        """ This method could potentially add network states to the people if needed """
+        return
+
+    def active(self, people):
+        return (people.age > self.debut) & people.male
+
+    def get_seekers(self, people, ti=None):
+        """ Find the people in this network who are looking for relationships """
+        unpartnered = np.setdiff1d(msm, self.members)
+        underpartnered = msm[self.current_partners < msmppl.partners]
+        active = people.age >= self.debut
+        people.ti_breakup
 
     def add_pairs(self, people, ti=None):
-        pass
+        available = np.setdiff1d(people.uid[people.msm], self.members)
 
-    def update(self, people, dt=None):
-        pass
+        p1 = available
+
+        beta = np.ones_like(p1)
+        dur = np.random.poisson(self.mean_dur, len(p1))
+        self['p1'] = np.concatenate([self['p1'], p1])
+        self['p2'] = np.concatenate([self['p2'], p2])
+        self['beta'] = np.concatenate([self['beta'], beta])
+        self['dur'] = np.concatenate([self['dur'], dur])
+
+    def update(self, people, ti=None, dt=None):
+        if dt is None: dt = people.dt
+        if ti is None: ti = people.to
+        self['dur'] = self['dur'] - dt
+        active = self['dur'] > 0
+        over = self['dur'] <= 0
+        people.ti_breakup[over] = ti
+
 
 class hpv_network(Network):
     def __init__(self, pars=None):
@@ -361,7 +395,8 @@ class hpv_network(Network):
         self.pars['cross_layer'] = 0.05  # Proportion of agents who have concurrent cross-layer relationships
         self.pars['partners'] = dict(dist='poisson', par1=0.01)  # The number of concurrent sexual partners
         self.pars['acts'] = dict(dist='neg_binomial', par1=80, par2=40)  # The number of sexual acts per year
-        self.pars['age_act_pars'] = dict(peak=30, retirement=100, debut_ratio=0.5, retirement_ratio=0.1) # Parameters describing changes in coital frequency over agent lifespans
+        self.pars['age_act_pars'] = dict(peak=30, retirement=100, debut_ratio=0.5,
+                                         retirement_ratio=0.1)  # Parameters describing changes in coital frequency over agent lifespans
         self.pars['condoms'] = 0.2  # The proportion of acts in which condoms are used
         self.pars['dur_pship'] = dict(dist='normal_pos', par1=1, par2=1)  # Duration of partnerships
         self.pars['participation'] = None  # Incidence of partnership formation by age
@@ -384,29 +419,31 @@ class hpv_network(Network):
         defaults = {}
         mixing = np.array([
             #       0,  5,  10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75
-            [ 0,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
-            [ 5,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
-            [10,    0,  0, .1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
-            [15,    0,  0, .1, .1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
-            [20,    0,  0, .1, .1, .1, .1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
-            [25,    0,  0, .5, .1, .5, .1, .1,  0,  0,  0,  0,  0,  0,  0,  0,  0],
-            [30,    0,  0,  1, .5, .5, .5, .5, .1,  0,  0,  0,  0,  0,  0,  0,  0],
-            [35,    0,  0, .5,  1,  1, .5,  1,  1, .5,  0,  0,  0,  0,  0,  0,  0],
-            [40,    0,  0,  0, .5,  1,  1,  1,  1,  1, .5,  0,  0,  0,  0,  0,  0],
-            [45,    0,  0,  0,  0, .1,  1,  1,  2,  1,  1, .5,  0,  0,  0,  0,  0],
-            [50,    0,  0,  0,  0,  0, .1,  1,  1,  1,  1,  2, .5,  0,  0,  0,  0],
-            [55,    0,  0,  0,  0,  0,  0, .1,  1,  1,  1,  1,  2, .5,  0,  0,  0],
-            [60,    0,  0,  0,  0,  0,  0,  0, .1, .5,  1,  1,  1,  2, .5,  0,  0],
-            [65,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  2, .5,  0],
-            [70,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1, .5],
-            [75,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [10, 0, 0, .1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [15, 0, 0, .1, .1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [20, 0, 0, .1, .1, .1, .1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [25, 0, 0, .5, .1, .5, .1, .1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [30, 0, 0, 1, .5, .5, .5, .5, .1, 0, 0, 0, 0, 0, 0, 0, 0],
+            [35, 0, 0, .5, 1, 1, .5, 1, 1, .5, 0, 0, 0, 0, 0, 0, 0],
+            [40, 0, 0, 0, .5, 1, 1, 1, 1, 1, .5, 0, 0, 0, 0, 0, 0],
+            [45, 0, 0, 0, 0, .1, 1, 1, 2, 1, 1, .5, 0, 0, 0, 0, 0],
+            [50, 0, 0, 0, 0, 0, .1, 1, 1, 1, 1, 2, .5, 0, 0, 0, 0],
+            [55, 0, 0, 0, 0, 0, 0, .1, 1, 1, 1, 1, 2, .5, 0, 0, 0],
+            [60, 0, 0, 0, 0, 0, 0, 0, .1, .5, 1, 1, 1, 2, .5, 0, 0],
+            [65, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, .5, 0],
+            [70, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, .5],
+            [75, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1],
         ])
 
         participation = np.array([
-                [ 0,  5,    10,    15,   20,   25,   30,   35,    40,    45,    50,    55,    60,    65,    70,    75],
-                [ 0,  0,  0.10,   0.7,  0.8,  0.6,  0.6,  0.4,   0.1,  0.05, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001], # Share of females of each age newly having casual relationships
-                [ 0,  0,  0.05,   0.7,  0.8,  0.6,  0.6,  0.4,   0.4,   0.3,   0.1,  0.05,  0.01,  0.01, 0.001, 0.001]], # Share of males of each age newly having casual relationships
-            )
+            [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75],
+            [0, 0, 0.10, 0.7, 0.8, 0.6, 0.6, 0.4, 0.1, 0.05, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001],
+            # Share of females of each age newly having casual relationships
+            [0, 0, 0.05, 0.7, 0.8, 0.6, 0.6, 0.4, 0.4, 0.3, 0.1, 0.05, 0.01, 0.01, 0.001, 0.001]],
+            # Share of males of each age newly having casual relationships
+        )
 
         defaults['mixing'] = mixing
         defaults['participation'] = participation
@@ -459,7 +496,8 @@ class hpv_network(Network):
             m += these_m_contacts.tolist()
 
         # Create preference matrix between eligible females and males that combines age and geo mixing
-        age_bins_f = np.digitize(people.age[f], bins=bins) - 1  # Age bins of females that are entering new relationships
+        age_bins_f = np.digitize(people.age[f],
+                                 bins=bins) - 1  # Age bins of females that are entering new relationships
         age_bins_m = np.digitize(people.age[m], bins=bins) - 1  # Age bins of active and participating males
         age_f, age_m = np.meshgrid(age_bins_f, age_bins_m)
         pair_probs = self.pars['mixing'][age_m, age_f + 1]
@@ -508,15 +546,16 @@ class hpv_network(Network):
 
         # Get indices of people at different stages
         below_peak_inds = avg_age <= self.pars['age_act_pars']['peak']
-        above_peak_inds = (avg_age > self.pars['age_act_pars']['peak']) & (avg_age < self.pars['age_act_pars']['retirement'])
+        above_peak_inds = (avg_age > self.pars['age_act_pars']['peak']) & (
+                    avg_age < self.pars['age_act_pars']['retirement'])
         retired_inds = avg_age > self.pars['age_act_pars']['retirement']
 
         # Set values by linearly scaling the number of acts for each partnership according to
         # the age of the couple at the commencement of the relationship
         below_peak_vals = acts[below_peak_inds] * (dr + (1 - dr) / (peak - avg_debut[below_peak_inds]) * (
-                    avg_age[below_peak_inds] - avg_debut[below_peak_inds]))
+                avg_age[below_peak_inds] - avg_debut[below_peak_inds]))
         above_peak_vals = acts[above_peak_inds] * (
-                    rr + (1 - rr) / (peak - retire) * (avg_age[above_peak_inds] - retire))
+                rr + (1 - rr) / (peak - retire) * (avg_age[above_peak_inds] - retire))
         retired_vals = 0
 
         # Set values and return
