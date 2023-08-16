@@ -330,25 +330,15 @@ class People(BasePeople):
 
         for state_name, state in module.states.items():
             combined_name = module.name + '.' + state_name
-            self._data[combined_name] = state.new(self._n)
+            self._data[combined_name] = state.new(self._n, self)
             self._map_arrays(keys=combined_name)
             self.states[combined_name] = state
 
         return
 
     def add_network(self, network, force=False):
-        # Initialize all the states associated with a network
-        if hasattr(self, network.name) and not force:
-            raise Exception(f'Module {network.name} already added')
-        self.__setattr__(network.name, sc.objdict())
-
-        for state_name, state in network.states.items():
-            combined_name = network.name + '.' + state_name
-            self._data[combined_name] = state.new(self._n, self)
-            self._map_arrays(keys=combined_name)
-            self.states[combined_name] = state
-
-        return
+        self.add_module(network, force=force)
+        self.networks[network.name] = network
 
     def scale_flows(self, inds):
         """

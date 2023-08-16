@@ -336,7 +336,7 @@ class msm(Network):
 
         self.states = ssu.named_dict(
             ssppl.State('participant', bool, distdict=msm_distdict, eligibility='male'),
-            ssppl.State('debut', float, distdict=self.pars['debut'], eligibility=is_msm),
+            ssppl.State('debut', float, distdict=self.pars['debut'], eligibility=is_msm, na_val=np.nan),
             ssppl.State('bisexual', bool, distdict=bi_distdict, eligibility=is_msm),
         )
 
@@ -345,7 +345,7 @@ class msm(Network):
         return
 
     def active(self, people):
-        return (people.age > self.debut) & people.male
+        return (people.age > people[self.name].debut) & people.male
 
     def get_seekers(self, people, ti=None):
         """ Find the people in this network who are looking for relationships """

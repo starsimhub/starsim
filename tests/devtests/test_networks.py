@@ -16,34 +16,11 @@ from scipy.stats import norm
 
 msm = ss.msm()
 ppl = ss.People(100)
+ppl.age = norm.rvs(30, 10, 100)  # Give people non-zero ages
 ppl.add_network(msm)
 
-#
-#
-# # Create an MSM state
-# msm_distdict = dict(dist='choice', par1=[True, False], par2=[0.15, 0.85])
-# msm = ss.State('msm', bool, distdict=msm_distdict, eligibility='male')
-#
-# # Create people with MSM
-# ppl = ss.People(100, states=msm)
-#
-# # Give people non-zero ages
-# ppl.age = norm.rvs(30, 10, 100)
-#
-# # Add an FSW state
-# def fsw_eligible(people): return (people.age > 20) & (people.age < 30) & people.female
-# fsw_distdict = dict(dist='choice', par1=[True, False], par2=[0.15, 0.85])
-# ppl.add_state('fsw', bool, eligibility=fsw_eligible, distdict=fsw_distdict, na_val=False)
-#
-# ppl.networks.msm.active
+# Sexually active MSM
+ppl.networks['msm'].active(ppl)
+# What about ppl.msm.active? Should ppl.msm be an objdict of states (as it is now), or the network itself?
 
 
-# Q: should networks add states in a similar way to modules?
-# e.g.
-#   class msm(ss.Network):
-#       def __init__():
-#           self.states = ssu.named_dict(State('msm', bool, True))
-#   people.add_network(msm())
-
-# class msm(ss.Network):
-#     pass
