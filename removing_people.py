@@ -311,6 +311,12 @@ p.remove(remove)
 
 s = pd.Series(z.values, p.uids)
 
-%timeit s[99990]
+# %timeit s[99990]
+#
+# %timeit z[99990]
 
-%timeit z[99990]
+def test():
+    for i in range(1000000):
+        z[99990]
+
+sc.profile(run=test, follow=[State.__getitem__])
