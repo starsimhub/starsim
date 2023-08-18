@@ -319,6 +319,13 @@ class People(BasePeople):
 
         return
 
+    def add_substates(self, obj):
+        for state_name, state in obj.states.items():
+            combined_name = obj.name + '.' + state_name
+            self._data[combined_name] = state.new(self._n, self)
+            self._map_arrays(keys=combined_name)
+            self.states[combined_name] = state
+
     def add_module(self, module, force=False):
         # Initialize all the states associated with a module
         # This is implemented as People.add_module rather than
@@ -327,18 +334,14 @@ class People(BasePeople):
         if hasattr(self, module.name) and not force:
             raise Exception(f'Module {module.name} already added')
         self.__setattr__(module.name, sc.objdict())
-
-        for state_name, state in module.states.items():
-            combined_name = module.name + '.' + state_name
-            self._data[combined_name] = state.new(self._n, self)
-            self._map_arrays(keys=combined_name)
-            self.states[combined_name] = state
-
+        self.add_substates(module)
         return
 
     def add_network(self, network, force=False):
-        self.add_module(network, force=force)
-        self.networks[network.name] = network
+        if hasattr(self, network.name) and not force:
+            raise Exception(f'Network {network.name} already added')
+        self.__setattr__(network.name, network)
+        self.add_substates(network)
 
     def scale_flows(self, inds):
         """

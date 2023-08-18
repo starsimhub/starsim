@@ -330,27 +330,22 @@ class msm(Network):
 
         # Set states
         msm_distdict = dict(dist='choice', par1=[True, False], par2=[self.pars['prop_msm'], 1 - self.pars['prop_msm']])
-        bi_distdict = dict(dist='choice', par1=[True, False],
-                           par2=[self.pars['prop_bisexual'], 1 - self.pars['prop_bisexual']])
         is_msm = lambda people: people.msm.participant  # TODO: improve this
 
         self.states = ssu.named_dict(
             ssppl.State('participant', bool, distdict=msm_distdict, eligibility='male'),
             ssppl.State('debut', float, distdict=self.pars['debut'], eligibility=is_msm, na_val=np.nan),
-            ssppl.State('bisexual', bool, distdict=bi_distdict, eligibility=is_msm),
+            ssppl.State('partners', int, distdict=self.pars['partners']+1, eligibility=is_msm, na_val=np.nan),
+            ssppl.State('current_partners', int, fill_value=0, eligibility=is_msm, na_val=np.nan),
         )
 
     def initialize(self, people):
         """ This method could potentially add network states to the people if needed """
         return
 
-    def active(self, people):
-        return (people.age > people[self.name].debut) & people.male
-
     def get_seekers(self, people, ti=None):
         """ Find the people in this network who are looking for relationships """
-        unpartnered = np.setdiff1d(msm, self.members)
-        underpartnered = msm[self.current_partners < msmppl.partners]
+        underpartnered = people.msm[self.current_partners < self.partners]
         active = people.age >= self.debut
         people.ti_breakup
 

@@ -20,7 +20,7 @@ ppl.age = norm.rvs(30, 10, 100)  # Give people non-zero ages
 ppl.add_network(msm)
 
 # Sexually active MSM
-ppl.networks['msm'].active(ppl)
+# ppl.networks['msm'].active(ppl)
 # What about ppl.msm.active? Should ppl.msm be an objdict of states (as it is now), or the network itself?
 
 
