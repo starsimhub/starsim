@@ -250,6 +250,33 @@ class Network(sc.objdict):
         pass
 
 
+class Contacts(Network):
+    """
+    Prototype of a mixing class for holding cross-network information.
+    A type of Network?
+    """
+
+    def __init__(self, networks=None, participation=None):
+        self.networks = networks
+        self.participation = participation
+
+        # Could store the overall number of partners?
+        # Why store it here instead of in people?
+        # Should it be a property?
+        # Idea here would be that each network would know how many partners
+        # (& preferred partners) a person had in total.
+        self.partners = ssppl.State('partners', int, distdict=...)
+
+    @ property
+    def contacts(self):
+        """ Concatenate each network's contact list?? """
+        return
+
+    def get_membership(self, people):
+        """ Given a list of networks and a people instance, return boolean membership arrays """
+        return
+
+
 class simple_sexual(Network):
     # Randomly pair males and females with variable relationship durations
     def __init__(self, mean_dur=5):
@@ -335,7 +362,7 @@ class msm(Network):
         self.states = ssu.named_dict(
             ssppl.State('participant', bool, distdict=msm_distdict, eligibility='male'),
             ssppl.State('debut', float, distdict=self.pars['debut'], eligibility=is_msm, na_val=np.nan),
-            ssppl.State('partners', int, distdict=self.pars['partners']+1, eligibility=is_msm, na_val=np.nan),
+            ssppl.State('partners', int, distdict=self.pars['partners'], eligibility=is_msm, na_val=np.nan),
             ssppl.State('current_partners', int, fill_value=0, eligibility=is_msm, na_val=np.nan),
         )
 
