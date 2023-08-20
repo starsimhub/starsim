@@ -341,7 +341,7 @@ class People(BasePeople):
         if hasattr(self, network.name) and not force:
             raise Exception(f'Network {network.name} already added')
         self.__setattr__(network.name, network)
-        self.add_substates(network)
+        # self.add_substates(network) # not needed on new branch
 
     def scale_flows(self, inds):
         """
