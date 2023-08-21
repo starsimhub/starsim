@@ -355,24 +355,22 @@ class msm(Network):
             'partners': dict(dist='poisson', par1=0.05),  # Concurrency metric
         })
 
-        # Set states
+        # States
         msm_distdict = dict(dist='choice', par1=[True, False], par2=[self.pars['prop_msm'], 1 - self.pars['prop_msm']])
-        is_msm = lambda people: people.msm.participant  # TODO: improve this
-
         self.states = ssu.named_dict(
-            ssppl.State('participant', bool, distdict=msm_distdict, eligibility='male'),
-            ssppl.State('debut', float, distdict=self.pars['debut'], eligibility=is_msm, na_val=np.nan),
-            ssppl.State('partners', int, distdict=self.pars['partners'], eligibility=is_msm, na_val=np.nan),
-            ssppl.State('current_partners', int, fill_value=0, eligibility=is_msm, na_val=np.nan),
+            ssppl.State('member', bool, distdict=msm_distdict, eligibility='male'),
+            ssppl.State('debut', float, distdict=self.pars['debut'], eligibility=self.member, na_val=np.nan),
+            ssppl.State('partners', int, distdict=self.pars['partners'], eligibility=self.member, na_val=np.nan),
+            ssppl.State('current_partners', int, fill_value=0, eligibility=self.member, na_val=np.nan),
         )
 
     def initialize(self, people):
-        """ This method could potentially add network states to the people if needed """
+        """ This method can initialize the states with the people """
         return
 
     def get_seekers(self, people, ti=None):
         """ Find the people in this network who are looking for relationships """
-        underpartnered = people.msm[self.current_partners < self.partners]
+        underpartnered = self.msm[self.current_partners < self.partners]
         active = people.age >= self.debut
         people.ti_breakup
 
