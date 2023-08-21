@@ -14,10 +14,6 @@ uids = np.array([3,4,5])
 x = pd.Index(uids)
 
 
-
-
-
-
 class FusedArray(NDArrayOperatorsMixin):
     # This is a class that allows indexing by UID but does not support dynamic growth
     # It's kind of like a Pandas series but one that only supports a monotonically increasing
@@ -33,17 +29,82 @@ class FusedArray(NDArrayOperatorsMixin):
 
     __slots__ = ('values','_uid_map','_uids')
 
-    def __init__(self, values, uids):
+    def __init__(self, values, uids, uid_map=None):
 
         self.values = values
+
+        if uid_map is None:
+            # Construct a local UID map as opposed to using a shared one (i.e., the one for all agents contained in the People instance)
+            uid_map = np.full(np.max(uids)+1, fill_value=INT_NAN, dtype=int)
+            uid_map[uids] = np.arange(len(uids))
+
         self._uids = uids
         self._uid_map = uid_map
 
-
     def __repr__(self):
-        df = pd.DataFrame(self.values.T, index=self._uids)
-        df.columns.name = self.name
+        # TODO - optimize (obviously won't want to make a full dataframe just to print it!)
+        if self.values.ndim == 1:
+            df = pd.DataFrame(self.values.T, index=self._uids, columns=['Quantity'])
+            df.index.name = 'UID'
+        else:
+            df = pd.DataFrame(self.values.T, index=self._uids).T
+            df.index.name='Quantity'
+            df.columns.name='UID'
         return df.__repr__()
+
+    # Overload indexing
+    #
+    # Supported indexing operations on the last dimension (max dimension of 2)
+    # - Integer value (mapped)
+    # - List/array of integers (mapped)
+    # - Boolean array (used directly)
+    # Unsupported operations
+    # - Slices
+    def _process_key(self, key):
+        if isinstance(key, np.ndarray) and key.dtype == bool:
+            # If we pass in a boolean array, apply it directly
+            return key
+        elif isinstance(key, tuple):
+            if isinstance(key[1], np.ndarray) and key[1].dtype == bool:
+                return key
+            elif isinstance(key[1], slice):
+                if key[1].start is None and key[1].stop is None and key[1].step is None:
+                    return key
+                else:
+                    raise Exception('Slicing not supported - slice the .values attribute by index instead e.g., x.values[0:5], not x[0:5]')
+            else:
+                return (key[0], self._uid_map[key[1]])
+        elif isinstance(key, slice):
+            if key[1].start is None and key[1].stop is None and key[1].step is None:
+                return key
+            else:
+                raise Exception('Slicing not supported - slice the .values attribute by index instead e.g., x.values[0:5], not x[0:5]')
+        else:
+            return self._uid_map[key]
+
+
+    def __getitem__(self, key):
+        if isinstance(key, (int, np.integer)):
+            return self.values.__getitem__(self._process_key(key))
+        else:
+            key = self._process_key(key)
+            if isinstance(key, tuple):
+                if isinstance(key[1],(int, np.integer)):
+                    uids = [self._uids[key[1]]]
+                    values = self.values.__getitem__((key[0], key[1], None))
+                    if isinstance(key[0],(int, np.integer)):
+                        return values[0]
+                else:
+                    uids = self._uids[key[1]]
+                    values = self.values.__getitem__((key[0], key[1]))
+
+            else:
+                uids = self._uids[key]
+                values = self.values.__getitem__(key)
+            return self.__class__(values=values, uids=uids)
+
+    def __setitem__(self, key, value):
+        return self.values.__setitem__(self._process_key(key), value)
 
     # Make it behave like a regular array mostly
     def __len__(self):
@@ -67,13 +128,52 @@ class FusedArray(NDArrayOperatorsMixin):
     def __array__(self):
         return self.values
 
-    def __array_ufunc__(self, *args, **kwargs):
-        args = [(x if x is not self else self.values) for x in args]
-        kwargs = {k: v if v is not self else self.values for k, v in kwargs.items()}
-        return self.values.__array_ufunc__(*args, **kwargs)
+    # def __array_prepare__(self, *args, **kwargs):
+    #     print(self)
+
+    # def __array_ufunc__(self, *args, **kwargs):
+    #     args = [(x if x is not self else self.values) for x in args]
+    #     kwargs = {k: v if v is not self else self.values for k, v in kwargs.items()}
+    #     return self.values.__array_ufunc__(*args, **kwargs)
+    #
+    # def __array_finalize__(self, *args, **kwargs):
+    #     return FusedArray(values=self.values.__array_ufunc__(*args, **kwargs), uids=self._uids, uid_map=self._uid_map)
+    #
+
+    def __array_wrap__(self, out_arr, context=None):
+        if out_arr.ndim == 0:
+            return out_arr.item()
+        return self.__class__(values=out_arr, uids=self._uids, uid_map=self._uid_map)
+
+
+x = np.arange(1,5)
+a = FusedArray(np.array([20,2,3]),uids=np.array([3,4,5]) )
+
+a = FusedArray(np.random.randn(100000),uids=np.arange(100000) )
+np.max(a)
 
 
 
+b = FusedArray(np.random.randn(2,10) ,uids=np.arange(10) )
+
+# b[:,1] # Get both variables for UID=1
+# print(b[:,[2,3]]) # Get both variables for UID=[2,3]
+b[0,:] # Get variable 1, for all UIDs
+#
+# print(b[:,1])
+# print(b[:,[2,3]])
+
+print(b)
+#
+# a = FusedArray(np.random.randn(100000),uids=np.arange(100000) )
+# %timeit np.max(a)
+# 21 µs ± 322 ns per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
+# %timeit a-1
+# 25.9 µs ± 415 ns per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
+
+
+
+raise Exception('stop')
 
 
 
