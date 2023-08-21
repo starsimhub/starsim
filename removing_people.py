@@ -8,12 +8,6 @@ from numpy.lib.mixins import NDArrayOperatorsMixin # Inherit from this to automa
 INT_NAN = np.iinfo(int).max  # Value to use to flag removed UIDs (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
 
 
-
-uids = np.array([3,4,5])
-
-x = pd.Index(uids)
-
-
 class FusedArray(NDArrayOperatorsMixin):
     # This is a class that allows indexing by UID but does not support dynamic growth
     # It's kind of like a Pandas series but one that only supports a monotonically increasing
@@ -33,7 +27,7 @@ class FusedArray(NDArrayOperatorsMixin):
 
         self.values = values
 
-        if uid_map is None:
+        if uid_map is None and uids is not None:
             # Construct a local UID map as opposed to using a shared one (i.e., the one for all agents contained in the People instance)
             uid_map = np.full(np.max(uids)+1, fill_value=INT_NAN, dtype=int)
             uid_map[uids] = np.arange(len(uids))
@@ -61,11 +55,11 @@ class FusedArray(NDArrayOperatorsMixin):
     # Unsupported operations
     # - Slices
     def _process_key(self, key):
-        if isinstance(key, np.ndarray) and key.dtype == bool:
+        if (isinstance(key, np.ndarray) and key.dtype == bool) or (isinstance(key, FusedArray) and key.values.dtype == bool):
             # If we pass in a boolean array, apply it directly
             return key
         elif isinstance(key, tuple):
-            if isinstance(key[1], np.ndarray) and key[1].dtype == bool:
+            if (isinstance(key[1], np.ndarray) and key[1].dtype == bool) or (isinstance(key[1], FusedArray) and key[1].values.dtype == bool):
                 return key
             elif isinstance(key[1], slice):
                 if key[1].start is None and key[1].stop is None and key[1].step is None:
@@ -75,7 +69,7 @@ class FusedArray(NDArrayOperatorsMixin):
             else:
                 return (key[0], self._uid_map[key[1]])
         elif isinstance(key, slice):
-            if key[1].start is None and key[1].stop is None and key[1].step is None:
+            if key.start is None and key.stop is None and key.step is None:
                 return key
             else:
                 raise Exception('Slicing not supported - slice the .values attribute by index instead e.g., x.values[0:5], not x[0:5]')
@@ -84,27 +78,38 @@ class FusedArray(NDArrayOperatorsMixin):
 
 
     def __getitem__(self, key):
-        if isinstance(key, (int, np.integer)):
-            return self.values.__getitem__(self._process_key(key))
-        else:
-            key = self._process_key(key)
-            if isinstance(key, tuple):
-                if isinstance(key[1],(int, np.integer)):
-                    uids = [self._uids[key[1]]]
-                    values = self.values.__getitem__((key[0], key[1], None))
-                    if isinstance(key[0],(int, np.integer)):
-                        return values[0]
-                else:
-                    uids = self._uids[key[1]]
-                    values = self.values.__getitem__((key[0], key[1]))
-
+        try:
+            if isinstance(key, (int, np.integer)):
+                return self.values.__getitem__(self._process_key(key))
             else:
-                uids = self._uids[key]
-                values = self.values.__getitem__(key)
-            return self.__class__(values=values, uids=uids)
+                key = self._process_key(key)
+                if isinstance(key, tuple):
+                    if isinstance(key[1],(int, np.integer)):
+                        uids = [self._uids[key[1]]]
+                        values = self.values.__getitem__((key[0], key[1], None))
+                        if isinstance(key[0],(int, np.integer)):
+                            return values[0]
+                    else:
+                        uids = self._uids[key[1]]
+                        values = self.values.__getitem__((key[0], key[1]))
+                else:
+                    uids = self._uids[key]
+                    values = self.values.__getitem__(key)
+                return FusedArray(values=values, uids=uids)
+        except IndexError as e:
+            if str(INT_NAN) in str(e):
+                raise IndexError(f'UID not present in array')
+            else:
+                raise e
 
     def __setitem__(self, key, value):
-        return self.values.__setitem__(self._process_key(key), value)
+        try:
+            return self.values.__setitem__(self._process_key(key), value)
+        except IndexError as e:
+            if str(INT_NAN) in str(e):
+                raise IndexError(f'UID not present in array')
+            else:
+                raise e
 
     # Make it behave like a regular array mostly
     def __len__(self):
@@ -128,134 +133,31 @@ class FusedArray(NDArrayOperatorsMixin):
     def __array__(self):
         return self.values
 
-    # def __array_prepare__(self, *args, **kwargs):
-    #     print(self)
+    def __array_ufunc__(self, *args, **kwargs):
+        # Does this function really work?!
+        if args[1] != '__call__':
+            args = [(x if x is not self else self.values) for x in args]
+            kwargs = {k: v if v is not self else self.values for k, v in kwargs.items()}
+            return self.values.__array_ufunc__(*args, **kwargs)
 
-    # def __array_ufunc__(self, *args, **kwargs):
-    #     args = [(x if x is not self else self.values) for x in args]
-    #     kwargs = {k: v if v is not self else self.values for k, v in kwargs.items()}
-    #     return self.values.__array_ufunc__(*args, **kwargs)
-    #
-    # def __array_finalize__(self, *args, **kwargs):
-    #     return FusedArray(values=self.values.__array_ufunc__(*args, **kwargs), uids=self._uids, uid_map=self._uid_map)
-    #
+        args = [(x if x is not self else self.values) for x in args]
+        if 'out' in kwargs and kwargs['out'][0] is self:
+            kwargs['out'] = self.values
+            args[0](*args[2:], **kwargs)
+            return self
+        else:
+            out_arr = args[0](*args[2:], **kwargs)
+            return FusedArray(values=out_arr, uids=self._uids, uid_map=self._uid_map)
 
     def __array_wrap__(self, out_arr, context=None):
+        # This allows numpy operations addition etc. to return instances of FusedArray
         if out_arr.ndim == 0:
             return out_arr.item()
-        return self.__class__(values=out_arr, uids=self._uids, uid_map=self._uid_map)
+        return FusedArray(values=out_arr, uids=self._uids, uid_map=self._uid_map) # Hardcoding class means State can inherit from FusedArray but return FusedArray base instances
 
 
-x = np.arange(1,5)
-a = FusedArray(np.array([20,2,3]),uids=np.array([3,4,5]) )
-
-a = FusedArray(np.random.randn(100000),uids=np.arange(100000) )
-np.max(a)
-
-
-
-b = FusedArray(np.random.randn(2,10) ,uids=np.arange(10) )
-
-# b[:,1] # Get both variables for UID=1
-# print(b[:,[2,3]]) # Get both variables for UID=[2,3]
-b[0,:] # Get variable 1, for all UIDs
-#
-# print(b[:,1])
-# print(b[:,[2,3]])
-
-print(b)
-#
-# a = FusedArray(np.random.randn(100000),uids=np.arange(100000) )
-# %timeit np.max(a)
-# 21 µs ± 322 ns per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
-# %timeit a-1
-# 25.9 µs ± 415 ns per loop (mean ± std. dev. of 7 runs, 10,000 loops each)
-
-
-
-raise Exception('stop')
-
-
-
-x = np.arange(1,5)
-y = np.arange(6,15)
-z = x.view()
-
-class DynamicPeople():
-    def __init__(self, states):
-
-        self._uid_map = State('uid',int) # This state tracks *ALL* uids ever created
-        self.uids = State('uid',int) # This state tracks *ALL* uids ever created
-
-        self.sex = State('sex',bool)
-        self.dead = State('dead',bool)
-        self.hiv.sus
-
-        # self.states  states
-
-        # self._dynamic_states = [self.uids, self.dead, self.hiv.sus,...] # List of references to dynamic states that should be updated. These should be local to a Sim but could be contained in interventions, connectors or analyzers
-
-    def __len__(self):
-        return len(self.uids)
-
-    def initialize(self, n):
-        self._uid_map.initialize(n)
-        self._uid_map[:] = np.arange(0, len(self._uid_map))
-
-        self.uids.initialize(uid_map=self._uid_map, uids=self.uids)
-        self.uids[:] = np.arange(0, len(self._uid_map))
-
-        # self.dead.initialize(uid_map=self._uid_map, uids=self.uids)
-        for state in self.states:
-            state.initialize(self)
-
-            state.initialize(sim.people)
-
-
-    def __setattr__(self, attr, value):
-        if hasattr(self, attr) and isinstance(getattr(self, attr), State):
-            raise Exception('Cannot assign directly to a state - must index into the view instead e.g. `people.uid[:]=`')
-        else:   # If not initialized, rely on the default behavior
-            object.__setattr__(self, attr, value)
-
-
-    def grow(self, n):
-        # Add agents
-        start_uid = len(self._uid_map)
-        start_idx = len(self.uids)
-
-        new_uids = np.arange(start_uid, start_uid+n)
-        new_inds = np.arange(start_idx, start_idx+n)
-
-        self._uid_map.grow(n)
-        self._uid_map[new_uids] = new_inds
-
-        self.uids.grow(n)
-        self.uids[new_uids] = new_uids
-
-        for state in self._dynamic_states:
-            state.grow(n)
-
-    def remove(self, uids):
-        # Remove specified indices
-
-        # After removing the requested UIDs, what are the remaining UIDs and their array positions?
-        remaining_uids = self.uids.values[~np.in1d(self.uids, uids)]
-        keep_inds = self._uid_map[remaining_uids] # Calculate indices to keep
-        self.uids._trim(keep_inds)
-
-        for state in self._dynamic_states:
-            state._trim(keep_inds)
-
-        # Update the UID map
-        self._uid_map[:] = INT_NAN
-        self._uid_map[remaining_uids] = np.arange(0, len(remaining_uids))
-
-        print()
-
-
-class State(NDArrayOperatorsMixin):
-    def __init__(self, name, dtype, fill_value=0, shape=None, label=None):
+class DynamicView(NDArrayOperatorsMixin):
+    def __init__(self, dtype, fill_value=0, shape=None, label=None):
         """
         Args:
             name: name of the result as used in the model
@@ -264,18 +166,14 @@ class State(NDArrayOperatorsMixin):
             shape: If not none, set to match a string in `pars` containing the dimensionality
             label: text used to construct labels for the result for displaying on plots and other outputs
         """
-        self.name = name
         self.dtype = dtype
         self.fill_value = fill_value
         self.shape = shape
-        self.label = label or name
 
         self.n = 0  # Number of agents currently in use
 
-        self._uids = None # Reference to an array-like instance (typically a State) containing the UIDs - this would be stored at the People level normally
-        self._uid_map = None  # Reference to an array-like instance (typically a kind of State/dynamic array) of length equal to number of agents ever created - this would be stored at the People level normally
         self._data = None  # The underlying memory array (length at least equal to n)
-        self.values = None  # The view corresponding to what is actually accessible (length equal to n)
+        self._view = None  # The view corresponding to what is actually accessible (length equal to n)
         return
 
     @property
@@ -287,42 +185,10 @@ class State(NDArrayOperatorsMixin):
         return self.n
 
     def __repr__(self):
-        # Quick/rough implementation to get it to print both the UIDs and the values
-        # It's important to print the UID as well so that it's obvious to users that they
-        # cannot index it like a normal array i.e., by position
-        if self._uid_map is not None:
-            uids = pd.Index(self._uids, name='UID')
-        else:
-            uids = None
+        return self._view.__repr__()
 
-        df = pd.DataFrame(self.values.T, index=uids)
-        df.columns.name = self.name
-        return df.__repr__()
-
-    @property
-    def indexed_by_uid(self):
-        # Returns True if this object is indexed by UID rather than array position
-        return self._uid_map is not None
-
-    def initialize(self, n=None, uid_map=None, uids=None):
-        """
-
-        :param n:
-        :param uid_map: Optionally specify a State containing UIDs - if specified, this State is indexed
-        :return:
-        """
-
-        # Either specify an initial size, or the UIDs to reference
-        assert (n is None) != (uid_map is None), 'Must specify either the initial number of agents or a reference to UIDs'
-        assert (uid_map is None) == (uids is None), 'Must specify uid_map and uids together'
-
-        if uid_map is not None:
-            self.n = len(uid_map)
-        else:
-            self.n = n
-
-        self._uid_map = uid_map
-        self._uids = uids
+    def initialize(self, n):
+        self.n = n
 
         # Calculate the number of rows
         if sc.isstring(self.shape):
@@ -352,25 +218,26 @@ class State(NDArrayOperatorsMixin):
 
             if callable(self.fill_value):
                 new = np.empty(shape, dtype=self.dtype)
-                new[:] = self.fill_value(self.n)
+                new[:] = self.fill_value(n_new) # TODO - make this work properly for 2d arrays
             else:
                 new = np.full(shape, dtype=self.dtype, fill_value=self.fill_value)
 
             self._data = np.concatenate([self._data, new], axis=self._data.ndim - 1)
 
         self.n += n
-
         self._map_arrays()
 
     def _trim(self, inds):
         # Keep only specified indices
-        # Should only be called via people.remove() so that the UID map can be updated too
-        self.n = len(inds)
+        # Note that these are indices, not UIDs!
+        n = len(inds)
         if self._data.ndim == 1:
-            self._data[:self.n] = self._data[inds]
+            self._data[:n] = self._data[inds]
+            self._data[n:self.n] = self.fill_value(self.n-n) if callable(self.fill_value) else self.fill_value
         else:
-            self._data[:,:self.n] = self._data[:,inds]
-
+            self._data[:,:n] = self._data[:,inds]
+            self._data[:,n:self.n] = self.fill_value(self.n-n) if callable(self.fill_value) else self.fill_value  # TODO - make this work properly for 2D arrays
+        self.n = n
         self._map_arrays()
 
     def _map_arrays(self):
@@ -382,74 +249,138 @@ class State(NDArrayOperatorsMixin):
         """
 
         if self._data.ndim == 1:
-            self.values = self._data[:self.n]
+            self._view = self._data[:self.n]
         elif self._data.ndim == 2:
-            self.values = self._data[:, :self.n]
+            self._view = self._data[:, :self.n]
         else:
             errormsg = 'Can only operate on 1D or 2D arrays'
             raise TypeError(errormsg)
         return
 
-    def _map_slice(self, key):
-        return slice(None if key.start is None else self._uid_map[key.start],None if key.stop is None else self._uid_map[key.stop],key.step)
-
     def __getitem__(self, key):
-        if self._uid_map is None:
-            return self.values.__getitem__(key)
-
-        if isinstance(key, slice):
-            return self.values.__getitem__(self._map_slice(key))
-        elif isinstance(key, np.ndarray) and key.dtype == bool:
-            return self.values.__getitem__(key)
-        elif isinstance(key, tuple):
-            # If it's a tuple, then map the second index and not the first
-            if isinstance(key[1], slice):
-                new_key = (key[0], self._map_slice(key[1]))
-            elif isinstance(key[1], np.ndarray) and key[1].dtype == bool:
-                new_key = key
-            else:
-                new_key = (key[0], self._uid_map[key[1]])
-            return self.values.__getitem__(new_key)
-        else:
-            # The key is expected to be the UID
-            # Translate to indices
-            return self.values.__getitem__(self._uid_map[key])
+        return self._view.__getitem__(key)
 
     def __setitem__(self, key, value):
-        if self._uid_map is None:
-            self.values.__setitem__(key, value)
-            return
-
-        if isinstance(key, slice):
-            self.values.__setitem__(self._map_slice(key), value)
-        elif isinstance(key, np.ndarray) and key.dtype == bool:
-                self.values.__setitem__(key, value)
-        elif isinstance(key, tuple):
-            # If it's a tuple, then map the second index and not the first
-            if isinstance(key[1], slice):
-                new_key = self._map_slice(key[1])
-            else:
-                new_key = (key[0], self._uid_map[key[1]])
-            self.values.__setitem__(new_key, value)
-        else:
-            # The key is expected to be the UID
-            # Translate to indices
-            self.values.__setitem__(self._uid_map[key], value)
-
-    # These methods allow operators and numpy functions like sum(), mean() etc.
-    # to be used directly on the State object, and with reasonable performance
+        self._view.__setitem__(key, value)
 
     @property
     def __array_interface__(self):
-        return self.values.__array_interface__
+        return self._view.__array_interface__
 
     def __array__(self):
-        return self.values
+        return self._view
 
     def __array_ufunc__(self, *args, **kwargs):
-        args = [(x if x is not self else self.values) for x in args]
-        kwargs = {k: v if v is not self else self.values for k, v in kwargs.items()}
-        return self.values.__array_ufunc__(*args, **kwargs)
+        args = [(x if x is not self else self._view) for x in args]
+        kwargs = {k: v if v is not self else self._view for k, v in kwargs.items()}
+        return self._view.__array_ufunc__(*args, **kwargs)
+
+
+class State(FusedArray):
+
+    def __init__(self, name, dtype, fill_value=0, shape=None, label=None):
+        super().__init__(values=None, uids=None, uid_map=None) # Call the FusedArray constructor
+        self._data = DynamicView(dtype=dtype, fill_value=fill_value,shape=shape)
+        self.name = name
+        self.label = label or name
+        self.values = self._data._view
+        self._initialized = False
+
+    def __repr__(self):
+        if not self._initialized:
+            return f'<State {self.name} (uninitialized)>'
+        else:
+            return FusedArray.__repr__(self)
+
+    def initialize(self, people):
+        if self._initialized:
+            return
+
+        people.add_state(self)
+        self._uid_map = people._uid_map
+        self._uids = people.uids
+        self._data.initialize(len(self._uids))
+        self.values = self._data._view
+        self._initialized = True
+
+    def grow(self, n):
+        self._data.grow(n)
+        self.values = self._data._view
+
+    def _trim(self, inds):
+        self._data._trim(inds)
+        self.values = self._data._view
+
+
+class DynamicPeople():
+    def __init__(self, states=None):
+
+        self._uid_map = DynamicView(int, fill_value=INT_NAN) # This variable tracks all UIDs ever created
+        self.uids = DynamicView(int, fill_value=INT_NAN) # This variable tracks all UIDs currently in use
+
+        self.sex = State('sex',bool)
+        self.dead = State('dead',bool)
+
+        self.states = [self.sex, self.dead] # All state objects linked to this People instance. Note that the states above are not yet linked to the People because they haven't been initialized
+
+        # In reality, these states might be added elsewhere (e.g., in modules)
+        if states is not None:
+            for state in states:
+                self.add_state(state)
+
+    def add_state(self, state):
+        if id(state) not in {id(x) for x in self.states}:
+            self.states.append(state)
+
+    def __len__(self):
+        return len(self.uids)
+
+    def initialize(self, n):
+
+        self._uid_map.initialize(n)
+        self._uid_map[:] = np.arange(0, n)
+        self.uids.initialize(n)
+        self.uids[:] = np.arange(0, n)
+
+        for state in self.states:
+            state.initialize(self)
+
+    def __setattr__(self, attr, value):
+        if hasattr(self, attr) and isinstance(getattr(self, attr), State):
+            raise Exception('Cannot assign directly to a state - must index into the view instead e.g. `people.uid[:]=`')
+        else:   # If not initialized, rely on the default behavior
+            object.__setattr__(self, attr, value)
+
+    def grow(self, n):
+        # Add agents
+        start_uid = len(self._uid_map)
+        start_idx = len(self.uids)
+
+        new_uids = np.arange(start_uid, start_uid+n)
+        new_inds = np.arange(start_idx, start_idx+n)
+
+        self._uid_map.grow(n)
+        self._uid_map[new_uids] = new_inds
+
+        self.uids.grow(n)
+        self.uids[new_inds] = new_uids
+
+        for state in self.states:
+            state.grow(n)
+
+    def remove(self, uids_to_remove):
+        # Calculate the *indices* to keep
+        keep_uids = self.uids[~np.in1d(self.uids, uids_to_remove)] # Calculate UIDs to keep
+        keep_inds = self._uid_map[keep_uids] # Calculate indices to keep
+
+        # Trim the UIDs and states
+        self.uids._trim(keep_inds)
+        for state in self.states:
+            state._trim(keep_inds)
+
+        # Update the UID map
+        self._uid_map[:] = INT_NAN # Clear out all previously used UIDs
+        self._uid_map[keep_uids] = np.arange(0, len(keep_uids)) # Assign the array indices for all of the current UIDs
 
 
 x = State('foo', int, 0)
@@ -459,37 +390,49 @@ z = State('bar', int, lambda n: np.random.randint(1,3,n))
 p = DynamicPeople(states=[x,y,z])
 p.initialize(3)
 p.grow(3)
-
-x[2] = 10
-x[3] = 20
-
-y[[0,1],2] = 10
-
-y[0,2] = 10
-y[0,3] = 20
-y[1,2] = 15
-y[1,3] = 25
-
 p.remove([0, 1])
 p.remove(2)
+p.grow(10)
 
-print(x)
-print(y)
-print(z)
+p.grow(8)
+p.grow(8)
 
+# print(x)
+# #
+# # z + 1
+# # z += 1
+# # z[z==2]
+# #
+# x[2] = 10
+# x[3] = 20
+# #
+# y[[0,1],2] = 10
+#
+# y[0,2] = 10
+# y[0,3] = 20
+# y[1,2] = 15
+# y[1,3] = 25
+# #
+# p.remove([0, 1])
+# p.remove(2)
+# #
+# print(x)
+# print(y)
+# print(z)
+# x[x==20]
 
-
-
-x = State('foo', int, 0)
-y = State('imm', float, 0, shape=2)
-z = State('bar', int, lambda n: np.random.randint(1,3,n))
-
-p = DynamicPeople(states=[x,y,z])
-p.initialize(100000)
-
-
-def true(x):
-    return x._uids[np.nonzero(x)[-1]]
+#
+#
+# x = State('foo', int, 0)
+# y = State('imm', float, 0, shape=2)
+# z = State('bar', int, lambda n: np.random.randint(1,3,n))
+#
+# p = DynamicPeople(states=[x,y,z])
+# p.initialize(100000)
+#
+#
+# def true(x):
+#     return x._uids[np.nonzero(x)[-1]]
 
 # x = State('foo', int, 0)
 # y = State('imm', float, 0, shape=2)
@@ -529,24 +472,24 @@ def true(x):
 # x[hiv_uids] += 1
 # x[:] += 1 works
 
-
+#
 # s = pd.Series(z.values, p.uids)
 # v = z.values
 # d = z._data
 # l = list(z.values)
+# #
+# # %timeit z[99999]
+# # %timeit s[99999]
+# # %timeit v[49999]
+# # %timeit l[49999]
+# # %timeit d[49999]
 #
-# %timeit z[99999]
-# %timeit s[99999]
-# %timeit v[49999]
-# %timeit l[49999]
-# %timeit d[49999]
-
-# TODO - remove slicing
-
-
-def test():
-    for i in range(100000):
-        z[99999]
-
-sc.profile(run=test, follow=[State.__getitem__])
-
+# # TODO - remove slicing
+#
+#
+# def test():
+#     for i in range(100000):
+#         z[99999]
+#
+# sc.profile(run=test, follow=[State.__getitem__])
+#
