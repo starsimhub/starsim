@@ -2,18 +2,98 @@ import pandas as pd
 import numpy as np
 import sciris as sc
 
+from numpy.lib.mixins import NDArrayOperatorsMixin # Inherit from this to automatically gain operators like +, -, ==, <, etc.
+
+
 INT_NAN = np.iinfo(int).max  # Value to use to flag removed UIDs (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
+
+
+
+uids = np.array([3,4,5])
+
+x = pd.Index(uids)
+
+
+
+
+
+
+class FusedArray(NDArrayOperatorsMixin):
+    # This is a class that allows indexing by UID but does not support dynamic growth
+    # It's kind of like a Pandas series but one that only supports a monotonically increasing
+    # unique integer index, and that we can customize and optimize indexing for. We also
+    # support indexing 2D arrays, with the second dimension (columns) being mapped by UID
+    # (this functionality is used to store vector states like genotype-specific quantities)
+    #
+    # We explictly do NOT support slicing, as these arrays are indexed by UID and slicing
+    # by UID can be confusing/ambiguous when there are missing values. Indexing returns
+    # another FusedArray instance
+    #
+    # Note that we do NOT use the
+
+    __slots__ = ('values','_uid_map','_uids')
+
+    def __init__(self, values, uids):
+
+        self.values = values
+        self._uids = uids
+        self._uid_map = uid_map
+
+
+    def __repr__(self):
+        df = pd.DataFrame(self.values.T, index=self._uids)
+        df.columns.name = self.name
+        return df.__repr__()
+
+    # Make it behave like a regular array mostly
+    def __len__(self):
+        return len(self.values)
+
+    def __contains__(self, *args, **kwargs):
+        return self.values.__contains__(*args, **kwargs)
+
+    @property
+    def shape(self):
+        return self.values.shape
+
+    @property
+    def ndim(self):
+        return self.values.ndim
+
+    @property
+    def __array_interface__(self):
+        return self.values.__array_interface__
+
+    def __array__(self):
+        return self.values
+
+    def __array_ufunc__(self, *args, **kwargs):
+        args = [(x if x is not self else self.values) for x in args]
+        kwargs = {k: v if v is not self else self.values for k, v in kwargs.items()}
+        return self.values.__array_ufunc__(*args, **kwargs)
+
+
+
+
+
+
+x = np.arange(1,5)
+y = np.arange(6,15)
+z = x.view()
 
 class DynamicPeople():
     def __init__(self, states):
 
         self._uid_map = State('uid',int) # This state tracks *ALL* uids ever created
-
         self.uids = State('uid',int) # This state tracks *ALL* uids ever created
-        self.dead = State('dead',bool)
-        self.states = states
 
-        self._dynamic_states = [] # List of references to dynamic states that should be updated. These should be local to a Sim but could be contained in interventions, connectors or analyzers
+        self.sex = State('sex',bool)
+        self.dead = State('dead',bool)
+        self.hiv.sus
+
+        # self.states  states
+
+        # self._dynamic_states = [self.uids, self.dead, self.hiv.sus,...] # List of references to dynamic states that should be updated. These should be local to a Sim but could be contained in interventions, connectors or analyzers
 
     def __len__(self):
         return len(self.uids)
@@ -22,12 +102,15 @@ class DynamicPeople():
         self._uid_map.initialize(n)
         self._uid_map[:] = np.arange(0, len(self._uid_map))
 
-        self.uids.initialize(uid_map=self._uid_map)
+        self.uids.initialize(uid_map=self._uid_map, uids=self.uids)
         self.uids[:] = np.arange(0, len(self._uid_map))
 
-        self.dead.initialize(uid_map=self._uid_map)
+        # self.dead.initialize(uid_map=self._uid_map, uids=self.uids)
         for state in self.states:
-            state.initialize(uid_map=self._uid_map)
+            state.initialize(self)
+
+            state.initialize(sim.people)
+
 
     def __setattr__(self, attr, value):
         if hasattr(self, attr) and isinstance(getattr(self, attr), State):
@@ -50,8 +133,7 @@ class DynamicPeople():
         self.uids.grow(n)
         self.uids[new_uids] = new_uids
 
-        self.dead.grow(n)
-        for state in self.states:
+        for state in self._dynamic_states:
             state.grow(n)
 
     def remove(self, uids):
@@ -59,13 +141,10 @@ class DynamicPeople():
 
         # After removing the requested UIDs, what are the remaining UIDs and their array positions?
         remaining_uids = self.uids.values[~np.in1d(self.uids, uids)]
-
-        # Calculate indices to keep
-        keep_inds = self._uid_map[remaining_uids]
-
+        keep_inds = self._uid_map[remaining_uids] # Calculate indices to keep
         self.uids._trim(keep_inds)
-        self.dead._trim(keep_inds)
-        for state in self.states:
+
+        for state in self._dynamic_states:
             state._trim(keep_inds)
 
         # Update the UID map
@@ -74,7 +153,7 @@ class DynamicPeople():
 
         print()
 
-from numpy.lib.mixins import NDArrayOperatorsMixin # Inherit from this to automatically gain operators like +, -, ==, <, etc.
+
 class State(NDArrayOperatorsMixin):
     def __init__(self, name, dtype, fill_value=0, shape=None, label=None):
         """
@@ -92,7 +171,9 @@ class State(NDArrayOperatorsMixin):
         self.label = label or name
 
         self.n = 0  # Number of agents currently in use
-        self._uid_map = None  # Array of length equal to number of agents ever created - this would be stored at the People level normally
+
+        self._uids = None # Reference to an array-like instance (typically a State) containing the UIDs - this would be stored at the People level normally
+        self._uid_map = None  # Reference to an array-like instance (typically a kind of State/dynamic array) of length equal to number of agents ever created - this would be stored at the People level normally
         self._data = None  # The underlying memory array (length at least equal to n)
         self.values = None  # The view corresponding to what is actually accessible (length equal to n)
         return
@@ -110,7 +191,7 @@ class State(NDArrayOperatorsMixin):
         # It's important to print the UID as well so that it's obvious to users that they
         # cannot index it like a normal array i.e., by position
         if self._uid_map is not None:
-            uids = pd.Index(np.where(self._uid_map != INT_NAN)[0], name='UID')
+            uids = pd.Index(self._uids, name='UID')
         else:
             uids = None
 
@@ -123,7 +204,7 @@ class State(NDArrayOperatorsMixin):
         # Returns True if this object is indexed by UID rather than array position
         return self._uid_map is not None
 
-    def initialize(self, n=None, uid_map=None):
+    def initialize(self, n=None, uid_map=None, uids=None):
         """
 
         :param n:
@@ -133,6 +214,7 @@ class State(NDArrayOperatorsMixin):
 
         # Either specify an initial size, or the UIDs to reference
         assert (n is None) != (uid_map is None), 'Must specify either the initial number of agents or a reference to UIDs'
+        assert (uid_map is None) == (uids is None), 'Must specify uid_map and uids together'
 
         if uid_map is not None:
             self.n = len(uid_map)
@@ -140,6 +222,7 @@ class State(NDArrayOperatorsMixin):
             self.n = n
 
         self._uid_map = uid_map
+        self._uids = uids
 
         # Calculate the number of rows
         if sc.isstring(self.shape):
@@ -304,19 +387,66 @@ z = State('bar', int, lambda n: np.random.randint(1,3,n))
 p = DynamicPeople(states=[x,y,z])
 p.initialize(100000)
 
-# To remove
-remove = np.random.choice(np.arange(len(p)), 50000, replace=False)
-p.remove(remove)
 
+def true(x):
+    return x._uids[np.nonzero(x)[-1]]
 
-s = pd.Series(z.values, p.uids)
-
-# %timeit s[99990]
+# x = State('foo', int, 0)
+# y = State('imm', float, 0, shape=2)
+# z = State('bar', int, lambda n: np.random.randint(1,3,n))
 #
-# %timeit z[99990]
+# p = DynamicPeople(states=[x,y,z])
+# p.initialize(100000)
+#
+# # To remove
+# remove = np.random.choice(np.arange(len(p)), 50000, replace=False)
+# p.remove(remove)
+#
+# # How should cv.true()/hp.true() get used?
+# # Essentially we want to return UIDs of people rather than actual IDs
+#
+# def true(v):
+#     if isinstance(v):
+#
+# # hpvsim
+# # filter_inds = people.true('hiv')  # indices fo people with HIV
+# # if len(filter_inds):
+# #     art_inds = filter_inds[hpu.true(people.art[filter_inds])]  # Indices of people on ART
+# #     not_art_inds = filter_inds[hpu.false(people.art[filter_inds])]
+# #     cd4_remaining_inds = hpu.itrue(((people.t - people.date_hiv[not_art_inds]) * dt) < people.dur_hiv[not_art_inds], not_art_inds)  # Indices of people not on ART who have an active infection
+# #
+#
+# # IN AN IDEAL WORLD
+# # Essentilly, we require true() to return the UIDs that go with each variable
+# hiv_uids = true(hiv)
+# art_uids = true(art[hiv_uids]])
+# not_art_inds = false(art[hiv_uids])
+
+# TODO - return something that tracks the UIDs if the getitem argument was a list/array
+
+# Support things like `x = x + 1`
+# x += 1 might be sensible
+# x[hiv_uids] += 1
+# x[:] += 1 works
+
+
+# s = pd.Series(z.values, p.uids)
+# v = z.values
+# d = z._data
+# l = list(z.values)
+#
+# %timeit z[99999]
+# %timeit s[99999]
+# %timeit v[49999]
+# %timeit l[49999]
+# %timeit d[49999]
+
+# TODO - remove slicing
+
 
 def test():
-    for i in range(1000000):
-        z[99990]
+    for i in range(100000):
+        z[99999]
 
 sc.profile(run=test, follow=[State.__getitem__])
+
