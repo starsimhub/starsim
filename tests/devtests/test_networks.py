@@ -154,8 +154,13 @@ class SexualNetwork(ss.Network):
         ), pars)
         self.states = ssu.omerge(self.states, states)
 
+        # Add orientation
+        opars = self.pars['orientation']
+        odist = dict(dist='choice', par1=opars.m_partner_prob, par2=opars.pop_shares)
+        self.states['orientation'] = ssppl.State('orientation', float, distdict=odist)
+
     def initialize(self, p):
-        """ Add states and do other initializations """
+        """ Do other initializations that need people - this also adds self.oreintation as an initialized state """
         return
 
     def add_pairs(self, p):
@@ -166,7 +171,7 @@ class SexualNetwork(ss.Network):
         male_uids = people.uid[people.male]
 
         # Find males who have fewer than their desired number of partners
-        # Figure out who they want to partner with
+        # Figure out who they want to partner with using self.orientation
         # Questions:
         #   - should there be assortativity between orientation, i.e. 6 more likely to pair with 6?
         #   - how can we incorporate differences in duration/concurrency with age/orientation?
