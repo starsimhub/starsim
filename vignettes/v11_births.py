@@ -44,7 +44,12 @@ pars = dict(
     death_rate=0.008,  # Crude death rate = 8/1000 people
 )
 sim = ss.Sim(pars=pars, modules=ss.syphilis())
-sim.run()  # print something saying that the pregnancy module and the maternal network are being added
+sim.run()  # print something saying that pregnancies/births are being added
+
+# sim.demographics? what would this contain?
+# sim.maternal?
+# or just leave it in
+
 
 sim.results.syphilis.stillborns.plot()  # Plot a time series of stillborns
 # Q: for birth outcomes, should these be added directly to the sim as well i.e. sim.results.stillborns?
@@ -58,3 +63,30 @@ sim = ss.Sim(location='rwanda', modules=ss.syphilis())
 
 # Implementing this:
 # Should we upload individual country data files? Do we need to do this?
+dem_pars = dict(
+    aging=True,
+    migration=False,
+    deaths=True,
+    births=True,
+    pregnancies=True
+)
+
+
+class Demographics:
+    def __init__(self, settings=None):
+        for sname, sval in settings:
+            self.__setattr__(sname, sval)
+        return
+
+    def update(self, people):
+        return
+
+    def increment_age(self, people):
+        people.age += people.dt
+
+
+
+
+
+
+
