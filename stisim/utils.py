@@ -4,26 +4,107 @@ Numerical utilities
 
 # %% Housekeeping
 
-import numpy as np  # For numerics
-import sciris as sc  # For additional utilities
+import warnings
+import numpy as np
+import sciris as sc
+from . import settings as sso
+
 
 # What functions are externally visible -- note, this gets populated in each section below
 __all__ = []
 
 
 # %% Helper functions
-__all__ += ['named_dict', 'omerge']
+__all__ += ['NDict', 'omerge']
 
 
-def named_dict(arg=None, *args):
-    """ Create an objdict based on object names """
-    args = sc.mergelists(arg, args, coerce='tuple')  # TODO: Must be a better way, I just forgot
-    return sc.objdict({arg.name: arg for arg in args})  # TODO: use dictobj instead for performance, probably
+class NDict(sc.objdict):
+    
+    
+    def __init__(self, *args, _name='name', _type=None, **kwargs):
+        self._name = _name
+        self._type = _type
+        argdict = self._validate(*args)
+        argdict.update(kwargs)
+        super().__init__(argdict)
+        return
+        
+            
+    def _validate(self, *args):
+        args = sc.mergelists(args, coerce='tuple')  # TODO: Must be a better way
+        failed = []
+        argdict = {}
+        for i,arg in enumerate(args):
+            if isinstance(arg, dict):
+                argdict.update(arg)
+            elif hasattr(arg, self._name):
+                argdict[getattr(arg, self._name)] = arg
+            else:
+                failed.append(i)
+        
+        # Check types
+        if self._type is not None:
+            wrong = {}
+            for k,v in argdict.items():
+                if not isinstance(v, self._type):
+                    wrong[k] = type(v)
+            if len(wrong):
+                errormsg = f'The following items do not have the expected type {self._type}:\n{wrong}'
+                raise TypeError(errormsg)
+        
+        if len(failed):
+            errormsg = f'Could not interpret arguments {failed}: does not have expected attribute "{self._name}"'
+            raise ValueError(errormsg)
+        else:
+            return argdict
+        
+    
+    def append(self, *args):
+        ''' Allow being used like a list '''
+        argdict = self._validate(*args)
+        self.update(argdict)
+        return
+    
+    
+    def __add__(self, dict2):
+        ''' Allow two dictionaries to be added (merged) '''
+        return sc.mergedicts(self, self._validate(dict2))
+
 
 
 def omerge(*args, **kwargs):
     """ Merge things into an objdict """
     return sc.objdict(sc.mergedicts(*args, **kwargs))
+
+
+def warn(msg, category=None, verbose=None, die=None):
+    """ Helper function to handle warnings -- not for the user """
+
+    # Handle inputs
+    warnopt = sso.warnings if not die else 'error'
+    if category is None:
+        category = RuntimeWarning
+    if verbose is None:
+        verbose = sso.verbose
+
+    # Handle the different options
+    if warnopt in ['error', 'errors']:  # Include alias since hard to remember
+        raise category(msg)
+    elif warnopt == 'warn':
+        msg = '\n' + msg
+        warnings.warn(msg, category=category, stacklevel=2)
+    elif warnopt == 'print':
+        if verbose:
+            msg = 'Warning: ' + msg
+            print(msg)
+    elif warnopt == 'ignore':
+        pass
+    else:
+        options = ['error', 'warn', 'print', 'ignore']
+        errormsg = f'Could not understand "{warnopt}": should be one of {options}'
+        raise ValueError(errormsg)
+
+    return
 
 
 # %% The core functions

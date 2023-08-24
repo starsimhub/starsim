@@ -272,31 +272,4 @@ def help(pattern=None, source=False, ignorecase=True, flags=None, context=False,
             return
 
 
-def warn(msg, category=None, verbose=None, die=None):
-    """ Helper function to handle warnings -- not for the user """
 
-    # Handle inputs
-    warnopt = sso.warnings if not die else 'error'
-    if category is None:
-        category = RuntimeWarning
-    if verbose is None:
-        verbose = sso.verbose
-
-    # Handle the different options
-    if warnopt in ['error', 'errors']:  # Include alias since hard to remember
-        raise category(msg)
-    elif warnopt == 'warn':
-        msg = '\n' + msg
-        warnings.warn(msg, category=category, stacklevel=2)
-    elif warnopt == 'print':
-        if verbose:
-            msg = 'Warning: ' + msg
-            print(msg)
-    elif warnopt == 'ignore':
-        pass
-    else:
-        options = ['error', 'warn', 'print', 'ignore']
-        errormsg = f'Could not understand "{warnopt}": should be one of {options}'
-        raise ValueError(errormsg)
-
-    return

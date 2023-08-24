@@ -4,6 +4,11 @@ unless other things get added (e.g. Resultsets, MultiResults, other...)
 """
 
 import numpy as np
+from . import utils as ssu
+
+
+class Results(ssu.NDict):
+    pass
 
 
 class Result(np.lib.mixins.NDArrayOperatorsMixin):

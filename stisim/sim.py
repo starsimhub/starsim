@@ -5,14 +5,14 @@ Define core Sim classes
 # Imports
 import numpy as np
 import sciris as sc
-from . import misc as ssm
 from . import settings as sss
 from . import utils as ssu
 from . import people as ssppl
+from . import modules as ssm
 from . import parameters as sspar
 from . import interventions as ssi
 from . import analyzers as ssa
-from .results import Result
+from . import results as ssr
 
 
 # Define the model
@@ -27,8 +27,8 @@ class Sim:
         self.people = people  # People object
         self.popdict = popdict  # popdict used to create people
         self.networks = networks  # List of provided networks
-        self.modules = ssu.named_dict(modules)  # List of modules to simulate
-        self.results = sc.objdict()  # For storing results
+        self.modules = ssm.Modules(modules)  # List of modules to simulate
+        self.results = ssr.Results()  # For storing results
         self.summary = None  # For storing a summary of the results
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running
@@ -115,7 +115,7 @@ class Sim:
             pop_keys = set(self.people.networks.keys())
             if modules and not len(pop_keys):
                 warnmsg = f'Warning: your simulation has {len(self.modules)} modules but no contact layers.'
-                ssm.warn(warnmsg, die=False)
+                ssu.warn(warnmsg, die=False)
 
         return
 
@@ -272,10 +272,10 @@ class Sim:
         Create the main results structure.
         """
         # Make results
-        results = ssu.named_dict(
-            Result('births', None, self.npts, sss.default_float),
-            Result('deaths', None, self.npts, sss.default_float),
-            Result('n_alive', None, self.npts, sss.default_int),
+        results = ssr.Results(
+            ssr.Result('births', None, self.npts, sss.default_float),
+            ssr.Result('deaths', None, self.npts, sss.default_float),
+            ssr.Result('n_alive', None, self.npts, sss.default_int),
         )
 
         # Final items
@@ -373,10 +373,10 @@ class Sim:
                         connector(self)
                     else:
                         warnmsg = 'Connector must be a callable function'
-                        ssm.warn(warnmsg, die=True)
+                        ssu.warn(warnmsg, die=True)
             elif self.ti == 0:  # only raise warning on first timestep
                 warnmsg = 'No connectors in sim'
-                ssm.warn(warnmsg, die=False)
+                ssu.warn(warnmsg, die=False)
             else:
                 return
         return
@@ -551,7 +551,7 @@ class Sim:
             obj = self.shrink(skip_attrs=skip_attrs, in_place=False)
         else:
             obj = self
-        ssm.save(filename=filename, obj=obj)
+        sc.save(filename=filename, obj=obj)
 
         return filename
 
@@ -560,7 +560,7 @@ class Sim:
         """
         Load from disk from a gzipped pickle.
         """
-        sim = ssm.load(filename, *args, **kwargs)
+        sim = sc.load(filename, *args, **kwargs)
         if not isinstance(sim, Sim):  # pragma: no cover
             errormsg = f'Cannot load object of {type(sim)} as a Sim object'
             raise TypeError(errormsg)

@@ -5,6 +5,10 @@ from .results import Result
 from . import utils as ssu
 
 
+class Modules(ssu.NDict):
+    pass
+
+
 class Module(sc.prettyobj):
     # Base module contains states/attributes that all modules have
     
