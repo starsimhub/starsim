@@ -1,5 +1,5 @@
 """
-Test objects from base.py
+Run simplest tests
 """
 
 # %% Imports and settings
