@@ -4,35 +4,29 @@ unless other things get added (e.g. Resultsets, MultiResults, other...)
 """
 
 import numpy as np
+import pandas as pd
 from . import utils as ssu
 
 
 class Results(ssu.NDict):
-    pass
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, _type=Result, *args, **kwargs)
 
 
-class Result(np.lib.mixins.NDArrayOperatorsMixin):
-    def __init__(self, name, module, shape, dtype):
-        self.name = name
-        self.module = module if module else None
-        self.values = np.zeros(shape, dtype=dtype)
-
-    def __getitem__(self, *args, **kwargs):  return self.values.__getitem__(*args, **kwargs)
-
-    def __setitem__(self, *args, **kwargs): return self.values.__setitem__(*args, **kwargs)
-
-    def __len__(self): return len(self.values)
-
-    def __repr__(self): return f'Result({self.module},{self.name}): {self.values.__repr__()}'
-
-    # These methods allow automatic use of functions like np.sum, np.exp, etc.
-    # with higher performance in some cases
-    @property
-    def __array_interface__(self): return self.values.__array_interface__
-
-    def __array__(self): return self.values
-
-    def __array_ufunc__(self, *args, **kwargs):
-        args = [(x if x is not self else self.values) for x in args]
-        kwargs = {k: v if v is not self else self.values for k, v in kwargs.items()}
-        return self.values.__array_ufunc__(*args, **kwargs)
+class Result(np.ndarray):
+    
+    def __new__(cls, module=None, name=None, shape=None, dtype=None):
+        arr = np.zeros(shape=shape, dtype=dtype).view(cls)
+        arr.name = name
+        arr.module = module
+        return arr
+    
+    def __repr__(self):
+        modulestr = f'{self.module}.' if self.module else ''
+        cls_name = self.__class__.__name__
+        arrstr = super().__repr__().removeprefix(cls_name)
+        out = f'{cls_name}({modulestr}{self.name}):\narray{arrstr}'
+        return out
+    
+    def pandas(self):
+        return pd.Series(self)
