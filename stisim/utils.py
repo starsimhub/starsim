@@ -21,9 +21,10 @@ __all__ += ['NDict', 'omerge']
 class NDict(sc.objdict):
     
     
-    def __init__(self, *args, _name='name', _type=None, **kwargs):
+    def __init__(self, *args, _name='name', _type=None, _strict=True, **kwargs):
         self.setattribute('_name', _name) # Since otherwise treated as keys
         self.setattribute('_type', _type)
+        self.setattribute('_strict', _strict)
         argdict = self._validate(*args)
         argdict.update(kwargs)
         super().__init__(argdict)
@@ -32,17 +33,23 @@ class NDict(sc.objdict):
             
     def _validate(self, *args):
         args = sc.mergelists(*args)
-        _name = self.getattribute('_name')
-        _type = self.getattribute('_type')
+        _name   = self.getattribute('_name')
+        _type   = self.getattribute('_type')
+        _strict = self.getattribute('_strict')
         failed = []
         argdict = {}
         for i,arg in enumerate(args):
             if arg is None:
                 pass
-            elif hasattr(arg, _name):
-                argdict[getattr(arg, _name)] = arg
-            elif isinstance(arg, dict):
-                argdict.update(arg)
+            elif hasattr(arg, _name) or not _strict:
+                try:
+                    argdict[getattr(arg, _name)] = arg
+                except:
+                    i = 0
+                    make_key = lambda i: f'item{i}'
+                    while make_key(i) in argdict:
+                        i += 1
+                    argdict[make_key(i)] = arg
             else:
                 failed.append(i)
         
