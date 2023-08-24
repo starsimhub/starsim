@@ -20,7 +20,7 @@ def test_people():
     del ppl
 
     # Possible to initialize people with extra states, e.g. a geolocation
-    extra_states = ss.named_dict(
+    extra_states = ss.NDict(
         ss.State('geolocation', int, distdict=dict(dist='choice', par1=[1, 2, 3])),
     )
     ppl = ss.People(100, states=extra_states)
@@ -60,7 +60,7 @@ def test_microsim():
     sc.heading('Test making people and providing them to a sim')
 
     ppl = ss.People(100)
-    ppl.networks = ssu.named_dict(ss.simple_sexual(), ss.maternal())
+    ppl.networks = ssu.NDict(ss.simple_sexual(), ss.maternal())
 
     # Make HIV module
     hiv = ss.HIV()

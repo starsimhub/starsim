@@ -22,8 +22,8 @@ class NDict(sc.objdict):
     
     
     def __init__(self, *args, _name='name', _type=None, **kwargs):
-        self._name = _name
-        self._type = _type
+        self.setattribute('_name', _name) # Since otherwise treated as keys
+        self.setattribute('_type', _type)
         argdict = self._validate(*args)
         argdict.update(kwargs)
         super().__init__(argdict)
@@ -31,22 +31,26 @@ class NDict(sc.objdict):
         
             
     def _validate(self, *args):
-        args = sc.mergelists(args, coerce='tuple')  # TODO: Must be a better way
+        args = sc.mergelists(*args)
+        _name = self.getattribute('_name')
+        _type = self.getattribute('_type')
         failed = []
         argdict = {}
         for i,arg in enumerate(args):
-            if isinstance(arg, dict):
+            if arg is None:
+                pass
+            elif hasattr(arg, _name):
+                argdict[getattr(arg, _name)] = arg
+            elif isinstance(arg, dict):
                 argdict.update(arg)
-            elif hasattr(arg, self._name):
-                argdict[getattr(arg, self._name)] = arg
             else:
                 failed.append(i)
         
         # Check types
-        if self._type is not None:
+        if _type is not None:
             wrong = {}
             for k,v in argdict.items():
-                if not isinstance(v, self._type):
+                if not isinstance(v, _type):
                     wrong[k] = type(v)
             if len(wrong):
                 errormsg = f'The following items do not have the expected type {self._type}:\n{wrong}'

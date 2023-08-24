@@ -223,7 +223,7 @@ class People(BasePeople):
         self.version = __version__  # Store version info
 
         # Initialize states, networks, modules
-        self.states = sc.mergedicts(base_states, states)
+        self.states = ssu.NDict(base_states, states)
         self.networks = ssu.NDict()
         self._modules = sc.autolist()
 
