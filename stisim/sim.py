@@ -254,7 +254,7 @@ class Sim:
         # This means networks will be stored in self.pars['networks'] and we'll need to copy them to the people.
         if self.people.networks is None or len(self.people.networks) == 0:
             if self.pars['networks'] is not None:
-                self.people.networks = ssu.named_dict(self.pars['networks'])
+                self.people.networks = ssu.NDict(self.pars['networks'])
 
         for key, network in self.people.networks.items():
             if network.label is not None:

@@ -57,7 +57,7 @@ class State(sc.prettyobj):
         return out
 
 
-base_states = ssu.named_dict(
+base_states = ssu.NDict(
     State('uid', int),
     State('age', float),
     State('female', bool, False),
@@ -224,7 +224,7 @@ class People(BasePeople):
 
         # Initialize states, networks, modules
         self.states = sc.mergedicts(base_states, states)
-        self.networks = ssu.named_dict()
+        self.networks = ssu.NDict()
         self._modules = sc.autolist()
 
         # Private variables relating to dynamic allocation
