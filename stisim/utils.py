@@ -50,6 +50,8 @@ class NDict(sc.objdict):
                     while make_key(i) in argdict:
                         i += 1
                     argdict[make_key(i)] = arg
+            elif isinstance(arg, dict):
+                argdict.update(arg)
             else:
                 failed.append(i)
         
