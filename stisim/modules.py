@@ -101,6 +101,80 @@ class Module(sc.prettyobj):
         return self.__class__.__name__.lower()
 
 
+class births(Module):
+    def __init__(self, pars=None):
+        super().__init__(pars)
+
+        # Set defaults
+        self.pars = sc.objdict()
+        self.pars.birth_rates = 0
+        self.pars.rel_birth = 1
+
+        # Overwrite with user-provided values
+        self.pars = ssu.omerge(self.pars, pars)
+
+        # Add results
+        self.results = ssu.named_dict(
+            Result('new_births'),
+            Result('cumulative_births'),
+            Result('cbr'),
+        )
+
+    def update_results(self, n_new, ti):
+        self.results['new_births'][ti] = n_new
+
+    def make_new_cases(self, sim):
+        """ Extract the right birth rates to use and translate it into a number of people to add """
+        years = self.pars.birth_rates[0]
+        rates = self.pars.birth_rates[1]
+        this_birth_rate = self.pars['rel_birth'] * np.interp(sim.year, years, rates) * sim.pars.dt_demog / 1e3
+        n_new = sc.randround(len(sim.people) * this_birth_rate)
+        self.add_births(sim, n_new)
+        return
+
+    def add_births(self, sim, n_new):
+        # Add n_new births to each state in the sim
+        sim.people.grow(n_new)
+        self.update_results(n_new, sim.ti)
+
+    def finalize(self, sim):
+        self.results['cumulative_births'] = np.cumsum(self.results['new_births'])
+        self.results['cbr'] = self.results['new_births'] / sim.results['pop_size']
+
+
+class background_deaths(Module):
+    def __init__(self, pars=None):
+        super().__init__(pars)
+
+        # Set defaults
+        self.pars = sc.objdict()
+        self.pars.death_rates = 0
+        self.pars.rel_death = 1
+
+        # Overwrite with user-provided values
+        self.pars = ssu.omerge(self.pars, pars)
+
+        # Add results
+        self.results = ssu.named_dict(
+            Result('new_deaths'),
+            Result('cumulative_deaths'),
+            Result('mortality_rate'),
+        )
+
+    def update_results(self, total_deaths, ti):
+        self.results['new_deaths'][ti] = total_deaths
+
+    def make_new_cases(self, sim):
+        """ Extract the right death rates to use and translate it into a number of people to remove """
+        total_deaths = self.pars.death_rates * self.pars.rel_death * len(sim.people)
+        self.update_results(total_deaths, sim.ti)
+        return
+
+    def finalize(self, sim):
+        self.results['cumulative_deaths'] = np.cumsum(self.results['new_deaths'])
+        self.results['mortality_rate'] = self.results['new_deaths'] / sim.results['pop_size']
+
+
 class HIV(Module):
     
     def __init__(self, pars=None):

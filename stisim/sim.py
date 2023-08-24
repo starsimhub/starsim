@@ -48,7 +48,7 @@ class Sim:
 
         # Make default parameters (using values from parameters.py)
         self.pars = sspar.make_pars()  # Start with default pars
-        self.pars.update_pars(**kwargs)  # Update the parameters
+        self.pars.update_pars(pars, **kwargs)  # Update the parameters
 
         # Initialize other quantities
         self.interventions = None
@@ -94,30 +94,6 @@ class Sim:
         self.results_ready = False
 
         return self
-
-    def layer_keys(self):
-        """
-        Attempt to retrieve the current network names
-        """
-        try:
-            keys = list(self.people['networks'].keys())
-        except:  # pragma: no cover
-            keys = []
-        return keys
-
-    def validate_layer_pars(self):
-        """
-        Check if there is a contact network
-        """
-
-        if self.people is not None:
-            modules = len(self.modules) > 0
-            pop_keys = set(self.people.networks.keys())
-            if modules and not len(pop_keys):
-                warnmsg = f'Warning: your simulation has {len(self.modules)} modules but no contact layers.'
-                ssm.warn(warnmsg, die=False)
-
-        return
 
     def validate_dt(self):
         """
