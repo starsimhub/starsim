@@ -5,7 +5,6 @@ Networks that connect people within a population
 # %% Imports
 import numpy as np
 import sciris as sc
-import pandas as pd
 from . import utils as ssu
 from . import settings as sss
 

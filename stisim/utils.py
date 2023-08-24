@@ -7,7 +7,7 @@ Numerical utilities
 import warnings
 import numpy as np
 import sciris as sc
-from . import settings as sso
+from . import settings as sss
 
 
 # What functions are externally visible -- note, this gets populated in each section below
@@ -85,11 +85,11 @@ def warn(msg, category=None, verbose=None, die=None):
     """ Helper function to handle warnings -- not for the user """
 
     # Handle inputs
-    warnopt = sso.warnings if not die else 'error'
+    warnopt = sss.options.warnings if not die else 'error'
     if category is None:
         category = RuntimeWarning
     if verbose is None:
-        verbose = sso.verbose
+        verbose = sss.options.verbose
 
     # Handle the different options
     if warnopt in ['error', 'errors']:  # Include alias since hard to remember
