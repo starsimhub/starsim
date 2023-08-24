@@ -74,7 +74,7 @@ class Module(sc.prettyobj):
         pars = sim.pars[self.name]
         for k, layer in sim.people.networks.items():
             if k in pars['beta']:
-                rel_trans = (sim.people[self.name].infected & ~sim.people.dead).astype(float)
+                rel_trans = (self.infected & ~sim.people.dead).astype(float)
                 rel_sus = (sim.people[self.name].susceptible & ~sim.people.dead).astype(float)
                 for a, b, beta in [[layer['p1'], layer['p2'], pars['beta'][k][0]], [layer['p2'], layer['p1'], pars['beta'][k][1]]]:
                     # probability of a->b transmission
@@ -383,19 +383,19 @@ class Pregnancy(Module):
         pars = sim.pars[self.name]
 
         # Change states for the newly pregnant woman
-        sim.people[self.name].susceptible[uids] = False
-        sim.people[self.name].pregnant[uids] = True
-        sim.people[self.name].ti_pregnant[uids] = sim.ti
+        self.states.susceptible[uids] = False
+        self.pregnant[uids] = True
+        self.ti_pregnant[uids] = sim.ti
 
         # Outcomes for pregnancies
         dur = np.full(len(uids), sim.ti + pars['dur_pregnancy'] / sim.dt)
         dead = np.random.random(len(uids)) < sim.pars[self.name].p_death
-        sim.people[self.name].ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
+        self.ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
         dur_post_partum = np.full(len(uids), dur + pars['dur_postpartum'] / sim.dt)
-        sim.people[self.name].ti_postpartum[uids] = dur_post_partum
+        self.ti_postpartum[uids] = dur_post_partum
 
         if len(ssu.true(dead)):
-            sim.people[self.name].ti_dead[uids[dead]] = dur[dead]
+            self.ti_dead[uids[dead]] = dur[dead]
         return
 
     def update_results(self, sim):
