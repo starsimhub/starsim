@@ -46,14 +46,6 @@ pars = dict(
 sim = ss.Sim(pars=pars, modules=ss.syphilis())
 sim.run()  # print something saying that pregnancies/births are being added
 
-# sim.demographics? what would this contain?
-# sim.maternal?
-# or just leave it in
-
-
-sim.results.syphilis.stillborns.plot()  # Plot a time series of stillborns
-# Q: for birth outcomes, should these be added directly to the sim as well i.e. sim.results.stillborns?
-
 # Example: adding birth outcomes - realistic
 # If people specify a location, we should load default demographic data for that place:
 #   1. a time series of death rates by age and sex,
@@ -61,32 +53,16 @@ sim.results.syphilis.stillborns.plot()  # Plot a time series of stillborns
 # We use the latter to generate pregnancies in agents.
 sim = ss.Sim(location='rwanda', modules=ss.syphilis())
 
-# Implementing this:
-# Should we upload individual country data files? Do we need to do this?
-dem_pars = dict(
-    aging=True,
-    migration=False,
-    deaths=True,
-    births=True,
-    pregnancies=True
-)
 
+##################################################################
+# Demographic module examples
+##################################################################
 
-class Demographics:
-    def __init__(self, settings=None):
-        for sname, sval in settings:
-            self.__setattr__(sname, sval)
-        return
-
-    def update(self, people):
-        return
-
-    def increment_age(self, people):
-        people.age += people.dt
-
-
-
-
+sim = ss.Sim(modules=[
+    ss.syphilis(),
+    ss.births(birth_rates=0.02),
+    ss.background_deaths(death_rates=0.01)
+])
 
 
 
