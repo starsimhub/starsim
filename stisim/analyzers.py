@@ -1,4 +1,14 @@
-from .modules import *
+"""
+Define analyzers
+"""
+
+import numpy as np
+from . import utils as ssu
+from . import modules as ssm
+
+
+class Analyzers(ssu.NDict):
+    pass
 
 
 class Analyzer:
@@ -19,7 +29,7 @@ class Analyzer:
 
 
 class CD4_analyzer(Analyzer):
-    requires = [HIV]
+    requires = [ssm.HIV]
 
     def __init__(self):
         self.cd4 = None

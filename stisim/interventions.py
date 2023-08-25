@@ -1,7 +1,12 @@
 import numpy as np
 import sciris as sc
-from .modules import *
-import stisim as ss
+from . import utils as ssu
+from . import modules as ssm
+
+
+class Interventions(ssu.NDict):
+    pass
+
 
 class Intervention():
 
@@ -22,7 +27,7 @@ class Intervention():
 
 class ART(Intervention):
 
-    requires = [HIV]
+    requires = [ssm.HIV]
 
     def __init__(self,t:np.array,capacity: np.array):
         self.t = sc.promotetoarray(t)
@@ -41,10 +46,10 @@ class ART(Intervention):
             eligible = ~sim.people.dead & sim.people.hiv.infected & ~sim.people.hiv.on_art
             n_eligible = np.count_nonzero(eligible)
             if n_eligible:
-                inds = np.random.choice(ss.true(eligible), min(n_eligible, n_change), replace=False)
+                inds = np.random.choice(ssu.true(eligible), min(n_eligible, n_change), replace=False)
                 sim.people.hiv.on_art[inds] = True
         elif n_change < 0:
             # Take some people off ART
             eligible = ~sim.people.dead & sim.people.hiv.infected & sim.people.hiv.on_art
-            inds = np.random.choice(ss.true(eligible), min(n_change), replace=False)
+            inds = np.random.choice(ssu.true(eligible), min(n_change), replace=False)
             sim.people.hiv.on_art[inds] = False

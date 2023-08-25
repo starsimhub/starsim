@@ -4,8 +4,10 @@ from .parameters    import *
 from .utils         import *
 from .people        import *
 from .networks      import *
-from .sim           import *
 from .modules       import *
+from .connectors    import *
+from .sim           import *
+
 
 # Import the version and print the license
 if options.verbose:

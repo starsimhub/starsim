@@ -9,6 +9,7 @@ from . import settings as sss
 from . import utils as ssu
 from . import people as ssppl
 from . import modules as ssm
+from . import connectors as ssc
 from . import parameters as sspar
 from . import interventions as ssi
 from . import analyzers as ssa
@@ -18,22 +19,19 @@ from . import results as ssr
 # Define the model
 class Sim:
 
-    def __init__(self, pars=None, label=None, people=None, popdict=None, modules=None,
-                 networks=None, version=None, **kwargs):
+    def __init__(self, pars=None, label=None, people=None, modules=None, connectors=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
         self.people = people  # People object
-        self.popdict = popdict  # popdict used to create people
-        self.networks = networks  # List of provided networks
         self.modules = ssm.Modules(modules)  # List of modules to simulate
+        self.connectors = ssc.Connectors(connectors)
         self.results = ssr.Results()  # For storing results
         self.summary = None  # For storing a summary of the results
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running
         self.results_ready = False  # Whether results are ready
-        self._default_ver = version  # Default version of parameters used
         self._orig_pars = None  # Store original parameters to optionally restore at the end of the simulation
 
         # Time indexing
@@ -51,8 +49,8 @@ class Sim:
         self.pars.update_pars(**kwargs)  # Update the parameters
 
         # Initialize other quantities
-        self.interventions = None
-        self.analyzers = None
+        self.interventions = ssi.Interventions()
+        self.analyzers = ssa.Analyzers()
 
         return
 
