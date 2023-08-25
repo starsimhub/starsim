@@ -16,12 +16,23 @@ class Modules(ssu.NDict):
 
 class Module(sc.prettyobj):
     
-    def __init__(self, pars=None, requires=None, *args, **kwargs):
+    def __init__(self, pars=None, label=None, requires=None, *args, **kwargs):
         self.pars = ssu.omerge(pars)
+        self.label = label if label else ''
         self.requires = sc.mergelists(requires)
         self.states = ssu.NDict()
         self.results = ssr.Results()
+        self.initialized = False
+        self.finalized = False
         return
+    
+    
+    def __call__(self, *args, **kwargs):
+        """ Makes module(sim) equivalent to module.apply(sim) """
+        if not self.initialized:  # pragma: no cover
+            errormsg = f'{self.name} (label={self.label}) has not been initialized'
+            raise RuntimeError(errormsg)
+        return self.apply(*args, **kwargs)
     
     
     def check_requires(self, sim):
@@ -33,6 +44,7 @@ class Module(sc.prettyobj):
     
     def initialize(self, sim):
         self.check_requires(sim)
+        self.initialized = True
         return
     
     
@@ -41,7 +53,7 @@ class Module(sc.prettyobj):
     
     
     def finalize(self, sim):
-        pass
+        self.finalized = True
     
     
     @property

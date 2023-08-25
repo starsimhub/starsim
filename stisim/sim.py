@@ -352,7 +352,9 @@ class Sim:
         """
         Apply the interventions
         """
-        pass
+        for intervention in self.interventions.values():
+            intervention(self)
+        return
 
 
     def update_modules(self):
@@ -361,24 +363,16 @@ class Sim:
         """
         for module in self.modules.values():
             module.update(self)
+        return
 
 
     def apply_connectors(self):
         """ Update connectors """
-        if len(self.modules) > 1:
-            connectors = self.pars['connectors']
-            if len(connectors) > 0:
-                for connector in self.connectors:
-                    if callable(connector):
-                        connector(self)
-                    else:
-                        warnmsg = 'Connector must be a callable function'
-                        ssu.warn(warnmsg, die=True)
-            elif self.ti == 0:  # only raise warning on first timestep
-                warnmsg = 'No connectors in sim'
-                ssu.warn(warnmsg, die=False)
+        for connector in self.connectors:
+            if callable(connector): # TODO: make logic consistent with interventions, etc.
+                connector(self)
             else:
-                return
+                connector.apply(self)
         return
 
 
@@ -386,7 +380,9 @@ class Sim:
         """
         Apply the analyzers
         """
-        pass
+        for analyzer in self.analyzers.values():
+            analyzer(self)
+        return
 
 
     def run(self, until=None, reset_seed=True, verbose=None):
@@ -402,23 +398,6 @@ class Sim:
             verbose = self.pars['verbose']
 
         if reset_seed:
-            # Reset the RNG. The primary use case (and why it defaults to True) is to ensure that
-            #
-            # >>> sim0.initialize()
-            # >>> sim0.run()
-            # >>> sim1.initialize()
-            # >>> sim1.run()
-            #
-            # produces the same output as
-            #
-            # >>> sim0.initialize()
-            # >>> sim1.initialize()
-            # >>> sim0.run()
-            # >>> sim1.run()
-            #
-            # The seed is offset by 1 to avoid drawing the same random numbers as those used for population generation,
-            # otherwise the first set of random numbers in the model (e.g., deaths) will be correlated with the first
-            # set of random numbers drawn in population generation (e.g., sex)
             ssu.set_seed(self.pars['rand_seed'] + 1)
 
         # Check for AlreadyRun errors
@@ -439,14 +418,10 @@ class Sim:
             # Check if we were asked to stop
             elapsed = T.toc(output=True)
             if self.pars['timelimit'] and elapsed > self.pars['timelimit']:
-                sc.printv(
-                    f"Time limit ({self.pars['timelimit']} s) exceeded; call sim.finalize() to compute results if desired",
-                    1, verbose)
+                sc.printv(f"Time limit ({self.pars['timelimit']} s) exceeded", 1, verbose)
                 return
             elif self.pars['stopping_func'] and self.pars['stopping_func'](self):
-                sc.printv(
-                    "Stopping function terminated the simulation; call sim.finalize() to compute results if desired", 1,
-                    verbose)
+                sc.printv("Stopping function terminated the simulation", 1, verbose)
                 return
 
             # Print progress
