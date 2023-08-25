@@ -174,7 +174,7 @@ class HIV(Disease):
     
 
     def init_results(self, sim):
-        Module.init_results(self, sim)
+        super().init_results(sim)
         self.results['n_art'] = ssr.Result('n_art', self.name, sim.npts, dtype=int)
         return
     
@@ -225,12 +225,17 @@ class Gonorrhea(Disease):
         sim.people.alive[gonorrhea_deaths] = False
         sim.people.ti_dead[gonorrhea_deaths] = sim.ti
         return
+    
 
     def update_results(self, sim):
         super(Gonorrhea, self).update_results(sim)
+        return
+    
     
     def make_new_cases(self, sim):
         super(Gonorrhea, self).make_new_cases(sim)
+        return
+
 
     def set_prognoses(self, sim, uids):
         sim.people[self.name].susceptible[uids] = False
@@ -241,9 +246,10 @@ class Gonorrhea(Disease):
         dead = np.random.random(len(uids)) < sim.pars[self.name].p_death
         sim.people[self.name].ti_recovered[uids[~dead]] = dur[~dead]
         sim.people[self.name].ti_dead[uids[dead]] = dur[dead]
+        return
 
 
-class Pregnancy(Disease):
+class Pregnancy(Module):
 
     def __init__(self, pars=None):
         super().__init__(pars)
@@ -271,9 +277,12 @@ class Pregnancy(Disease):
 
         return
 
+
     def initialize(self, sim):
-        Module.initialize(self, sim)
+        super().initialize(sim)
         sim.pars['birth_rates'] = None  # This turns off birth rate pars so births only come from this module
+        return
+    
 
     def init_results(self, sim):
         """
@@ -284,6 +293,7 @@ class Pregnancy(Disease):
         self.results['pregnancies'] = ssr.Result('pregnancies', self.name, sim.npts, dtype=int)
         self.results['births']      = ssr.Result('births', self.name, sim.npts, dtype=int)
         return
+
 
     def update_states(self, sim):
         """
@@ -310,6 +320,7 @@ class Pregnancy(Disease):
             sim.people.ti_dead[maternal_deaths] = sim.ti
 
         return
+
 
     def make_new_cases(self, sim):
         """
@@ -350,6 +361,7 @@ class Pregnancy(Disease):
 
         return
 
+
     def set_prognoses(self, sim, uids):
         """
         Make pregnancies
@@ -375,7 +387,9 @@ class Pregnancy(Disease):
             sim.people[self.name].ti_dead[uids[dead]] = dur[dead]
         return
 
+
     def update_results(self, sim):
         mppl = sim.people[self.name]
         sim.results[self.name]['pregnancies'][sim.ti] = np.count_nonzero(mppl.ti_pregnant == sim.ti)
         sim.results[self.name]['births'][sim.ti] = np.count_nonzero(mppl.ti_delivery == sim.ti)
+        return

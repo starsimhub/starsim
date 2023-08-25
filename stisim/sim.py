@@ -328,10 +328,11 @@ class Sim:
             raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
 
         # Update states, modules, partnerships
-        self.update_demographics()
-        self.update_networks()
-        self.update_modules()
-        # self.update_connectors()  # TODO: add this when ready
+        self.people.update(self)
+        self.apply_interventions()
+        self.apply_modules()
+        self.apply_connectors()
+        self.apply_analyzers()
 
         # Tidy up
         self.ti += 1
@@ -340,19 +341,13 @@ class Sim:
 
         return
 
+
     def update_demographics(self):
         """
         TODO: decide whether this method is needed
         """
         self.people.update_demographics(dt=self.dt, ti=self.ti)
 
-    def update_networks(self):
-        """
-        Update networks
-        TODO: resolve where the networks live - sim.networks (akin to sim.modules), sim.people.networks, both?
-        """
-        for layer in self.people.networks.values():
-            layer.update(self.people)
 
     def update_modules(self):
         """
@@ -360,6 +355,7 @@ class Sim:
         """
         for module in self.modules.values():
             module.update(self)
+
 
     def update_connectors(self):
         """ Update connectors """
