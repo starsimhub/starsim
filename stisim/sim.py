@@ -63,9 +63,8 @@ class Sim:
         return self.yearvec[self.ti]
 
     def initialize(self, popdict=None, reset=False, **kwargs):
-        """
-        Perform all initializations on the sim.
-        """
+        """ Perform all initializations on the sim. """
+
         # Validation and initialization
         self.ti = 0  # The current time index
         self.validate_pars()  # Ensure parameters have valid values
@@ -94,9 +93,7 @@ class Sim:
         return self
 
     def layer_keys(self):
-        """
-        Attempt to retrieve the current network names
-        """
+        """ Attempt to retrieve the current network names """
         try:
             keys = list(self.people['networks'].keys())
         except:  # pragma: no cover
@@ -104,10 +101,7 @@ class Sim:
         return keys
 
     def validate_layer_pars(self):
-        """
-        Check if there is a contact network
-        """
-
+        """ Check if there is a contact network """
         if self.people is not None:
             modules = len(self.modules) > 0
             pop_keys = set(self.people.networks.keys())
@@ -122,6 +116,7 @@ class Sim:
         Check that 1/dt is an integer value, otherwise results and time vectors will have mismatching shapes.
         init_results explicitly makes this assumption by casting resfrequency = int(1/dt).
         """
+
         dt = self.dt
         reciprocal = 1.0 / dt  # Compute the reciprocal of dt
         if not reciprocal.is_integer():  # Check if reciprocal is not a whole (integer) number
@@ -133,10 +128,11 @@ class Sim:
                 warnmsg = f"Warning: Provided time step dt: {dt} resulted in a non-integer number of steps per year. Rounded to {rounded_dt}."
                 print(warnmsg)
 
+        return
+
     def validate_pars(self):
-        """
-        Some parameters can take multiple types; this makes them consistent.
-        """
+        """ Some parameters can take multiple types; this makes them consistent. """
+
         # Handle n_agents
         if self.pars['n_agents'] is not None:
             self.pars['n_agents'] = int(self.pars['n_agents'])
@@ -161,7 +157,7 @@ class Sim:
             if self.pars['n_years']:
                 self.pars['end'] = self.pars['start'] + self.pars['n_years']
             else:
-                errormsg = 'You must supply one of n_years and end."'
+                errormsg = 'You must supply one of n_years and end.'
                 raise ValueError(errormsg)
 
         # Handle verbose
@@ -174,13 +170,14 @@ class Sim:
         return
 
     def init_time_vecs(self):
-        """
-        Construct vectors things that keep track of time
-        """
+        """ Construct vectors things that keep track of time """
+
         self.yearvec = sc.inclusiverange(start=self.pars['start'], stop=self.pars['end'] + 1 - self.pars['dt'],
                                          step=self.pars['dt'])  # Includes all the timepoints in the last year
         self.npts = len(self.yearvec)
         self.tivec = np.arange(self.npts)
+
+        return
 
     def init_people(self, popdict=None, reset=False, verbose=None, **kwargs):
         """
@@ -239,15 +236,15 @@ class Sim:
 
         return self
 
-
     def init_modules(self):
         """ Initialize modules and connectors to be simulated """
+
         for module in self.modules.values():
             module.initialize(self)
         for connector in self.connectors.values():
             connector.initialize(self)
-        return
 
+        return
 
     def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
@@ -269,11 +266,9 @@ class Sim:
 
         return
 
-
     def init_results(self):
-        """
-        Create the main results structure.
-        """
+        """ Create the main results structure """
+
         # Make results
         results = ssr.Results(
             ssr.Result('births', None, self.npts, sss.default_float),
@@ -287,12 +282,11 @@ class Sim:
 
         return
 
-
     def init_interventions(self):
         """ Initialize and validate the interventions """
 
         # Translate the intervention specs into actual interventions
-        for i, intervention in enumerate(self.pars['interventions']):
+        for intervention in self.pars['interventions']:
             if isinstance(intervention, type) and issubclass(intervention, ssi.Intervention):
                 intervention = intervention()  # Convert from a class to an instance of a class
             if isinstance(intervention, ssi.Intervention):
@@ -306,12 +300,11 @@ class Sim:
 
         return
 
-
     def init_analyzers(self):
         """ Initialize the analyzers """
 
         # Interpret analyzers
-        for ai, analyzer in enumerate(self.pars['analyzers']):
+        for analyzer in self.pars['analyzers']:
             if isinstance(analyzer, type) and issubclass(analyzer, ssa.Analyzer):
                 analyzer = analyzer()  # Convert from a class to an instance of a class
             if not (isinstance(analyzer, ssa.Analyzer) or callable(analyzer)):
@@ -324,7 +317,6 @@ class Sim:
                 analyzer.initialize(self)
 
         return
-
 
     def step(self):
         """ Step through time and update values """
@@ -349,22 +341,16 @@ class Sim:
 
 
     def apply_interventions(self):
-        """
-        Apply the interventions
-        """
+        """ Apply the interventions """
         for intervention in self.interventions.values():
             intervention(self)
         return
 
-
     def update_modules(self):
-        """
-        Update modules
-        """
+        """ Update modules """
         for module in self.modules.values():
             module.update(self)
         return
-
 
     def apply_connectors(self):
         """ Update connectors """
@@ -375,15 +361,11 @@ class Sim:
                 connector.apply(self)
         return
 
-
     def apply_analyzers(self):
-        """
-        Apply the analyzers
-        """
+        """ Apply the analyzers """
         for analyzer in self.analyzers.values():
             analyzer(self)
         return
-
 
     def run(self, until=None, reset_seed=True, verbose=None):
         """ Run the model once """
@@ -414,7 +396,6 @@ class Sim:
 
         # Main simulation loop
         while self.ti < until:
-
             # Check if we were asked to stop
             elapsed = T.toc(output=True)
             if self.pars['timelimit'] and elapsed > self.pars['timelimit']:
@@ -434,7 +415,7 @@ class Sim:
                     if not (self.ti % int(1.0 / verbose)):
                         sc.progressbar(self.ti + 1, self.npts, label=string, length=20, newline=True)
 
-            # Actually run the model
+            # Advance the model by one step
             self.step()
 
         # If simulation reached the end, finalize the results
@@ -443,7 +424,6 @@ class Sim:
             sc.printv(f'Run finished after {elapsed:0.2f} s.\n', 1, verbose)
 
         return self
-
 
     def finalize(self, verbose=None):
         """ Compute final results """
@@ -457,7 +437,6 @@ class Sim:
         self.results_ready = True  # Set this first so self.summary() knows to print the results
         self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
         return
-
 
     def shrink(self, skip_attrs=None, in_place=True):
         """
@@ -473,6 +452,7 @@ class Sim:
         Returns:
             shrunken (Sim): a Sim object with the listed attributes removed
         """
+
         # By default, skip people (~90% of memory), popdict, and _orig_pars (which is just a backup)
         if skip_attrs is None:
             skip_attrs = ['people']
@@ -491,7 +471,6 @@ class Sim:
             return
         else:
             return shrunken
-
 
     def save(self, filename=None, keep_people=None, skip_attrs=None, **kwargs):
         """
@@ -535,9 +514,8 @@ class Sim:
 
     @staticmethod
     def load(filename, *args, **kwargs):
-        """
-        Load from disk from a gzipped pickle.
-        """
+        """ Load from disk from a gzipped pickle.  """
+
         sim = sc.load(filename, *args, **kwargs)
         if not isinstance(sim, Sim):  # pragma: no cover
             errormsg = f'Cannot load object of {type(sim)} as a Sim object'
@@ -552,4 +530,5 @@ class AlreadyRunError(RuntimeError):
     and ignored if required, but it is anticipated that most of the time, calling
     :py:func:`Sim.run` and not taking any timesteps, would be an inadvertent error.
     """
+
     pass

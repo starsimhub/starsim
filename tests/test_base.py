@@ -31,7 +31,6 @@ def test_people():
 
 
 def test_networks():
-
     # Make completely abstract layers
     n_edges = 10_000
     n_people = 1000
@@ -79,7 +78,6 @@ def test_microsim():
     return sim
 
 def test_ppl_construction():
-
     sim_pars = {'networks': [ss.simple_sexual()], 'n_agents': 100}
     gon_pars = {'beta': {'simple_sexual': [0.08, 0.04]}}
     gon = ss.Gonorrhea(pars=gon_pars)
@@ -92,7 +90,6 @@ def test_ppl_construction():
     plt.title('Number of gonorrhea infections')
 
     return sim
-
 
 
 # %% Run as a script

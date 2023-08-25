@@ -19,8 +19,7 @@ __all__ += ['NDict', 'omerge']
 
 
 class NDict(sc.objdict):
-    
-    
+
     def __init__(self, *args, _name='name', _type=None, _strict=True, **kwargs):
         self.setattribute('_name', _name) # Since otherwise treated as keys
         self.setattribute('_type', _type)
@@ -29,8 +28,7 @@ class NDict(sc.objdict):
         argdict.update(kwargs)
         super().__init__(argdict)
         return
-        
-            
+
     def _validate(self, *args):
         args = sc.mergelists(*args)
         _name   = self.getattribute('_name')
@@ -70,19 +68,19 @@ class NDict(sc.objdict):
             raise ValueError(errormsg)
         else:
             return argdict
-        
-    
+        return 
+
     def append(self, *args):
-        ''' Allow being used like a list '''
+        """ Allow being used like a list """
+
         argdict = self._validate(*args)
         self.update(argdict)
         return
-    
-    
-    def __add__(self, dict2):
-        ''' Allow two dictionaries to be added (merged) '''
-        return sc.mergedicts(self, self._validate(dict2))
 
+    def __add__(self, dict2):
+        """ Allow two dictionaries to be added (merged) """
+
+        return sc.mergedicts(self, self._validate(dict2))
 
 
 def omerge(*args, **kwargs):
@@ -127,6 +125,7 @@ def unique(arr):
     Equivalent to np.unique(return_counts=True) but ~5x faster, and
     only works for arrays of positive integers.
     """
+
     counts = np.bincount(arr.ravel())
     unique = np.flatnonzero(counts)
     counts = counts[unique]
@@ -141,6 +140,7 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
     add extra people. For a version with sorting by default, see Network.find_contacts(). Indices must be
     an int64 array since this is what's returned by true() etc. functions by default.
     """
+
     pairing_partners = set()
     inds = set(inds)
     for i in range(len(p1)):
@@ -272,6 +272,7 @@ def set_seed(seed=None):
     Args:
         seed (int): the random seed
     """
+
     # Dies if a float is given
     if seed is not None:
         seed = int(seed)
@@ -301,8 +302,8 @@ def binomial_filter(prob, arr):
 
         inds = ss.binomial_filter(0.5, np.arange(20)**2) # Which values in the (arbitrary) array passed the coin flip
     """
-    return arr[(np.random.random(len(arr)) < prob).nonzero()[0]]
 
+    return arr[(np.random.random(len(arr)) < prob).nonzero()[0]]
 
 
 def n_poisson(rate, n):
@@ -335,6 +336,7 @@ def n_neg_binomial(rate, dispersion, n, step=1):  # Numba not used due to incomp
         outcomes = ss.n_neg_binomial(100, 1, 50) # 50 negative binomial trials with mean 100 and dispersion roughly equal to mean (large-mean limit)
         outcomes = ss.n_neg_binomial(1, 100, 20) # 20 negative binomial trials with mean 1 and dispersion still roughly equal to mean (approximately Poisson)
     """
+
     nbn_n = dispersion
     nbn_p = dispersion / (rate / step + dispersion)
     samples = np.random.negative_binomial(n=nbn_n, p=nbn_p, size=n) * step
@@ -358,6 +360,7 @@ def true(arr):
 
         inds = ss.true(np.array([1,0,0,1,1,0,1])) # Returns array([0, 3, 4, 6])
     """
+
     return arr.nonzero()[-1]
 
 
@@ -372,6 +375,7 @@ def false(arr):
 
         inds = ss.false(np.array([1,0,0,1,1,0,1]))
     """
+
     return np.logical_not(arr).nonzero()[-1]
 
 
@@ -386,6 +390,7 @@ def defined(arr):
 
         inds = ss.defined(np.array([1,np.nan,0,np.nan,1,0,1]))
     """
+
     return (~np.isnan(arr)).nonzero()[-1]
 
 
@@ -400,4 +405,5 @@ def undefined(arr):
 
         inds = ss.defined(np.array([1,np.nan,0,np.nan,1,0,1]))
     """
+
     return np.isnan(arr).nonzero()[-1]

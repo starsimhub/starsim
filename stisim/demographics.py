@@ -16,7 +16,7 @@ class Pregnancy(ssm.Disease):
         # Other, e.g. postpartum, on contraception...
         self.states = ssu.NDict(
             ssp.State('infertile', bool, False),  # Applies to girls and women outside the fertility window
-            ssp.State('susceptible', bool, True),  # Applies to girls and women inside the fertility window - needs renaming
+            ssp.State('susceptible', bool, True),  # Applies to girls and women inside the fertility window - needs renaming (fecund?)
             ssp.State('pregnant', bool, False),  # Currently pregnant
             ssp.State('postpartum', bool, False),  # Currently post-partum
             ssp.State('ti_pregnant', float, np.nan),  # Time pregnancy begins
@@ -36,12 +36,10 @@ class Pregnancy(ssm.Disease):
 
         return
 
-
     def initialize(self, sim):
         super().initialize(sim)
         sim.pars['birth_rates'] = None  # This turns off birth rate pars so births only come from this module
         return
-    
 
     def init_results(self, sim):
         """
@@ -53,12 +51,8 @@ class Pregnancy(ssm.Disease):
         self.results['births']      = ssr.Result('births', self.name, sim.npts, dtype=int)
         return
 
-
     def update_states(self, sim):
-        """
-        Update states
-        """
-
+        """ Update states """
         # Check for new deliveries
         deliveries = sim.people[self.name].pregnant & (sim.people[self.name].ti_delivery <= sim.ti)
         sim.people[self.name].pregnant[deliveries] = False
@@ -77,9 +71,7 @@ class Pregnancy(ssm.Disease):
         if len(maternal_deaths):
             sim.people.alive[maternal_deaths] = False
             sim.people.ti_dead[maternal_deaths] = sim.ti
-
         return
-
 
     def make_new_cases(self, sim):
         """
@@ -117,9 +109,7 @@ class Pregnancy(ssm.Disease):
 
                 # Set prognoses for the pregnancies
                 self.set_prognoses(sim, uids)
-
         return
-
 
     def set_prognoses(self, sim, uids):
         """
@@ -145,7 +135,6 @@ class Pregnancy(ssm.Disease):
         if len(ssu.true(dead)):
             sim.people[self.name].ti_dead[uids[dead]] = dur[dead]
         return
-
 
     def update_results(self, sim):
         mppl = sim.people[self.name]

@@ -26,6 +26,8 @@ class CD4_analyzer(Analyzer):
     def initialize(self, sim):
         super().initialize(sim)
         self.cd4 = np.zeros((sim.npts, sim.people.n), dtype=int)
+        return
 
     def apply(self, sim):
         self.cd4[sim.t] = sim.people.hiv.cd4
+        return

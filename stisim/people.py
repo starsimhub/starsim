@@ -25,6 +25,7 @@ class State(sc.prettyobj):
             shape: If not none, set to match a string in `pars` containing the dimensionality
             label: text used to construct labels for the result for displaying on plots and other outputs
         """
+
         self.name = name
         self.dtype = dtype
         self.fill_value = fill_value
@@ -83,11 +84,9 @@ class BasePeople(sc.prettyobj):
         """ Length of people """
         return len(self[base_key])
 
-
     def _len_arrays(self):
         """ Length of underlying arrays """
         return len(self._data[base_key])
-    
 
     def _grow(self, n):
         """
@@ -98,6 +97,7 @@ class BasePeople(sc.prettyobj):
         Args:
             n (int): Number of new agents to add
         """
+
         orig_n = self._n
         new_total = orig_n + n
         if new_total > self._s:
@@ -111,7 +111,6 @@ class BasePeople(sc.prettyobj):
         new_inds = np.arange(orig_n, self._n)
         return new_inds
 
-
     def _map_arrays(self, keys=None):
         """
         Set main simulation attributes to be views of the underlying data
@@ -124,7 +123,6 @@ class BasePeople(sc.prettyobj):
         def rsetattr(obj, attr, val):
             pre, _, post = attr.rpartition('.')
             return setattr(rgetattr(obj, pre) if pre else obj, post, val)
-
 
         def rgetattr(obj, attr, *args):
             def _getattr(obj, attr):
@@ -147,43 +145,38 @@ class BasePeople(sc.prettyobj):
             else:
                 errormsg = 'Can only operate on 1D or 2D arrays'
                 raise TypeError(errormsg)
-
         return
-
 
     def __getitem__(self, key):
         """
         Allow people['attr'] instead of getattr(people, 'attr')
         If the key is an integer, alias `people.person()` to return a `Person` instance
         """
+
         if isinstance(key, int):
             return self.person(key) # TODO: need to re-implement
         else:
             return self.__getattribute__(key)
 
-
     def __setitem__(self, key, value):
         """ Ditto """
         return self.__setattr__(key, value)
-
 
     def __iter__(self):
         """ Iterate over people """
         for i in range(len(self)):
             yield self[i]
-            
-            
+        return
+
     @property
     def active(self):
         """ Indices of everyone sexually active  """
         return (self.age >= self.debut) & self.alive
-    
-    
+
     @property
     def dead(self):
         """ Dead boolean """
         return ~self.alive
-
 
 
 class People(BasePeople):
@@ -211,10 +204,7 @@ class People(BasePeople):
     # %% Basic methods
 
     def __init__(self, n, states=None, networks=None):
-        """
-        Initialize
-        """
-        
+        """ Initialize """
         self.initialized = False
         self.version = __version__  # Store version info
 
@@ -235,7 +225,6 @@ class People(BasePeople):
         self['uid'][:] = np.arange(self._n)
         return
 
-
     def initialize(self, popdict=None):
         """ Initialize people by setting their attributes """
         if popdict is None: # TODO: update
@@ -247,7 +236,6 @@ class People(BasePeople):
             self['female'][:] = popdict['female']
         self.initialized = True
         return
-
 
     def add_module(self, module, force=False):
         # Initialize all the states associated with a module
@@ -266,32 +254,27 @@ class People(BasePeople):
 
         return
 
-
     def scale_flows(self, inds):
         """
         Return the scaled versions of the flows -- replacement for len(inds)
         followed by scale factor multiplication
         """
         return self.scale[inds].sum()
-    
-    
+
     def update(self, sim):
         """ Update demographics and networks """
         self.update_demographics(sim.dt, sim.ti)
         self.update_networks()
         return
 
-
     def update_demographics(self, dt, ti):
         """ Perform vital dynamic updates at the current timestep """
         self.age[self.alive] += dt
         self.alive[self.ti_dead <= ti] = False
         return
-    
 
     def update_networks(self):
-        """
-        Update networks
-        """
+        """ Update networks """
         for network in self.networks.values():
             network.update(self)
+        return

@@ -19,6 +19,7 @@ class ART(Intervention):
         self.requires = ssh.HIV
         self.t = sc.promotetoarray(t)
         self.capacity = sc.promotetoarray(capacity)
+        return
 
     def apply(self, sim):
         if sim.t < self.t[0]:

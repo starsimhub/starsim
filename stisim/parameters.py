@@ -8,8 +8,6 @@ from .settings import options as sso  # For setting global options
 __all__ = ['make_pars']
 
 
-
-
 class Parameters(sc.objdict):
     """
     Create the parameters for the simulation. Typically, this function is used
@@ -22,6 +20,7 @@ class Parameters(sc.objdict):
     Returns:
         pars (dict): the parameters of the simulation
     """
+
     def __init__(self, **kwargs):
 
         # Population parameters
@@ -62,7 +61,6 @@ class Parameters(sc.objdict):
 
         return
 
-
     def update_pars(self, pars=None, create=False):
         """
         Update internal dict with new pars.
@@ -83,6 +81,6 @@ class Parameters(sc.objdict):
             self.update(pars)
         return
 
+
 def make_pars(**kwargs):
     return Parameters(**kwargs)
-    

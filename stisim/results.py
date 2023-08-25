@@ -11,10 +11,9 @@ from . import utils as ssu
 class Results(ssu.NDict):
     def __init__(self, *args, **kwargs):
         super().__init__(self, _type=Result, *args, **kwargs)
-
+        return
 
 class Result(np.ndarray):
-    
     def __new__(cls, module=None, name=None, shape=None, dtype=None):
         arr = np.zeros(shape=shape, dtype=dtype).view(cls)
         arr.name = name

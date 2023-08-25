@@ -28,7 +28,7 @@ class Gonorrhea(ssm.Disease):
             'eff_condoms': 0.7,
         }, self.pars)
         return
-    
+
     def update_states(self, sim):
         # What if something in here should depend on another module?
         # I guess we could just check for it e.g., 'if HIV in sim.modules' or
@@ -37,17 +37,14 @@ class Gonorrhea(ssm.Disease):
         sim.people.alive[gonorrhea_deaths] = False
         sim.people.ti_dead[gonorrhea_deaths] = sim.ti
         return
-    
 
     def update_results(self, sim):
         super(Gonorrhea, self).update_results(sim)
         return
-    
-    
+
     def make_new_cases(self, sim):
         super(Gonorrhea, self).make_new_cases(sim)
         return
-
 
     def set_prognoses(self, sim, uids):
         sim.people[self.name].susceptible[uids] = False

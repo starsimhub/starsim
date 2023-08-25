@@ -31,26 +31,22 @@ class HIV(ssm.Disease):
         }, self.pars)
         return
 
-
     def update_states(self, sim):
         """ Update CD4 """
         hivppl = sim.people.hiv
         hivppl.cd4[sim.people.alive & hivppl.infected & hivppl.on_art] += (sim.pars.hiv.cd4_max - hivppl.cd4[sim.people.alive & hivppl.infected & hivppl.on_art])/sim.pars.hiv.cd4_rate
         hivppl.cd4[sim.people.alive & hivppl.infected & ~hivppl.on_art] += (sim.pars.hiv.cd4_min - hivppl.cd4[sim.people.alive & hivppl.infected & ~hivppl.on_art])/sim.pars.hiv.cd4_rate
         return
-    
 
     def init_results(self, sim):
         super().init_results(sim)
         self.results['n_art'] = ssr.Result('n_art', self.name, sim.npts, dtype=int)
         return
-    
 
     def update_results(self, sim):
         super(HIV, self).update_results(sim)
         sim.results[self.name]['n_art'] = np.count_nonzero(sim.people.alive & sim.people[self.name].on_art)
         return
-    
 
     def make_new_cases(self, sim):
         # eff_condoms = sim.pars[self.name]['eff_condoms'] # TODO figure out how to add this
@@ -61,3 +57,4 @@ class HIV(ssm.Disease):
         sim.people[self.name].susceptible[uids] = False
         sim.people[self.name].infected[uids] = True
         sim.people[self.name].ti_infected[uids] = sim.ti
+        return

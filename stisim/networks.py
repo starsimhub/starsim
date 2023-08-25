@@ -72,6 +72,8 @@ class Network(sc.objdict):
             self[key] = np.array(value, dtype=self.meta.get(key))
             self.initialized = True
 
+        return
+
     @property
     def name(self):
         # The module name is a lower-case version of its class name
@@ -91,7 +93,7 @@ class Network(sc.objdict):
         namestr = self.__class__.__name__
         labelstr = f'"{self.label}"' if self.label else '<no label>'
         keys_str = ', '.join(self.keys())
-        output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", f, m, beta)
+        output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", p1, p2, beta)
         output += self.to_df().__repr__()
         return output
 
@@ -167,7 +169,7 @@ class Network(sc.objdict):
         Append contacts to the current network.
 
         Args:
-            contacts (dict): a dictionary of arrays with keys f,m,beta, as returned from network.pop_inds()
+            contacts (dict): a dictionary of arrays with keys p1,p2,beta, as returned from network.pop_inds()
         """
         for key in self.meta_keys():
             new_arr = contacts[key]
@@ -202,7 +204,7 @@ class Network(sc.objdict):
 
         For some purposes (e.g. contact tracing) it's necessary to find all the contacts
         associated with a subset of the people in this network. Since contacts are bidirectional
-        it's necessary to check both P1 and P2 for the target indices. The return type is a Set
+        it's necessary to check both p1 and p2 for the target indices. The return type is a Set
         so that there is no duplication of indices (otherwise if the Network has explicit
         symmetric interactions, they could appear multiple times). This is also for performance so
         that the calling code doesn't need to perform its own unique() operation. Note that
@@ -217,22 +219,22 @@ class Network(sc.objdict):
             contact_inds (array): a set of indices for pairing partners
 
         Example: If there were a network with
-        - P1 = [1,2,3,4]
-        - P2 = [2,3,1,4]
+        - p1 = [1,2,3,4]
+        - p2 = [2,3,1,4]
         Then find_contacts([1,3]) would return {1,2,3}
         """
 
         # Check types
         if not isinstance(inds, np.ndarray):
             inds = sc.promotetoarray(inds)
-        if inds.dtype != np.int64:  # pragma: no cover # This is int64 since indices often come from hpv.true(), which returns int64
+        if inds.dtype != np.int64:  # pragma: no cover # This is int64 since indices often come from utils.true(), which returns int64
             inds = np.array(inds, dtype=np.int64)
 
         # Find the contacts
         contact_inds = ssu.find_contacts(self['p1'], self['p2'], inds)
         if as_array:
             contact_inds = np.fromiter(contact_inds, dtype=sss.default_int)
-            contact_inds.sort()  # Sorting ensures that the results are reproducible for a given seed as well as being identical to previous versions of HPVsim
+            contact_inds.sort()  # Sorting ensures that the results are reproducible for a given seed as well as being identical to previous versions of STIsim
 
         return contact_inds
 
@@ -259,8 +261,11 @@ class simple_sexual(Network):
         # Set other parameters
         self.mean_dur = mean_dur
 
+        return
+
     def initialize(self, people):
         self.add_pairs(people, ti=0)
+        return
 
     def add_pairs(self, people, ti=None):
         # Find unpartnered males and females - could in principle check other contact layers too
@@ -283,6 +288,8 @@ class simple_sexual(Network):
         self['beta'] = np.concatenate([self['beta'], beta])
         self['dur'] = np.concatenate([self['dur'], dur])
 
+        return
+
     def update(self, people, dt=None):
         if dt is None: dt = people.dt
         # First remove any relationships due to end
@@ -295,6 +302,8 @@ class simple_sexual(Network):
 
         # Then add new relationships for unpartnered people
         self.add_pairs(people)
+
+        return
 
 
 class hpv_network(Network):
@@ -326,8 +335,11 @@ class hpv_network(Network):
         self.update_pars(pars)
         self.get_layer_probs()
 
+        return
+
     def initialize(self, people):
         self.add_pairs(people, ti=0)
+        return
 
     def update_pars(self, pars):
         if pars is not None:
@@ -336,8 +348,9 @@ class hpv_network(Network):
         return
 
     def get_layer_probs(self):
-
         defaults = {}
+
+        # Mixing array with female age (horizontal) and male age (vertical)
         mixing = np.array([
             #       0,  5,  10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75
             [ 0,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
@@ -359,7 +372,7 @@ class hpv_network(Network):
         ])
 
         participation = np.array([
-                [ 0,  5,    10,    15,   20,   25,   30,   35,    40,    45,    50,    55,    60,    65,    70,    75],
+                [ 0,  5,    10,    15,   20,   25,   30,   35,    40,    45,    50,    55,    60,    65,    70,    75], # Age cutoffs
                 [ 0,  0,  0.10,   0.7,  0.8,  0.6,  0.6,  0.4,   0.1,  0.05, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001], # Share of females of each age newly having casual relationships
                 [ 0,  0,  0.05,   0.7,  0.8,  0.6,  0.6,  0.4,   0.4,   0.3,   0.1,  0.05,  0.01,  0.01, 0.001, 0.001]], # Share of males of each age newly having casual relationships
             )
@@ -370,11 +383,9 @@ class hpv_network(Network):
         for pkey, pval in defaults.items():
             if self.pars[pkey] is None:
                 self.pars[pkey] = pval
-
         return
 
     def add_pairs(self, people, ti=0):
-
         female = people.female
         active = people.active
         f_active = female & active
@@ -495,8 +506,10 @@ class hpv_network(Network):
         return
 
     def update(self, people, ti=None, dt=None):
+        """ Remove expired pairs and add new pairs """
         if ti is None: ti = people.ti
         if dt is None: dt = people.dt
+
         # First remove any relationships due to end
         self['dur'] = self['dur'] - dt
         active = self['dur'] > 0
@@ -519,11 +532,13 @@ class maternal(Network):
 
     def update(self, people, dt=None):
         if dt is None: dt = people.dt
+
         # Set beta to 0 for women who complete post-partum period
         # Keep connections for now, might want to consider removing
         self['dur'] = self['dur'] - dt
         inactive = self['dur'] <= 0
         self['beta'][inactive] = 0
+        return
 
     def initialize(self, people):
         """ No pairs added upon initialization """
