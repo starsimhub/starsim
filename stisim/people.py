@@ -62,7 +62,7 @@ base_states = ssu.NDict(
     State('age', float),
     State('female', bool, False),
     State('debut', float),
-    State('dead', bool, False),
+    State('alive', bool, True),
     State('ti_dead', float, np.nan),  # Time index for death
     State('scale', float, 1.0),
 )
@@ -83,19 +83,11 @@ class BasePeople(sc.prettyobj):
         """ Length of people """
         return len(self[base_key])
 
+
     def _len_arrays(self):
         """ Length of underlying arrays """
         return len(self._data[base_key])
-
-    def lock(self):
-        """ Lock the people object to prevent keys from being added """
-        self._lock = True
-        return
-
-    def unlock(self):
-        """ Unlock the people object to allow keys to be added """
-        self._lock = False
-        return
+    
 
     def _grow(self, n):
         """
@@ -118,6 +110,7 @@ class BasePeople(sc.prettyobj):
         self._map_arrays()
         new_inds = np.arange(orig_n, self._n)
         return new_inds
+
 
     def _map_arrays(self, keys=None):
         """
@@ -157,36 +150,39 @@ class BasePeople(sc.prettyobj):
 
         return
 
+
     def __getitem__(self, key):
-        """ Allow people['attr'] instead of getattr(people, 'attr')
-            If the key is an integer, alias `people.person()` to return a `Person` instance
+        """
+        Allow people['attr'] instead of getattr(people, 'attr')
+        If the key is an integer, alias `people.person()` to return a `Person` instance
         """
         if isinstance(key, int):
-            return self.person(key)
+            return self.person(key) # TODO: need to re-implement
         else:
             return self.__getattribute__(key)
 
+
     def __setitem__(self, key, value):
         """ Ditto """
-        if self._lock and key not in self.__dict__:  # pragma: no cover
-            errormsg = f'Key "{key}" is not an attribute of people and the people object is locked; see people.unlock()'
-            raise AttributeError(errormsg)
         return self.__setattr__(key, value)
+
 
     def __iter__(self):
         """ Iterate over people """
         for i in range(len(self)):
             yield self[i]
             
+            
     @property
     def active(self):
         """ Indices of everyone sexually active  """
         return (self.age >= self.debut) & self.alive
     
+    
     @property
-    def alive(self):
-        """ Alive boolean """
-        return ~self.dead
+    def dead(self):
+        """ Dead boolean """
+        return ~self.alive
 
 
 
@@ -214,7 +210,7 @@ class People(BasePeople):
 
     # %% Basic methods
 
-    def __init__(self, n, states=None, strict=True, **kwargs):
+    def __init__(self, n, states=None, strict=True):
         """
         Initialize
         """
@@ -238,12 +234,6 @@ class People(BasePeople):
             self._data[state_name] = state.new(self._n)
         self._map_arrays()
         self['uid'][:] = np.arange(self._n)
-
-        # Define lock attribute here, since BasePeople.lock()/unlock() requires it
-        self._lock = False  # Prevent further modification of keys
-        
-        if strict: self.lock()  # If strict is true, stop further keys from being set (does not affect attributes)
-        self.kwargs = kwargs
         return
 
 
@@ -295,8 +285,8 @@ class People(BasePeople):
 
     def update_demographics(self, dt, ti):
         """ Perform vital dynamic updates at the current timestep """
-        self.age[~self.dead] += dt
-        self.dead[self.ti_dead <= ti] = True
+        self.age[self.alive] += dt
+        self.alive[self.ti_dead <= ti] = False
         return
     
 

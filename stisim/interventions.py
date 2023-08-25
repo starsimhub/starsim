@@ -38,18 +38,18 @@ class ART(Intervention):
             return
 
         capacity = self.capacity[np.where(self.t <= sim.t)[0][-1]]
-        on_art = ~sim.people.dead & sim.people.hiv.on_art
+        on_art = sim.people.alive & sim.people.hiv.on_art
 
         n_change = capacity - np.count_nonzero(on_art)
         if n_change > 0:
             # Add more ART
-            eligible = ~sim.people.dead & sim.people.hiv.infected & ~sim.people.hiv.on_art
+            eligible = sim.people.alive & sim.people.hiv.infected & ~sim.people.hiv.on_art
             n_eligible = np.count_nonzero(eligible)
             if n_eligible:
                 inds = np.random.choice(ssu.true(eligible), min(n_eligible, n_change), replace=False)
                 sim.people.hiv.on_art[inds] = True
         elif n_change < 0:
             # Take some people off ART
-            eligible = ~sim.people.dead & sim.people.hiv.infected & sim.people.hiv.on_art
+            eligible = sim.people.alive & sim.people.hiv.infected & sim.people.hiv.on_art
             inds = np.random.choice(ssu.true(eligible), min(n_change), replace=False)
             sim.people.hiv.on_art[inds] = False
