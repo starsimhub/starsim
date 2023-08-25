@@ -23,19 +23,32 @@ class Module(sc.prettyobj):
         self.results = ssr.Results()
         return
     
+    
+    def check_requires(self, sim):
+        for req in self.requires:
+            if req not in sim.modules:
+                raise Exception(f'{self.__name__} requires module {req} but the Sim did not contain this module')
+        return
+    
+    
     def initialize(self, sim):
-        pass
+        self.check_requires(sim)
+        return
+    
     
     def apply(self, sim):
         pass
     
+    
     def finalize(self, sim):
         pass
+    
     
     @property
     def name(self):
         """ The module name is a lower-case version of its class name """
         return self.__class__.__name__.lower()
+
 
 
 class Disease(Module):
