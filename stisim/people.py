@@ -210,7 +210,7 @@ class People(BasePeople):
 
     # %% Basic methods
 
-    def __init__(self, n, states=None, strict=True):
+    def __init__(self, n, states=None, networks=None):
         """
         Initialize
         """
@@ -220,8 +220,7 @@ class People(BasePeople):
 
         # Initialize states, networks, modules
         self.states = ssu.NDict(base_states, states)
-        self.networks = ssu.NDict()
-        self._modules = sc.autolist()
+        self.networks = ssu.NDict(networks)
 
         # Private variables relating to dynamic allocation
         self._data = dict()

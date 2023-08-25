@@ -4,7 +4,7 @@ Define analyzers
 
 import numpy as np
 from . import utils as ssu
-from . import modules as ssm
+from . import hiv as ssh
 
 
 class Analyzers(ssu.NDict):
@@ -29,7 +29,7 @@ class Analyzer:
 
 
 class CD4_analyzer(Analyzer):
-    requires = [ssm.HIV]
+    requires = [ssh.HIV]
 
     def __init__(self):
         self.cd4 = None

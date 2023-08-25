@@ -6,7 +6,6 @@ Test objects from base.py
 import sciris as sc
 import numpy as np
 import stisim as ss
-from stisim import utils as ssu
 import matplotlib.pyplot as plt
 
 
@@ -59,8 +58,8 @@ def test_networks():
 def test_microsim():
     sc.heading('Test making people and providing them to a sim')
 
-    ppl = ss.People(100)
-    ppl.networks = ssu.NDict(ss.simple_sexual(), ss.maternal())
+    networks = [ss.simple_sexual(), ss.maternal()]
+    ppl = ss.People(100, networks=networks)
 
     # Make HIV module
     hiv = ss.HIV()

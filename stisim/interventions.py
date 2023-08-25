@@ -1,7 +1,7 @@
 import numpy as np
 import sciris as sc
 from . import utils as ssu
-from . import modules as ssm
+from . import hiv as ssh
 
 
 class Interventions(ssu.NDict):
@@ -27,7 +27,7 @@ class Intervention():
 
 class ART(Intervention):
 
-    requires = [ssm.HIV]
+    requires = [ssh.HIV]
 
     def __init__(self,t:np.array,capacity: np.array):
         self.t = sc.promotetoarray(t)
