@@ -21,9 +21,11 @@ class Network(sc.objdict):
     the connection. Connections are undirected; each person is both a source and sink.
 
     Args:
-        p1 (array): an array of N connections, representing people on one side of the connection
-        p2 (array): an array of people on the other side of the connection
-        beta (array): an array representing relative transmissibility for this network - TODO, do we need this?
+        p1 (array): an array of length N, the number of connections in the network, with the indices of people
+                   on one side of the connection.
+        p2 (array): an array of length N, the number of connections in the network, with the indices of people
+                    on the other side of the connection.
+        beta (array): an array representing relative transmissibility of each connection for this network - TODO, do we need this?
         label (str): the name of the network (optional)
         kwargs (dict): other keys copied directly into the network
 
@@ -245,7 +247,10 @@ class Network(sc.objdict):
 
 
 class simple_sexual(Network):
-    # Randomly pair males and females with variable relationship durations
+    """
+    A class holding a single network of contact edges (connections) between people.
+    This network is built by **randomly pairing** males and female with variable relationship durations.
+    """
     def __init__(self, mean_dur=5):
         key_dict = {
             'p1': sss.default_int,
