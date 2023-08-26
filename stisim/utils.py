@@ -19,8 +19,22 @@ __all__ += ['NDict', 'omerge']
 
 
 class NDict(sc.objdict):
-    
-    
+    """
+    A dictionary-like class that provides additional functionalities for handling named items.
+
+    Args:
+        _name (str): The items' attribute to use as keys.
+        _type (type): The expected type of items.
+        _strict (bool): If True, only items with the specified attribute will be accepted.
+
+    **Examples**::
+
+        networks = ss.NDict(ss.simple_sexual(), ss.maternal())
+        networks = ss.NDict([ss.simple_sexual(), ss.maternal()])
+        networks = ss.NDict({'simple_sexual':ss.simple_sexual(), 'maternal':ss.maternal()})
+
+    """
+
     def __init__(self, *args, _name='name', _type=None, _strict=True, **kwargs):
         self.setattribute('_name', _name) # Since otherwise treated as keys
         self.setattribute('_type', _type)
