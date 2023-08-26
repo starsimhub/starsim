@@ -111,9 +111,7 @@ class Network(sc.objdict):
 
     @property
     def members(self):
-        """
-        Return sorted array of all members
-        """
+        """ Return sorted array of all members """
         return np.unique([self['p1'], self['p2']])
 
     def meta_keys(self):
@@ -180,7 +178,7 @@ class Network(sc.objdict):
             self[key] = np.resize(self[key], n_total)  # Resize to make room, preserving dtype
             self[key][n_curr:] = new_arr  # Copy contacts into the network
         return
-    
+
     def to_dict(self):
         """ Convert to dictionary """
         d = {k:self[k] for k in self.meta_keys()}
@@ -240,9 +238,11 @@ class Network(sc.objdict):
         return contact_inds
 
     def add_pairs(self):
+        """ Define how pairs of people are formed """
         pass
 
     def update(self):
+        """ Define how pairs/connections evolve (in time) """
         pass
 
 
