@@ -89,7 +89,7 @@ class Network(sc.objdict):
         except:  # pragma: no cover
             return 0
 
-    def __repr__(self):
+    def __repr__(self, **kwargs):
         """ Convert to a dataframe for printing """
         namestr = self.__class__.__name__
         labelstr = f'"{self.label}"' if self.label else '<no label>'
