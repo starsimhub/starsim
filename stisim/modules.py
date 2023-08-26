@@ -9,11 +9,6 @@ from . import results as ssr
 from . import utils as ssu
 
 
-class Modules(ssu.ndict):
-    pass
-
-
-
 class Module(sc.prettyobj):
     
     def __init__(self, pars=None, label=None, requires=None, *args, **kwargs):
@@ -44,6 +39,16 @@ class Module(sc.prettyobj):
     
     def initialize(self, sim):
         self.check_requires(sim)
+        
+        # Merge parameters
+        sim.pars[self.name] = self.pars
+        sim.results[self.name] = self.results
+
+        # Add this module to a People instance. This would always involve calling People.add_module
+        # but subsequently modules could have their own logic for initializing the default values
+        # and initializing any outputs that are required
+        sim.people.add_module(self)
+        
         self.initialized = True
         return
     
@@ -75,21 +80,16 @@ class Disease(Module):
         )
         return
 
-
+    
     def initialize(self, sim):
-        # Merge parameters
-        sim.pars[self.name] = self.pars
-        sim.results[self.name] = self.results
-
-        # Add this module to a People instance. This would always involve calling People.add_module
-        # but subsequently modules could have their own logic for initializing the default values
-        # and initializing any outputs that are required
-        sim.people.add_module(self)
-
+        super().initialize(sim)
+        
         # Initialization steps
         self.validate_pars(sim)
         self.init_states(sim)
         self.init_results(sim)
+        return
+        
 
 
     def validate_pars(self, sim):
@@ -98,6 +98,7 @@ class Disease(Module):
         """
         if 'beta' not in sim.pars[self.name]:
             sim.pars[self.name].beta = sc.objdict({k: [1, 1] for k in sim.people.networks})
+        return
 
 
     def init_states(self, sim):
@@ -163,3 +164,8 @@ class Disease(Module):
 
     def finalize_results(self, sim):
         pass
+    
+    
+class Modules(ssu.ndict):
+    def __init__(self, *args, type=Module, **kwargs):
+        return super().__init__(self, *args, type=type, **kwargs)

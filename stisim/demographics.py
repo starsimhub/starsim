@@ -8,7 +8,8 @@ from . import people as ssp
 from . import modules as ssm
 from . import results as ssr
 
-class Pregnancy(ssm.Disease):
+
+class Pregnancy(ssm.Module):
 
     def __init__(self, pars=None):
         super().__init__(pars)
@@ -39,6 +40,7 @@ class Pregnancy(ssm.Disease):
 
     def initialize(self, sim):
         super().initialize(sim)
+        self.init_results(sim)
         sim.pars['birth_rates'] = None  # This turns off birth rate pars so births only come from this module
         return
     
@@ -51,6 +53,16 @@ class Pregnancy(ssm.Disease):
         """
         self.results['pregnancies'] = ssr.Result('pregnancies', self.name, sim.npts, dtype=int)
         self.results['births']      = ssr.Result('births', self.name, sim.npts, dtype=int)
+        return
+    
+    
+    def update(self, sim):
+        """
+        Perform all updates
+        """
+        self.update_states(sim)
+        self.make_pregnancies(sim)
+        self.update_results(sim)
         return
 
 
@@ -81,7 +93,7 @@ class Pregnancy(ssm.Disease):
         return
 
 
-    def make_new_cases(self, sim):
+    def make_pregnancies(self, sim):
         """
         Select people to make pregnancy using incidence data
         This should use ASFR data from https://population.un.org/wpp/Download/Standard/Fertility/
@@ -148,7 +160,7 @@ class Pregnancy(ssm.Disease):
 
 
     def update_results(self, sim):
-        mppl = sim.people[self.name]
-        sim.results[self.name]['pregnancies'][sim.ti] = np.count_nonzero(mppl.ti_pregnant == sim.ti)
-        sim.results[self.name]['births'][sim.ti] = np.count_nonzero(mppl.ti_delivery == sim.ti)
+        mppl = sim.people[self.name] # TODO: refactor with states owning their own data
+        self.results['pregnancies'][sim.ti] = np.count_nonzero(mppl.ti_pregnant == sim.ti)
+        self.results['births'][sim.ti] = np.count_nonzero(mppl.ti_delivery == sim.ti)
         return

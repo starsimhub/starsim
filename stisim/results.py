@@ -10,7 +10,7 @@ from . import utils as ssu
 
 class Results(ssu.ndict):
     def __init__(self, *args, **kwargs):
-        super().__init__(self, _type=Result, *args, **kwargs)
+        super().__init__(self, type=Result, *args, **kwargs)
 
 
 class Result(np.ndarray):
