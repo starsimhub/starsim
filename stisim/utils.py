@@ -23,9 +23,9 @@ class ndict(sc.objdict):
     A dictionary-like class that provides additional functionalities for handling named items.
 
     Args:
-        _name (str): The items' attribute to use as keys.
-        _type (type): The expected type of items.
-        _strict (bool): If True, only items with the specified attribute will be accepted.
+        name (str): The items' attribute to use as keys.
+        type (type): The expected type of items.
+        strict (bool): If True, only items with the specified attribute will be accepted.
 
     **Examples**::
 
@@ -35,20 +35,31 @@ class ndict(sc.objdict):
 
     """
 
-    def __init__(self, *args, _name='name', _type=None, _strict=True, **kwargs):
-        self.setattribute('_name', _name) # Since otherwise treated as keys
-        self.setattribute('_type', _type)
-        self.setattribute('_strict', _strict)
+    def __init__(self, *args, name='name', type=None, strict=True, **kwargs):
+        self.setattribute('_name', name) # Since otherwise treated as keys
+        self.setattribute('_type', type)
+        self.setattribute('_strict', strict)
         argdict = self._validate(*args)
         argdict.update(kwargs)
         super().__init__(argdict)
         return
+    
+    def _check_types(self, argdict):
+        """ Check types """
+        _type   = self.getattribute('_type')
+        if _type is not None:
+            wrong = {}
+            for k,v in argdict.items():
+                if not isinstance(v, _type):
+                    wrong[k] = type(v)
+            if len(wrong):
+                errormsg = f'The following items do not have the expected type {self._type}:\n{wrong}'
+                raise TypeError(errormsg)
         
-            
     def _validate(self, *args):
         args = sc.mergelists(*args)
         _name   = self.getattribute('_name')
-        _type   = self.getattribute('_type')
+        
         _strict = self.getattribute('_strict')
         failed = []
         argdict = {}
@@ -69,22 +80,14 @@ class ndict(sc.objdict):
             else:
                 failed.append(i)
         
-        # Check types
-        if _type is not None:
-            wrong = {}
-            for k,v in argdict.items():
-                if not isinstance(v, _type):
-                    wrong[k] = type(v)
-            if len(wrong):
-                errormsg = f'The following items do not have the expected type {self._type}:\n{wrong}'
-                raise TypeError(errormsg)
+        self._check_types(argdict)
+        
         
         if len(failed):
             errormsg = f'Could not interpret arguments {failed}: does not have expected attribute "{self._name}"'
             raise ValueError(errormsg)
         else:
             return argdict
-        
     
     def append(self, *args):
         ''' Allow being used like a list '''
@@ -92,11 +95,9 @@ class ndict(sc.objdict):
         self.update(argdict)
         return
     
-    
     def __add__(self, dict2):
         ''' Allow two dictionaries to be added (merged) '''
         return sc.mergedicts(self, self._validate(dict2))
-
 
 
 def omerge(*args, **kwargs):
