@@ -8,7 +8,7 @@ import pandas as pd
 from . import utils as ssu
 
 
-class Results(ssu.NDict):
+class Results(ssu.ndict):
     def __init__(self, *args, **kwargs):
         super().__init__(self, _type=Result, *args, **kwargs)
 

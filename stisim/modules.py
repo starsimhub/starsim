@@ -9,7 +9,7 @@ from . import results as ssr
 from . import utils as ssu
 
 
-class Modules(ssu.NDict):
+class Modules(ssu.ndict):
     pass
 
 
@@ -20,7 +20,7 @@ class Module(sc.prettyobj):
         self.pars = ssu.omerge(pars)
         self.label = label if label else ''
         self.requires = sc.mergelists(requires)
-        self.states = ssu.NDict()
+        self.states = ssu.ndict()
         self.results = ssr.Results()
         self.initialized = False
         self.finalized = False
@@ -68,7 +68,7 @@ class Disease(Module):
     
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__(pars, *args, **kwargs)
-        self.states = ssu.NDict(
+        self.states = ssu.ndict(
             ssp.State('rel_sus', float, 1),
             ssp.State('rel_sev', float, 1),
             ssp.State('rel_trans', float, 1),

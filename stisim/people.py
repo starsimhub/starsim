@@ -57,7 +57,7 @@ class State(sc.prettyobj):
         return out
 
 
-base_states = ssu.NDict(
+base_states = ssu.ndict(
     State('uid', int),
     State('age', float),
     State('female', bool, False),
@@ -219,8 +219,8 @@ class People(BasePeople):
         self.version = __version__  # Store version info
 
         # Initialize states, networks, modules
-        self.states = ssu.NDict(base_states, states)
-        self.networks = ssu.NDict(networks)
+        self.states = ssu.ndict(base_states, states)
+        self.networks = ssu.ndict(networks)
 
         # Private variables relating to dynamic allocation
         self._data = dict()

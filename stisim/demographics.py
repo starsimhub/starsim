@@ -14,7 +14,7 @@ class Pregnancy(ssm.Disease):
         super().__init__(pars)
 
         # Other, e.g. postpartum, on contraception...
-        self.states = ssu.NDict(
+        self.states = ssu.ndict(
             ssp.State('infertile', bool, False),  # Applies to girls and women outside the fertility window
             ssp.State('susceptible', bool, True),  # Applies to girls and women inside the fertility window - needs renaming
             ssp.State('pregnant', bool, False),  # Currently pregnant

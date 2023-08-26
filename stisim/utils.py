@@ -15,10 +15,10 @@ __all__ = []
 
 
 # %% Helper functions
-__all__ += ['NDict', 'omerge']
+__all__ += ['ndict', 'omerge']
 
 
-class NDict(sc.objdict):
+class ndict(sc.objdict):
     """
     A dictionary-like class that provides additional functionalities for handling named items.
 
@@ -29,9 +29,9 @@ class NDict(sc.objdict):
 
     **Examples**::
 
-        networks = ss.NDict(ss.simple_sexual(), ss.maternal())
-        networks = ss.NDict([ss.simple_sexual(), ss.maternal()])
-        networks = ss.NDict({'simple_sexual':ss.simple_sexual(), 'maternal':ss.maternal()})
+        networks = ss.ndict(ss.simple_sexual(), ss.maternal())
+        networks = ss.ndict([ss.simple_sexual(), ss.maternal()])
+        networks = ss.ndict({'simple_sexual':ss.simple_sexual(), 'maternal':ss.maternal()})
 
     """
 

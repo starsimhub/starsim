@@ -6,7 +6,7 @@ from . import utils as ssu
 from . import modules as ssm
 
 
-class Analyzers(ssu.NDict):
+class Analyzers(ssu.ndict):
     pass
 
 

@@ -16,7 +16,7 @@ class HIV(ssm.Disease):
     
     def __init__(self, pars=None):
         super().__init__(pars)
-        self.states = ssu.NDict(
+        self.states = ssu.ndict(
             ssp.State('susceptible', bool, True),
             ssp.State('infected', bool, False),
             ssp.State('ti_infected', float, 0),
