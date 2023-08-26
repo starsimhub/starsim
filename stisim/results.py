@@ -4,7 +4,7 @@ unless other things get added (e.g. Resultsets, MultiResults, other...)
 """
 
 import numpy as np
-import pandas as pd
+import sciris as sc
 from . import utils as ssu
 
 
@@ -28,5 +28,5 @@ class Result(np.ndarray):
         out = f'{cls_name}({modulestr}{self.name}):\narray{arrstr}'
         return out
     
-    def pandas(self):
-        return pd.Series(self)
+    def to_df(self):
+        return sc.dataframe({self.name:self})
