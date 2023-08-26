@@ -34,8 +34,9 @@ class Network(sc.objdict):
     **Examples**::
 
         # Generate an average of 10 contacts for 1000 people
-        n = 10_000
+        n_contacts_pp = 10
         n_people = 1000
+        n = n_contacts_pp * n_people
         p1 = np.random.randint(n_people, size=n)
         p2 = np.random.randint(n_people, size=n)
         beta = np.ones(n)
