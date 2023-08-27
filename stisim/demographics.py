@@ -6,6 +6,9 @@ import numpy as np
 import stisim as ss
 
 
+__all__ = ['Pregnancy']
+
+
 class Pregnancy(ss.Module):
 
     def __init__(self, pars=None):
