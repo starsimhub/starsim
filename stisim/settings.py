@@ -17,7 +17,7 @@ import sciris as sc
 import numpy as np
 
 # Specify all externally visible classes this file defines
-__all__ = ['options']
+__all__ = ['options', 'float_', 'int_']
 
 
 # %% Define the options class
