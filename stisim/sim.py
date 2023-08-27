@@ -272,9 +272,9 @@ class Sim:
         """
         # Make results
         results = ssr.Results(
-            ssr.Result('births', None, self.npts, sss.default_float),
-            ssr.Result('deaths', None, self.npts, sss.default_float),
-            ssr.Result('n_alive', None, self.npts, sss.default_int),
+            ssr.Result('births', None, self.npts, sss.float_),
+            ssr.Result('deaths', None, self.npts, sss.float_),
+            ssr.Result('n_alive', None, self.npts, sss.int_),
         )
 
         # Final items

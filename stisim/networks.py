@@ -52,9 +52,9 @@ class Network(sc.objdict):
 
     def __init__(self, *args, key_dict=None, transmission='horizontal', label=None, **kwargs):
         default_keys = {
-            'p1': ss.default_int,
-            'p2': ss.default_int,
-            'beta': ss.default_float,
+            'p1': ss.int_,
+            'p2': ss.int_,
+            'beta': ss.float_,
         }
         self.meta = sc.mergedicts(default_keys, key_dict)
         self.transmission = transmission  # "vertical" or "horizontal", determines whether transmission is bidirectional
@@ -231,7 +231,7 @@ class Network(sc.objdict):
         # Find the contacts
         contact_inds = ss.find_contacts(self['p1'], self['p2'], inds)
         if as_array:
-            contact_inds = np.fromiter(contact_inds, dtype=ss.default_int)
+            contact_inds = np.fromiter(contact_inds, dtype=ss.int_)
             contact_inds.sort()  # Sorting ensures that the results are reproducible for a given seed as well as being identical to previous versions of HPVsim
 
         return contact_inds
@@ -258,10 +258,10 @@ class simple_sexual(Network):
     """
     def __init__(self, mean_dur=5):
         key_dict = {
-            'p1': ss.default_int,
-            'p2': ss.default_int,
-            'dur': ss.default_float,
-            'beta': ss.default_float,
+            'p1': ss.int_,
+            'p2': ss.int_,
+            'dur': ss.float_,
+            'beta': ss.float_,
         }
 
         # Call init for the base class, which sets all the keys
@@ -312,12 +312,12 @@ class hpv_network(Network):
     def __init__(self, pars=None):
 
         key_dict = {
-            'p1': ss.default_int,
-            'p2': ss.default_int,
-            'dur': ss.default_float,
-            'acts': ss.default_float,
-            'start': ss.default_float,
-            'beta': ss.default_float,
+            'p1': ss.int_,
+            'p2': ss.int_,
+            'dur': ss.float_,
+            'acts': ss.float_,
+            'start': ss.float_,
+            'beta': ss.float_,
         }
 
         # Call init for the base class, which sets all the keys
@@ -487,11 +487,11 @@ class hpv_network(Network):
         retired_vals = 0
 
         # Set values and return
-        scaled_acts = np.full(len(acts), np.nan, dtype=ss.default_float)
+        scaled_acts = np.full(len(acts), np.nan, dtype=ss.float_)
         scaled_acts[below_peak_inds] = below_peak_vals
         scaled_acts[above_peak_inds] = above_peak_vals
         scaled_acts[retired_inds] = retired_vals
-        start = np.array([ti] * n_partnerships, dtype=ss.default_float)
+        start = np.array([ti] * n_partnerships, dtype=ss.float_)
         beta = np.ones(n_partnerships)
 
         new_contacts = dict(
@@ -524,7 +524,7 @@ class maternal(Network):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
-        key_dict = sc.mergedicts({'dur': ss.default_float}, key_dict)
+        key_dict = sc.mergedicts({'dur': ss.float_}, key_dict)
         super().__init__(key_dict=key_dict, transmission=transmission)
         return
 
