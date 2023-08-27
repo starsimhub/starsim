@@ -5,19 +5,13 @@ Define core Sim classes
 # Imports
 import numpy as np
 import sciris as sc
-from . import settings as sss
-from . import utils as ssu
-from . import people as ssppl
-from . import modules as ssm
-from . import connectors as ssc
-from . import parameters as sspar
-from . import interventions as ssi
-from . import analyzers as ssa
-from . import results as ssr
+import stisim as ss
 
 
-# Define the model
-class Sim:
+__all__ = ['Sim', 'AlreadyRunError']
+
+
+class Sim(sc.prettyobj):
 
     def __init__(self, pars=None, label=None, people=None, modules=None, connectors=None, **kwargs):
 
@@ -25,9 +19,9 @@ class Sim:
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
         self.people = people  # People object
-        self.modules = ssm.Modules(modules)  # List of modules to simulate
-        self.connectors = ssc.Connectors(connectors)
-        self.results = ssr.Results()  # For storing results
+        self.modules = ss.Modules(modules)  # List of modules to simulate
+        self.connectors = ss.Connectors(connectors)
+        self.results = ss.Results()  # For storing results
         self.summary = None  # For storing a summary of the results
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running # TODO: replace with finalized?
@@ -41,12 +35,12 @@ class Sim:
         self.npts = None
 
         # Make default parameters (using values from parameters.py)
-        self.pars = sspar.make_pars()  # Start with default pars
+        self.pars = ss.make_pars()  # Start with default pars
         self.pars.update_pars(sc.mergedicts(pars, kwargs))  # Update the parameters
 
         # Initialize other quantities
-        self.interventions = ssi.Interventions()
-        self.analyzers = ssa.Analyzers()
+        self.interventions = ss.Interventions()
+        self.analyzers = ss.Analyzers()
 
         return
 
@@ -67,7 +61,7 @@ class Sim:
         self.validate_pars()  # Ensure parameters have valid values
         self.validate_dt()
         self.init_time_vecs()  # Initialize time vecs
-        ssu.set_seed(self.pars['rand_seed'])  # Reset the random seed before the population is created
+        ss.set_seed(self.pars['rand_seed'])  # Reset the random seed before the population is created
 
         # Initialize the core sim components
         self.init_people(popdict=popdict, reset=reset, **kwargs)  # Create all the people (the heaviest step)
@@ -80,7 +74,7 @@ class Sim:
 
         # Reset the random seed to the default run seed, so that if the simulation is run with
         # reset_seed=False right after initialization, it will still produce the same output
-        ssu.set_seed(self.pars['rand_seed'] + 1)
+        ss.set_seed(self.pars['rand_seed'] + 1)
 
         # Final steps
         self.initialized = True
@@ -109,7 +103,7 @@ class Sim:
             pop_keys = set(self.people.networks.keys())
             if modules and not len(pop_keys):
                 warnmsg = f'Warning: your simulation has {len(self.modules)} modules but no contact layers.'
-                ssu.warn(warnmsg, die=False)
+                ss.warn(warnmsg, die=False)
 
         return
 
@@ -201,7 +195,7 @@ class Sim:
 
         # If people have not been supplied, make them
         if self.people is None:
-            self.people = ssppl.People(self.pars['n_agents'], kwargs)  # This just assigns UIDs and length
+            self.people = ss.People(self.pars['n_agents'], kwargs)  # This just assigns UIDs and length
 
         # If a popdict has not been supplied, we can make one from location data
         if popdict is None:
@@ -210,7 +204,7 @@ class Sim:
                 if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
                     errormsg = 'You can either define total_pop explicitly or via the location, but not both'
                     raise ValueError(errormsg)
-                total_pop, popdict = ssppl.make_popdict(n=self.pars['n_agents'], location=self.pars['location'], verbose=self.pars['verbose'])
+                total_pop, popdict = ss.make_popdict(n=self.pars['n_agents'], location=self.pars['location'], verbose=self.pars['verbose'])
 
             else:
                 if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
@@ -252,7 +246,7 @@ class Sim:
         # This means networks will be stored in self.pars['networks'] and we'll need to copy them to the people.
         if self.people.networks is None or len(self.people.networks) == 0:
             if self.pars['networks'] is not None:
-                self.people.networks = ssu.ndict(self.pars['networks'])
+                self.people.networks = ss.ndict(self.pars['networks'])
 
         for key, network in self.people.networks.items():
             if network.label is not None:
@@ -271,10 +265,10 @@ class Sim:
         Create the main results structure.
         """
         # Make results
-        results = ssr.Results(
-            ssr.Result('births', None, self.npts, sss.float_),
-            ssr.Result('deaths', None, self.npts, sss.float_),
-            ssr.Result('n_alive', None, self.npts, sss.int_),
+        results = ss.Results(
+            ss.Result('births', None, self.npts, ss.float_),
+            ss.Result('deaths', None, self.npts, ss.float_),
+            ss.Result('n_alive', None, self.npts, ss.int_),
         )
 
         # Final items
@@ -289,9 +283,9 @@ class Sim:
 
         # Translate the intervention specs into actual interventions
         for i, intervention in enumerate(self.pars['interventions']):
-            if isinstance(intervention, type) and issubclass(intervention, ssi.Intervention):
+            if isinstance(intervention, type) and issubclass(intervention, ss.Intervention):
                 intervention = intervention()  # Convert from a class to an instance of a class
-            if isinstance(intervention, ssi.Intervention):
+            if isinstance(intervention, ss.Intervention):
                 intervention.initialize(self)
                 self.interventions += intervention
             elif callable(intervention):
@@ -308,15 +302,15 @@ class Sim:
 
         # Interpret analyzers
         for ai, analyzer in enumerate(self.pars['analyzers']):
-            if isinstance(analyzer, type) and issubclass(analyzer, ssa.Analyzer):
+            if isinstance(analyzer, type) and issubclass(analyzer, ss.Analyzer):
                 analyzer = analyzer()  # Convert from a class to an instance of a class
-            if not (isinstance(analyzer, ssa.Analyzer) or callable(analyzer)):
+            if not (isinstance(analyzer, ss.Analyzer) or callable(analyzer)):
                 errormsg = f'Analyzer {analyzer} does not seem to be a valid analyzer: must be a function or Analyzer subclass'
                 raise TypeError(errormsg)
             self.analyzers += analyzer  # Add it in
 
         for analyzer in self.analyzers:
-            if isinstance(analyzer, ssa.Analyzer):
+            if isinstance(analyzer, ss.Analyzer):
                 analyzer.initialize(self)
 
         return
@@ -394,7 +388,7 @@ class Sim:
             verbose = self.pars['verbose']
 
         if reset_seed:
-            ssu.set_seed(self.pars['rand_seed'] + 1)
+            ss.set_seed(self.pars['rand_seed'] + 1)
 
         # Check for AlreadyRun errors
         errormsg = None

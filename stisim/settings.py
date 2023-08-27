@@ -2,26 +2,18 @@
 Define options for STIsim.
 All options should be set using set() or directly, e.g.::
 
-    ss.options(font_size=18)
-
-To reset default options, use::
-
-    ss.options('default')
-
-Note: "options" is used to refer to the choices available (e.g., DPI), while "settings"
-is used to refer to the choices made (e.g., DPI=150).
+    ss.options(verbose=False)
 """
 
 import os
-import sciris as sc
 import numpy as np
+import sciris as sc
 
-# Specify all externally visible classes this file defines
+
 __all__ = ['options', 'float_', 'int_']
 
 
-# %% Define the options class
-
+# Not public to avoid confusion with ss.options
 class Options(sc.objdict):
     """
     Set options for STIsim.
