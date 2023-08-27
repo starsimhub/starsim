@@ -67,6 +67,10 @@ class Module(sc.prettyobj):
         return self.__class__.__name__.lower()
 
 
+class Modules(ssu.ndict):
+    def __init__(self, *args, type=Module, **kwargs):
+        return super().__init__(self, *args, type=type, **kwargs)
+
 
 class Disease(Module):
     """ Base module contains states/attributes that all modules have """
@@ -164,8 +168,3 @@ class Disease(Module):
 
     def finalize_results(self, sim):
         pass
-    
-    
-class Modules(ssu.ndict):
-    def __init__(self, *args, type=Module, **kwargs):
-        return super().__init__(self, *args, type=type, **kwargs)

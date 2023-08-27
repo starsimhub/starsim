@@ -10,7 +10,7 @@ from . import settings as sss
 
 
 # Specify all externally visible functions this file defines
-__all__ = ['Network', 'simple_sexual', 'hpv_network', 'maternal']
+__all__ = ['Networks', 'Network', 'simple_sexual', 'hpv_network', 'maternal']
 
 class Network(sc.objdict):
     """
@@ -245,6 +245,12 @@ class Network(sc.objdict):
         """ Define how pairs/connections evolve (in time) """
         pass
 
+
+
+class Networks(ssu.ndict):
+    def __init__(self, *args, type=Network, **kwargs):
+        return super().__init__(self, *args, type=type, **kwargs)
+    
 
 class simple_sexual(Network):
     """
