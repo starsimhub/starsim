@@ -93,10 +93,9 @@ class ndict(sc.objdict):
             self._process_arg(arg, key=key)
         return
     
-    def append(self, *args):
+    def append(self, arg):
         ''' Allow being used like a list '''
-        argdict = self._validate(*args)
-        self.update(argdict)
+        self._process_arg(arg)
         return
     
     def __add__(self, dict2):
