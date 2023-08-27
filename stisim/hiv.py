@@ -16,15 +16,19 @@ class HIV(ssm.Disease):
     
     def __init__(self, pars=None):
         super().__init__(pars)
-        self.states = ssu.ndict(
-            ssp.State('susceptible', bool, True),
-            ssp.State('infected', bool, False),
-            ssp.State('ti_infected', float, 0),
-            ssp.State('on_art', bool, False),
-            ssp.State('cd4', float, 500),
-            self.states,
-        )
-    
+
+        self.susceptible = ssp.State('susceptible', bool, True)
+        self.infected = ssp.State('infected', bool, False)
+        self.ti_infected = ssp.State('ti_infected', float, 0)
+        self.on_art = ssp.State('on_art', bool, False)
+        self.cd4 = ssp.State('cd4', float, 500)
+
+        self.states.append(self.susceptible)
+        self.states.append(self.infected)
+        self.states.append(self.ti_infected)
+        self.states.append(self.on_art)
+        self.states.append(self.cd4)
+
         self.pars = ssu.omerge({
             'cd4_min': 100,
             'cd4_max': 500,
@@ -37,9 +41,8 @@ class HIV(ssm.Disease):
 
     def update_states(self, sim):
         """ Update CD4 """
-        hivppl = sim.people.hiv
-        hivppl.cd4[sim.people.alive & hivppl.infected & hivppl.on_art] += (sim.pars.hiv.cd4_max - hivppl.cd4[sim.people.alive & hivppl.infected & hivppl.on_art])/sim.pars.hiv.cd4_rate
-        hivppl.cd4[sim.people.alive & hivppl.infected & ~hivppl.on_art] += (sim.pars.hiv.cd4_min - hivppl.cd4[sim.people.alive & hivppl.infected & ~hivppl.on_art])/sim.pars.hiv.cd4_rate
+        self.cd4[sim.people.alive & self.infected & self.on_art] += (self.pars.cd4_max - self.cd4[sim.people.alive & self.infected & self.on_art])/self.pars.cd4_rate
+        self.cd4[sim.people.alive & self.infected & ~self.on_art] += (self.pars.cd4_min - self.cd4[sim.people.alive & self.infected & ~self.on_art])/self.pars.cd4_rate
         return
     
 
@@ -61,9 +64,9 @@ class HIV(ssm.Disease):
         return
     
     def set_prognoses(self, sim, uids):
-        sim.people[self.name].susceptible[uids] = False
-        sim.people[self.name].infected[uids] = True
-        sim.people[self.name].ti_infected[uids] = sim.ti
+        self.susceptible[uids] = False
+        self.infected[uids] = True
+        self.ti_infected[uids] = sim.ti
 
 
 #%% Interventions
