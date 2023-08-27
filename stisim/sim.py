@@ -201,7 +201,7 @@ class Sim:
 
         # If people have not been supplied, make them
         if self.people is None:
-            self.people = ssppl.People(kwargs)  # This just assigns UIDs and length
+            self.people = ssppl.People(n=self.pars['n_agents'], **kwargs)  # This just assigns UIDs and length
 
         # If a popdict has not been supplied, we can make one from location data
         if popdict is None:
