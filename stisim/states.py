@@ -173,20 +173,30 @@ class FusedArray(NDArrayOperatorsMixin):
         return self.values
 
     def __array_ufunc__(self, *args, **kwargs):
-        # Does this function really work?! This is to support using +=
         if args[1] != '__call__':
+            # This is a generic catch-all for ufuncs that are not being applied with '__call__' (e.g., operations returning a scalar like 'np.sum()' use reduce instead)
             args = [(x if x is not self else self.values) for x in args]
             kwargs = {k: v if v is not self else self.values for k, v in kwargs.items()}
             return self.values.__array_ufunc__(*args, **kwargs)
 
         args = [(x if x is not self else self.values) for x in args]
         if 'out' in kwargs and kwargs['out'][0] is self:
+            # In-place operations like += use this branch
             kwargs['out'] = self.values
             args[0](*args[2:], **kwargs)
             return self
         else:
-            out_arr = args[0](*args[2:], **kwargs)
-            return FusedArray(values=out_arr, uids=self.uids, uid_map=self._uid_map)
+            out = args[0](*args[2:], **kwargs)
+            if isinstance(out, FusedArray):
+                # For some operations (e.g., those involving two FusedArrays) the result of the ufunc will already be a FusedArray
+                # In particular, operating on two states will result in a FusedArray where the references to the original People uid_map and uids
+                # are still intact. In such cases, we can return the resulting FusedArray directly
+                return out
+            else:
+                # Otherwise, if the result of the ufunc is an array (e.g., because one of the arguments was an array) then
+                # we need to wrap it up in a new FusedArray. With '__call__' the dimensions should hopefully be the same and we should
+                # be able to reuse the UID arrays directly
+                return FusedArray(values=out, uids=self.uids, uid_map=self._uid_map)
 
     def __array_wrap__(self, out_arr, context=None):
         # This allows numpy operations addition etc. to return instances of FusedArray

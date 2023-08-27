@@ -164,11 +164,10 @@ class People(BasePeople):
             self.add_state(state)  # Register the state internally for dynamic growth
             self.states.append(state)  # Expose these states with their original names
             state.initialize(self) # Connect the state to this people instance
-
+            setattr(self, state.name, state)
         self.networks = ssu.ndict(networks)
 
         return
-
 
     def initialize(self, popdict=None):
         """ Initialize people by setting their attributes """
@@ -192,9 +191,15 @@ class People(BasePeople):
             raise Exception(f'Module {module.name} already added')
         self.__setattr__(module.name, sc.objdict())
 
+        module_states = sc.objdict()
+        setattr(self, module.name, module_states)
+
         for state_name, state in module.states.items():
-            combined_name = module.name + '.' + state_name
-            self.states[combined_name] = state # Register the state on the user-facing side using the combined name
+            combined_name = module.name + '.' + state_name # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
+            self.states[combined_name] = state # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
+            pre, _, post = combined_name.rpartition('.')
+            setattr(module_states, state_name, state)
+            state.initialize(self) # Connect the state to this people instance
 
         return
 
