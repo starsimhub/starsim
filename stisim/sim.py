@@ -42,7 +42,7 @@ class Sim:
 
         # Make default parameters (using values from parameters.py)
         self.pars = sspar.make_pars()  # Start with default pars
-        self.pars.update_pars(sc.mergedicts(pars, **kwargs))  # Update the parameters
+        self.pars.update_pars(sc.mergedicts(pars, kwargs))  # Update the parameters
 
         # Initialize other quantities
         self.interventions = ssi.Interventions()
