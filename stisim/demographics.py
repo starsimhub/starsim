@@ -99,16 +99,14 @@ class Pregnancy(ssm.Module):
         This should use ASFR data from https://population.un.org/wpp/Download/Standard/Fertility/
         """
         # Abbreviate key variables
-        cpars = sim.pars[self.name]
         ppl = sim.people
-        this_inci = cpars['inci']
 
         # If incidence of pregnancy is non-zero, make some cases
         # Think about how to deal with age/time-varying fertility
-        if this_inci > 0:
+        if self.pars.inci > 0:
             demon_conds = ppl.female & ppl.active & ppl[self.name].susceptible
             inds_to_choose_from = ssu.true(demon_conds)
-            uids = ssu.binomial_filter(this_inci, inds_to_choose_from)
+            uids = ssu.binomial_filter(self.pars.inci, inds_to_choose_from)
 
             # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
             n_unborn_agents = len(uids)
@@ -116,7 +114,7 @@ class Pregnancy(ssm.Module):
                 # Grow the arrays and set properties for the unborn agents
                 new_inds = sim.people._grow(n_unborn_agents)
                 sim.people.uid[new_inds] = new_inds
-                sim.people.age[new_inds] = -cpars['dur_pregnancy']
+                sim.people.age[new_inds] = -self.pars.dur_pregnancy
                 sim.people.female[new_inds] = np.random.choice([True, False], size=n_unborn_agents)
 
                 # Add connections to any vertical transmission layers
@@ -124,7 +122,7 @@ class Pregnancy(ssm.Module):
                 # handled separately to the sexual networks, TBC how to handle this most elegantly
                 for lkey, layer in sim.people.networks.items():
                     if layer.transmission == 'vertical':  # What happens if there's more than one vertical layer?
-                        durs = np.full(n_unborn_agents, fill_value=cpars['dur_pregnancy']+cpars['dur_postpartum'])
+                        durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy+self.pars.dur_postpartum)
                         layer.add_pairs(uids, new_inds, dur=durs)
 
                 # Set prognoses for the pregnancies
