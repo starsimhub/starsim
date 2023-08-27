@@ -11,13 +11,23 @@ import numba as nb
 #   but they will produce incorrect output. States all reference the same UIDs so can be safely operated on
 
 @nb.njit
-def numba_get_vals_uids(vals, key, uid_map, uids):
+def numba_get_vals_uids(vals, key, uid_map):
     out = np.empty(len(key), dtype=vals.dtype)
     new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
     for i in range(len(key)):
         out[i] = vals[uid_map[key[i]]]
         new_uid_map[key[i]] = i
     return out, key, new_uid_map
+
+@nb.njit
+def numba_set_vals_uids_multiple(vals, key, uid_map, value):
+    for i in range(len(key)):
+        vals[uid_map[key[i]]] = value[i]
+
+@nb.njit
+def numba_set_vals_uids_single(vals, key, uid_map, value):
+    for i in range(len(key)):
+        vals[uid_map[key[i]]] = value
 
 
 class FusedArray(NDArrayOperatorsMixin):
@@ -55,52 +65,32 @@ class FusedArray(NDArrayOperatorsMixin):
     def dtype(self):
         return self.values.dtype
 
-    # Overload indexing
-    #
-    # Supported indexing operations on the last dimension (max dimension of 2)
-    # - Integer value (mapped)
-    # - List/array of integers (mapped)
-    # - Boolean array (used directly)
-    # Unsupported operations
-    # - Slices
-    def _process_key(self, key):
-        if isinstance(key, (np.ndarray, FusedArray)) and key.dtype.kind == 'b':
-            # If we pass in a boolean array, apply it directly
-            return key
-        elif isinstance(key, slice):
-            if key.start is None and key.stop is None and key.step is None:
-                return key
-            else:
-                raise Exception('Slicing not supported - slice the .values attribute by index instead e.g., x.values[0:5], not x[0:5]')
-        else:
-            return self._uid_map[key]
-
-
     def __getitem__(self, key):
         try:
             if isinstance(key, (int, np.integer)):
+                # Handle getting a single item by UID
                 return self.values[self._uid_map[key]]
-            if isinstance(key, (np.ndarray, FusedArray)):
+            elif isinstance(key, (np.ndarray, FusedArray)):
                 if key.dtype.kind == 'b':
+                    # Handle accessing items with a logical array. Surprisingly, it seems faster to use nonzero() to convert
+                    # it to indices first. Also, the pure Python implementation is difficult to improve upon using numba
                     mapped_key = key.__array__().nonzero()[0]
                     uids = self.uids.__array__()[mapped_key]
                     new_uid_map = np.full(len(self._uid_map), fill_value=INT_NAN, dtype=int)
                     new_uid_map[uids] = np.arange(len(uids))
                     values = self.values[mapped_key]
                 else:
-                    values, uids, new_uid_map = numba_get_vals_uids(self.values, key, self._uid_map.__array__(), self.uids.__array__())
-                    # new_uid_map = np.full_like(self._uid_map._view, fill_value=INT_NAN, dtype=int)
-                    # new_uid_map = np.empty(len(self._uid_map), dtype=int)
-                    # new_uid_map[uids] = np.arange(len(uids))
-
+                    # Access items by an array of integers. We do get a decent performance boost from using numba here
+                    values, uids, new_uid_map = numba_get_vals_uids(self.values, key, self._uid_map.__array__())
             elif isinstance(key, slice):
                 if key.start is None and key.stop is None and key.step is None:
                     return sc.dcp(self)
                 else:
                     raise Exception('Slicing not supported - slice the .values attribute by index instead e.g., x.values[0:5], not x[0:5]')
             else:
-                values, uids, new_uid_map = numba_get_vals_uids(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__(), self.uids.__array__())
-
+                # This branch is specifically handling the user passing in a list of integers instead of an array, therefore
+                # we need an additional conversion to an array first using np.fromiter to improve numba performance
+                values, uids, new_uid_map = numba_get_vals_uids(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__())
             return FusedArray(values=values, uids=uids, uid_map=new_uid_map)
         except IndexError as e:
             if str(INT_NAN) in str(e):
@@ -109,8 +99,31 @@ class FusedArray(NDArrayOperatorsMixin):
                 raise e
 
     def __setitem__(self, key, value):
+        # nb. the use of .__array__() calls is to access the array interface and thereby treat both np.ndarray and DynamicView instances
+        # in the same way without needing an additional type check. This is also why the FusedArray.dtype property is defined. Noting
+        # that for a State, the uid_map is a dynamic view attached to the People, but after an indexing operation, it will be a bare
+        # FusedArray that has an ordinary numpy array as the uid_map
         try:
-            return self.values.__setitem__(self._process_key(key), value)
+            if isinstance(key, (int, np.integer)):
+                return self.values.__setitem__(self._uid_map[key], value)
+            elif isinstance(key, (np.ndarray, FusedArray)):
+                if key.dtype.kind == 'b':
+                    self.values.__setitem__(key.__array__().nonzero()[0], value)
+                else:
+                    if isinstance(value, (np.ndarray, FusedArray)):
+                        return numba_set_vals_uids_multiple(self.values, key, self._uid_map.__array__(), value.__array__())
+                    else:
+                        return numba_set_vals_uids_single(self.values, key, self._uid_map.__array__(), value)
+            elif isinstance(key, slice):
+                if key.start is None and key.stop is None and key.step is None:
+                    return self.values.__setitem__(key, value)
+                else:
+                    raise Exception('Slicing not supported - slice the .values attribute by index instead e.g., x.values[0:5], not x[0:5]')
+            else:
+                if isinstance(value, (np.ndarray, FusedArray)):
+                    return numba_set_vals_uids_multiple(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__(), value.__array__())
+                else:
+                    return numba_set_vals_uids_single(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__(), value)
         except IndexError as e:
             if str(INT_NAN) in str(e):
                 raise IndexError(f'UID not present in array')
@@ -483,3 +496,15 @@ uid_map = p._uid_map._view
 # # print('Series (loc): ', end='')
 # # %timeit s.loc[boolean]
 #
+
+# ASSIGNMENT
+# %timeit a[single_item_ind] = 1
+# %timeit z[single_item_uid] = 1
+# %timeit a[multiple_items_ind] = 1
+# %timeit z[multiple_items_uid] = 1
+
+# %timeit a[multiple_items_few_ind] = 1
+# %timeit z[multiple_items_few_uid] = 1
+
+# %timeit a[boolean] = 1
+# %timeit z[boolean] = 1
