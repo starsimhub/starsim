@@ -10,24 +10,7 @@ import numba as nb
 # - If two FusedArrays have the same number of entries but have different UIDs (or even a different order of UIDs) then operations like addition will work
 #   but they will produce incorrect output. States all reference the same UIDs so can be safely operated on
 
-@nb.njit
-def numba_get_vals_uids(vals, key, uid_map):
-    out = np.empty(len(key), dtype=vals.dtype)
-    new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
-    for i in range(len(key)):
-        out[i] = vals[uid_map[key[i]]]
-        new_uid_map[key[i]] = i
-    return out, key, new_uid_map
 
-@nb.njit
-def numba_set_vals_uids_multiple(vals, key, uid_map, value):
-    for i in range(len(key)):
-        vals[uid_map[key[i]]] = value[i]
-
-@nb.njit
-def numba_set_vals_uids_single(vals, key, uid_map, value):
-    for i in range(len(key)):
-        vals[uid_map[key[i]]] = value
 
 
 class FusedArray(NDArrayOperatorsMixin):
@@ -65,6 +48,54 @@ class FusedArray(NDArrayOperatorsMixin):
     def dtype(self):
         return self.values.dtype
 
+    @staticmethod
+    @nb.njit
+    def _get_vals_uids(vals, key, uid_map):
+        """
+        Extract valued from a collection of UIDs
+
+        :param vals: A 1D np.ndarray containing the values
+        :param key: A 1D np.ndnarray of integers containing the UIDs to query
+        :param uid_map: A 1D np.ndarray of integers mapping UID to array position in ``vals``
+        :return: A tuple of (values, uids, new_uid_map) suitable for passing into the FusedArray constructor
+        """
+        out = np.empty(len(key), dtype=vals.dtype)
+        new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
+        for i in range(len(key)):
+            out[i] = vals[uid_map[key[i]]]
+            new_uid_map[key[i]] = i
+        return out, key, new_uid_map
+
+    @staticmethod
+    @nb.njit
+    def _set_vals_uids_multiple(vals, key, uid_map, value):
+        """
+        Insert an array of values based on UID
+
+        :param vals: A reference to a 1D np.ndarray in which to insert the values
+        :param key: A 1D np.ndnarray of integers containing the UIDs to add values for
+        :param uid_map:  A 1D np.ndarray of integers mapping UID to array position in ``vals``
+        :param value: A 1D np.ndarray the same length as ``key`` containing values to insert
+        :return:
+        """
+        for i in range(len(key)):
+            vals[uid_map[key[i]]] = value[i]
+
+    @staticmethod
+    @nb.njit
+    def _set_vals_uids_single(vals, key, uid_map, value):
+        """
+        Insert a single value into multiple UIDs
+
+        :param vals: A reference to a 1D np.ndarray in which to insert the values
+        :param key: A 1D np.ndnarray of integers containing the UIDs to add values for
+        :param uid_map:  A 1D np.ndarray of integers mapping UID to array position in ``vals``
+        :param value: A scalar value to insert at every position specified by ``key``
+        :return:
+        """
+        for i in range(len(key)):
+            vals[uid_map[key[i]]] = value
+
     def __getitem__(self, key):
         try:
             if isinstance(key, (int, np.integer)):
@@ -81,7 +112,7 @@ class FusedArray(NDArrayOperatorsMixin):
                     values = self.values[mapped_key]
                 else:
                     # Access items by an array of integers. We do get a decent performance boost from using numba here
-                    values, uids, new_uid_map = numba_get_vals_uids(self.values, key, self._uid_map.__array__())
+                    values, uids, new_uid_map = self._get_vals_uids(self.values, key, self._uid_map.__array__())
             elif isinstance(key, slice):
                 if key.start is None and key.stop is None and key.step is None:
                     return sc.dcp(self)
@@ -90,7 +121,7 @@ class FusedArray(NDArrayOperatorsMixin):
             else:
                 # This branch is specifically handling the user passing in a list of integers instead of an array, therefore
                 # we need an additional conversion to an array first using np.fromiter to improve numba performance
-                values, uids, new_uid_map = numba_get_vals_uids(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__())
+                values, uids, new_uid_map = self._get_vals_uids(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__())
             return FusedArray(values=values, uids=uids, uid_map=new_uid_map)
         except IndexError as e:
             if str(INT_NAN) in str(e):
@@ -111,9 +142,9 @@ class FusedArray(NDArrayOperatorsMixin):
                     self.values.__setitem__(key.__array__().nonzero()[0], value)
                 else:
                     if isinstance(value, (np.ndarray, FusedArray)):
-                        return numba_set_vals_uids_multiple(self.values, key, self._uid_map.__array__(), value.__array__())
+                        return self._set_vals_uids_multiple(self.values, key, self._uid_map.__array__(), value.__array__())
                     else:
-                        return numba_set_vals_uids_single(self.values, key, self._uid_map.__array__(), value)
+                        return self._set_vals_uids_single(self.values, key, self._uid_map.__array__(), value)
             elif isinstance(key, slice):
                 if key.start is None and key.stop is None and key.step is None:
                     return self.values.__setitem__(key, value)
@@ -121,9 +152,9 @@ class FusedArray(NDArrayOperatorsMixin):
                     raise Exception('Slicing not supported - slice the .values attribute by index instead e.g., x.values[0:5], not x[0:5]')
             else:
                 if isinstance(value, (np.ndarray, FusedArray)):
-                    return numba_set_vals_uids_multiple(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__(), value.__array__())
+                    return self._set_vals_uids_multiple(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__(), value.__array__())
                 else:
-                    return numba_set_vals_uids_single(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__(), value)
+                    return self._set_vals_uids_single(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__(), value)
         except IndexError as e:
             if str(INT_NAN) in str(e):
                 raise IndexError(f'UID not present in array')
@@ -447,7 +478,6 @@ a = z.values
 s = pd.Series(z.values, p.uids)
 uid_map = p._uid_map._view
 
-#
 # print('SINGLE ITEM LOOKUP')
 # print('Array (direct): ', end='')
 # %timeit a[single_item_ind]
@@ -455,10 +485,10 @@ uid_map = p._uid_map._view
 # %timeit a[uid_map[single_item_uid]]
 # print('State: ', end='')
 # %timeit z[single_item_uid]
-# # print('Series: ', end='')
-# # %timeit s[single_item_uid]
-# # print('Series (loc): ', end='')
-# # %timeit s.loc[single_item_uid]
+# print('Series: ', end='')
+# %timeit s[single_item_uid]
+# print('Series (loc): ', end='')
+# %timeit s.loc[single_item_uid]
 # print()
 # print('MULTIPLE ITEM LOOKUP')
 # print('Array (direct): ', end='')
@@ -467,10 +497,10 @@ uid_map = p._uid_map._view
 # %timeit a[uid_map[multiple_items_uid]]
 # print('State: ', end='')
 # %timeit z[multiple_items_uid]
-# # print('Series: ', end='')
-# # %timeit s[multiple_items_uid]
-# # print('Series (loc): ', end='')
-# # %timeit s.loc[multiple_items_uid]
+# print('Series: ', end='')
+# %timeit s[multiple_items_uid]
+# print('Series (loc): ', end='')
+# %timeit s.loc[multiple_items_uid]
 # print()
 # print('MULTIPLE ITEM LOOKUP (FEW)')
 # print('Array (direct): ', end='')
@@ -479,10 +509,10 @@ uid_map = p._uid_map._view
 # %timeit a[uid_map[multiple_items_few_uid]]
 # print('State: ', end='')
 # %timeit z[multiple_items_few_uid]
-# # print('Series: ', end='')
-# # %timeit s[multiple_items_few_uid]
-# # print('Series (loc): ', end='')
-# # %timeit s.loc[multiple_items_few_uid]
+# print('Series: ', end='')
+# %timeit s[multiple_items_few_uid]
+# print('Series (loc): ', end='')
+# %timeit s.loc[multiple_items_few_uid]
 # print()
 # print('BOOLEAN ARRAY LOOKUP')
 # print('Array (direct): ', end='')
@@ -491,20 +521,79 @@ uid_map = p._uid_map._view
 # %timeit a[boolean.nonzero()[0]]
 # print('State: ', end='')
 # %timeit z[boolean]
-# # print('Series: ', end='')
-# # %timeit s[boolean]
-# # print('Series (loc): ', end='')
-# # %timeit s.loc[boolean]
-#
-
-# ASSIGNMENT
+# print('Series: ', end='')
+# %timeit s[boolean]
+# print('Series (loc): ', end='')
+# %timeit s.loc[boolean]
+# print()
+# print('SINGLE ITEM ASSIGNMENT')
+# print('Array (direct): ', end='')
 # %timeit a[single_item_ind] = 1
+# print('Array (mapped): ', end='')
+# %timeit a[uid_map[single_item_uid]] = 1
+# print('State: ', end='')
 # %timeit z[single_item_uid] = 1
+# print('Series: ', end='')
+# %timeit s[single_item_uid] = 1
+# print('Series (loc): ', end='')
+# %timeit s.loc[single_item_uid] = 1
+# print()
+# print('MULTIPLE ITEM ASSIGNMENT')
+# print('Array (direct): ', end='')
 # %timeit a[multiple_items_ind] = 1
+# print('Array (mapped): ', end='')
+# %timeit a[uid_map[multiple_items_uid]] = 1
+# print('State: ', end='')
 # %timeit z[multiple_items_uid] = 1
-
+# print('Series: ', end='')
+# %timeit s[multiple_items_uid] = 1
+# print('Series (loc): ', end='')
+# %timeit s.loc[multiple_items_uid] = 1
+# print()
+# print('MULTIPLE ITEM ASSIGNMENT (FEW)')
+# print('Array (direct): ', end='')
 # %timeit a[multiple_items_few_ind] = 1
+# print('Array (mapped): ', end='')
+# %timeit a[uid_map[multiple_items_few_uid]] = 1
+# print('State: ', end='')
 # %timeit z[multiple_items_few_uid] = 1
-
+# print('Series: ', end='')
+# %timeit s[multiple_items_few_uid] = 1
+# print('Series (loc): ', end='')
+# %timeit s.loc[multiple_items_few_uid] = 1
+# print()
+# print('MULTIPLE ITEM ARRAY ASSIGNMENT')
+# print('Array (direct): ', end='')
+# %timeit a[multiple_items_ind] = multiple_items_ind
+# print('Array (mapped): ', end='')
+# %timeit a[uid_map[multiple_items_uid]] = multiple_items_ind
+# print('State: ', end='')
+# %timeit z[multiple_items_uid] = multiple_items_ind
+# print('Series: ', end='')
+# %timeit s[multiple_items_uid] = multiple_items_ind
+# print('Series (loc): ', end='')
+# %timeit s.loc[multiple_items_uid] = multiple_items_ind
+# print()
+# print('MULTIPLE ITEM ARRAY ASSIGNMENT (FEW)')
+# print('Array (direct): ', end='')
+# %timeit a[multiple_items_few_ind] = multiple_items_few_ind
+# print('Array (mapped): ', end='')
+# %timeit a[uid_map[multiple_items_few_uid]] = multiple_items_few_ind
+# print('State: ', end='')
+# %timeit z[multiple_items_few_uid] = multiple_items_few_ind
+# print('Series: ', end='')
+# %timeit s[multiple_items_few_uid] = multiple_items_few_ind
+# print('Series (loc): ', end='')
+# %timeit s.loc[multiple_items_few_uid] = multiple_items_few_ind
+# print()
+# print('BOOLEAN ARRAY ASSIGNMENT')
+# print('Array (direct): ', end='')
 # %timeit a[boolean] = 1
+# print('Array (nonzero): ', end='')
+# %timeit a[boolean.nonzero()[0]] = 1
+# print('State: ', end='')
 # %timeit z[boolean] = 1
+# print('Series: ', end='')
+# %timeit s[boolean] = 1
+# print('Series (loc): ', end='')
+# %timeit s.loc[boolean]
