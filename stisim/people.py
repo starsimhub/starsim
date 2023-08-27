@@ -141,7 +141,7 @@ class People(BasePeople):
 
     # %% Basic methods
 
-    def __init__(self, n, networks=None):
+    def __init__(self, n, extra_states=None, networks=None):
         """
         Initialize
         """
@@ -158,6 +158,7 @@ class People(BasePeople):
             State('ti_dead', float, np.nan),  # Time index for death
             State('scale', float, 1.0),
         ]
+        states.extend(sc.promotetolist(extra_states))
 
         self.states = ssu.ndict()
 
