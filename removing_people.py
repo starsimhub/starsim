@@ -327,7 +327,7 @@ class State(FusedArray):
 
         people.add_state(self)
         self._uid_map = people._uid_map
-        self.uids = people.uids
+        self.uids = people.uid
         self._data.initialize(len(self.uids))
         self.values = self._data._view
         self._initialized = True

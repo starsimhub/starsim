@@ -24,12 +24,12 @@ class BasePeople(sc.prettyobj):
 
         self.initialized = False
         self._uid_map = DynamicView(int, fill_value=INT_NAN) # This variable tracks all UIDs ever created
-        self.uids = DynamicView(int, fill_value=INT_NAN) # This variable tracks all UIDs currently in use
+        self.uid = DynamicView(int, fill_value=INT_NAN) # This variable tracks all UIDs currently in use
 
         self._uid_map.initialize(n)
         self._uid_map[:] = np.arange(0, n)
-        self.uids.initialize(n)
-        self.uids[:] = np.arange(0, n)
+        self.uid.initialize(n)
+        self.uid[:] = np.arange(0, n)
 
         # We internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
         # e.g., across modules, but we will never change the size of a State multiple times in the same iteration over
@@ -40,14 +40,14 @@ class BasePeople(sc.prettyobj):
 
     def __len__(self):
         """ Length of people """
-        return len(self.uids)
+        return len(self.uid)
 
     def add_state(self, state):
         if id(state) not in self._states:
             self._states[id(state)] = state
 
     def __len__(self):
-        return len(self.uids)
+        return len(self.uid)
 
     def grow(self, n):
         """
@@ -56,7 +56,7 @@ class BasePeople(sc.prettyobj):
         :param n: Integer number of agents to add
         """
         start_uid = len(self._uid_map)
-        start_idx = len(self.uids)
+        start_idx = len(self.uid)
 
         new_uids = np.arange(start_uid, start_uid+n)
         new_inds = np.arange(start_idx, start_idx+n)
@@ -64,8 +64,8 @@ class BasePeople(sc.prettyobj):
         self._uid_map.grow(n)
         self._uid_map[new_uids] = new_inds
 
-        self.uids.grow(n)
-        self.uids[new_inds] = new_uids
+        self.uid.grow(n)
+        self.uid[new_inds] = new_uids
 
         for state in self._states.values():
             state.grow(n)
@@ -79,11 +79,11 @@ class BasePeople(sc.prettyobj):
         :param uids_to_remove: An int/list/array containing the UID(s) to remove
         """
         # Calculate the *indices* to keep
-        keep_uids = self.uids[~np.in1d(self.uids, uids_to_remove)] # Calculate UIDs to keep
+        keep_uids = self.uid[~np.in1d(self.uid, uids_to_remove)] # Calculate UIDs to keep
         keep_inds = self._uid_map[keep_uids] # Calculate indices to keep
 
         # Trim the UIDs and states
-        self.uids._trim(keep_inds)
+        self.uid._trim(keep_inds)
         for state in self._states:
             state._trim(keep_inds)
 
@@ -151,7 +151,6 @@ class People(BasePeople):
         self.version = __version__  # Store version info
 
         states = [
-            State('uid', int),
             State('age', float),
             State('female', bool, False),
             State('debut', float),

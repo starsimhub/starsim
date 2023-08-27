@@ -17,23 +17,23 @@ class FusedArray(NDArrayOperatorsMixin):
     # by UID can be confusing/ambiguous when there are missing values. Indexing with a list/array returns
     # another FusedArray instance which enables chained filtering
 
-    __slots__ = ('values','_uid_map','uids')
+    __slots__ = ('values','_uid_map', 'uid')
 
-    def __init__(self, values, uids, uid_map=None):
+    def __init__(self, values, uid, uid_map=None):
 
         self.values = values
-        self.uids = uids
+        self.uid = uid
 
-        if uid_map is None and uids is not None:
+        if uid_map is None and uid is not None:
             # Construct a local UID map as opposed to using a shared one (i.e., the one for all agents contained in the People instance)
-            self.uid_map = np.full(np.max(uids)+1, fill_value=INT_NAN, dtype=int)
-            self.uid_map[uids] = np.arange(len(uids))
+            self.uid_map = np.full(np.max(uid) + 1, fill_value=INT_NAN, dtype=int)
+            self.uid_map[uid] = np.arange(len(uid))
         else:
             self._uid_map = uid_map
 
     def __repr__(self):
         # TODO - optimize? Don't really need to create a dataframe just to print it, but on the other hand, it's fast enough and very easy
-        df = pd.DataFrame(self.values.T, index=self.uids, columns=['Quantity'])
+        df = pd.DataFrame(self.values.T, index=self.uid, columns=['Quantity'])
         df.index.name = 'UID'
         return df.__repr__()
 
@@ -99,7 +99,7 @@ class FusedArray(NDArrayOperatorsMixin):
                     # Handle accessing items with a logical array. Surprisingly, it seems faster to use nonzero() to convert
                     # it to indices first. Also, the pure Python implementation is difficult to improve upon using numba
                     mapped_key = key.__array__().nonzero()[0]
-                    uids = self.uids.__array__()[mapped_key]
+                    uids = self.uid.__array__()[mapped_key]
                     new_uid_map = np.full(len(self._uid_map), fill_value=INT_NAN, dtype=int)
                     new_uid_map[uids] = np.arange(len(uids))
                     values = self.values[mapped_key]
@@ -115,7 +115,7 @@ class FusedArray(NDArrayOperatorsMixin):
                 # This branch is specifically handling the user passing in a list of integers instead of an array, therefore
                 # we need an additional conversion to an array first using np.fromiter to improve numba performance
                 values, uids, new_uid_map = self._get_vals_uids(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__())
-            return FusedArray(values=values, uids=uids, uid_map=new_uid_map)
+            return FusedArray(values=values, uid=uids, uid_map=new_uid_map)
         except IndexError as e:
             if str(INT_NAN) in str(e):
                 raise IndexError(f'UID not present in array')
@@ -199,13 +199,13 @@ class FusedArray(NDArrayOperatorsMixin):
                 # Otherwise, if the result of the ufunc is an array (e.g., because one of the arguments was an array) then
                 # we need to wrap it up in a new FusedArray. With '__call__' the dimensions should hopefully be the same and we should
                 # be able to reuse the UID arrays directly
-                return FusedArray(values=out, uids=self.uids, uid_map=self._uid_map)
+                return FusedArray(values=out, uid=self.uid, uid_map=self._uid_map)
 
     def __array_wrap__(self, out_arr, context=None):
         # This allows numpy operations addition etc. to return instances of FusedArray
         if out_arr.ndim == 0:
             return out_arr.item()
-        return FusedArray(values=out_arr, uids=self.uids, uid_map=self._uid_map) # Hardcoding class means State can inherit from FusedArray but return FusedArray base instances
+        return FusedArray(values=out_arr, uid=self.uid, uid_map=self._uid_map) # Hardcoding class means State can inherit from FusedArray but return FusedArray base instances
 
 
 class DynamicView(NDArrayOperatorsMixin):
@@ -303,7 +303,7 @@ class DynamicView(NDArrayOperatorsMixin):
 class State(FusedArray):
 
     def __init__(self, name, dtype, fill_value=0, label=None):
-        super().__init__(values=None, uids=None, uid_map=None) # Call the FusedArray constructor
+        super().__init__(values=None, uid=None, uid_map=None) # Call the FusedArray constructor
         self._data = DynamicView(dtype=dtype, fill_value=fill_value)
         self.name = name
         self.label = label or name
@@ -322,8 +322,8 @@ class State(FusedArray):
 
         people.add_state(self)
         self._uid_map = people._uid_map
-        self.uids = people.uids
-        self._data.initialize(len(self.uids))
+        self.uid = people.uid
+        self._data.initialize(len(self.uid))
         self.values = self._data._view
         self._initialized = True
 
@@ -335,73 +335,3 @@ class State(FusedArray):
         self._data._trim(inds)
         self.values = self._data._view
 
-
-class DynamicPeople():
-    def __init__(self, states=None):
-
-        self._uid_map = DynamicView(int, fill_value=INT_NAN) # This variable tracks all UIDs ever created
-        self.uids = DynamicView(int, fill_value=INT_NAN) # This variable tracks all UIDs currently in use
-
-        self.sex = State('sex',bool)
-        self.dead = State('dead',bool)
-
-        self.states = [self.sex, self.dead] # All state objects linked to this People instance. Note that the states above are not yet linked to the People because they haven't been initialized
-
-        # In reality, these states might be added elsewhere (e.g., in modules)
-        if states is not None:
-            for state in states:
-                self.add_state(state)
-
-    def add_state(self, state):
-        if id(state) not in {id(x) for x in self.states}:
-            self.states.append(state)
-
-    def __len__(self):
-        return len(self.uids)
-
-    def initialize(self, n):
-
-        self._uid_map.initialize(n)
-        self._uid_map[:] = np.arange(0, n)
-        self.uids.initialize(n)
-        self.uids[:] = np.arange(0, n)
-
-        for state in self.states:
-            state.initialize(self)
-
-    def __setattr__(self, attr, value):
-        if hasattr(self, attr) and isinstance(getattr(self, attr), State):
-            raise Exception('Cannot assign directly to a state - must index into the view instead e.g. `people.uid[:]=`')
-        else:   # If not initialized, rely on the default behavior
-            object.__setattr__(self, attr, value)
-
-    def grow(self, n):
-        # Add agents
-        start_uid = len(self._uid_map)
-        start_idx = len(self.uids)
-
-        new_uids = np.arange(start_uid, start_uid+n)
-        new_inds = np.arange(start_idx, start_idx+n)
-
-        self._uid_map.grow(n)
-        self._uid_map[new_uids] = new_inds
-
-        self.uids.grow(n)
-        self.uids[new_inds] = new_uids
-
-        for state in self.states:
-            state.grow(n)
-
-    def remove(self, uids_to_remove):
-        # Calculate the *indices* to keep
-        keep_uids = self.uids[~np.in1d(self.uids, uids_to_remove)] # Calculate UIDs to keep
-        keep_inds = self._uid_map[keep_uids] # Calculate indices to keep
-
-        # Trim the UIDs and states
-        self.uids._trim(keep_inds)
-        for state in self.states:
-            state._trim(keep_inds)
-
-        # Update the UID map
-        self._uid_map[:] = INT_NAN # Clear out all previously used UIDs
-        self._uid_map[keep_uids] = np.arange(0, len(keep_uids)) # Assign the array indices for all of the current UIDs

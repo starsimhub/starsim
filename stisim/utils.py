@@ -376,7 +376,7 @@ def true(state):
         inds = ss.true(people.alive) # Returns array of UIDs of alive agents
     """
 
-    return state.uids.__array__()[np.nonzero(state.__array__())]
+    return state.uid.__array__()[np.nonzero(state.__array__())]
 
 
 def false(state):
@@ -390,7 +390,7 @@ def false(state):
 
         inds = ss.false(people.alive) # Returns array of UIDs of dead agents
     """
-    return state.uids.__array__()[np.nonzero(~state.__array__())]
+    return state.uid.__array__()[np.nonzero(~state.__array__())]
 
 
 def defined(arr):
