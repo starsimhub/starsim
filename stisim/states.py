@@ -161,6 +161,9 @@ class FusedArray(NDArrayOperatorsMixin):
     def __contains__(self, *args, **kwargs):
         return self.values.__contains__(*args, **kwargs)
 
+    def astype(self, *args, **kwargs):
+        return self.values.astype(*args, **kwargs)
+
     @property
     def shape(self):
         return self.values.shape

@@ -364,33 +364,33 @@ def n_neg_binomial(rate, dispersion, n, step=1):  # Numba not used due to incomp
 __all__ += ['true', 'false', 'defined', 'undefined']
 
 
-def true(arr):
+def true(state):
     """
-    Returns the indices of the values of the array that are true: just an alias
-    for arr.nonzero()[0].
+    Returns the UIDs of the values of the array that are true
 
     Args:
-        arr (array): any array
+        state (State, FusedArray)
 
     **Example**::
 
-        inds = ss.true(np.array([1,0,0,1,1,0,1])) # Returns array([0, 3, 4, 6])
+        inds = ss.true(people.alive) # Returns array of UIDs of alive agents
     """
-    return arr.nonzero()[-1]
+
+    return state.uids.__array__()[np.nonzero(state.__array__())]
 
 
-def false(arr):
+def false(state):
     """
     Returns the indices of the values of the array that are false.
 
     Args:
-        arr (array): any array
+        state (State, FusedArray)
 
     **Example**::
 
-        inds = ss.false(np.array([1,0,0,1,1,0,1]))
+        inds = ss.false(people.alive) # Returns array of UIDs of dead agents
     """
-    return np.logical_not(arr).nonzero()[-1]
+    return state.uids.__array__()[np.nonzero(~state.__array__())]
 
 
 def defined(arr):

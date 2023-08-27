@@ -112,10 +112,9 @@ class Pregnancy(ssm.Module):
             n_unborn_agents = len(uids)
             if n_unborn_agents > 0:
                 # Grow the arrays and set properties for the unborn agents
-                new_inds = sim.people._grow(n_unborn_agents)
-                sim.people.uid[new_inds] = new_inds
-                sim.people.age[new_inds] = -self.pars.dur_pregnancy
-                sim.people.female[new_inds] = np.random.choice([True, False], size=n_unborn_agents)
+                new_uids = sim.people.grow(n_unborn_agents)
+                sim.people.age[new_uids] = -self.pars.dur_pregnancy
+                sim.people.female[new_uids] = np.random.choice([True, False], size=n_unborn_agents)
 
                 # Add connections to any vertical transmission layers
                 # Placeholder code to be moved / refactored. The maternal network may need to be
@@ -123,7 +122,7 @@ class Pregnancy(ssm.Module):
                 for lkey, layer in sim.people.networks.items():
                     if layer.transmission == 'vertical':  # What happens if there's more than one vertical layer?
                         durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy+self.pars.dur_postpartum)
-                        layer.add_pairs(uids, new_inds, dur=durs)
+                        layer.add_pairs(uids, new_uids, dur=durs)
 
                 # Set prognoses for the pregnancies
                 self.set_prognoses(sim, uids)
@@ -152,7 +151,7 @@ class Pregnancy(ssm.Module):
         dur_post_partum = np.full(len(uids), dur + pars['dur_postpartum'] / sim.dt)
         sim.people[self.name].ti_postpartum[uids] = dur_post_partum
 
-        if len(ssu.true(dead)):
+        if np.count_nonzero(dead):
             sim.people[self.name].ti_dead[uids[dead]] = dur[dead]
         return
 

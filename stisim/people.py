@@ -67,8 +67,10 @@ class BasePeople(sc.prettyobj):
         self.uids.grow(n)
         self.uids[new_inds] = new_uids
 
-        for state in self._states:
+        for state in self._states.values():
             state.grow(n)
+
+        return new_uids
 
     def remove(self, uids_to_remove):
         """
