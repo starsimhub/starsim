@@ -9,6 +9,8 @@ from . import results as ssr
 from . import utils as ssu
 
 
+__all__ = ['Module', 'Modules', 'Disease']
+
 class Module(sc.prettyobj):
     
     def __init__(self, pars=None, label=None, requires=None, *args, **kwargs):
