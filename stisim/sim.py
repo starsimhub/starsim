@@ -30,23 +30,19 @@ class Sim:
         self.results = ssr.Results()  # For storing results
         self.summary = None  # For storing a summary of the results
         self.initialized = False  # Whether initialization is complete
-        self.complete = False  # Whether a simulation has completed running
+        self.complete = False  # Whether a simulation has completed running # TODO: replace with finalized?
         self.results_ready = False  # Whether results are ready
-        self._orig_pars = None  # Store original parameters to optionally restore at the end of the simulation
+        self.filename = None
 
         # Time indexing
-        self.ti = None  # The time index, e.g. 0, 1, 2
+        self.ti = None  # The time index, e.g. 0, 1, 2 # TODO: do we need all of these?
         self.yearvec = None
         self.tivec = None
         self.npts = None
-        
-        self.filename = None
-        self.initialized = None
-        self.results_ready = None
 
         # Make default parameters (using values from parameters.py)
         self.pars = sspar.make_pars()  # Start with default pars
-        self.pars.update_pars(**kwargs)  # Update the parameters
+        self.pars.update_pars(sc.mergedicts(pars, **kwargs))  # Update the parameters
 
         # Initialize other quantities
         self.interventions = ssi.Interventions()
