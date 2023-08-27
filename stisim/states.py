@@ -164,6 +164,15 @@ class FusedArray(NDArrayOperatorsMixin):
     def astype(self, *args, **kwargs):
         return self.values.astype(*args, **kwargs)
 
+    def sum(self):
+        return self.values.sum()
+
+    def mean(self):
+        return self.values.mean()
+
+    def count_nonzero(self):
+        return self.values.count_nonzero()
+
     @property
     def shape(self):
         return self.values.shape
