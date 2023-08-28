@@ -84,7 +84,7 @@ class BasePeople(sc.prettyobj):
             state._trim(keep_inds)
 
         # Update the UID map
-        self._uid_map[:] = INT_NAN # Clear out all previously used UIDs
+        self._uid_map[:] = ss.INT_NAN # Clear out all previously used UIDs
         self._uid_map[keep_uids] = np.arange(0, len(keep_uids)) # Assign the array indices for all of the current UIDs
         return
 
