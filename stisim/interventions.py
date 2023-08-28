@@ -1,50 +1,11 @@
-import numpy as np
-import sciris as sc
-from .modules import *
-import stisim as ss
-
-class Intervention():
-
-    requires = [] # Optionally list required modules here
-
-    def initialize(self, sim):
-        for req in self.requires:
-            if req not in sim.modules:
-                raise Exception(f'{self.__name__} requires module {req} but the Sim did not contain this module')
-
-    def apply(self, sim):
-        pass
-
-    def finalize(self, sim):
-        pass
+from . import utils as ssu
+from . import modules as ssm
 
 
+class Intervention(ssm.Module):
+    pass
 
-class ART(Intervention):
 
-    requires = [HIV]
-
-    def __init__(self,t:np.array,capacity: np.array):
-        self.t = sc.promotetoarray(t)
-        self.capacity = sc.promotetoarray(capacity)
-
-    def apply(self, sim):
-        if sim.t < self.t[0]:
-            return
-
-        capacity = self.capacity[np.where(self.t <= sim.t)[0][-1]]
-        on_art = ~sim.people.dead & sim.people.hiv.on_art
-
-        n_change = capacity - np.count_nonzero(on_art)
-        if n_change > 0:
-            # Add more ART
-            eligible = ~sim.people.dead & sim.people.hiv.infected & ~sim.people.hiv.on_art
-            n_eligible = np.count_nonzero(eligible)
-            if n_eligible:
-                inds = np.random.choice(ss.true(eligible), min(n_eligible, n_change), replace=False)
-                sim.people.hiv.on_art[inds] = True
-        elif n_change < 0:
-            # Take some people off ART
-            eligible = ~sim.people.dead & sim.people.hiv.infected & sim.people.hiv.on_art
-            inds = np.random.choice(ss.true(eligible), min(n_change), replace=False)
-            sim.people.hiv.on_art[inds] = False
+class Interventions(ssu.ndict):
+    def __init__(self, *args, type=Intervention, **kwargs):
+        return super().__init__(self, *args, type=type, **kwargs)

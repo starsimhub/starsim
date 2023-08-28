@@ -15,62 +15,83 @@ __all__ = []
 
 
 # %% Helper functions
-__all__ += ['NDict', 'omerge']
+__all__ += ['ndict', 'omerge']
 
 
-class NDict(sc.objdict):
+class ndict(sc.objdict):
+    """
+    A dictionary-like class that provides additional functionalities for handling named items.
+
+    Args:
+        name (str): The items' attribute to use as keys.
+        type (type): The expected type of items.
+        strict (bool): If True, only items with the specified attribute will be accepted.
+
+    **Examples**::
+
+        networks = ss.ndict(ss.simple_sexual(), ss.maternal())
+        networks = ss.ndict([ss.simple_sexual(), ss.maternal()])
+        networks = ss.ndict({'simple_sexual':ss.simple_sexual(), 'maternal':ss.maternal()})
+
+    """
+
+    def __init__(self, *args, name='name', type=None, strict=True, **kwargs):
+        self.setattribute('_name', name) # Since otherwise treated as keys
+        self.setattribute('_type', type)
+        self.setattribute('_strict', strict)
+        self._initialize(*args, **kwargs)
+        return
     
-    
-    def __init__(self, *args, _name='name', _type=None, _strict=True, **kwargs):
-        self.setattribute('_name', _name) # Since otherwise treated as keys
-        self.setattribute('_type', _type)
-        self.setattribute('_strict', _strict)
-        argdict = self._validate(*args)
-        argdict.update(kwargs)
-        super().__init__(argdict)
+    def _process_arg(self, arg, key=None):
+        _name   = self.getattribute('_name')
+        _strict = self.getattribute('_strict')
+        valid = False
+        if arg is None:
+            return # Nothing to do
+        elif hasattr(arg, _name):
+            key = key or getattr(arg, _name)
+            valid = True
+        elif isinstance(arg, dict):
+            if _name in arg:
+                key = key or arg[_name]
+                valid = True
+            else:
+                for k,v in arg.items():
+                    self._process_arg(v, key=k)
+                valid = None # Skip final processing
+        elif not _strict:
+            key = key or f'item{len(self)+1}'
+            valid = True
+        else:
+            valid = False
+        
+        if valid is True:
+            self._check_type(arg)
+            self[key] = arg
+        elif valid is None:
+            pass # Nothing to do
+        else:
+            errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{_name}"'
+            raise ValueError(errormsg)
+            
         return
         
-            
-    def _validate(self, *args):
-        args = sc.mergelists(*args)
-        _name   = self.getattribute('_name')
+    def _check_type(self, arg):
+        """ Check types """
         _type   = self.getattribute('_type')
-        _strict = self.getattribute('_strict')
-        failed = []
-        argdict = {}
-        for i,arg in enumerate(args):
-            if arg is None:
-                pass
-            elif hasattr(arg, _name) or not _strict:
-                try:
-                    argdict[getattr(arg, _name)] = arg
-                except:
-                    i = 0
-                    make_key = lambda i: f'item{i}'
-                    while make_key(i) in argdict:
-                        i += 1
-                    argdict[make_key(i)] = arg
-            elif isinstance(arg, dict):
-                argdict.update(arg)
-            else:
-                failed.append(i)
-        
-        # Check types
         if _type is not None:
-            wrong = {}
-            for k,v in argdict.items():
-                if not isinstance(v, _type):
-                    wrong[k] = type(v)
-            if len(wrong):
-                errormsg = f'The following items do not have the expected type {self._type}:\n{wrong}'
+            if not isinstance(arg, _type):
+                errormsg = f'The following item does not have the expected type {self._type}:\n{arg}'
                 raise TypeError(errormsg)
-        
-        if len(failed):
-            errormsg = f'Could not interpret arguments {failed}: does not have expected attribute "{self._name}"'
-            raise ValueError(errormsg)
-        else:
-            return argdict
-        
+        return
+    
+    def _initialize(self, *args, **kwargs):
+        args = sc.mergelists(*args)
+        for arg in args:
+            self._process_arg(arg)
+        for key,arg in kwargs.items():
+            self._process_arg(arg, key=key)
+        return
     
     def append(self, *args):
         ''' Allow being used like a list '''
@@ -78,11 +99,9 @@ class NDict(sc.objdict):
         self.update(argdict)
         return
     
-    
     def __add__(self, dict2):
         ''' Allow two dictionaries to be added (merged) '''
         return sc.mergedicts(self, self._validate(dict2))
-
 
 
 def omerge(*args, **kwargs):

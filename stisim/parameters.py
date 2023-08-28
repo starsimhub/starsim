@@ -8,8 +8,6 @@ from .settings import options as sso  # For setting global options
 __all__ = ['make_pars']
 
 
-
-
 class Parameters(sc.objdict):
     """
     Create the parameters for the simulation. Typically, this function is used

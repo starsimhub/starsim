@@ -18,41 +18,34 @@ from . import results as ssr
 # Define the model
 class Sim:
 
-    def __init__(self, pars=None, label=None, people=None, popdict=None, modules=None,
-                 networks=None, version=None, **kwargs):
+    def __init__(self, pars=None, label=None, people=None, modules=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
         self.people = people  # People object
-        self.popdict = popdict  # popdict used to create people
-        self.networks = networks  # List of provided networks
         self.modules = ssm.Modules(modules)  # List of modules to simulate
+        self.connectors = None  # Placeholder storage while we determine what these are
         self.results = ssr.Results()  # For storing results
         self.summary = None  # For storing a summary of the results
         self.initialized = False  # Whether initialization is complete
-        self.complete = False  # Whether a simulation has completed running
+        self.complete = False  # Whether a simulation has completed running # TODO: replace with finalized?
         self.results_ready = False  # Whether results are ready
-        self._default_ver = version  # Default version of parameters used
-        self._orig_pars = None  # Store original parameters to optionally restore at the end of the simulation
+        self.filename = None
 
         # Time indexing
-        self.ti = None  # The time index, e.g. 0, 1, 2
+        self.ti = None  # The time index, e.g. 0, 1, 2 # TODO: do we need all of these?
         self.yearvec = None
         self.tivec = None
         self.npts = None
-        
-        self.filename = None
-        self.initialized = None
-        self.results_ready = None
 
         # Make default parameters (using values from parameters.py)
         self.pars = sspar.make_pars()  # Start with default pars
-        self.pars.update_pars(**kwargs)  # Update the parameters
+        self.pars.update_pars(sc.mergedicts(pars, kwargs))  # Update the parameters
 
         # Initialize other quantities
-        self.interventions = None
-        self.analyzers = None
+        self.interventions = ssi.Interventions()
+        self.analyzers = ssa.Analyzers()
 
         return
 
@@ -63,6 +56,14 @@ class Sim:
     @property
     def year(self):
         return self.yearvec[self.ti]
+
+    @property
+    def disease_list(self):
+        return [m for m in self.modules if isinstance(m, ssm.Disease)]
+
+    @property
+    def diseases_present(self):
+        return len(self.disease_list) > 0
 
     def initialize(self, popdict=None, reset=False, **kwargs):
         """
@@ -82,7 +83,9 @@ class Sim:
         self.init_modules()
         self.init_interventions()
         self.init_analyzers()
-        self.validate_layer_pars()
+
+        # Perform post-initialization validation
+        self.validate_post_init()
 
         # Reset the random seed to the default run seed, so that if the simulation is run with
         # reset_seed=False right after initialization, it will still produce the same output
@@ -94,30 +97,6 @@ class Sim:
         self.results_ready = False
 
         return self
-
-    def layer_keys(self):
-        """
-        Attempt to retrieve the current network names
-        """
-        try:
-            keys = list(self.people['networks'].keys())
-        except:  # pragma: no cover
-            keys = []
-        return keys
-
-    def validate_layer_pars(self):
-        """
-        Check if there is a contact network
-        """
-
-        if self.people is not None:
-            modules = len(self.modules) > 0
-            pop_keys = set(self.people.networks.keys())
-            if modules and not len(pop_keys):
-                warnmsg = f'Warning: your simulation has {len(self.modules)} modules but no contact layers.'
-                ssu.warn(warnmsg, die=False)
-
-        return
 
     def validate_dt(self):
         """
@@ -213,13 +192,16 @@ class Sim:
         if popdict is None:
             if self.pars['location'] is not None:
                 # Check where to get total_pop from
-                if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
+                if self.pars[
+                    'total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
                     errormsg = 'You can either define total_pop explicitly or via the location, but not both'
                     raise ValueError(errormsg)
-                total_pop, popdict = ssppl.make_popdict(n=self.pars['n_agents'], location=self.pars['location'], verbose=self.pars['verbose'])
+                total_pop, popdict = ssppl.make_popdict(n=self.pars['n_agents'], location=self.pars['location'],
+                                                        verbose=self.pars['verbose'])
 
             else:
-                if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
+                if self.pars[
+                    'total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
                     total_pop = self.pars['total_pop']
                 else:
                     if self.pars['pop_scale'] is not None:
@@ -242,7 +224,7 @@ class Sim:
         return self
 
     def init_modules(self):
-        """ Initialize modules to be simulated """
+        """ Initialize modules and connectors to be simulated """
         for module in self.modules.values():
             module.initialize(self)
         return
@@ -254,7 +236,7 @@ class Sim:
         # This means networks will be stored in self.pars['networks'] and we'll need to copy them to the people.
         if self.people.networks is None or len(self.people.networks) == 0:
             if self.pars['networks'] is not None:
-                self.people.networks = ssu.NDict(self.pars['networks'])
+                self.people.networks = ssu.ndict(self.pars['networks'])
 
         for key, network in self.people.networks.items():
             if network.label is not None:
@@ -273,8 +255,6 @@ class Sim:
         """
         # Make results
         results = ssr.Results(
-            ssr.Result('births', None, self.npts, sss.default_float),
-            ssr.Result('deaths', None, self.npts, sss.default_float),
             ssr.Result('n_alive', None, self.npts, sss.default_int),
         )
 
@@ -305,8 +285,6 @@ class Sim:
     def init_analyzers(self):
         """ Initialize the analyzers """
 
-        self.analyzers = sc.autolist()
-
         # Interpret analyzers
         for ai, analyzer in enumerate(self.pars['analyzers']):
             if isinstance(analyzer, type) and issubclass(analyzer, ssa.Analyzer):
@@ -322,6 +300,18 @@ class Sim:
 
         return
 
+    def validate_post_init(self):
+        """
+        Validate inputs again once everything has been initialized.
+        TBC whether we keep this or incorporate the checks into the init methods
+        """
+        # Make sure that there's a contact network if any diseases are present
+        networks_present = len(self.people.networks.keys())
+        if self.diseases_present and not networks_present:
+            warnmsg = f'Warning: your simulation has {len(self.disease_list)} diseases but no contact network(s).'
+            ssu.warn(warnmsg, die=False)
+        return
+
     def step(self):
         """ Step through time and update values """
 
@@ -330,10 +320,10 @@ class Sim:
             raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
 
         # Update states, modules, partnerships
-        self.update_demographics()
-        self.update_networks()
+        self.people.update(self)
+        self.apply_interventions()
         self.update_modules()
-        # self.update_connectors()  # TODO: add this when ready
+        self.apply_analyzers()
 
         # Tidy up
         self.ti += 1
@@ -342,19 +332,13 @@ class Sim:
 
         return
 
-    def update_demographics(self):
+    def apply_interventions(self):
         """
-        TODO: decide whether this method is needed
+        Apply the interventions
         """
-        self.people.update_demographics(dt=self.dt, ti=self.ti)
-
-    def update_networks(self):
-        """
-        Update networks
-        TODO: resolve where the networks live - sim.networks (akin to sim.modules), sim.people.networks, both?
-        """
-        for layer in self.people.networks.values():
-            layer.update(self.people)
+        for intervention in self.interventions.values():
+            intervention(self)
+        return
 
     def update_modules(self):
         """
@@ -362,25 +346,15 @@ class Sim:
         """
         for module in self.modules.values():
             module.update(self)
-
-    def update_connectors(self):
-        """ Update connectors """
-        if len(self.modules) > 1:
-            connectors = self.pars['connectors']
-            if len(connectors) > 0:
-                for connector in connectors:
-                    if callable(connector):
-                        connector(self)
-                    else:
-                        warnmsg = 'Connector must be a callable function'
-                        ssu.warn(warnmsg, die=True)
-            elif self.ti == 0:  # only raise warning on first timestep
-                warnmsg = 'No connectors in sim'
-                ssu.warn(warnmsg, die=False)
-            else:
-                return
         return
 
+    def apply_analyzers(self):
+        """
+        Apply the analyzers
+        """
+        for analyzer in self.analyzers.values():
+            analyzer(self)
+        return
 
     def run(self, until=None, reset_seed=True, verbose=None):
         """ Run the model once """
@@ -395,23 +369,6 @@ class Sim:
             verbose = self.pars['verbose']
 
         if reset_seed:
-            # Reset the RNG. The primary use case (and why it defaults to True) is to ensure that
-            #
-            # >>> sim0.initialize()
-            # >>> sim0.run()
-            # >>> sim1.initialize()
-            # >>> sim1.run()
-            #
-            # produces the same output as
-            #
-            # >>> sim0.initialize()
-            # >>> sim1.initialize()
-            # >>> sim0.run()
-            # >>> sim1.run()
-            #
-            # The seed is offset by 1 to avoid drawing the same random numbers as those used for population generation,
-            # otherwise the first set of random numbers in the model (e.g., deaths) will be correlated with the first
-            # set of random numbers drawn in population generation (e.g., sex)
             ssu.set_seed(self.pars['rand_seed'] + 1)
 
         # Check for AlreadyRun errors
@@ -432,14 +389,10 @@ class Sim:
             # Check if we were asked to stop
             elapsed = T.toc(output=True)
             if self.pars['timelimit'] and elapsed > self.pars['timelimit']:
-                sc.printv(
-                    f"Time limit ({self.pars['timelimit']} s) exceeded; call sim.finalize() to compute results if desired",
-                    1, verbose)
+                sc.printv(f"Time limit ({self.pars['timelimit']} s) exceeded", 1, verbose)
                 return
             elif self.pars['stopping_func'] and self.pars['stopping_func'](self):
-                sc.printv(
-                    "Stopping function terminated the simulation; call sim.finalize() to compute results if desired", 1,
-                    verbose)
+                sc.printv("Stopping function terminated the simulation", 1, verbose)
                 return
 
             # Print progress
@@ -473,14 +426,7 @@ class Sim:
         # Final settings
         self.results_ready = True  # Set this first so self.summary() knows to print the results
         self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
-
-        # Perform calculations on results
-        # self.compute_results(verbose=verbose) # Calculate the rest of the results
-        self.results = sc.objdict(
-            self.results)  # Convert results to a odicts/objdict to allow e.g. sim.results.diagnoses
-
         return
-
 
     def shrink(self, skip_attrs=None, in_place=True):
         """
@@ -498,7 +444,7 @@ class Sim:
         """
         # By default, skip people (~90% of memory), popdict, and _orig_pars (which is just a backup)
         if skip_attrs is None:
-            skip_attrs = ['popdict', 'people', '_orig_pars']
+            skip_attrs = ['people']
 
         # Create the new object, and copy original dict, skipping the skipped attributes
         if in_place:
@@ -565,108 +511,6 @@ class Sim:
             errormsg = f'Cannot load object of {type(sim)} as a Sim object'
             raise TypeError(errormsg)
         return sim
-
-    def _get_ia(self, which, label=None, partial=False, as_list=False, as_inds=False, die=True, first=False):
-        """ Helper method for get_interventions() and get_analyzers(); see get_interventions() docstring """
-
-        # Handle inputs
-        if which not in ['interventions', 'analyzers']:  # pragma: no cover
-            errormsg = f'This method is only defined for interventions and analyzers, not "{which}"'
-            raise ValueError(errormsg)
-
-        ia_list = sc.tolist(
-            self.analyzers if which == 'analyzers' else self.interventions)  # List of interventions or analyzers
-        n_ia = len(ia_list)  # Number of interventions/analyzers
-
-        if label == 'summary':  # Print a summary of the interventions
-            df = sc.dataframe(columns=['ind', 'label', 'type'])
-            for ind, ia_obj in enumerate(ia_list):
-                df = df.append(dict(ind=ind, label=str(ia_obj.label), type=type(ia_obj)), ignore_index=True)
-            print(f'Summary of {which}:')
-            print(df)
-            return
-
-        else:  # Standard usage case
-            position = 0 if first else -1  # Choose either the first or last element
-            if label is None:  # Get all interventions if no label is supplied, e.g. sim.get_interventions()
-                label = np.arange(n_ia)
-            if isinstance(label, np.ndarray):  # Allow arrays to be provided
-                label = label.tolist()
-            labels = sc.promotetolist(label)
-
-            # Calculate the matches
-            matches = []
-            match_inds = []
-            for label in labels:
-                if sc.isnumber(label):
-                    matches.append(ia_list[label])  # This will raise an exception if an invalid index is given
-                    label = n_ia + label if label < 0 else label  # Convert to a positive number
-                    match_inds.append(label)
-                elif sc.isstring(label) or isinstance(label, type):
-                    for ind, ia_obj in enumerate(ia_list):
-                        if sc.isstring(label) and ia_obj.label == label or (partial and (label in str(ia_obj.label))):
-                            matches.append(ia_obj)
-                            match_inds.append(ind)
-                        elif isinstance(label, type) and isinstance(ia_obj, label):
-                            matches.append(ia_obj)
-                            match_inds.append(ind)
-                else:  # pragma: no cover
-                    errormsg = f'Could not interpret label type "{type(label)}": should be str, int, list, or {which} class'
-                    raise TypeError(errormsg)
-
-            # Parse the output options
-            if as_inds:
-                output = match_inds
-            elif as_list:  # Used by get_interventions()
-                output = matches
-            else:
-                if len(matches) == 0:  # pragma: no cover
-                    if die:
-                        errormsg = f'No {which} matching "{label}" were found'
-                        raise ValueError(errormsg)
-                    else:
-                        output = None
-                else:
-                    output = matches[
-                        position]  # Return either the first or last match (usually), used by get_intervention()
-
-            return output
-
-    def get_interventions(self, label=None, partial=False, as_inds=False):
-        """
-        Find the matching intervention(s) by label, index, or type. If None, return
-        all interventions. If the label provided is "summary", then print a summary
-        of the interventions (index, label, type).
-
-        Args:
-            label (str, int, Intervention, list): the label, index, or type of intervention to get; if a list, iterate over one of those types
-            partial (bool): if true, return partial matches (e.g. 'beta' will match all beta interventions)
-            as_inds (bool): if true, return matching indices instead of the actual interventions
-        """
-        return self._get_ia('interventions', label=label, partial=partial, as_inds=as_inds, as_list=True)
-
-    def get_intervention(self, label=None, partial=False, first=False, die=True):
-        """
-        Like get_interventions(), find the matching intervention(s) by label,
-        index, or type. If more than one intervention matches, return the last
-        by default. If no label is provided, return the last intervention in the list.
-
-        Args:
-            label (str, int, Intervention, list): the label, index, or type of intervention to get; if a list, iterate over one of those types
-            partial (bool): if true, return partial matches (e.g. 'beta' will match all beta interventions)
-            first (bool): if true, return first matching intervention (otherwise, return last)
-            die (bool): whether to raise an exception if no intervention is found
-        """
-        return self._get_ia('interventions', label=label, partial=partial, first=first, die=die, as_inds=False, as_list=False)
-
-    def get_analyzers(self, label=None, partial=False, as_inds=False):
-        """ Same as get_interventions(), but for analyzers. """
-        return self._get_ia('analyzers', label=label, partial=partial, as_list=True, as_inds=as_inds)
-
-    def get_analyzer(self, label=None, partial=False, first=False, die=True):
-        """ Same as get_intervention(), but for analyzers. """
-        return self._get_ia('analyzers', label=label, partial=partial, first=first, die=die, as_inds=False, as_list=False)
-
 
 
 class AlreadyRunError(RuntimeError):

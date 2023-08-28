@@ -10,20 +10,23 @@ from . import settings as sss
 
 
 # Specify all externally visible functions this file defines
-__all__ = ['Network', 'simple_sexual', 'hpv_network', 'maternal']
+__all__ = ['Networks', 'Network', 'simple_sexual', 'hpv_network', 'maternal']
 
 class Network(sc.objdict):
     """
-    A small class holding a single network of contact edges (connections) between people.
+    A class holding a single network of contact edges (connections) between people
+    as well as methods for updating these.
 
     The input is typically arrays including: person 1 of the connection, person 2 of
     the connection, the weight of the connection, the duration and start/end times of
-    the connection. Connections are undirected; each person is both a source and sink.
+    the connection.
 
     Args:
-        p1 (array): an array of N connections, representing people on one side of the connection
-        p2 (array): an array of people on the other side of the connection
-        beta (array): an array representing relative transmissibility for this network - TODO, do we need this?
+        p1 (array): an array of length N, the number of connections in the network, with the indices of people
+                   on one side of the connection.
+        p2 (array): an array of length N, the number of connections in the network, with the indices of people
+                    on the other side of the connection.
+        beta (array): an array representing relative transmissibility of each connection for this network - TODO, do we need this?
         label (str): the name of the network (optional)
         kwargs (dict): other keys copied directly into the network
 
@@ -34,8 +37,9 @@ class Network(sc.objdict):
     **Examples**::
 
         # Generate an average of 10 contacts for 1000 people
-        n = 10_000
+        n_contacts_pp = 10
         n_people = 1000
+        n = n_contacts_pp * n_people
         p1 = np.random.randint(n_people, size=n)
         p2 = np.random.randint(n_people, size=n)
         beta = np.ones(n)
@@ -48,14 +52,14 @@ class Network(sc.objdict):
         network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
     """
 
-    def __init__(self, *args, key_dict=None, transmission='horizontal', label=None, **kwargs):
+    def __init__(self, *args, key_dict=None, vertical=False, label=None, **kwargs):
         default_keys = {
             'p1': sss.default_int,
             'p2': sss.default_int,
             'beta': sss.default_float,
         }
         self.meta = sc.mergedicts(default_keys, key_dict)
-        self.transmission = transmission  # "vertical" or "horizontal", determines whether transmission is bidirectional
+        self.vertical = vertical  # Whether transmission is bidirectional
         self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
         self.label = label
         self.initialized = False
@@ -86,7 +90,7 @@ class Network(sc.objdict):
         except:  # pragma: no cover
             return 0
 
-    def __repr__(self):
+    def __repr__(self, **kwargs):
         """ Convert to a dataframe for printing """
         namestr = self.__class__.__name__
         labelstr = f'"{self.label}"' if self.label else '<no label>'
@@ -108,9 +112,7 @@ class Network(sc.objdict):
 
     @property
     def members(self):
-        """
-        Return sorted array of all members
-        """
+        """ Return sorted array of all members """
         return np.unique([self['p1'], self['p2']])
 
     def meta_keys(self):
@@ -177,7 +179,7 @@ class Network(sc.objdict):
             self[key] = np.resize(self[key], n_total)  # Resize to make room, preserving dtype
             self[key][n_curr:] = new_arr  # Copy contacts into the network
         return
-    
+
     def to_dict(self):
         """ Convert to dictionary """
         d = {k:self[k] for k in self.meta_keys()}
@@ -237,14 +239,24 @@ class Network(sc.objdict):
         return contact_inds
 
     def add_pairs(self):
+        """ Define how pairs of people are formed """
         pass
 
     def update(self):
+        """ Define how pairs/connections evolve (in time) """
         pass
 
 
+class Networks(ssu.ndict):
+    def __init__(self, *args, type=Network, **kwargs):
+        return super().__init__(self, *args, type=type, **kwargs)
+    
+
 class simple_sexual(Network):
-    # Randomly pair males and females with variable relationship durations
+    """
+    A class holding a single network of contact edges (connections) between people.
+    This network is built by **randomly pairing** males and female with variable relationship durations.
+    """
     def __init__(self, mean_dur=5):
         key_dict = {
             'p1': sss.default_int,
@@ -509,12 +521,12 @@ class hpv_network(Network):
 
 
 class maternal(Network):
-    def __init__(self, key_dict=None, transmission='vertical'):
+    def __init__(self, key_dict=None, vertical=True):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
         key_dict = sc.mergedicts({'dur': sss.default_float}, key_dict)
-        super().__init__(key_dict=key_dict, transmission=transmission)
+        super().__init__(key_dict=key_dict, vertical=vertical)
         return
 
     def update(self, people, dt=None):
