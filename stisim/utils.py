@@ -39,27 +39,25 @@ class ndict(sc.objdict):
         self.setattribute('_name', name) # Since otherwise treated as keys
         self.setattribute('_type', type)
         self.setattribute('_strict', strict)
-        self._initialize(*args, **kwargs)
+        self.append(*args, **kwargs)
         return
     
     def _process_arg(self, arg, key=None):
-        _name   = self.getattribute('_name')
-        _strict = self.getattribute('_strict')
         valid = False
         if arg is None:
             return # Nothing to do
-        elif hasattr(arg, _name):
-            key = key or getattr(arg, _name)
+        elif hasattr(arg, self._name):
+            key = key or getattr(arg, self._name)
             valid = True
         elif isinstance(arg, dict):
-            if _name in arg:
-                key = key or arg[_name]
+            if self._name in arg:
+                key = key or arg[self._name]
                 valid = True
             else:
                 for k,v in arg.items():
                     self._process_arg(v, key=k)
                 valid = None # Skip final processing
-        elif not _strict:
+        elif not self._strict:
             key = key or f'item{len(self)+1}'
             valid = True
         else:
@@ -71,21 +69,20 @@ class ndict(sc.objdict):
         elif valid is None:
             pass # Nothing to do
         else:
-            errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{_name}"'
+            errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._name}"'
             raise ValueError(errormsg)
             
         return
         
     def _check_type(self, arg):
         """ Check types """
-        _type   = self.getattribute('_type')
-        if _type is not None:
-            if not isinstance(arg, _type):
+        if self._type is not None:
+            if not isinstance(arg, self._type):
                 errormsg = f'The following item does not have the expected type {self._type}:\n{arg}'
                 raise TypeError(errormsg)
         return
     
-    def _initialize(self, *args, **kwargs):
+    def append(self, *args, **kwargs):
         args = sc.mergelists(*args)
         for arg in args:
             self._process_arg(arg)
@@ -93,15 +90,21 @@ class ndict(sc.objdict):
             self._process_arg(arg, key=key)
         return
     
-    def append(self, *args):
-        ''' Allow being used like a list '''
-        argdict = self._validate(*args)
-        self.update(argdict)
-        return
+    def copy(self):
+        new = self.__class__.__new__(name=self._name, type=self._type, strict=self._strict)
+        new.update(self)
+        return new
     
     def __add__(self, dict2):
-        ''' Allow two dictionaries to be added (merged) '''
-        return sc.mergedicts(self, self._validate(dict2))
+        """ Allow c = a + b """
+        new = self.copy()
+        new._process_arg(dict2)
+        return new
+
+    def __iadd__(self, dict2):
+        """ Allow a += b """
+        self._process_arg(dict2)
+        return self
 
 
 def omerge(*args, **kwargs):
