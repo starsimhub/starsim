@@ -8,7 +8,6 @@ from .modules       import *
 from .demographics  import *
 from .hiv           import *
 from .gonorrhea     import *
-from .connectors    import *
 from .sim           import *
 
 
