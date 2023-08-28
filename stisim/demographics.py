@@ -155,7 +155,6 @@ class Pregnancy(ss.Module):
             sim.people[self.name].ti_dead[uids[dead]] = dur[dead]
         return
 
-
     def update_results(self, sim):
         mppl = sim.people[self.name] # TODO: refactor with states owning their own data
         self.results['pregnancies'][sim.ti] = np.count_nonzero(mppl.ti_pregnant == sim.ti)

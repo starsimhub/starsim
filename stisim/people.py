@@ -6,9 +6,9 @@ Defines the People class and functions associated with making people
 import numpy as np
 import sciris as sc
 import stisim as ss
-from .states import DynamicView, State, INT_NAN
 
 __all__ = ['BasePeople', 'People']
+
 
 # %% Main people class
 class BasePeople(sc.prettyobj):
@@ -21,8 +21,8 @@ class BasePeople(sc.prettyobj):
     def __init__(self, n):
 
         self.initialized = False
-        self._uid_map = DynamicView(int, fill_value=INT_NAN) # This variable tracks all UIDs ever created
-        self.uid = DynamicView(int, fill_value=INT_NAN) # This variable tracks all UIDs currently in use
+        self._uid_map = ss.DynamicView(int, fill_value=ss.INT_NAN) # This variable tracks all UIDs ever created
+        self.uid = ss.DynamicView(int, fill_value=ss.INT_NAN) # This variable tracks all UIDs currently in use
 
         self._uid_map.initialize(n)
         self._uid_map[:] = np.arange(0, n)
@@ -147,12 +147,12 @@ class People(BasePeople):
         self.version = ss.__version__  # Store version info
 
         states = [
-            State('age', float),
-            State('female', bool, False),
-            State('debut', float),
-            State('alive', bool, True),
-            State('ti_dead', float, np.nan),  # Time index for death
-            State('scale', float, 1.0),
+            ss.State('age', float),
+            ss.State('female', bool, False),
+            ss.State('debut', float),
+            ss.State('alive', bool, True),
+            ss.State('ti_dead', float, np.nan),  # Time index for death
+            ss.State('scale', float, 1.0),
         ]
         states.extend(sc.promotetolist(extra_states))
 
@@ -240,3 +240,8 @@ class People(BasePeople):
     def dead(self):
         """ Dead boolean """
         return ~self.alive
+
+    @property
+    def male(self):
+        """ Male boolean """
+        return ~self.female
