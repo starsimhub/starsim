@@ -26,7 +26,7 @@ class HIV(ss.Disease):
         self.states.append(self.on_art)
         self.states.append(self.cd4)
 
-        self.pars = ssu.omerge({
+        self.pars = ss.omerge({
             'cd4_min': 100,
             'cd4_max': 500,
             'cd4_rate': 5,
