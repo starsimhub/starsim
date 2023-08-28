@@ -5,29 +5,23 @@ Define core Sim classes
 # Imports
 import numpy as np
 import sciris as sc
-from . import settings as sss
-from . import utils as ssu
-from . import people as ssppl
-from . import modules as ssm
-from . import connectors as ssc
-from . import parameters as sspar
-from . import interventions as ssi
-from . import analyzers as ssa
-from . import results as ssr
+import stisim as ss
 
 
-# Define the model
-class Sim:
+__all__ = ['Sim', 'AlreadyRunError']
 
-    def __init__(self, pars=None, label=None, people=None, modules=None, connectors=None, **kwargs):
+
+class Sim(sc.prettyobj):
+
+    def __init__(self, pars=None, label=None, people=None, modules=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
         self.people = people  # People object
-        self.modules = ssm.Modules(modules)  # List of modules to simulate
-        self.connectors = ssc.Connectors(connectors)
-        self.results = ssr.Results()  # For storing results
+        self.modules = ss.Modules(modules)  # List of modules to simulate
+        self.connectors = None  # Placeholder storage while we determine what these are
+        self.results = ss.Results()  # For storing results
         self.summary = None  # For storing a summary of the results
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running # TODO: replace with finalized?
@@ -41,12 +35,12 @@ class Sim:
         self.npts = None
 
         # Make default parameters (using values from parameters.py)
-        self.pars = sspar.make_pars()  # Start with default pars
+        self.pars = ss.make_pars()  # Start with default pars
         self.pars.update_pars(sc.mergedicts(pars, kwargs))  # Update the parameters
 
         # Initialize other quantities
-        self.interventions = ssi.Interventions()
-        self.analyzers = ssa.Analyzers()
+        self.interventions = ss.Interventions()
+        self.analyzers = ss.Analyzers()
 
         return
 
@@ -58,6 +52,14 @@ class Sim:
     def year(self):
         return self.yearvec[self.ti]
 
+    @property
+    def disease_list(self):
+        return [m for m in self.modules if isinstance(m, ss.Disease)]
+
+    @property
+    def diseases_present(self):
+        return len(self.disease_list) > 0
+
     def initialize(self, popdict=None, reset=False, **kwargs):
         """
         Perform all initializations on the sim.
@@ -67,7 +69,7 @@ class Sim:
         self.validate_pars()  # Ensure parameters have valid values
         self.validate_dt()
         self.init_time_vecs()  # Initialize time vecs
-        ssu.set_seed(self.pars['rand_seed'])  # Reset the random seed before the population is created
+        ss.set_seed(self.pars['rand_seed'])  # Reset the random seed before the population is created
 
         # Initialize the core sim components
         self.init_people(popdict=popdict, reset=reset, **kwargs)  # Create all the people (the heaviest step)
@@ -76,11 +78,13 @@ class Sim:
         self.init_modules()
         self.init_interventions()
         self.init_analyzers()
-        self.validate_layer_pars()
+
+        # Perform post-initialization validation
+        self.validate_post_init()
 
         # Reset the random seed to the default run seed, so that if the simulation is run with
         # reset_seed=False right after initialization, it will still produce the same output
-        ssu.set_seed(self.pars['rand_seed'] + 1)
+        ss.set_seed(self.pars['rand_seed'] + 1)
 
         # Final steps
         self.initialized = True
@@ -88,30 +92,6 @@ class Sim:
         self.results_ready = False
 
         return self
-
-    def layer_keys(self):
-        """
-        Attempt to retrieve the current network names
-        """
-        try:
-            keys = list(self.people['networks'].keys())
-        except:  # pragma: no cover
-            keys = []
-        return keys
-
-    def validate_layer_pars(self):
-        """
-        Check if there is a contact network
-        """
-
-        if self.people is not None:
-            modules = len(self.modules) > 0
-            pop_keys = set(self.people.networks.keys())
-            if modules and not len(pop_keys):
-                warnmsg = f'Warning: your simulation has {len(self.modules)} modules but no contact layers.'
-                ssu.warn(warnmsg, die=False)
-
-        return
 
     def validate_dt(self):
         """
@@ -201,19 +181,21 @@ class Sim:
 
         # If people have not been supplied, make them
         if self.people is None:
-            self.people = ssppl.People(n=self.pars['n_agents'], **kwargs)  # This just assigns UIDs and length
+            self.people = ss.People(n=self.pars['n_agents'], **kwargs)  # This just assigns UIDs and length
 
         # If a popdict has not been supplied, we can make one from location data
         if popdict is None:
             if self.pars['location'] is not None:
                 # Check where to get total_pop from
-                if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
+                if self.pars[
+                    'total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
                     errormsg = 'You can either define total_pop explicitly or via the location, but not both'
                     raise ValueError(errormsg)
-                total_pop, popdict = ssppl.make_popdict(n=self.pars['n_agents'], location=self.pars['location'], verbose=self.pars['verbose'])
+                total_pop, popdict = ss.make_popdict(n=self.pars['n_agents'], location=self.pars['location'], verbose=self.pars['verbose'])
 
             else:
-                if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
+                if self.pars[
+                    'total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
                     total_pop = self.pars['total_pop']
                 else:
                     if self.pars['pop_scale'] is not None:
@@ -235,15 +217,11 @@ class Sim:
 
         return self
 
-
     def init_modules(self):
         """ Initialize modules and connectors to be simulated """
         for module in self.modules.values():
             module.initialize(self)
-        for connector in self.connectors.values():
-            connector.initialize(self)
         return
-
 
     def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
@@ -252,7 +230,7 @@ class Sim:
         # This means networks will be stored in self.pars['networks'] and we'll need to copy them to the people.
         if self.people.networks is None or len(self.people.networks) == 0:
             if self.pars['networks'] is not None:
-                self.people.networks = ssu.ndict(self.pars['networks'])
+                self.people.networks = ss.ndict(self.pars['networks'])
 
         for key, network in self.people.networks.items():
             if network.label is not None:
@@ -265,16 +243,13 @@ class Sim:
 
         return
 
-
     def init_results(self):
         """
         Create the main results structure.
         """
         # Make results
-        results = ssr.Results(
-            ssr.Result('births', None, self.npts, sss.default_float),
-            ssr.Result('deaths', None, self.npts, sss.default_float),
-            ssr.Result('n_alive', None, self.npts, sss.default_int),
+        results = ss.Results(
+            ss.Result('n_alive', None, self.npts, ss.int_),
         )
 
         # Final items
@@ -283,15 +258,14 @@ class Sim:
 
         return
 
-
     def init_interventions(self):
         """ Initialize and validate the interventions """
 
         # Translate the intervention specs into actual interventions
         for i, intervention in enumerate(self.pars['interventions']):
-            if isinstance(intervention, type) and issubclass(intervention, ssi.Intervention):
+            if isinstance(intervention, type) and issubclass(intervention, ss.Intervention):
                 intervention = intervention()  # Convert from a class to an instance of a class
-            if isinstance(intervention, ssi.Intervention):
+            if isinstance(intervention, ss.Intervention):
                 intervention.initialize(self)
                 self.interventions += intervention
             elif callable(intervention):
@@ -302,25 +276,35 @@ class Sim:
 
         return
 
-
     def init_analyzers(self):
         """ Initialize the analyzers """
 
         # Interpret analyzers
         for ai, analyzer in enumerate(self.pars['analyzers']):
-            if isinstance(analyzer, type) and issubclass(analyzer, ssa.Analyzer):
+            if isinstance(analyzer, type) and issubclass(analyzer, ss.Analyzer):
                 analyzer = analyzer()  # Convert from a class to an instance of a class
-            if not (isinstance(analyzer, ssa.Analyzer) or callable(analyzer)):
+            if not (isinstance(analyzer, ss.Analyzer) or callable(analyzer)):
                 errormsg = f'Analyzer {analyzer} does not seem to be a valid analyzer: must be a function or Analyzer subclass'
                 raise TypeError(errormsg)
             self.analyzers += analyzer  # Add it in
 
         for analyzer in self.analyzers:
-            if isinstance(analyzer, ssa.Analyzer):
+            if isinstance(analyzer, ss.Analyzer):
                 analyzer.initialize(self)
 
         return
 
+    def validate_post_init(self):
+        """
+        Validate inputs again once everything has been initialized.
+        TBC whether we keep this or incorporate the checks into the init methods
+        """
+        # Make sure that there's a contact network if any diseases are present
+        networks_present = len(self.people.networks.keys())
+        if self.diseases_present and not networks_present:
+            warnmsg = f'Warning: your simulation has {len(self.disease_list)} diseases but no contact network(s).'
+            ss.warn(warnmsg, die=False)
+        return
 
     def step(self):
         """ Step through time and update values """
@@ -333,7 +317,6 @@ class Sim:
         self.people.update(self)
         self.apply_interventions()
         self.update_modules()
-        self.apply_connectors()
         self.apply_analyzers()
 
         # Tidy up
@@ -343,7 +326,6 @@ class Sim:
 
         return
 
-
     def apply_interventions(self):
         """
         Apply the interventions
@@ -351,7 +333,6 @@ class Sim:
         for intervention in self.interventions.values():
             intervention(self)
         return
-
 
     def update_modules(self):
         """
@@ -361,17 +342,6 @@ class Sim:
             module.update(self)
         return
 
-
-    def apply_connectors(self):
-        """ Update connectors """
-        for connector in self.connectors:
-            if callable(connector): # TODO: make logic consistent with interventions, etc.
-                connector(self)
-            else:
-                connector.apply(self)
-        return
-
-
     def apply_analyzers(self):
         """
         Apply the analyzers
@@ -379,7 +349,6 @@ class Sim:
         for analyzer in self.analyzers.values():
             analyzer(self)
         return
-
 
     def run(self, until=None, reset_seed=True, verbose=None):
         """ Run the model once """
@@ -394,7 +363,7 @@ class Sim:
             verbose = self.pars['verbose']
 
         if reset_seed:
-            ssu.set_seed(self.pars['rand_seed'] + 1)
+            ss.set_seed(self.pars['rand_seed'] + 1)
 
         # Check for AlreadyRun errors
         errormsg = None
@@ -440,7 +409,6 @@ class Sim:
 
         return self
 
-
     def finalize(self, verbose=None):
         """ Compute final results """
 
@@ -453,7 +421,6 @@ class Sim:
         self.results_ready = True  # Set this first so self.summary() knows to print the results
         self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
         return
-
 
     def shrink(self, skip_attrs=None, in_place=True):
         """
@@ -487,7 +454,6 @@ class Sim:
             return
         else:
             return shrunken
-
 
     def save(self, filename=None, keep_people=None, skip_attrs=None, **kwargs):
         """
