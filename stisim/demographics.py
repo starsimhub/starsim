@@ -104,8 +104,8 @@ class Pregnancy(ssm.Module):
         # If incidence of pregnancy is non-zero, make some cases
         # Think about how to deal with age/time-varying fertility
         if self.pars.inci > 0:
-            demon_conds = ppl.female & ppl.active & ppl[self.name].susceptible
-            inds_to_choose_from = ssu.true(demon_conds)
+            denom_conds = ppl.female & ppl.active & ppl[self.name].susceptible
+            inds_to_choose_from = ssu.true(denom_conds)
             uids = ssu.binomial_filter(self.pars.inci, inds_to_choose_from)
 
             # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
