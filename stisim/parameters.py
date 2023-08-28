@@ -6,12 +6,9 @@ import sciris as sc
 import stisim as ss
 
 
-<<<<<<< HEAD
 __all__ = ['Parameters', 'make_pars']
 
 
-=======
->>>>>>> main
 class Parameters(sc.objdict):
     """
     Create the parameters for the simulation. Typically, this function is used
