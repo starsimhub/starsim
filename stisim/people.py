@@ -4,76 +4,12 @@ Defines the People class and functions associated with making people
 
 # %% Imports
 import functools
-<<<<<<< HEAD
-from . import utils as ssu
-from .version import __version__
-from .states import DynamicView, State, INT_NAN
-
-__all__ = ['BasePeople', 'People']
-=======
 import numpy as np
 import sciris as sc
 import stisim as ss
 
+__all__ = ['BasePeople', 'People']
 
-__all__ = ['State', 'BasePeople', 'People']
-
-
-#%% States
-
-class State(sc.prettyobj):
-    def __init__(self, name, dtype, fill_value=0, shape=None, distdict=None, label=None):
-        """
-        Args:
-            name: name of the result as used in the model
-            dtype: datatype
-            fill_value: default value for this state upon model initialization
-            shape: If not none, set to match a string in `pars` containing the dimensionality
-            label: text used to construct labels for the result for displaying on plots and other outputs
-        """
-        self.name = name
-        self.dtype = dtype
-        self.fill_value = fill_value
-        self.shape = shape
-        self.distdict = distdict
-        self.is_dist = distdict is not None # Set this by default, but allow it to be overridden
-        self.label = label or name
-        return
-
-    @property
-    def ndim(self):
-        return len(sc.tolist(self.shape)) + 1
-
-    def new(self, n):
-        if self.is_dist:
-            return self.new_dist(n)
-        else:
-            return self.new_scalar(n)
-
-    def new_scalar(self, n):
-        shape = sc.tolist(self.shape)
-        shape.append(n)
-        out = np.full(shape, dtype=self.dtype, fill_value=self.fill_value)
-        return out
-
-    def new_dist(self, n):
-        shape = sc.tolist(self.shape)
-        shape.append(n)
-        out = ss.sample(**self.distdict, size=tuple(shape))
-        return out
-
-
-base_states = ss.ndict(
-    State('uid', int),
-    State('age', float),
-    State('female', bool, False),
-    State('debut', float),
-    State('alive', bool, True),
-    State('ti_dead', float, np.nan),  # Time index for death
-    State('scale', float, 1.0),
-)
-
->>>>>>> main
 
 # %% Main people class
 class BasePeople(sc.prettyobj):
@@ -86,8 +22,8 @@ class BasePeople(sc.prettyobj):
     def __init__(self, n):
 
         self.initialized = False
-        self._uid_map = DynamicView(int, fill_value=INT_NAN) # This variable tracks all UIDs ever created
-        self.uid = DynamicView(int, fill_value=INT_NAN) # This variable tracks all UIDs currently in use
+        self._uid_map = ss.DynamicView(int, fill_value=ss.INT_NAN) # This variable tracks all UIDs ever created
+        self.uid = ss.DynamicView(int, fill_value=ss.INT_NAN) # This variable tracks all UIDs currently in use
 
         self._uid_map.initialize(n)
         self._uid_map[:] = np.arange(0, n)
@@ -151,7 +87,7 @@ class BasePeople(sc.prettyobj):
             state._trim(keep_inds)
 
         # Update the UID map
-        self._uid_map[:] = INT_NAN # Clear out all previously used UIDs
+        self._uid_map[:] = ss.INT_NAN # Clear out all previously used UIDs
         self._uid_map[keep_uids] = np.arange(0, len(keep_uids)) # Assign the array indices for all of the current UIDs
 
 
@@ -211,35 +147,29 @@ class People(BasePeople):
 
         super().__init__(n)
         
-<<<<<<< HEAD
-        self.version = __version__  # Store version info
+        self.version = ss.__version__  # Store version info
 
         states = [
-            State('age', float),
-            State('female', bool, False),
-            State('debut', float),
-            State('alive', bool, True),
-            State('ti_dead', float, np.nan),  # Time index for death
-            State('scale', float, 1.0),
+            ss.State('age', float),
+            ss.State('female', bool, False),
+            ss.State('debut', float),
+            ss.State('alive', bool, True),
+            ss.State('ti_dead', float, np.nan),  # Time index for death
+            ss.State('scale', float, 1.0),
         ]
         states.extend(sc.promotetolist(extra_states))
 
-        self.states = ssu.ndict()
+        self.states = ss.ndict()
 
         for state in states:
             self.add_state(state)  # Register the state internally for dynamic growth
             self.states.append(state)  # Expose these states with their original names
             state.initialize(self) # Connect the state to this people instance
             setattr(self, state.name, state)
-        self.networks = ssu.ndict(networks)
-=======
+        self.networks = ss.ndict(networks)
+
         self.initialized = False
         self.version = ss.__version__  # Store version info
-
-        # Initialize states, networks, modules
-        self.states = ss.ndict(base_states, states)
-        self.networks = ss.ndict(networks)
->>>>>>> main
 
         return
 
@@ -316,3 +246,8 @@ class People(BasePeople):
     def dead(self):
         """ Dead boolean """
         return ~self.alive
+
+    @property
+    def male(self):
+        """ Male boolean """
+        return ~self.female

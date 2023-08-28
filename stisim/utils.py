@@ -90,18 +90,11 @@ class ndict(sc.objdict):
             self._process_arg(arg, key=key)
         return
     
-<<<<<<< HEAD
-    def append(self, arg):
-        ''' Allow being used like a list '''
-        self._process_arg(arg)
-        return
-=======
     def copy(self):
         new = self.__class__.__new__(name=self._name, type=self._type, strict=self._strict)
         new.update(self)
         return new
->>>>>>> main
-    
+
     def __add__(self, dict2):
         """ Allow c = a + b """
         new = self.copy()
