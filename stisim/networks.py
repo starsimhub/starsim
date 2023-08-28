@@ -521,12 +521,12 @@ class hpv_network(Network):
 
 
 class maternal(Network):
-    def __init__(self, key_dict=None, transmission='vertical'):
+    def __init__(self, key_dict=None, vertical=True):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
         key_dict = sc.mergedicts({'dur': sss.default_float}, key_dict)
-        super().__init__(key_dict=key_dict, transmission=transmission)
+        super().__init__(key_dict=key_dict, vertical=vertical)
         return
 
     def update(self, people, dt=None):

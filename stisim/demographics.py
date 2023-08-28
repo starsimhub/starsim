@@ -121,7 +121,7 @@ class Pregnancy(ssm.Module):
                 # Placeholder code to be moved / refactored. The maternal network may need to be
                 # handled separately to the sexual networks, TBC how to handle this most elegantly
                 for lkey, layer in sim.people.networks.items():
-                    if layer.transmission == 'vertical':  # What happens if there's more than one vertical layer?
+                    if layer.vertical:  # What happens if there's more than one vertical layer?
                         durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy+self.pars.dur_postpartum)
                         layer.add_pairs(uids, new_inds, dur=durs)
 
