@@ -11,7 +11,6 @@ from .analyzers     import *
 from .demographics  import *
 from .hiv           import *
 from .gonorrhea     import *
-from .connectors    import *
 from .sim           import *
 
 # Import the version and print the license

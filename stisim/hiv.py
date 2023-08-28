@@ -7,11 +7,16 @@ import sciris as sc
 import stisim as ss
 
 
+<<<<<<< HEAD
 __all__ = ['HIV', 'ART', 'CD4_analyzer']
 
 
 class HIV(ss.Disease):
     
+=======
+class HIV(ssm.Disease):
+
+>>>>>>> main
     def __init__(self, pars=None):
         super().__init__(pars)
         self.states = ss.ndict(
@@ -22,8 +27,13 @@ class HIV(ss.Disease):
             ss.State('cd4', float, 500),
             self.states,
         )
+<<<<<<< HEAD
     
         self.pars = ss.omerge({
+=======
+
+        self.pars = ssu.omerge({
+>>>>>>> main
             'cd4_min': 100,
             'cd4_max': 500,
             'cd4_rate': 5,
@@ -32,43 +42,41 @@ class HIV(ss.Disease):
         }, self.pars)
         return
 
-
     def update_states(self, sim):
         """ Update CD4 """
         hivppl = sim.people.hiv
-        hivppl.cd4[sim.people.alive & hivppl.infected & hivppl.on_art] += (sim.pars.hiv.cd4_max - hivppl.cd4[sim.people.alive & hivppl.infected & hivppl.on_art])/sim.pars.hiv.cd4_rate
-        hivppl.cd4[sim.people.alive & hivppl.infected & ~hivppl.on_art] += (sim.pars.hiv.cd4_min - hivppl.cd4[sim.people.alive & hivppl.infected & ~hivppl.on_art])/sim.pars.hiv.cd4_rate
+        hivppl.cd4[sim.people.alive & hivppl.infected & hivppl.on_art] += (sim.pars.hiv.cd4_max - hivppl.cd4[
+            sim.people.alive & hivppl.infected & hivppl.on_art]) / sim.pars.hiv.cd4_rate
+        hivppl.cd4[sim.people.alive & hivppl.infected & ~hivppl.on_art] += (sim.pars.hiv.cd4_min - hivppl.cd4[
+            sim.people.alive & hivppl.infected & ~hivppl.on_art]) / sim.pars.hiv.cd4_rate
         return
-    
 
     def init_results(self, sim):
         super().init_results(sim)
         self.results['n_art'] = ss.Result('n_art', self.name, sim.npts, dtype=int)
         return
-    
 
     def update_results(self, sim):
         super(HIV, self).update_results(sim)
         sim.results[self.name]['n_art'] = np.count_nonzero(sim.people.alive & sim.people[self.name].on_art)
         return
-    
 
     def make_new_cases(self, sim):
         # eff_condoms = sim.pars[self.name]['eff_condoms'] # TODO figure out how to add this
         super().make_new_cases(sim)
         return
-    
+
     def set_prognoses(self, sim, uids):
         sim.people[self.name].susceptible[uids] = False
         sim.people[self.name].infected[uids] = True
         sim.people[self.name].ti_infected[uids] = sim.ti
 
 
-#%% Interventions
+# %% Interventions
 
 class ART(ss.Intervention):
 
-    def __init__(self,t:np.array,capacity: np.array):
+    def __init__(self, t: np.array, capacity: np.array):
         self.requires = HIV
         self.t = sc.promotetoarray(t)
         self.capacity = sc.promotetoarray(capacity)
@@ -93,13 +101,21 @@ class ART(ss.Intervention):
             eligible = sim.people.alive & sim.people.hiv.infected & sim.people.hiv.on_art
             inds = np.random.choice(ss.true(eligible), min(n_change), replace=False)
             sim.people.hiv.on_art[inds] = False
-        
+
         return
+<<<<<<< HEAD
     
     
 #%% Analyzers
     
 class CD4_analyzer(ss.Analyzer):
+=======
+
+
+# %% Analyzers
+
+class CD4_analyzer(ssa.Analyzer):
+>>>>>>> main
 
     def __init__(self):
         self.requires = HIV

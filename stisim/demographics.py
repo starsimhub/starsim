@@ -104,9 +104,15 @@ class Pregnancy(ss.Module):
         # If incidence of pregnancy is non-zero, make some cases
         # Think about how to deal with age/time-varying fertility
         if self.pars.inci > 0:
+<<<<<<< HEAD
             demon_conds = ppl.female & ppl.active & ppl[self.name].susceptible
             inds_to_choose_from = ss.true(demon_conds)
             uids = ss.binomial_filter(self.pars.inci, inds_to_choose_from)
+=======
+            denom_conds = ppl.female & ppl.active & ppl[self.name].susceptible
+            inds_to_choose_from = ssu.true(denom_conds)
+            uids = ssu.binomial_filter(self.pars.inci, inds_to_choose_from)
+>>>>>>> main
 
             # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
             n_unborn_agents = len(uids)
@@ -121,7 +127,7 @@ class Pregnancy(ss.Module):
                 # Placeholder code to be moved / refactored. The maternal network may need to be
                 # handled separately to the sexual networks, TBC how to handle this most elegantly
                 for lkey, layer in sim.people.networks.items():
-                    if layer.transmission == 'vertical':  # What happens if there's more than one vertical layer?
+                    if layer.vertical:  # What happens if there's more than one vertical layer?
                         durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy+self.pars.dur_postpartum)
                         layer.add_pairs(uids, new_inds, dur=durs)
 

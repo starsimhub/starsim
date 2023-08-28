@@ -1,6 +1,5 @@
 """
-Results and associated structures. Currently only holds results, could move to base.py
-unless other things get added (e.g. Resultsets, MultiResults, other...)
+Result structures.
 """
 
 import numpy as np
