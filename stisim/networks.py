@@ -246,12 +246,7 @@ class Network(sc.objdict):
         pass
 
 
-<<<<<<< HEAD
-
 class Networks(ss.ndict):
-=======
-class Networks(ssu.ndict):
->>>>>>> main
     def __init__(self, *args, type=Network, **kwargs):
         return super().__init__(self, *args, type=type, **kwargs)
     
@@ -529,13 +524,8 @@ class maternal(Network):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
-<<<<<<< HEAD
         key_dict = sc.mergedicts({'dur': ss.float_}, key_dict)
-        super().__init__(key_dict=key_dict, transmission=transmission)
-=======
-        key_dict = sc.mergedicts({'dur': sss.default_float}, key_dict)
         super().__init__(key_dict=key_dict, vertical=vertical)
->>>>>>> main
         return
 
     def update(self, people, dt=None):
