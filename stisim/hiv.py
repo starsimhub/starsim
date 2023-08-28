@@ -6,17 +6,11 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 
-
-<<<<<<< HEAD
 __all__ = ['HIV', 'ART', 'CD4_analyzer']
 
 
 class HIV(ss.Disease):
-    
-=======
-class HIV(ssm.Disease):
 
->>>>>>> main
     def __init__(self, pars=None):
         super().__init__(pars)
         self.states = ss.ndict(
@@ -27,13 +21,8 @@ class HIV(ssm.Disease):
             ss.State('cd4', float, 500),
             self.states,
         )
-<<<<<<< HEAD
-    
-        self.pars = ss.omerge({
-=======
 
-        self.pars = ssu.omerge({
->>>>>>> main
+        self.pars = ss.omerge({
             'cd4_min': 100,
             'cd4_max': 500,
             'cd4_rate': 5,
@@ -103,19 +92,11 @@ class ART(ss.Intervention):
             sim.people.hiv.on_art[inds] = False
 
         return
-<<<<<<< HEAD
-    
-    
+
+
 #%% Analyzers
-    
+
 class CD4_analyzer(ss.Analyzer):
-=======
-
-
-# %% Analyzers
-
-class CD4_analyzer(ssa.Analyzer):
->>>>>>> main
 
     def __init__(self):
         self.requires = HIV
