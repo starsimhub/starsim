@@ -61,7 +61,7 @@ class Network:
 class msm(Network):
     def __init__(self, pars, eligibility='male', states=None):
         super().__init__(pars, eligibility, states)
-        self.states = ss.omerge(self.states, ss.named_dict(states))
+        self.states = ss.omerge(self.states, ss.ndict(states))
 
 
 class mf_marital(Network):
@@ -205,8 +205,8 @@ class Person:
             self.pop_rankings[this_dim] = prefs
             self.pop_scores = self.pop_scores * prefs
 
-        self.pop_order = np.array([q.name for q in potentials])[np.argsort(self.pop_scores)]
-        self.pop_order = list(self.pop_order)
+        self.pop_order = np.array([q.name for q in potentials])[np.argsort(self.pop_scores)][::-1]
+        # self.pop_order = list(self.pop_order)
 
 
 if __name__ == '__main__':
