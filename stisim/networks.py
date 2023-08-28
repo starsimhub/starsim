@@ -14,11 +14,12 @@ __all__ = ['Networks', 'Network', 'simple_sexual', 'hpv_network', 'maternal']
 
 class Network(sc.objdict):
     """
-    A small class holding a single network of contact edges (connections) between people.
+    A class holding a single network of contact edges (connections) between people
+    as well as methods for updating these.
 
     The input is typically arrays including: person 1 of the connection, person 2 of
     the connection, the weight of the connection, the duration and start/end times of
-    the connection. Connections are undirected; each person is both a source and sink.
+    the connection.
 
     Args:
         p1 (array): an array of length N, the number of connections in the network, with the indices of people
@@ -51,14 +52,14 @@ class Network(sc.objdict):
         network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
     """
 
-    def __init__(self, *args, key_dict=None, transmission='horizontal', label=None, **kwargs):
+    def __init__(self, *args, key_dict=None, vertical=False, label=None, **kwargs):
         default_keys = {
             'p1': sss.default_int,
             'p2': sss.default_int,
             'beta': sss.default_float,
         }
         self.meta = sc.mergedicts(default_keys, key_dict)
-        self.transmission = transmission  # "vertical" or "horizontal", determines whether transmission is bidirectional
+        self.vertical = vertical  # Whether transmission is bidirectional
         self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
         self.label = label
         self.initialized = False
@@ -244,7 +245,6 @@ class Network(sc.objdict):
     def update(self):
         """ Define how pairs/connections evolve (in time) """
         pass
-
 
 
 class Networks(ssu.ndict):
@@ -521,12 +521,12 @@ class hpv_network(Network):
 
 
 class maternal(Network):
-    def __init__(self, key_dict=None, transmission='vertical'):
+    def __init__(self, key_dict=None, vertical=True):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
         key_dict = sc.mergedicts({'dur': sss.default_float}, key_dict)
-        super().__init__(key_dict=key_dict, transmission=transmission)
+        super().__init__(key_dict=key_dict, vertical=vertical)
         return
 
     def update(self, people, dt=None):
