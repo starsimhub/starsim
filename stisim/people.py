@@ -3,11 +3,9 @@ Defines the People class and functions associated with making people
 """
 
 # %% Imports
-import sciris as sc
-import numpy as np
 import functools
-from . import utils as ssu
-from .version import __version__
+import numpy as np
+import sciris as sc
 from .states import DynamicView, State, INT_NAN
 
 __all__ = ['BasePeople', 'People']
@@ -148,7 +146,8 @@ class People(BasePeople):
 
         super().__init__(n)
         
-        self.version = __version__  # Store version info
+        self.initialized = False
+        self.version = ss.__version__  # Store version info
 
         states = [
             State('age', float),

@@ -3,11 +3,10 @@ Set parameters
 """
 
 import sciris as sc
-from .settings import options as sso  # For setting global options
-
-__all__ = ['make_pars']
+import stisim as ss
 
 
+__all__ = ['Parameters', 'make_pars']
 
 
 class Parameters(sc.objdict):
@@ -42,8 +41,7 @@ class Parameters(sc.objdict):
         self.dt              = 1.0           # Timestep (in years)
         self.dt_demog        = 1.0           # Timestep for demographic updates (in years)
         self.rand_seed       = 1             # Random seed, if None, don't reset
-        self.verbose         = sso.verbose   # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
-        self.use_migration   = True          # Whether to estimate migration rates to correct the total population size
+        self.verbose         = ss.options.verbose # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
     
         # Events and interventions
         self.connectors      = sc.autolist()

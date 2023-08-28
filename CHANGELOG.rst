@@ -9,6 +9,12 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :depth: 1
 
 
+Version 0.0.5 (2023-08-29)
+--------------------------
+- Refactor file structure 
+- *GitHub info*: PRs `77 <https://github.com/amath-idm/stisim/pull/77>`_ and `86 <https://github.com/amath-idm/stisim/pull/86>`_
+
+
 Version 0.0.2 (2023-06-29)
 --------------------------
 - Adds in basic *sim functionality

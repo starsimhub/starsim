@@ -3,31 +3,31 @@ Define pregnancy, deaths, migration, etc.
 """
 
 import numpy as np
-from . import utils as ssu
-from . import people as ssp
-from . import modules as ssm
-from . import results as ssr
+import stisim as ss
 
 
-class Pregnancy(ssm.Module):
+__all__ = ['Pregnancy']
+
+
+class Pregnancy(ss.Module):
 
     def __init__(self, pars=None):
         super().__init__(pars)
 
         # Other, e.g. postpartum, on contraception...
-        self.states = ssu.ndict(
-            ssp.State('infertile', bool, False),  # Applies to girls and women outside the fertility window
-            ssp.State('susceptible', bool, True),  # Applies to girls and women inside the fertility window - needs renaming
-            ssp.State('pregnant', bool, False),  # Currently pregnant
-            ssp.State('postpartum', bool, False),  # Currently post-partum
-            ssp.State('ti_pregnant', float, np.nan),  # Time pregnancy begins
-            ssp.State('ti_delivery', float, np.nan),  # Time of delivery
-            ssp.State('ti_postpartum', float, np.nan),  # Time postpartum ends
-            ssp.State('ti_dead', float, np.nan),  # Maternal mortality
+        self.states = ss.ndict(
+            ss.State('infertile', bool, False),  # Applies to girls and women outside the fertility window
+            ss.State('susceptible', bool, True),  # Applies to girls and women inside the fertility window - needs renaming
+            ss.State('pregnant', bool, False),  # Currently pregnant
+            ss.State('postpartum', bool, False),  # Currently post-partum
+            ss.State('ti_pregnant', float, np.nan),  # Time pregnancy begins
+            ss.State('ti_delivery', float, np.nan),  # Time of delivery
+            ss.State('ti_postpartum', float, np.nan),  # Time postpartum ends
+            ss.State('ti_dead', float, np.nan),  # Maternal mortality
             self.states,
         )
 
-        self.pars = ssu.omerge({
+        self.pars = ss.omerge({
             'dur_pregnancy': 0.75,  # Make this a distribution?
             'dur_postpartum': 0.5,  # Make this a distribution?
             'inci': 0.03,  # Replace this with age-specific rates
@@ -51,8 +51,8 @@ class Pregnancy(ssm.Module):
         Still unclear whether this logic should live in the pregnancy module, the
         individual disease modules, the connectors, or the sim.
         """
-        self.results['pregnancies'] = ssr.Result('pregnancies', self.name, sim.npts, dtype=int)
-        self.results['births']      = ssr.Result('births', self.name, sim.npts, dtype=int)
+        self.results['pregnancies'] = ss.Result('pregnancies', self.name, sim.npts, dtype=int)
+        self.results['births']      = ss.Result('births', self.name, sim.npts, dtype=int)
         return
     
     
@@ -85,7 +85,7 @@ class Pregnancy(ssm.Module):
         sim.people[self.name].ti_postpartum[postpartum] = sim.ti
 
         # Maternal deaths
-        maternal_deaths = ssu.true(sim.people[self.name].ti_dead <= sim.ti)
+        maternal_deaths = ss.true(sim.people[self.name].ti_dead <= sim.ti)
         if len(maternal_deaths):
             sim.people.alive[maternal_deaths] = False
             sim.people.ti_dead[maternal_deaths] = sim.ti
@@ -104,9 +104,9 @@ class Pregnancy(ssm.Module):
         # If incidence of pregnancy is non-zero, make some cases
         # Think about how to deal with age/time-varying fertility
         if self.pars.inci > 0:
-            demon_conds = ppl.female & ppl.active & ppl[self.name].susceptible
-            inds_to_choose_from = ssu.true(demon_conds)
-            uids = ssu.binomial_filter(self.pars.inci, inds_to_choose_from)
+            denom_conds = ppl.female & ppl.active & ppl[self.name].susceptible
+            inds_to_choose_from = ss.true(denom_conds)
+            uids = ss.binomial_filter(self.pars.inci, inds_to_choose_from)
 
             # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
             n_unborn_agents = len(uids)
@@ -120,7 +120,7 @@ class Pregnancy(ssm.Module):
                 # Placeholder code to be moved / refactored. The maternal network may need to be
                 # handled separately to the sexual networks, TBC how to handle this most elegantly
                 for lkey, layer in sim.people.networks.items():
-                    if layer.transmission == 'vertical':  # What happens if there's more than one vertical layer?
+                    if layer.vertical:  # What happens if there's more than one vertical layer?
                         durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy+self.pars.dur_postpartum)
                         layer.add_pairs(uids, new_uids, dur=durs)
 

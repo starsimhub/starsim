@@ -1,16 +1,13 @@
 """
-Results and associated structures. Currently only holds results, could move to base.py
-unless other things get added (e.g. Resultsets, MultiResults, other...)
+Result structures.
 """
 
 import numpy as np
 import sciris as sc
-from . import utils as ssu
+import stisim as ss
 
 
-class Results(ssu.ndict):
-    def __init__(self, *args, **kwargs):
-        super().__init__(self, type=Result, *args, **kwargs)
+__all__ = ['Result', 'Results']
 
 
 class Result(np.ndarray):
@@ -30,3 +27,8 @@ class Result(np.ndarray):
     
     def to_df(self):
         return sc.dataframe({self.name:self})
+    
+    
+class Results(ss.ndict):
+    def __init__(self, *args, **kwargs):
+        super().__init__(self, type=Result, *args, **kwargs)

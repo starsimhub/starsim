@@ -4,24 +4,21 @@ Defne HIV
 
 import numpy as np
 import sciris as sc
-from . import utils as ssu
-from . import people as ssp
-from . import modules as ssm
-from . import results as ssr
-from . import interventions as ssi
-from . import analyzers as ssa
+import stisim as ss
+
+__all__ = ['HIV', 'ART', 'CD4_analyzer']
 
 
-class HIV(ssm.Disease):
-    
+class HIV(ss.Disease):
+
     def __init__(self, pars=None):
         super().__init__(pars)
 
-        self.susceptible = ssp.State('susceptible', bool, True)
-        self.infected = ssp.State('infected', bool, False)
-        self.ti_infected = ssp.State('ti_infected', float, 0)
-        self.on_art = ssp.State('on_art', bool, False)
-        self.cd4 = ssp.State('cd4', float, 500)
+        self.susceptible = ss.State('susceptible', bool, True)
+        self.infected = ss.State('infected', bool, False)
+        self.ti_infected = ss.State('ti_infected', float, 0)
+        self.on_art = ss.State('on_art', bool, False)
+        self.cd4 = ss.State('cd4', float, 500)
 
         self.states.append(self.susceptible)
         self.states.append(self.infected)
@@ -38,42 +35,38 @@ class HIV(ssm.Disease):
         }, self.pars)
         return
 
-
     def update_states(self, sim):
         """ Update CD4 """
         self.cd4[sim.people.alive & self.infected & self.on_art] += (self.pars.cd4_max - self.cd4[sim.people.alive & self.infected & self.on_art])/self.pars.cd4_rate
         self.cd4[sim.people.alive & self.infected & ~self.on_art] += (self.pars.cd4_min - self.cd4[sim.people.alive & self.infected & ~self.on_art])/self.pars.cd4_rate
         return
-    
 
     def init_results(self, sim):
         super().init_results(sim)
-        self.results['n_art'] = ssr.Result('n_art', self.name, sim.npts, dtype=int)
+        self.results['n_art'] = ss.Result('n_art', self.name, sim.npts, dtype=int)
         return
-    
 
     def update_results(self, sim):
         super(HIV, self).update_results(sim)
         sim.results[self.name]['n_art'] = np.count_nonzero(sim.people.alive & sim.people[self.name].on_art)
         return
-    
 
     def make_new_cases(self, sim):
         # eff_condoms = sim.pars[self.name]['eff_condoms'] # TODO figure out how to add this
         super().make_new_cases(sim)
         return
-    
+
     def set_prognoses(self, sim, uids):
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = sim.ti
 
 
-#%% Interventions
+# %% Interventions
 
-class ART(ssi.Intervention):
+class ART(ss.Intervention):
 
-    def __init__(self,t:np.array,capacity: np.array):
+    def __init__(self, t: np.array, capacity: np.array):
         self.requires = HIV
         self.t = sc.promotetoarray(t)
         self.capacity = sc.promotetoarray(capacity)
@@ -91,20 +84,20 @@ class ART(ssi.Intervention):
             eligible = sim.people.alive & sim.people.hiv.infected & ~sim.people.hiv.on_art
             n_eligible = np.count_nonzero(eligible)
             if n_eligible:
-                inds = np.random.choice(ssu.true(eligible), min(n_eligible, n_change), replace=False)
+                inds = np.random.choice(ss.true(eligible), min(n_eligible, n_change), replace=False)
                 sim.people.hiv.on_art[inds] = True
         elif n_change < 0:
             # Take some people off ART
             eligible = sim.people.alive & sim.people.hiv.infected & sim.people.hiv.on_art
-            inds = np.random.choice(ssu.true(eligible), min(n_change), replace=False)
+            inds = np.random.choice(ss.true(eligible), min(n_change), replace=False)
             sim.people.hiv.on_art[inds] = False
-        
+
         return
-    
-    
+
+
 #%% Analyzers
-    
-class CD4_analyzer(ssa.Analyzer):
+
+class CD4_analyzer(ss.Analyzer):
 
     def __init__(self):
         self.requires = HIV
