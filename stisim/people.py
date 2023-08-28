@@ -3,11 +3,10 @@ Defines the People class and functions associated with making people
 """
 
 # %% Imports
-import sciris as sc
-import numpy as np
 import functools
-from . import utils as ssu
-from .version import __version__
+import numpy as np
+import sciris as sc
+import stisim as ss
 
 
 __all__ = ['State', 'BasePeople', 'People']
@@ -53,11 +52,11 @@ class State(sc.prettyobj):
     def new_dist(self, n):
         shape = sc.tolist(self.shape)
         shape.append(n)
-        out = ssu.sample(**self.distdict, size=tuple(shape))
+        out = ss.sample(**self.distdict, size=tuple(shape))
         return out
 
 
-base_states = ssu.ndict(
+base_states = ss.ndict(
     State('uid', int),
     State('age', float),
     State('female', bool, False),
@@ -216,11 +215,11 @@ class People(BasePeople):
         """
         
         self.initialized = False
-        self.version = __version__  # Store version info
+        self.version = ss.__version__  # Store version info
 
         # Initialize states, networks, modules
-        self.states = ssu.ndict(base_states, states)
-        self.networks = ssu.ndict(networks)
+        self.states = ss.ndict(base_states, states)
+        self.networks = ss.ndict(networks)
 
         # Private variables relating to dynamic allocation
         self._data = dict()

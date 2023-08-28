@@ -1,4 +1,4 @@
-name: Sciris CI tests
+name: STIsim CI tests
 on: [pull_request]
 
 jobs:

@@ -4,19 +4,20 @@ Disease modules
 
 import numpy as np
 import sciris as sc
-from . import people as ssp
-from . import results as ssr
-from . import utils as ssu
+import stisim as ss
+
+
+__all__ = ['Module', 'Modules', 'Disease']
 
 
 class Module(sc.prettyobj):
     
     def __init__(self, pars=None, label=None, requires=None, *args, **kwargs):
-        self.pars = ssu.omerge(pars)
+        self.pars = ss.omerge(pars)
         self.label = label if label else ''
         self.requires = sc.mergelists(requires)
-        self.states = ssu.ndict()
-        self.results = ssr.Results()
+        self.states = ss.ndict()
+        self.results = ss.Results()
         self.initialized = False
         self.finalized = False
         return
@@ -67,7 +68,7 @@ class Module(sc.prettyobj):
         return self.__class__.__name__.lower()
 
 
-class Modules(ssu.ndict):
+class Modules(ss.ndict):
     def __init__(self, *args, type=Module, **kwargs):
         return super().__init__(self, *args, type=type, **kwargs)
 
@@ -77,10 +78,10 @@ class Disease(Module):
     
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__(pars, *args, **kwargs)
-        self.states = ssu.ndict(
-            ssp.State('rel_sus', float, 1),
-            ssp.State('rel_sev', float, 1),
-            ssp.State('rel_trans', float, 1),
+        self.states = ss.ndict(
+            ss.State('rel_sus', float, 1),
+            ss.State('rel_sev', float, 1),
+            ss.State('rel_trans', float, 1),
         )
         return
 
@@ -118,10 +119,10 @@ class Disease(Module):
         """
         Initialize results. TODO, should these be stored in the module or just added directly to the sim?
         """
-        self.results['n_susceptible']  = ssr.Result(self.name, 'n_susceptible', sim.npts, dtype=int)
-        self.results['n_infected']     = ssr.Result(self.name, 'n_infected', sim.npts, dtype=int)
-        self.results['prevalence']     = ssr.Result(self.name, 'prevalence', sim.npts, dtype=float)
-        self.results['new_infections'] = ssr.Result(self.name, 'n_infected', sim.npts, dtype=int)
+        self.results['n_susceptible']  = ss.Result(self.name, 'n_susceptible', sim.npts, dtype=int)
+        self.results['n_infected']     = ss.Result(self.name, 'n_infected', sim.npts, dtype=int)
+        self.results['prevalence']     = ss.Result(self.name, 'prevalence', sim.npts, dtype=float)
+        self.results['new_infections'] = ss.Result(self.name, 'n_infected', sim.npts, dtype=int)
         return
     
 

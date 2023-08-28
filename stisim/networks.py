@@ -5,8 +5,7 @@ Networks that connect people within a population
 # %% Imports
 import numpy as np
 import sciris as sc
-from . import utils as ssu
-from . import settings as sss
+import stisim as ss
 
 
 # Specify all externally visible functions this file defines
@@ -54,9 +53,9 @@ class Network(sc.objdict):
 
     def __init__(self, *args, key_dict=None, vertical=False, label=None, **kwargs):
         default_keys = {
-            'p1': sss.default_int,
-            'p2': sss.default_int,
-            'beta': sss.default_float,
+            'p1': ss.int_,
+            'p2': ss.int_,
+            'beta': ss.float_,
         }
         self.meta = sc.mergedicts(default_keys, key_dict)
         self.vertical = vertical  # Whether transmission is bidirectional
@@ -231,9 +230,9 @@ class Network(sc.objdict):
             inds = np.array(inds, dtype=np.int64)
 
         # Find the contacts
-        contact_inds = ssu.find_contacts(self['p1'], self['p2'], inds)
+        contact_inds = ss.find_contacts(self['p1'], self['p2'], inds)
         if as_array:
-            contact_inds = np.fromiter(contact_inds, dtype=sss.default_int)
+            contact_inds = np.fromiter(contact_inds, dtype=ss.int_)
             contact_inds.sort()  # Sorting ensures that the results are reproducible for a given seed as well as being identical to previous versions of HPVsim
 
         return contact_inds
@@ -247,7 +246,7 @@ class Network(sc.objdict):
         pass
 
 
-class Networks(ssu.ndict):
+class Networks(ss.ndict):
     def __init__(self, *args, type=Network, **kwargs):
         return super().__init__(self, *args, type=type, **kwargs)
     
@@ -259,10 +258,10 @@ class simple_sexual(Network):
     """
     def __init__(self, mean_dur=5):
         key_dict = {
-            'p1': sss.default_int,
-            'p2': sss.default_int,
-            'dur': sss.default_float,
-            'beta': sss.default_float,
+            'p1': ss.int_,
+            'p2': ss.int_,
+            'dur': ss.float_,
+            'beta': ss.float_,
         }
 
         # Call init for the base class, which sets all the keys
@@ -313,12 +312,12 @@ class hpv_network(Network):
     def __init__(self, pars=None):
 
         key_dict = {
-            'p1': sss.default_int,
-            'p2': sss.default_int,
-            'dur': sss.default_float,
-            'acts': sss.default_float,
-            'start': sss.default_float,
-            'beta': sss.default_float,
+            'p1': ss.int_,
+            'p2': ss.int_,
+            'dur': ss.float_,
+            'acts': ss.float_,
+            'start': ss.float_,
+            'beta': ss.float_,
         }
 
         # Call init for the base class, which sets all the keys
@@ -398,7 +397,7 @@ class hpv_network(Network):
         current_partners = np.zeros((len(people)))
         current_partners[f_partnered_inds] = f_partnered_counts
         current_partners[m_partnered_inds] = m_partnered_counts
-        partners = ssu.sample(**self.pars['partners'], size=len(people)) + 1
+        partners = ss.sample(**self.pars['partners'], size=len(people)) + 1
         underpartnered = current_partners < partners  # Indices of underpartnered people
         f_eligible = f_active & underpartnered
         m_eligible = m_active & underpartnered
@@ -407,22 +406,22 @@ class hpv_network(Network):
         bins = self.pars['participation'][0, :]  # Extract age bins
 
         # Try randomly select females for pairing
-        f_eligible_inds = ssu.true(f_eligible)  # Inds of all eligible females
+        f_eligible_inds = ss.true(f_eligible)  # Inds of all eligible females
         age_bins_f = np.digitize(people.age[f_eligible_inds], bins=bins) - 1  # Age bins of selected females
         bin_range_f = np.unique(age_bins_f)  # Range of bins
         f = []  # Initialize the female partners
         for ab in bin_range_f:  # Loop over age bins
-            these_f_contacts = ssu.binomial_filter(self.pars['participation'][1][ab], f_eligible_inds[
+            these_f_contacts = ss.binomial_filter(self.pars['participation'][1][ab], f_eligible_inds[
                 age_bins_f == ab])  # Select females according to their participation rate in this layer
             f += these_f_contacts.tolist()
 
         # Select males according to their participation rate in this layer
-        m_eligible_inds = ssu.true(m_eligible)
+        m_eligible_inds = ss.true(m_eligible)
         age_bins_m = np.digitize(people.age[m_eligible_inds], bins=bins) - 1
         bin_range_m = np.unique(age_bins_m)  # Range of bins
         m = []  # Initialize the male partners
         for ab in bin_range_m:
-            these_m_contacts = ssu.binomial_filter(self.pars['participation'][2][ab], m_eligible_inds[
+            these_m_contacts = ss.binomial_filter(self.pars['participation'][2][ab], m_eligible_inds[
                 age_bins_m == ab])  # Select males according to their participation rate in this layer
             m += these_m_contacts.tolist()
 
@@ -456,8 +455,8 @@ class hpv_network(Network):
         p1 = np.array(f)
         p2 = selected_males
         n_partnerships = len(p1)
-        dur = ssu.sample(**self.pars['dur_pship'], size=n_partnerships)
-        acts = ssu.sample(**self.pars['acts'], size=n_partnerships)
+        dur = ss.sample(**self.pars['dur_pship'], size=n_partnerships)
+        acts = ss.sample(**self.pars['acts'], size=n_partnerships)
         age_p1 = people.age[p1]
         age_p2 = people.age[p2]
 
@@ -488,11 +487,11 @@ class hpv_network(Network):
         retired_vals = 0
 
         # Set values and return
-        scaled_acts = np.full(len(acts), np.nan, dtype=sss.default_float)
+        scaled_acts = np.full(len(acts), np.nan, dtype=ss.float_)
         scaled_acts[below_peak_inds] = below_peak_vals
         scaled_acts[above_peak_inds] = above_peak_vals
         scaled_acts[retired_inds] = retired_vals
-        start = np.array([ti] * n_partnerships, dtype=sss.default_float)
+        start = np.array([ti] * n_partnerships, dtype=ss.float_)
         beta = np.ones(n_partnerships)
 
         new_contacts = dict(
@@ -525,7 +524,7 @@ class maternal(Network):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
-        key_dict = sc.mergedicts({'dur': sss.default_float}, key_dict)
+        key_dict = sc.mergedicts({'dur': ss.float_}, key_dict)
         super().__init__(key_dict=key_dict, vertical=vertical)
         return
 
