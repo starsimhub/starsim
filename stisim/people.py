@@ -3,7 +3,6 @@ Defines the People class and functions associated with making people
 """
 
 # %% Imports
-import functools
 import numpy as np
 import sciris as sc
 import stisim as ss
@@ -44,9 +43,7 @@ class BasePeople(sc.prettyobj):
     def add_state(self, state):
         if id(state) not in self._states:
             self._states[id(state)] = state
-
-    def __len__(self):
-        return len(self.uid)
+        return
 
     def grow(self, n):
         """
@@ -89,6 +86,7 @@ class BasePeople(sc.prettyobj):
         # Update the UID map
         self._uid_map[:] = ss.INT_NAN # Clear out all previously used UIDs
         self._uid_map[keep_uids] = np.arange(0, len(keep_uids)) # Assign the array indices for all of the current UIDs
+        return
 
 
     def __getitem__(self, key):
@@ -141,12 +139,11 @@ class People(BasePeople):
     # %% Basic methods
 
     def __init__(self, n, extra_states=None, networks=None):
-        """
-        Initialize
-        """
+        """ Initialize """
 
         super().__init__(n)
         
+        self.initialized = False
         self.version = ss.__version__  # Store version info
 
         states = [
@@ -167,9 +164,6 @@ class People(BasePeople):
             state.initialize(self) # Connect the state to this people instance
             setattr(self, state.name, state)
         self.networks = ss.ndict(networks)
-
-        self.initialized = False
-        self.version = ss.__version__  # Store version info
 
         return
 

@@ -39,10 +39,10 @@ class ndict(sc.objdict):
         self.setattribute('_name', name) # Since otherwise treated as keys
         self.setattribute('_type', type)
         self.setattribute('_strict', strict)
-        self.append(*args, **kwargs)
+        self._initialize(*args, **kwargs)
         return
     
-    def _process_arg(self, arg, key=None):
+    def append(self, arg, key=None):
         valid = False
         if arg is None:
             return # Nothing to do
@@ -55,7 +55,7 @@ class ndict(sc.objdict):
                 valid = True
             else:
                 for k,v in arg.items():
-                    self._process_arg(v, key=k)
+                    self.append(v, key=k)
                 valid = None # Skip final processing
         elif not self._strict:
             key = key or f'item{len(self)+1}'
@@ -82,19 +82,19 @@ class ndict(sc.objdict):
                 raise TypeError(errormsg)
         return
     
-    def append(self, *args, **kwargs):
+    def _initialize(self, *args, **kwargs):
         args = sc.mergelists(*args)
         for arg in args:
-            self._process_arg(arg)
+            self.append(arg)
         for key,arg in kwargs.items():
-            self._process_arg(arg, key=key)
+            self.append(arg, key=key)
         return
     
     def copy(self):
         new = self.__class__.__new__(name=self._name, type=self._type, strict=self._strict)
         new.update(self)
         return new
-
+    
     def __add__(self, dict2):
         """ Allow c = a + b """
         new = self.copy()
