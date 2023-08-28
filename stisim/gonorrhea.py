@@ -3,25 +3,26 @@ Defne gonorrhea
 """
 
 import numpy as np
-from . import utils as ssu
-from . import people as ssp
-from . import modules as ssm
+import stisim as ss
 
 
-class Gonorrhea(ssm.Disease):
+__all__ = ['Gonorrhea']
+
+
+class Gonorrhea(ss.Disease):
 
     def __init__(self, pars=None):
         super().__init__(pars)
-        self.states = ssu.ndict(
-            ssp.State('susceptible', bool, True),
-            ssp.State('infected', bool, False),
-            ssp.State('ti_infected', float, 0),
-            ssp.State('ti_recovered', float, 0),
-            ssp.State('ti_dead', float, np.nan), # Death due to gonorrhea
+        self.states = ss.ndict(
+            ss.State('susceptible', bool, True),
+            ss.State('infected', bool, False),
+            ss.State('ti_infected', float, 0),
+            ss.State('ti_recovered', float, 0),
+            ss.State('ti_dead', float, np.nan), # Death due to gonorrhea
             self.states,
         )
 
-        self.pars = ssu.omerge({
+        self.pars = ss.omerge({
             'dur_inf': 3, # not modelling diagnosis or treatment explicitly here
             'p_death': 0.2,
             'initial': 3,
@@ -38,16 +39,13 @@ class Gonorrhea(ssm.Disease):
         sim.people.ti_dead[gonorrhea_deaths] = sim.ti
         return
     
-
     def update_results(self, sim):
         super(Gonorrhea, self).update_results(sim)
         return
     
-    
     def make_new_cases(self, sim):
         super(Gonorrhea, self).make_new_cases(sim)
         return
-
 
     def set_prognoses(self, sim, uids):
         sim.people[self.name].susceptible[uids] = False

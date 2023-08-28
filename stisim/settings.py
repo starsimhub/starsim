@@ -2,26 +2,18 @@
 Define options for STIsim.
 All options should be set using set() or directly, e.g.::
 
-    ss.options(font_size=18)
-
-To reset default options, use::
-
-    ss.options('default')
-
-Note: "options" is used to refer to the choices available (e.g., DPI), while "settings"
-is used to refer to the choices made (e.g., DPI=150).
+    ss.options(verbose=False)
 """
 
 import os
-import sciris as sc
 import numpy as np
-
-# Specify all externally visible classes this file defines
-__all__ = ['options']
+import sciris as sc
 
 
-# %% Define the options class
+__all__ = ['options', 'float_', 'int_']
 
+
+# Not public to avoid confusion with ss.options
 class Options(sc.objdict):
     """
     Set options for STIsim.
@@ -216,14 +208,14 @@ options = Options()
 # Default for precision
 # Used in various places throughout the code, generally as:
 #   import stisim.settings as sss
-#   arr = np.full(100, 0, sss.default_float)
+#   arr = np.full(100, 0, sss.float_)
 result_float = np.float64  # Always use float64 for results, for simplicity
 if options.precision == 32:
-    default_float = np.float32
-    default_int = np.int32
+    float_ = np.float32
+    int_ = np.int32
 elif options.precision == 64:  # pragma: no cover
-    default_float = np.float64
-    default_int = np.int64
+    float_ = np.float64
+    int_ = np.int64
 else:
     raise NotImplementedError(f'Precision must be either 32 bit or 64 bit, not {options.precision}')
 

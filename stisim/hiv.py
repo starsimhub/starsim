@@ -4,28 +4,25 @@ Defne HIV
 
 import numpy as np
 import sciris as sc
-from . import utils as ssu
-from . import people as ssp
-from . import modules as ssm
-from . import results as ssr
-from . import interventions as ssi
-from . import analyzers as ssa
+import stisim as ss
+
+__all__ = ['HIV', 'ART', 'CD4_analyzer']
 
 
-class HIV(ssm.Disease):
+class HIV(ss.Disease):
 
     def __init__(self, pars=None):
         super().__init__(pars)
-        self.states = ssu.ndict(
-            ssp.State('susceptible', bool, True),
-            ssp.State('infected', bool, False),
-            ssp.State('ti_infected', float, 0),
-            ssp.State('on_art', bool, False),
-            ssp.State('cd4', float, 500),
+        self.states = ss.ndict(
+            ss.State('susceptible', bool, True),
+            ss.State('infected', bool, False),
+            ss.State('ti_infected', float, 0),
+            ss.State('on_art', bool, False),
+            ss.State('cd4', float, 500),
             self.states,
         )
 
-        self.pars = ssu.omerge({
+        self.pars = ss.omerge({
             'cd4_min': 100,
             'cd4_max': 500,
             'cd4_rate': 5,
@@ -45,7 +42,7 @@ class HIV(ssm.Disease):
 
     def init_results(self, sim):
         super().init_results(sim)
-        self.results['n_art'] = ssr.Result('n_art', self.name, sim.npts, dtype=int)
+        self.results['n_art'] = ss.Result('n_art', self.name, sim.npts, dtype=int)
         return
 
     def update_results(self, sim):
@@ -66,7 +63,7 @@ class HIV(ssm.Disease):
 
 # %% Interventions
 
-class ART(ssi.Intervention):
+class ART(ss.Intervention):
 
     def __init__(self, t: np.array, capacity: np.array):
         self.requires = HIV
@@ -86,20 +83,20 @@ class ART(ssi.Intervention):
             eligible = sim.people.alive & sim.people.hiv.infected & ~sim.people.hiv.on_art
             n_eligible = np.count_nonzero(eligible)
             if n_eligible:
-                inds = np.random.choice(ssu.true(eligible), min(n_eligible, n_change), replace=False)
+                inds = np.random.choice(ss.true(eligible), min(n_eligible, n_change), replace=False)
                 sim.people.hiv.on_art[inds] = True
         elif n_change < 0:
             # Take some people off ART
             eligible = sim.people.alive & sim.people.hiv.infected & sim.people.hiv.on_art
-            inds = np.random.choice(ssu.true(eligible), min(n_change), replace=False)
+            inds = np.random.choice(ss.true(eligible), min(n_change), replace=False)
             sim.people.hiv.on_art[inds] = False
 
         return
 
 
-# %% Analyzers
+#%% Analyzers
 
-class CD4_analyzer(ssa.Analyzer):
+class CD4_analyzer(ss.Analyzer):
 
     def __init__(self):
         self.requires = HIV

@@ -1,11 +1,17 @@
-from . import utils as ssu
-from . import modules as ssm
+"""
+Define interventions
+"""
+
+import stisim as ss
 
 
-class Intervention(ssm.Module):
+__all__ = ['Intervention', 'Interventions']
+
+
+class Intervention(ss.Module):
     pass
 
 
-class Interventions(ssu.ndict):
+class Interventions(ss.ndict):
     def __init__(self, *args, type=Intervention, **kwargs):
         return super().__init__(self, *args, type=type, **kwargs)
