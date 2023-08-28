@@ -58,11 +58,9 @@ sim = ss.Sim(location='rwanda', modules=ss.syphilis())
 # Demographic module examples
 ##################################################################
 
-sim = ss.Sim(modules=[
-    ss.syphilis(),
-    ss.births(birth_rates=0.02),
-    ss.background_deaths(death_rates=0.01)
-])
+sim = ss.Sim(diseases=ss.syphilis(), networks=ss.simple_sexual(), vitals='nigeria')
+
+
 
 
 
