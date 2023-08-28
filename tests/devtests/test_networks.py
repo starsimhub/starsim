@@ -35,36 +35,33 @@ people = ss.People(100)
 # people.routes.injecting  # second type of network for STIsim
 # people.routes.airborne  # if modeling TB for e.g.
 
-import stisim.people as ssppl
-import stisim.utils as ssu
-
 
 def bs(name, prob, eligibility=None):
     """ Shorthand for defining a boolean state with a certain probability """
     distdict = dict(dist='choice', par1=[True, False], par2=[prob, 1 - prob])
-    bool_state = ssppl.State(name, bool, distdict=distdict, eligibility=eligibility)
+    bool_state = ss.State(name, bool, distdict=distdict, eligibility=eligibility)
     return bool_state
 
 
 class Network:
     def __init__(self, pars=None, eligibility=None, states=None):
-        self.pars = ssu.omerge(dict(
+        self.pars = ss.omerge(dict(
             part_rate=1,
         ), pars)
         self.eligibility = eligibility
-        self.states = ssu.omerge(
-            ssu.named_dict(
+        self.states = ss.omerge(
+            ss.ndict(
                 bs('participant', self.pars['part_rate'], eligibility=self.eligibility),
-                ssppl.State('debut', float, 15),
-                ssppl.State('partners', int, 2),
-                ssppl.State('current_partners', int, 0),
+                ss.State('debut', float, 15),
+                ss.State('partners', int, 2),
+                ss.State('current_partners', int, 0),
             ), states)
 
 
 class msm(Network):
     def __init__(self, pars, eligibility='male', states=None):
         super().__init__(pars, eligibility, states)
-        self.states = ssu.omerge(self.states, ssu.named_dict(states))
+        self.states = ss.omerge(self.states, ss.named_dict(states))
 
 
 class mf_marital(Network):
@@ -87,7 +84,7 @@ class SexualTransmission(Network):
         self.find_participants(people)
 
     def find_participants(self, people):
-        participants = ssu.true(self.states['participant'])
+        participants = ss.true(self.states['participant'])
         for network in self.networks:
             network.states['participant'].get_eligibility(people)
 
@@ -123,7 +120,7 @@ western_prefs = orientation(
     pop_shares=[0.93, 0.040, 0.005, 0.005, 0.02]
     # From https://en.wikipedia.org/wiki/Demographics_of_sexual_orientation
 )
-orientation1 = ssppl.State('orientation', int,
+orientation1 = ss.State('orientation', int,
                            distdict=dict(dist='choice', par1=western_prefs.m_partner_prob,
                                          par2=western_prefs.pop_shares),
                            eligibility='male')
@@ -148,16 +145,16 @@ closeted_prefs = orientation(
 
 class SexualNetwork(ss.Network):
     def __init__(self, pars=None, states=None):
-        self.pars = ssu.omerge(dict(
+        self.pars = ss.omerge(dict(
             part_rate=1,
             orientation=closeted_prefs,
         ), pars)
-        self.states = ssu.omerge(self.states, states)
+        self.states = ss.omerge(self.states, states)
 
         # Add orientation
         opars = self.pars['orientation']
         odist = dict(dist='choice', par1=opars.m_partner_prob, par2=opars.pop_shares)
-        self.states['orientation'] = ssppl.State('orientation', float, distdict=odist)
+        self.states['orientation'] = ss.State('orientation', float, distdict=odist)
 
     def initialize(self, p):
         """ Do other initializations that need people - this also adds self.oreintation as an initialized state """
@@ -202,7 +199,7 @@ class Person:
             prefs = np.zeros_like(potentials)
             partner_vals = np.array([getattr(q, this_dim) for q in potentials])
             for s, sprob in these_prefs.items():
-                matches = ssu.true(partner_vals == s)
+                matches = ss.true(partner_vals == s)
                 if len(matches):
                     prefs[matches] = sprob / len(matches)
             self.pop_rankings[this_dim] = prefs
