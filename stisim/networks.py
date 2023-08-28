@@ -5,28 +5,27 @@ Networks that connect people within a population
 # %% Imports
 import numpy as np
 import sciris as sc
-import pandas as pd
-from . import utils as ssu
-from . import settings as sss
-from . import people as ssppl
+import stisim as ss
+
 
 # Specify all externally visible functions this file defines
-__all__ = ['Network', 'simple_sexual', 'msm', 'hpv_network', 'maternal']
-
+__all__ = ['Networks', 'Network', 'simple_sexual', 'hpv_network', 'maternal']
 
 class Network(sc.objdict):
     """
-    A class holding a single network of contact edges (connections) between people,
+    A class holding a single network of contact edges (connections) between people
     as well as methods for updating these.
 
     The input is typically arrays including: person 1 of the connection, person 2 of
     the connection, the weight of the connection, the duration and start/end times of
-    the connection. Connections are undirected; each person is both a source and sink.
+    the connection.
 
     Args:
-        p1 (array): an array of N connections, representing people on one side of the connection
-        p2 (array): an array of people on the other side of the connection
-        beta (array): an array representing relative transmissibility for this network - TODO, do we need this?
+        p1 (array): an array of length N, the number of connections in the network, with the indices of people
+                   on one side of the connection.
+        p2 (array): an array of length N, the number of connections in the network, with the indices of people
+                    on the other side of the connection.
+        beta (array): an array representing relative transmissibility of each connection for this network - TODO, do we need this?
         label (str): the name of the network (optional)
         kwargs (dict): other keys copied directly into the network
 
@@ -37,8 +36,9 @@ class Network(sc.objdict):
     **Examples**::
 
         # Generate an average of 10 contacts for 1000 people
-        n = 10_000
+        n_contacts_pp = 10
         n_people = 1000
+        n = n_contacts_pp * n_people
         p1 = np.random.randint(n_people, size=n)
         p2 = np.random.randint(n_people, size=n)
         beta = np.ones(n)
@@ -51,18 +51,18 @@ class Network(sc.objdict):
         network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
     """
 
-    def __init__(self, *args, key_dict=None, transmission='horizontal', label=None, **kwargs):
+    def __init__(self, *args, key_dict=None, vertical=False, label=None, **kwargs):
 
         default_keys = {
-            'p1': sss.default_int,
-            'p2': sss.default_int,
-            'beta': sss.default_float,
+            'p1': ss.int_,
+            'p2': ss.int_,
+            'beta': ss.float_,
         }
 
         self.pars = sc.objdict()
-        self.states = ssu.named_dict()
+        self.states = ss.named_dict()
         self.meta = sc.mergedicts(default_keys, key_dict)
-        self.transmission = transmission  # "vertical" or "horizontal", determines whether transmission is bidirectional
+        self.vertical = vertical  # Whether transmission is bidirectional
         self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
         self.label = label
         self.initialized = False
@@ -93,7 +93,7 @@ class Network(sc.objdict):
         except:  # pragma: no cover
             return 0
 
-    def __repr__(self):
+    def __repr__(self, **kwargs):
         """ Convert to a dataframe for printing """
         namestr = self.name
         labelstr = f'"{self.label}"' if self.label else '<no label>'
@@ -115,9 +115,7 @@ class Network(sc.objdict):
 
     @property
     def members(self):
-        """
-        Return sorted array of all members
-        """
+        """ Return sorted array of all members """
         return np.unique([self['p1'], self['p2']])
 
     def meta_keys(self):
@@ -236,17 +234,19 @@ class Network(sc.objdict):
             inds = np.array(inds, dtype=np.int64)
 
         # Find the contacts
-        contact_inds = ssu.find_contacts(self['p1'], self['p2'], inds)
+        contact_inds = ss.find_contacts(self['p1'], self['p2'], inds)
         if as_array:
-            contact_inds = np.fromiter(contact_inds, dtype=sss.default_int)
+            contact_inds = np.fromiter(contact_inds, dtype=ss.int_)
             contact_inds.sort()  # Sorting ensures that the results are reproducible for a given seed as well as being identical to previous versions of HPVsim
 
         return contact_inds
 
     def add_pairs(self):
+        """ Define how pairs of people are formed """
         pass
 
     def update(self):
+        """ Define how pairs/connections evolve (in time) """
         pass
 
 
@@ -265,7 +265,7 @@ class Contacts(Network):
         # Should it be a property?
         # Idea here would be that each network would know how many partners
         # (& preferred partners) a person had in total.
-        self.partners = ssppl.State('partners', int, distdict=...)
+        self.partners = ss.State('partners', int, distdict=...)
 
     @ property
     def contacts(self):
@@ -277,14 +277,22 @@ class Contacts(Network):
         return
 
 
+class Networks(ss.ndict):
+    def __init__(self, *args, type=Network, **kwargs):
+        return super().__init__(self, *args, type=type, **kwargs)
+    
+
 class simple_sexual(Network):
-    # Randomly pair males and females with variable relationship durations
+    """
+    A class holding a single network of contact edges (connections) between people.
+    This network is built by **randomly pairing** males and female with variable relationship durations.
+    """
     def __init__(self, mean_dur=5):
         key_dict = {
-            'p1': sss.default_int,
-            'p2': sss.default_int,
-            'dur': sss.default_float,
-            'beta': sss.default_float,
+            'p1': ss.int_,
+            'p2': ss.int_,
+            'dur': ss.float_,
+            'beta': ss.float_,
         }
 
         # Call init for the base class, which sets all the keys
@@ -336,10 +344,10 @@ class msm(Network):
 
     def __init__(self, pars=None):
         key_dict = {
-            'p1': sss.default_int,
-            'p2': sss.default_int,
-            'dur': sss.default_float,
-            'beta': sss.default_float,
+            'p1': ss.int_,
+            'p2': ss.int_,
+            'dur': ss.float_,
+            'beta': ss.float_,
         }
 
         # Call init for the base class, which sets all the keys
@@ -357,11 +365,11 @@ class msm(Network):
 
         # States
         msm_distdict = dict(dist='choice', par1=[True, False], par2=[self.pars['prop_msm'], 1 - self.pars['prop_msm']])
-        self.states = ssu.named_dict(
-            ssppl.State('member', bool, distdict=msm_distdict, eligibility='male'),
-            ssppl.State('debut', float, distdict=self.pars['debut'], eligibility=self.member, na_val=np.nan),
-            ssppl.State('partners', int, distdict=self.pars['partners'], eligibility=self.member, na_val=np.nan),
-            ssppl.State('current_partners', int, fill_value=0, eligibility=self.member, na_val=np.nan),
+        self.states = ss.named_dict(
+            ss.State('member', bool, distdict=msm_distdict, eligibility='male'),
+            ss.State('debut', float, distdict=self.pars['debut'], eligibility=self.member, na_val=np.nan),
+            ss.State('partners', int, distdict=self.pars['partners'], eligibility=self.member, na_val=np.nan),
+            ss.State('current_partners', int, fill_value=0, eligibility=self.member, na_val=np.nan),
         )
 
     def initialize(self, people):
@@ -377,15 +385,6 @@ class msm(Network):
     def add_pairs(self, people, ti=None):
         available = np.setdiff1d(people.uid[people.msm], self.members)
 
-        p1 = available
-
-        beta = np.ones_like(p1)
-        dur = np.random.poisson(self.mean_dur, len(p1))
-        self['p1'] = np.concatenate([self['p1'], p1])
-        self['p2'] = np.concatenate([self['p2'], p2])
-        self['beta'] = np.concatenate([self['beta'], beta])
-        self['dur'] = np.concatenate([self['dur'], dur])
-
     def update(self, people, ti=None, dt=None):
         if dt is None: dt = people.dt
         if ti is None: ti = people.to
@@ -399,12 +398,12 @@ class hpv_network(Network):
     def __init__(self, pars=None):
 
         key_dict = {
-            'p1': sss.default_int,
-            'p2': sss.default_int,
-            'dur': sss.default_float,
-            'acts': sss.default_float,
-            'start': sss.default_float,
-            'beta': sss.default_float,
+            'p1': ss.int_,
+            'p2': ss.int_,
+            'dur': ss.float_,
+            'acts': ss.float_,
+            'start': ss.float_,
+            'beta': ss.float_,
         }
 
         # Call init for the base class, which sets all the keys
@@ -487,7 +486,7 @@ class hpv_network(Network):
         current_partners = np.zeros((len(people)))
         current_partners[f_partnered_inds] = f_partnered_counts
         current_partners[m_partnered_inds] = m_partnered_counts
-        partners = ssu.sample(**self.pars['partners'], size=len(people)) + 1
+        partners = ss.sample(**self.pars['partners'], size=len(people)) + 1
         underpartnered = current_partners < partners  # Indices of underpartnered people
         f_eligible = f_active & underpartnered
         m_eligible = m_active & underpartnered
@@ -496,22 +495,22 @@ class hpv_network(Network):
         bins = self.pars['participation'][0, :]  # Extract age bins
 
         # Try randomly select females for pairing
-        f_eligible_inds = ssu.true(f_eligible)  # Inds of all eligible females
+        f_eligible_inds = ss.true(f_eligible)  # Inds of all eligible females
         age_bins_f = np.digitize(people.age[f_eligible_inds], bins=bins) - 1  # Age bins of selected females
         bin_range_f = np.unique(age_bins_f)  # Range of bins
         f = []  # Initialize the female partners
         for ab in bin_range_f:  # Loop over age bins
-            these_f_contacts = ssu.binomial_filter(self.pars['participation'][1][ab], f_eligible_inds[
+            these_f_contacts = ss.binomial_filter(self.pars['participation'][1][ab], f_eligible_inds[
                 age_bins_f == ab])  # Select females according to their participation rate in this layer
             f += these_f_contacts.tolist()
 
         # Select males according to their participation rate in this layer
-        m_eligible_inds = ssu.true(m_eligible)
+        m_eligible_inds = ss.true(m_eligible)
         age_bins_m = np.digitize(people.age[m_eligible_inds], bins=bins) - 1
         bin_range_m = np.unique(age_bins_m)  # Range of bins
         m = []  # Initialize the male partners
         for ab in bin_range_m:
-            these_m_contacts = ssu.binomial_filter(self.pars['participation'][2][ab], m_eligible_inds[
+            these_m_contacts = ss.binomial_filter(self.pars['participation'][2][ab], m_eligible_inds[
                 age_bins_m == ab])  # Select males according to their participation rate in this layer
             m += these_m_contacts.tolist()
 
@@ -546,8 +545,8 @@ class hpv_network(Network):
         p1 = np.array(f)
         p2 = selected_males
         n_partnerships = len(p1)
-        dur = ssu.sample(**self.pars['dur_pship'], size=n_partnerships)
-        acts = ssu.sample(**self.pars['acts'], size=n_partnerships)
+        dur = ss.sample(**self.pars['dur_pship'], size=n_partnerships)
+        acts = ss.sample(**self.pars['acts'], size=n_partnerships)
         age_p1 = people.age[p1]
         age_p2 = people.age[p2]
 
@@ -579,11 +578,11 @@ class hpv_network(Network):
         retired_vals = 0
 
         # Set values and return
-        scaled_acts = np.full(len(acts), np.nan, dtype=sss.default_float)
+        scaled_acts = np.full(len(acts), np.nan, dtype=ss.float_)
         scaled_acts[below_peak_inds] = below_peak_vals
         scaled_acts[above_peak_inds] = above_peak_vals
         scaled_acts[retired_inds] = retired_vals
-        start = np.array([ti] * n_partnerships, dtype=sss.default_float)
+        start = np.array([ti] * n_partnerships, dtype=ss.float_)
         beta = np.ones(n_partnerships)
 
         new_contacts = dict(
@@ -612,12 +611,12 @@ class hpv_network(Network):
 
 
 class maternal(Network):
-    def __init__(self, key_dict=None, transmission='vertical'):
+    def __init__(self, key_dict=None, vertical=True):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
-        key_dict = sc.mergedicts({'dur': sss.default_float}, key_dict)
-        super().__init__(key_dict=key_dict, transmission=transmission)
+        key_dict = sc.mergedicts({'dur': ss.float_}, key_dict)
+        super().__init__(key_dict=key_dict, vertical=vertical)
         return
 
     def update(self, people, dt=None):

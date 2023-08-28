@@ -3,11 +3,10 @@ Defines the People class and functions associated with making people
 """
 
 # %% Imports
-import sciris as sc
-import numpy as np
 import functools
-from . import utils as ssu
-from .version import __version__
+import numpy as np
+import sciris as sc
+import stisim as ss
 
 __all__ = ['State', 'BasePeople', 'People']
 
@@ -56,7 +55,7 @@ class State(sc.prettyobj):
     def new(self, n, people=None):
         if people is not None:
             full_out = self.new_scalar(n, fill_value=self.na_val)
-            inds = ssu.true(self.get_eligibility(people))
+            inds = ss.true(self.get_eligibility(people))
             defined_vals = self.new(len(inds))
             full_out[inds] = defined_vals
             return full_out
@@ -77,16 +76,16 @@ class State(sc.prettyobj):
     def new_dist(self, n):
         shape = sc.tolist(self.shape)
         shape.append(n)
-        out = ssu.sample(**self.distdict, size=tuple(shape))
+        out = ss.sample(**self.distdict, size=tuple(shape))
         return out
 
 
-base_states = ssu.named_dict(
+base_states = ss.ndict(
     State('uid', int),
     State('age', float),
     State('female', bool, distdict=dict(dist='choice', par1=[True, False], par2=[0.5, 0.5])),
     State('debut', float),
-    State('dead', bool, False),
+    State('alive', bool, True),
     State('ti_dead', float, np.nan),  # Time index for death
     State('scale', float, 1.0),
 )
@@ -107,19 +106,11 @@ class BasePeople(sc.prettyobj):
         """ Length of people """
         return len(self[base_key])
 
+
     def _len_arrays(self):
         """ Length of underlying arrays """
         return len(self._data[base_key])
-
-    def lock(self):
-        """ Lock the people object to prevent keys from being added """
-        self._lock = True
-        return
-
-    def unlock(self):
-        """ Unlock the people object to allow keys to be added """
-        self._lock = False
-        return
+    
 
     def _grow(self, n):
         """
@@ -142,6 +133,7 @@ class BasePeople(sc.prettyobj):
         self._map_arrays()
         new_inds = np.arange(orig_n, self._n)
         return new_inds
+
 
     def _map_arrays(self, keys=None):
         """
@@ -181,27 +173,29 @@ class BasePeople(sc.prettyobj):
 
         return
 
+
     def __getitem__(self, key):
-        """ Allow people['attr'] instead of getattr(people, 'attr')
-            If the key is an integer, alias `people.person()` to return a `Person` instance
+        """
+        Allow people['attr'] instead of getattr(people, 'attr')
+        If the key is an integer, alias `people.person()` to return a `Person` instance
         """
         if isinstance(key, int):
-            return self.person(key)
+            return self.person(key) # TODO: need to re-implement
         else:
             return self.__getattribute__(key)
 
+
     def __setitem__(self, key, value):
         """ Ditto """
-        if self._lock and key not in self.__dict__:  # pragma: no cover
-            errormsg = f'Key "{key}" is not an attribute of people and the people object is locked; see people.unlock()'
-            raise AttributeError(errormsg)
         return self.__setattr__(key, value)
+
 
     def __iter__(self):
         """ Iterate over people """
         for i in range(len(self)):
             yield self[i]
 
+            
     @property
     def active(self):
         """ Indices of everyone sexually active  """
@@ -213,9 +207,9 @@ class BasePeople(sc.prettyobj):
         return ~self.female
 
     @property
-    def alive(self):
-        """ Alive boolean """
-        return ~self.dead
+    def dead(self):
+        """ Dead boolean """
+        return ~self.alive
 
 
 class People(BasePeople):
@@ -242,21 +236,17 @@ class People(BasePeople):
 
     # %% Basic methods
 
-    def __init__(self, n, states=None, strict=True, **kwargs):
+    def __init__(self, n, states=None, networks=None):
         """
         Initialize
         """
 
         self.initialized = False
-        self.version = __version__  # Store version info
+        self.version = ss.__version__  # Store version info
 
         # Initialize states, networks, modules
-        if states is not None:
-            if not sc.isiterable(states):
-                states = ssu.named_dict(states)
-        self.states = sc.mergedicts(base_states, states)
-        self.networks = ssu.named_dict()
-        self._modules = sc.autolist()
+        self.states = ss.ndict(base_states, states)
+        self.networks = ss.ndict(networks)
 
         # Private variables relating to dynamic allocation
         self._data = dict()
@@ -269,17 +259,11 @@ class People(BasePeople):
             self._data[state_name] = state.new(self._n)
         self._map_arrays()
         self['uid'][:] = np.arange(self._n)
-
-        # Define lock attribute here, since BasePeople.lock()/unlock() requires it
-        self._lock = False  # Prevent further modification of keys
-
-        if strict: self.lock()  # If strict is true, stop further keys from being set (does not affect attributes)
-        self.kwargs = kwargs
         return
 
     def initialize(self, popdict=None):
         """ Initialize people by setting their attributes """
-        if popdict is None:
+        if popdict is None: # TODO: update
             self['age'][:] = np.random.random(size=len(self)) * 100
             self['female'][:] = np.random.choice([False, True], size=len(self))
         else:
@@ -350,75 +334,21 @@ class People(BasePeople):
         """
         return self.scale[inds].sum()
 
+    def update(self, sim):
+        """ Update demographics and networks """
+        self.update_demographics(sim.dt, sim.ti)
+        self.update_networks()
+        return
+
     def update_demographics(self, dt, ti):
         """ Perform vital dynamic updates at the current timestep """
+        self.age[self.alive] += dt
+        self.alive[self.ti_dead <= ti] = False
+        return
 
-        self.age[~self.dead] += dt
-        self.dead[self.ti_dead <= ti] = True
-
-# %% Helper functions to create popdicts
-
-# def set_static(new_n, existing_n=0, pars=None, f_ratio=0.5):
-#     """
-#     Set static population characteristics that do not change over time.
-#     This function can be used when adding new births, in which case the existing popsize can be given as `existing_n`.
-
-#     Arguments:
-#         new_n (int): Number of new individuals to add to the population.
-#         existing_n (int, optional): Number of existing individuals in the population. Default is 0.
-#         pars (dict, optional): Dictionary of parameters. Default is None.
-#         f_ratio (float, optional): Female ratio in the population. Default is 0.5.
-
-#     Returns:
-#         uid (ndarray, int): unique identifiers for the individuals.
-#         female (ndarray, bool): array indicating whether an individual is female or not.
-#         debut (ndarray, bool): array indicating the debut value for each individual.
-#     """
-#     uid = np.arange(existing_n, existing_n+new_n, dtype=sss.default_int)
-#     female = np.random.choice([True, False], size=new_n, p=f_ratio)
-#     n_females = len(ssu.true(female))
-#     debut = np.full(new_n, np.nan, dtype=sss.default_float)
-#     debut[female] = ssu.sample(**pars['debut']['m'], size=n_females)
-#     debut[~female] = ssu.sample(**pars['debut']['f'], size=new_n-n_females)
-#     return uid, female, debut
-
-
-# def make_popdict(n=None, location=None, year=None, verbose=None, f_ratio=0.5, dt_round_age=True, dt=None):
-#     """ Create a location-specific population dictionary """
-
-#     # Initialize total pop size
-#     total_pop = None
-
-#     # Load age data for this location if available
-#     if verbose:
-#         print(f'Loading location-specific data for "{location}"')
-#     try:
-#         age_data = ssdata.get_age_distribution(location, year=year)
-#         total_pop = sum(age_data[:, 2])  # Return the total population
-#     except ValueError as E:
-#         warnmsg = f'Could not load age data for requested location "{location}" ({str(E)})'
-#         ssm.warn(warnmsg, die=True)
-
-#     uid, female, debut = set_static(n, f_ratio=f_ratio)
-
-#     # Set ages, rounding to nearest timestep if requested
-#     age_data_min = age_data[:, 0]
-#     age_data_max = age_data[:, 1]
-#     age_data_range = age_data_max - age_data_min
-#     age_data_prob = age_data[:, 2]
-#     age_data_prob /= age_data_prob.sum()  # Ensure it sums to 1
-#     age_bins = ssu.n_multinomial(age_data_prob, n)  # Choose age bins
-#     if dt_round_age:
-#         ages = age_data_min[age_bins] + np.random.randint(
-#             age_data_range[age_bins] / dt) * dt  # Uniformly distribute within this age bin
-#     else:
-#         ages = age_data_min[age_bins] + age_data_range[age_bins] * np.random.random(n)  # Uniform  within this age bin
-
-#     # Store output
-#     popdict = dict(
-#         uid=uid,
-#         age=ages,
-#         female=female
-#     )
-
-#     return total_pop, popdict
+    def update_networks(self):
+        """
+        Update networks
+        """
+        for network in self.networks.values():
+            network.update(self)
