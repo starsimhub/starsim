@@ -119,10 +119,10 @@ class Disease(Module):
         """
         Initialize results. TODO, should these be stored in the module or just added directly to the sim?
         """
-        self.results['n_susceptible']  = ss.Result(self.name, 'n_susceptible', sim.npts, dtype=int)
-        self.results['n_infected']     = ss.Result(self.name, 'n_infected', sim.npts, dtype=int)
-        self.results['prevalence']     = ss.Result(self.name, 'prevalence', sim.npts, dtype=float)
-        self.results['new_infections'] = ss.Result(self.name, 'n_infected', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'n_susceptible', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'n_infected', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'prevalence', sim.npts, dtype=float)
+        self.results += ss.Result(self.name, 'new_infections', sim.npts, dtype=int)
         return
     
 
