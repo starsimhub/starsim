@@ -19,7 +19,7 @@ class Gonorrhea(ss.Disease):
             ss.State('infected', bool, False),
             ss.State('ti_infected', float, 0),
             ss.State('ti_recovered', float, 0),
-            ss.State('ti_dead', float, np.nan), # Death due to gonorrhea
+            ss.State('ti_dead', float, np.nan),  # Death due to gonorrhea
             self.states,
         )
 
@@ -27,7 +27,7 @@ class Gonorrhea(ss.Disease):
             self.__setattr__(state.name, state)
 
         self.pars = ss.omerge({
-            'dur_inf': 3, # not modelling diagnosis or treatment explicitly here
+            'dur_inf': 3,  # not modelling diagnosis or treatment explicitly here
             'p_death': 0.2,
             'initial': 3,
             'eff_condoms': 0.7,
