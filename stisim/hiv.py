@@ -48,7 +48,7 @@ class HIV(ss.Disease):
 
     def update_results(self, sim):
         super(HIV, self).update_results(sim)
-        sim.results[self.name]['n_art'] = np.count_nonzero(sim.people.alive & sim.people[self.name].on_art)
+        sim.results[self.name]['n_art'] = np.count_nonzero(sim.people.alive & self.on_art)
         return
 
     def make_new_cases(self, sim):

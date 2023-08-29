@@ -21,8 +21,7 @@ class Module(sc.prettyobj):
         self.initialized = False
         self.finalized = False
         return
-    
-    
+
     def __call__(self, *args, **kwargs):
         """ Makes module(sim) equivalent to module.apply(sim) """
         if not self.initialized:  # pragma: no cover
@@ -30,13 +29,11 @@ class Module(sc.prettyobj):
             raise RuntimeError(errormsg)
         return self.apply(*args, **kwargs)
     
-    
     def check_requires(self, sim):
         for req in self.requires:
             if req not in sim.modules:
                 raise Exception(f'{self.__name__} requires module {req} but the Sim did not contain this module')
         return
-    
     
     def initialize(self, sim):
         self.check_requires(sim)
@@ -52,16 +49,13 @@ class Module(sc.prettyobj):
         
         self.initialized = True
         return
-    
-    
+
     def apply(self, sim):
         pass
-    
-    
+
     def finalize(self, sim):
         self.finalized = True
-    
-    
+
     @property
     def name(self):
         """ The module name is a lower-case version of its class name """
@@ -84,7 +78,6 @@ class Disease(Module):
             ss.State('rel_trans', float, 1),
         )
         return
-
     
     def initialize(self, sim):
         super().initialize(sim)
@@ -94,8 +87,6 @@ class Disease(Module):
         self.init_states(sim)
         self.init_results(sim)
         return
-        
-
 
     def validate_pars(self, sim):
         """
@@ -114,7 +105,6 @@ class Disease(Module):
         self.set_prognoses(sim, initial_cases)
         return
 
-
     def init_results(self, sim):
         """
         Initialize results. TODO, should these be stored in the module or just added directly to the sim?
@@ -124,7 +114,6 @@ class Disease(Module):
         self.results += ss.Result(self.name, 'prevalence', sim.npts, dtype=float)
         self.results += ss.Result(self.name, 'new_infections', sim.npts, dtype=int)
         return
-    
 
     def update(self, sim):
         """
@@ -134,12 +123,10 @@ class Disease(Module):
         self.make_new_cases(sim)
         self.update_results(sim)
         return
-    
 
     def update_states(self, sim):
         # Carry out any autonomous state changes at the start of the timestep
         pass
-
 
     def make_new_cases(self, sim):
         """ Add new cases of module, through transmission, incidence, etc. """
@@ -155,17 +142,14 @@ class Disease(Module):
                     if new_cases.any():
                         self.set_prognoses(sim, b[new_cases])
 
-
     def set_prognoses(self, sim, uids):
         pass
 
-
     def update_results(self, sim):
-        self.results['n_susceptible'][sim.ti]  = np.count_nonzero(sim.people[self.name].susceptible)
-        self.results['n_infected'][sim.ti]     = np.count_nonzero(sim.people[self.name].infected)
-        self.results['prevalence'][sim.ti]     = sim.results[self.name].n_infected[sim.ti] / len(sim.people)
-        self.results['new_infections'][sim.ti] = np.count_nonzero(sim.people[self.name].ti_infected == sim.ti)
-
+        self.results['n_susceptible'][sim.ti]  = np.count_nonzero(self.susceptible)
+        self.results['n_infected'][sim.ti]     = np.count_nonzero(self.infected)
+        self.results['prevalence'][sim.ti]     = self.results.n_infected[sim.ti] / len(sim.people)
+        self.results['new_infections'][sim.ti] = np.count_nonzero(self.ti_infected == sim.ti)
 
     def finalize_results(self, sim):
         pass
