@@ -19,10 +19,10 @@ def test_people():
     del ppl
 
     # Possible to initialize people with extra states, e.g. a geolocation
-    extra_states = ss.ndict(
-        ss.State('geolocation', int, distdict=dict(dist='choice', par1=[1, 2, 3])),
-    )
-    ppl = ss.People(100, states=extra_states)
+    extra_states = [
+        ss.State('geolocation', int, lambda n: np.random.choice([1,2,3],n)),
+    ]
+    ppl = ss.People(100, extra_states=extra_states)
 
     # Possible to add a module to people outside a sim (not typical workflow)
     ppl.add_module(ss.HIV())
