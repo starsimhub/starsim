@@ -14,14 +14,11 @@ class Gonorrhea(ss.Disease):
     def __init__(self, pars=None):
         super().__init__(pars)
 
-        self.states = ss.ndict(
-            ss.State('susceptible', bool, True),
-            ss.State('infected', bool, False),
-            ss.State('ti_infected', float, 0),
-            ss.State('ti_recovered', float, 0),
-            ss.State('ti_dead', float, np.nan),  # Death due to gonorrhea
-            self.states,
-        )
+        self.susceptible = ss.State('susceptible', bool, True)
+        self.infected = ss.State('infected', bool, False)
+        self.ti_infected = ss.State('ti_infected', float, 0)
+        self.ti_recovered = ss.State('ti_recovered', float, 0)
+        self.ti_dead = ss.State('ti_dead', float, np.nan)  # Death due to gonorrhea
 
         self.pars = ss.omerge({
             'dur_inf': 3,  # not modelling diagnosis or treatment explicitly here

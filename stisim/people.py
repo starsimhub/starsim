@@ -181,14 +181,13 @@ class People(BasePeople):
 
 
     def add_module(self, module, force=False):
-        # Initialize all the states associated with a module
-        # This is implemented as People.add_module rather than
-        # Module.add_to_people(people) or similar because its primary
-        # role is to modify the People object
+        # Map the module's states into the People state ndict
         if hasattr(self, module.name) and not force:
             raise Exception(f'Module {module.name} already added')
         self.__setattr__(module.name, sc.objdict())
 
+        # The entries created below make it possible to do `sim.people.hiv.susceptible` or
+        # `sim.people.states['hiv.susceptible']` and have both of them work
         module_states = sc.objdict()
         setattr(self, module.name, module_states)
 
@@ -197,7 +196,6 @@ class People(BasePeople):
             self.states[combined_name] = state # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
             pre, _, post = combined_name.rpartition('.')
             setattr(module_states, state_name, state)
-            state.initialize(self) # Connect the state to this people instance
 
         return
 
