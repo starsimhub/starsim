@@ -9,6 +9,13 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :depth: 1
 
 
+Version 0.0.6 (2023-08-30)
+--------------------------
+- Changes agent IDs from index-based to UID-based
+- Allows states to store their own data and live within modules
+- *GitHub info*: PR `88 <https://github.com/amath-idm/stisim/pull/88>`_
+
+
 Version 0.0.5 (2023-08-29)
 --------------------------
 - Refactor file structure 
