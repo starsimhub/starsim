@@ -327,7 +327,7 @@ class State(FusedArray):
 
         people.add_state(self)
         self._uid_map = people._uid_map
-        self.uids = people.uid
+        self.uids = people.uids
         self._data.initialize(len(self.uids))
         self.values = self._data._view
         self._initialized = True
@@ -489,122 +489,49 @@ a = z.values
 s = pd.Series(z.values, p.uids)
 uid_map = p._uid_map._view
 
-# print('SINGLE ITEM LOOKUP')
-# print('Array (direct): ', end='')
-# %timeit a[single_item_ind]
-# print('Array (mapped): ', end='')
-# %timeit a[uid_map[single_item_uid]]
-# print('State: ', end='')
-# %timeit z[single_item_uid]
-# print('Series: ', end='')
-# %timeit s[single_item_uid]
-# print('Series (loc): ', end='')
-# %timeit s.loc[single_item_uid]
-# print()
-# print('MULTIPLE ITEM LOOKUP')
-# print('Array (direct): ', end='')
-# %timeit a[multiple_items_ind]
-# print('Array (mapped): ', end='')
-# %timeit a[uid_map[multiple_items_uid]]
-# print('State: ', end='')
-# %timeit z[multiple_items_uid]
-# print('Series: ', end='')
-# %timeit s[multiple_items_uid]
-# print('Series (loc): ', end='')
-# %timeit s.loc[multiple_items_uid]
-# print()
-# print('MULTIPLE ITEM LOOKUP (FEW)')
-# print('Array (direct): ', end='')
-# %timeit a[multiple_items_few_ind]
-# print('Array (mapped): ', end='')
-# %timeit a[uid_map[multiple_items_few_uid]]
-# print('State: ', end='')
-# %timeit z[multiple_items_few_uid]
-# print('Series: ', end='')
-# %timeit s[multiple_items_few_uid]
-# print('Series (loc): ', end='')
-# %timeit s.loc[multiple_items_few_uid]
-# print()
-# print('BOOLEAN ARRAY LOOKUP')
-# print('Array (direct): ', end='')
-# %timeit a[boolean]
-# print('Array (nonzero): ', end='')
-# %timeit a[boolean.nonzero()[0]]
-# print('State: ', end='')
-# %timeit z[boolean]
-# print('Series: ', end='')
-# %timeit s[boolean]
-# print('Series (loc): ', end='')
-# %timeit s.loc[boolean]
-# print()
-# print('SINGLE ITEM ASSIGNMENT')
-# print('Array (direct): ', end='')
-# %timeit a[single_item_ind] = 1
-# print('Array (mapped): ', end='')
-# %timeit a[uid_map[single_item_uid]] = 1
-# print('State: ', end='')
-# %timeit z[single_item_uid] = 1
-# print('Series: ', end='')
-# %timeit s[single_item_uid] = 1
-# print('Series (loc): ', end='')
-# %timeit s.loc[single_item_uid] = 1
-# print()
-# print('MULTIPLE ITEM ASSIGNMENT')
-# print('Array (direct): ', end='')
-# %timeit a[multiple_items_ind] = 1
-# print('Array (mapped): ', end='')
-# %timeit a[uid_map[multiple_items_uid]] = 1
-# print('State: ', end='')
-# %timeit z[multiple_items_uid] = 1
-# print('Series: ', end='')
-# %timeit s[multiple_items_uid] = 1
-# print('Series (loc): ', end='')
-# %timeit s.loc[multiple_items_uid] = 1
-# print()
-# print('MULTIPLE ITEM ASSIGNMENT (FEW)')
-# print('Array (direct): ', end='')
-# %timeit a[multiple_items_few_ind] = 1
-# print('Array (mapped): ', end='')
-# %timeit a[uid_map[multiple_items_few_uid]] = 1
-# print('State: ', end='')
-# %timeit z[multiple_items_few_uid] = 1
-# print('Series: ', end='')
-# %timeit s[multiple_items_few_uid] = 1
-# print('Series (loc): ', end='')
-# %timeit s.loc[multiple_items_few_uid] = 1
-# print()
-# print('MULTIPLE ITEM ARRAY ASSIGNMENT')
-# print('Array (direct): ', end='')
-# %timeit a[multiple_items_ind] = multiple_items_ind
-# print('Array (mapped): ', end='')
-# %timeit a[uid_map[multiple_items_uid]] = multiple_items_ind
-# print('State: ', end='')
-# %timeit z[multiple_items_uid] = multiple_items_ind
-# print('Series: ', end='')
-# %timeit s[multiple_items_uid] = multiple_items_ind
-# print('Series (loc): ', end='')
-# %timeit s.loc[multiple_items_uid] = multiple_items_ind
-# print()
-# print('MULTIPLE ITEM ARRAY ASSIGNMENT (FEW)')
-# print('Array (direct): ', end='')
-# %timeit a[multiple_items_few_ind] = multiple_items_few_ind
-# print('Array (mapped): ', end='')
-# %timeit a[uid_map[multiple_items_few_uid]] = multiple_items_few_ind
-# print('State: ', end='')
-# %timeit z[multiple_items_few_uid] = multiple_items_few_ind
-# print('Series: ', end='')
-# %timeit s[multiple_items_few_uid] = multiple_items_few_ind
-# print('Series (loc): ', end='')
-# %timeit s.loc[multiple_items_few_uid] = multiple_items_few_ind
-# print()
-# print('BOOLEAN ARRAY ASSIGNMENT')
-# print('Array (direct): ', end='')
-# %timeit a[boolean] = 1
-# print('Array (nonzero): ', end='')
-# %timeit a[boolean.nonzero()[0]] = 1
-# print('State: ', end='')
-# %timeit z[boolean] = 1
-# print('Series: ', end='')
-# %timeit s[boolean] = 1
-# print('Series (loc): ', end='')
-# %timeit s.loc[boolean]
+if True:
+
+    def lookup(lbl, uids, n=10_000):
+        print('\n' + lbl)
+        with sc.timer('State: '):
+            for i in range(n): z[uids]
+        with sc.timer('Series: '):
+            for i in range(n): s[uids]
+        with sc.timer('Series (loc): '):
+            for i in range(n): s.loc[uids]
+
+        with sc.timer('Series (hack): '):
+            for i in range(n): 
+                if uids.dtype == np.bool_:
+                    s.values[uids]
+                else:
+                    s.values[uid_map[uids]]
+
+    def assign(lbl, uids, vals, n=10_000):
+        print('\n' + lbl)
+        with sc.timer('State: '):
+            for i in range(n): z[uids] = vals
+        with sc.timer('Series: '):
+            for i in range(n): s[uids] = vals
+        with sc.timer('Series (loc): '):
+            for i in range(n): s.loc[uids] = vals
+
+        with sc.timer('Series (hack): '):
+            for i in range(n): 
+                if uids.dtype == np.bool_:
+                    s.values[uids] = vals
+                else:
+                    s.values[uid_map[uids]] = vals
+
+    lookup('SINGLE ITEM LOOKUP', single_item_uid)
+    lookup('MULTIPLE ITEM LOOKUP', multiple_items_uid)
+    lookup('MULTIPLE ITEM LOOKUP (FEW)', multiple_items_few_uid)
+    lookup('BOOLEAN ARRAY LOOKUP', boolean)
+
+    assign('SINGLE ITEM ASSIGNMENT', single_item_uid, 1)
+    assign('MULTIPLE ITEM ASSIGNMENT', multiple_items_uid, 1)
+    assign('MULTIPLE ITEM ASSIGNMENT (FEW)', multiple_items_few_uid, 1)
+    
+    assign('MULTIPLE ITEM ARRAY ASSIGNMENT', multiple_items_uid, multiple_items_ind)
+    assign('MULTIPLE ITEM ARRAY ASSIGNMENT (FEW)', multiple_items_few_uid, multiple_items_few_ind)
+    assign('BOOLEAN ARRAY ASSIGNMENT', boolean, 1)
