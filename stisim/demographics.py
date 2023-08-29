@@ -44,7 +44,6 @@ class Pregnancy(ss.Module):
         self.init_results(sim)
         sim.pars['birth_rates'] = None  # This turns off birth rate pars so births only come from this module
         return
-    
 
     def init_results(self, sim):
         """
@@ -52,8 +51,8 @@ class Pregnancy(ss.Module):
         Still unclear whether this logic should live in the pregnancy module, the
         individual disease modules, the connectors, or the sim.
         """
-        self.results += ss.Result('pregnancies', self.name, sim.npts, dtype=int)
-        self.results += ss.Result('births', self.name, sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'pregnancies', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'births', sim.npts, dtype=int)
         return
 
     def update(self, sim):
