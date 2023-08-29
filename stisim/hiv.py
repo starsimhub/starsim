@@ -46,7 +46,6 @@ class HIV(ss.Disease):
 
     def update_results(self, sim):
         super(HIV, self).update_results(sim)
-        sim.results[self.name]['n_art'] = np.count_nonzero(sim.people.alive & self.on_art)
         return
 
     def make_new_cases(self, sim):
@@ -92,6 +91,9 @@ class ART(ss.Intervention):
             eligible = sim.people.alive & sim.people.hiv.infected & sim.people.hiv.on_art
             inds = np.random.choice(ss.true(eligible), min(n_change), replace=False)
             sim.people.hiv.on_art[inds] = False
+
+        # Add result
+        sim.results.hiv.n_art = np.count_nonzero(sim.people.alive & sim.people.hiv.on_art)
 
         return
 
