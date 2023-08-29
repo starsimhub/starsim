@@ -3,14 +3,12 @@ Defines the People class and functions associated with making people
 """
 
 # %% Imports
-import sciris as sc
 import numpy as np
-import functools
-from . import utils as ssu
-from .version import __version__
-from .states import DynamicView, State, INT_NAN
+import sciris as sc
+import stisim as ss
 
 __all__ = ['BasePeople', 'People']
+
 
 # %% Main people class
 class BasePeople(sc.prettyobj):
@@ -23,8 +21,8 @@ class BasePeople(sc.prettyobj):
     def __init__(self, n):
 
         self.initialized = False
-        self._uid_map = DynamicView(int, fill_value=INT_NAN) # This variable tracks all UIDs ever created
-        self.uid = DynamicView(int, fill_value=INT_NAN) # This variable tracks all UIDs currently in use
+        self._uid_map = ss.DynamicView(int, fill_value=ss.INT_NAN) # This variable tracks all UIDs ever created
+        self.uid = ss.DynamicView(int, fill_value=ss.INT_NAN) # This variable tracks all UIDs currently in use
 
         self._uid_map.initialize(n)
         self._uid_map[:] = np.arange(0, n)
@@ -45,9 +43,7 @@ class BasePeople(sc.prettyobj):
     def add_state(self, state):
         if id(state) not in self._states:
             self._states[id(state)] = state
-
-    def __len__(self):
-        return len(self.uid)
+        return
 
     def grow(self, n):
         """
@@ -88,8 +84,9 @@ class BasePeople(sc.prettyobj):
             state._trim(keep_inds)
 
         # Update the UID map
-        self._uid_map[:] = INT_NAN # Clear out all previously used UIDs
+        self._uid_map[:] = ss.INT_NAN # Clear out all previously used UIDs
         self._uid_map[keep_uids] = np.arange(0, len(keep_uids)) # Assign the array indices for all of the current UIDs
+        return
 
 
     def __getitem__(self, key):
@@ -142,32 +139,31 @@ class People(BasePeople):
     # %% Basic methods
 
     def __init__(self, n, extra_states=None, networks=None):
-        """
-        Initialize
-        """
+        """ Initialize """
 
         super().__init__(n)
         
-        self.version = __version__  # Store version info
+        self.initialized = False
+        self.version = ss.__version__  # Store version info
 
         states = [
-            State('age', float),
-            State('female', bool, False),
-            State('debut', float),
-            State('alive', bool, True),
-            State('ti_dead', float, np.nan),  # Time index for death
-            State('scale', float, 1.0),
+            ss.State('age', float),
+            ss.State('female', bool, False),
+            ss.State('debut', float),
+            ss.State('alive', bool, True),
+            ss.State('ti_dead', float, np.nan),  # Time index for death
+            ss.State('scale', float, 1.0),
         ]
         states.extend(sc.promotetolist(extra_states))
 
-        self.states = ssu.ndict()
+        self.states = ss.ndict()
 
         for state in states:
             self.add_state(state)  # Register the state internally for dynamic growth
             self.states.append(state)  # Expose these states with their original names
             state.initialize(self) # Connect the state to this people instance
             setattr(self, state.name, state)
-        self.networks = ssu.ndict(networks)
+        self.networks = ss.ndict(networks)
 
         return
 
@@ -244,3 +240,8 @@ class People(BasePeople):
     def dead(self):
         """ Dead boolean """
         return ~self.alive
+
+    @property
+    def male(self):
+        """ Male boolean """
+        return ~self.female

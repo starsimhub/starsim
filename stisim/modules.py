@@ -4,24 +4,24 @@ Disease modules
 
 import numpy as np
 import sciris as sc
-from . import people as ssp
-from . import results as ssr
-from . import utils as ssu
+import stisim as ss
+
+
+__all__ = ['Module', 'Modules', 'Disease']
 
 
 class Module(sc.prettyobj):
     
     def __init__(self, pars=None, label=None, requires=None, *args, **kwargs):
-        self.pars = ssu.omerge(pars)
+        self.pars = ss.omerge(pars)
         self.label = label if label else ''
         self.requires = sc.mergelists(requires)
-        self.states = ssu.ndict()
-        self.results = ssr.Results()
+        self.states = ss.ndict()
+        self.results = ss.Results()
         self.initialized = False
         self.finalized = False
         return
-    
-    
+
     def __call__(self, *args, **kwargs):
         """ Makes module(sim) equivalent to module.apply(sim) """
         if not self.initialized:  # pragma: no cover
@@ -29,13 +29,11 @@ class Module(sc.prettyobj):
             raise RuntimeError(errormsg)
         return self.apply(*args, **kwargs)
     
-    
     def check_requires(self, sim):
         for req in self.requires:
             if req not in sim.modules:
                 raise Exception(f'{self.__name__} requires module {req} but the Sim did not contain this module')
         return
-    
     
     def initialize(self, sim):
         self.check_requires(sim)
@@ -44,6 +42,10 @@ class Module(sc.prettyobj):
         sim.pars[self.name] = self.pars
         sim.results[self.name] = self.results
 
+        # Add the module states to the module
+        for state in self.states.values():
+            self.__setattr__(state.name, state)
+
         # Add this module to a People instance. This would always involve calling People.add_module
         # but subsequently modules could have their own logic for initializing the default values
         # and initializing any outputs that are required
@@ -51,23 +53,20 @@ class Module(sc.prettyobj):
         
         self.initialized = True
         return
-    
-    
+
     def apply(self, sim):
         pass
-    
-    
+
     def finalize(self, sim):
         self.finalized = True
-    
-    
+
     @property
     def name(self):
         """ The module name is a lower-case version of its class name """
         return self.__class__.__name__.lower()
 
 
-class Modules(ssu.ndict):
+class Modules(ss.ndict):
     def __init__(self, *args, type=Module, **kwargs):
         return super().__init__(self, *args, type=type, **kwargs)
 
@@ -77,13 +76,12 @@ class Disease(Module):
     
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__(pars, *args, **kwargs)
-        self.states = ssu.ndict(
-            ssp.State('rel_sus', float, 1),
-            ssp.State('rel_sev', float, 1),
-            ssp.State('rel_trans', float, 1),
+        self.states = ss.ndict(
+            ss.State('rel_sus', float, 1),
+            ss.State('rel_sev', float, 1),
+            ss.State('rel_trans', float, 1),
         )
         return
-
     
     def initialize(self, sim):
         super().initialize(sim)
@@ -93,8 +91,6 @@ class Disease(Module):
         self.init_states(sim)
         self.init_results(sim)
         return
-        
-
 
     def validate_pars(self, sim):
         """
@@ -113,17 +109,15 @@ class Disease(Module):
         self.set_prognoses(sim, initial_cases)
         return
 
-
     def init_results(self, sim):
         """
-        Initialize results. TODO, should these be stored in the module or just added directly to the sim?
+        Initialize results
         """
-        self.results['n_susceptible']  = ssr.Result(self.name, 'n_susceptible', sim.npts, dtype=int)
-        self.results['n_infected']     = ssr.Result(self.name, 'n_infected', sim.npts, dtype=int)
-        self.results['prevalence']     = ssr.Result(self.name, 'prevalence', sim.npts, dtype=float)
-        self.results['new_infections'] = ssr.Result(self.name, 'n_infected', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'n_susceptible', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'n_infected', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'prevalence', sim.npts, dtype=float)
+        self.results += ss.Result(self.name, 'new_infections', sim.npts, dtype=int)
         return
-    
 
     def update(self, sim):
         """
@@ -133,20 +127,18 @@ class Disease(Module):
         self.make_new_cases(sim)
         self.update_results(sim)
         return
-    
 
     def update_states(self, sim):
         # Carry out any autonomous state changes at the start of the timestep
         pass
-
 
     def make_new_cases(self, sim):
         """ Add new cases of module, through transmission, incidence, etc. """
         pars = sim.pars[self.name]
         for k, layer in sim.people.networks.items():
             if k in pars['beta']:
-                rel_trans = (sim.people[self.name].infected & sim.people.alive).astype(float)
-                rel_sus = (sim.people[self.name].susceptible & sim.people.alive).astype(float)
+                rel_trans = (self.infected & sim.people.alive).astype(float)
+                rel_sus = (self.susceptible & sim.people.alive).astype(float)
                 for a, b, beta in [[layer['p1'], layer['p2'], pars['beta'][k][0]], [layer['p2'], layer['p1'], pars['beta'][k][1]]]:
                     # probability of a->b transmission
                     p_transmit = rel_trans[a] * rel_sus[b] * layer['beta'] * beta
@@ -154,17 +146,14 @@ class Disease(Module):
                     if new_cases.any():
                         self.set_prognoses(sim, b[new_cases])
 
-
     def set_prognoses(self, sim, uids):
         pass
 
-
     def update_results(self, sim):
-        self.results['n_susceptible'][sim.ti]  = np.count_nonzero(sim.people[self.name].susceptible)
-        self.results['n_infected'][sim.ti]     = np.count_nonzero(sim.people[self.name].infected)
-        self.results['prevalence'][sim.ti]     = sim.results[self.name].n_infected[sim.ti] / len(sim.people)
-        self.results['new_infections'][sim.ti] = np.count_nonzero(sim.people[self.name].ti_infected == sim.ti)
-
+        self.results['n_susceptible'][sim.ti]  = np.count_nonzero(self.susceptible)
+        self.results['n_infected'][sim.ti]     = np.count_nonzero(self.infected)
+        self.results['prevalence'][sim.ti]     = self.results.n_infected[sim.ti] / len(sim.people)
+        self.results['new_infections'][sim.ti] = np.count_nonzero(self.ti_infected == sim.ti)
 
     def finalize_results(self, sim):
         pass

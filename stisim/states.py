@@ -2,11 +2,12 @@ import pandas as pd
 import numpy as np
 import sciris as sc
 import numba as nb
-from numpy.lib.mixins import NDArrayOperatorsMixin # Inherit from this to automatically gain operators like +, -, ==, <, etc.
+from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
 
 __all__ = ['State', 'DynamicView', 'INT_NAN']
 
 INT_NAN = np.iinfo(int).max  # Value to use to flag removed UIDs (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
+
 
 class FusedArray(NDArrayOperatorsMixin):
     # This is a class that allows indexing by UID but does not support dynamic growth
