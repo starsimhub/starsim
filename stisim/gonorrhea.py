@@ -23,9 +23,6 @@ class Gonorrhea(ss.Disease):
             self.states,
         )
 
-        for state in self.states.values():
-            self.__setattr__(state.name, state)
-
         self.pars = ss.omerge({
             'dur_inf': 3,  # not modelling diagnosis or treatment explicitly here
             'p_death': 0.2,

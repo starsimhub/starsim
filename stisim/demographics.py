@@ -26,8 +26,6 @@ class Pregnancy(ss.Module):
             ss.State('ti_dead', float, np.nan),  # Maternal mortality
             self.states,
         )
-        for state in self.states.values():
-            self.__setattr__(state.name, state)
 
         self.pars = ss.omerge({
             'dur_pregnancy': 0.75,  # Make this a distribution?

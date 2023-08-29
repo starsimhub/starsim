@@ -42,6 +42,10 @@ class Module(sc.prettyobj):
         sim.pars[self.name] = self.pars
         sim.results[self.name] = self.results
 
+        # Add the module states to the module
+        for state in self.states.values():
+            self.__setattr__(state.name, state)
+
         # Add this module to a People instance. This would always involve calling People.add_module
         # but subsequently modules could have their own logic for initializing the default values
         # and initializing any outputs that are required

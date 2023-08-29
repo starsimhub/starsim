@@ -19,11 +19,9 @@ class HIV(ss.Disease):
             ss.State('infected', bool, False),
             ss.State('ti_infected', float, 0),
             ss.State('on_art', bool, False),
-            ss.State('cd4', float, 500)
+            ss.State('cd4', float, 500),
+            self.states
         )
-
-        for state in self.states.values():
-            self.__setattr__(state.name, state)
 
         self.pars = ss.omerge({
             'cd4_min': 100,
@@ -32,6 +30,7 @@ class HIV(ss.Disease):
             'initial': 30,
             'eff_condoms': 0.7,
         }, self.pars)
+
         return
 
     def update_states(self, sim):
