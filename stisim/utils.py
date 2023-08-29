@@ -98,12 +98,12 @@ class ndict(sc.objdict):
     def __add__(self, dict2):
         """ Allow c = a + b """
         new = self.copy()
-        new._process_arg(dict2)
+        new.append(dict2)
         return new
 
     def __iadd__(self, dict2):
         """ Allow a += b """
-        self._process_arg(dict2)
+        self.append(dict2)
         return self
 
 
