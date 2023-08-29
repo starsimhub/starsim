@@ -201,7 +201,6 @@ class People(BasePeople):
 
         return
 
-
     def scale_flows(self, inds):
         """
         Return the scaled versions of the flows -- replacement for len(inds)

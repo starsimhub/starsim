@@ -13,14 +13,14 @@ __all__ = ['Sim', 'AlreadyRunError']
 
 class Sim(sc.prettyobj):
 
-    def __init__(self, pars=None, label=None, people=None, modules=None, **kwargs):
+    def __init__(self, pars=None, label=None, people=None, modules=None, connectors=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
         self.people = people  # People object
         self.modules = ss.Modules(modules)  # List of modules to simulate
-        self.connectors = None  # Placeholder storage while we determine what these are
+        self.connectors = ss.Connectors(connectors)
         self.results = ss.Results()  # For storing results
         self.summary = None  # For storing a summary of the results
         self.initialized = False  # Whether initialization is complete
