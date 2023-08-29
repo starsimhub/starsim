@@ -37,14 +37,15 @@ class simple_hiv_ng(Connector):
             raise ValueError(errormsg)
         return
 
-    def apply(self, sim):
+    @staticmethod
+    def update(sim):
         """ Specify how HIV increases NG rel_sus and rel_trans """
 
-        sim.people.gonorrhea.rel_sus[sim.people.hiv.cd4 < 500] *= 2
-        sim.people.gonorrhea.rel_sus[sim.people.hiv.cd4 < 200] *= 5
+        sim.people.gonorrhea.rel_sus[sim.people.hiv.cd4 < 500] = 2
+        sim.people.gonorrhea.rel_sus[sim.people.hiv.cd4 < 200] = 5
 
-        sim.people.gonorrhea.rel_trans[sim.people.hiv.cd4 < 500] *= 2
-        sim.people.gonorrhea.rel_trans[sim.people.hiv.cd4 < 200] *= 5
+        sim.people.gonorrhea.rel_trans[sim.people.hiv.cd4 < 500] = 2
+        sim.people.gonorrhea.rel_trans[sim.people.hiv.cd4 < 200] = 5
 
         return
 

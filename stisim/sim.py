@@ -223,6 +223,10 @@ class Sim(sc.prettyobj):
             module.initialize(self)
         return
 
+    def init_connectors(self):
+        for connector in self.connectors.values():
+            connector.initialize(self)
+
     def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
 
@@ -317,6 +321,7 @@ class Sim(sc.prettyobj):
         self.people.update(self)
         self.apply_interventions()
         self.update_modules()
+        self.update_connectors()
         self.apply_analyzers()
 
         # Tidy up
@@ -340,6 +345,14 @@ class Sim(sc.prettyobj):
         """
         for module in self.modules.values():
             module.update(self)
+        return
+
+    def update_connectors(self):
+        """
+        Update connectors
+        """
+        for connector in self.connectors.values():
+            connector.update(self)
         return
 
     def apply_analyzers(self):
