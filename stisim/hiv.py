@@ -43,7 +43,6 @@ class HIV(ss.Disease):
 
     def init_results(self, sim):
         super().init_results(sim)
-        self.results['n_art'] = ss.Result('n_art', self.name, sim.npts, dtype=int)
         return
 
     def update_results(self, sim):
@@ -70,6 +69,9 @@ class ART(ss.Intervention):
         self.requires = HIV
         self.t = sc.promotetoarray(t)
         self.capacity = sc.promotetoarray(capacity)
+
+    def initialize(self, sim):
+        sim.hiv.results += ss.Result(self.name, 'n_art', sim.npts, dtype=int)
 
     def apply(self, sim):
         if sim.t < self.t[0]:
