@@ -411,52 +411,7 @@ class DynamicPeople():
         self._uid_map[:] = INT_NAN # Clear out all previously used UIDs
         self._uid_map[keep_uids] = np.arange(0, len(keep_uids)) # Assign the array indices for all of the current UIDs
 
-# TEST INDEXING PERFORMANCE
-
-
-
-# x = State('foo', int, 0)
-# y = State('imm', float, 0, shape=2)
-# z = State('bar', int, lambda n: np.random.randint(1,3,n))
-#
-# p = DynamicPeople(states=[x,y,z])
-# p.initialize(3)
-# p.grow(3)
-# p.remove([0, 1])
-# p.remove(2)
-# p.grow(10)
-#
-# p.grow(8)
-# p.grow(8)
-
-# print(x)
-# #
-# # z + 1
-# # z += 1
-# # z[z==2]
-# #
-# x[2] = 10
-# x[3] = 20
-# #
-# y[[0,1],2] = 10
-#
-# y[0,2] = 10
-# y[0,3] = 20
-# y[1,2] = 15
-# y[1,3] = 25
-# #
-# p.remove([0, 1])
-# p.remove(2)
-# #
-# print(x)
-# print(y)
-# print(z)
-# x[x==20]
-
-#
-#
 x = State('foo', int, 0)
-# y = State('imm', float, 0, shape=2)
 z = State('bar', int, lambda n: np.random.randint(1,3,n))
 
 p = DynamicPeople(states=[x,z])
@@ -465,8 +420,7 @@ p.initialize(200000)
 remove = np.random.choice(np.arange(len(p)), 100000, replace=False)
 p.remove(remove)
 
-# Single item
-# Multiple items
+# Define uids and indices
 multiple_items_uid = np.random.choice(p.uids, 50000, replace=False)
 multiple_items_ind = p._uid_map[multiple_items_uid]
 multiple_items_few_uid = np.random.choice(p.uids, 1000, replace=False)
@@ -474,10 +428,7 @@ multiple_items_few_ind = p._uid_map[multiple_items_few_uid]
 single_item_uid = multiple_items_uid[5000]
 single_item_ind = multiple_items_ind[5000]
 boolean = np.random.randint(0,2, size=len(p)).astype(bool)
-#
-# z[single_item_uid]
-z[multiple_items_few_uid]
-# #
+
 def index():
     for i in range(50000):
         z[multiple_items_few_uid]
@@ -490,8 +441,7 @@ s = pd.Series(z.values, p.uids)
 uid_map = p._uid_map._view
 
 if True:
-
-    def lookup(lbl, uids, n=10_000):
+    def lookup(lbl, uids, n=2_000):
         print('\n' + lbl)
         with sc.timer('State: '):
             for i in range(n): z[uids]
@@ -507,7 +457,7 @@ if True:
                 else:
                     s.values[uid_map[uids]]
 
-    def assign(lbl, uids, vals, n=10_000):
+    def assign(lbl, uids, vals, n=2_000):
         print('\n' + lbl)
         with sc.timer('State: '):
             for i in range(n): z[uids] = vals
