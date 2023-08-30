@@ -21,8 +21,8 @@ class BasePeople(sc.prettyobj):
     def __init__(self, n):
 
         self.initialized = False
-        self._uid_map = ss.DynamicView(int, fill_value=ss.INT_NAN) # This variable tracks all UIDs ever created
-        self.uid = ss.DynamicView(int, fill_value=ss.INT_NAN) # This variable tracks all UIDs currently in use
+        self._uid_map = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs ever created
+        self.uid = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs currently in use
 
         self._uid_map.initialize(n)
         self._uid_map[:] = np.arange(0, n)
@@ -54,8 +54,8 @@ class BasePeople(sc.prettyobj):
         start_uid = len(self._uid_map)
         start_idx = len(self.uid)
 
-        new_uids = np.arange(start_uid, start_uid+n)
-        new_inds = np.arange(start_idx, start_idx+n)
+        new_uids = np.arange(start_uid, start_uid + n)
+        new_inds = np.arange(start_idx, start_idx + n)
 
         self._uid_map.grow(n)
         self._uid_map[new_uids] = new_inds
@@ -75,8 +75,8 @@ class BasePeople(sc.prettyobj):
         :param uids_to_remove: An int/list/array containing the UID(s) to remove
         """
         # Calculate the *indices* to keep
-        keep_uids = self.uid[~np.in1d(self.uid, uids_to_remove)] # Calculate UIDs to keep
-        keep_inds = self._uid_map[keep_uids] # Calculate indices to keep
+        keep_uids = self.uid[~np.in1d(self.uid, uids_to_remove)]  # Calculate UIDs to keep
+        keep_inds = self._uid_map[keep_uids]  # Calculate indices to keep
 
         # Trim the UIDs and states
         self.uid._trim(keep_inds)
@@ -84,10 +84,9 @@ class BasePeople(sc.prettyobj):
             state._trim(keep_inds)
 
         # Update the UID map
-        self._uid_map[:] = ss.INT_NAN # Clear out all previously used UIDs
-        self._uid_map[keep_uids] = np.arange(0, len(keep_uids)) # Assign the array indices for all of the current UIDs
+        self._uid_map[:] = ss.INT_NAN  # Clear out all previously used UIDs
+        self._uid_map[keep_uids] = np.arange(0, len(keep_uids))  # Assign the array indices for all of the current UIDs
         return
-
 
     def __getitem__(self, key):
         """
@@ -95,23 +94,18 @@ class BasePeople(sc.prettyobj):
         If the key is an integer, alias `people.person()` to return a `Person` instance
         """
         if isinstance(key, int):
-            return self.person(key) # TODO: need to re-implement
+            return self.person(key)  # TODO: need to re-implement
         else:
             return self.__getattribute__(key)
-
 
     def __setitem__(self, key, value):
         """ Ditto """
         return self.__setattr__(key, value)
 
-
     def __iter__(self):
         """ Iterate over people """
         for i in range(len(self)):
             yield self[i]
-            
-            
-
 
 
 class People(BasePeople):
@@ -142,7 +136,7 @@ class People(BasePeople):
         """ Initialize """
 
         super().__init__(n)
-        
+
         self.initialized = False
         self.version = ss.__version__  # Store version info
 
@@ -157,19 +151,14 @@ class People(BasePeople):
         states.extend(sc.promotetolist(extra_states))
 
         self.states = ss.ndict()
-
-        for state in states:
-            self.add_state(state)  # Register the state internally for dynamic growth
-            self.states.append(state)  # Expose these states with their original names
-            state.initialize(self) # Connect the state to this people instance
-            setattr(self, state.name, state)
+        self._initialize_states(states)
         self.networks = ss.ndict(networks)
 
         return
 
     def initialize(self, popdict=None):
         """ Initialize people by setting their attributes """
-        if popdict is None: # TODO: update
+        if popdict is None:  # TODO: update
             self['age'][:] = np.random.random(size=len(self)) * 100
             self['female'][:] = np.random.choice([False, True], size=len(self))
         else:
@@ -179,6 +168,13 @@ class People(BasePeople):
         self.initialized = True
         return
 
+    def _initialize_states(self, states):
+        for state in states:
+            self.add_state(state)  # Register the state internally for dynamic growth
+            self.states.append(state)  # Expose these states with their original names
+            state.initialize(self)  # Connect the state to this people instance
+            setattr(self, state.name, state)
+        return
 
     def add_module(self, module, force=False):
         # Map the module's states into the People state ndict
@@ -190,15 +186,21 @@ class People(BasePeople):
         # `sim.people.states['hiv.susceptible']` and have both of them work
         module_states = sc.objdict()
         setattr(self, module.name, module_states)
+        self._register_module_states(module, module_states)
+
+    def _register_module_states(self, module, module_states):
+        """Enable dot notation for module specific states:
+         - `sim.people.hiv.susceptible` or
+         - `sim.people.states['hiv.susceptible'`
+        """
 
         for state_name, state in module.states.items():
-            combined_name = module.name + '.' + state_name # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
-            self.states[combined_name] = state # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
+            combined_name = module.name + '.' + state_name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
+            self.states[combined_name] = state  # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
             pre, _, post = combined_name.rpartition('.')
             setattr(module_states, state_name, state)
 
         return
-
 
     def scale_flows(self, inds):
         """
@@ -206,21 +208,18 @@ class People(BasePeople):
         followed by scale factor multiplication
         """
         return self.scale[inds].sum()
-    
-    
+
     def update(self, sim):
         """ Update demographics and networks """
         self.update_demographics(sim.dt, sim.ti)
         self.update_networks()
         return
 
-
     def update_demographics(self, dt, ti):
         """ Perform vital dynamic updates at the current timestep """
         self.age[self.alive] += dt
         self.alive[self.ti_dead <= ti] = False
         return
-    
 
     def update_networks(self):
         """
