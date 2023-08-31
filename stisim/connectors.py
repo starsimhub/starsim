@@ -26,26 +26,30 @@ class simple_hiv_ng(Connector):
 
     def __init__(self, pars=None):
         super().__init__(pars=pars)
-        self.pars = ss.omerge({}, self.pars)  # Unnecessary but could add pars here
+        self.pars = ss.omerge({
+            'rel_trans_hiv': 2,
+            'rel_trans_aids': 5,
+            'rel_sus_hiv': 2,
+            'rel_sus_aids': 5,
+        }, self.pars)  # Unnecessary but could add pars here
         self.modules = [ss.HIV, ss.Gonorrhea]
         return
 
     def initialize(self, sim):
         # Make sure the sim has the modules that this connector deals with
-        if (ss.HIV() not in sim.modules) or (ss.Gonorrhea not in sim.modules):
+        if ('hiv' not in sim.modules.keys()) or ('gonorrhea' not in sim.modules.keys()):
             errormsg = 'Missing required modules'
             raise ValueError(errormsg)
         return
 
-    @staticmethod
-    def update(sim):
+    def update(self, sim):
         """ Specify how HIV increases NG rel_sus and rel_trans """
 
-        sim.people.gonorrhea.rel_sus[sim.people.hiv.cd4 < 500] = 2
-        sim.people.gonorrhea.rel_sus[sim.people.hiv.cd4 < 200] = 5
+        sim.people.gonorrhea.rel_sus[sim.people.hiv.cd4 < 500] = self.pars.rel_sus_hiv
+        sim.people.gonorrhea.rel_sus[sim.people.hiv.cd4 < 200] = self.pars.rel_sus_aids
 
-        sim.people.gonorrhea.rel_trans[sim.people.hiv.cd4 < 500] = 2
-        sim.people.gonorrhea.rel_trans[sim.people.hiv.cd4 < 200] = 5
+        sim.people.gonorrhea.rel_trans[sim.people.hiv.cd4 < 500] = self.pars.rel_trans_hiv
+        sim.people.gonorrhea.rel_trans[sim.people.hiv.cd4 < 200] = self.pars.rel_trans_aids
 
         return
 

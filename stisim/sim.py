@@ -76,6 +76,7 @@ class Sim(sc.prettyobj):
         self.init_networks()
         self.init_results()
         self.init_modules()
+        self.init_connectors()
         self.init_interventions()
         self.init_analyzers()
 

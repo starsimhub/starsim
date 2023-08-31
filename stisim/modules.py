@@ -105,7 +105,8 @@ class Disease(Module):
         """
         Initialize states. This could involve passing in a full set of initial conditions, or using init_prev, or other
         """
-        initial_cases = np.random.choice(sim.people.uid, sim.pars[self.name]['initial'])
+        n_init_cases = int(self.pars['init_prev'] * len(sim.people))
+        initial_cases = np.random.choice(sim.people.uid, n_init_cases, replace=False)
         self.set_prognoses(sim, initial_cases)
         return
 
@@ -134,11 +135,16 @@ class Disease(Module):
 
     def make_new_cases(self, sim):
         """ Add new cases of module, through transmission, incidence, etc. """
-        pars = sim.pars[self.name]
+        pars = self.pars
         for k, layer in sim.people.networks.items():
             if k in pars['beta']:
-                rel_trans = (self.infected & sim.people.alive).astype(float)
-                rel_sus = (self.susceptible & sim.people.alive).astype(float)
+                rel_trans = (self.infected & sim.people.alive).astype(float) * self.rel_trans.values
+                rel_sus = (self.susceptible & sim.people.alive).astype(float) * self.rel_sus.values
+                # if self.name=='gonorrhea' and sim.ti==1:
+                #     import traceback;
+                #     traceback.print_exc();
+                #     import pdb;
+                #     pdb.set_trace()
                 for a, b, beta in [[layer['p1'], layer['p2'], pars['beta'][k][0]], [layer['p2'], layer['p1'], pars['beta'][k][1]]]:
                     # probability of a->b transmission
                     p_transmit = rel_trans[a] * rel_sus[b] * layer['beta'] * beta

@@ -27,7 +27,7 @@ class HIV(ss.Disease):
             'cd4_min': 100,
             'cd4_max': 500,
             'cd4_rate': 5,
-            'initial': 30,
+            'init_prev': 0.05,
             'eff_condoms': 0.7,
         }, self.pars)
 
