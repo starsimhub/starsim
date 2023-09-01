@@ -265,12 +265,12 @@ class DynamicView(NDArrayOperatorsMixin):
         self._map_arrays()
 
     def grow(self, n):
-
         if self.n + n > self._s:
+            # If the total number of agents exceeds the array size, extend the storage array
             n_new = max(n, int(self._s / 2))  # Minimum 50% growth
-            self._data = np.concatenate([self._data, self._new_items(n)], axis=0)
+            self._data = np.concatenate([self._data, self._new_items(n_new)], axis=0)
 
-        self.n += n
+        self.n += n  # Increase the count of the number of agents by `n` (the requested number of new agents)
         self._map_arrays()
 
     def _trim(self, inds):
