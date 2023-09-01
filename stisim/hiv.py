@@ -14,14 +14,11 @@ class HIV(ss.Disease):
     def __init__(self, pars=None):
         super().__init__(pars)
 
-        self.states = ss.ndict(
-            ss.State('susceptible', bool, True),
-            ss.State('infected', bool, False),
-            ss.State('ti_infected', float, 0),
-            ss.State('on_art', bool, False),
-            ss.State('cd4', float, 500),
-            self.states
-        )
+        self.susceptible = ss.State('susceptible', bool, True)
+        self.infected = ss.State('infected', bool, False)
+        self.ti_infected = ss.State('ti_infected', float, 0)
+        self.on_art = ss.State('on_art', bool, False)
+        self.cd4 = ss.State('cd4', float, 500)
 
         self.pars = ss.omerge({
             'cd4_min': 100,

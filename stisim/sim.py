@@ -222,6 +222,14 @@ class Sim(sc.prettyobj):
         """ Initialize modules and connectors to be simulated """
         for module in self.modules.values():
             module.initialize(self)
+
+            # Add the module's parameters and results into the Sim's dicts
+            self.pars[module.name] = module.pars
+            self.results[module.name] = module.results
+
+            # Add module states to the People's dicts
+            self.people.add_module(module)
+
         return
 
     def init_connectors(self):

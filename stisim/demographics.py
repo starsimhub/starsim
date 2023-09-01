@@ -15,17 +15,14 @@ class Pregnancy(ss.Module):
         super().__init__(pars)
 
         # Other, e.g. postpartum, on contraception...
-        self.states = ss.ndict(
-            ss.State('infertile', bool, False),  # Applies to girls and women outside the fertility window
-            ss.State('susceptible', bool, True),  # Applies to girls and women inside the fertility window - needs renaming
-            ss.State('pregnant', bool, False),  # Currently pregnant
-            ss.State('postpartum', bool, False),  # Currently post-partum
-            ss.State('ti_pregnant', float, np.nan),  # Time pregnancy begins
-            ss.State('ti_delivery', float, np.nan),  # Time of delivery
-            ss.State('ti_postpartum', float, np.nan),  # Time postpartum ends
-            ss.State('ti_dead', float, np.nan),  # Maternal mortality
-            self.states,
-        )
+        self.infertile = ss.State('infertile', bool, False)   # Applies to girls and women outside the fertility window
+        self.susceptible = ss.State('susceptible', bool, True)   # Applies to girls and women inside the fertility window - needs renaming
+        self.pregnant = ss.State('pregnant', bool, False)   # Currently pregnant
+        self.postpartum = ss.State('postpartum', bool, False)   # Currently post-partum
+        self.ti_pregnant = ss.State('ti_pregnant', float, np.nan)   # Time pregnancy begins
+        self.ti_delivery = ss.State('ti_delivery', float, np.nan)   # Time of delivery
+        self.ti_postpartum = ss.State('ti_postpartum', float, np.nan)   # Time postpartum ends
+        self.ti_dead = ss.State('ti_dead', float, np.nan)   # Maternal mortality
 
         self.pars = ss.omerge({
             'dur_pregnancy': 0.75,  # Make this a distribution?
