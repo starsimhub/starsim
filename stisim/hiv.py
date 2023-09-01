@@ -14,9 +14,7 @@ class HIV(ss.Disease):
     def __init__(self, pars=None):
         super().__init__(pars)
 
-        self.susceptible = ss.State('susceptible', bool, True)
-        self.infected = ss.State('infected', bool, False)
-        self.ti_infected = ss.State('ti_infected', float, 0)
+        # States additional to the default disease states (see base class)
         self.on_art = ss.State('on_art', bool, False)
         self.cd4 = ss.State('cd4', float, 500)
 
@@ -37,6 +35,9 @@ class HIV(ss.Disease):
         return
 
     def init_results(self, sim):
+        """
+        Initialize results
+        """
         super().init_results(sim)
         return
 

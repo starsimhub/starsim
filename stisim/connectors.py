@@ -8,9 +8,8 @@ import stisim as ss
 class Connector(ss.Module):
     def __init__(self, pars=None, modules=None, *args, **kwargs):
         self.pars = ss.omerge(pars)
-        self.states = ss.ndict()
         self.results = ss.ndict()
-        self.modules = ss.ndict()
+        self.modules = ss.ndict(modules)
         return
 
 
@@ -32,7 +31,7 @@ class simple_hiv_ng(Connector):
             'rel_sus_hiv': 2,
             'rel_sus_aids': 5,
         }, self.pars)  # Unnecessary but could add pars here
-        self.modules = [ss.HIV, ss.Gonorrhea]
+        self.modules = ['hiv', 'gonorrhea']
         return
 
     def initialize(self, sim):
