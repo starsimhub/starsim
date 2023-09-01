@@ -27,7 +27,9 @@ class Gonorrhea(ss.Disease):
             'init_prev': 0.03,
         }, self.pars)
 
-        # Additional states dependant on parameter values? e.g. self.p_symp?
+        # Additional states dependent on parameter values, e.g. self.p_symp?
+        # These might be useful for connectors to target, e.g. if HIV reduces p_clear
+
         return
 
     def init_results(self, sim):

@@ -36,8 +36,9 @@ class simple_hiv_ng(Connector):
 
     def initialize(self, sim):
         # Make sure the sim has the modules that this connector deals with
-        if ('hiv' not in sim.modules.keys()) or ('gonorrhea' not in sim.modules.keys()):
-            errormsg = 'Missing required modules'
+        # TODO replace this placeholder code with something robust.
+        if not set(self.modules).issubset(sim.modules.keys()):
+            errormsg = f'Missing required modules {set(self.modules).difference(sim.modules.keys())}'
             raise ValueError(errormsg)
         return
 
@@ -53,5 +54,19 @@ class simple_hiv_ng(Connector):
         return
 
 
+class ng_infertility(Connector):
+    """
+    A connector between the pregnancy and gonorrhea modules, which reduces a woman's
+    fertility if she has untreated gonorrhea infection
+    """
+    pass
+
+
+class ng_birth(Connector):
+    """
+    A connector between the pregnancy and gonorrhea modules, which adds adverse birth
+    outcomes for babies born to mothers with untreated gonorrhea infection.
+    """
+    pass
 
 
