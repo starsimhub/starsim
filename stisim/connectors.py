@@ -56,17 +56,20 @@ class simple_hiv_ng(Connector):
 
 class ng_infertility(Connector):
     """
-    A connector between the pregnancy and gonorrhea modules, which reduces a woman's
+    A connector between the fertility and gonorrhea modules, which reduces a woman's
     fertility if she has untreated gonorrhea infection
     """
-    pass
+    def __init__(self, pars=None):
+        super().__init__(pars=pars)
+        self.pars = ss.omerge({
+            'rel_fertility': 0.5,
+        }, self.pars)
+        self.modules = ['pregnancy', 'gonorrhea']
+        return
 
-
-class ng_birth(Connector):
-    """
-    A connector between the pregnancy and gonorrhea modules, which adds adverse birth
-    outcomes for babies born to mothers with untreated gonorrhea infection.
-    """
-    pass
+    def update(self, sim):
+        """ How gonorrhea reduces fertility """
+        sim.people.pregnancy.rel_fertility[sim.people.gonorrhea.infected] = self.pars.rel_fertility
+        return
 
 

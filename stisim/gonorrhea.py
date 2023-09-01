@@ -67,7 +67,7 @@ class Gonorrhea(ss.Disease):
 
     def set_prognoses(self, sim, uids):
         """
-        Natural history of gonorrhea
+        Natural history of gonorrhea for adult infection
         """
 
         # Set infection status
@@ -87,3 +87,7 @@ class Gonorrhea(ss.Disease):
         self.ti_clearance[clear_uids] = dur
 
         return
+
+    def set_congenital(self, sim, uids):
+        pass
+

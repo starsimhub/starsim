@@ -55,6 +55,9 @@ class HIV(ss.Disease):
         self.infected[uids] = True
         self.ti_infected[uids] = sim.ti
 
+    def set_congenital(self, sim, uids):
+        self.set_prognoses(sim, uids)  # Pass back?
+
 
 # %% Interventions
 
