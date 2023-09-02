@@ -1,5 +1,6 @@
 import numpy as np
 import sciris as sc
+import stisim as ss
 
 __all__ = ['Streams', 'Stream']
 
@@ -10,7 +11,7 @@ class Streams:
     """
 
     def __init__(self):
-        self.streams = []
+        self._streams = ss.ndict()
         return
     
     def add(self, stream):
@@ -18,13 +19,12 @@ class Streams:
 
         # Return value will be used as the seed offset for this stream
         # Depends on order, which will become a problem - need a better solution
-        n = len(self.streams)
-        self.streams.append(stream)
-        
+        n = len(self._streams)
+        self._streams.append(stream)
         return n
 
     def step(self, ti):
-        for stream in self.streams:
+        for stream in self._streams.dict_values():
             stream.step(ti)
         return
 
@@ -89,12 +89,12 @@ class Stream(np.random.Generator):
         return len(self.ppl._uid_map)
 
     def random(self, arr):
-        return (super(Stream, self).random(self.block_size))[arr]
+        return super(Stream, self).random(self.block_size)[arr]
 
     def bernoulli(self, prob, arr):
         #return super(Stream, self).choice([True, False], size=self.block_size, p=[prob, 1-prob]) # very slow
         #return (super(Stream, self).binomial(n=1, p=prob, size=self.block_size))[arr].astype(bool) # pretty fast
-        return (self.random(self.block_size) < prob)[arr] # fastest
+        return super(Stream, self).random(self.block_size)[arr] < prob # fastest
 
     def bernoulli_filter(self, prob, arr):
         #return arr[self.bernoulli(prob, arr).nonzero()[0]]

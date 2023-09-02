@@ -325,7 +325,7 @@ class Sim(sc.prettyobj):
             raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
 
         # Update states, modules, partnerships
-        self.streams.step(self.ti)
+        self.streams.step(self.ti+1) # on first step, ti=0, but 0 used for initialization
         self.people.update(self)
         self.apply_interventions()
         self.update_modules()

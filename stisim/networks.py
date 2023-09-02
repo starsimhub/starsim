@@ -350,61 +350,59 @@ class simple_embedding(simple_sexual):
 
         # Make p1 the shorter array
         if len(available_f) < len(available_m):
+            switch = True # Want p1 as m in the end
             p1 = available_f
             p2 = available_m
         else:
+            switch = False # Want p1 as m in the end
             p1 = available_m
             p2 = available_f
 
         loc1 = self.rng_pair_12.random(arr=p1)
         loc2 = self.rng_pair_21.random(arr=p2)
 
-        done = False
-
         p1v = np.tile(loc1, (len(loc2),1))
         p2v = np.tile(loc2[:,np.newaxis], len(loc1))
-        d = np.absolute(p2v-p1v)
+        d_full = np.absolute(p2v-p1v)
+        d = d_full.copy()
+
+        unmatched_p1i = np.arange(len(p1))
+        unmatched_p2i = np.arange(len(p2))
 
         pairs = []
 
-        while not done:
-            closest1 = d.argmin(axis=0)
-            # with axis=0, 0 at loc1[0] will be closest to closest1[0] at loc2[ closest1[0] ]
+        while len(unmatched_p1i)>0:
+            # Perhaps more efficient to change up directionality of matching at times?
+            p2i_closest_to_each_p1 = d.argmin(axis=0)
+            selected_up2i, selected_up1i = np.unique(p2i_closest_to_each_p1, return_index=True)
+            selected_p1i = unmatched_p1i[selected_up1i]
+            selected_p2i = unmatched_p2i[selected_up2i]
 
-            ele = np.unique(closest1)
-            closest2 = d.argmin(axis=1)
+            # loc1[selected_p1i] should be close to loc2[selected_p2i]
+            pairs.append( (p1[selected_p1i], p2[selected_p2i]) )
 
-            #loc1[ closest2[np.unique(closest1)]] is near loc2[ele]
-            # so pair p2=ele with p1=closest2[np.unique(closest1)]
-            pairs.append( (p1[closest2[np.unique(closest1)]], p2[ele]) )
+            # Remove pairs and repeat
+            unmatched_p1i = np.setdiff1d(unmatched_p1i, selected_p1i)
+            unmatched_p2i = np.setdiff1d(unmatched_p2i, selected_p2i)
 
-            # WIP!
+            # Trim distance matrix
+            d = d_full[np.ix_(unmatched_p2i, unmatched_p1i)]
 
-            # remove pairs and repeat
-            unmatched_inds_1 = np.setdiff1d(np.arange(len(p1)), closest2[np.unique(closest1)])
-            unmatched_inds_2 = np.setdiff1d(np.arange(len(p2)), ele)
-            #p1 = np.setdiff1d( p1, p1[closest2[np.unique(closest1)]])
-            #p2 = np.setdiff1d(p2, p2[ele])
-            p1 = p1[unmatched_inds_1]
-            p2 = p2[unmatched_inds_2]
+            print(f'Matching with {len(unmatched_p1i)} to go')
 
-            d = d[unmatched_inds_1, unmatched_inds_2]
+        pairs = np.concatenate(pairs, axis=1)
+        n_pairs = pairs.shape[1]
 
-
-
-        if len(available_m) <= len(available_f):
-            p1 = available_m
-            p2 = self.rng_pair_12.choice(available_f, len(p1), replace=False) # TODO: Stream-ify
-        else:
-            p2 = available_f
-            p1 = self.rng_pair_21.choice(available_m, len(p2), replace=False) # TODO: Stream-ify
-
-        beta = np.ones_like(p1)
-        dur = self.rng_mean_dur.poisson(self.mean_dur, len(p1)) # TODO: Stream-ify
+        (p1, p2) = (pairs[1], pairs[0]) if switch else (pairs[0], pairs[1])
         self['p1'] = np.concatenate([self['p1'], p1])
         self['p2'] = np.concatenate([self['p2'], p2])
+
+        beta = np.ones(n_pairs)
+        dur = self.rng_mean_dur.poisson(self.mean_dur, n_pairs) # TODO: Stream-ify
         self['beta'] = np.concatenate([self['beta'], beta])
         self['dur'] = np.concatenate([self['dur'], dur])
+
+        return n_pairs
 
 
 class hpv_network(Network):

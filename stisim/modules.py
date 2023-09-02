@@ -150,6 +150,7 @@ class Disease(Module):
 
     def make_new_cases(self, sim):
         """ Add new cases of module, through transmission, incidence, etc. """
+        n_new_cases = 0 # number of new cases made
         pars = sim.pars[self.name]
         for k, layer in sim.people.networks.items():
             if k in pars['beta']:
@@ -158,9 +159,12 @@ class Disease(Module):
                 for a, b, beta, rng in [[layer['p1'], layer['p2'], pars['beta'][k][0], self.rng_trans_ab], [layer['p2'], layer['p1'], pars['beta'][k][1], self.rng_trans_ba]]:
                     # probability of a->b transmission
                     p_transmit = rel_trans[a] * rel_sus[b] * layer['beta'] * beta
-                    new_cases = rng.random(len(a)) < p_transmit # TODO: Convert to flat list of N probs and block sample
-                    if new_cases.any():
-                        self.set_prognoses(sim, b[new_cases])
+                    #new_cases = rng.random(len(a)) < p_transmit # TODO: Convert to flat list of N probs and block sample
+                    new_cases = rng.bernoulli_filter(p_transmit, b)
+                    n_new_cases += len(new_cases)
+                    if len(new_cases):
+                        self.set_prognoses(sim, new_cases)
+        return n_new_cases
 
     def set_prognoses(self, sim, uids):
         pass
