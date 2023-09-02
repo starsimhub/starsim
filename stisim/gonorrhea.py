@@ -20,6 +20,9 @@ class Gonorrhea(ss.Disease):
         self.ti_recovered = ss.State('ti_recovered', float, 0)
         self.ti_dead = ss.State('ti_dead', float, np.nan)  # Death due to gonorrhea
 
+        self.rng_prog = ss.Stream('prog_dur')
+        self.rng_dead = ss.Stream('dead')
+
         self.pars = ss.omerge({
             'dur_inf': 3,  # not modelling diagnosis or treatment explicitly here
             'p_death': 0.2,
@@ -27,7 +30,7 @@ class Gonorrhea(ss.Disease):
             'eff_condoms': 0.7,
         }, self.pars)
         return
-    
+
     def update_states(self, sim):
         # What if something in here should depend on another module?
         # I guess we could just check for it e.g., 'if HIV in sim.modules' or
@@ -51,7 +54,8 @@ class Gonorrhea(ss.Disease):
         self.ti_infected[uids] = sim.ti
 
         dur = sim.ti + np.random.poisson(self.pars['dur_inf']/sim.pars.dt, len(uids))
-        dead = np.random.random(len(uids)) < self.pars.p_death
+        dead = self.rng_dead.bernoulli(self.pars.p_death, uids)
+
         self.ti_recovered[uids[~dead]] = dur[~dead]
         self.ti_dead[uids[dead]] = dur[dead]
         return

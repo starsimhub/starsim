@@ -3,6 +3,7 @@ from .settings      import *
 from .parameters    import *
 from .utils         import *
 from .states        import *
+from .streams       import *
 from .people        import *
 from .networks      import *
 from .modules       import *

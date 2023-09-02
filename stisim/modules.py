@@ -19,6 +19,12 @@ class Module(sc.prettyobj):
         self.results = ss.Results()
         self.initialized = False
         self.finalized = False
+
+        # Random number streams
+        self.rng_init_cases = ss.Stream('initial_cases')
+        self.rng_trans_ab = ss.Stream('trans_ab')
+        self.rng_trans_ba = ss.Stream('trans_ba')
+
         return
 
     def __call__(self, *args, **kwargs):
@@ -37,9 +43,13 @@ class Module(sc.prettyobj):
     def initialize(self, sim):
         self.check_requires(sim)
 
-        # Connect the states to the sim
+        # Connect the states to the people
         for state in self.states.values():
             state.initialize(sim.people)
+
+        # Connect the streams to the sim
+        for stream in self.streams.values():
+            stream.initialize(sim)
 
         self.initialized = True
         return
@@ -58,6 +68,10 @@ class Module(sc.prettyobj):
     @property
     def states(self):
         return ss.ndict({k:v for k,v in self.__dict__.items() if isinstance(v, ss.State)})
+
+    @property
+    def streams(self):
+        return ss.ndict({k:v for k,v in self.__dict__.items() if isinstance(v, ss.Stream)})
 
 
 class Modules(ss.ndict):
@@ -100,7 +114,13 @@ class Disease(Module):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        initial_cases = np.random.choice(sim.people.uid, self.pars['initial'])
+        if self.pars['initial'] <= 0:
+            return
+
+        #initial_cases = np.random.choice(sim.people.uid, self.pars['initial'])
+        #rng = sim.rngs.get(f'initial_cases_{self.name}')
+        #initial_cases = ss.binomial_filter_rng(prob=self.pars['initial']/len(sim.people), arr=sim.people.uid, rng=rng, block_size=len(sim.people._uid_map))
+        initial_cases = self.rng_init_cases.bernoulli_filter(prob=self.pars['initial']/len(sim.people), arr=sim.people.uid)
 
         self.set_prognoses(sim, initial_cases)
         return
@@ -135,10 +155,10 @@ class Disease(Module):
             if k in pars['beta']:
                 rel_trans = (self.infected & sim.people.alive).astype(float)
                 rel_sus = (self.susceptible & sim.people.alive).astype(float)
-                for a, b, beta in [[layer['p1'], layer['p2'], pars['beta'][k][0]], [layer['p2'], layer['p1'], pars['beta'][k][1]]]:
+                for a, b, beta, rng in [[layer['p1'], layer['p2'], pars['beta'][k][0], self.rng_trans_ab], [layer['p2'], layer['p1'], pars['beta'][k][1], self.rng_trans_ba]]:
                     # probability of a->b transmission
                     p_transmit = rel_trans[a] * rel_sus[b] * layer['beta'] * beta
-                    new_cases = np.random.random(len(a)) < p_transmit
+                    new_cases = rng.random(len(a)) < p_transmit # TODO: Convert to flat list of N probs and block sample
                     if new_cases.any():
                         self.set_prognoses(sim, b[new_cases])
 

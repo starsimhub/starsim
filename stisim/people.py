@@ -170,7 +170,7 @@ class People(BasePeople):
     def initialize(self, popdict=None):
         """ Initialize people by setting their attributes """
         if popdict is None: # TODO: update
-            self['age'][:] = np.random.random(size=len(self)) * 100
+            self['age'][:] = np.random.random(size=len(self)) * 100 # These are okay for now as direct calls to the central rng
             self['female'][:] = np.random.choice([False, True], size=len(self))
         else:
             # Use random defaults

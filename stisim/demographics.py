@@ -32,6 +32,9 @@ class Pregnancy(ss.Module):
             'initial': 3,  # Number of women initially pregnant
         }, self.pars)
 
+        self.rng_sex = ss.Stream('sex_at_birth')
+        self.rng_conception = ss.Stream('conception')
+
         return
 
     def initialize(self, sim):
@@ -98,7 +101,7 @@ class Pregnancy(ss.Module):
         if self.pars.inci > 0:
             denom_conds = ppl.female & ppl.active & self.susceptible
             inds_to_choose_from = ss.true(denom_conds)
-            uids = ss.binomial_filter(self.pars.inci, inds_to_choose_from)
+            uids = self.rng_conception.bernoulli_filter(prob=self.pars.inci, arr=inds_to_choose_from)
 
             # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
             n_unborn_agents = len(uids)
@@ -106,7 +109,7 @@ class Pregnancy(ss.Module):
                 # Grow the arrays and set properties for the unborn agents
                 new_uids = sim.people.grow(n_unborn_agents)
                 sim.people.age[new_uids] = -self.pars.dur_pregnancy
-                sim.people.female[new_uids] = np.random.choice([True, False], size=n_unborn_agents)
+                sim.people.female[new_uids] = self.rng_sex.bernoulli(prob=0.5, arr=uids) # Replace 0.5 with sex ratio at birth
 
                 # Add connections to any vertical transmission layers
                 # Placeholder code to be moved / refactored. The maternal network may need to be

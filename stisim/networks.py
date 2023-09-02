@@ -9,7 +9,7 @@ import stisim as ss
 
 
 # Specify all externally visible functions this file defines
-__all__ = ['Networks', 'Network', 'simple_sexual', 'hpv_network', 'maternal']
+__all__ = ['Networks', 'Network', 'simple_sexual', 'simple_embedding', 'hpv_network', 'maternal']
 
 class Network(sc.objdict):
     """
@@ -80,8 +80,21 @@ class Network(sc.objdict):
         # The module name is a lower-case version of its class name
         return self.__class__.__name__.lower()
 
-    def initialize(self):
+    def initialize(self, sim):
         pass
+        # Auto initialization trick for streams does not work because objdict overwrites __dict__
+        '''
+        # Connect the streams to the sim
+        for stream in self.streams.values():
+            stream.initialize(sim)
+        return
+        '''
+
+    '''
+    @property
+    def streams(self):
+       return ss.ndict({k:v for k,v in self.__dict__.items() if isinstance(v, ss.Stream)})
+    '''
 
     def __len__(self):
         try:
@@ -270,8 +283,23 @@ class simple_sexual(Network):
         # Set other parameters
         self.mean_dur = mean_dur
 
-    def initialize(self, people):
-        self.add_pairs(people, ti=0)
+        # Define random streams
+        self.rng_pair_12 = ss.Stream('pair_12')
+        self.rng_pair_21 = ss.Stream('pair_21')
+        self.rng_mean_dur = ss.Stream('mean_dur')
+
+        return
+
+    def initialize(self, sim):
+        super().initialize(sim)
+        
+        # Initialize random streams
+        self.rng_pair_12.initialize(sim)
+        self.rng_pair_21.initialize(sim)
+        self.rng_mean_dur.initialize(sim)
+
+        self.add_pairs(sim.people, ti=0)
+        return
 
     def add_pairs(self, people, ti=None):
         # Find unpartnered males and females - could in principle check other contact layers too
@@ -282,13 +310,13 @@ class simple_sexual(Network):
 
         if len(available_m) <= len(available_f):
             p1 = available_m
-            p2 = np.random.choice(available_f, len(p1), replace=False)
+            p2 = self.rng_pair_12.choice(available_f, len(p1), replace=False) # TODO: Stream-ify
         else:
             p2 = available_f
-            p1 = np.random.choice(available_m, len(p2), replace=False)
+            p1 = self.rng_pair_21.choice(available_m, len(p2), replace=False) # TODO: Stream-ify
 
         beta = np.ones_like(p1)
-        dur = np.random.poisson(self.mean_dur, len(p1))
+        dur = self.rng_mean_dur.poisson(self.mean_dur, len(p1)) # TODO: Stream-ify
         self['p1'] = np.concatenate([self['p1'], p1])
         self['p2'] = np.concatenate([self['p2'], p2])
         self['beta'] = np.concatenate([self['beta'], beta])
@@ -306,6 +334,77 @@ class simple_sexual(Network):
 
         # Then add new relationships for unpartnered people
         self.add_pairs(people)
+
+class simple_embedding(simple_sexual):
+    """
+    A class holding a single network of contact edges (connections) between people.
+    This network is built by **randomly pairing** males and female with variable relationship durations.
+    """
+
+    def add_pairs(self, people, ti=None):
+        # Find unpartnered males and females - could in principle check other contact layers too
+        # by having the People object passed in here
+
+        available_m = np.setdiff1d(people.uid[~people.female], self.members)
+        available_f = np.setdiff1d(people.uid[people.female], self.members)
+
+        # Make p1 the shorter array
+        if len(available_f) < len(available_m):
+            p1 = available_f
+            p2 = available_m
+        else:
+            p1 = available_m
+            p2 = available_f
+
+        loc1 = self.rng_pair_12.random(arr=p1)
+        loc2 = self.rng_pair_21.random(arr=p2)
+
+        done = False
+
+        p1v = np.tile(loc1, (len(loc2),1))
+        p2v = np.tile(loc2[:,np.newaxis], len(loc1))
+        d = np.absolute(p2v-p1v)
+
+        pairs = []
+
+        while not done:
+            closest1 = d.argmin(axis=0)
+            # with axis=0, 0 at loc1[0] will be closest to closest1[0] at loc2[ closest1[0] ]
+
+            ele = np.unique(closest1)
+            closest2 = d.argmin(axis=1)
+
+            #loc1[ closest2[np.unique(closest1)]] is near loc2[ele]
+            # so pair p2=ele with p1=closest2[np.unique(closest1)]
+            pairs.append( (p1[closest2[np.unique(closest1)]], p2[ele]) )
+
+            # WIP!
+
+            # remove pairs and repeat
+            unmatched_inds_1 = np.setdiff1d(np.arange(len(p1)), closest2[np.unique(closest1)])
+            unmatched_inds_2 = np.setdiff1d(np.arange(len(p2)), ele)
+            #p1 = np.setdiff1d( p1, p1[closest2[np.unique(closest1)]])
+            #p2 = np.setdiff1d(p2, p2[ele])
+            p1 = p1[unmatched_inds_1]
+            p2 = p2[unmatched_inds_2]
+
+            d = d[unmatched_inds_1, unmatched_inds_2]
+
+
+
+        if len(available_m) <= len(available_f):
+            p1 = available_m
+            p2 = self.rng_pair_12.choice(available_f, len(p1), replace=False) # TODO: Stream-ify
+        else:
+            p2 = available_f
+            p1 = self.rng_pair_21.choice(available_m, len(p2), replace=False) # TODO: Stream-ify
+
+        beta = np.ones_like(p1)
+        dur = self.rng_mean_dur.poisson(self.mean_dur, len(p1)) # TODO: Stream-ify
+        self['p1'] = np.concatenate([self['p1'], p1])
+        self['p2'] = np.concatenate([self['p2'], p2])
+        self['beta'] = np.concatenate([self['beta'], beta])
+        self['dur'] = np.concatenate([self['dur'], dur])
 
 
 class hpv_network(Network):
@@ -334,11 +433,22 @@ class hpv_network(Network):
         self.pars['participation'] = None  # Incidence of partnership formation by age
         self.pars['mixing'] = None  # Mixing matrices for storing age differences in partnerships
 
+        self.rng_partners = ss.Stream('partners')
+        self.rng_acts = ss.Stream('acts')
+        self.rng_dur_pship = ss.Stream('dur_pship')
+
         self.update_pars(pars)
         self.get_layer_probs()
 
-    def initialize(self, people):
-        self.add_pairs(people, ti=0)
+    def initialize(self, sim):
+        super().initialize(sim)
+
+        self.rng_partners.initialize(sim)
+        self.rng_acts.initialize(sim)
+        self.rng_dur_pship.initialize(sim)
+
+        self.add_pairs(sim.people, ti=0)
+        return
 
     def update_pars(self, pars):
         if pars is not None:
@@ -397,7 +507,7 @@ class hpv_network(Network):
         current_partners = np.zeros((len(people)))
         current_partners[f_partnered_inds] = f_partnered_counts
         current_partners[m_partnered_inds] = m_partnered_counts
-        partners = ss.sample(**self.pars['partners'], size=len(people)) + 1
+        partners = ss.sample(self.rng_partners, **self.pars['partners'], size=len(people)) + 1
         underpartnered = current_partners < partners  # Indices of underpartnered people
         f_eligible = f_active & underpartnered
         m_eligible = m_active & underpartnered
@@ -439,12 +549,12 @@ class hpv_network(Network):
             choices = []
             fems = np.arange(len(f))
             f_paired_bools = np.full(len(fems), True, dtype=bool)
-            np.random.shuffle(fems)
+            np.random.shuffle(fems) # TODO: Stream-ify
             for fem in fems:
                 m_col = pair_probs[:, fem]
                 if m_col.sum() > 0:
                     m_col_norm = m_col / m_col.sum()
-                    choice = np.random.choice(len(m_col_norm), 1, replace=False, p=m_col_norm)
+                    choice = np.random.choice(len(m_col_norm), 1, replace=False, p=m_col_norm) # TODO: Stream-ify
                     choices.append(choice)
                     pair_probs[choice, :] = 0  # Once male partner is assigned, remove from eligible pool
                 else:
@@ -455,8 +565,8 @@ class hpv_network(Network):
         p1 = np.array(f)
         p2 = selected_males
         n_partnerships = len(p1)
-        dur = ss.sample(**self.pars['dur_pship'], size=n_partnerships)
-        acts = ss.sample(**self.pars['acts'], size=n_partnerships)
+        dur = ss.sample(self.rng_dur_pship, **self.pars['dur_pship'], size=n_partnerships)
+        acts = ss.sample(self.rng_acts, **self.pars['acts'], size=n_partnerships)
         age_p1 = people.age[p1]
         age_p2 = people.age[p2]
 

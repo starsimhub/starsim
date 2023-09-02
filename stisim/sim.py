@@ -42,6 +42,9 @@ class Sim(sc.prettyobj):
         self.interventions = ss.Interventions()
         self.analyzers = ss.Analyzers()
 
+        # Decision container
+        self.streams = ss.Streams()
+
         return
 
     @property
@@ -246,7 +249,7 @@ class Sim(sc.prettyobj):
             else:
                 layer_name = key
                 network.label = layer_name
-            network.initialize(self.people)
+            network.initialize(self)
             self.people.networks[layer_name] = network
 
         return
@@ -322,6 +325,7 @@ class Sim(sc.prettyobj):
             raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
 
         # Update states, modules, partnerships
+        self.streams.step(self.ti)
         self.people.update(self)
         self.apply_interventions()
         self.update_modules()

@@ -64,8 +64,14 @@ class ART(ss.Intervention):
         self.t = sc.promotetoarray(t)
         self.capacity = sc.promotetoarray(capacity)
 
+        self.rng_add_ART = ss.Stream('add_ART')
+        self.rng_remove_ART = ss.Stream('remove_ART')
+
+        return
+
     def initialize(self, sim):
         sim.hiv.results += ss.Result(self.name, 'n_art', sim.npts, dtype=int)
+        return
 
     def apply(self, sim):
         if sim.t < self.t[0]:
@@ -80,12 +86,13 @@ class ART(ss.Intervention):
             eligible = sim.people.alive & sim.people.hiv.infected & ~sim.people.hiv.on_art
             n_eligible = np.count_nonzero(eligible)
             if n_eligible:
-                inds = np.random.choice(ss.true(eligible), min(n_eligible, n_change), replace=False)
+                inds = self.rng_add_ART.bernoulli_filter(prob=min(n_eligible, n_change)/n_eligible, arr=eligible)
                 sim.people.hiv.on_art[inds] = True
         elif n_change < 0:
             # Take some people off ART
             eligible = sim.people.alive & sim.people.hiv.infected & sim.people.hiv.on_art
-            inds = np.random.choice(ss.true(eligible), min(n_change), replace=False)
+            n_eligible = np.count_nonzero(eligible)
+            inds = self.rng_remove_ART.bernoulli_filter(prob=-n_change/n_eligible, arr=eligible)
             sim.people.hiv.on_art[inds] = False
 
         # Add result
