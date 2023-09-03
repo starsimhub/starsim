@@ -52,8 +52,8 @@ class Parameters(sc.objdict):
     
         # Network parameters, generally initialized after the population has been constructed
         self.networks        = sc.autolist()  # Network types and parameters
-        self.debut           = dict(f=dict(dist='normal', par1=15.0, par2=2.0),
-                                    m=dict(dist='normal', par1=17.5, par2=2.0))
+        self.debut           = dict(f=ss.normal(mean=15.0, std=2.0),
+                                    m=ss.normal(mean=17.5, std=2.0))
 
         # Update with any supplied parameter values and generate things that need to be generated
         self.update(kwargs)
