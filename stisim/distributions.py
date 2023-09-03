@@ -6,25 +6,17 @@ Example usage
 >>> dist = stisim.normal(1,1) # Make a distribution
 >>> dist()  # Draw a sample
 >>> dist(10) # Draw several samples
+>>> dist.sample(10) # Same as above
 >>> stisim.State('foo', float, fill_value=dist)  # Use distribution as the fill value for a state
 >>> disease.pars['immunity'] = dist  # Store the distribution as a parameter
->>> disease.pars['immunity'](5)  # Draw some samples from the parameter
->>> stisim.sample(disease.pars['immunity'],5)  # Identical to the above, but potentially easier to read/interpret depending on context
->>> stisim.poisson(rate=1)(n=10)  # Canonical way to sample from a temporary distribution (i.e., to just make samples without storing the Distribution object)
->>> stisim.poisson.sample(rate=1,n=10)  # Alternative syntax for sampling from a distribution without creating a separate object
+>>> disease.pars['immunity'].sample(5)  # Draw some samples from the parameter
+>>> stisim.poisson(rate=1).sample(n=10)  # Sample from a temporary distribution
 """
 
 import numpy as np
 import sciris as sc
 
-__all__ = ['sample', 'Distribution', 'uniform', 'choice', 'normal', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int', 'poisson', 'neg_binomial', 'beta', 'gamma']
-
-
-def sample(dist, n=1):
-    """
-    Helper function to improve readability where desired
-    """
-    return dist(n)
+__all__ = ['Distribution', 'uniform', 'choice', 'normal', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int', 'poisson', 'neg_binomial', 'beta', 'gamma']
 
 
 class Distribution():
@@ -38,23 +30,14 @@ class Distribution():
         """
         raise NotImplementedError
 
-    def __call__(self, n=1):
+    def __call__(self, n=1, **kwargs):
+        return self.sample(n, **kwargs)
+
+    def sample(cls, n=1, **kwargs):
         """
         Return a specified number of samples from the distribution
-
-        :param n:
-        :return:
         """
         raise NotImplementedError
-
-    @classmethod
-    def sample(cls, *args, n=1, **kwargs):
-        """
-        Draw samples without explicitly creating an instance
-
-        This is a fallback method that could be overwritten for efficiency as required
-        """
-        return cls(*args, **kwargs)(n)
 
 
 class uniform(Distribution):
@@ -69,7 +52,7 @@ class uniform(Distribution):
     def mean(self):
         return (self.low + self.high) / 2
 
-    def __call__(self, n=1):
+    def sample(self, n=1):
         return np.random.uniform(low=self.low, high=self.high, size=n)
 
 
@@ -83,7 +66,7 @@ class choice(Distribution):
         self.probabilities = probabilities
         self.replace = replace
 
-    def __call__(self, n, replace=True):
+    def sample(self, n, replace=True):
         return np.random.choice(a=self.choices, p=self.probabilities, replace=self.replace, size=n)
 
 
@@ -96,7 +79,7 @@ class normal(Distribution):
         self.mean = mean
         self.std = std
 
-    def __call__(self, n=1):
+    def sample(self, n=1):
         return np.random.normal(loc=self.mean, scale=self.std, size=n)
 
 
@@ -107,7 +90,7 @@ class normal_pos(normal):
     WARNING - this function came from hpvsim but confirm that the implementation is correct?
     """
 
-    def __call__(self, n=1):
+    def sample(self, n=1):
         return np.abs(super().sample(n))
 
 
@@ -116,7 +99,7 @@ class normal_int(Distribution):
     Normal distribution returning only integer values
     """
 
-    def __call__(self, n=1):
+    def sample(self, n=1):
         return np.round(super().sample(n))
 
 
@@ -135,7 +118,7 @@ class lognormal(Distribution):
         self.underlying_mean = np.log(mean ** 2 / np.sqrt(std ** 2 + mean ** 2))  # Computes the mean of the underlying normal distribution
         self.underlying_std = np.sqrt(np.log(std ** 2 / mean ** 2 + 1))  # Computes sigma for the underlying normal distribution
 
-    def __call__(self, n=1):
+    def sample(self, n=1):
 
         if (sc.isnumber(self.mean) and self.mean > 0) or (sc.checktype(self.mean, 'arraylike') and (self.mean > 0).all()):
             return np.random.lognormal(mean=self.underlying_mean, sigma=self.underlying_std, size=n)
@@ -148,7 +131,7 @@ class lognormal_int(lognormal):
     Lognormal returning only integer values
     """
 
-    def __call__(self, n=1):
+    def sample(self, n=1):
         return np.round(super().sample(n))
 
 
@@ -163,7 +146,7 @@ class poisson(Distribution):
     def mean(self):
         return self.rate
 
-    def __call__(self, n=1):
+    def sample(self, n=1):
         return np.random.poisson(self.rate, n)
 
 
@@ -190,7 +173,7 @@ class neg_binomial(Distribution):
         self.dispersion = dispersion
         self.step = step
 
-    def __call__(self, n=1):
+    def sample(self, n=1):
         nbn_n = self.dispersion
         nbn_p = self.dispersion / (self.mean / self.step + self.dispersion)
         return np.random.negative_binomial(n=nbn_n, p=nbn_p, size=n) * self.step
@@ -208,7 +191,7 @@ class beta(Distribution):
     def mean(self):
         return self.alpha / (self.alpha + self.beta)
 
-    def __call__(self, n=1):
+    def sample(self, n=1):
         return np.random.beta(a=self.alpha, b=self.beta, size=n)
 
 
@@ -224,5 +207,5 @@ class gamma(Distribution):
     def mean(self):
         return self.shape * self.scale
 
-    def __call__(self, n=1):
+    def sample(self, n=1):
         return np.random.gamma(shape=self.shape, scale=self.scale, size=n)

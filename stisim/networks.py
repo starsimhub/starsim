@@ -330,7 +330,7 @@ class hpv_network(Network):
         self.pars['acts'] = ss.neg_binomial(mean=80, dispersion=40)  # The number of sexual acts per year
         self.pars['age_act_pars'] = dict(peak=30, retirement=100, debut_ratio=0.5, retirement_ratio=0.1) # Parameters describing changes in coital frequency over agent lifespans
         self.pars['condoms'] = 0.2  # The proportion of acts in which condoms are used
-        self.pars['dur_pship'] = ss.normal_pos(1, 1)  # Duration of partnerships
+        self.pars['dur_pship'] = ss.normal_pos(mean=1, std=1)  # Duration of partnerships
         self.pars['participation'] = None  # Incidence of partnership formation by age
         self.pars['mixing'] = None  # Mixing matrices for storing age differences in partnerships
 
