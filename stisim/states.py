@@ -2,11 +2,11 @@ import pandas as pd
 import numpy as np
 import sciris as sc
 import numba as nb
+from stisim.utils import INT_NAN
 from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
 
-__all__ = ['State', 'DynamicView', 'INT_NAN']
+__all__ = ['State', 'DynamicView']
 
-INT_NAN = np.iinfo(int).max  # Value to use to flag removed UIDs (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
 
 
 class FusedArray(NDArrayOperatorsMixin):

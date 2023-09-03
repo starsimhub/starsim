@@ -13,6 +13,11 @@ import stisim as ss
 # What functions are externally visible -- note, this gets populated in each section below
 __all__ = []
 
+# System constants
+__all__ += ['INT_NAN']
+
+INT_NAN = np.iinfo(np.int32).max  # Value to use to flag invalid content (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
+
 
 # %% Helper functions
 __all__ += ['ndict', 'omerge']
