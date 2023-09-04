@@ -143,11 +143,7 @@ class Disease(Module):
                     p_transmit = rel_trans[a] * rel_sus[b] * layer['beta'] * beta
                     new_cases = np.random.random(len(a)) < p_transmit
                     if np.any(new_cases):
-                        # Placeholder -- need to figure out how to distinguish these
-                        if not layer.vertical:
-                            self.set_prognoses(sim, b[new_cases])
-                        else:
-                            self.set_congenital(sim, b[new_cases])
+                        self.set_prognoses(sim, b[new_cases])
 
     def set_prognoses(self, sim, uids):
         pass
