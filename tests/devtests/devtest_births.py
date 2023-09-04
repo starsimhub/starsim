@@ -16,10 +16,11 @@ sim.initialize()
 sim.run()
 
 fig, ax = plt.subplots(2, 1)
-ax[0].plot(sim.tivec, sim.results.births)
-ax[0].plot(sim.tivec, sim.results.deaths)
-ax[1].plot(sim.tivec, sim.results.n_alive)
+ax[0].plot(sim.tivec, sim.results.births.new)
+ax[0].plot(sim.tivec, sim.results.background_deaths.new)
+ax[1].plot(sim.tivec, sim.results[0])
 
-ax[0].title('Births and deaths')
-ax[1].title('Population size')
+ax[0].set_title('Births and deaths')
+ax[1].set_title('Population size')
 
+plt.show()

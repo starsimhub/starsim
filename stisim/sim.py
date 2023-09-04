@@ -327,6 +327,9 @@ class Sim(sc.prettyobj):
         self.update_modules()
         self.apply_analyzers()
 
+        # Update results
+        self.results[0][self.ti] = len(self.people)
+
         # Tidy up
         self.ti += 1
         if self.ti == self.npts:

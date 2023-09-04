@@ -31,22 +31,28 @@ class births(ss.Module):
         self.results += ss.Result(self.name, 'cbr', sim.npts, dtype=int)
         return
 
-    def update_results(self, n_new, ti):
-        self.results['new'][ti] = n_new
-
-    def make_new_cases(self, sim):
-        """ Extract the right birth rates to use and translate it into a number of people to add """
-        years = self.pars.birth_rates[0]
-        rates = self.pars.birth_rates[1]
-        this_birth_rate = self.pars['rel_birth'] * np.interp(sim.year, years, rates) * sim.pars.dt_demog / 1e3
-        n_new = sc.randround(len(sim.people) * this_birth_rate)
-        self.add_births(sim, n_new)
+    def update(self, sim):
+        n_new = self.add_births(sim)
+        self.update_results(n_new, sim)
         return
 
-    def add_births(self, sim, n_new):
+    def get_birth_rate(self, sim):
+        """
+        Extract the right birth rates to use and translate it into a number of people to add.
+        Eventually this might also process time series data.
+        """
+        this_birth_rate = self.pars.birth_rates * self.pars.rel_birth * sim.pars.dt_demog
+        n_new = sc.randround(len(sim.people) * this_birth_rate)
+        return n_new
+
+    def add_births(self, sim):
         # Add n_new births to each state in the sim
+        n_new = self.get_birth_rate(sim)
         sim.people.grow(n_new)
-        self.update_results(n_new, sim.ti)
+        return n_new
+
+    def update_results(self, n_new, sim):
+        self.results['new'][sim.ti] = n_new
 
     def finalize(self, sim):
         self.results['cumulative'] = np.cumsum(self.results['new'])
@@ -74,14 +80,30 @@ class background_deaths(ss.Module):
         self.results += ss.Result(self.name, 'mortality_rate', sim.npts, dtype=int)
         return
 
-    def update_results(self, total_deaths, ti):
-        self.results['new'][ti] = total_deaths
-
-    def make_new_cases(self, sim):
-        """ Extract the right death rates to use and translate it into a number of people to remove """
-        total_deaths = self.pars.death_rates * self.pars.rel_death * len(sim.people)
-        self.update_results(total_deaths, sim.ti)
+    def update(self, sim):
+        n_deaths = self.apply_deaths(sim)
+        self.update_results(n_deaths, sim)
         return
+
+    def get_death_rate(self, sim):
+        """
+        Extract the right birth rates to use and translate it into a number of people to add.
+        Eventually this might also process time series data.
+        """
+        this_death_rate = self.pars.death_rates * self.pars.rel_death
+        n_deaths = sc.randround(len(sim.people) * this_death_rate)
+        return n_deaths
+
+    def apply_deaths(self, sim):
+        """ Randomly select people to die """
+        n_deaths = self.get_death_rate(sim)
+        death_uids = np.random.choice(sim.people.uid, n_deaths, replace=False)
+        sim.people.alive[death_uids] = False
+        sim.people.remove(death_uids)
+        return n_deaths
+
+    def update_results(self, n_deaths, sim):
+        self.results['new'][sim.ti] = n_deaths
 
     def finalize(self, sim):
         self.results['cumulative'] = np.cumsum(self.results['new'])
