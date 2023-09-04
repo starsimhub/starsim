@@ -4,9 +4,10 @@ Define pregnancy, deaths, migration, etc.
 
 import numpy as np
 import stisim as ss
+import sciris as sc
+import pandas as pd
 
-
-__all__ = ['Pregnancy']
+__all__ = ['Pregnancy', 'background_deaths']
 
 
 class Pregnancy(ss.Module):
@@ -149,3 +150,39 @@ class Pregnancy(ss.Module):
         self.results['pregnancies'][sim.ti] = np.count_nonzero(self.ti_pregnant == sim.ti)
         self.results['births'][sim.ti] = np.count_nonzero(self.ti_delivery == sim.ti)
         return
+
+
+class background_deaths(ss.Module):
+    def __init__(self, pars=None):
+        super().__init__(pars)
+
+        # Set defaults
+        self.pars = sc.objdict()
+
+        self.pars.death_rate = pd.Series(
+            index=[0, 10, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95],
+            data=[0.0046355, 0.000776, 0.0014232, 0.0016693, 0.0021449, 0.0028822, 0.0039143, 0.0053676, 0.0082756, 0.01, 0.02, 0.03, 0.04, 0.06, 0.11, 0.15, 0.21, 0.30],
+        )
+
+        # Overwrite with user-provided values
+        self.pars = ss.omerge(self.pars, pars)
+        self.results = ss.ndict()
+
+
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.results += ss.Result(self.name, 'new_deaths', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'cumulative_deaths', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'mortality_rate', sim.npts, dtype=int)
+
+
+    def update(self, sim):
+        death_rates = self.pars.death_rate.iloc[np.digitize(sim.people.age, self.pars.death_rate.index) - 1].values
+        deaths = ss.binomial_filter(death_rates, sim.people.uid)
+        sim.people.alive[deaths] = False
+        self.results['new_deaths'][sim.ti] = len(deaths)
+        return
+
+    def finalize(self, sim):
+        self.results['cumulative_deaths'] = np.cumsum(self.results['new_deaths'])
+        self.results['mortality_rate'] = self.results['new_deaths'] / sim.results['pop_size']
