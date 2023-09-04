@@ -56,7 +56,10 @@ class FusedArray(NDArrayOperatorsMixin):
         out = np.empty(len(key), dtype=vals.dtype)
         new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
         for i in range(len(key)):
-            out[i] = vals[uid_map[key[i]]]
+            idx = uid_map[key[i]]
+            if idx == INT_NAN:
+                raise IndexError('UID not present in array')
+            out[i] = vals[idx]
             new_uid_map[key[i]] = i
         return out, key, new_uid_map
 
@@ -73,7 +76,10 @@ class FusedArray(NDArrayOperatorsMixin):
         :return:
         """
         for i in range(len(key)):
-            vals[uid_map[key[i]]] = value[i]
+            idx = uid_map[key[i]]
+            if idx == INT_NAN:
+                raise IndexError('UID not present in array')
+            vals[idx] = value[i]
 
     @staticmethod
     @nb.njit
@@ -88,7 +94,10 @@ class FusedArray(NDArrayOperatorsMixin):
         :return:
         """
         for i in range(len(key)):
-            vals[uid_map[key[i]]] = value
+            idx = uid_map[key[i]]
+            if idx == INT_NAN:
+                raise IndexError('UID not present in array')
+            vals[idx] = value
 
     def __getitem__(self, key):
         try:
