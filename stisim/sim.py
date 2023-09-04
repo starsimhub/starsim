@@ -257,7 +257,7 @@ class Sim(sc.prettyobj):
         """
         # Make results
         results = ss.Results(
-            ss.Result('n_alive', None, self.npts, ss.int_),
+            ss.Result(None, 'n_alive', self.npts, ss.int_),
         )
 
         # Final items
