@@ -2,11 +2,11 @@ import pandas as pd
 import numpy as np
 import sciris as sc
 import numba as nb
+from stisim.utils import INT_NAN
 from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
 
-__all__ = ['State', 'DynamicView', 'INT_NAN']
+__all__ = ['State', 'DynamicView']
 
-INT_NAN = np.iinfo(int).max  # Value to use to flag removed UIDs (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
 
 
 class FusedArray(NDArrayOperatorsMixin):
@@ -265,12 +265,12 @@ class DynamicView(NDArrayOperatorsMixin):
         self._map_arrays()
 
     def grow(self, n):
-
         if self.n + n > self._s:
+            # If the total number of agents exceeds the array size, extend the storage array
             n_new = max(n, int(self._s / 2))  # Minimum 50% growth
-            self._data = np.concatenate([self._data, self._new_items(n)], axis=0)
+            self._data = np.concatenate([self._data, self._new_items(n_new)], axis=0)
 
-        self.n += n
+        self.n += n  # Increase the count of the number of agents by `n` (the requested number of new agents)
         self._map_arrays()
 
     def _trim(self, inds):

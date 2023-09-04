@@ -326,11 +326,11 @@ class hpv_network(Network):
         # Define default parameters
         self.pars = dict()
         self.pars['cross_layer'] = 0.05  # Proportion of agents who have concurrent cross-layer relationships
-        self.pars['partners'] = dict(dist='poisson', par1=0.01)  # The number of concurrent sexual partners
-        self.pars['acts'] = dict(dist='neg_binomial', par1=80, par2=40)  # The number of sexual acts per year
+        self.pars['partners'] = ss.poisson(rate=0.01)  # The number of concurrent sexual partners
+        self.pars['acts'] = ss.neg_binomial(mean=80, dispersion=40)  # The number of sexual acts per year
         self.pars['age_act_pars'] = dict(peak=30, retirement=100, debut_ratio=0.5, retirement_ratio=0.1) # Parameters describing changes in coital frequency over agent lifespans
         self.pars['condoms'] = 0.2  # The proportion of acts in which condoms are used
-        self.pars['dur_pship'] = dict(dist='normal_pos', par1=1, par2=1)  # Duration of partnerships
+        self.pars['dur_pship'] = ss.normal_pos(mean=1, std=1)  # Duration of partnerships
         self.pars['participation'] = None  # Incidence of partnership formation by age
         self.pars['mixing'] = None  # Mixing matrices for storing age differences in partnerships
 
@@ -397,7 +397,7 @@ class hpv_network(Network):
         current_partners = np.zeros((len(people)))
         current_partners[f_partnered_inds] = f_partnered_counts
         current_partners[m_partnered_inds] = m_partnered_counts
-        partners = ss.sample(**self.pars['partners'], size=len(people)) + 1
+        partners = self.pars['partners'].sample(len(people)) + 1
         underpartnered = current_partners < partners  # Indices of underpartnered people
         f_eligible = f_active & underpartnered
         m_eligible = m_active & underpartnered
@@ -455,8 +455,8 @@ class hpv_network(Network):
         p1 = np.array(f)
         p2 = selected_males
         n_partnerships = len(p1)
-        dur = ss.sample(**self.pars['dur_pship'], size=n_partnerships)
-        acts = ss.sample(**self.pars['acts'], size=n_partnerships)
+        dur = self.pars['dur_pship'].sample(n_partnerships)
+        acts = self.pars['acts'].sample(n_partnerships)
         age_p1 = people.age[p1]
         age_p2 = people.age[p2]
 
