@@ -135,18 +135,14 @@ class Disease(Module):
         pars = self.pars
         for k, layer in sim.people.networks.items():
             if k in pars['beta']:
-                rel_trans = (self.infected & sim.people.alive) #.astype(float) * self.rel_trans
-                rel_sus = (self.susceptible & sim.people.alive) #.astype(float) * self.rel_sus
+                rel_trans = (self.infected & sim.people.alive).astype(float) * self.rel_trans
+                rel_sus = (self.susceptible & sim.people.alive).astype(float) * self.rel_sus
                 for a, b, beta in [[layer['p1'], layer['p2'], pars['beta'][k][0]],
                                    [layer['p2'], layer['p1'], pars['beta'][k][1]]]:
                     # probability of a->b transmission
                     p_transmit = rel_trans[a] * rel_sus[b] * layer['beta'] * beta
                     new_cases = np.random.random(len(a)) < p_transmit
-                    # import traceback;
-                    # traceback.print_exc();
-                    # import pdb;
-                    # pdb.set_trace()
-                    if new_cases.any():
+                    if np.any(new_cases):
                         # Placeholder -- need to figure out how to distinguish these
                         if not layer.vertical:
                             self.set_prognoses(sim, b[new_cases])
