@@ -328,7 +328,7 @@ class Sim(sc.prettyobj):
         self.apply_analyzers()
 
         # Update results
-        self.results[0][self.ti] = len(self.people)
+        self.results.n_alive[self.ti] = len(self.people)
 
         # Tidy up
         self.ti += 1
