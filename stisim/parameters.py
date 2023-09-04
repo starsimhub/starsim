@@ -28,9 +28,12 @@ class Parameters(sc.objdict):
         self.n_agents = 10e3  # Number of agents
         self.total_pop = 10e3  # If defined, used for calculating the scale factor
         self.pop_scale = None  # How much to scale the population
-        self.location = None  # What demographics to use - NOT CURRENTLY FUNCTIONAL
-        self.birth_rates = None  # Birth rates, loaded below
-        self.death_rates = None  # Death rates, loaded below
+
+        # Demographic parameters: NOT CURRENTLY FUNCTIONAL
+        # TBC whether these parameters live here or in separate demographic modules
+        self.location = None  # What demographics to use
+        self.birth_rates = None  # Birth rates
+        self.death_rates = None  # Death rates
         self.rel_birth = 1.0  # Birth rate scale factor
         self.rel_death = 1.0  # Death rate scale factor
 
