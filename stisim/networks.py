@@ -58,8 +58,6 @@ class Network(sc.objdict):
             'beta': ss.float_,
         }
 
-        self.pars = sc.objdict()
-        self.states = ss.ndict()
         self.meta = sc.mergedicts(default_keys, key_dict)
         self.vertical = vertical  # Whether transmission is bidirectional
         self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
@@ -80,7 +78,7 @@ class Network(sc.objdict):
 
     @property
     def name(self):
-        # The network name is a lower-case version of its class name
+        # The module name is a lower-case version of its class name
         return self.__class__.__name__.lower()
 
     def initialize(self):
@@ -184,7 +182,7 @@ class Network(sc.objdict):
 
     def to_dict(self):
         """ Convert to dictionary """
-        d = {k: self[k] for k in self.meta_keys()}
+        d = {k:self[k] for k in self.meta_keys()}
         return d
 
     def to_df(self):
@@ -311,62 +309,6 @@ class simple_sexual(Network):
         self.add_pairs(people)
 
 
-class msm(Network):
-    """ MSM Network """
-
-    def __init__(self, pars=None):
-        key_dict = {
-            'p1': ss.int_,
-            'p2': ss.int_,
-            'dur': ss.float_,
-            'beta': ss.float_,
-        }
-
-        # Call init for the base class, which sets all the keys
-        super().__init__(key_dict=key_dict)
-
-        # Set pars
-        self.pars = sc.objdict({
-            'prop_msm': 0.1,
-            'prop_bisexual': 0.5,  # Proportion of MSM who also partner with women
-            'dur': ss.lognormal(4, 4),  # Relationship duration
-            'debut': ss.lognormal(20, 4),  # Age of sexual debut
-            'dur_btwn': ss.lognormal(0.5, 2),  # Lag between relationships
-            'partners': ss.poisson(0.05),  # Concurrency metric
-        })
-
-        # States
-        msm_dist = ss.choice([True, False], [self.pars['prop_msm'], 1 - self.pars['prop_msm']])
-        self.states = ss.ndict(
-            ss.State('member', bool, msm_dist, eligibility='male'),
-            ss.State('debut', float, self.pars['debut'], eligibility=self.member, na_val=np.nan),
-            ss.State('partners', int, self.pars['partners'], eligibility=self.member, na_val=np.nan),
-            ss.State('current_partners', int, fill_value=0, eligibility=self.member, na_val=np.nan),
-        )
-
-    def initialize(self, people):
-        """ This method can initialize the states with the people """
-        return
-
-    def get_seekers(self, people, ti=None):
-        """ Find the people in this network who are looking for relationships """
-        underpartnered = self.msm[self.current_partners < self.partners]
-        active = people.age >= self.debut
-        people.ti_breakup
-
-    def add_pairs(self, people, ti=None):
-        # available = np.setdiff1d(people.uid[people.msm], self.members)
-        return
-
-    def update(self, people, ti=None, dt=None):
-        if dt is None: dt = people.dt
-        if ti is None: ti = people.to
-        self['dur'] = self['dur'] - dt
-        active = self['dur'] > 0
-        over = self['dur'] <= 0
-        people.ti_breakup[over] = ti
-
-
 class hpv_network(Network):
     def __init__(self, pars=None):
 
@@ -410,31 +352,29 @@ class hpv_network(Network):
         defaults = {}
         mixing = np.array([
             #       0,  5,  10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [10, 0, 0, .1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [15, 0, 0, .1, .1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [20, 0, 0, .1, .1, .1, .1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [25, 0, 0, .5, .1, .5, .1, .1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [30, 0, 0, 1, .5, .5, .5, .5, .1, 0, 0, 0, 0, 0, 0, 0, 0],
-            [35, 0, 0, .5, 1, 1, .5, 1, 1, .5, 0, 0, 0, 0, 0, 0, 0],
-            [40, 0, 0, 0, .5, 1, 1, 1, 1, 1, .5, 0, 0, 0, 0, 0, 0],
-            [45, 0, 0, 0, 0, .1, 1, 1, 2, 1, 1, .5, 0, 0, 0, 0, 0],
-            [50, 0, 0, 0, 0, 0, .1, 1, 1, 1, 1, 2, .5, 0, 0, 0, 0],
-            [55, 0, 0, 0, 0, 0, 0, .1, 1, 1, 1, 1, 2, .5, 0, 0, 0],
-            [60, 0, 0, 0, 0, 0, 0, 0, .1, .5, 1, 1, 1, 2, .5, 0, 0],
-            [65, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, .5, 0],
-            [70, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, .5],
-            [75, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1],
+            [ 0,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+            [ 5,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+            [10,    0,  0, .1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+            [15,    0,  0, .1, .1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+            [20,    0,  0, .1, .1, .1, .1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+            [25,    0,  0, .5, .1, .5, .1, .1,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+            [30,    0,  0,  1, .5, .5, .5, .5, .1,  0,  0,  0,  0,  0,  0,  0,  0],
+            [35,    0,  0, .5,  1,  1, .5,  1,  1, .5,  0,  0,  0,  0,  0,  0,  0],
+            [40,    0,  0,  0, .5,  1,  1,  1,  1,  1, .5,  0,  0,  0,  0,  0,  0],
+            [45,    0,  0,  0,  0, .1,  1,  1,  2,  1,  1, .5,  0,  0,  0,  0,  0],
+            [50,    0,  0,  0,  0,  0, .1,  1,  1,  1,  1,  2, .5,  0,  0,  0,  0],
+            [55,    0,  0,  0,  0,  0,  0, .1,  1,  1,  1,  1,  2, .5,  0,  0,  0],
+            [60,    0,  0,  0,  0,  0,  0,  0, .1, .5,  1,  1,  1,  2, .5,  0,  0],
+            [65,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  2, .5,  0],
+            [70,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1, .5],
+            [75,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1],
         ])
 
         participation = np.array([
-            [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75],
-            [0, 0, 0.10, 0.7, 0.8, 0.6, 0.6, 0.4, 0.1, 0.05, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001],
-            # Share of females of each age newly having casual relationships
-            [0, 0, 0.05, 0.7, 0.8, 0.6, 0.6, 0.4, 0.4, 0.3, 0.1, 0.05, 0.01, 0.01, 0.001, 0.001]],
-            # Share of males of each age newly having casual relationships
-        )
+                [ 0,  5,    10,    15,   20,   25,   30,   35,    40,    45,    50,    55,    60,    65,    70,    75],
+                [ 0,  0,  0.10,   0.7,  0.8,  0.6,  0.6,  0.4,   0.1,  0.05, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001], # Share of females of each age newly having casual relationships
+                [ 0,  0,  0.05,   0.7,  0.8,  0.6,  0.6,  0.4,   0.4,   0.3,   0.1,  0.05,  0.01,  0.01, 0.001, 0.001]], # Share of males of each age newly having casual relationships
+            )
 
         defaults['mixing'] = mixing
         defaults['participation'] = participation

@@ -156,5 +156,3 @@ class Disease(Module):
 
     def finalize_results(self, sim):
         pass
-
-
