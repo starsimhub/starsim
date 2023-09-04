@@ -172,16 +172,22 @@ class FusedArray(NDArrayOperatorsMixin):
         return self.values.__contains__(*args, **kwargs)
 
     def astype(self, *args, **kwargs):
-        return self.values.astype(*args, **kwargs)
+        return FusedArray(values=self.values.astype(*args, **kwargs), uid=self.uid, uid_map=self._uid_map)
 
-    def sum(self):
-        return self.values.sum()
+    def sum(self, *args, **kwargs):
+        return self.values.sum(*args, **kwargs)
 
-    def mean(self):
-        return self.values.mean()
+    def mean(self, *args, **kwargs):
+        return self.values.mean(*args, **kwargs)
 
-    def count_nonzero(self):
-        return self.values.count_nonzero()
+    def any(self, *args, **kwargs):
+        return self.values.any(*args, **kwargs)
+
+    def all(self, *args, **kwargs):
+        return self.values.all(*args, **kwargs)
+
+    def count_nonzero(self, *args, **kwargs):
+        return self.values.count_nonzero(*args, **kwargs)
 
     @property
     def shape(self):
