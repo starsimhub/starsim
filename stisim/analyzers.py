@@ -1,32 +1,17 @@
-from .modules import *
+"""
+Define analyzers
+"""
+
+import stisim as ss
 
 
-class Analyzer:
-    requires = []
-
-    # TODO - what if the analyzer depends on a specific variable? How does the analyzer know which modules are required?
-    def initialize(self, sim):
-        for req in self.requires:
-            if req not in sim.modules:
-                raise Exception(f'{self.__name__} requires module {req} but the Sim did not contain this module')
-        pass
-
-    def apply(self, sim):
-        pass
-
-    def finalize(self, sim):
-        pass
+__all__ = ['Analyzer', 'Analyzers']
 
 
-class CD4_analyzer(Analyzer):
-    requires = [HIV]
+class Analyzer(ss.Module):
+    pass
 
-    def __init__(self):
-        self.cd4 = None
 
-    def initialize(self, sim):
-        super().initialize(sim)
-        self.cd4 = np.zeros((sim.npts, sim.people.n), dtype=int)
-
-    def apply(self, sim):
-        self.cd4[sim.t] = sim.people.hiv.cd4
+class Analyzers(ss.ndict):
+    def __init__(self, *args, type=Analyzer, **kwargs):
+        return super().__init__(self, *args, type=type, **kwargs)
