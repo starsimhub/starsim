@@ -29,6 +29,10 @@ class Gonorrhea(ss.Disease):
             'initial': 3,
             'eff_condoms': 0.7,
         }, self.pars)
+
+
+        self.rng_dur_inf = ss.Stream('dur_inf')
+
         return
 
     def update_states(self, sim):
@@ -53,7 +57,7 @@ class Gonorrhea(ss.Disease):
         self.infected[uids] = True
         self.ti_infected[uids] = sim.ti
 
-        dur = sim.ti + np.random.poisson(self.pars['dur_inf']/sim.pars.dt, len(uids))
+        dur = sim.ti + self.rng.poisson(self.pars['dur_inf']/sim.pars.dt, len(uids)) # By whom infected from???
         dead = self.rng_dead.bernoulli(self.pars.p_death, uids)
 
         self.ti_recovered[uids[~dead]] = dur[~dead]

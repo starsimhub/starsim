@@ -158,9 +158,14 @@ class Disease(Module):
                 rel_sus = (self.susceptible & sim.people.alive).astype(float)
                 for a, b, beta, rng in [[layer['p1'], layer['p2'], pars['beta'][k][0], self.rng_trans_ab], [layer['p2'], layer['p1'], pars['beta'][k][1], self.rng_trans_ba]]:
                     # probability of a->b transmission
-                    p_transmit = rel_trans[a] * rel_sus[b] * layer['beta'] * beta
-                    #new_cases = rng.random(len(a)) < p_transmit # TODO: Convert to flat list of N probs and block sample
-                    new_cases = rng.bernoulli_filter(p_transmit, b)
+                    p_tran_edge = rel_trans[a] * rel_sus[b] * layer['beta'] * beta
+                    
+                    # Will need to be more efficient here - can maintain edge to node matrix
+                    node_from_edge = np.zeros( (len(sim.people._uid_map), len(p_tran_edge)) )
+                    node_from_edge[b, np.arange(len(b))] = 1
+                    p_acq_node = np.dot(node_from_edge, p_tran_edge) # calculated for all nodes, including those outside b
+                    new_cases = rng.bernoulli_filter(p_acq_node[b], b)
+
                     n_new_cases += len(new_cases)
                     if len(new_cases):
                         self.set_prognoses(sim, new_cases)

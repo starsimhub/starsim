@@ -12,16 +12,32 @@ class Streams:
 
     def __init__(self):
         self._streams = ss.ndict()
+        self.used_seeds = []
+        return
+
+    def initialize(self, base_seed):
+        self.base_seed = base_seed
         return
     
     def add(self, stream):
-        """ Add a stream """
+        """
+        Add a stream
+        
+        Can request an offset, will check for overlap
+        Otherwise, return value will be used as the seed offset for this stream
+        """
 
-        # Return value will be used as the seed offset for this stream
-        # Depends on order, which will become a problem - need a better solution
-        n = len(self._streams)
+        if stream.seed_offset is None:
+            seed = len(self._streams) # Put at end by default
+        elif stream.seed_offset in self.used_seeds:
+            raise Exception(f'Requested seed offset {stream.seed_offset} for stream {stream} has already been used.')
+        else:
+            seed = stream.seed_offset
+        self.used_seeds.append(seed)
+
         self._streams.append(stream)
-        return n
+
+        return self.base_seed + seed
 
     def step(self, ti):
         for stream in self._streams.dict_values():
@@ -33,9 +49,11 @@ class Stream(np.random.Generator):
     Class for tracking one random number stream associated with one decision per timestep
     """
     
-    def __init__(self, name, seed_offset=0, **kwargs):
+    def __init__(self, name, seed_offset=None, **kwargs):
         """
         Create a random number stream
+
+        seed_offset will be automatically assigned (sequentially in first-come order) if None
         
         name: a name for this Stream, like "coin_flip"
         uid: an identifier added to the name to make it uniquely identifiable, for example the name or id of the calling class
@@ -67,7 +85,7 @@ class Stream(np.random.Generator):
         self.seed = sim.streams.add(self)
 
         if 'bit_generator' not in self.kwargs:
-            self.kwargs['bit_generator'] = np.random.PCG64(seed=self.seed + self.seed_offset)
+            self.kwargs['bit_generator'] = np.random.PCG64(seed=self.seed)
         super().__init__(**self.kwargs)
 
         #self.rng = np.random.default_rng(seed=self.seed + self.seed_offset)

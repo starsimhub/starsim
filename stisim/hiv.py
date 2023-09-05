@@ -64,8 +64,8 @@ class ART(ss.Intervention):
         self.t = sc.promotetoarray(t)
         self.capacity = sc.promotetoarray(capacity)
 
-        self.rng_add_ART = ss.Stream('add_ART')
-        self.rng_remove_ART = ss.Stream('remove_ART')
+        self.rng_add_ART = ss.Stream('add_ART', seed_offset=100)
+        self.rng_remove_ART = ss.Stream('remove_ART', seed_offset=101)
 
         return
 

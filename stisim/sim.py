@@ -75,6 +75,7 @@ class Sim(sc.prettyobj):
         ss.set_seed(self.pars['rand_seed'])  # Reset the random seed before the population is created
 
         # Initialize the core sim components
+        self.streams.initialize(self.pars['rand_seed'] + 1) # +1 ensures that the base seed is not reused
         self.init_people(popdict=popdict, reset=reset, **kwargs)  # Create all the people (the heaviest step)
         self.init_networks()
         self.init_results()
@@ -87,7 +88,7 @@ class Sim(sc.prettyobj):
 
         # Reset the random seed to the default run seed, so that if the simulation is run with
         # reset_seed=False right after initialization, it will still produce the same output
-        ss.set_seed(self.pars['rand_seed'] + 1)
+        ss.set_seed(self.pars['rand_seed'] + 1) # Hopefully not used now that we have streams
 
         # Final steps
         self.initialized = True
