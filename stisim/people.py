@@ -141,7 +141,7 @@ class People(BasePeople):
 
         states = [
             ss.State('age', float),
-            ss.State('female', bool, ss.choice([True,False])),
+            ss.State('female', bool, ss.choice([True, False])),
             ss.State('debut', float),
             ss.State('alive', bool, True),
             ss.State('ti_dead', float, np.nan),  # Time index for death
@@ -190,7 +190,7 @@ class People(BasePeople):
     def _register_module_states(self, module, module_states):
         """Enable dot notation for module specific states:
          - `sim.people.hiv.susceptible` or
-         - `sim.people.states['hiv.susceptible'`
+         - `sim.people.states['hiv.susceptible']`
         """
 
         for state_name, state in module.states.items():
@@ -216,8 +216,10 @@ class People(BasePeople):
 
     def update_demographics(self, dt, ti):
         """ Perform vital dynamic updates at the current timestep """
-        self.age[self.alive] += dt
-        self.alive[self.ti_dead <= ti] = False
+        death_uids = ss.true(self.ti_dead <= ti)
+        self.alive[death_uids] = False
+        self.remove(death_uids)
+        self.age += dt
         return
 
     def update_networks(self):

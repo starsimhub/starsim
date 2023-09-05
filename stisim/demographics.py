@@ -5,7 +5,7 @@ Define pregnancy, deaths, migration, etc.
 import numpy as np
 import stisim as ss
 import sciris as sc
-
+import pandas as pd
 
 __all__ = ['births', 'background_deaths', 'Pregnancy']
 
@@ -18,7 +18,29 @@ class births(ss.Module):
         self.pars = ss.omerge({
             'birth_rates': 0,
             'rel_birth': 1,
+            'data_cols': {'year': 'Year', 'cbr': 'CBR'},
+            'units_per_100': 1e-3  # assumes birth rates are per 1000. If using percentages, switch this to 1
         }, self.pars)
+
+        # Validate birth rate inputs
+        self.set_birth_rates(pars['birth_rates'])
+
+    def set_birth_rates(self, birth_rates):
+        """ Determine format that birth rates have been provided and standardize/validate """
+        if sc.checktype(birth_rates, pd.DataFrame):
+            if not set(self.pars.data_cols.values()).issubset(birth_rates.columns):
+                errormsg = 'Please ensure the columns of the birth rate data match the values in pars.data_cols.'
+                raise ValueError(errormsg)
+        if sc.checktype(birth_rates, dict):
+            if not set(self.pars.data_cols.values()).issubset(birth_rates.keys()):
+                errormsg = 'Please ensure the keys of the birth rate data dict match the values in pars.data_cols.'
+                raise ValueError(errormsg)
+            birth_rates = pd.DataFrame(birth_rates)
+        if sc.isnumber(birth_rates):
+            birth_rates = pd.DataFrame({self.pars.data_cols['year']: [2000], self.pars.data_cols['cbr']: [birth_rates]})
+
+        self.pars.birth_rates = birth_rates
+        return
 
     def initialize(self, sim):
         super().initialize(sim)
@@ -41,7 +63,10 @@ class births(ss.Module):
         Extract the right birth rates to use and translate it into a number of people to add.
         Eventually this might also process time series data.
         """
-        this_birth_rate = self.pars.birth_rates * self.pars.rel_birth * sim.pars.dt_demog
+        p = self.pars
+        br_year = p.birth_rates[p.data_cols['year']]
+        br_val = p.birth_rates[p.data_cols['cbr']]
+        this_birth_rate = np.interp(sim.year, br_year, br_val) * p.units_per_100 * p.rel_birth * sim.pars.dt_demog
         n_new = sc.randround(len(sim.people) * this_birth_rate)
         return n_new
 
@@ -63,11 +88,41 @@ class background_deaths(ss.Module):
     def __init__(self, pars=None):
         super().__init__(pars)
 
-        # Set defaults
         self.pars = ss.omerge({
             'death_rates': 0,
             'rel_death': 1,
+            'data_cols': {'year': 'Time', 'sex': 'Sex', 'age': 'AgeGrpStart', 'value': 'mx'},
+            'sex_keys': {'f': 'Female', 'm': 'Male'},
+            'units_per_100': 1e-3  # assumes birth rates are per 1000. If using percentages, switch this to 1
         }, self.pars)
+
+        # Validate death rate inputs
+        self.set_death_rates(pars['death_rates'])
+
+        # Set death probs
+        self.death_probs = ss.State('death_probs', float, 0)
+
+    def set_death_rates(self, death_rates):
+        """Standardize/validate death rates"""
+        if sc.checktype(death_rates, pd.DataFrame):
+            if not set(self.pars.data_cols.values()).issubset(death_rates.columns):
+                errormsg = 'Please ensure the columns of the death rate data match the values in pars.data_cols.'
+                raise ValueError(errormsg)
+        if sc.checktype(death_rates, dict):
+            if not set(self.pars.data_cols.values()).issubset(death_rates.keys()):
+                errormsg = 'Please ensure the keys of the death rate data dict match the values in pars.data_cols.'
+                raise ValueError(errormsg)
+            death_rates = pd.DataFrame(death_rates)
+        if sc.isnumber(death_rates):
+            death_rates = pd.DataFrame({
+                self.pars.data_cols['year']: [2000, 2000],
+                self.pars.data_cols['age']: [0, 0],
+                self.pars.data_cols['sex']: self.pars.sex_keys.values(),
+                self.pars.data_cols['value']: [death_rates, death_rates],
+            })
+
+        self.pars.death_rates = death_rates
+        return
 
     def initialize(self, sim):
         super().initialize(sim)
@@ -85,22 +140,35 @@ class background_deaths(ss.Module):
         self.update_results(n_deaths, sim)
         return
 
-    def get_death_rate(self, sim):
-        """
-        Extract the right birth rates to use and translate it into a number of people to add.
-        Eventually this might also process time series data.
-        """
-        this_death_rate = self.pars.death_rates * self.pars.rel_death
-        n_deaths = sc.randround(len(sim.people) * this_death_rate)
-        return n_deaths
-
     def apply_deaths(self, sim):
-        """ Randomly select people to die """
-        n_deaths = self.get_death_rate(sim)
-        death_uids = np.random.choice(sim.people.uid, n_deaths, replace=False)
-        sim.people.alive[death_uids] = False
-        sim.people.remove(death_uids)
-        return n_deaths
+        """ Select people to die """
+
+        p = self.pars
+        year_label = p.data_cols['year']
+        age_label = p.data_cols['age']
+        sex_label = p.data_cols['sex']
+        val_label = p.data_cols['value']
+        sex_keys = p.sex_keys
+
+        available_years = p.death_rates[year_label].unique()
+        year_ind = sc.findnearest(available_years, sim.year)
+        nearest_year = available_years[year_ind]
+
+        df = p.death_rates.loc[p.death_rates[year_label] == nearest_year]
+        age_bins = df[age_label].unique()
+        age_inds = np.digitize(sim.people.age, age_bins) - 1
+
+        f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
+        m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
+        self.death_probs[sim.people.female] = f_arr[age_inds[sim.people.female]]
+        self.death_probs[sim.people.male] = m_arr[age_inds[sim.people.male]]
+        self.death_probs *= p.rel_death  # Adjust overall death probabilities
+
+        # Get indices of people who die of other causes
+        death_uids = ss.true(ss.binomial_arr(self.death_probs))
+        sim.people.ti_dead[death_uids] = sim.ti
+
+        return len(death_uids)
 
     def update_results(self, n_deaths, sim):
         self.results['new'][sim.ti] = n_deaths
@@ -116,14 +184,15 @@ class Pregnancy(ss.Module):
         super().__init__(pars)
 
         # Other, e.g. postpartum, on contraception...
-        self.infertile = ss.State('infertile', bool, False)   # Applies to girls and women outside the fertility window
-        self.susceptible = ss.State('susceptible', bool, True)   # Applies to girls and women inside the fertility window - needs renaming
-        self.pregnant = ss.State('pregnant', bool, False)   # Currently pregnant
-        self.postpartum = ss.State('postpartum', bool, False)   # Currently post-partum
-        self.ti_pregnant = ss.State('ti_pregnant', float, np.nan)   # Time pregnancy begins
-        self.ti_delivery = ss.State('ti_delivery', float, np.nan)   # Time of delivery
-        self.ti_postpartum = ss.State('ti_postpartum', float, np.nan)   # Time postpartum ends
-        self.ti_dead = ss.State('ti_dead', float, np.nan)   # Maternal mortality
+        self.infertile = ss.State('infertile', bool, False)  # Applies to girls and women outside the fertility window
+        self.susceptible = ss.State('susceptible', bool,
+                                    True)  # Applies to girls and women inside the fertility window - needs renaming
+        self.pregnant = ss.State('pregnant', bool, False)  # Currently pregnant
+        self.postpartum = ss.State('postpartum', bool, False)  # Currently post-partum
+        self.ti_pregnant = ss.State('ti_pregnant', float, np.nan)  # Time pregnancy begins
+        self.ti_delivery = ss.State('ti_delivery', float, np.nan)  # Time of delivery
+        self.ti_postpartum = ss.State('ti_postpartum', float, np.nan)  # Time postpartum ends
+        self.ti_dead = ss.State('ti_dead', float, np.nan)  # Maternal mortality
 
         self.pars = ss.omerge({
             'dur_pregnancy': 0.75,  # Make this a distribution?
@@ -214,7 +283,7 @@ class Pregnancy(ss.Module):
                 # handled separately to the sexual networks, TBC how to handle this most elegantly
                 for lkey, layer in sim.people.networks.items():
                     if layer.vertical:  # What happens if there's more than one vertical layer?
-                        durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy+self.pars.dur_postpartum)
+                        durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
                         layer.add_pairs(uids, new_uids, dur=durs)
 
                 # Set prognoses for the pregnancies
