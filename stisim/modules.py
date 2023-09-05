@@ -140,7 +140,13 @@ class Disease(Module):
                 for a, b, beta in [[layer['p1'], layer['p2'], pars['beta'][k][0]],
                                    [layer['p2'], layer['p1'], pars['beta'][k][1]]]:
                     # probability of a->b transmission
-                    p_transmit = rel_trans[a] * rel_sus[b] * layer['beta'] * beta
+                    try:
+                        p_transmit = rel_trans[a] * rel_sus[b] * layer['beta'] * beta
+                    except:
+                        import traceback;
+                        traceback.print_exc();
+                        import pdb;
+                        pdb.set_trace()
                     new_cases = np.random.random(len(a)) < p_transmit
                     if new_cases.any():
                         self.set_prognoses(sim, b[new_cases])

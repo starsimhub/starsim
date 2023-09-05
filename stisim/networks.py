@@ -242,9 +242,20 @@ class Network(sc.objdict):
         """ Define how pairs of people are formed """
         pass
 
-    def update(self):
+    def update(self, people):
         """ Define how pairs/connections evolve (in time) """
-        pass
+        # Remove connections where one person has died
+        to_remove = ss.true((people.ti_dead == people.ti)[self.p1])
+        try:
+            self.pop_inds(to_remove)
+            to_remove = ss.true((people.ti_dead == people.ti)[self.p2])
+            self.pop_inds(to_remove)
+        except:
+            import traceback;
+            traceback.print_exc();
+            import pdb;
+            pdb.set_trace()
+        return
 
 
 class Networks(ss.ndict):
@@ -296,6 +307,7 @@ class simple_sexual(Network):
         self['dur'] = np.concatenate([self['dur'], dur])
 
     def update(self, people, dt=None):
+        super().update(people)
         if dt is None: dt = people.dt
         # First remove any relationships due to end
         self['dur'] = self['dur'] - dt

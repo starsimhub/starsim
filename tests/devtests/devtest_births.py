@@ -18,8 +18,8 @@ realistic_death = {'death_rates': pd.read_csv('../test_data/nigeria_deaths.csv')
 
 births = ss.births(realistic_birth)
 deaths = ss.background_deaths(realistic_death)
-
-sim = ss.Sim(people=ppl, modules=[births, deaths])
+gon = ss.Gonorrhea({'p_death': 0.5, 'initial': 1000})
+sim = ss.Sim(people=ppl, modules=[births, deaths, gon], networks=ss.simple_sexual())
 sim.initialize()
 sim.run()
 

@@ -215,8 +215,8 @@ class People(BasePeople):
 
     def update(self, sim):
         """ Update demographics and networks """
-        self.update_demographics(sim.dt, sim.ti)
         self.update_networks()
+        self.update_demographics(sim.dt, sim.ti)
         return
 
     def update_demographics(self, dt, ti):
