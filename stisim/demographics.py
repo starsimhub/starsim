@@ -185,8 +185,7 @@ class Pregnancy(ss.Module):
 
         # Other, e.g. postpartum, on contraception...
         self.infertile = ss.State('infertile', bool, False)  # Applies to girls and women outside the fertility window
-        self.susceptible = ss.State('susceptible', bool,
-                                    True)  # Applies to girls and women inside the fertility window - needs renaming
+        self.susceptible = ss.State('susceptible', bool, True)  # Applies to girls and women inside the fertility window - needs renaming
         self.pregnant = ss.State('pregnant', bool, False)  # Currently pregnant
         self.postpartum = ss.State('postpartum', bool, False)  # Currently post-partum
         self.ti_pregnant = ss.State('ti_pregnant', float, np.nan)  # Time pregnancy begins
@@ -198,7 +197,7 @@ class Pregnancy(ss.Module):
             'dur_pregnancy': 0.75,  # Make this a distribution?
             'dur_postpartum': 0.5,  # Make this a distribution?
             'inci': 0.03,  # Replace this with age-specific rates
-            'p_death': 0.02,  # Probability of maternal death. Question, should this be linked to age and/or duration?
+            'p_death': 0,  # Probability of maternal death. Question, should this be linked to age and/or duration?
             'initial': 3,  # Number of women initially pregnant
         }, self.pars)
 
@@ -276,7 +275,6 @@ class Pregnancy(ss.Module):
                 # Grow the arrays and set properties for the unborn agents
                 new_uids = sim.people.grow(n_unborn_agents)
                 sim.people.age[new_uids] = -self.pars.dur_pregnancy
-                sim.people.female[new_uids] = np.random.choice([True, False], size=n_unborn_agents)
 
                 # Add connections to any vertical transmission layers
                 # Placeholder code to be moved / refactored. The maternal network may need to be
