@@ -144,7 +144,7 @@ class People(BasePeople):
             ss.State('female', bool, ss.choice([True, False])),
             ss.State('debut', float),
             ss.State('alive', bool, True),
-            ss.State('ti_dead', float, np.nan),  # Time index for death
+            ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
             ss.State('scale', float, 1.0),
         ]
         states.extend(sc.promotetolist(extra_states))
