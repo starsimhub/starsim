@@ -54,6 +54,7 @@ class from_data(Distribution):
         return
 
     def sample(self, n=1):
+        """ Sample using CDF """
         bin_midpoints = self.bins[:-1] + np.diff(self.bins) / 2
         cdf = np.cumsum(self.vals)
         cdf = cdf / cdf[-1]

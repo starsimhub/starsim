@@ -7,7 +7,7 @@ import stisim as ss
 import matplotlib.pyplot as plt
 import pandas as pd
 
-ppl = ss.People(10000)
+ppl = ss.People(10000, age_data=pd.read_csv('../test_data/nigeria_age.csv'))
 
 # Parameters
 simple_birth = {'birth_rates': 20}

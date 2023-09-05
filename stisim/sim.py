@@ -207,9 +207,9 @@ class Sim(sc.prettyobj):
         if self.pars['pop_scale'] is None:
             self.pars['pop_scale'] = total_pop / self.pars['n_agents']
 
-        # Finish initialization
+        # Any other initialization
         if not self.people.initialized:
-            self.people.initialize(popdict=popdict)  # Fully initialize the people
+            self.people.initialize()
 
         # Add time attributes
         self.people.ti = self.ti

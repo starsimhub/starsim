@@ -4,6 +4,7 @@ Defines the People class and functions associated with making people
 
 # %% Imports
 import numpy as np
+import pandas as pd
 import sciris as sc
 import stisim as ss
 
@@ -131,7 +132,7 @@ class People(BasePeople):
 
     # %% Basic methods
 
-    def __init__(self, n, extra_states=None, networks=None):
+    def __init__(self, n, age_data=None, extra_states=None, networks=None):
         """ Initialize """
 
         super().__init__(n)
@@ -139,8 +140,11 @@ class People(BasePeople):
         self.initialized = False
         self.version = ss.__version__  # Store version info
 
+        # Handle age data
+        age_data_dist = self.validate_age_data(age_data)
+
         states = [
-            ss.State('age', float),
+            ss.State('age', float, age_data_dist),
             ss.State('female', bool, ss.choice([True, False])),
             ss.State('debut', float),
             ss.State('alive', bool, True),
@@ -155,15 +159,15 @@ class People(BasePeople):
 
         return
 
-    def initialize(self, popdict=None):
-        """ Initialize people by setting their attributes """
-        if popdict is None:  # TODO: update
-            self['age'][:] = np.random.random(size=len(self)) * 100
-            self['female'][:] = np.random.choice([False, True], size=len(self))
-        else:
-            # Use random defaults
-            self['age'][:] = popdict['age']
-            self['female'][:] = popdict['female']
+    @staticmethod
+    def validate_age_data(age_data):
+        """ Validate age data """
+        if age_data is None: return ss.uniform(0, 100)
+        if sc.checktype(age_data, pd.DataFrame):
+            return ss.from_data(vals=age_data['value'].values, bins=age_data['age'].values)
+
+    def initialize(self):
+        """ Initialization - TBC what needs to go here """
         self.initialized = True
         return
 
