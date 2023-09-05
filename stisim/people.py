@@ -140,11 +140,8 @@ class People(BasePeople):
         self.initialized = False
         self.version = ss.__version__  # Store version info
 
-        # Handle age data
-        age_data_dist = self.validate_age_data(age_data)
-
         states = [
-            ss.State('age', float, age_data_dist),
+            ss.State('age', float, 0),
             ss.State('female', bool, ss.choice([True, False])),
             ss.State('debut', float),
             ss.State('alive', bool, True),
@@ -156,6 +153,10 @@ class People(BasePeople):
         self.states = ss.ndict()
         self._initialize_states(states)
         self.networks = ss.ndict(networks)
+
+        # Set initial age distribution - likely move this somewhere else later
+        age_data_dist = self.validate_age_data(age_data)
+        self.age[:] = age_data_dist.sample(len(self))
 
         return
 
