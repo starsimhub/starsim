@@ -81,7 +81,7 @@ def test_microsim():
 def test_ppl_construction():
 
     sim_pars = {'networks': [ss.simple_sexual()], 'n_agents': 100}
-    gon_pars = {'beta': {'simple_sexual': [0.08, 0.04]}}
+    gon_pars = {'beta': {'simple_sexual': [0.08, 0.04]}, 'p_death': 0.0}
     gon = ss.Gonorrhea(pars=gon_pars)
 
     sim = ss.Sim(pars=sim_pars, modules=[gon])
@@ -101,9 +101,9 @@ if __name__ == '__main__':
     T = sc.tic()
 
     # Run tests
-    ppl = test_people()
-    nw1, nw2, nw3, nw4 = test_networks()
-    sim1 = test_microsim()
+    # ppl = test_people()
+    # nw1, nw2, nw3, nw4 = test_networks()
+    # sim1 = test_microsim()
     sim2 = test_ppl_construction()
 
     sc.toc(T)
