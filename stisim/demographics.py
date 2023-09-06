@@ -104,24 +104,54 @@ class background_deaths(ss.Module):
 
     def set_death_rates(self, death_rates):
         """Standardize/validate death rates"""
+
         if sc.checktype(death_rates, pd.DataFrame):
             if not set(self.pars.data_cols.values()).issubset(death_rates.columns):
                 errormsg = 'Please ensure the columns of the death rate data match the values in pars.data_cols.'
                 raise ValueError(errormsg)
-        if sc.checktype(death_rates, dict):
+            df = death_rates
+
+        elif sc.checktype(death_rates, pd.Series):
+            if (death_rates.index < 120).all():  # Assume index is age bins
+                df = pd.DataFrame({
+                    self.pars.data_cols['year']: 2000,
+                    self.pars.data_cols['age']: death_rates.index.values,
+                    self.pars.data_cols['value']: death_rates.values,
+                })
+            elif (death_rates.index > 1900).all():  # Assume index year
+                df = pd.DataFrame({
+                    self.pars.data_cols['year']: death_rates.index.values,
+                    self.pars.data_cols['age']: 0,
+                    self.pars.data_cols['value']: death_rates.values,
+
+                })
+            else:
+                errormsg = 'Could not understand index of death rate series: should be age or year.'
+                raise ValueError(errormsg)
+
+            df = pd.concat([df, df])
+            df[self.pars.data_cols['sex']] = np.repeat(list(self.pars.sex_keys.values()), len(death_rates))
+
+        elif sc.checktype(death_rates, dict):
             if not set(self.pars.data_cols.values()).issubset(death_rates.keys()):
                 errormsg = 'Please ensure the keys of the death rate data dict match the values in pars.data_cols.'
                 raise ValueError(errormsg)
-            death_rates = pd.DataFrame(death_rates)
-        if sc.isnumber(death_rates):
-            death_rates = pd.DataFrame({
+            df = pd.DataFrame(death_rates)
+
+        elif sc.isnumber(death_rates):
+            df = pd.DataFrame({
                 self.pars.data_cols['year']: [2000, 2000],
                 self.pars.data_cols['age']: [0, 0],
                 self.pars.data_cols['sex']: self.pars.sex_keys.values(),
                 self.pars.data_cols['value']: [death_rates, death_rates],
             })
 
-        self.pars.death_rates = death_rates
+        else:
+            errormsg = f'Death rate data type {type(death_rates)} not understood.'
+            raise ValueError(errormsg)
+
+        self.pars.death_rates = df
+
         return
 
     def initialize(self, sim):

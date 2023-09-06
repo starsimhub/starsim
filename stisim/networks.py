@@ -247,10 +247,7 @@ class Network(sc.objdict):
     def update(self, people):
         """ Define how pairs/connections evolve (in time) """
         # Remove connections where one person has died
-        to_remove = (people.ti_dead == people.ti)[self.p1]
-        self.pop_inds(to_remove, do_return=False)
-        to_remove = (people.ti_dead == people.ti)[self.p2]
-        self.pop_inds(to_remove, do_return=False)
+        self.remove_uids(ss.true(people.dead))
         return
 
     def remove_uids(self, uids):
@@ -261,6 +258,7 @@ class Network(sc.objdict):
         keep = ~(np.isin(self.p1, uids) | np.isin(self.p2, uids))
         for k in self.meta_keys():
             self[k] = self[k][keep]
+
 
 class Networks(ss.ndict):
     def __init__(self, *args, type=Network, **kwargs):
