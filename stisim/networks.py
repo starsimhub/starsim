@@ -154,7 +154,7 @@ class Network(sc.objdict):
                 self[key] = np.delete(self[key], inds)  # Remove from the original
         return output
 
-    def pop_inds(self, inds):
+    def pop_inds(self, inds, do_return=True):
         """
         "Pop" the specified indices from the edgelist and return them as a dict.
         Returns arguments in the right format to be used with network.append().
@@ -162,7 +162,9 @@ class Network(sc.objdict):
         Args:
             inds (int, array, slice): the indices to be removed
         """
-        return self.get_inds(inds, remove=True)
+        popped_inds = self.get_inds(inds, remove=True)
+        if do_return: return popped_inds
+        else: return
 
     def append(self, contacts):
         """
@@ -246,9 +248,9 @@ class Network(sc.objdict):
         """ Define how pairs/connections evolve (in time) """
         # Remove connections where one person has died
         to_remove = (people.ti_dead == people.ti)[self.p1]
-        self.pop_inds(to_remove)
+        self.pop_inds(to_remove, do_return=False)
         to_remove = (people.ti_dead == people.ti)[self.p2]
-        self.pop_inds(to_remove)
+        self.pop_inds(to_remove, do_return=False)
         return
 
 
