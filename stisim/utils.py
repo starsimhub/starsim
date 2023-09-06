@@ -13,6 +13,11 @@ import stisim as ss
 # What functions are externally visible -- note, this gets populated in each section below
 __all__ = []
 
+# System constants
+__all__ += ['INT_NAN']
+
+INT_NAN = np.iinfo(np.int32).max  # Value to use to flag invalid content (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
+
 
 # %% Helper functions
 __all__ += ['ndict', 'omerge']
@@ -39,10 +44,10 @@ class ndict(sc.objdict):
         self.setattribute('_name', name) # Since otherwise treated as keys
         self.setattribute('_type', type)
         self.setattribute('_strict', strict)
-        self.append(*args, **kwargs)
+        self._initialize(*args, **kwargs)
         return
     
-    def _process_arg(self, arg, key=None):
+    def append(self, arg, key=None):
         valid = False
         if arg is None:
             return # Nothing to do
@@ -55,7 +60,7 @@ class ndict(sc.objdict):
                 valid = True
             else:
                 for k,v in arg.items():
-                    self._process_arg(v, key=k)
+                    self.append(v, key=k)
                 valid = None # Skip final processing
         elif not self._strict:
             key = key or f'item{len(self)+1}'
@@ -82,12 +87,12 @@ class ndict(sc.objdict):
                 raise TypeError(errormsg)
         return
     
-    def append(self, *args, **kwargs):
+    def _initialize(self, *args, **kwargs):
         args = sc.mergelists(*args)
         for arg in args:
-            self._process_arg(arg)
+            self.append(arg)
         for key,arg in kwargs.items():
-            self._process_arg(arg, key=key)
+            self.append(arg, key=key)
         return
     
     def copy(self):
@@ -98,12 +103,12 @@ class ndict(sc.objdict):
     def __add__(self, dict2):
         """ Allow c = a + b """
         new = self.copy()
-        new._process_arg(dict2)
+        new.append(dict2)
         return new
 
     def __iadd__(self, dict2):
         """ Allow a += b """
-        self._process_arg(dict2)
+        self.append(dict2)
         return self
 
 
@@ -368,33 +373,33 @@ def n_neg_binomial(rate, dispersion, n, step=1):  # Numba not used due to incomp
 __all__ += ['true', 'false', 'defined', 'undefined']
 
 
-def true(arr):
+def true(state):
     """
-    Returns the indices of the values of the array that are true: just an alias
-    for arr.nonzero()[0].
+    Returns the UIDs of the values of the array that are true
 
     Args:
-        arr (array): any array
+        state (State, FusedArray)
 
     **Example**::
 
-        inds = ss.true(np.array([1,0,0,1,1,0,1])) # Returns array([0, 3, 4, 6])
+        inds = ss.true(people.alive) # Returns array of UIDs of alive agents
     """
-    return arr.nonzero()[-1]
+
+    return state.uid.__array__()[np.nonzero(state.__array__())]
 
 
-def false(arr):
+def false(state):
     """
     Returns the indices of the values of the array that are false.
 
     Args:
-        arr (array): any array
+        state (State, FusedArray)
 
     **Example**::
 
-        inds = ss.false(np.array([1,0,0,1,1,0,1]))
+        inds = ss.false(people.alive) # Returns array of UIDs of dead agents
     """
-    return np.logical_not(arr).nonzero()[-1]
+    return state.uid.__array__()[np.nonzero(~state.__array__())]
 
 
 def defined(arr):
