@@ -253,6 +253,14 @@ class Network(sc.objdict):
         self.pop_inds(to_remove, do_return=False)
         return
 
+    def remove_uids(self, uids):
+        """ Remove interactions involving specified UIDs
+
+        This is required if agents have been removed from the simulation
+        """
+        keep = ~(np.isin(self.p1, uids) | np.isin(self.p2, uids))
+        for k in self.meta_keys():
+            self[k] = self[k][keep]
 
 class Networks(ss.ndict):
     def __init__(self, *args, type=Network, **kwargs):

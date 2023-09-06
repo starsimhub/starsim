@@ -86,6 +86,11 @@ class BasePeople(sc.prettyobj):
         # Update the UID map
         self._uid_map[:] = ss.INT_NAN  # Clear out all previously used UIDs
         self._uid_map[keep_uids] = np.arange(0, len(keep_uids))  # Assign the array indices for all of the current UIDs
+
+        # Remove the UIDs from the network too
+        for network in self.networks.values():
+            network.remove_uids(uids_to_remove)
+
         return
 
     def __getitem__(self, key):
@@ -215,15 +220,19 @@ class People(BasePeople):
 
     def update(self, sim):
         """ Update demographics and networks """
-        self.update_networks()
         self.update_demographics(sim.dt, sim.ti)
+
+        if sim.pars.remove_dead:
+            self.remove(self.uid[self.dead])
+
+        self.update_networks()
+
         return
 
     def update_demographics(self, dt, ti):
         """ Perform vital dynamic updates at the current timestep """
         death_uids = ss.true(self.ti_dead <= ti)
         self.alive[death_uids] = False
-        self.remove(death_uids)
         self.age += dt
         return
 

@@ -56,7 +56,10 @@ class FusedArray(NDArrayOperatorsMixin):
         out = np.empty(len(key), dtype=vals.dtype)
         new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
         for i in range(len(key)):
-            out[i] = vals[uid_map[key[i]]]
+            idx = uid_map[key[i]]
+            if idx == INT_NAN:
+                raise IndexError('UID not present in array')
+            out[i] = vals[idx]
             new_uid_map[key[i]] = i
         return out, key, new_uid_map
 
@@ -73,7 +76,10 @@ class FusedArray(NDArrayOperatorsMixin):
         :return:
         """
         for i in range(len(key)):
-            vals[uid_map[key[i]]] = value[i]
+            idx = uid_map[key[i]]
+            if idx == INT_NAN:
+                raise IndexError('UID not present in array')
+            vals[idx] = value[i]
 
     @staticmethod
     @nb.njit
@@ -88,7 +94,10 @@ class FusedArray(NDArrayOperatorsMixin):
         :return:
         """
         for i in range(len(key)):
-            vals[uid_map[key[i]]] = value
+            idx = uid_map[key[i]]
+            if idx == INT_NAN:
+                raise IndexError('UID not present in array')
+            vals[idx] = value
 
     def __getitem__(self, key):
         try:
@@ -163,16 +172,22 @@ class FusedArray(NDArrayOperatorsMixin):
         return self.values.__contains__(*args, **kwargs)
 
     def astype(self, *args, **kwargs):
-        return self.values.astype(*args, **kwargs)
+        return FusedArray(values=self.values.astype(*args, **kwargs), uid=self.uid, uid_map=self._uid_map)
 
-    def sum(self):
-        return self.values.sum()
+    def sum(self, *args, **kwargs):
+        return self.values.sum(*args, **kwargs)
 
-    def mean(self):
-        return self.values.mean()
+    def mean(self, *args, **kwargs):
+        return self.values.mean(*args, **kwargs)
 
-    def count_nonzero(self):
-        return self.values.count_nonzero()
+    def any(self, *args, **kwargs):
+        return self.values.any(*args, **kwargs)
+
+    def all(self, *args, **kwargs):
+        return self.values.all(*args, **kwargs)
+
+    def count_nonzero(self, *args, **kwargs):
+        return self.values.count_nonzero(*args, **kwargs)
 
     @property
     def shape(self):
