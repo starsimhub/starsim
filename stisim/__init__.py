@@ -8,6 +8,7 @@ from .people        import *
 from .networks      import *
 from .modules       import *
 from .results       import *
+from .demographics  import *
 from .interventions import *
 from .analyzers     import *
 from .demographics  import *

@@ -208,9 +208,9 @@ class Sim(sc.prettyobj):
         if self.pars['pop_scale'] is None:
             self.pars['pop_scale'] = total_pop / self.pars['n_agents']
 
-        # Finish initialization
+        # Any other initialization
         if not self.people.initialized:
-            self.people.initialize(popdict=popdict)  # Fully initialize the people
+            self.people.initialize()
 
         # Add time attributes
         self.people.ti = self.ti
@@ -262,7 +262,7 @@ class Sim(sc.prettyobj):
         """
         # Make results
         results = ss.Results(
-            ss.Result('n_alive', None, self.npts, ss.int_),
+            ss.Result(None, 'n_alive', self.npts, ss.int_),
         )
 
         # Final items
@@ -332,6 +332,9 @@ class Sim(sc.prettyobj):
         self.update_modules()
         self.update_connectors()
         self.apply_analyzers()
+
+        # Update results
+        self.results.n_alive[self.ti] = len(self.people)
 
         # Tidy up
         self.ti += 1
