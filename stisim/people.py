@@ -142,7 +142,7 @@ class People(BasePeople):
 
         states = [
             ss.State('age', float),
-            ss.State('female', bool, False),
+            ss.State('female', bool, ss.choice([True,False])),
             ss.State('debut', float),
             ss.State('alive', bool, True),
             ss.State('ti_dead', float, np.nan),  # Time index for death
