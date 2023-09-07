@@ -326,7 +326,7 @@ class simple_sexual(Network):
         if dt is None: dt = people.dt
         # First remove any relationships due to end
         self['dur'] = self['dur'] - dt
-        active = self['dur'] > 0
+        active = (self['dur'] > 0) & people.alive[self['p1']] & people.alive[self['p1']]
         self['p1'] = self['p1'][active]
         self['p2'] = self['p2'][active]
         self['beta'] = self['beta'][active]
@@ -345,8 +345,12 @@ class simple_embedding(simple_sexual):
         # Find unpartnered males and females - could in principle check other contact layers too
         # by having the People object passed in here
 
-        available_m = np.setdiff1d(people.uid[~people.female], self.members)
-        available_f = np.setdiff1d(people.uid[people.female], self.members)
+        available_m = np.setdiff1d(ss.true(~people.female), self.members)
+        available_f = np.setdiff1d(ss.true(people.female), self.members)
+
+        # slow:
+        available_m = ss.true(people.alive[available_m])
+        available_f = ss.true(people.alive[available_f])
 
         # Make p1 the shorter array
         if len(available_f) < len(available_m):

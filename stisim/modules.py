@@ -21,9 +21,9 @@ class Module(sc.prettyobj):
         self.finalized = False
 
         # Random number streams
-        self.rng_init_cases = ss.Stream('initial_cases')
-        self.rng_trans_ab = ss.Stream('trans_ab')
-        self.rng_trans_ba = ss.Stream('trans_ba')
+        self.rng_init_cases      = ss.Stream('initial_cases')
+        self.rng_trans_ab        = ss.Stream('trans_ab')
+        self.rng_trans_ba        = ss.Stream('trans_ba')
         self.rng_choose_infector = ss.Stream('choose_infector')
 
         return
@@ -134,6 +134,7 @@ class Disease(Module):
         self.results += ss.Result(self.name, 'n_infected', sim.npts, dtype=int)
         self.results += ss.Result(self.name, 'prevalence', sim.npts, dtype=float)
         self.results += ss.Result(self.name, 'new_infections', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'new_deaths', sim.npts, dtype=int)
         return
 
     def update(self, sim):

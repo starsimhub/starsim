@@ -40,6 +40,9 @@ class Gonorrhea(ss.Disease):
         gonorrhea_deaths = self.ti_dead <= sim.ti
         sim.people.alive[gonorrhea_deaths] = False
         sim.people.ti_dead[gonorrhea_deaths] = sim.ti
+
+        self.results.new_deaths += len(gonorrhea_deaths)
+
         return
     
     def update_results(self, sim):

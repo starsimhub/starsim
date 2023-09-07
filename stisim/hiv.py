@@ -15,11 +15,13 @@ class HIV(ss.Disease):
         super().__init__(pars)
 
         self.susceptible = ss.State('susceptible', bool, True)
-        self.infected = ss.State('infected', bool, False)
+        self.infected    = ss.State('infected', bool, False)
         self.ti_infected = ss.State('ti_infected', float, 0)
-        self.on_art = ss.State('on_art', bool, False)
-        self.on_prep = ss.State('on_prep', bool, False)
-        self.cd4 = ss.State('cd4', float, 500)
+        self.on_art      = ss.State('on_art', bool, False)
+        self.on_prep     = ss.State('on_prep', bool, False)
+        self.cd4         = ss.State('cd4', float, 500)
+
+        self.rng_dead = ss.Stream('dead')
 
         self.pars = ss.omerge({
             'cd4_min': 100,
@@ -37,6 +39,15 @@ class HIV(ss.Disease):
         self.cd4[sim.people.alive & self.infected & ~self.on_art] += (self.pars.cd4_min - self.cd4[sim.people.alive & self.infected & ~self.on_art])/self.pars.cd4_rate
 
         self.rel_sus[sim.people.alive & self.on_prep] = 0.1
+
+        hiv_death_prob = 0.1 / (self.pars.cd4_min - self.pars.cd4_max)**2 *  (self.pars.cd4_max - self.cd4)**2
+        can_die = ss.true(sim.people.alive & sim.people.hiv.infected)
+        hiv_deaths = self.rng_dead.bernoulli_filter(prob=hiv_death_prob[can_die], arr = can_die)
+        
+        sim.people.alive[hiv_deaths] = False
+        sim.people.ti_dead[hiv_deaths] = sim.ti
+        self.results['new_deaths'][sim.ti] = len(hiv_deaths)
+
         return
 
     def init_results(self, sim):
