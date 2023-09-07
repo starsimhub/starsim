@@ -14,14 +14,15 @@ class Gonorrhea(ss.Disease):
     def __init__(self, pars=None):
         super().__init__(pars)
 
-        self.susceptible = ss.State('susceptible', bool, True)
-        self.infected = ss.State('infected', bool, False)
-        self.ti_infected = ss.State('ti_infected', float, 0)
-        self.ti_recovered = ss.State('ti_recovered', float, 0)
-        self.ti_dead = ss.State('ti_dead', float, np.nan)  # Death due to gonorrhea
+        self.susceptible    = ss.State('susceptible', bool, True)
+        self.infected       = ss.State('infected', bool, False)
+        self.ti_infected    = ss.State('ti_infected', float, 0)
+        self.ti_recovered   = ss.State('ti_recovered', float, 0)
+        self.ti_dead        = ss.State('ti_dead', float, np.nan)  # Death due to gonorrhea
 
-        self.rng_prog = ss.Stream('prog_dur')
-        self.rng_dead = ss.Stream('dead')
+        self.rng_prog       = ss.Stream('prog_dur')
+        self.rng_dead       = ss.Stream('dead')
+        self.rng_dur_inf    = ss.Stream('dur_inf')
 
         self.pars = ss.omerge({
             'dur_inf': 3,  # not modelling diagnosis or treatment explicitly here
@@ -29,9 +30,6 @@ class Gonorrhea(ss.Disease):
             'initial': 3,
             'eff_condoms': 0.7,
         }, self.pars)
-
-
-        self.rng_dur_inf = ss.Stream('dur_inf')
 
         return
 
@@ -52,14 +50,15 @@ class Gonorrhea(ss.Disease):
         super(Gonorrhea, self).make_new_cases(sim)
         return
 
-    def set_prognoses(self, sim, uids):
-        self.susceptible[uids] = False
-        self.infected[uids] = True
-        self.ti_infected[uids] = sim.ti
+    def set_prognoses(self, sim, to_uids, from_uids=None):
+        self.susceptible[to_uids] = False
+        self.infected[to_uids] = True
+        self.ti_infected[to_uids] = sim.ti
 
-        dur = sim.ti + self.rng.poisson(self.pars['dur_inf']/sim.pars.dt, len(uids)) # By whom infected from???
-        dead = self.rng_dead.bernoulli(self.pars.p_death, uids)
+        #dur = sim.ti + self.rng_dur_inf.poisson(self.pars['dur_inf']/sim.pars.dt, len(to_uids)) # By whom infected from??? TODO
+        dur = sim.ti + self.rng_dur_inf.poisson(self.pars['dur_inf']/sim.pars.dt, to_uids) # By whom infected from??? TODO
+        dead = self.rng_dead.bernoulli(self.pars.p_death, to_uids)
 
-        self.ti_recovered[uids[~dead]] = dur[~dead]
-        self.ti_dead[uids[dead]] = dur[dead]
+        self.ti_recovered[to_uids[~dead]] = dur[~dead]
+        self.ti_dead[to_uids[dead]] = dur[dead]
         return

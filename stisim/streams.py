@@ -109,6 +109,9 @@ class Stream(np.random.Generator):
     def random(self, arr):
         return super(Stream, self).random(self.block_size)[arr]
 
+    def poisson(self, lam, arr):
+        return super(Stream, self).poisson(lam=lam, size=self.block_size)[arr]
+
     def bernoulli(self, prob, arr):
         #return super(Stream, self).choice([True, False], size=self.block_size, p=[prob, 1-prob]) # very slow
         #return (super(Stream, self).binomial(n=1, p=prob, size=self.block_size))[arr].astype(bool) # pretty fast

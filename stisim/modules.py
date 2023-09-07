@@ -24,6 +24,7 @@ class Module(sc.prettyobj):
         self.rng_init_cases = ss.Stream('initial_cases')
         self.rng_trans_ab = ss.Stream('trans_ab')
         self.rng_trans_ba = ss.Stream('trans_ba')
+        self.rng_choose_infector = ss.Stream('choose_infector')
 
         return
 
@@ -122,7 +123,7 @@ class Disease(Module):
         #initial_cases = ss.binomial_filter_rng(prob=self.pars['initial']/len(sim.people), arr=sim.people.uid, rng=rng, block_size=len(sim.people._uid_map))
         initial_cases = self.rng_init_cases.bernoulli_filter(prob=self.pars['initial']/len(sim.people), arr=sim.people.uid)
 
-        self.set_prognoses(sim, initial_cases)
+        self.set_prognoses(sim, initial_cases, from_uids=None) # TODO: sentinel value to indicate seeds?
         return
 
     def init_results(self, sim):
@@ -155,23 +156,39 @@ class Disease(Module):
         for k, layer in sim.people.networks.items():
             if k in pars['beta']:
                 rel_trans = (self.infected & sim.people.alive).astype(float)
-                rel_sus = (self.susceptible & sim.people.alive).astype(float)
+                rel_sus = self.rel_sus * (self.susceptible & sim.people.alive)
                 for a, b, beta, rng in [[layer['p1'], layer['p2'], pars['beta'][k][0], self.rng_trans_ab], [layer['p2'], layer['p1'], pars['beta'][k][1], self.rng_trans_ba]]:
                     # probability of a->b transmission
-                    p_tran_edge = rel_trans[a] * rel_sus[b] * layer['beta'] * beta
+                    if beta == 0:
+                        continue
+                    #p_tran_edge = rel_trans[a] * rel_sus[b] * layer['beta'] * beta
                     
                     # Will need to be more efficient here - can maintain edge to node matrix
-                    node_from_edge = np.zeros( (len(sim.people._uid_map), len(p_tran_edge)) )
-                    node_from_edge[b, np.arange(len(b))] = 1
-                    p_acq_node = np.dot(node_from_edge, p_tran_edge) # calculated for all nodes, including those outside b
-                    new_cases = rng.bernoulli_filter(p_acq_node[b], b)
+                    node_from_edge = np.ones( (len(sim.people._uid_map), len(a)) )
+                    node_from_edge[b, np.arange(len(b))] = 1 - rel_trans[a] * rel_sus[b] * layer['beta'] * beta
+                    #p_acq_node = np.dot(node_from_edge, p_tran_edge) # calculated for all nodes, including those outside b
+                    p_acq_node = 1 - node_from_edge.prod(axis=1) # 1 - (1-p1)*(1-p2)*...
+                    new_cases_bool = rng.bernoulli(p_acq_node[b], b)
+                    new_cases = b[new_cases_bool]
+
+                    if not len(new_cases):
+                        continue
 
                     n_new_cases += len(new_cases)
-                    if len(new_cases):
-                        self.set_prognoses(sim, new_cases)
+                    # Decide whom the infection came from
+                    frm = np.zeros_like(new_cases)
+
+                    # Need one random number for each b <-- align by blocksize
+                    r = self.rng_choose_infector.random(new_cases) # Align rng to b
+                    prob = (1-node_from_edge[new_cases])
+                    cumsum = (prob / ((prob.sum(axis=1)[:,np.newaxis]))).cumsum(axis=1)
+                    frm_idx = np.argmax( cumsum >= r[:,np.newaxis], axis=1)
+                    frm = a[frm_idx]
+                    self.set_prognoses(sim, new_cases, frm)
+
         return n_new_cases
 
-    def set_prognoses(self, sim, uids):
+    def set_prognoses(self, sim, to_uids, from_uids):
         pass
 
     def update_results(self, sim):

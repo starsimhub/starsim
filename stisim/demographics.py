@@ -120,11 +120,11 @@ class Pregnancy(ss.Module):
                         layer.add_pairs(uids, new_uids, dur=durs)
 
                 # Set prognoses for the pregnancies
-                self.set_prognoses(sim, uids)
+                self.set_prognoses(sim, uids) # Could set from_uids to network partners?
 
         return
 
-    def set_prognoses(self, sim, uids):
+    def set_prognoses(self, sim, to_uids, from_uids=None):
         """
         Make pregnancies
         Add miscarriage/termination logic here
@@ -133,19 +133,19 @@ class Pregnancy(ss.Module):
         """
 
         # Change states for the newly pregnant woman
-        self.susceptible[uids] = False
-        self.pregnant[uids] = True
-        self.ti_pregnant[uids] = sim.ti
+        self.susceptible[to_uids] = False
+        self.pregnant[to_uids] = True
+        self.ti_pregnant[to_uids] = sim.ti
 
         # Outcomes for pregnancies
-        dur = np.full(len(uids), sim.ti + self.pars.dur_pregnancy / sim.dt)
-        dead = np.random.random(len(uids)) < self.pars.p_death
-        self.ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
-        dur_post_partum = np.full(len(uids), dur + self.pars.dur_postpartum / sim.dt)
-        self.ti_postpartum[uids] = dur_post_partum
+        dur = np.full(len(to_uids), sim.ti + self.pars.dur_pregnancy / sim.dt)
+        dead = np.random.random(len(to_uids)) < self.pars.p_death
+        self.ti_delivery[to_uids] = dur  # Currently assumes maternal deaths still result in a live baby
+        dur_post_partum = np.full(len(to_uids), dur + self.pars.dur_postpartum / sim.dt)
+        self.ti_postpartum[to_uids] = dur_post_partum
 
         if np.count_nonzero(dead):
-            self.ti_dead[uids[dead]] = dur[dead]
+            self.ti_dead[to_uids[dead]] = dur[dead]
         return
 
     def update_results(self, sim):

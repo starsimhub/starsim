@@ -398,7 +398,7 @@ class simple_embedding(simple_sexual):
         self['p2'] = np.concatenate([self['p2'], p2])
 
         beta = np.ones(n_pairs)
-        dur = self.rng_mean_dur.poisson(self.mean_dur, n_pairs) # TODO: Stream-ify
+        dur = self.rng_mean_dur.poisson(self.mean_dur, p1) # TODO: Stream-ify... trying using p1
         self['beta'] = np.concatenate([self['beta'], beta])
         self['dur'] = np.concatenate([self['dur'], dur])
 
