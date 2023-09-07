@@ -18,6 +18,7 @@ class HIV(ss.Disease):
         self.infected = ss.State('infected', bool, False)
         self.ti_infected = ss.State('ti_infected', float, 0)
         self.on_art = ss.State('on_art', bool, False)
+        self.on_prep = ss.State('on_prep', bool, False)
         self.cd4 = ss.State('cd4', float, 500)
 
         self.pars = ss.omerge({
@@ -34,6 +35,8 @@ class HIV(ss.Disease):
         """ Update CD4 """
         self.cd4[sim.people.alive & self.infected & self.on_art] += (self.pars.cd4_max - self.cd4[sim.people.alive & self.infected & self.on_art])/self.pars.cd4_rate
         self.cd4[sim.people.alive & self.infected & ~self.on_art] += (self.pars.cd4_min - self.cd4[sim.people.alive & self.infected & ~self.on_art])/self.pars.cd4_rate
+
+        self.rel_sus[sim.people.alive & self.on_prep] = 0.1
         return
 
     def init_results(self, sim):
@@ -49,10 +52,10 @@ class HIV(ss.Disease):
         super().make_new_cases(sim)
         return
 
-    def set_prognoses(self, sim, uids):
-        self.susceptible[uids] = False
-        self.infected[uids] = True
-        self.ti_infected[uids] = sim.ti
+    def set_prognoses(self, sim, to_uids, from_uids=None):
+        self.susceptible[to_uids] = False
+        self.infected[to_uids] = True
+        self.ti_infected[to_uids] = sim.ti
 
 
 # %% Interventions
@@ -70,21 +73,22 @@ class ART(ss.Intervention):
         return
 
     def initialize(self, sim):
-        sim.hiv.results += ss.Result(self.name, 'n_art', sim.npts, dtype=int)
+        sim.results.hiv += ss.Result(self.name, 'n_art', sim.npts, dtype=int)
+        self.initialized = True
         return
 
     def apply(self, sim):
-        if sim.t < self.t[0]:
+        if sim.ti < self.t[0]:
             return
 
-        capacity = self.capacity[np.where(self.t <= sim.t)[0][-1]]
+        capacity = self.capacity[np.where(self.t <= sim.ti)[0][-1]]
         on_art = sim.people.alive & sim.people.hiv.on_art
 
         n_change = capacity - np.count_nonzero(on_art)
         if n_change > 0:
             # Add more ART
-            eligible = sim.people.alive & sim.people.hiv.infected & ~sim.people.hiv.on_art
-            n_eligible = np.count_nonzero(eligible)
+            eligible = ss.true(sim.people.alive & sim.people.hiv.infected & ~sim.people.hiv.on_art)
+            n_eligible = len(eligible) #np.count_nonzero(eligible)
             if n_eligible:
                 inds = self.rng_add_ART.bernoulli_filter(prob=min(n_eligible, n_change)/n_eligible, arr=eligible)
                 sim.people.hiv.on_art[inds] = True
@@ -97,6 +101,50 @@ class ART(ss.Intervention):
 
         # Add result
         sim.results.hiv.n_art = np.count_nonzero(sim.people.alive & sim.people.hiv.on_art)
+
+        return
+
+class PrEP(ss.Intervention):
+
+    def __init__(self, t: np.array, capacity: np.array):
+        self.requires = HIV
+        self.t = sc.promotetoarray(t)
+        self.capacity = sc.promotetoarray(capacity)
+
+        self.rng_add_PrEP = ss.Stream('add_PrEP', seed_offset=102)
+        self.rng_remove_PrEP = ss.Stream('remove_PrEP', seed_offset=103)
+
+        return
+
+    def initialize(self, sim):
+        sim.results.hiv += ss.Result(self.name, 'n_prep', sim.npts, dtype=int)
+        self.initialized = True
+        return
+
+    def apply(self, sim):
+        if sim.ti < self.t[0]:
+            return
+
+        capacity = self.capacity[np.where(self.t <= sim.ti)[0][-1]]
+        on_prep = sim.people.alive & sim.people.hiv.on_prep
+
+        n_change = capacity - np.count_nonzero(on_prep)
+        if n_change > 0:
+            # Add more PrEP
+            eligible = ss.true(sim.people.alive & ~sim.people.hiv.infected & ~sim.people.hiv.on_prep)
+            n_eligible = len(eligible) #np.count_nonzero(eligible)
+            if n_eligible:
+                inds = self.rng_add_PrEP.bernoulli_filter(prob=min(n_eligible, n_change)/n_eligible, arr=eligible)
+                sim.people.hiv.on_prep[inds] = True
+        elif n_change < 0:
+            # Take some people off PrEP
+            eligible = sim.people.alive & sim.people.hiv.on_prep
+            n_eligible = np.count_nonzero(eligible)
+            inds = self.rng_remove_PrEP.bernoulli_filter(prob=-n_change/n_eligible, arr=eligible)
+            sim.people.hiv.on_prep[inds] = False
+
+        # Add result
+        sim.results.hiv.n_prep = np.count_nonzero(sim.people.alive & sim.people.hiv.on_prep)
 
         return
 
