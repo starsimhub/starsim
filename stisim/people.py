@@ -4,11 +4,11 @@ Defines the People class and functions associated with making people
 
 # %% Imports
 import numpy as np
+import pandas as pd
 import sciris as sc
 import stisim as ss
 
 __all__ = ['BasePeople', 'People']
-
 
 # %% Main people class
 class BasePeople(sc.prettyobj):
@@ -137,7 +137,7 @@ class People(BasePeople):
 
     # %% Basic methods
 
-    def __init__(self, n, extra_states=None, networks=None):
+    def __init__(self, n, age_data=None, extra_states=None, networks=None):
         """ Initialize """
 
         super().__init__(n)
@@ -146,11 +146,11 @@ class People(BasePeople):
         self.version = ss.__version__  # Store version info
 
         states = [
-            ss.State('age', float),
-            ss.State('female', bool, False),
+            ss.State('age', float, 0),
+            ss.State('female', bool, ss.choice([True, False])),
             ss.State('debut', float),
             ss.State('alive', bool, True),
-            ss.State('ti_dead', float, np.nan),  # Time index for death
+            ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
             ss.State('scale', float, 1.0),
         ]
         states.extend(sc.promotetolist(extra_states))
@@ -159,17 +159,21 @@ class People(BasePeople):
         self._initialize_states(states)
         self.networks = ss.ndict(networks)
 
+        # Set initial age distribution - likely move this somewhere else later
+        age_data_dist = self.validate_age_data(age_data)
+        self.age[:] = age_data_dist.sample(len(self))
+
         return
 
-    def initialize(self, popdict=None):
-        """ Initialize people by setting their attributes """
-        if popdict is None:  # TODO: update
-            self['age'][:] = np.random.random(size=len(self)) * 100
-            self['female'][:] = np.random.choice([False, True], size=len(self))
-        else:
-            # Use random defaults
-            self['age'][:] = popdict['age']
-            self['female'][:] = popdict['female']
+    @staticmethod
+    def validate_age_data(age_data):
+        """ Validate age data """
+        if age_data is None: return ss.uniform(0, 100)
+        if sc.checktype(age_data, pd.DataFrame):
+            return ss.from_data(vals=age_data['value'].values, bins=age_data['age'].values)
+
+    def initialize(self):
+        """ Initialization - TBC what needs to go here """
         self.initialized = True
         return
 
@@ -196,7 +200,7 @@ class People(BasePeople):
     def _register_module_states(self, module, module_states):
         """Enable dot notation for module specific states:
          - `sim.people.hiv.susceptible` or
-         - `sim.people.states['hiv.susceptible'`
+         - `sim.people.states['hiv.susceptible']`
         """
 
         for state_name, state in module.states.items():
@@ -227,8 +231,9 @@ class People(BasePeople):
 
     def update_demographics(self, dt, ti):
         """ Perform vital dynamic updates at the current timestep """
-        self.age[self.alive] += dt
-        self.alive[self.ti_dead <= ti] = False
+        death_uids = ss.true(self.ti_dead <= ti)
+        self.alive[death_uids] = False
+        self.age += dt
         return
 
     def update_networks(self):

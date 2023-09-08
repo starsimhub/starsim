@@ -20,7 +20,7 @@ INT_NAN = np.iinfo(np.int32).max  # Value to use to flag invalid content (i.e., 
 
 
 # %% Helper functions
-__all__ += ['ndict', 'omerge']
+__all__ += ['ndict', 'omerge', 'warn', 'unique', 'find_contacts']
 
 
 class ndict(sc.objdict):
@@ -147,7 +147,6 @@ def warn(msg, category=None, verbose=None, die=None):
     return
 
 
-# %% The core functions
 def unique(arr):
     """
     Find the unique elements and counts in an array.
@@ -200,8 +199,24 @@ def set_seed(seed=None):
 
 # %% Probabilities -- mostly not jitted since performance gain is minimal
 
-__all__ += ['binomial_filter', 'n_poisson', 'n_neg_binomial']
+__all__ += ['binomial_arr', 'binomial_filter', 'n_poisson', 'n_neg_binomial']
 
+
+def binomial_arr(prob_arr):
+    '''
+    Binomial (Bernoulli) trials each with different probabilities.
+
+    Args:
+        prob_arr (array): array of probabilities
+
+    Returns:
+         Boolean array of which trials on the input array succeeded
+
+    **Example**::
+
+        outcomes = ss.binomial_arr([0.1, 0.1, 0.2, 0.2, 0.8, 0.8]) # Perform 6 trials with different probabilities
+    '''
+    return np.random.random(prob_arr.shape) < prob_arr
 
 
 def binomial_filter(prob, arr):

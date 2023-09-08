@@ -22,7 +22,7 @@ class Gonorrhea(ss.Disease):
 
         self.pars = ss.omerge({
             'dur_inf': 3,  # not modelling diagnosis or treatment explicitly here
-            'p_death': 0.2,
+            'p_death': 0,
             'initial': 3,
             'eff_condoms': 0.7,
         }, self.pars)

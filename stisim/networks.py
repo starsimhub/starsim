@@ -57,6 +57,7 @@ class Network(sc.objdict):
             'p2': ss.int_,
             'beta': ss.float_,
         }
+
         self.meta = sc.mergedicts(default_keys, key_dict)
         self.vertical = vertical  # Whether transmission is bidirectional
         self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
@@ -91,7 +92,7 @@ class Network(sc.objdict):
 
     def __repr__(self, **kwargs):
         """ Convert to a dataframe for printing """
-        namestr = self.__class__.__name__
+        namestr = self.name
         labelstr = f'"{self.label}"' if self.label else '<no label>'
         keys_str = ', '.join(self.keys())
         output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", f, m, beta)
@@ -153,7 +154,7 @@ class Network(sc.objdict):
                 self[key] = np.delete(self[key], inds)  # Remove from the original
         return output
 
-    def pop_inds(self, inds):
+    def pop_inds(self, inds, do_return=True):
         """
         "Pop" the specified indices from the edgelist and return them as a dict.
         Returns arguments in the right format to be used with network.append().
@@ -161,7 +162,9 @@ class Network(sc.objdict):
         Args:
             inds (int, array, slice): the indices to be removed
         """
-        return self.get_inds(inds, remove=True)
+        popped_inds = self.get_inds(inds, remove=True)
+        if do_return: return popped_inds
+        else: return
 
     def append(self, contacts):
         """
@@ -241,9 +244,11 @@ class Network(sc.objdict):
         """ Define how pairs of people are formed """
         pass
 
-    def update(self):
+    def update(self, people):
         """ Define how pairs/connections evolve (in time) """
-        pass
+        # Remove connections where one person has died
+        self.remove_uids(ss.true(people.dead))
+        return
 
     def remove_uids(self, uids):
         """ Remove interactions involving specified UIDs
@@ -253,6 +258,7 @@ class Network(sc.objdict):
         keep = ~(np.isin(self.p1, uids) | np.isin(self.p2, uids))
         for k in self.meta_keys():
             self[k] = self[k][keep]
+
 
 class Networks(ss.ndict):
     def __init__(self, *args, type=Network, **kwargs):
@@ -303,6 +309,7 @@ class simple_sexual(Network):
         self['dur'] = np.concatenate([self['dur'], dur])
 
     def update(self, people, dt=None):
+        super().update(people)
         if dt is None: dt = people.dt
         # First remove any relationships due to end
         self['dur'] = self['dur'] - dt
@@ -434,7 +441,8 @@ class hpv_network(Network):
             m += these_m_contacts.tolist()
 
         # Create preference matrix between eligible females and males that combines age and geo mixing
-        age_bins_f = np.digitize(people.age[f], bins=bins) - 1  # Age bins of females that are entering new relationships
+        age_bins_f = np.digitize(people.age[f],
+                                 bins=bins) - 1  # Age bins of females that are entering new relationships
         age_bins_m = np.digitize(people.age[m], bins=bins) - 1  # Age bins of active and participating males
         age_f, age_m = np.meshgrid(age_bins_f, age_bins_m)
         pair_probs = self.pars['mixing'][age_m, age_f + 1]
@@ -483,15 +491,16 @@ class hpv_network(Network):
 
         # Get indices of people at different stages
         below_peak_inds = avg_age <= self.pars['age_act_pars']['peak']
-        above_peak_inds = (avg_age > self.pars['age_act_pars']['peak']) & (avg_age < self.pars['age_act_pars']['retirement'])
+        above_peak_inds = (avg_age > self.pars['age_act_pars']['peak']) & (
+                    avg_age < self.pars['age_act_pars']['retirement'])
         retired_inds = avg_age > self.pars['age_act_pars']['retirement']
 
         # Set values by linearly scaling the number of acts for each partnership according to
         # the age of the couple at the commencement of the relationship
         below_peak_vals = acts[below_peak_inds] * (dr + (1 - dr) / (peak - avg_debut[below_peak_inds]) * (
-                    avg_age[below_peak_inds] - avg_debut[below_peak_inds]))
+                avg_age[below_peak_inds] - avg_debut[below_peak_inds]))
         above_peak_vals = acts[above_peak_inds] * (
-                    rr + (1 - rr) / (peak - retire) * (avg_age[above_peak_inds] - retire))
+                rr + (1 - rr) / (peak - retire) * (avg_age[above_peak_inds] - retire))
         retired_vals = 0
 
         # Set values and return
