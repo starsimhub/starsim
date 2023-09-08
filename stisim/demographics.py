@@ -215,28 +215,79 @@ class Pregnancy(ss.Module):
 
         # Other, e.g. postpartum, on contraception...
         self.infertile = ss.State('infertile', bool, False)  # Applies to girls and women outside the fertility window
-        self.susceptible = ss.State('susceptible', bool, True)  # Applies to girls and women inside the fertility window - needs renaming
+        self.susceptible = ss.State('fecund', bool, True)  # Applies to girls and women inside the fertility window
         self.pregnant = ss.State('pregnant', bool, False)  # Currently pregnant
         self.postpartum = ss.State('postpartum', bool, False)  # Currently post-partum
         self.ti_pregnant = ss.State('ti_pregnant', float, np.nan)  # Time pregnancy begins
         self.ti_delivery = ss.State('ti_delivery', float, np.nan)  # Time of delivery
         self.ti_postpartum = ss.State('ti_postpartum', float, np.nan)  # Time postpartum ends
         self.ti_dead = ss.State('ti_dead', float, np.nan)  # Maternal mortality
+        self.conception_probs = ss.State('conception_probs', float, 0)
 
         self.pars = ss.omerge({
             'dur_pregnancy': 0.75,  # Make this a distribution?
             'dur_postpartum': 0.5,  # Make this a distribution?
-            'inci': 0.03,  # Replace this with age-specific rates
+            'fertility_rates': 0,
+            'data_cols': {'year': 'Time', 'age': 'AgeGrp', 'value': 'ASFR'},
+            'units_per_100': 1e-3,  # assumes fertility rates are per 1000. If using percentages, switch this to 1
             'p_death': 0,  # Probability of maternal death. Question, should this be linked to age and/or duration?
-            'initial': 3,  # Number of women initially pregnant
         }, self.pars)
+
+        # Validate fertility rate inputs
+        self.set_fertility_rates(self.pars['fertility_rates'])
+
+        return
+
+    def set_fertility_rates(self, fertility_rates):
+        """ Validate fertility rates """
+        if sc.checktype(fertility_rates, pd.DataFrame):
+            if not set(self.pars.data_cols.values()).issubset(fertility_rates.columns):
+                errormsg = 'Please ensure the columns of the fertility rate data match the values in pars.data_cols.'
+                raise ValueError(errormsg)
+            df = fertility_rates
+
+        elif sc.checktype(fertility_rates, pd.Series):
+            if (fertility_rates.index < 120).all():  # Assume index is age bins
+                df = pd.DataFrame({
+                    self.pars.data_cols['year']: 2000,
+                    self.pars.data_cols['age']: fertility_rates.index.values,
+                    self.pars.data_cols['value']: fertility_rates.values,
+                })
+            elif (fertility_rates.index > 1900).all():  # Assume index year
+                df = pd.DataFrame({
+                    self.pars.data_cols['year']: fertility_rates.index.values,
+                    self.pars.data_cols['age']: 0,
+                    self.pars.data_cols['value']: fertility_rates.values,
+
+                })
+            else:
+                errormsg = 'Could not understand index of fertility rate series: should be age or year.'
+                raise ValueError(errormsg)
+
+        elif sc.checktype(fertility_rates, dict):
+            if not set(self.pars.data_cols.values()).issubset(fertility_rates.keys()):
+                errormsg = 'Please ensure the keys of the fertility rate data dict match the values in pars.data_cols.'
+                raise ValueError(errormsg)
+            df = pd.DataFrame(fertility_rates)
+
+        elif sc.isnumber(fertility_rates):
+            df = pd.DataFrame({
+                self.pars.data_cols['year']: [2000],
+                self.pars.data_cols['age']: [15],
+                self.pars.data_cols['value']: fertility_rates,
+            })
+
+        else:
+            errormsg = f'Fertility rate data type {type(fertility_rates)} not understood.'
+            raise ValueError(errormsg)
+
+        self.pars.fertility_rates = df
 
         return
 
     def initialize(self, sim):
         super().initialize(sim)
         self.init_results(sim)
-        sim.pars['birth_rates'] = None  # This turns off birth rate pars so births only come from this module
         return
 
     def init_results(self, sim):
@@ -286,36 +337,45 @@ class Pregnancy(ss.Module):
 
     def make_pregnancies(self, sim):
         """
-        Select people to make pregnancy using incidence data
-        This should use ASFR data from https://population.un.org/wpp/Download/Standard/Fertility/
+        Select people to make pregnancy using fertility rates
         """
+
         # Abbreviate key variables
-        ppl = sim.people
+        p = self.pars
+        year_label = p.data_cols['year']
+        age_label = p.data_cols['age']
+        val_label = p.data_cols['value']
 
-        # If incidence of pregnancy is non-zero, make some cases
-        # Think about how to deal with age/time-varying fertility
-        if self.pars.inci > 0:
-            denom_conds = ppl.female & ppl.active & self.susceptible
-            inds_to_choose_from = ss.true(denom_conds)
-            uids = ss.binomial_filter(self.pars.inci, inds_to_choose_from)
+        available_years = p.fertility_rates[year_label].unique()
+        year_ind = sc.findnearest(available_years, sim.year)
+        nearest_year = available_years[year_ind]
 
-            # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
-            n_unborn_agents = len(uids)
-            if n_unborn_agents > 0:
-                # Grow the arrays and set properties for the unborn agents
-                new_uids = sim.people.grow(n_unborn_agents)
-                sim.people.age[new_uids] = -self.pars.dur_pregnancy
+        df = p.fertility_rates.loc[p.fertility_rates[year_label] == nearest_year]
+        age_bins = df[age_label].unique()
+        age_inds = np.digitize(sim.people.age, age_bins) - 1
 
-                # Add connections to any vertical transmission layers
-                # Placeholder code to be moved / refactored. The maternal network may need to be
-                # handled separately to the sexual networks, TBC how to handle this most elegantly
-                for lkey, layer in sim.people.networks.items():
-                    if layer.vertical:  # What happens if there's more than one vertical layer?
-                        durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
-                        layer.add_pairs(uids, new_uids, dur=durs)
+        conception_eligible = sim.people.female & (age_inds >= 0)
+        conception_probs = df[val_label].values * p.units_per_100 * sim.pars.dt_demog
+        self.conception_probs[conception_eligible] = conception_probs[age_inds[conception_eligible]]
+        conceive_uids = ss.true(ss.binomial_arr(self.conception_probs))
 
-                # Set prognoses for the pregnancies
-                self.set_prognoses(sim, uids)
+        # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
+        n_unborn_agents = len(conceive_uids)
+        if n_unborn_agents > 0:
+            # Grow the arrays and set properties for the unborn agents
+            new_uids = sim.people.grow(n_unborn_agents)
+            sim.people.age[new_uids] = -self.pars.dur_pregnancy
+
+            # Add connections to any vertical transmission layers
+            # Placeholder code to be moved / refactored. The maternal network may need to be
+            # handled separately to the sexual networks, TBC how to handle this most elegantly
+            for lkey, layer in sim.people.networks.items():
+                if layer.vertical:  # What happens if there's more than one vertical layer?
+                    durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
+                    layer.add_pairs(conceive_uids, new_uids, dur=durs)
+
+            # Set prognoses for the pregnancies
+            self.set_prognoses(sim, conceive_uids)
 
         return
 
