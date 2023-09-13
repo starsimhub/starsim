@@ -28,6 +28,7 @@ class Parameters(sc.objdict):
         self.n_agents = 10e3  # Number of agents
         self.total_pop = 10e3  # If defined, used for calculating the scale factor
         self.pop_scale = None  # How much to scale the population
+        self.remove_dead     = True          # Remove dead agents each timestep
 
         # Demographic parameters: NOT CURRENTLY FUNCTIONAL
         # TBC whether these parameters live here or in separate demographic modules

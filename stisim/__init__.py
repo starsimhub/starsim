@@ -16,6 +16,9 @@ from .hiv           import *
 from .gonorrhea     import *
 from .sim           import *
 
+import sciris as sc
+root = sc.thispath().parent
+
 # Import the version and print the license
 if options.verbose:
     print(__license__)

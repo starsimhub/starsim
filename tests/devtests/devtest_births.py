@@ -7,14 +7,15 @@ import stisim as ss
 import matplotlib.pyplot as plt
 import pandas as pd
 
-ppl = ss.People(10000, age_data=pd.read_csv('../test_data/nigeria_age.csv'))
+
+ppl = ss.People(10000)#, age_data=pd.read_csv('../test_data/nigeria_age.csv'))
 
 # Parameters
 simple_birth = {'birth_rates': 20}
 simple_death = {'death_rates': 0.015}
 
-realistic_birth = {'birth_rates': pd.read_csv('../test_data/nigeria_births.csv')}
-realistic_death = {'death_rates': pd.read_csv('../test_data/nigeria_deaths.csv')}
+realistic_birth = {'birth_rates': pd.read_csv(ss.root/'tests/test_data/nigeria_births.csv')}
+realistic_death = {'death_rates': pd.read_csv(ss.root/'tests/test_data/nigeria_deaths.csv')}
 
 series_death = {'death_rates': pd.Series(
             index=[0, 10, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95],
@@ -24,7 +25,7 @@ series_death = {'death_rates': pd.Series(
 births = ss.births(realistic_birth)
 deaths = ss.background_deaths(series_death)
 gon = ss.Gonorrhea({'p_death': 0.5, 'initial': 1000})
-sim = ss.Sim(people=ppl, modules=[births, deaths, gon], networks=ss.simple_sexual())
+sim = ss.Sim(people=ppl, modules=[births, deaths, gon], networks=ss.simple_sexual(), remove_dead=True, n_years=100)
 sim.initialize()
 sim.run()
 

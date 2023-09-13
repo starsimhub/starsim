@@ -67,7 +67,7 @@ class births(ss.Module):
         br_year = p.birth_rates[p.data_cols['year']]
         br_val = p.birth_rates[p.data_cols['cbr']]
         this_birth_rate = np.interp(sim.year, br_year, br_val) * p.units_per_100 * p.rel_birth * sim.pars.dt_demog
-        n_new = sc.randround(len(sim.people) * this_birth_rate)
+        n_new = sc.randround(np.count_nonzero(sim.people.alive) * this_birth_rate)
         return n_new
 
     def add_births(self, sim):
@@ -196,6 +196,7 @@ class background_deaths(ss.Module):
 
         # Get indices of people who die of other causes
         death_uids = ss.true(ss.binomial_arr(self.death_probs))
+        death_uids = sim.people.alive[death_uids].uid
         sim.people.ti_dead[death_uids] = sim.ti
 
         return len(death_uids)
