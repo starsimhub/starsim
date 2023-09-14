@@ -196,7 +196,7 @@ class background_deaths(ss.Module):
 
         # Get indices of people who die of other causes
         death_uids = ss.true(ss.binomial_arr(self.death_probs))
-        death_uids = sim.people.alive[death_uids].uid
+        death_uids = ss.true(sim.people.alive[death_uids])
         sim.people.ti_dead[death_uids] = sim.ti
 
         return len(death_uids)

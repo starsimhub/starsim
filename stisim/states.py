@@ -55,6 +55,7 @@ class FusedArray(NDArrayOperatorsMixin):
         """
         out = np.empty(len(key), dtype=vals.dtype)
         new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
+
         for i in range(len(key)):
             idx = uid_map[key[i]]
             if idx == INT_NAN:
@@ -187,7 +188,7 @@ class FusedArray(NDArrayOperatorsMixin):
         return self.values.all(*args, **kwargs)
 
     def count_nonzero(self, *args, **kwargs):
-        return self.values.count_nonzero(*args, **kwargs)
+        return np.count_nonzero(self.values, *args, **kwargs)
 
     @property
     def shape(self):

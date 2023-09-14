@@ -258,6 +258,7 @@ class Sim(sc.prettyobj):
         # Make results
         results = ss.Results(
             ss.Result(None, 'n_alive', self.npts, ss.int_),
+            ss.Result(None, 'new_deaths', self.npts, ss.int_),
         )
 
         # Final items
@@ -296,7 +297,7 @@ class Sim(sc.prettyobj):
                 raise TypeError(errormsg)
             self.analyzers += analyzer  # Add it in
 
-        for analyzer in self.analyzers:
+        for analyzer in self.analyzers.values():
             if isinstance(analyzer, ss.Analyzer):
                 analyzer.initialize(self)
 
@@ -328,7 +329,8 @@ class Sim(sc.prettyobj):
         self.apply_analyzers()
 
         # Update results
-        self.results.n_alive[self.ti] = len(self.people)
+        self.results.n_alive[self.ti] = np.count_nonzero(self.people.alive)
+        self.results.new_deaths[self.ti] = np.count_nonzero(self.people.ti_dead == self.ti)
 
         # Tidy up
         self.ti += 1

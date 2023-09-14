@@ -16,8 +16,8 @@ class Gonorrhea(ss.Disease):
 
         self.susceptible = ss.State('susceptible', bool, True)
         self.infected = ss.State('infected', bool, False)
-        self.ti_infected = ss.State('ti_infected', float, 0)
-        self.ti_recovered = ss.State('ti_recovered', float, 0)
+        self.ti_infected = ss.State('ti_infected', float, np.nan)
+        self.ti_recovered = ss.State('ti_recovered', float, np.nan)
         self.ti_dead = ss.State('ti_dead', float, np.nan)  # Death due to gonorrhea
 
         self.pars = ss.omerge({
@@ -32,8 +32,14 @@ class Gonorrhea(ss.Disease):
         # What if something in here should depend on another module?
         # I guess we could just check for it e.g., 'if HIV in sim.modules' or
         # 'if 'hiv' in sim.people' or something
-        gonorrhea_deaths = self.ti_dead <= sim.ti
-        sim.people.alive[gonorrhea_deaths] = False
+
+        # Recovery
+        recovered = ss.true(self.infected & (self.ti_recovered <= sim.ti))
+        self.infected[recovered] = False
+        self.susceptible[recovered] = True
+
+        # Schedule death for anyone that is
+        gonorrhea_deaths = ss.true(sim.people.alive & (self.ti_dead <= sim.ti))
         sim.people.ti_dead[gonorrhea_deaths] = sim.ti
         return
     

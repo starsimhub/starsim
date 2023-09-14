@@ -151,7 +151,7 @@ class Disease(Module):
     def update_results(self, sim):
         self.results['n_susceptible'][sim.ti] = np.count_nonzero(self.susceptible)
         self.results['n_infected'][sim.ti] = np.count_nonzero(self.infected)
-        self.results['prevalence'][sim.ti] = self.results.n_infected[sim.ti] / len(sim.people)
+        self.results['prevalence'][sim.ti] = self.results.n_infected[sim.ti] / np.count_nonzero(sim.people.alive)
         self.results['new_infections'][sim.ti] = np.count_nonzero(self.ti_infected == sim.ti)
 
     def finalize_results(self, sim):
