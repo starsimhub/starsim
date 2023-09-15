@@ -10,6 +10,6 @@ __all__ = ['Analyzer']
 
 class Analyzer(ss.Module):
 
-    def update(self, sim):
+    def update_results(self, sim):
         return
 

@@ -338,7 +338,7 @@ class Sim(sc.prettyobj):
         # Update results
         self.people.update_results(self)
         for analyzer in self.analyzers.values():
-            analyzer.update(self)
+            analyzer.update_results(self)
 
         # Tidy up
         self.ti += 1
