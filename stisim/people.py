@@ -206,11 +206,11 @@ class People(BasePeople):
          - `sim.people.states['hiv.susceptible']`
         """
 
-        for state_name, state in module.states.items():
-            combined_name = module.name + '.' + state_name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
+        for state in module.states:
+            combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
             self.states[combined_name] = state  # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
             pre, _, post = combined_name.rpartition('.')
-            setattr(module_states, state_name, state)
+            setattr(module_states, state.name, state)
 
         return
 

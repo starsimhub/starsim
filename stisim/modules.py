@@ -37,7 +37,7 @@ class Module(sc.prettyobj):
         self.check_requires(sim)
 
         # Connect the states to the sim
-        for state in self.states.values():
+        for state in self.states:
             state.initialize(sim.people)
 
         self.initialized = True
@@ -53,7 +53,18 @@ class Module(sc.prettyobj):
 
     @property
     def states(self):
-        return ss.ndict({k: v for k, v in self.__dict__.items() if isinstance(v, ss.State)})
+        """
+        Return a flat collection of all states
+
+        The base class returns all states that are contained in top-level attributes
+        of the Module. If a Module stores states in a non-standard location (e.g.,
+        within a list of states, or otherwise in some other nested structure - perhaps
+        due to supporting features like multiple genotypes) then the Module should
+        overload this attribute to ensure that all states appear in here.
+
+        :return:
+        """
+        return [x for x in self.__dict__.values() if isinstance(x, ss.State)]
 
 
 class Disease(Module):
