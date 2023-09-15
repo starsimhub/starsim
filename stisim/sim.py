@@ -25,6 +25,7 @@ class Sim(sc.prettyobj):
         self.summary = None  # For storing a summary of the results
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running # TODO: replace with finalized?
+        self.diseases      = ss.ndict(diseases, type=ss.Disease)
         self.results_ready = False  # Whether results are ready
         self.filename = None
 
@@ -41,6 +42,8 @@ class Sim(sc.prettyobj):
         # Initialize other quantities
         self.interventions = ss.Interventions()
         self.analyzers = ss.Analyzers()
+        self.interventions = ss.ndict(type=ss.Intervention)
+        self.analyzers = ss.ndict(type=ss.Analyzer)
 
         return
 

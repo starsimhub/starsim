@@ -6,7 +6,7 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 
-__all__ = ['Module', 'Modules', 'Disease']
+__all__ = ['Module', 'Disease']
 
 
 class Module(sc.prettyobj):
@@ -42,9 +42,6 @@ class Module(sc.prettyobj):
 
         self.initialized = True
         return
-
-    def apply(self, sim):
-        pass
 
     def finalize(self, sim):
         self.finalized = True
