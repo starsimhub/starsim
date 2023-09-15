@@ -337,6 +337,10 @@ class Sim(sc.prettyobj):
 
         # Update results
         self.people.update_results(self)
+
+        for disease in self.diseases.values():
+            disease.update_results(self)
+
         for analyzer in self.analyzers.values():
             analyzer.update_results(self)
 

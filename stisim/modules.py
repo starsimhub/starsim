@@ -130,16 +130,6 @@ class Disease(Module):
 
         pass
 
-    def update(self, sim):
-        """
-        Perform all updates
-        """
-        self.update_states(sim)
-        self.make_new_cases(sim)
-        self.update_results(sim)
-        return
-
-
     def make_new_cases(self, sim):
         """ Add new cases of module, through transmission, incidence, etc. """
         pars = sim.pars[self.name]
