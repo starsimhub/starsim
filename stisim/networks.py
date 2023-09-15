@@ -246,14 +246,15 @@ class Network(sc.objdict):
 
     def update(self, people):
         """ Define how pairs/connections evolve (in time) """
-        # Remove connections where one person has died
-        self.remove_uids(ss.true(people.dead))
         return
 
     def remove_uids(self, uids):
-        """ Remove interactions involving specified UIDs
+        """
+        Remove interactions involving specified UIDs
 
-        This is required if agents have been removed from the simulation
+        This method is typically called via `People.remove()` and
+        is specifically used when removing agents from the simulation.
+
         """
         keep = ~(np.isin(self.p1, uids) | np.isin(self.p2, uids))
         for k in self.meta_keys():

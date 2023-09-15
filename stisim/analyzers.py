@@ -9,6 +9,7 @@ __all__ = ['Analyzer']
 
 
 class Analyzer(ss.Module):
-    pass
 
+    def update(self, sim):
+        return
 

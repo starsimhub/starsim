@@ -18,7 +18,7 @@ class Gonorrhea(ss.Disease):
         self.infected = ss.State('infected', bool, False)
         self.ti_infected = ss.State('ti_infected', float, np.nan)
         self.ti_recovered = ss.State('ti_recovered', float, np.nan)
-        self.ti_dead = ss.State('ti_dead', float, np.nan)  # Death due to gonorrhea
+        self.ti_dead = ss.State('ti_dead', int, ss.INT_NAN)  # Death due to gonorrhea
 
         self.pars = ss.omerge({
             'dur_inf': 3,  # not modelling diagnosis or treatment explicitly here
@@ -38,9 +38,10 @@ class Gonorrhea(ss.Disease):
         self.infected[recovered] = False
         self.susceptible[recovered] = True
 
-        # Schedule death for anyone that is
-        gonorrhea_deaths = ss.true(sim.people.alive & (self.ti_dead <= sim.ti))
-        sim.people.ti_dead[gonorrhea_deaths] = sim.ti
+        # Schedule death for anyone that is due to die
+        gonorrhea_deaths = ss.true(self.ti_dead <= sim.ti)
+        sim.people.request_death(gonorrhea_deaths)
+
         return
     
     def update_results(self, sim):

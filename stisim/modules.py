@@ -15,7 +15,7 @@ class Module(sc.prettyobj):
         self.pars = ss.omerge(pars)
         self.label = label if label else ''
         self.requires = sc.mergelists(requires)
-        self.results = ss.Results()
+        self.results = ss.ndict(type=ss.Result)
         self.initialized = False
         self.finalized = False
         return
@@ -54,11 +54,6 @@ class Module(sc.prettyobj):
     @property
     def states(self):
         return ss.ndict({k: v for k, v in self.__dict__.items() if isinstance(v, ss.State)})
-
-
-class Modules(ss.ndict):
-    def __init__(self, *args, type=Module, **kwargs):
-        return super().__init__(self, *args, type=type, **kwargs)
 
 
 class Disease(Module):
@@ -114,6 +109,16 @@ class Disease(Module):
         self.results += ss.Result(self.name, 'new_infections', sim.npts, dtype=int)
         return
 
+    def update_states_pre(self, sim):
+        """
+        Carry out autonomous state changes at the start of the timestep
+
+        :param sim:
+        :return:
+        """
+
+        pass
+
     def update(self, sim):
         """
         Perform all updates
@@ -123,9 +128,6 @@ class Disease(Module):
         self.update_results(sim)
         return
 
-    def update_states(self, sim):
-        # Carry out any autonomous state changes at the start of the timestep
-        pass
 
     def make_new_cases(self, sim):
         """ Add new cases of module, through transmission, incidence, etc. """

@@ -7,17 +7,18 @@ import stisim as ss
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
+import sciris as sc
 
 class agent_analyzer(ss.Analyzer):
     def initialize(self, sim):
         super().initialize(sim)
         self.n_agents = np.zeros(sim.npts)
 
-    def apply(self, sim):
+    def update(self, sim):
         self.n_agents[sim.ti] = len(sim.people)
 
 
-def run_test(remove_dead=True, do_plot=False, rand_seed=0):
+def run_test(remove_dead=True, do_plot=False, rand_seed=0, verbose=False):
     ppl = ss.People(50000)
 
     # Parameters
@@ -34,7 +35,9 @@ def run_test(remove_dead=True, do_plot=False, rand_seed=0):
     deaths = ss.background_deaths(series_death)
     gon = ss.Gonorrhea({'p_death': 0.5, 'initial': 1000})
 
-    sim = ss.Sim(people=ppl, modules=[births, deaths, gon], networks=ss.simple_sexual(), remove_dead=remove_dead, n_years=100, analyzers=[agent_analyzer()], rand_seed=rand_seed)
+    sim = ss.Sim(people=ppl, demographics=[births,deaths], diseases=[gon], networks=ss.simple_sexual(), remove_dead=remove_dead, n_years=100, analyzers=[agent_analyzer()], rand_seed=rand_seed, verbose=verbose)
+    # sim = ss.Sim(people=ppl, modules=[births, deaths], networks=ss.simple_sexual(), remove_dead=remove_dead, n_years=100, analyzers=[agent_analyzer()], rand_seed=rand_seed, verbose=False)
+
     sim.initialize()
     sim.run()
 
@@ -55,10 +58,18 @@ def run_test(remove_dead=True, do_plot=False, rand_seed=0):
     return sim
 
 
-for i in range(10):
-    sim1 = run_test(False, rand_seed=i)
-    sim2 = run_test(True, rand_seed=i)
+def compare_totals(rand_seed=0):
+    sim1 = run_test(False, rand_seed=rand_seed)
+    sim2 = run_test(True, rand_seed=rand_seed+1)
+    return sim1.people.alive.count_nonzero() - sim2.people.alive.count_nonzero()
 
+
+if __name__ == '__main__':
+
+    # x = sc.parallelize(compare_totals, np.arange(50))
+
+    sim1 = run_test(False, rand_seed=0, verbose=0.1)
+    sim2 = run_test(True, rand_seed=0, verbose=0.1)
 
     fig, ax = plt.subplots(2, 2)
     ax = ax.ravel()

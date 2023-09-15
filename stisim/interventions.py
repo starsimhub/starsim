@@ -9,5 +9,6 @@ __all__ = ['Intervention']
 
 
 class Intervention(ss.Module):
-    pass
 
+    def apply(self):
+        return
