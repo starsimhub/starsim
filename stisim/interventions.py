@@ -11,4 +11,4 @@ __all__ = ['Intervention']
 class Intervention(ss.Module):
 
     def apply(self):
-        return
+        raise NotImplementedError

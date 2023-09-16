@@ -11,5 +11,5 @@ __all__ = ['Analyzer']
 class Analyzer(ss.Module):
 
     def update_results(self, sim):
-        return
+        raise NotImplementedError
 

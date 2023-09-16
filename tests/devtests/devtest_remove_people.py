@@ -14,7 +14,7 @@ class agent_analyzer(ss.Analyzer):
         super().initialize(sim)
         self.n_agents = np.zeros(sim.npts)
 
-    def update(self, sim):
+    def update_results(self, sim):
         self.n_agents[sim.ti] = len(sim.people)
 
 
