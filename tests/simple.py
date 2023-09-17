@@ -118,20 +118,20 @@ for ti in sim1.tivec:
     plt.show()
 
 # Plot
-fig, axv = plt.subplots(3,1, sharex=True)
+fig, axv = plt.subplots(2,1, sharex=True)
 axv[0].plot(sim1.tivec, sim1.results.hiv.n_infected, label='Baseline')
 axv[0].plot(sim2.tivec, sim2.results.hiv.n_infected, ls=':', label='Intervention')
 axv[0].set_title('HIV number of infections')
 
-axv[1].plot(sim1.tivec, sim1.results.gonorrhea.n_infected, label='Baseline')
-axv[1].plot(sim2.tivec, sim2.results.gonorrhea.n_infected, ls=':', label='Intervention')
-axv[1].set_title('Gonorrhea number of infections')
+axv[1].plot(sim1.tivec, sim1.results.hiv.new_deaths, label='Baseline')
+axv[1].plot(sim2.tivec, sim2.results.hiv.new_deaths, ls=':', label='Intervention')
+axv[1].set_title('HIV Deaths')
 
-axv[2].plot(sim1.tivec, sim1.results.hiv.new_deaths, label='Baseline')
-axv[2].plot(sim2.tivec, sim2.results.hiv.new_deaths, ls=':', label='Intervention')
-axv[2].set_title('HIV Deaths')
-
-
+''' Gonorrhea removed for now
+axv[2].plot(sim1.tivec, sim1.results.gonorrhea.n_infected, label='Baseline')
+axv[2].plot(sim2.tivec, sim2.results.gonorrhea.n_infected, ls=':', label='Intervention')
+axv[2].set_title('Gonorrhea number of infections')
+'''
 plt.legend()
 plt.show()
 print('Done')
