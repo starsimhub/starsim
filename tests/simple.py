@@ -7,7 +7,6 @@ import stisim as ss
 import matplotlib.pyplot as plt
 import pandas as pd
 import networkx as nx
-import seaborn as sns
 
 class Graph():
     def __init__(self, nodes, edges):
