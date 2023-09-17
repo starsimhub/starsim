@@ -303,7 +303,7 @@ class Sim(sc.prettyobj):
                 raise TypeError(errormsg)
             self.analyzers += analyzer  # Add it in
 
-        for analyzer in self.analyzers:
+        for analyzer in self.analyzers.values():
             if isinstance(analyzer, ss.Analyzer):
                 analyzer.initialize(self)
 
@@ -432,6 +432,15 @@ class Sim(sc.prettyobj):
             # Because the results are rescaled in-place, finalizing the sim cannot be run more than once or
             # otherwise the scale factor will be applied multiple times
             raise AlreadyRunError('Simulation has already been finalized')
+
+        for module in self.modules.values():
+            module.finalize(self)
+
+        for intervention in self.interventions.values():
+            intervention.finalize(self)
+
+        for analyzer in self.analyzers.values():
+            analyzer.finalize(self)
 
         # Final settings
         self.results_ready = True  # Set this first so self.summary() knows to print the results

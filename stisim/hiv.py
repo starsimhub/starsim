@@ -38,12 +38,12 @@ class HIV(ss.Disease):
         self.cd4[sim.people.alive & self.infected & self.on_art] += (self.pars.cd4_max - self.cd4[sim.people.alive & self.infected & self.on_art])/self.pars.cd4_rate
         self.cd4[sim.people.alive & self.infected & ~self.on_art] += (self.pars.cd4_min - self.cd4[sim.people.alive & self.infected & ~self.on_art])/self.pars.cd4_rate
 
-        self.rel_sus[sim.people.alive & self.on_prep] = 0.1
+        self.rel_sus[sim.people.alive & ~self.infected & self.on_prep] = 0.04
+        self.rel_sus[sim.people.alive & self.infected & self.on_art] = 0.04
 
-        hiv_death_prob = 0.1 / (self.pars.cd4_min - self.pars.cd4_max)**2 *  (self.pars.cd4_max - self.cd4)**2
+        hiv_death_prob = 0.1 / (self.pars.cd4_min - self.pars.cd4_max)**2 *  (self.cd4 - self.pars.cd4_max)**2
         can_die = ss.true(sim.people.alive & sim.people.hiv.infected)
         hiv_deaths = self.rng_dead.bernoulli_filter(prob=hiv_death_prob[can_die], arr = can_die)
-        
         sim.people.alive[hiv_deaths] = False
         sim.people.ti_dead[hiv_deaths] = sim.ti
         self.results['new_deaths'][sim.ti] = len(hiv_deaths)
@@ -73,10 +73,10 @@ class HIV(ss.Disease):
 
 class ART(ss.Intervention):
 
-    def __init__(self, t: np.array, capacity: np.array):
+    def __init__(self, t: np.array, coverage: np.array):
         self.requires = HIV
         self.t = sc.promotetoarray(t)
-        self.capacity = sc.promotetoarray(capacity)
+        self.coverage = sc.promotetoarray(coverage)
 
         self.rng_add_ART = ss.Stream('add_ART', seed_offset=100)
         self.rng_remove_ART = ss.Stream('remove_ART', seed_offset=101)
@@ -92,10 +92,9 @@ class ART(ss.Intervention):
         if sim.ti < self.t[0]:
             return
 
-        capacity = self.capacity[np.where(self.t <= sim.ti)[0][-1]]
+        coverage = self.coverage[np.where(self.t <= sim.ti)[0][-1]]
         on_art = sim.people.alive & sim.people.hiv.on_art
-
-        n_change = capacity - np.count_nonzero(on_art)
+        n_change = np.round(coverage * sim.people.alive.sum() - np.count_nonzero(on_art)).astype(int)
         if n_change > 0:
             # Add more ART
             eligible = ss.true(sim.people.alive & sim.people.hiv.infected & ~sim.people.hiv.on_art)
@@ -117,10 +116,10 @@ class ART(ss.Intervention):
 
 class PrEP(ss.Intervention):
 
-    def __init__(self, t: np.array, capacity: np.array):
+    def __init__(self, t: np.array, coverage: np.array):
         self.requires = HIV
         self.t = sc.promotetoarray(t)
-        self.capacity = sc.promotetoarray(capacity)
+        self.coverage = sc.promotetoarray(coverage)
 
         self.rng_add_PrEP = ss.Stream('add_PrEP', seed_offset=102)
         self.rng_remove_PrEP = ss.Stream('remove_PrEP', seed_offset=103)
@@ -136,10 +135,9 @@ class PrEP(ss.Intervention):
         if sim.ti < self.t[0]:
             return
 
-        capacity = self.capacity[np.where(self.t <= sim.ti)[0][-1]]
+        coverage = self.coverage[np.where(self.t <= sim.ti)[0][-1]]
         on_prep = sim.people.alive & sim.people.hiv.on_prep
-
-        n_change = capacity - np.count_nonzero(on_prep)
+        n_change = np.round(coverage * sim.people.alive.sum() - np.count_nonzero(on_prep)).astype(int)
         if n_change > 0:
             # Add more PrEP
             eligible = ss.true(sim.people.alive & ~sim.people.hiv.infected & ~sim.people.hiv.on_prep)

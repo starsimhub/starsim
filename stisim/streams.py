@@ -99,7 +99,8 @@ class Stream(np.random.Generator):
     def step(self, ti):
         """ Advance to time ti step by jumping """
         self.bit_generator.state = self._init_state # restore initial state
-        self.bit_generator.jumped(jumps=ti) # Take ti jumps
+        # jumped returns a new bit_generator, use directly instead of setting state?
+        self.bit_generator.state = self.bit_generator.jumped(jumps=ti).state # Take ti jumps
         return
 
     @property

@@ -326,7 +326,7 @@ class simple_sexual(Network):
         if dt is None: dt = people.dt
         # First remove any relationships due to end
         self['dur'] = self['dur'] - dt
-        active = (self['dur'] > 0) & people.alive[self['p1']] & people.alive[self['p1']]
+        active = (self['dur'] > 0) & people.alive[self['p1']] & people.alive[self['p2']]
         self['p1'] = self['p1'][active]
         self['p2'] = self['p2'][active]
         self['beta'] = self['beta'][active]
@@ -351,6 +351,11 @@ class simple_embedding(simple_sexual):
         # slow:
         available_m = ss.true(people.alive[available_m])
         available_f = ss.true(people.alive[available_f])
+
+        if not len(available_m) or not len(available_f):
+            if ss.options.verbose > 1:
+                print('No pairs to add')
+            return 0
 
         # Make p1 the shorter array
         if len(available_f) < len(available_m):
@@ -392,7 +397,8 @@ class simple_embedding(simple_sexual):
             # Trim distance matrix
             d = d_full[np.ix_(unmatched_p2i, unmatched_p1i)]
 
-            print(f'Matching with {len(unmatched_p1i)} to go')
+            if ss.options.verbose > 1:
+                print(f'Matching with {len(unmatched_p1i)} to go')
 
         pairs = np.concatenate(pairs, axis=1)
         n_pairs = pairs.shape[1]
