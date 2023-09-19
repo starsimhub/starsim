@@ -156,7 +156,7 @@ class Disease(Module):
         pars = sim.pars[self.name]
         for k, layer in sim.people.networks.items():
             if k in pars['beta']:
-                rel_trans = (self.infected & sim.people.alive).astype(float)
+                rel_trans = self.rel_trans * (self.infected & sim.people.alive)
                 rel_sus = self.rel_sus * (self.susceptible & sim.people.alive)
                 for a, b, beta, rng in [[layer['p1'], layer['p2'], pars['beta'][k][0], self.rng_trans_ab], [layer['p2'], layer['p1'], pars['beta'][k][1], self.rng_trans_ba]]:
                     # probability of a->b transmission

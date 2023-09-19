@@ -1,5 +1,5 @@
 """
-Run simplest tests
+Run test with ladder network
 """
 
 # %% Imports and settings
@@ -65,7 +65,7 @@ class rng_analyzer(ss.Analyzer):
             #'ng': sim.people.gonorrhea.infected.values,
         })
 
-        edges = pd.DataFrame(sim.people.networks['simple_embedding'].to_dict()) #sim.people.networks['simple_embedding'].to_df() #TODO: repr issues
+        edges = pd.DataFrame(sim.people.networks[0].to_dict()) #sim.people.networks['simple_embedding'].to_df() #TODO: repr issues
 
         self.graphs[sim.ti] = Graph(nodes, edges)
         return
@@ -77,15 +77,11 @@ class rng_analyzer(ss.Analyzer):
 
 def run_sim(n=25, intervention=False, analyze=False):
     ppl = ss.People(n)
-    ppl.networks = ss.ndict(ss.simple_embedding())#, ss.maternal())
+    ppl.networks = ss.ndict(ss.ladder())#, ss.maternal())
 
     hiv = ss.HIV()
-    #hiv.pars['beta'] = {'simple_embedding': [0.0008, 0.0004], 'maternal': [0.2, 0]}
-    hiv.pars['beta'] = {'simple_embedding': [0.06, 0.04]}#, 'maternal': [0.2, 0]}
+    hiv.pars['beta'] = {'ladder': [0.06, 0.04]}
     hiv.pars['initial'] = 3
-
-    #gon = ss.Gonorrhea()
-    #gon.pars['beta'] = 0.3
 
     pars = {
         'start': 1980,
@@ -94,7 +90,6 @@ def run_sim(n=25, intervention=False, analyze=False):
         'rand_seed': 0,
         'analyzers': [rng_analyzer()] if analyze else [],
     }
-    #sim = ss.Sim(people=ppl, modules=[hiv, gon, ss.Pregnancy()], pars=pars, label=f'Sim with {n} agents and intv={intervention}')
     sim = ss.Sim(people=ppl, modules=[hiv], pars=pars, label=f'Sim with {n} agents and intv={intervention}')
     sim.initialize()
     sim.run()
@@ -102,19 +97,13 @@ def run_sim(n=25, intervention=False, analyze=False):
     return sim
 
 n = 10
-sim1 = run_sim(n, intervention=False, analyze=plot_graph)
 sim2 = run_sim(n, intervention=True, analyze=plot_graph)
-#sc.save('sims.obj', [sim1, sim2])
-
-# TODO: Parallelization does not work with the current snapshot analyzer
-#sim1, sim2 = sc.parallelize(run_sim, iterkwargs=[{'intervention':False}, {'intervention':True}], die=True)
+sim1 = run_sim(n, intervention=False, analyze=plot_graph)
 
 if plot_graph:
     g1 = sim1.analyzers[0].graphs
     g2 = sim2.analyzers[0].graphs
 
-    #pos = nx.circular_layout(g1[0].graph)
-    #n = len(sim1.people._uid_map) # Will eventually need this line due to population growth
     pos = {i:(np.cos(2*np.pi*i/n), np.sin(2*np.pi*i/n)) for i in range(n)}
 
     for ti in sim1.tivec:

@@ -9,7 +9,7 @@ import stisim as ss
 
 
 # Specify all externally visible functions this file defines
-__all__ = ['Networks', 'Network', 'simple_sexual', 'simple_embedding', 'hpv_network', 'maternal']
+__all__ = ['Networks', 'Network', 'simple_sexual', 'simple_embedding', 'ladder', 'hpv_network', 'maternal']
 
 class Network(sc.objdict):
     """
@@ -413,6 +413,34 @@ class simple_embedding(simple_sexual):
         self['dur'] = np.concatenate([self['dur'], dur])
 
         return n_pairs
+
+
+class ladder(simple_sexual):
+    """
+    Very simple network for debugging in which edges are:
+    1-2, 3-4, 5-6, ...
+    """
+    def __init__(self):
+        key_dict = {
+            'p1': ss.int_,
+            'p2': ss.int_,
+            'beta': ss.float_,
+        }
+
+        # Call init for the base class, which sets all the keys
+        super().__init__(mean_dur=np.iinfo(int).max)
+        return
+
+    def initialize(self, sim):
+        n = len(sim.people._uid_map)
+        self['p1'] = np.arange(0,n,2) # EVEN
+        self['p2'] = np.arange(1,n,2) # ODD
+        self['beta'] = np.ones(len(self['p1']))
+        self['dur'] = np.iinfo(int).max
+        return
+    
+    def update(self, people, dt=None):
+        pass
 
 
 class hpv_network(Network):

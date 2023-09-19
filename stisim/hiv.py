@@ -39,7 +39,7 @@ class HIV(ss.Disease):
         self.cd4[sim.people.alive & self.infected & ~self.on_art] += (self.pars.cd4_min - self.cd4[sim.people.alive & self.infected & ~self.on_art])/self.pars.cd4_rate
 
         self.rel_sus[sim.people.alive & ~self.infected & self.on_prep] = 0.04
-        self.rel_sus[sim.people.alive & self.infected & self.on_art] = 0.04
+        self.rel_trans[sim.people.alive & self.infected & self.on_art] = 0.04
 
         hiv_death_prob = 0.1 / (self.pars.cd4_min - self.pars.cd4_max)**2 *  (self.cd4 - self.pars.cd4_max)**2
         can_die = ss.true(sim.people.alive & sim.people.hiv.infected)
