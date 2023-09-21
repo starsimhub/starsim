@@ -94,7 +94,8 @@ class ART(ss.Intervention):
 
         coverage = self.coverage[np.where(self.t <= sim.ti)[0][-1]]
         on_art = sim.people.alive & sim.people.hiv.on_art
-        n_change = np.round(coverage * sim.people.alive.sum() - np.count_nonzero(on_art)).astype(int)
+        infected = sim.people.alive & sim.people.hiv.infected
+        n_change = np.round(coverage * infected.sum() - on_art.sum()).astype(int)
         if n_change > 0:
             # Add more ART
             eligible = ss.true(sim.people.alive & sim.people.hiv.infected & ~sim.people.hiv.on_art)

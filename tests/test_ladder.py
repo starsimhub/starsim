@@ -81,17 +81,20 @@ def run_sim(n=25, intervention=False, analyze=False):
 
     hiv = ss.HIV()
     hiv.pars['beta'] = {'ladder': [0.06, 0.04]}
-    hiv.pars['initial'] = 3
+    hiv.pars['initial'] = 0
 
     pars = {
         'start': 1980,
         'end': 2010,
-        'interventions': [ss.hiv.ART(0, 0.1)] if intervention else [], # ss.hiv.PrEP(0, 0.2), 
+        'interventions': [ss.hiv.ART(0, 0.5)] if intervention else [], # ss.hiv.PrEP(0, 0.2), 
         'rand_seed': 0,
         'analyzers': [rng_analyzer()] if analyze else [],
     }
     sim = ss.Sim(people=ppl, modules=[hiv], pars=pars, label=f'Sim with {n} agents and intv={intervention}')
     sim.initialize()
+
+    sim.modules['hiv'].set_prognoses(sim, np.arange(0,n,2), from_uids=None)
+
     sim.run()
 
     return sim
