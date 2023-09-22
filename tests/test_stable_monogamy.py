@@ -1,5 +1,5 @@
 """
-Run test with ladder network
+Run test with stable_monogamy network
 """
 
 # %% Imports and settings
@@ -77,10 +77,10 @@ class rng_analyzer(ss.Analyzer):
 
 def run_sim(n=25, intervention=False, analyze=False):
     ppl = ss.People(n)
-    ppl.networks = ss.ndict(ss.ladder())#, ss.maternal())
+    ppl.networks = ss.ndict(ss.stable_monogamy())#, ss.maternal())
 
     hiv = ss.HIV()
-    hiv.pars['beta'] = {'ladder': [0.06, 0.04]}
+    hiv.pars['beta'] = {'stable_monogamy': [0.06, 0.04]}
     hiv.pars['initial'] = 0
 
     pars = {

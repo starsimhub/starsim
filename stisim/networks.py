@@ -9,7 +9,7 @@ import stisim as ss
 
 
 # Specify all externally visible functions this file defines
-__all__ = ['Networks', 'Network', 'simple_sexual', 'simple_embedding', 'ladder', 'hpv_network', 'maternal']
+__all__ = ['Networks', 'Network', 'simple_sexual', 'simple_embedding', 'stable_monogamy', 'hpv_network', 'maternal']
 
 class Network(sc.objdict):
     """
@@ -415,7 +415,7 @@ class simple_embedding(simple_sexual):
         return n_pairs
 
 
-class ladder(simple_sexual):
+class stable_monogamy(simple_sexual):
     """
     Very simple network for debugging in which edges are:
     1-2, 3-4, 5-6, ...
