@@ -13,10 +13,12 @@ class Streams:
     def __init__(self):
         self._streams = ss.ndict()
         self.used_seeds = []
+        self.initialized = False
         return
 
     def initialize(self, base_seed):
         self.base_seed = base_seed
+        self.initialized = True
         return
     
     def add(self, stream):
@@ -26,6 +28,8 @@ class Streams:
         Can request an offset, will check for overlap
         Otherwise, return value will be used as the seed offset for this stream
         """
+        if not self.initialized:
+            raise Exception('Please call initialize before adding a stream to Streams.')
 
         if stream.seed_offset is None:
             seed = len(self._streams) # Put at end by default
@@ -43,6 +47,20 @@ class Streams:
         for stream in self._streams.dict_values():
             stream.step(ti)
         return
+
+class NotResetException(Exception):
+    "Raised when stream is called when not ready."
+    pass
+
+def _pre_draw(func):
+    def check_ready(self, arr):
+        """ Validation before drawing """
+        if not self.ready:
+            msg = f'Stream {self.name} has already been sampled on this timestep!'
+            raise NotResetException(msg)
+        self.ready = False
+        return func(self, arr)
+    return check_ready
 
 class Stream(np.random.Generator):
     """
@@ -73,6 +91,7 @@ class Stream(np.random.Generator):
         self.ppl = None # Needed for block size
 
         self.initialized = False
+        self.ready = True
 
         return
 
@@ -94,19 +113,32 @@ class Stream(np.random.Generator):
         self.ppl = sim.people
 
         self.initialized = True
+        self.ready = True
+        return
+
+    def reset(self):
+        """ Restore initial state """
+        self.bit_generator.state = self._init_state
+        self.ready = True
         return
 
     def step(self, ti):
         """ Advance to time ti step by jumping """
-        self.bit_generator.state = self._init_state # restore initial state
+        
+        # First reset back to the initial state
+        self.reset()
+
+        # Now take ti jumps
         # jumped returns a new bit_generator, use directly instead of setting state?
-        self.bit_generator.state = self.bit_generator.jumped(jumps=ti).state # Take ti jumps
+        self.bit_generator.state = self.bit_generator.jumped(jumps=ti).state
+
         return
 
     @property
     def block_size(self):
         return len(self.ppl._uid_map)
 
+    @_pre_draw
     def random(self, arr):
         return super(Stream, self).random(self.block_size)[arr]
 
