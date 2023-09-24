@@ -8,6 +8,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 import networkx as nx
+import sys
 
 plot_graph = True
 
@@ -24,6 +25,7 @@ class Graph():
         ec = ['green' if nd['on_art'] or nd['on_prep'] else 'black' for i, nd in self.graph.nodes.data() if i in inds]
         if inds:
             nx.draw_networkx_nodes(self.graph, nodelist=inds, pos=pos, ax=ax, node_color=nc, edgecolors=ec, **kwargs)
+        return
 
     def plot(self, pos, ax=None):
         kwargs = dict(node_shape='x', node_size=250, linewidths=2, ax=ax)
@@ -38,8 +40,8 @@ class Graph():
         nx.draw_networkx_edges(self.graph, pos=pos, ax=ax)
         nx.draw_networkx_labels(self.graph, labels={i:int(a['cd4']) for i,a in self.graph.nodes.data()}, font_size=8, pos=pos, ax=ax)
         nx.draw_networkx_edge_labels(self.graph, edge_labels={(i,j): int(a['dur']) for i,j,a in self.graph.edges.data()}, font_size=8, pos=pos, ax=ax)
-        
         return
+
 
 class rng_analyzer(ss.Analyzer):
     ''' Simple analyzer to assess if random streams are working '''
@@ -109,12 +111,33 @@ if plot_graph:
 
     pos = {i:(np.cos(2*np.pi*i/n), np.sin(2*np.pi*i/n)) for i in range(n)}
 
-    for ti in sim1.tivec:
-        fig, axv = plt.subplots(1,2, figsize=(10,5))
+    fig, axv = plt.subplots(1, 2, figsize=(10,5))
+    global ti
+    ti = 0
+    timax = sim1.tivec[-1]
+    def on_press(event):
+        print('press', event.key)
+        sys.stdout.flush()
+        global ti
+        if event.key == 'right':
+            ti = min(ti+1, timax)
+        elif event.key == 'left':
+            ti = max(ti-1, 0)
+
+        # Clear
+        axv[0].clear()
+        axv[1].clear()
+
         g1[ti].plot(pos, ax=axv[0])
         g2[ti].plot(pos, ax=axv[1])
         fig.suptitle(f'Time is {ti}')
-        plt.show()
+        fig.canvas.draw()
+
+    fig.canvas.mpl_connect('key_press_event', on_press)
+
+    g1[ti].plot(pos, ax=axv[0])
+    g2[ti].plot(pos, ax=axv[1])
+    plt.show()
 
 # Plot
 fig, axv = plt.subplots(2,1, sharex=True)

@@ -12,7 +12,7 @@ def make_rng(name='Test'):
     """ Create and initialize a stream """
     sim = ss.Sim()
     sim.initialize()
-    rng = ss.Stream('Test')
+    rng = ss.Stream(name)
     rng.initialize(sim)
 
     return rng
@@ -23,7 +23,7 @@ def make_rng(name='Test'):
 def test_sample(n=5):
     """ Simple sample """
     sc.heading('Testing stream object')
-    rng = make_rng(n)
+    rng = make_rng()
     uids = np.arange(n)
 
     draws = rng.random(uids)
@@ -35,7 +35,7 @@ def test_sample(n=5):
 def test_reset(n=5):
     """ Sample, reset, sample """
     sc.heading('Testing sample, reset, sample')
-    rng = make_rng(n)
+    rng = make_rng()
     uids = np.arange(n)
 
     draws1 = rng.random(uids)
@@ -53,7 +53,7 @@ def test_reset(n=5):
 def test_step(n=5):
     """ Sample, step, sample """
     sc.heading('Testing sample, step, sample')
-    rng = make_rng(n)
+    rng = make_rng()
     uids = np.arange(n)
 
     draws1 = rng.random(uids)
@@ -71,7 +71,7 @@ def test_step(n=5):
 def test_repeat(n=5):
     """ Sample, sample - should raise and exception"""
     sc.heading('Testing sample, sample - should raise an exception')
-    rng = make_rng(n)
+    rng = make_rng()
     uids = np.arange(n)
 
     draws1 = rng.random(uids)
