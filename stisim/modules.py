@@ -21,10 +21,12 @@ class Module(sc.prettyobj):
         self.finalized = False
 
         # Random number streams
-        self.rng_init_cases      = ss.Stream('initial_cases')
-        self.rng_trans_ab        = ss.Stream('trans_ab')
-        self.rng_trans_ba        = ss.Stream('trans_ba')
-        self.rng_choose_infector = ss.Stream('choose_infector')
+        self.rng_init_cases         = ss.Stream('initial_cases')
+        # The following random streams are dicts from layer key to rng
+        self.rng_trans_ab           = {}
+        self.rng_trans_ba           = {}
+        self.rng_choose_infector_ab = {}
+        self.rng_choose_infector_ba = {}
 
         return
 
@@ -43,6 +45,13 @@ class Module(sc.prettyobj):
     
     def initialize(self, sim):
         self.check_requires(sim)
+
+        # Random number streams per network layer
+        for lkey in sim.people.networks.keys():
+            self.rng_trans_ab[lkey]           = ss.Stream(f'trans_ab: {lkey}')
+            self.rng_trans_ba[lkey]           = ss.Stream(f'trans_ba: {lkey}')
+            self.rng_choose_infector_ab[lkey] = ss.Stream(f'choose_infector_ab: {lkey}')
+            self.rng_choose_infector_ba[lkey] = ss.Stream(f'choose_infector_ba: {lkey}')
 
         # Connect the states to the people
         for state in self.states.values():
@@ -154,33 +163,33 @@ class Disease(Module):
         """ Add new cases of module, through transmission, incidence, etc. """
         n_new_cases = 0 # number of new cases made
         pars = sim.pars[self.name]
-        for k, layer in sim.people.networks.items():
-            if k in pars['beta']:
+        for lkey, layer in sim.people.networks.items():
+            if lkey in pars['beta']:
                 rel_trans = self.rel_trans * (self.infected & sim.people.alive)
                 rel_sus = self.rel_sus * (self.susceptible & sim.people.alive)
-                for a, b, beta, rng in [[layer['p1'], layer['p2'], pars['beta'][k][0], self.rng_trans_ab], [layer['p2'], layer['p1'], pars['beta'][k][1], self.rng_trans_ba]]:
-                    # probability of a->b transmission
+
+                a_to_b = [layer['p1'], layer['p2'], pars['beta'][lkey][0], self.rng_trans_ab[lkey], self.rng_choose_infector_ab[lkey]]
+                b_to_a = [layer['p2'], layer['p1'], pars['beta'][lkey][1], self.rng_trans_ba[lkey], self.rng_choose_infector_ba[lkey]]
+                for a, b, beta, rng_trans, rng_chs_inf in [a_to_b, b_to_a]:
                     if beta == 0:
                         continue
-                    #p_tran_edge = rel_trans[a] * rel_sus[b] * layer['beta'] * beta
                     
-                    # Will need to be more efficient here - can maintain edge to node matrix
+                    # Check for new transmission from a --> b
+                    # TODO: Will need to be more efficient here - can maintain edge to node matrix
                     node_from_edge = np.ones( (len(sim.people._uid_map), len(a)) )
                     node_from_edge[b, np.arange(len(b))] = 1 - rel_trans[a] * rel_sus[b] * layer['beta'] * beta
-                    #p_acq_node = np.dot(node_from_edge, p_tran_edge) # calculated for all nodes, including those outside b
                     p_acq_node = 1 - node_from_edge.prod(axis=1) # 1 - (1-p1)*(1-p2)*...
-                    new_cases_bool = rng.bernoulli(p_acq_node[b], b)
+                    new_cases_bool = rng_trans.bernoulli(p_acq_node[b], b)
                     new_cases = b[new_cases_bool]
 
                     if not len(new_cases):
                         continue
 
                     n_new_cases += len(new_cases)
-                    # Decide whom the infection came from
-                    frm = np.zeros_like(new_cases)
 
-                    # Need one random number for each b <-- align by blocksize
-                    r = self.rng_choose_infector.random(new_cases) # Align rng to b
+                    # Decide whom the infection came from using one random number for each b (aligned by block size)
+                    frm = np.zeros_like(new_cases)
+                    r = rng_chs_inf.random(new_cases)
                     prob = (1-node_from_edge[new_cases])
                     cumsum = (prob / ((prob.sum(axis=1)[:,np.newaxis]))).cumsum(axis=1)
                     frm_idx = np.argmax( cumsum >= r[:,np.newaxis], axis=1)

@@ -31,6 +31,9 @@ class Streams:
         if not self.initialized:
             raise NotInitializedException('Please call initialize before adding a stream to Streams.')
 
+        if stream.name in self._streams:
+            raise RepeatNameException(f'A Stream with name {stream.name} has already been added.')
+
         if stream.seed_offset is None:
             seed = len(self._streams) # Put at end by default
         elif stream.seed_offset in self.used_seeds:
@@ -61,6 +64,11 @@ class NotResetException(Exception):
 
 class NotInitializedException(Exception):
     "Raised when stream is called when not initialized."
+    pass
+
+
+class RepeatNameException(Exception):
+    "Raised when adding a stream to streams when the stream name has already been used."
     pass
 
 

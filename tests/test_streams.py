@@ -6,7 +6,7 @@ Test the Streams object from streams.py
 import numpy as np
 import sciris as sc
 import stisim as ss
-from stisim.streams import NotInitializedException, SeedRepeatException
+from stisim.streams import NotInitializedException, SeedRepeatException, RepeatNameException
 
 
 # %% Define the tests
@@ -150,6 +150,42 @@ def test_samplingorder(n=5):
     return np.all(s_before == s_after)
 
 
+def test_repeatname(n=5):
+    """ Test two streams with the same name """
+    sc.heading('Testing if two streams with the same name are allowed')
+    streams = ss.Streams()
+    streams.initialize(base_seed=17)
+
+    uids = np.arange(0,n,2) # every other to make it interesting
+    bso = np.arange(n)
+
+    rng0 = ss.Stream('test')
+    rng0.initialize(streams, bso)
+
+    rng1 = ss.Stream('test')
+    try:
+        rng1.initialize(streams, bso)
+        return False # Should not get here!
+    except RepeatNameException as e:
+        print(f'YAY! Got exception: {e}')
+    return True
+
+
+
+
+
+
+    s_before = rng0.random(uids)
+    _ = rng1.random(uids)
+
+    streams.reset()
+
+    _ = rng1.random(uids)
+    s_after = rng0.random(uids)
+
+    return np.all(s_before == s_after)
+
+
 
 # %% Run as a script
 if __name__ == '__main__':
@@ -164,6 +200,7 @@ if __name__ == '__main__':
     assert test_initialize()
     assert test_seedrepeat()
     assert test_samplingorder()
+    assert test_repeatname()
 
     sc.toc(T)
     print('Done.')
