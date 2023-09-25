@@ -48,9 +48,9 @@ class births(ss.Module):
         return
 
     def init_results(self, sim):
-        self.results += ss.Result(self.name, 'new', sim.npts, dtype=int)
-        self.results += ss.Result(self.name, 'cumulative', sim.npts, dtype=int)
-        self.results += ss.Result(self.name, 'cbr', sim.npts, dtype=int)
+        self.results += ss.Result(name='new', shape=sim.npts, dtype=int)
+        self.results += ss.Result(name='cumulative', shape=sim.npts, dtype=int)
+        self.results += ss.Result(name='cbr', shape=sim.npts, dtype=int)
         return
 
     def update(self, sim):
@@ -160,9 +160,9 @@ class background_deaths(ss.Module):
         return
 
     def init_results(self, sim):
-        self.results += ss.Result(self.name, 'new', sim.npts, dtype=int)
-        self.results += ss.Result(self.name, 'cumulative', sim.npts, dtype=int)
-        self.results += ss.Result(self.name, 'mortality_rate', sim.npts, dtype=int)
+        self.results += ss.Result(name='new', shape=sim.npts, dtype=int)
+        self.results += ss.Result(name='cumulative', shape=sim.npts, dtype=int)
+        self.results += ss.Result(name='mortality_rate', shape=sim.npts, dtype=int)
         return
 
     def update(self, sim):
@@ -296,8 +296,8 @@ class Pregnancy(ss.Module):
         Still unclear whether this logic should live in the pregnancy module, the
         individual disease modules, the connectors, or the sim.
         """
-        self.results += ss.Result(self.name, 'pregnancies', sim.npts, dtype=int)
-        self.results += ss.Result(self.name, 'births', sim.npts, dtype=int)
+        self.results += ss.Result(name='pregnancies', shape=sim.npts, dtype=int)
+        self.results += ss.Result(name='births', shape=sim.npts, dtype=int)
         return
 
     def update(self, sim):

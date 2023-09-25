@@ -13,13 +13,14 @@ __all__ = ['Sim', 'AlreadyRunError']
 
 class Sim(sc.prettyobj):
 
-    def __init__(self, pars=None, label=None, people=None, modules=None, **kwargs):
+    def __init__(self, pars=None, label=None, people=None, demographics=None, modules=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
         self.people = people  # People object
         self.modules = ss.Modules(modules)  # List of modules to simulate
+        self.demographics = demographics  # Multiple formats accepted -- see init_demographics for details
         self.connectors = None  # Placeholder storage while we determine what these are
         self.results = ss.Results()  # For storing results
         self.summary = None  # For storing a summary of the results
@@ -60,7 +61,7 @@ class Sim(sc.prettyobj):
     def diseases_present(self):
         return len(self.disease_list) > 0
 
-    def initialize(self, popdict=None, reset=False, **kwargs):
+    def initialize(self, reset=False, **kwargs):
         """
         Perform all initializations on the sim.
         """
@@ -72,7 +73,8 @@ class Sim(sc.prettyobj):
         ss.set_seed(self.pars['rand_seed'])  # Reset the random seed before the population is created
 
         # Initialize the core sim components
-        self.init_people(popdict=popdict, reset=reset, **kwargs)  # Create all the people (the heaviest step)
+        self.init_people(reset=reset, **kwargs)  # Create all the people (the heaviest step)
+        self.init_demographics()
         self.init_networks()
         self.init_results()
         self.init_modules()
@@ -158,13 +160,12 @@ class Sim(sc.prettyobj):
         self.npts = len(self.yearvec)
         self.tivec = np.arange(self.npts)
 
-    def init_people(self, popdict=None, reset=False, verbose=None, **kwargs):
+    def init_people(self, reset=False, verbose=None, **kwargs):
         """
         Initialize people within the sim
         Sometimes the people are provided, in which case this just adds a few sim properties to them.
         Other time people are not provided and this method makes them.
         Args:
-            popdict         (any):  pre-generated people of various formats.
             reset           (bool): whether to regenerate the people even if they already exist
             verbose         (int):  detail to print
             kwargs          (dict): passed to ss.make_people()
@@ -183,25 +184,21 @@ class Sim(sc.prettyobj):
         if self.people is None:
             self.people = ss.People(n=self.pars['n_agents'], **kwargs)  # This just assigns UIDs and length
 
-        # If a popdict has not been supplied, we can make one from location data
-        if popdict is None:
-            if self.pars['location'] is not None:
-                # Check where to get total_pop from
-                if self.pars[
-                    'total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
-                    errormsg = 'You can either define total_pop explicitly or via the location, but not both'
-                    raise ValueError(errormsg)
-                total_pop, popdict = ss.make_popdict(n=self.pars['n_agents'], location=self.pars['location'], verbose=self.pars['verbose'])
+        # TODO refactor
+        if self.pars['location'] is not None:
+            # Check where to get total_pop from
+            if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
+                errormsg = 'You can either define total_pop explicitly or via the location, but not both'
+                raise ValueError(errormsg)
 
+        else:
+            if self.pars['total_pop'] is not None:
+                total_pop = self.pars['total_pop']
             else:
-                if self.pars[
-                    'total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
-                    total_pop = self.pars['total_pop']
+                if self.pars['pop_scale'] is not None:
+                    total_pop = self.pars['pop_scale'] * self.pars['n_agents']
                 else:
-                    if self.pars['pop_scale'] is not None:
-                        total_pop = self.pars['pop_scale'] * self.pars['n_agents']
-                    else:
-                        total_pop = self.pars['n_agents']
+                    total_pop = self.pars['n_agents']
 
         self.pars['total_pop'] = total_pop
         if self.pars['pop_scale'] is None:
@@ -216,6 +213,17 @@ class Sim(sc.prettyobj):
         self.people.dt = self.dt
 
         return self
+
+    def init_demographics(self):
+        """ Initialize demographic modules """
+        if sc.checktype(self.demographics, str):
+            # Should accept location string, plus other allowable keywords like "static" or "default"?
+            raise NotImplementedError
+        if sc.checktype(self.demographics, ss.Module):
+            self.demographics = sc.tolist(self.demographics)
+        if sc.checktype(self.demographics, list):
+            self.demographics = ss.Modules(self.demographics)
+        return
 
     def init_modules(self):
         """ Initialize modules and connectors to be simulated """
