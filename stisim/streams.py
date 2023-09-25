@@ -29,12 +29,12 @@ class Streams:
         Otherwise, return value will be used as the seed offset for this stream
         """
         if not self.initialized:
-            raise Exception('Please call initialize before adding a stream to Streams.')
+            raise NotInitializedException('Please call initialize before adding a stream to Streams.')
 
         if stream.seed_offset is None:
             seed = len(self._streams) # Put at end by default
         elif stream.seed_offset in self.used_seeds:
-            raise Exception(f'Requested seed offset {stream.seed_offset} for stream {stream} has already been used.')
+            raise SeedRepeatException(f'Requested seed offset {stream.seed_offset} for stream {stream} has already been used.')
         else:
             seed = stream.seed_offset
         self.used_seeds.append(seed)
@@ -48,19 +48,40 @@ class Streams:
             stream.step(ti)
         return
 
+    def reset(self):
+        for stream in self._streams.dict_values():
+            stream.reset()
+        return
+
+
 class NotResetException(Exception):
     "Raised when stream is called when not ready."
     pass
 
+
+class NotInitializedException(Exception):
+    "Raised when stream is called when not initialized."
+    pass
+
+
+class SeedRepeatException(Exception):
+    "Raised when stream is called when not initialized."
+    pass
+
+
 def _pre_draw(func):
     def check_ready(self, arr):
         """ Validation before drawing """
+        if not self.initialized:
+            msg = f'Stream {self.name} has not been initialized!'
+            raise NotInitializedException(msg)
         if not self.ready:
             msg = f'Stream {self.name} has already been sampled on this timestep!'
             raise NotResetException(msg)
         self.ready = False
         return func(self, arr)
     return check_ready
+
 
 class Stream(np.random.Generator):
     """
@@ -88,20 +109,19 @@ class Stream(np.random.Generator):
         self.kwargs = kwargs
         
         self.seed = None
-        self.ppl = None # Needed for block size
+        self.bso = None # Block size object, typically sim.people._uid_map
 
         self.initialized = False
         self.ready = True
-
         return
 
-    def initialize(self, sim):
+    def initialize(self, streams, block_size_object):
         if self.initialized:
             # TODO: Raise warning
             assert not self.initialized
             return
 
-        self.seed = sim.streams.add(self)
+        self.seed = streams.add(self)
 
         if 'bit_generator' not in self.kwargs:
             self.kwargs['bit_generator'] = np.random.PCG64(seed=self.seed)
@@ -110,7 +130,7 @@ class Stream(np.random.Generator):
         #self.rng = np.random.default_rng(seed=self.seed + self.seed_offset)
         self._init_state = self.bit_generator.state # Store the initial state
 
-        self.ppl = sim.people
+        self.bso = block_size_object
 
         self.initialized = True
         self.ready = True
@@ -136,7 +156,7 @@ class Stream(np.random.Generator):
 
     @property
     def block_size(self):
-        return len(self.ppl._uid_map)
+        return len(self.bso)
 
     @_pre_draw
     def random(self, arr):

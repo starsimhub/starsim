@@ -50,7 +50,7 @@ class Module(sc.prettyobj):
 
         # Connect the streams to the sim
         for stream in self.streams.values():
-            stream.initialize(sim)
+            stream.initialize(sim.streams, sim.people._uid_map)
 
         self.initialized = True
         return

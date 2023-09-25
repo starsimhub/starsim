@@ -42,7 +42,7 @@ class Sim(sc.prettyobj):
         self.interventions = ss.Interventions()
         self.analyzers = ss.Analyzers()
 
-        # Decision container
+        # Streams container
         self.streams = ss.Streams()
 
         return
@@ -287,7 +287,7 @@ class Sim(sc.prettyobj):
                 raise TypeError(errormsg)
 
             for stream in intervention.streams.values():
-                stream.initialize(self)
+                stream.initialize(self.streams, self.people._uid_map)
 
         return
 
