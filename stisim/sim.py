@@ -387,12 +387,6 @@ class Sim(sc.prettyobj):
 
             # Check if we were asked to stop
             elapsed = T.toc(output=True)
-            if self.pars['timelimit'] and elapsed > self.pars['timelimit']:
-                sc.printv(f"Time limit ({self.pars['timelimit']} s) exceeded", 1, verbose)
-                return
-            elif self.pars['stopping_func'] and self.pars['stopping_func'](self):
-                sc.printv("Stopping function terminated the simulation", 1, verbose)
-                return
 
             # Print progress
             if verbose:
