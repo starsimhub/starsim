@@ -68,6 +68,9 @@ class BasePeople(sc.prettyobj):
 
         for state in self._states.values():
             state.grow(n)
+            if state.eligibility:
+                ineligible_uids = ~state.eligibility(self)
+                state._data[ineligible_uids] = state._data.ineligible_val
 
         return new_uids
 

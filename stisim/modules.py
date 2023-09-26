@@ -135,12 +135,13 @@ class Disease(Module):
         pars = sim.pars[self.name]
         for k, layer in sim.people.networks.items():
             if k in pars['beta']:
+                contacts = layer.contacts
                 rel_trans = (self.infected & sim.people.alive).astype(float)
                 rel_sus = (self.susceptible & sim.people.alive).astype(float)
-                for a, b, beta in [[layer['p1'], layer['p2'], pars['beta'][k][0]],
-                                   [layer['p2'], layer['p1'], pars['beta'][k][1]]]:
+                for a, b, beta in [[contacts.p1, contacts.p2, pars.beta[k][0]],
+                                   [contacts.p2, contacts.p1, pars.beta[k][1]]]:
                     # probability of a->b transmission
-                    p_transmit = rel_trans[a] * rel_sus[b] * layer['beta'] * beta
+                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta
                     new_cases = np.random.random(len(a)) < p_transmit
                     if new_cases.any():
                         self.set_prognoses(sim, b[new_cases])

@@ -5,8 +5,8 @@ from .utils         import *
 from .distributions import *
 from .states        import *
 from .people        import *
-from .networks      import *
 from .modules       import *
+from .networks      import *
 from .results       import *
 from .demographics  import *
 from .interventions import *

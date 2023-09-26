@@ -245,11 +245,13 @@ class Sim(sc.prettyobj):
             else:
                 layer_name = key
                 network.label = layer_name
-            network.initialize(self.people)
+            network.initialize(self)
+
+            # Add network states to the People's dicts
+            # self.people.add_module(network)
             self.people.networks[layer_name] = network
 
         return
-
 
     def init_interventions(self):
         """ Initialize and validate the interventions """

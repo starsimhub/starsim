@@ -7,11 +7,11 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 
-
 # Specify all externally visible functions this file defines
-__all__ = ['Networks', 'Network', 'simple_sexual', 'hpv_network', 'maternal']
+__all__ = ['Networks', 'Network', 'simple_sexual', 'msm', 'hpv_network', 'maternal']
 
-class Network(sc.objdict):
+
+class Network(ss.Module):
     """
     A class holding a single network of contact edges (connections) between people
     as well as methods for updating these.
@@ -51,29 +51,29 @@ class Network(sc.objdict):
         network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
     """
 
-    def __init__(self, *args, key_dict=None, vertical=False, label=None, **kwargs):
+    def __init__(self, pars=None, key_dict=None, vertical=False, *args, **kwargs):
+
+        # Initialize as a module
+        super().__init__(pars, *args, **kwargs)
+
+        # Each relationship is characterized by these default set of keys, plus any user- or network-supplied ones
         default_keys = {
             'p1': ss.int_,
             'p2': ss.int_,
             'beta': ss.float_,
         }
-
-        self.meta = sc.mergedicts(default_keys, key_dict)
+        self.meta = ss.omerge(default_keys, key_dict)
         self.vertical = vertical  # Whether transmission is bidirectional
         self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
-        self.label = label
-        self.initialized = False
-
-        # Handle args
-        kwargs = sc.mergedicts(*args, kwargs)
 
         # Initialize the keys of the network
+        self.contacts = sc.objdict()
         for key, dtype in self.meta.items():
-            self[key] = np.empty((0,), dtype=dtype)
+            self.contacts[key] = np.empty((0,), dtype=dtype)
 
         # Set data, if provided
         for key, value in kwargs.items():
-            self[key] = np.array(value, dtype=self.meta.get(key))
+            self.contacts[key] = np.array(value, dtype=self.meta.get(key))
             self.initialized = True
 
     @property
@@ -81,8 +81,9 @@ class Network(sc.objdict):
         # The module name is a lower-case version of its class name
         return self.__class__.__name__.lower()
 
-    def initialize(self):
-        pass
+    def initialize(self, sim):
+        super().initialize(sim)
+        return
 
     def __len__(self):
         try:
@@ -108,12 +109,12 @@ class Network(sc.objdict):
 
         Returns: True if person index appears in any interactions
         """
-        return (item in self['p1']) or (item in self['p2'])
+        return (item in self.contacts.p1) or (item in self.contacts.p2)
 
     @property
     def members(self):
         """ Return sorted array of all members """
-        return np.unique([self['p1'], self['p2']])
+        return np.unique([self.contacts.p1, self.contacts.p2])
 
     def meta_keys(self):
         """ Return the keys for the network's meta information """
@@ -126,17 +127,16 @@ class Network(sc.objdict):
         If dtype is incorrect, try to convert automatically; if length is incorrect,
         do not.
         """
-        n = len(self[self.basekey])
+        n = len(self.contacts[self.basekey])
         for key, dtype in self.meta.items():
             if dtype:
-                actual = self[key].dtype
+                actual = self.contacts[key].dtype
                 expected = dtype
                 if actual != expected:
-                    self[key] = np.array(self[key],
-                                         dtype=expected)  # Probably harmless, so try to convert to correct type
-            actual_n = len(self[key])
+                    self.contacts[key] = np.array(self.contacts[key], dtype=expected)  # Try to convert to correct type
+            actual_n = len(self.contacts[key])
             if n != actual_n:
-                errormsg = f'Expecting length {n} for network key "{key}"; got {actual_n}'  # We can't fix length mismatches
+                errormsg = f'Expecting length {n} for network key "{key}"; got {actual_n}'  # Report length mismatches
                 raise TypeError(errormsg)
         return
 
@@ -149,9 +149,9 @@ class Network(sc.objdict):
         """
         output = {}
         for key in self.meta_keys():
-            output[key] = self[key][inds]  # Copy to the output object
+            output[key] = self.contacts[key][inds]  # Copy to the output object
             if remove:
-                self[key] = np.delete(self[key], inds)  # Remove from the original
+                self.contacts[key] = np.delete(self.contacts[key], inds)  # Remove from the original
         return output
 
     def pop_inds(self, inds, do_return=True):
@@ -163,8 +163,10 @@ class Network(sc.objdict):
             inds (int, array, slice): the indices to be removed
         """
         popped_inds = self.get_inds(inds, remove=True)
-        if do_return: return popped_inds
-        else: return
+        if do_return:
+            return popped_inds
+        else:
+            return
 
     def append(self, contacts):
         """
@@ -175,16 +177,16 @@ class Network(sc.objdict):
         """
         for key in self.meta_keys():
             new_arr = contacts[key]
-            n_curr = len(self[key])  # Current number of contacts
+            n_curr = len(self.contacts[key])  # Current number of contacts
             n_new = len(new_arr)  # New contacts to add
             n_total = n_curr + n_new  # New size
-            self[key] = np.resize(self[key], n_total)  # Resize to make room, preserving dtype
-            self[key][n_curr:] = new_arr  # Copy contacts into the network
+            self.contacts[key] = np.resize(self.contacts[key], n_total)  # Resize to make room, preserving dtype
+            self.contacts[key][n_curr:] = new_arr  # Copy contacts into the network
         return
 
     def to_dict(self):
         """ Convert to dictionary """
-        d = {k:self[k] for k in self.meta_keys()}
+        d = {k: self.contacts[k] for k in self.meta_keys()}
         return d
 
     def to_df(self):
@@ -197,7 +199,7 @@ class Network(sc.objdict):
         if keys is None:
             keys = self.meta_keys()
         for key in keys:
-            self[key] = df[key].to_numpy()
+            self.contacts[key] = df[key].to_numpy()
         return self
 
     def find_contacts(self, inds, as_array=True):
@@ -233,16 +235,26 @@ class Network(sc.objdict):
             inds = np.array(inds, dtype=np.int64)
 
         # Find the contacts
-        contact_inds = ss.find_contacts(self['p1'], self['p2'], inds)
+        contact_inds = ss.find_contacts(self.contacts.p1, self.contacts.p2, inds)
         if as_array:
             contact_inds = np.fromiter(contact_inds, dtype=ss.int_)
-            contact_inds.sort()  # Sorting ensures that the results are reproducible for a given seed as well as being identical to previous versions of HPVsim
+            contact_inds.sort()
 
         return contact_inds
 
     def add_pairs(self):
         """ Define how pairs of people are formed """
         pass
+
+    def end_pairs(self, people):
+        """ End relationships due to end """
+        dt = people.dt
+        self.contacts.dur = self.contacts.dur - dt
+        active = self.contacts.dur > 0
+        self.contacts.p1 = self.contacts.p1[active]
+        self.contacts.p2 = self.contacts.p2[active]
+        self.contacts.beta = self.contacts.beta[active]
+        self.contacts.dur = self.contacts.dur[active]
 
     def update(self, people):
         """ Define how pairs/connections evolve (in time) """
@@ -251,27 +263,28 @@ class Network(sc.objdict):
     def remove_uids(self, uids):
         """
         Remove interactions involving specified UIDs
-
         This method is typically called via `People.remove()` and
         is specifically used when removing agents from the simulation.
-
         """
-        keep = ~(np.isin(self.p1, uids) | np.isin(self.p2, uids))
+        keep = ~(np.isin(self.contacts.p1, uids) | np.isin(self.contacts.p2, uids))
         for k in self.meta_keys():
-            self[k] = self[k][keep]
+            self.contacts[k] = self.contacts[k][keep]
 
 
 class Networks(ss.ndict):
     def __init__(self, *args, type=Network, **kwargs):
         return super().__init__(self, *args, type=type, **kwargs)
-    
+
 
 class simple_sexual(Network):
     """
     A class holding a single network of contact edges (connections) between people.
     This network is built by **randomly pairing** males and female with variable relationship durations.
     """
-    def __init__(self, mean_dur=5):
+
+    def __init__(self, pars=None):
+        super().__init__(pars)
+
         key_dict = {
             'p1': ss.int_,
             'p2': ss.int_,
@@ -283,10 +296,13 @@ class simple_sexual(Network):
         super().__init__(key_dict=key_dict)
 
         # Set other parameters
-        self.mean_dur = mean_dur
+        self.pars = ss.omerge({
+            'dur': ss.lognormal(5, 3),
+        }, self.pars)
 
-    def initialize(self, people):
-        self.add_pairs(people, ti=0)
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.add_pairs(sim.people, ti=0)
 
     def add_pairs(self, people, ti=None):
         # Find unpartnered males and females - could in principle check other contact layers too
@@ -303,24 +319,64 @@ class simple_sexual(Network):
             p1 = np.random.choice(available_m, len(p2), replace=False)
 
         beta = np.ones_like(p1)
-        dur = np.random.poisson(self.mean_dur, len(p1))
-        self['p1'] = np.concatenate([self['p1'], p1])
-        self['p2'] = np.concatenate([self['p2'], p2])
-        self['beta'] = np.concatenate([self['beta'], beta])
-        self['dur'] = np.concatenate([self['dur'], dur])
+        dur = self.pars.dur.sample(len(p1))
+        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
+        self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
+        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
+        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
 
     def update(self, people, dt=None):
-        super().update(people)
-        if dt is None: dt = people.dt
-        # First remove any relationships due to end
-        self['dur'] = self['dur'] - dt
-        active = self['dur'] > 0
-        self['p1'] = self['p1'][active]
-        self['p2'] = self['p2'][active]
-        self['beta'] = self['beta'][active]
-        self['dur'] = self['dur'][active]
+        self.end_pairs(people)
+        self.add_pairs(people)
 
-        # Then add new relationships for unpartnered people
+
+class msm(Network):
+    """
+    A network that randomly pairs males
+    """
+
+    def __init__(self, pars=None):
+        super().__init__(pars)
+
+        key_dict = {
+            'p1': ss.int_,
+            'p2': ss.int_,
+            'dur': ss.float_,
+            'beta': ss.float_,
+        }
+
+        # Call init for the base class, which sets all the keys
+        super().__init__(key_dict=key_dict)
+
+        # Set other parameters
+        self.pars = ss.omerge({
+            'dur': ss.lognormal(5, 3),
+            'part_rate': 0.1,  # Participation rate
+        }, self.pars)
+
+        # Network states
+        prop_msm = self.pars.part_rate
+        def eligibility(people): return ss.true(people.male)
+        fill_value = ss.choice([True, False], probabilities=[prop_msm, 1-prop_msm])
+        self.is_msm = ss.State('is_msm', bool, fill_value=fill_value, eligibility=eligibility, ineligible_val=False)
+
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.add_pairs(sim.people, ti=0)
+
+    def add_pairs(self, people, ti=None):
+        # Pair all unpartnered MSM
+        available_m = np.setdiff1d(people.uid[self.is_msm], self.members)
+        n_pairs = int(len(available_m)/2)
+        p1 = available_m[:n_pairs]
+        p2 = available_m[n_pairs:n_pairs*2]
+        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
+        self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
+        self.contacts.beta = np.concatenate([self.contacts.beta, np.ones_like(p1)])
+        self.contacts.dur = np.concatenate([self.contacts.dur, self.pars.dur.sample(len(p1))])
+
+    def update(self, people, dt=None):
+        self.end_pairs(people)
         self.add_pairs(people)
 
 
@@ -344,7 +400,8 @@ class hpv_network(Network):
         self.pars['cross_layer'] = 0.05  # Proportion of agents who have concurrent cross-layer relationships
         self.pars['partners'] = ss.poisson(rate=0.01)  # The number of concurrent sexual partners
         self.pars['acts'] = ss.neg_binomial(mean=80, dispersion=40)  # The number of sexual acts per year
-        self.pars['age_act_pars'] = dict(peak=30, retirement=100, debut_ratio=0.5, retirement_ratio=0.1) # Parameters describing changes in coital frequency over agent lifespans
+        self.pars['age_act_pars'] = dict(peak=30, retirement=100, debut_ratio=0.5,
+                                         retirement_ratio=0.1)  # Parameters describing changes in coital frequency over agent lifespans
         self.pars['condoms'] = 0.2  # The proportion of acts in which condoms are used
         self.pars['dur_pship'] = ss.normal_pos(mean=1, std=1)  # Duration of partnerships
         self.pars['participation'] = None  # Incidence of partnership formation by age
@@ -367,29 +424,31 @@ class hpv_network(Network):
         defaults = {}
         mixing = np.array([
             #       0,  5,  10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75
-            [ 0,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
-            [ 5,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
-            [10,    0,  0, .1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
-            [15,    0,  0, .1, .1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
-            [20,    0,  0, .1, .1, .1, .1,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
-            [25,    0,  0, .5, .1, .5, .1, .1,  0,  0,  0,  0,  0,  0,  0,  0,  0],
-            [30,    0,  0,  1, .5, .5, .5, .5, .1,  0,  0,  0,  0,  0,  0,  0,  0],
-            [35,    0,  0, .5,  1,  1, .5,  1,  1, .5,  0,  0,  0,  0,  0,  0,  0],
-            [40,    0,  0,  0, .5,  1,  1,  1,  1,  1, .5,  0,  0,  0,  0,  0,  0],
-            [45,    0,  0,  0,  0, .1,  1,  1,  2,  1,  1, .5,  0,  0,  0,  0,  0],
-            [50,    0,  0,  0,  0,  0, .1,  1,  1,  1,  1,  2, .5,  0,  0,  0,  0],
-            [55,    0,  0,  0,  0,  0,  0, .1,  1,  1,  1,  1,  2, .5,  0,  0,  0],
-            [60,    0,  0,  0,  0,  0,  0,  0, .1, .5,  1,  1,  1,  2, .5,  0,  0],
-            [65,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  2, .5,  0],
-            [70,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1, .5],
-            [75,    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [10, 0, 0, .1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [15, 0, 0, .1, .1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [20, 0, 0, .1, .1, .1, .1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [25, 0, 0, .5, .1, .5, .1, .1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+            [30, 0, 0, 1, .5, .5, .5, .5, .1, 0, 0, 0, 0, 0, 0, 0, 0],
+            [35, 0, 0, .5, 1, 1, .5, 1, 1, .5, 0, 0, 0, 0, 0, 0, 0],
+            [40, 0, 0, 0, .5, 1, 1, 1, 1, 1, .5, 0, 0, 0, 0, 0, 0],
+            [45, 0, 0, 0, 0, .1, 1, 1, 2, 1, 1, .5, 0, 0, 0, 0, 0],
+            [50, 0, 0, 0, 0, 0, .1, 1, 1, 1, 1, 2, .5, 0, 0, 0, 0],
+            [55, 0, 0, 0, 0, 0, 0, .1, 1, 1, 1, 1, 2, .5, 0, 0, 0],
+            [60, 0, 0, 0, 0, 0, 0, 0, .1, .5, 1, 1, 1, 2, .5, 0, 0],
+            [65, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, .5, 0],
+            [70, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, .5],
+            [75, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1],
         ])
 
         participation = np.array([
-                [ 0,  5,    10,    15,   20,   25,   30,   35,    40,    45,    50,    55,    60,    65,    70,    75],
-                [ 0,  0,  0.10,   0.7,  0.8,  0.6,  0.6,  0.4,   0.1,  0.05, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001], # Share of females of each age newly having casual relationships
-                [ 0,  0,  0.05,   0.7,  0.8,  0.6,  0.6,  0.4,   0.4,   0.3,   0.1,  0.05,  0.01,  0.01, 0.001, 0.001]], # Share of males of each age newly having casual relationships
-            )
+            [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75],
+            [0, 0, 0.10, 0.7, 0.8, 0.6, 0.6, 0.4, 0.1, 0.05, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001],
+            # Share of females of each age newly having casual relationships
+            [0, 0, 0.05, 0.7, 0.8, 0.6, 0.6, 0.4, 0.4, 0.3, 0.1, 0.05, 0.01, 0.01, 0.001, 0.001]],
+            # Share of males of each age newly having casual relationships
+        )
 
         defaults['mixing'] = mixing
         defaults['participation'] = participation
@@ -493,7 +552,7 @@ class hpv_network(Network):
         # Get indices of people at different stages
         below_peak_inds = avg_age <= self.pars['age_act_pars']['peak']
         above_peak_inds = (avg_age > self.pars['age_act_pars']['peak']) & (
-                    avg_age < self.pars['age_act_pars']['retirement'])
+                avg_age < self.pars['age_act_pars']['retirement'])
         retired_inds = avg_age > self.pars['age_act_pars']['retirement']
 
         # Set values by linearly scaling the number of acts for each partnership according to
@@ -550,9 +609,9 @@ class maternal(Network):
         if dt is None: dt = people.dt
         # Set beta to 0 for women who complete post-partum period
         # Keep connections for now, might want to consider removing
-        self['dur'] = self['dur'] - dt
-        inactive = self['dur'] <= 0
-        self['beta'][inactive] = 0
+        self.contacts.dur = self.contacts.dur - dt
+        inactive = self.contacts.dur <= 0
+        self.contacts.beta[inactive] = 0
 
     def initialize(self, people):
         """ No pairs added upon initialization """
@@ -563,8 +622,8 @@ class maternal(Network):
         Add connections between pregnant women and their as-yet-unborn babies
         """
         beta = np.ones_like(mother_inds)
-        self['p1'] = np.concatenate([self['p1'], mother_inds])
-        self['p2'] = np.concatenate([self['p2'], unborn_inds])
-        self['beta'] = np.concatenate([self['beta'], beta])
-        self['dur'] = np.concatenate([self['dur'], dur])
+        self.contacts.p1 = np.concatenate([self.contacts.p1, mother_inds])
+        self.contacts.p2 = np.concatenate([self.contacts.p2, unborn_inds])
+        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
+        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
         return
