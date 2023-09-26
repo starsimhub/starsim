@@ -9,12 +9,14 @@ import pandas as pd
 
 __all__ = ['DemographicModule', 'births', 'background_deaths', 'Pregnancy']
 
+
 class DemographicModule(ss.Module):
     # A demographic module typically handles births/deaths/migration and takes
     # place at the start of the timestep, before networks are updated and before
     # any disease modules are executed
     pass
     # TODO - add common demographic-related functionality here
+
 
 class births(DemographicModule):
     def __init__(self, pars=None):
@@ -73,13 +75,7 @@ class births(DemographicModule):
         br_year = p.birth_rates[p.data_cols['year']]
         br_val = p.birth_rates[p.data_cols['cbr']]
         this_birth_rate = np.interp(sim.year, br_year, br_val) * p.units_per_100 * p.rel_birth * sim.pars.dt_demog
-        # n_new = sc.randround(np.count_nonzero(sim.people.alive) * this_birth_rate)
-
-        # print(f'Alive for births: {np.count_nonzero(sim.people.alive)}')
         n_new = int(np.floor(np.count_nonzero(sim.people.alive) * this_birth_rate))
-        # print(n_new)
-        # if sim.ti == 5:
-        #     raise Exception('stop')
         return n_new
 
     def add_births(self, sim):
@@ -228,7 +224,8 @@ class Pregnancy(DemographicModule):
 
         # Other, e.g. postpartum, on contraception...
         self.infertile = ss.State('infertile', bool, False)  # Applies to girls and women outside the fertility window
-        self.susceptible = ss.State('susceptible', bool, True)  # Applies to girls and women inside the fertility window - needs renaming
+        self.susceptible = ss.State('susceptible', bool,
+                                    True)  # Applies to girls and women inside the fertility window - needs renaming
         self.pregnant = ss.State('pregnant', bool, False)  # Currently pregnant
         self.postpartum = ss.State('postpartum', bool, False)  # Currently post-partum
         self.ti_pregnant = ss.State('ti_pregnant', int, ss.INT_NAN)  # Time pregnancy begins
@@ -358,4 +355,3 @@ class Pregnancy(DemographicModule):
         self.results['pregnancies'][sim.ti] = np.count_nonzero(self.ti_pregnant == sim.ti)
         self.results['births'][sim.ti] = np.count_nonzero(self.ti_delivery == sim.ti)
         return
-

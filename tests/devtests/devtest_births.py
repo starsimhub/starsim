@@ -25,7 +25,7 @@ series_death = {'death_rates': pd.Series(
 births = ss.births(realistic_birth)
 deaths = ss.background_deaths(series_death)
 gon = ss.Gonorrhea({'p_death': 0.5, 'initial': 1000})
-sim = ss.Sim(people=ppl, modules=[births, deaths, gon], networks=ss.simple_sexual(), n_years=100)
+sim = ss.Sim(people=ppl, demographics=[births, deaths], diseases=gon, networks=ss.simple_sexual(), n_years=100)
 sim.initialize()
 sim.run()
 
