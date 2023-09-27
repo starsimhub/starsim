@@ -13,16 +13,15 @@ __all__ = ['Sim', 'AlreadyRunError']
 
 class Sim(sc.prettyobj):
 
-    def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, **kwargs):
+    def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, connectors=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
         self.people = people  # People object
-
         self.demographics  = ss.ndict(demographics, type=ss.DemographicModule)
         self.diseases      = ss.ndict(diseases, type=ss.Disease)
-        self.connectors    = None  # Placeholder storage while we determine what these are
+        self.connectors    = ss.ndict(connectors, type=ss.Connector)
         self.results       = ss.ndict(type=ss.Result)  # For storing results
         self.summary       = None  # For storing a summary of the results
         self.initialized   = False  # Whether initialization is complete
@@ -70,6 +69,7 @@ class Sim(sc.prettyobj):
         self.init_networks()
         self.init_demographics()
         self.init_diseases()
+        self.init_connectors()
         self.init_interventions()
         self.init_analyzers()
 
@@ -230,6 +230,10 @@ class Sim(sc.prettyobj):
 
         return
 
+    def init_connectors(self):
+        for connector in self.connectors.values():
+            connector.initialize(self)
+
     def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
 
@@ -320,6 +324,10 @@ class Sim(sc.prettyobj):
         for disease in self.diseases.values():
             disease.update_states_pre(self)
 
+        # Update connectors -- TBC where this appears in the ordering
+        for connector in self.connectors.values():
+            connector.update(self)
+
         # Update networks - this takes place here in case autonomous state changes at this timestep
         # affect eligibility for contacts
         self.people.update_networks()
@@ -356,7 +364,6 @@ class Sim(sc.prettyobj):
 
         return
 
-
     def run(self, until=None, reset_seed=True, verbose=None):
         """ Run the model once """
 
@@ -391,9 +398,6 @@ class Sim(sc.prettyobj):
             elapsed = T.toc(output=True)
             if self.pars['timelimit'] and elapsed > self.pars['timelimit']:
                 sc.printv(f"Time limit ({self.pars['timelimit']} s) exceeded", 1, verbose)
-                return
-            elif self.pars['stopping_func'] and self.pars['stopping_func'](self):
-                sc.printv("Stopping function terminated the simulation", 1, verbose)
                 return
 
             # Print progress

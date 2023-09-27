@@ -77,7 +77,7 @@ class Disease(Module):
         self.rel_trans = ss.State('rel_trans', float, 1)
         self.susceptible = ss.State('susceptible', bool, True)
         self.infected = ss.State('infected', bool, False)
-        self.ti_infected = ss.State('ti_infected', float, np.nan)
+        self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
 
         return
 
@@ -105,8 +105,8 @@ class Disease(Module):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        initial_cases = np.random.choice(sim.people.uid, self.pars['initial'])
-
+        n_init_cases = int(self.pars['init_prev'] * len(sim.people))
+        initial_cases = np.random.choice(sim.people.uid, n_init_cases, replace=False)
         self.set_prognoses(sim, initial_cases)
         return
 
@@ -132,21 +132,26 @@ class Disease(Module):
 
     def make_new_cases(self, sim):
         """ Add new cases of module, through transmission, incidence, etc. """
-        pars = sim.pars[self.name]
+        pars = self.pars
         for k, layer in sim.people.networks.items():
             if k in pars['beta']:
                 contacts = layer.contacts
-                rel_trans = (self.infected & sim.people.alive).astype(float)
-                rel_sus = (self.susceptible & sim.people.alive).astype(float)
+                rel_trans = (self.infected & sim.people.alive).astype(float) * self.rel_trans
+                rel_sus = (self.susceptible & sim.people.alive).astype(float) * self.rel_sus
                 for a, b, beta in [[contacts.p1, contacts.p2, pars.beta[k][0]],
                                    [contacts.p2, contacts.p1, pars.beta[k][1]]]:
                     # probability of a->b transmission
                     p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta
                     new_cases = np.random.random(len(a)) < p_transmit
-                    if new_cases.any():
+                    if np.any(new_cases):
                         self.set_prognoses(sim, b[new_cases])
 
     def set_prognoses(self, sim, uids):
+        pass
+
+    def set_congenital(self, sim, uids):
+        # Need to figure out whether we would have a methods like this here or make it
+        # part of a pregnancy/STI connector
         pass
 
     def update_results(self, sim):

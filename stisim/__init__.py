@@ -14,6 +14,7 @@ from .analyzers     import *
 from .demographics  import *
 from .hiv           import *
 from .gonorrhea     import *
+from .connectors    import *
 from .sim           import *
 
 import sciris as sc
