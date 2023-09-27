@@ -235,7 +235,7 @@ class FusedArray(NDArrayOperatorsMixin):
 
 
 class DynamicView(NDArrayOperatorsMixin):
-    def __init__(self, dtype, fill_value=0, ineligible_val=None):
+    def __init__(self, dtype, fill_value=0):
         """
         Args:
             name: name of the result as used in the model
@@ -246,10 +246,7 @@ class DynamicView(NDArrayOperatorsMixin):
         """
         self.dtype = dtype
         self.fill_value = fill_value
-        self.ineligible_val = ineligible_val
-
         self.n = 0  # Number of agents currently in use
-
         self._data = None  # The underlying memory array (length at least equal to n)
         self._view = None  # The view corresponding to what is actually accessible (length equal to n)
         return
@@ -267,40 +264,25 @@ class DynamicView(NDArrayOperatorsMixin):
         # Print out the numpy view directly
         return self._view.__repr__()
 
-    def _new_items(self, n, eligible_uids=None):
+    def _new_items(self, n):
         # Create new arrays of the correct dtype and fill them based on the (optionally callable) fill value
         if callable(self.fill_value):
-            if eligible_uids is not None:
-                new = np.full(n, dtype=self.dtype, fill_value=self.ineligible_val)
-                try:
-                    new[eligible_uids] = self.fill_value(len(eligible_uids))
-                except:
-                    import traceback;
-                    traceback.print_exc();
-                    import pdb;
-                    pdb.set_trace()
-
-            else:
-                new = np.empty(n, dtype=self.dtype)
-                new[:] = self.fill_value(n)
+            new = np.empty(n, dtype=self.dtype)
+            new[:] = self.fill_value(n)
         else:
-            if eligible_uids is not None:
-                new = np.full(n, dtype=self.dtype, fill_value=self.ineligible_val)
-                new[eligible_uids] = np.full(len(eligible_uids), dtype=self.dtype, fill_value=self.fill_value)
-            else:
-                new = np.full(n, dtype=self.dtype, fill_value=self.fill_value)
+            new = np.full(n, dtype=self.dtype, fill_value=self.fill_value)
         return new
 
-    def initialize(self, n, eligible_uids=None):
-        self._data = self._new_items(n, eligible_uids=eligible_uids)
+    def initialize(self, n):
+        self._data = self._new_items(n)
         self.n = n
         self._map_arrays()
 
-    def grow(self, n, eligible_uids=None):
+    def grow(self, n):
         if self.n + n > self._s:
             # If the total number of agents exceeds the array size, extend the storage array
             n_new = max(n, int(self._s / 2))  # Minimum 50% growth
-            self._data = np.concatenate([self._data, self._new_items(n_new, eligible_uids=eligible_uids)], axis=0)
+            self._data = np.concatenate([self._data, self._new_items(n_new)], axis=0)
 
         self.n += n  # Increase the count of the number of agents by `n` (the requested number of new agents)
         self._map_arrays()
@@ -344,12 +326,11 @@ class DynamicView(NDArrayOperatorsMixin):
 
 class State(FusedArray):
 
-    def __init__(self, name, dtype, fill_value=0, label=None, eligibility=None, ineligible_val=0):
+    def __init__(self, name, dtype, fill_value=0, label=None):
         super().__init__(values=None, uid=None, uid_map=None)  # Call the FusedArray constructor
-        self._data = DynamicView(dtype=dtype, fill_value=fill_value, ineligible_val=ineligible_val)
+        self._data = DynamicView(dtype=dtype, fill_value=fill_value)
         self.name = name
         self.label = label or name
-        self.eligibility = eligibility
         self.values = self._data._view
         self._initialized = False
 
@@ -366,15 +347,12 @@ class State(FusedArray):
         people.add_state(self)
         self._uid_map = people._uid_map
         self.uid = people.uid
-
-        # Check eligibility
-        eligible_uids = self.eligibility(people) if self.eligibility else None
-        self._data.initialize(len(self.uid), eligible_uids)
+        self._data.initialize(len(self.uid))
         self.values = self._data._view
         self._initialized = True
 
-    def grow(self, n, eligible_uids=None):
-        self._data.grow(n, eligible_uids)
+    def grow(self, n):
+        self._data.grow(n)
         self.values = self._data._view
 
     def _trim(self, inds):

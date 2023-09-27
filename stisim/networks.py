@@ -356,12 +356,12 @@ class msm(Network):
 
         # Network states
         prop_msm = self.pars.part_rate
-        def eligibility(people): return ss.true(people.male)
         fill_value = ss.choice([True, False], probabilities=[prop_msm, 1-prop_msm])
-        self.is_msm = ss.State('is_msm', bool, fill_value=fill_value, eligibility=eligibility, ineligible_val=False)
+        self.is_msm = ss.State('is_msm', bool, fill_value=fill_value)
 
     def initialize(self, sim):
         super().initialize(sim)
+        self.is_msm[sim.people.female] = False
         self.add_pairs(sim.people, ti=0)
 
     def add_pairs(self, people, ti=None):
