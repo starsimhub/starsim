@@ -12,18 +12,18 @@ ng.pars['init_prev'] = 0.025
 
 ppl1 = ss.People(10000)
 ppl1.networks = ss.ndict(ss.simple_sexual())
-sim_nohiv = ss.Sim(people=ppl1, modules=ng)
+sim_nohiv = ss.Sim(people=ppl1, diseases=ng)
 sim_nohiv.run()
 
 hiv = ss.HIV()
 hiv.pars['beta'] = {'simple_sexual': [0.0008, 0.0004]}
-hiv.pars['init_prev'] = 0.8
+hiv.pars['init_prev'] = 0.05
 ng = ss.Gonorrhea()
 ng.pars['beta'] = {'simple_sexual': [0.05, 0.025]}
 ng.pars['init_prev'] = 0.025
 ppl2 = ss.People(10000)
 ppl2.networks = ss.ndict(ss.simple_sexual())
-sim_hiv = ss.Sim(people=ppl2, modules=[hiv, ng], connectors=ss.simple_hiv_ng())
+sim_hiv = ss.Sim(people=ppl2, diseases=[hiv, ng], connectors=ss.simple_hiv_ng())
 sim_hiv.run()
 
 plt.figure()

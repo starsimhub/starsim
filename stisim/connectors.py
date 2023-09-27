@@ -6,10 +6,10 @@ import stisim as ss
 
 
 class Connector(ss.Module):
-    def __init__(self, pars=None, modules=None, *args, **kwargs):
+    def __init__(self, pars=None, diseases=None, *args, **kwargs):
         self.pars = ss.omerge(pars)
         self.results = ss.ndict()
-        self.modules = ss.ndict(modules)
+        self.diseases = ss.ndict(diseases)
         return
 
 
@@ -25,15 +25,15 @@ class simple_hiv_ng(Connector):
             'rel_trans_aids': 5,
             'rel_sus_hiv': 2,
             'rel_sus_aids': 5,
-        }, self.pars)  # Unnecessary but could add pars here
-        self.modules = ['hiv', 'gonorrhea']
+        }, self.pars)  # Could add pars here
+        self.diseases = ['hiv', 'gonorrhea']
         return
 
     def initialize(self, sim):
         # Make sure the sim has the modules that this connector deals with
         # TODO replace this placeholder code with something robust.
-        if not set(self.modules).issubset(sim.modules.keys()):
-            errormsg = f'Missing required modules {set(self.modules).difference(sim.modules.keys())}'
+        if not set(self.diseases).issubset(sim.diseases.keys()):
+            errormsg = f'Missing required diseases {set(self.diseases).difference(sim.diseases.keys())}'
             raise ValueError(errormsg)
         return
 
