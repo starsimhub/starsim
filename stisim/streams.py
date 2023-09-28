@@ -202,6 +202,10 @@ class MultiStream(np.random.Generator):
         return super(MultiStream, self).poisson(lam=lam, size=self.draw_size(arr))[arr]
 
     @_pre_draw
+    def normal(self, arr, mu=0, std=1):
+        return mu + std*super(MultiStream, self).normal(size=self.draw_size(arr))[arr]
+
+    @_pre_draw
     def bernoulli(self, arr, prob):
         #return super(MultiStream, self).choice([True, False], size=arr.max()+1) # very slow
         #return (super(MultiStream, self).binomial(n=1, p=prob, size=arr.max()+1))[arr].astype(bool) # pretty fast
@@ -373,6 +377,9 @@ class CentralizedStream(np.random.Generator):
 
     def poisson(self, arr, lam):
         return np.random.poisson(lam=lam, size=self.draw_size(arr))
+
+    def normal(self, arr, mu=0, std=1):
+        return mu + std*np.random.normal(size=self.draw_size(arr), loc=mu, scale=std)
 
     def bernoulli(self, arr, prob):
         return np.random.random(self.draw_size(arr)) < prob

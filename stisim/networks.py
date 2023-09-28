@@ -7,6 +7,7 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 import scipy.optimize as spo
+import scipy.spatial as sps
 
 
 # Specify all externally visible functions this file defines
@@ -364,15 +365,11 @@ class simple_embedding(simple_sexual):
                 print('No pairs to add')
             return 0
 
-        ### NEW
-        loc_m = self.rng_pair_12.random(arr=available_m)
-        loc_f = self.rng_pair_21.random(arr=available_f)
+        loc_m = people.age[available_m].values - 5 + self.rng_pair_12.normal(arr=available_m, std=3)
+        loc_f = people.age[available_f].values     + self.rng_pair_21.normal(arr=available_f, std=3)
+        dist_mat = sps.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
 
-        p1v = np.tile(loc_m, (len(loc_f),1))
-        p2v = np.tile(loc_f[:,np.newaxis], len(loc_m))
-        d_full = np.absolute(p2v-p1v)
-
-        ind_f, ind_m = spo.linear_sum_assignment(d_full)
+        ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
         # loc_f[ind_f[0]] is close to loc_m[ind_m[0]]
 
         n_pairs = len(ind_f)

@@ -15,7 +15,7 @@ n_rand_seeds = 250
 art_cov_levels = [0.025, 0.05, 0.10, 0.73] + [0] # Must include 0 as that's the baseline
 
 figdir = 'figs'
-sc.path(figdir).mkdir(parents=True, exist_ok=True)
+#sc.path(figdir).mkdir(parents=True, exist_ok=True)
 
 def run_sim(n, art_cov, rand_seed, multistream):
     ppl = ss.People(n)
@@ -102,7 +102,7 @@ def plot_scenarios(df):
         g = sns.relplot(kind='line', data=mrg_by_ms, x='ti', y='Value - Reference', hue='art_cov', col='channel', row='art_cov',
             height=3, aspect=1.0, palette='Set1', estimator=None, units='rand_seed', lw=0.5, facet_kws=fkw) #errorbar='sd', lw=2, 
         g.set_titles(col_template='{col_name}', row_template='ART cov: {row_name}')
-        g.fig.suptitle('Multiscale' if ms else 'Centralized')
+        g.fig.suptitle('Multistream' if ms else 'Centralized')
         g.fig.subplots_adjust(top=0.88)
         g.set_xlabels(r'Value - Reference at $t_i$')
         g.fig.savefig(os.path.join(figdir, 'diff_multistream.png' if ms else 'diff_centralized.png'), bbox_inches='tight', dpi=300)
