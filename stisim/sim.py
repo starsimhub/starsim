@@ -287,7 +287,7 @@ class Sim(sc.prettyobj):
                 raise TypeError(errormsg)
 
             for stream in intervention.streams.values():
-                stream.initialize(self.streams, self.people._uid_map)
+                stream.initialize(self.streams)
 
         return
 

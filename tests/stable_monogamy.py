@@ -10,6 +10,7 @@ import numpy as np
 import networkx as nx
 import sys
 
+multistream = True # Can set multistream to False for comparison
 plot_graph = True
 
 class Graph():
@@ -39,7 +40,7 @@ class Graph():
 
         nx.draw_networkx_edges(self.graph, pos=pos, ax=ax)
         nx.draw_networkx_labels(self.graph, labels={i:int(a['cd4']) for i,a in self.graph.nodes.data()}, font_size=8, pos=pos, ax=ax)
-        nx.draw_networkx_edge_labels(self.graph, edge_labels={(i,j): int(a['dur']) for i,j,a in self.graph.edges.data()}, font_size=8, pos=pos, ax=ax)
+        #nx.draw_networkx_edge_labels(self.graph, edge_labels={(i,j): int(a['dur']) for i,j,a in self.graph.edges.data()}, font_size=8, pos=pos, ax=ax)
         return
 
 
@@ -79,18 +80,27 @@ class rng_analyzer(ss.Analyzer):
 
 def run_sim(n=25, intervention=False, analyze=False):
     ppl = ss.People(n)
-    ppl.networks = ss.ndict(ss.stable_monogamy())#, ss.maternal())
 
-    hiv = ss.HIV()
-    hiv.pars['beta'] = {'stable_monogamy': [0.06, 0.04]}
-    hiv.pars['initial'] = 0
+    net_pars = {'multistream': multistream}
+    ppl.networks = ss.ndict(ss.stable_monogamy(pars=net_pars))#, ss.maternal(net_pars))
+
+    hiv_pars = {
+        'beta': {'stable_monogamy': [0.06, 0.04]},
+        'initial': 0,
+        'multistream': multistream,
+    }
+    hiv = ss.HIV(hiv_pars)
+
+    art_pars = {'multistream': multistream}
+    art = ss.hiv.ART(0, 0.5, pars=art_pars)
 
     pars = {
         'start': 1980,
         'end': 2010,
-        'interventions': [ss.hiv.ART(0, 0.5)] if intervention else [], # ss.hiv.PrEP(0, 0.2), 
+        'interventions': [art] if intervention else [],
         'rand_seed': 0,
-        'analyzers': [rng_analyzer()] if analyze else [],
+        'analyzers': [rng_analyzer(pars={'multistream': multistream})] if analyze else [],
+        'multistream': multistream,
     }
     sim = ss.Sim(people=ppl, modules=[hiv], pars=pars, label=f'Sim with {n} agents and intv={intervention}')
     sim.initialize()

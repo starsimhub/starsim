@@ -267,8 +267,9 @@ class DynamicView(NDArrayOperatorsMixin):
     def grow(self, n):
 
         if self.n + n > self._s:
-            n_new = max(n, int(self._s / 2))  # Minimum 50% growth
-            self._data = np.concatenate([self._data, self._new_items(n)], axis=0)
+            # Grow the underlying _data
+            num_to_add = max(n, int(self._s / 2))  # Minimum 50% growth
+            self._data = np.concatenate([self._data, self._new_items(num_to_add)], axis=0)
 
         self.n += n
         self._map_arrays()

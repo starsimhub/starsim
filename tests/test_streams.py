@@ -17,9 +17,8 @@ def test_streams(n=5):
     streams = ss.Streams()
     streams.initialize(base_seed=10)
 
-    rng = ss.Stream('stream1')
-    bso = np.arange(n)
-    rng.initialize(streams, bso)
+    rng = ss.MultiStream('stream1')
+    rng.initialize(streams)
 
     uids = np.arange(0,n,2) # every other to make it interesting
     draws = rng.random(uids)
@@ -34,13 +33,12 @@ def test_seed(n=5):
     streams = ss.Streams()
     streams.initialize(base_seed=10)
 
-    bso = np.arange(n)
 
-    rng0 = ss.Stream('stream0')
-    rng0.initialize(streams, bso)
+    rng0 = ss.MultiStream('stream0')
+    rng0.initialize(streams)
 
-    rng1 = ss.Stream('stream1')
-    rng1.initialize(streams, bso)
+    rng1 = ss.MultiStream('stream1')
+    rng1.initialize(streams)
 
     return rng1.seed != rng0.seed
 
@@ -48,13 +46,11 @@ def test_seed(n=5):
 def test_reset(n=5):
     """ Sample, step, sample """
     sc.heading('Testing sample, step, sample')
-    streams = ss.Streams()
+    streams = ss.MultiStream()
     streams.initialize(base_seed=10)
 
-    bso = np.arange(n)
-
-    rng = ss.Stream('stream0')
-    rng.initialize(streams, bso)
+    rng = ss.MultiStream('stream0')
+    rng.initialize(streams)
 
     uids = np.arange(0,n,2) # every other to make it interesting
     s_before = rng.random(uids)
@@ -72,10 +68,8 @@ def test_step(n=5):
     streams = ss.Streams()
     streams.initialize(base_seed=10)
 
-    bso = np.arange(n)
-
-    rng = ss.Stream('stream0')
-    rng.initialize(streams, bso)
+    rng = ss.MultiStream('stream0')
+    rng.initialize(streams)
 
     uids = np.arange(0,n,2) # every other to make it interesting
     s_before = rng.random(uids)
@@ -93,12 +87,10 @@ def test_initialize(n=5):
     streams = ss.Streams()
     #streams.initialize(base_seed=3)
 
-    bso = np.arange(n)
-
-    rng = ss.Stream('stream0')
+    rng = ss.MultiStream('stream0')
 
     try:
-        rng.initialize(streams, bso)
+        rng.initialize(streams)
         return False # Should not get here!
     except NotInitializedException as e:
         print(f'YAY! Got exception: {e}')
@@ -111,18 +103,17 @@ def test_seedrepeat(n=5):
     streams = ss.Streams()
     streams.initialize(base_seed=10)
 
-    bso = np.arange(n)
-
-    rng = ss.Stream('stream0', seed_offset=0)
-    rng.initialize(streams, bso)
+    rng = ss.MultiStream('stream0', seed_offset=0)
+    rng.initialize(streams)
 
     try:
-        rng1 = ss.Stream('stream1', seed_offset=0)
-        rng1.initialize(streams, bso)
+        rng1 = ss.MultiStream('stream1', seed_offset=0)
+        rng1.initialize(streams)
         return False # Should not get here!
     except SeedRepeatException as e:
         print(f'YAY! Got exception: {e}')
     return True
+
 
 def test_samplingorder(n=5):
     """ Ensure sampling from one stream doesn't affect another """
@@ -131,13 +122,12 @@ def test_samplingorder(n=5):
     streams.initialize(base_seed=10)
 
     uids = np.arange(0,n,2) # every other to make it interesting
-    bso = np.arange(n)
 
-    rng0 = ss.Stream('stream0')
-    rng0.initialize(streams, bso)
+    rng0 = ss.MultiStream('stream0')
+    rng0.initialize(streams)
 
-    rng1 = ss.Stream('stream1')
-    rng1.initialize(streams, bso)
+    rng1 = ss.MultiStream('stream1')
+    rng1.initialize(streams)
 
     s_before = rng0.random(uids)
     _ = rng1.random(uids)
@@ -156,35 +146,16 @@ def test_repeatname(n=5):
     streams = ss.Streams()
     streams.initialize(base_seed=17)
 
-    uids = np.arange(0,n,2) # every other to make it interesting
-    bso = np.arange(n)
+    rng0 = ss.MultiStream('test')
+    rng0.initialize(streams)
 
-    rng0 = ss.Stream('test')
-    rng0.initialize(streams, bso)
-
-    rng1 = ss.Stream('test')
+    rng1 = ss.MultiStream('test')
     try:
-        rng1.initialize(streams, bso)
+        rng1.initialize(streams)
         return False # Should not get here!
     except RepeatNameException as e:
         print(f'YAY! Got exception: {e}')
     return True
-
-
-
-
-
-
-    s_before = rng0.random(uids)
-    _ = rng1.random(uids)
-
-    streams.reset()
-
-    _ = rng1.random(uids)
-    s_after = rng0.random(uids)
-
-    return np.all(s_before == s_after)
-
 
 
 # %% Run as a script

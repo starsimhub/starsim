@@ -20,9 +20,9 @@ class Gonorrhea(ss.Disease):
         self.ti_recovered   = ss.State('ti_recovered', float, 0)
         self.ti_dead        = ss.State('ti_dead', float, np.nan)  # Death due to gonorrhea
 
-        self.rng_prog       = ss.Stream('prog_dur')
-        self.rng_dead       = ss.Stream('dead')
-        self.rng_dur_inf    = ss.Stream('dur_inf')
+        self.rng_prog       = ss.Stream(self.multistream)('prog_dur')
+        self.rng_dead       = ss.Stream(self.multistream)('dead')
+        self.rng_dur_inf    = ss.Stream(self.multistream)('dur_inf')
 
         self.pars = ss.omerge({
             'dur_inf': 3,  # not modelling diagnosis or treatment explicitly here
@@ -58,9 +58,8 @@ class Gonorrhea(ss.Disease):
         self.infected[to_uids] = True
         self.ti_infected[to_uids] = sim.ti
 
-        #dur = sim.ti + self.rng_dur_inf.poisson(self.pars['dur_inf']/sim.pars.dt, len(to_uids)) # By whom infected from??? TODO
-        dur = sim.ti + self.rng_dur_inf.poisson(self.pars['dur_inf']/sim.pars.dt, to_uids) # By whom infected from??? TODO
-        dead = self.rng_dead.bernoulli(self.pars.p_death, to_uids)
+        dur = sim.ti + self.rng_dur_inf.poisson(to_uids, self.pars['dur_inf']/sim.pars.dt) # By whom infected from??? TODO
+        dead = self.rng_dead.bernoulli(to_uids, self.pars.p_death)
 
         self.ti_recovered[to_uids[~dead]] = dur[~dead]
         self.ti_dead[to_uids[dead]] = dur[dead]

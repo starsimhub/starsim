@@ -51,17 +51,23 @@ class Network(sc.objdict):
         network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
     """
 
-    def __init__(self, *args, key_dict=None, vertical=False, label=None, **kwargs):
+    def __init__(self, *args, pars=None, key_dict=None, vertical=False, label=None, **kwargs):
         default_keys = {
             'p1': ss.int_,
             'p2': ss.int_,
             'beta': ss.float_,
         }
+
+        default_pars = {'multistream': True}
+        self.pars = sc.mergedicts(default_pars, pars)
+
         self.meta = sc.mergedicts(default_keys, key_dict)
         self.vertical = vertical  # Whether transmission is bidirectional
         self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
         self.label = label
         self.initialized = False
+
+        self.multistream = self.pars['multistream']
 
         # Handle args
         kwargs = sc.mergedicts(*args, kwargs)
@@ -86,7 +92,7 @@ class Network(sc.objdict):
         '''
         # Connect the streams to the sim
         for stream in self.streams.values():
-            stream.initialize(sim)
+            stream.initialize(sim.streams)
         return
         '''
 
@@ -269,7 +275,7 @@ class simple_sexual(Network):
     A class holding a single network of contact edges (connections) between people.
     This network is built by **randomly pairing** males and female with variable relationship durations.
     """
-    def __init__(self, mean_dur=5):
+    def __init__(self, mean_dur=5, **kwargs):
         key_dict = {
             'p1': ss.int_,
             'p2': ss.int_,
@@ -278,15 +284,15 @@ class simple_sexual(Network):
         }
 
         # Call init for the base class, which sets all the keys
-        super().__init__(key_dict=key_dict)
+        super().__init__(key_dict=key_dict, **kwargs)
 
         # Set other parameters
         self.mean_dur = mean_dur
 
         # Define random streams
-        self.rng_pair_12 = ss.Stream('pair_12')
-        self.rng_pair_21 = ss.Stream('pair_21')
-        self.rng_mean_dur = ss.Stream('mean_dur')
+        self.rng_pair_12 = ss.Stream(self.multistream)('pair_12')
+        self.rng_pair_21 = ss.Stream(self.multistream)('pair_21')
+        self.rng_mean_dur = ss.Stream(self.multistream)('mean_dur')
 
         return
 
@@ -294,9 +300,9 @@ class simple_sexual(Network):
         super().initialize(sim)
         
         # Initialize random streams
-        self.rng_pair_12.initialize(sim.streams, sim.people._uid_map)
-        self.rng_pair_21.initialize(sim.streams, sim.people._uid_map)
-        self.rng_mean_dur.initialize(sim.streams, sim.people._uid_map)
+        self.rng_pair_12.initialize(sim.streams)
+        self.rng_pair_21.initialize(sim.streams)
+        self.rng_mean_dur.initialize(sim.streams)
 
         self.add_pairs(sim.people, ti=0)
         return
@@ -310,13 +316,13 @@ class simple_sexual(Network):
 
         if len(available_m) <= len(available_f):
             p1 = available_m
-            p2 = self.rng_pair_12.choice(available_f, len(p1), replace=False) # TODO: Stream-ify
+            p2 = self.rng_pair_12.choice(len(p1), available_f, replace=False) # TODO: Stream-ify
         else:
             p2 = available_f
-            p1 = self.rng_pair_21.choice(available_m, len(p2), replace=False) # TODO: Stream-ify
+            p1 = self.rng_pair_21.choice(len(p2), available_m, replace=False) # TODO: Stream-ify
 
         beta = np.ones_like(p1)
-        dur = self.rng_mean_dur.poisson(self.mean_dur, len(p1)) # TODO: Stream-ify
+        dur = self.rng_mean_dur.poisson(len(p1), self.mean_dur) # TODO: Stream-ify
         self['p1'] = np.concatenate([self['p1'], p1])
         self['p2'] = np.concatenate([self['p2'], p2])
         self['beta'] = np.concatenate([self['beta'], beta])
@@ -408,7 +414,7 @@ class simple_embedding(simple_sexual):
         self['p2'] = np.concatenate([self['p2'], p2])
 
         beta = np.ones(n_pairs)
-        dur = self.rng_mean_dur.poisson(self.mean_dur, p1) # TODO: Stream-ify... trying using p1
+        dur = self.rng_mean_dur.poisson(p1, self.mean_dur)
         self['beta'] = np.concatenate([self['beta'], beta])
         self['dur'] = np.concatenate([self['dur'], dur])
 
@@ -420,15 +426,9 @@ class stable_monogamy(simple_sexual):
     Very simple network for debugging in which edges are:
     1-2, 3-4, 5-6, ...
     """
-    def __init__(self):
-        key_dict = {
-            'p1': ss.int_,
-            'p2': ss.int_,
-            'beta': ss.float_,
-        }
-
+    def __init__(self, **kwargs):
         # Call init for the base class, which sets all the keys
-        super().__init__(mean_dur=np.iinfo(int).max)
+        super().__init__(mean_dur=np.iinfo(int).max, **kwargs)
         return
 
     def initialize(self, sim):
@@ -444,7 +444,7 @@ class stable_monogamy(simple_sexual):
 
 
 class hpv_network(Network):
-    def __init__(self, pars=None):
+    def __init__(self, pars=None, **kwargs):
 
         key_dict = {
             'p1': ss.int_,
@@ -456,22 +456,22 @@ class hpv_network(Network):
         }
 
         # Call init for the base class, which sets all the keys
-        super().__init__(key_dict=key_dict)
+        super().__init__(key_dict=key_dict, **kwargs)
 
         # Define default parameters
         self.pars = dict()
         self.pars['cross_layer'] = 0.05  # Proportion of agents who have concurrent cross-layer relationships
-        self.pars['partners'] = dict(dist='poisson', par1=0.01)  # The number of concurrent sexual partners
-        self.pars['acts'] = dict(dist='neg_binomial', par1=80, par2=40)  # The number of sexual acts per year
+        self.pars['partners'] = dict(dist='poisson', par1=0.01)  # The number of concurrent sexual partners # TODO: Stream-ify
+        self.pars['acts'] = dict(dist='neg_binomial', par1=80, par2=40)  # The number of sexual acts per year # TODO: Stream-ify
         self.pars['age_act_pars'] = dict(peak=30, retirement=100, debut_ratio=0.5, retirement_ratio=0.1) # Parameters describing changes in coital frequency over agent lifespans
         self.pars['condoms'] = 0.2  # The proportion of acts in which condoms are used
-        self.pars['dur_pship'] = dict(dist='normal_pos', par1=1, par2=1)  # Duration of partnerships
+        self.pars['dur_pship'] = dict(dist='normal_pos', par1=1, par2=1)  # Duration of partnerships # TODO: Stream-ify
         self.pars['participation'] = None  # Incidence of partnership formation by age
         self.pars['mixing'] = None  # Mixing matrices for storing age differences in partnerships
 
-        self.rng_partners = ss.Stream('partners')
-        self.rng_acts = ss.Stream('acts')
-        self.rng_dur_pship = ss.Stream('dur_pship')
+        self.rng_partners = ss.Stream(self.multistream)('partners')
+        self.rng_acts = ss.Stream(self.multistream)('acts')
+        self.rng_dur_pship = ss.Stream(self.multistream)('dur_pship')
 
         self.update_pars(pars)
         self.get_layer_probs()
@@ -666,12 +666,12 @@ class hpv_network(Network):
 
 
 class maternal(Network):
-    def __init__(self, key_dict=None, vertical=True):
+    def __init__(self, key_dict=None, vertical=True, **kwargs):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
         key_dict = sc.mergedicts({'dur': ss.float_}, key_dict)
-        super().__init__(key_dict=key_dict, vertical=vertical)
+        super().__init__(key_dict=key_dict, vertical=vertical, **kwargs)
         return
 
     def update(self, people, dt=None):

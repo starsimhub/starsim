@@ -21,7 +21,7 @@ class HIV(ss.Disease):
         self.on_prep     = ss.State('on_prep', bool, False)
         self.cd4         = ss.State('cd4', float, 500)
 
-        self.rng_dead = ss.Stream('dead')
+        self.rng_dead = ss.Stream(self.multistream)('dead')
 
         self.pars = ss.omerge({
             'cd4_min': 100,
@@ -43,7 +43,7 @@ class HIV(ss.Disease):
 
         hiv_death_prob = 0.1 / (self.pars.cd4_min - self.pars.cd4_max)**2 *  (self.cd4 - self.pars.cd4_max)**2
         can_die = ss.true(sim.people.alive & sim.people.hiv.infected)
-        hiv_deaths = self.rng_dead.bernoulli_filter(prob=hiv_death_prob[can_die], arr = can_die)
+        hiv_deaths = self.rng_dead.bernoulli_filter(arr=can_die, prob=hiv_death_prob[can_die])
         sim.people.alive[hiv_deaths] = False
         sim.people.ti_dead[hiv_deaths] = sim.ti
         self.results['new_deaths'][sim.ti] = len(hiv_deaths)
@@ -73,13 +73,15 @@ class HIV(ss.Disease):
 
 class ART(ss.Intervention):
 
-    def __init__(self, t: np.array, coverage: np.array):
+    def __init__(self, t: np.array, coverage: np.array, **kwargs):
         self.requires = HIV
         self.t = sc.promotetoarray(t)
         self.coverage = sc.promotetoarray(coverage)
 
-        self.rng_add_ART = ss.Stream('add_ART', seed_offset=100)
-        self.rng_remove_ART = ss.Stream('remove_ART', seed_offset=101)
+        super().__init__(**kwargs)
+
+        self.rng_add_ART = ss.Stream(self.multistream)('add_ART', seed_offset=100)
+        self.rng_remove_ART = ss.Stream(self.multistream)('remove_ART', seed_offset=101)
 
         return
 
@@ -101,13 +103,13 @@ class ART(ss.Intervention):
             eligible = ss.true(sim.people.alive & sim.people.hiv.infected & ~sim.people.hiv.on_art)
             n_eligible = len(eligible) #np.count_nonzero(eligible)
             if n_eligible:
-                inds = self.rng_add_ART.bernoulli_filter(prob=min(n_eligible, n_change)/n_eligible, arr=eligible)
+                inds = self.rng_add_ART.bernoulli_filter(arr=eligible, prob=min(n_eligible, n_change)/n_eligible)
                 sim.people.hiv.on_art[inds] = True
         elif n_change < 0:
             # Take some people off ART
             eligible = sim.people.alive & sim.people.hiv.infected & sim.people.hiv.on_art
             n_eligible = np.count_nonzero(eligible)
-            inds = self.rng_remove_ART.bernoulli_filter(prob=-n_change/n_eligible, arr=eligible)
+            inds = self.rng_remove_ART.bernoulli_filter(arr=eligible, prob=-n_change/n_eligible)
             sim.people.hiv.on_art[inds] = False
 
         # Add result
@@ -122,8 +124,8 @@ class PrEP(ss.Intervention):
         self.t = sc.promotetoarray(t)
         self.coverage = sc.promotetoarray(coverage)
 
-        self.rng_add_PrEP = ss.Stream('add_PrEP', seed_offset=102)
-        self.rng_remove_PrEP = ss.Stream('remove_PrEP', seed_offset=103)
+        self.rng_add_PrEP = ss.Stream(self.multistream)('add_PrEP', seed_offset=102)
+        self.rng_remove_PrEP = ss.Stream(self.multistream)('remove_PrEP', seed_offset=103)
 
         return
 
@@ -144,13 +146,13 @@ class PrEP(ss.Intervention):
             eligible = ss.true(sim.people.alive & ~sim.people.hiv.infected & ~sim.people.hiv.on_prep)
             n_eligible = len(eligible) #np.count_nonzero(eligible)
             if n_eligible:
-                inds = self.rng_add_PrEP.bernoulli_filter(prob=min(n_eligible, n_change)/n_eligible, arr=eligible)
+                inds = self.rng_add_PrEP.bernoulli_filter(arr=eligible, prob=min(n_eligible, n_change)/n_eligible)
                 sim.people.hiv.on_prep[inds] = True
         elif n_change < 0:
             # Take some people off PrEP
             eligible = sim.people.alive & sim.people.hiv.on_prep
             n_eligible = np.count_nonzero(eligible)
-            inds = self.rng_remove_PrEP.bernoulli_filter(prob=-n_change/n_eligible, arr=eligible)
+            inds = self.rng_remove_PrEP.bernoulli_filter(arr=eligible, prob=-n_change/n_eligible)
             sim.people.hiv.on_prep[inds] = False
 
         # Add result

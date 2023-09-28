@@ -41,6 +41,7 @@ class Parameters(sc.objdict):
         self.dt              = 1.0           # Timestep (in years)
         self.dt_demog        = 1.0           # Timestep for demographic updates (in years)
         self.rand_seed       = 1             # Random seed, if None, don't reset
+        self.multistream     = True          # Run with multiple random number streams as opposed to one centralized random number generator
         self.verbose         = ss.options.verbose # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
     
         # Events and interventions
