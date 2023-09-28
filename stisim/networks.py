@@ -316,13 +316,13 @@ class simple_sexual(Network):
 
         if len(available_m) <= len(available_f):
             p1 = available_m
-            p2 = self.rng_pair_12.choice(len(p1), available_f, replace=False) # TODO: Stream-ify
+            p2 = self.rng_pair_12.choice(available_f, size=len(p1), replace=False) # TODO: Stream-ify
         else:
             p2 = available_f
-            p1 = self.rng_pair_21.choice(len(p2), available_m, replace=False) # TODO: Stream-ify
+            p1 = self.rng_pair_21.choice(available_m, size=len(p2), replace=False) # TODO: Stream-ify
 
         beta = np.ones_like(p1)
-        dur = self.rng_mean_dur.poisson(len(p1), self.mean_dur) # TODO: Stream-ify
+        dur = self.rng_mean_dur.poisson(p1, self.mean_dur) # TODO: Stream-ify
         self['p1'] = np.concatenate([self['p1'], p1])
         self['p2'] = np.concatenate([self['p2'], p2])
         self['beta'] = np.concatenate([self['beta'], beta])
@@ -479,9 +479,9 @@ class hpv_network(Network):
     def initialize(self, sim):
         super().initialize(sim)
 
-        self.rng_partners.initialize(sim)
-        self.rng_acts.initialize(sim)
-        self.rng_dur_pship.initialize(sim)
+        self.rng_partners.initialize(sim.streams)
+        self.rng_acts.initialize(sim.streams)
+        self.rng_dur_pship.initialize(sim.streams)
 
         self.add_pairs(sim.people, ti=0)
         return
