@@ -6,6 +6,7 @@ Networks that connect people within a population
 import numpy as np
 import sciris as sc
 import stisim as ss
+import scipy.optimize as spo
 
 
 # Specify all externally visible functions this file defines
@@ -363,58 +364,23 @@ class simple_embedding(simple_sexual):
                 print('No pairs to add')
             return 0
 
-        # Make p1 the shorter array
-        if len(available_f) < len(available_m):
-            switch = True # Want p1 as m in the end
-            p1 = available_f
-            p2 = available_m
-        else:
-            switch = False # Want p1 as m in the end
-            p1 = available_m
-            p2 = available_f
+        ### NEW
+        loc_m = self.rng_pair_12.random(arr=available_m)
+        loc_f = self.rng_pair_21.random(arr=available_f)
 
-        loc1 = self.rng_pair_12.random(arr=p1)
-        loc2 = self.rng_pair_21.random(arr=p2)
-
-        p1v = np.tile(loc1, (len(loc2),1))
-        p2v = np.tile(loc2[:,np.newaxis], len(loc1))
+        p1v = np.tile(loc_m, (len(loc_f),1))
+        p2v = np.tile(loc_f[:,np.newaxis], len(loc_m))
         d_full = np.absolute(p2v-p1v)
-        d = d_full.copy()
 
-        unmatched_p1i = np.arange(len(p1))
-        unmatched_p2i = np.arange(len(p2))
+        ind_f, ind_m = spo.linear_sum_assignment(d_full)
+        # loc_f[ind_f[0]] is close to loc_m[ind_m[0]]
 
-        pairs = []
-
-        while len(unmatched_p1i)>0:
-            # Perhaps more efficient to change up directionality of matching at times?
-            p2i_closest_to_each_p1 = d.argmin(axis=0)
-            selected_up2i, selected_up1i = np.unique(p2i_closest_to_each_p1, return_index=True)
-            selected_p1i = unmatched_p1i[selected_up1i]
-            selected_p2i = unmatched_p2i[selected_up2i]
-
-            # loc1[selected_p1i] should be close to loc2[selected_p2i]
-            pairs.append( (p1[selected_p1i], p2[selected_p2i]) )
-
-            # Remove pairs and repeat
-            unmatched_p1i = np.setdiff1d(unmatched_p1i, selected_p1i)
-            unmatched_p2i = np.setdiff1d(unmatched_p2i, selected_p2i)
-
-            # Trim distance matrix
-            d = d_full[np.ix_(unmatched_p2i, unmatched_p1i)]
-
-            if ss.options.verbose > 1:
-                print(f'Matching with {len(unmatched_p1i)} to go')
-
-        pairs = np.concatenate(pairs, axis=1)
-        n_pairs = pairs.shape[1]
-
-        (p1, p2) = (pairs[1], pairs[0]) if switch else (pairs[0], pairs[1])
-        self['p1'] = np.concatenate([self['p1'], p1])
-        self['p2'] = np.concatenate([self['p2'], p2])
+        n_pairs = len(ind_f)
+        self['p1'] = np.concatenate([self['p1'], ind_m])
+        self['p2'] = np.concatenate([self['p2'], ind_f])
 
         beta = np.ones(n_pairs)
-        dur = self.rng_mean_dur.poisson(p1, self.mean_dur)
+        dur = self.rng_mean_dur.poisson(ind_m, self.mean_dur)
         self['beta'] = np.concatenate([self['beta'], beta])
         self['dur'] = np.concatenate([self['dur'], dur])
 
