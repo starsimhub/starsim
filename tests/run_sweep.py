@@ -1,5 +1,5 @@
 """
-Run a simple HIV simulation with random number coherence
+A simple beta sweep with multisim on and off using HIV as an example pathogen
 """
 
 # %% Imports and settings

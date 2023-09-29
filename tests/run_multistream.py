@@ -1,5 +1,5 @@
 """
-Run a simple HIV simulation with random number coherence
+Exploring multisim (on vs off) for a model HIV system sweeping coverage of either ART or PrEP.
 """
 
 # %% Imports and settings
