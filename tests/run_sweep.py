@@ -11,7 +11,7 @@ import seaborn as sns
 
 n = 1_000 # Agents
 n_rand_seeds = 250
-x_beta_levels = [0.5, 0.95, 1.05, 2] + [1] # Must include 1 as that's the baseline
+x_beta_levels = [0.8, 0.92, 1.05, 1.2] + [1] # Must include 1 as that's the baseline | roughly np.logspace(np.log2(0.8), np.log2(1.2), 4, base=2)
 
 figdir = os.path.join(os.getcwd(), 'figs', 'BetaSweep')
 sc.path(figdir).mkdir(parents=True, exist_ok=True)
@@ -55,7 +55,7 @@ def run_sim(n, x_beta, rand_seed, multistream):
 
     return df
 
-def run_scenarios():
+def run_scenarios(figdir):
     results = []
     times = {}
     for multistream in [True, False]:
@@ -74,7 +74,7 @@ def run_scenarios():
     return df
 
 
-def plot_scenarios(df):
+def plot_scenarios(df, figdir):
     d = pd.melt(df, id_vars=['ti', 'rand_seed', 'x_beta', 'multistream'], var_name='channel', value_name='Value')
     d['baseline'] = d['x_beta']==1
     bl = d.loc[d['baseline']]
@@ -98,7 +98,7 @@ def plot_scenarios(df):
     for ms, mrg_by_ms in mrg.groupby('multistream'):
         g = sns.relplot(kind='line', data=mrg_by_ms, x='ti', y='Value - Reference', hue='x_beta', col='channel', row='x_beta',
             height=3, aspect=1.0, palette='Set1', estimator=None, units='rand_seed', lw=0.5, facet_kws=fkw) #errorbar='sd', lw=2, 
-        g.set_titles(col_template='{col_name}', row_template='Coverage: {row_name}')
+        g.set_titles(col_template='{col_name}', row_template='Beta: {row_name}')
         g.fig.suptitle('Multistream' if ms else 'Centralized')
         g.fig.subplots_adjust(top=0.88)
         g.set_xlabels(r'Value - Reference at $t_i$')
@@ -113,6 +113,14 @@ def plot_scenarios(df):
     g.set_xlabels(f'Value - Reference at $t_i={{{tf}}}$')
     g.fig.savefig(os.path.join(figdir, 'final.png'), bbox_inches='tight', dpi=300)
 
+    ## FINAL TIME function of beta
+    dtf = d.set_index(['ti', 'rand_seed']).sort_index().loc[tf]
+    g = sns.relplot(kind='line', data=dtf.reset_index(), x='x_beta', y='Value', col='channel', row='multistream',
+        height=5, aspect=1.2, facet_kws=fkw, estimator=None, units='rand_seed', lw=0.25)
+    g.set_titles(col_template='{col_name}', row_template='Multistream: {row_name}')
+    g.set_ylabels(f'Value at $t_i={{{tf}}}$')
+    g.fig.savefig(os.path.join(figdir, 'final_beta.png'), bbox_inches='tight', dpi=300)
+
     print('Figures saved to:', os.path.join(os.getcwd(), figdir))
 
     return
@@ -122,16 +130,17 @@ if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-p', '--plot', help='plot from a cached CSV file', type=str)
+    parser.add_argument('-p', '--plot', help='Folder containing cached results.csv', type=str)
     args = parser.parse_args()
 
     if args.plot:
         print('Reading CSV file', args.plot)
-        df = pd.read_csv(args.plot, index_col=0)
+        df = pd.read_csv(os.path.join(args.plot, 'result.csv'), index_col=0)
+        figdir = args.plot
     else:
         print('Running scenarios')
-        df = run_scenarios()
+        df = run_scenarios(figdir)
 
-    plot_scenarios(df)
+    plot_scenarios(df, figdir)
 
     print('Done')
