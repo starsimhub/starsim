@@ -18,7 +18,7 @@ import sciris as sc
 
 __all__ = [
     'Distribution', 'uniform', 'choice', 'normal', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int',
-    'poisson', 'neg_binomial', 'beta', 'gamma', 'from_data'
+    'poisson', 'neg_binomial', 'beta', 'gamma', 'from_data', 'dist_dict'
 ]
 
 
@@ -35,6 +35,10 @@ class Distribution():
 
     def __call__(self, n=1, **kwargs):
         return self.sample(n, **kwargs)
+
+    @property
+    def name(self):
+        return self.__class__.__name__
 
     def sample(cls, n=1, **kwargs):
         """
@@ -117,7 +121,7 @@ class normal_pos(normal):
         return np.abs(super().sample(n))
 
 
-class normal_int(Distribution):
+class normal_int(normal):
     """
     Normal distribution returning only integer values
     """
@@ -232,3 +236,19 @@ class gamma(Distribution):
 
     def sample(self, n=1):
         return np.random.gamma(shape=self.shape, scale=self.scale, size=n)
+
+
+dist_dict = {
+    'uniform': uniform,
+    'choice': choice,
+    'normal': normal,
+    'normal_pos': normal_pos,
+    'normal_int': normal_int,
+    'lognormal': lognormal,
+    'lognormal_int': lognormal_int,
+    'poisson': poisson,
+    'neg_binomial': neg_binomial,
+    'beta': beta,
+    'gamma': gamma
+}
+

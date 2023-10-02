@@ -208,6 +208,7 @@ class Sim(sc.prettyobj):
         # Set time attributes
         self.people.ti = self.ti
         self.people.dt = self.dt
+        self.people.year = self.year
         self.people.init_results(self)
         return self
 

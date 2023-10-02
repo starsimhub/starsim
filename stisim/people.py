@@ -272,6 +272,16 @@ class People(BasePeople):
         """ Male boolean """
         return ~self.female
 
+    @property
+    def f(self):
+        """ Shorthand for female """
+        return self.female
+
+    @property
+    def m(self):
+        """ Shorthand for male """
+        return self.male
+
     def init_results(self, sim):
         sim.results += ss.Result(None, 'n_alive', sim.npts, ss.int_)
         sim.results += ss.Result(None, 'new_deaths', sim.npts, ss.int_)

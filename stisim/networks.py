@@ -6,6 +6,7 @@ Networks that connect people within a population
 import numpy as np
 import sciris as sc
 import stisim as ss
+import pandas as pd
 
 # Specify all externally visible functions this file defines
 __all__ = ['Networks', 'Network', 'simple_sexual', 'msm', 'hpv_network', 'maternal']
@@ -119,6 +120,15 @@ class Network(ss.Module):
     def meta_keys(self):
         """ Return the keys for the network's meta information """
         return self.meta.keys()
+
+    def set_network_states(self, people):
+        """
+        Many network states depend on properties of people -- e.g. MSM depends on being male,
+        age of debut varies by sex and over time, and participation rates vary by age.
+        Each time states are dynamically grown, this funciton should be called to set the network
+        states that depend on other states.
+        """
+        pass
 
     def validate(self, force=True):
         """
@@ -275,6 +285,21 @@ class Networks(ss.ndict):
     def __init__(self, *args, type=Network, **kwargs):
         return super().__init__(self, *args, type=type, **kwargs)
 
+class Par():
+    def __init__(self, val, by_sex=False, by_age=False, by_time=False, by_individual=False):
+        self.by_sex = by_sex
+        self.by_age = by_age
+        self.by_time = by_time
+        self.by_individual = by_individual
+        self.val = val
+        self.df = self.make_df()
+        return
+
+    def make_df(self, ):
+
+        return
+
+
 
 class simple_sexual(Network):
     """
@@ -297,19 +322,111 @@ class simple_sexual(Network):
 
         # Set other parameters
         self.pars = ss.omerge({
-            'dur': ss.lognormal(5, 3),
+            'dur': ss.lognormal(15, 15),  # Should also vary by age, year, and individual pair?
+            'part_rates': 0.9,  # Participation rates - can vary by sex and year
+            'rel_part_rates': 1.0,
+            'debut': 16,  # Age of debut can vary by sex, year, and individual
+            'rel_debut': 1.0,
         }, self.pars)
+
+        # Set metadata for select parameters - this tells us which dimensions are allowed to vary
+        self.meta_pars = sc.objdict({
+            'part_rates': {'year': 2000, 'sex': ['m', 'f'], 'part_rates': None},
+            'debut': {'year': 2000, 'sex': ['m', 'f'], 'debut': None, 'std': 0, 'dist': 'lognormal'},
+            'dur': {'year': 2000, 'age': 0, 'dur': [None], 'std': 0, 'dist': 'lognormal'},
+        })
+        self.validate_pars()
+
+        # Define states - use placeholder values
+        self.participant = ss.State('participant', bool, fill_value=False)
+        self.debut = ss.State('debut', float, fill_value=0)
+
+    def active(self, people):
+        return self.participant & (people.age > self.debut)
+
+    def validate_pars(self):
+        """ Validate parameters and expand assumptions """
+
+        for parname, defaults in self.meta_pars.items():
+            cols = defaults.keys()
+            par = self.pars[parname]
+
+            if sc.checktype(par, pd.DataFrame):
+                if not set(cols).issubset(par.columns):
+                    errormsg = f'Please ensure the columns of the data for parameter {parname} are {cols}.'
+                    raise ValueError(errormsg)
+                df = par
+
+            elif sc.checktype(par, dict):
+                if not set(cols).issubset(par.keys()):
+                    errormsg = f'Please ensure the keys of the data dict for parameters {parname} are {cols}.'
+                    raise ValueError(errormsg)
+                df = pd.DataFrame(par)
+
+            elif sc.checktype(par, ss.Distribution):
+                df = pd.DataFrame(defaults)
+                df[parname] = par.mean
+                df['std'] = par.std
+                df['dist'] = par.name
+
+            elif sc.isnumber(par):
+                dd = {}
+                for col in cols:
+                    dd[col] = defaults[col]
+                    if col == parname:
+                        dd[col] = par
+                df = pd.DataFrame(dd)
+
+            else:
+                errormsg = f'Participation rate data type {type(par)} not understood.'
+                raise ValueError(errormsg)
+
+            self.pars[parname] = df
+
+        # Check values
+        if (self.pars.part_rates['part_rates'] < 0).any() or (self.pars.part_rates['part_rates'] > 1).any():
+            raise ValueError(f'Invalid participation rate for network {simple_sexual}.')
+
+        return
+
+    def set_network_states(self, people, initial=False):
+        """ Set network states including age of entry into network and participation rates """
+        for sk in ['f', 'm']:
+            # If this is the initial time that these are being set, do the whole population
+            if initial:
+                uids = people.uid[people[sk]]
+            # Otherwise, set states at birth
+            else:
+                uids = people.uid[(people.age < people.dt) & people[sk]]
+
+            # Set participation rates, with the logic being that these are people who will want
+            # to participate in the network at some point
+            df = self.pars.part_rates.loc[self.pars.part_rates.sex == sk]
+            pr = np.interp(people.year, df['year'], df['part_rates']) * self.pars.rel_part_rates
+            dist = ss.choice([True, False], probabilities=[pr, 1-pr])(len(uids))
+            self.participant[uids] = dist
+
+            # Set debut age
+            df = self.pars.debut.loc[self.pars.debut.sex == sk]
+            all_years = self.pars.debut.year.values
+            year_ind = sc.findnearest(all_years, people.year)
+            nearest_year = all_years[year_ind]
+
+            mean = np.interp(people.year, df['year'], df['debut'])
+            std = np.interp(people.year, df['year'], df['std'])
+            dist = df.loc[df.year == nearest_year].dist.iloc[0]
+            debut_vals = ss.dist_dict[dist](mean, std)(len(uids))
+            self.debut[uids] = debut_vals
 
     def initialize(self, sim):
         super().initialize(sim)
+        self.set_network_states(sim.people, initial=True)
         self.add_pairs(sim.people, ti=0)
 
     def add_pairs(self, people, ti=None):
-        # Find unpartnered males and females - could in principle check other contact layers too
-        # by having the People object passed in here
-
-        available_m = np.setdiff1d(people.uid[~people.female], self.members)
-        available_f = np.setdiff1d(people.uid[people.female], self.members)
+        # Find unpartnered males and females
+        available_m = np.setdiff1d(people.uid[people.male & self.participant], self.members)
+        available_f = np.setdiff1d(people.uid[people.female & self.participant], self.members)
 
         if len(available_m) <= len(available_f):
             p1 = available_m
@@ -319,14 +436,24 @@ class simple_sexual(Network):
             p1 = np.random.choice(available_m, len(p2), replace=False)
 
         beta = np.ones_like(p1)
-        dur = self.pars.dur.sample(len(p1))
+
+        # Figure out durations
+        all_years = self.pars.dur.year.values
+        year_ind = sc.findnearest(all_years, people.year)
+        nearest_year = all_years[year_ind]
+        mean = np.interp(people.year, self.pars.dur['year'], self.pars.dur['dur'])
+        std = np.interp(people.year, self.pars.dur['year'], self.pars.dur['std'])
+        dur_dist = self.pars.dur.loc[self.pars.dur.year == nearest_year].dist.iloc[0]
+        dur_vals = ss.dist_dict[dur_dist](mean, std)(len(p1))
+
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
         self.contacts.beta = np.concatenate([self.contacts.beta, beta])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
+        self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
 
     def update(self, people, dt=None):
         self.end_pairs(people)
+        self.set_network_states(people)
         self.add_pairs(people)
 
 
@@ -351,22 +478,22 @@ class msm(Network):
         # Set other parameters
         self.pars = ss.omerge({
             'dur': ss.lognormal(5, 3),
-            'part_rate': 0.1,  # Participation rate
+            'part_rate': 0.1,  # Participation rate - should be able to vary by age, time, sex
         }, self.pars)
 
         # Network states
-        prop_msm = self.pars.part_rate
-        fill_value = ss.choice([True, False], probabilities=[prop_msm, 1-prop_msm])
-        self.is_msm = ss.State('is_msm', bool, fill_value=fill_value)
+        prate = self.pars.part_rate
+        fill_value = ss.choice([True, False], probabilities=[prate, 1-prate])
+        self.participant = ss.State('participant', bool, fill_value=fill_value)
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.is_msm[sim.people.female] = False
+        self.participant[sim.people.female] = False
         self.add_pairs(sim.people, ti=0)
 
     def add_pairs(self, people, ti=None):
         # Pair all unpartnered MSM
-        available_m = np.setdiff1d(people.uid[self.is_msm], self.members)
+        available_m = np.setdiff1d(people.uid[self.participant], self.members)
         n_pairs = int(len(available_m)/2)
         p1 = available_m[:n_pairs]
         p2 = available_m[n_pairs:n_pairs*2]
