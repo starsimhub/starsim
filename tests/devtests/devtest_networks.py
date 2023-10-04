@@ -8,10 +8,11 @@ import matplotlib.pyplot as plt
 
 
 ppl = ss.People(10000)
+
+mf_pars = {'part_rates': 0.85}
+msm_pars = {'part_rates': 0.1}
 ppl.networks = ss.ndict(
-    ss.mf(pars={'part_rates': 0.85}),
-    ss.msm(pars={'part_rates': 0.05}),
-    ss.mf_msm(pars={'part_rates': 0.1}),
+    ss.mf_msm(msm_pars=msm_pars, mf_pars=mf_pars),
     ss.maternal()
 )
 

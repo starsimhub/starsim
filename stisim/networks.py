@@ -99,7 +99,7 @@ class Network(ss.Module):
         """ Convert to a dataframe for printing """
         namestr = self.name
         labelstr = f'"{self.label}"' if self.label else '<no label>'
-        keys_str = ', '.join(self.keys())
+        keys_str = ', '.join(self.contacts.keys())
         output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", f, m, beta)
         output += self.to_df().__repr__()
         return output
@@ -310,8 +310,6 @@ class mf(Network):
     """
 
     def __init__(self, pars=None):
-        super().__init__(pars)
-
         key_dict = {
             'p1': ss.int_,
             'p2': ss.int_,
@@ -320,7 +318,7 @@ class mf(Network):
         }
 
         # Call init for the base class, which sets all the keys
-        super().__init__(key_dict=key_dict)
+        super().__init__(pars, key_dict=key_dict)
 
         # Set other parameters
         self.pars = ss.omerge({
@@ -471,17 +469,13 @@ class msm(Network):
     """
 
     def __init__(self, pars=None):
-        super().__init__(pars)
-
         key_dict = {
             'p1': ss.int_,
             'p2': ss.int_,
             'dur': ss.float_,
             'beta': ss.float_,
         }
-
-        # Call init for the base class, which sets all the keys
-        super().__init__(key_dict=key_dict)
+        super().__init__(pars, key_dict=key_dict)
 
         # Set other parameters
         self.pars = ss.omerge({
@@ -514,9 +508,6 @@ class msm(Network):
 class mf_msm(Network):
     """ Combines the MF and MSM networks """
     def __init__(self, pars=None, msm_pars=None, mf_pars=None):
-        super().__init__(pars)
-        self.msm = msm(msm_pars)
-        self.mf = mf(mf_pars)
 
         key_dict = {
             'p1': ss.int_,
@@ -524,7 +515,9 @@ class mf_msm(Network):
             'dur': ss.float_,
             'beta': ss.float_,
         }
-        super().__init__(key_dict=key_dict)
+        super().__init__(pars, key_dict=key_dict)
+        self.msm = msm(pars=msm_pars)
+        self.mf = mf(pars=mf_pars)
 
         self.pars = ss.omerge({
             'prop_bi': 0.5,  # Could vary over time -- but not by age or sex or individual
@@ -538,7 +531,7 @@ class mf_msm(Network):
         return
 
     def set_participation(self, people):
-        # Female participation rate just uses the mf network
+        # Use the mf network to set the female participation rate
         f_uids = people.uid[people.female]
         self.mf.set_participation(f_uids, people.year, 'f')
 
@@ -557,7 +550,7 @@ class mf_msm(Network):
         # All these males need to be in the MF network. What remaining share to we need?
         mf_df = self.mf.pars.part_rates.loc[self.mf.pars.part_rates.sex == 'm']  # Male participation in the MF network
         mf_pr = np.interp(people.year, mf_df['year'], mf_df['part_rates']) * self.mf.pars.rel_part_rates
-        remaining_pr = max(mf_pr*len(m_uids)-len(bi_uids), 0)/len(m_uids)
+        remaining_pr = max(mf_pr*len(m_uids)-len(bi_uids), 0)/len(mf_excl_set)
         mf_excl_uids = ss.binomial_filter(remaining_pr, mf_excl_set)  # Males in MF network only
         self.mf.participant[bi_uids] = True
         self.mf.participant[mf_excl_uids] = True
@@ -568,11 +561,14 @@ class mf_msm(Network):
     def add_pairs(self, people, ti=None):
         self.mf.add_pairs(people, ti=ti)
         self.msm.add_pairs(people, ti=ti)
+        for key in ['p1', 'p2', 'beta', 'dur']:
+            self.contacts[key] = np.concatenate([self.mf.contacts[key], self.msm.contacts[key]])
 
     def update(self, people, dt=None):
         self.mf.update(people)
         self.msm.update(people)
-
+        for key in ['p1', 'p2', 'beta', 'dur']:
+            self.contacts[key] = np.concatenate([self.mf.contacts[key], self.msm.contacts[key]])
 
 
 class hpv_network(Network):
