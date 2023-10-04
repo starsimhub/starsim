@@ -254,6 +254,10 @@ class People(BasePeople):
         """
         Update networks
         """
+        # Update the participation rates
+
+
+        # Now update each network individually
         for network in self.networks.values():
             network.update(self)
 
