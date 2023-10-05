@@ -19,8 +19,8 @@ class MyPeople(ss.People):
         self.states['risk_tolerance'] = State('risk_tolerance', float, False)
         self.something_else = 'bar'
 
-    def update_states_pre(self):
-        super().update_states_pre()
+    def update_pre(self):
+        super().update_pre()
         <do something related to the new attributes>
         <or could overload another function>
 

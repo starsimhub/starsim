@@ -8,7 +8,7 @@ import warnings
 import numpy as np
 import sciris as sc
 import stisim as ss
-
+import numba as nb
 
 # What functions are externally visible -- note, this gets populated in each section below
 __all__ = []
@@ -20,7 +20,7 @@ INT_NAN = np.iinfo(np.int32).max  # Value to use to flag invalid content (i.e., 
 
 
 # %% Helper functions
-__all__ += ['ndict', 'omerge']
+__all__ += ['ndict', 'omerge', 'warn', 'unique', 'find_contacts']
 
 
 class ndict(sc.objdict):
@@ -147,7 +147,6 @@ def warn(msg, category=None, verbose=None, die=None):
     return
 
 
-# %% The core functions
 def unique(arr):
     """
     Find the unique elements and counts in an array.
@@ -200,8 +199,24 @@ def set_seed(seed=None):
 
 # %% Probabilities -- mostly not jitted since performance gain is minimal
 
-__all__ += ['binomial_filter', 'n_poisson', 'n_neg_binomial']
+__all__ += ['binomial_arr', 'binomial_filter', 'n_poisson', 'n_neg_binomial']
 
+
+def binomial_arr(prob_arr):
+    '''
+    Binomial (Bernoulli) trials each with different probabilities.
+
+    Args:
+        prob_arr (array): array of probabilities
+
+    Returns:
+         Boolean array of which trials on the input array succeeded
+
+    **Example**::
+
+        outcomes = ss.binomial_arr([0.1, 0.1, 0.2, 0.2, 0.8, 0.8]) # Perform 6 trials with different probabilities
+    '''
+    return np.random.random(prob_arr.shape) < prob_arr
 
 
 def binomial_filter(prob, arr):
@@ -264,6 +279,34 @@ def n_neg_binomial(rate, dispersion, n, step=1):  # Numba not used due to incomp
 
 __all__ += ['true', 'false', 'defined', 'undefined']
 
+@nb.njit
+def _true(uids, values):
+    """
+    Returns the UIDs for indices where the value evaluates as True
+    """
+    out = np.empty(len(uids), dtype=uids.dtype)
+    j = 0
+    for i in range(len(values)):
+        out[j] = uids[i]
+        if values[i]:
+            j += 1
+    out = out[0:j]
+    return out
+
+@nb.njit
+def _false(uids, values):
+    """
+    Returns the UIDs for indices where the value evaluates as False
+    """
+    out = np.empty(len(uids), dtype=uids.dtype)
+    j = 0
+    for i in range(len(values)):
+        out[j] = uids[i]
+        if not values[i]:
+            j += 1
+    out = out[0:j]
+    return out
+
 
 def true(state):
     """
@@ -276,8 +319,7 @@ def true(state):
 
         inds = ss.true(people.alive) # Returns array of UIDs of alive agents
     """
-
-    return state.uid.__array__()[np.nonzero(state.__array__())]
+    return _true(state.uid.__array__(), state.__array__())
 
 
 def false(state):
@@ -291,7 +333,7 @@ def false(state):
 
         inds = ss.false(people.alive) # Returns array of UIDs of dead agents
     """
-    return state.uid.__array__()[np.nonzero(~state.__array__())]
+    return _false(state.uid.__array__(), state.__array__())
 
 
 def defined(arr):

@@ -16,7 +16,10 @@ Example usage
 import numpy as np
 import sciris as sc
 
-__all__ = ['Distribution', 'uniform', 'choice', 'normal', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int', 'poisson', 'neg_binomial', 'beta', 'gamma']
+__all__ = [
+    'Distribution', 'uniform', 'choice', 'normal', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int',
+    'poisson', 'neg_binomial', 'beta', 'gamma', 'from_data'
+]
 
 
 class Distribution():
@@ -38,6 +41,26 @@ class Distribution():
         Return a specified number of samples from the distribution
         """
         raise NotImplementedError
+
+
+class from_data(Distribution):
+    """ Sample from data """
+
+    def __init__(self, vals, bins):
+        self.vals = vals
+        self.bins = bins
+
+    def mean(self):
+        return
+
+    def sample(self, n=1):
+        """ Sample using CDF """
+        bin_midpoints = self.bins[:-1] + np.diff(self.bins) / 2
+        cdf = np.cumsum(self.vals)
+        cdf = cdf / cdf[-1]
+        values = np.random.rand(n)
+        value_bins = np.searchsorted(cdf, values)
+        return bin_midpoints[value_bins]
 
 
 class uniform(Distribution):
