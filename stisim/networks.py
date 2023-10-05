@@ -285,9 +285,9 @@ class Network(ss.Module):
 
 
 class Networks(ss.ndict):
-    def __init__(self, *args, connectors=None, **kwargs):
+    def __init__(self, *args, type=Network, connectors=None, **kwargs):
         self.setattribute('_connectors', ss.ndict(connectors))
-        super().__init__(*args, **kwargs)
+        super().__init__(*args, type=type, **kwargs)
         return
 
     def initialize(self, sim):
@@ -395,39 +395,46 @@ class mf(Network):
             uids = people.uid[(people.age < people.dt) & people[sex]]
         return uids
 
-    def set_network_states(self, people, initial=False):
+    def set_network_states(self, people, upper_age=None):
         """ Set network states including age of entry into network and participation rates """
+        self.set_participation(people, upper_age=upper_age)
+        self.set_debut(people, upper_age=upper_age)
+
+    def set_participation(self, people, upper_age=None):
+        # Set people who will participate in the network at some point
+        year = people.year
+        if upper_age is None: uids = people.uid
+        else: uids = people.uid[(people.age < upper_age)]
+
         for sk in ['f', 'm']:
-            uids = self.get_state_uids(people, sk, initial=initial)
-            self.set_participation(uids, people.year, sk)
-            self.set_debut(uids, people.year, sk)
+            uids = ss.true(people[sk][uids])
+            df = self.pars.part_rates.loc[self.pars.part_rates.sex == sk]
+            pr = np.interp(year, df['year'], df['part_rates']) * self.pars.rel_part_rates
+            dist = ss.choice([True, False], probabilities=[pr, 1-pr])(len(uids))
+            self.participant[uids] = dist
 
-    def set_participation(self, uids, year, sex):
-        # Set participation rates, with the logic being that these are people who will want
-        # to participate in the network at some point
-        df = self.pars.part_rates.loc[self.pars.part_rates.sex == sex]
-        pr = np.interp(year, df['year'], df['part_rates']) * self.pars.rel_part_rates
-        dist = ss.choice([True, False], probabilities=[pr, 1-pr])(len(uids))
-        self.participant[uids] = dist
-
-    def set_debut(self, uids, year, sex):
+    def set_debut(self, people, upper_age=None):
         # Set debut age
-        df = self.pars.debut.loc[self.pars.debut.sex == sex]
-        all_years = self.pars.debut.year.values
-        year_ind = sc.findnearest(all_years, year)
-        nearest_year = all_years[year_ind]
+        if upper_age is None: uids = people.uid
+        else: uids = people.uid[(people.age < upper_age)]
 
-        mean = np.interp(year, df['year'], df['debut'])
-        std = np.interp(year, df['year'], df['std'])
-        dist = df.loc[df.year == nearest_year].dist.iloc[0]
-        debut_vals = ss.dist_dict[dist](mean, std)(len(uids)) * self.pars.rel_debut
-        self.debut[uids] = debut_vals
+        for sk in ['f', 'm']:
+            uids = ss.true(people[sk][uids])
+            df = self.pars.debut.loc[self.pars.debut.sex == sk]
+            all_years = self.pars.debut.year.values
+            year_ind = sc.findnearest(all_years, people.year)
+            nearest_year = all_years[year_ind]
 
-    def initialize(self, sim, fully=True):
+            mean = np.interp(people.year, df['year'], df['debut'])
+            std = np.interp(people.year, df['year'], df['std'])
+            dist = df.loc[df.year == nearest_year].dist.iloc[0]
+            debut_vals = ss.dist_dict[dist](mean, std)(len(uids)) * self.pars.rel_debut
+            self.debut[uids] = debut_vals
+
+    def initialize(self, sim):
         super().initialize(sim)
-        if fully:
-            self.set_network_states(sim.people, initial=True)
-            self.add_pairs(sim.people, ti=0)
+        self.set_network_states(sim.people)
+        self.add_pairs(sim.people, ti=0)
 
     def add_pairs(self, people, ti=None):
         # Find unpartnered males and females
@@ -459,7 +466,7 @@ class mf(Network):
 
     def update(self, people, dt=None):
         self.end_pairs(people)
-        self.set_network_states(people)
+        self.set_network_states(people, upper_age=people.dt)
         self.add_pairs(people)
 
 
@@ -549,6 +556,7 @@ class mf_msm(NetworkConnector):
             uids = people.uid
         else:
             uids = people.uid[(people.age < upper_age)]
+        uids = ss.true(people.male[uids])
 
         # Get networks and overwrite default participation
         mf = people.networks['mf']
@@ -556,26 +564,21 @@ class mf_msm(NetworkConnector):
         mf.participant[uids] = False
         msm.participant[uids] = False
 
-        # Use the mf network to set the female participation rate
-        f_uids = ss.true(people.female[uids])
-        mf.set_participation(f_uids, people.year, 'f')
-
         # Male participation rate uses info about cross-network participation.
         # First, we determine who's participating in the MSM network
-        m_uids = ss.true(people.male[uids])
         pr = msm.pars.part_rates
-        dist = ss.choice([True, False], probabilities=[pr, 1-pr])(len(m_uids))
-        msm.participant[m_uids] = dist
+        dist = ss.choice([True, False], probabilities=[pr, 1-pr])(len(uids))
+        msm.participant[uids] = dist
 
         # Now we take the MSM participants and determine which are also in the MF network
         msm_uids = ss.true(msm.participant[uids])  # Males in the MSM network
         bi_uids = ss.binomial_filter(self.pars.prop_bi, msm_uids)  # Males in both MSM and MF networks
-        mf_excl_set = np.setdiff1d(m_uids, msm_uids)  # Set of males who aren't in the MSM network
+        mf_excl_set = np.setdiff1d(uids, msm_uids)  # Set of males who aren't in the MSM network
 
         # All these males need to be in the MF network. What remaining share to we need?
         mf_df = mf.pars.part_rates.loc[mf.pars.part_rates.sex == 'm']  # Male participation in the MF network
         mf_pr = np.interp(people.year, mf_df['year'], mf_df['part_rates']) * mf.pars.rel_part_rates
-        remaining_pr = max(mf_pr*len(m_uids)-len(bi_uids), 0)/len(mf_excl_set)
+        remaining_pr = max(mf_pr*len(uids)-len(bi_uids), 0)/len(mf_excl_set)
         mf_excl_uids = ss.binomial_filter(remaining_pr, mf_excl_set)  # Males in MF network only
         mf.participant[bi_uids] = True
         mf.participant[mf_excl_uids] = True
