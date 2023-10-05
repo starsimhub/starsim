@@ -133,7 +133,7 @@ class Disease(Module):
     def make_new_cases(self, sim):
         """ Add new cases of module, through transmission, incidence, etc. """
         pars = self.pars
-        for k, layer in sim.people.networks.items():
+        for k, layer in sim.people.networks.networks.items():
             if k in pars['beta']:
                 contacts = layer.contacts
                 rel_trans = (self.infected & sim.people.alive).astype(float) * self.rel_trans

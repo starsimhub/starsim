@@ -9,7 +9,7 @@ import stisim as ss
 import pandas as pd
 
 # Specify all externally visible functions this file defines
-__all__ = ['Networks', 'Network', 'mf', 'msm', 'mf_msm', 'hpv_network', 'maternal']
+__all__ = ['Networks', 'Network', 'NetworkConnector', 'mf', 'msm', 'mf_msm', 'hpv_network', 'maternal']
 
 
 class Network(ss.Module):
@@ -284,23 +284,17 @@ class Network(ss.Module):
             self.contacts[k] = self.contacts[k][keep]
 
 
-class Networks(ss.ndict):
-    def __init__(self, *args, type=Network, **kwargs):
-        return super().__init__(self, *args, type=type, **kwargs)
-
-class Par():
-    def __init__(self, val, by_sex=False, by_age=False, by_time=False, by_individual=False):
-        self.by_sex = by_sex
-        self.by_age = by_age
-        self.by_time = by_time
-        self.by_individual = by_individual
-        self.val = val
-        self.df = self.make_df()
+class Networks(sc.objdict):
+    def __init__(self, networks=None, connectors=None):
+        self.networks = ss.ndict(networks)
+        self.connectors = ss.ndict(connectors)
         return
 
-    def make_df(self, ):
-
-        return
+    def initialize(self, sim):
+        for nw in self.networks.values():
+            nw.initialize(sim)
+        for cn in self.connectors.values():
+            cn.initialize(sim)
 
 
 class mf(Network):
@@ -505,70 +499,78 @@ class msm(Network):
         self.add_pairs(people)
 
 
-class mf_msm(Network):
+class NetworkConnector(ss.Module):
+    """
+    Template for a connector between networks.
+
+    """
+    def __init__(self, *args, networks=None, pars=None, **kwargs):
+        super().__init__(pars, *args, **kwargs)
+        self.networks = networks
+        self.pars = ss.omerge(pars)
+
+    def initialize(self, sim):
+        # Check that the requested networks are in the sim
+        avail = set(sim.people.networks.networks.keys())
+        if not set(self.networks).issubset(avail):
+            errormsg = f'Connection between {self.networks} has been requested, but available networks are {avail}.'
+            raise ValueError(errormsg)
+        return
+
+    def set_participation(self, people):
+        pass
+
+    def add_pairs(self, people, ti=None):
+        pass
+
+    def update(self, people, dt=0):
+        pass
+
+
+class mf_msm(NetworkConnector):
     """ Combines the MF and MSM networks """
-    def __init__(self, pars=None, msm_pars=None, mf_pars=None):
-
-        key_dict = {
-            'p1': ss.int_,
-            'p2': ss.int_,
-            'dur': ss.float_,
-            'beta': ss.float_,
-        }
-        super().__init__(pars, key_dict=key_dict)
-        self.msm = msm(pars=msm_pars)
-        self.mf = mf(pars=mf_pars)
-
+    def __init__(self, networks=None, pars=None):
+        super().__init__(networks=networks, pars=pars)
         self.pars = ss.omerge({
             'prop_bi': 0.5,  # Could vary over time -- but not by age or sex or individual
         }, self.pars)
+        if self.networks is None: self.networks = ['mf', 'msm']
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.msm.initialize(sim, fully=False)  # don't fully initialize, i.e. don't set participation
-        self.mf.initialize(sim, fully=False)
         self.set_participation(sim.people)
         return
 
     def set_participation(self, people):
+        # Get networks and overwrite default participation
+        mf = people.networks.networks['mf']
+        msm = people.networks.networks['msm']
+        mf.participant[:] = False
+        msm.participant[:] = False
+
         # Use the mf network to set the female participation rate
         f_uids = people.uid[people.female]
-        self.mf.set_participation(f_uids, people.year, 'f')
+        mf.set_participation(f_uids, people.year, 'f')
 
         # Male participation rate uses info about cross-network participation.
         # First, we determine who's participating in the MSM network
         m_uids = people.uid[people.male]
-        pr = self.msm.pars.part_rates
+        pr = msm.pars.part_rates
         dist = ss.choice([True, False], probabilities=[pr, 1-pr])(len(m_uids))
-        self.msm.participant[m_uids] = dist
+        msm.participant[m_uids] = dist
 
         # Now we take the MSM participants and determine which are also in the MF network
-        msm_uids = people.uid[self.msm.participant]  # Males in the MSM network
+        msm_uids = people.uid[msm.participant]  # Males in the MSM network
         bi_uids = ss.binomial_filter(self.pars.prop_bi, msm_uids)  # Males in both MSM and MF networks
         mf_excl_set = np.setdiff1d(m_uids, msm_uids)  # Set of males who aren't in the MSM network
 
         # All these males need to be in the MF network. What remaining share to we need?
-        mf_df = self.mf.pars.part_rates.loc[self.mf.pars.part_rates.sex == 'm']  # Male participation in the MF network
-        mf_pr = np.interp(people.year, mf_df['year'], mf_df['part_rates']) * self.mf.pars.rel_part_rates
+        mf_df = mf.pars.part_rates.loc[mf.pars.part_rates.sex == 'm']  # Male participation in the MF network
+        mf_pr = np.interp(people.year, mf_df['year'], mf_df['part_rates']) * mf.pars.rel_part_rates
         remaining_pr = max(mf_pr*len(m_uids)-len(bi_uids), 0)/len(mf_excl_set)
         mf_excl_uids = ss.binomial_filter(remaining_pr, mf_excl_set)  # Males in MF network only
-        self.mf.participant[bi_uids] = True
-        self.mf.participant[mf_excl_uids] = True
-
-        # Now add pairs
-        self.add_pairs(people, ti=0)
-
-    def add_pairs(self, people, ti=None):
-        self.mf.add_pairs(people, ti=ti)
-        self.msm.add_pairs(people, ti=ti)
-        for key in ['p1', 'p2', 'beta', 'dur']:
-            self.contacts[key] = np.concatenate([self.mf.contacts[key], self.msm.contacts[key]])
-
-    def update(self, people, dt=None):
-        self.mf.update(people)
-        self.msm.update(people)
-        for key in ['p1', 'p2', 'beta', 'dur']:
-            self.contacts[key] = np.concatenate([self.mf.contacts[key], self.msm.contacts[key]])
+        mf.participant[bi_uids] = True
+        mf.participant[mf_excl_uids] = True
 
 
 class hpv_network(Network):
@@ -804,7 +806,7 @@ class maternal(Network):
         inactive = self.contacts.dur <= 0
         self.contacts.beta[inactive] = 0
 
-    def initialize(self, people):
+    def initialize(self, sim):
         """ No pairs added upon initialization """
         pass
 

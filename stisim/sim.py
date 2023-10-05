@@ -242,19 +242,24 @@ class Sim(sc.prettyobj):
         # This means networks will be stored in self.pars['networks'] and we'll need to copy them to the people.
         if self.people.networks is None or len(self.people.networks) == 0:
             if self.pars['networks'] is not None:
-                self.people.networks = ss.ndict(self.pars['networks'])
+                self.people.networks = ss.Networks(self.pars['networks'])
 
-        for key, network in self.people.networks.items():
-            if network.label is not None:
-                layer_name = network.label
-            else:
-                layer_name = key
-                network.label = layer_name
-            network.initialize(self)
+        if not isinstance(self.people.networks, ss.Networks):
+            self.people.networks = ss.Networks(networks=self.people.networks)
+
+        self.people.networks.initialize(self)
+
+        # for key, network in self.people.networks.networks.items():  # TODO rename
+            # if network.label is not None:
+            #     layer_name = network.label
+            # else:
+            #     layer_name = key
+            #     network.label = layer_name
+            # network.initialize(self)
 
             # Add network states to the People's dicts
             # self.people.add_module(network)
-            self.people.networks[layer_name] = network
+            # self.people.networks[network.name] = network
 
         return
 

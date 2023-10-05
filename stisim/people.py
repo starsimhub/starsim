@@ -91,7 +91,7 @@ class BasePeople(sc.prettyobj):
         self._uid_map[keep_uids] = np.arange(0, len(keep_uids))  # Assign the array indices for all of the current UIDs
 
         # Remove the UIDs from the network too
-        for network in self.networks.values():
+        for network in self.networks.networks.values():
             network.remove_uids(uids_to_remove)
 
         return
@@ -227,7 +227,7 @@ class People(BasePeople):
         """
         uids_to_remove = ss.true(self.dead)
         self.remove(uids_to_remove)
-        for network in self.networks.values():
+        for network in self.networks.networks.values():
             network.remove_uids(uids_to_remove)
         return
 
@@ -254,11 +254,8 @@ class People(BasePeople):
         """
         Update networks
         """
-        # Update the participation rates
-
-
         # Now update each network individually
-        for network in self.networks.values():
+        for network in self.networks.networks.values():
             network.update(self)
 
     @property
