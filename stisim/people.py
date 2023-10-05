@@ -91,7 +91,7 @@ class BasePeople(sc.prettyobj):
         self._uid_map[keep_uids] = np.arange(0, len(keep_uids))  # Assign the array indices for all of the current UIDs
 
         # Remove the UIDs from the network too
-        for network in self.networks.networks.values():
+        for network in self.networks.values():
             network.remove_uids(uids_to_remove)
 
         return
@@ -160,7 +160,7 @@ class People(BasePeople):
 
         self.states = ss.ndict()
         self._initialize_states(states)
-        self.networks = ss.ndict(networks)
+        self.networks = ss.Networks(networks)
 
         # Set initial age distribution - likely move this somewhere else later
         age_data_dist = self.validate_age_data(age_data)
@@ -227,7 +227,7 @@ class People(BasePeople):
         """
         uids_to_remove = ss.true(self.dead)
         self.remove(uids_to_remove)
-        for network in self.networks.networks.values():
+        for network in self.networks.values():
             network.remove_uids(uids_to_remove)
         return
 
@@ -254,9 +254,7 @@ class People(BasePeople):
         """
         Update networks
         """
-        # Now update each network individually
-        for network in self.networks.networks.values():
-            network.update(self)
+        self.networks.update(self)
 
     @property
     def active(self):

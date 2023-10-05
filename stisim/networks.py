@@ -284,17 +284,23 @@ class Network(ss.Module):
             self.contacts[k] = self.contacts[k][keep]
 
 
-class Networks(sc.objdict):
-    def __init__(self, networks=None, connectors=None):
-        self.networks = ss.ndict(networks)
-        self.connectors = ss.ndict(connectors)
+class Networks(ss.ndict):
+    def __init__(self, *args, connectors=None, **kwargs):
+        self.setattribute('_connectors', ss.ndict(connectors))
+        super().__init__(*args, **kwargs)
         return
 
     def initialize(self, sim):
-        for nw in self.networks.values():
+        for nw in self.values():
             nw.initialize(sim)
-        for cn in self.connectors.values():
+        for cn in self._connectors.values():
             cn.initialize(sim)
+
+    def update(self, people):
+        for nw in self.values():
+            nw.update(people)
+        for cn in self._connectors.values():
+            cn.update(people)
 
 
 class mf(Network):
@@ -502,7 +508,6 @@ class msm(Network):
 class NetworkConnector(ss.Module):
     """
     Template for a connector between networks.
-
     """
     def __init__(self, *args, networks=None, pars=None, **kwargs):
         super().__init__(pars, *args, **kwargs)
@@ -511,7 +516,7 @@ class NetworkConnector(ss.Module):
 
     def initialize(self, sim):
         # Check that the requested networks are in the sim
-        avail = set(sim.people.networks.networks.keys())
+        avail = set(sim.people.networks.keys())
         if not set(self.networks).issubset(avail):
             errormsg = f'Connection between {self.networks} has been requested, but available networks are {avail}.'
             raise ValueError(errormsg)
@@ -520,10 +525,7 @@ class NetworkConnector(ss.Module):
     def set_participation(self, people):
         pass
 
-    def add_pairs(self, people, ti=None):
-        pass
-
-    def update(self, people, dt=0):
+    def update(self, people):
         pass
 
 
@@ -541,26 +543,32 @@ class mf_msm(NetworkConnector):
         self.set_participation(sim.people)
         return
 
-    def set_participation(self, people):
+    def set_participation(self, people, upper_age=None):
+
+        if upper_age is None:
+            uids = people.uid
+        else:
+            uids = people.uid[(people.age < upper_age)]
+
         # Get networks and overwrite default participation
-        mf = people.networks.networks['mf']
-        msm = people.networks.networks['msm']
-        mf.participant[:] = False
-        msm.participant[:] = False
+        mf = people.networks['mf']
+        msm = people.networks['msm']
+        mf.participant[uids] = False
+        msm.participant[uids] = False
 
         # Use the mf network to set the female participation rate
-        f_uids = people.uid[people.female]
+        f_uids = ss.true(people.female[uids])
         mf.set_participation(f_uids, people.year, 'f')
 
         # Male participation rate uses info about cross-network participation.
         # First, we determine who's participating in the MSM network
-        m_uids = people.uid[people.male]
+        m_uids = ss.true(people.male[uids])
         pr = msm.pars.part_rates
         dist = ss.choice([True, False], probabilities=[pr, 1-pr])(len(m_uids))
         msm.participant[m_uids] = dist
 
         # Now we take the MSM participants and determine which are also in the MF network
-        msm_uids = people.uid[msm.participant]  # Males in the MSM network
+        msm_uids = ss.true(msm.participant[uids])  # Males in the MSM network
         bi_uids = ss.binomial_filter(self.pars.prop_bi, msm_uids)  # Males in both MSM and MF networks
         mf_excl_set = np.setdiff1d(m_uids, msm_uids)  # Set of males who aren't in the MSM network
 
@@ -571,6 +579,10 @@ class mf_msm(NetworkConnector):
         mf_excl_uids = ss.binomial_filter(remaining_pr, mf_excl_set)  # Males in MF network only
         mf.participant[bi_uids] = True
         mf.participant[mf_excl_uids] = True
+
+    def update(self, people):
+        self.set_participation(people, upper_age=people.dt)
+        return
 
 
 class hpv_network(Network):
