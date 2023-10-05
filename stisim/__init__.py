@@ -17,7 +17,7 @@ from .gonorrhea     import *
 from .sim           import *
 
 import sciris as sc
-root = sc.thispath().parent
+root = sc.thispath(__file__).parent
 
 # Import the version and print the license
 if options.verbose:

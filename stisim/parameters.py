@@ -52,8 +52,6 @@ class Parameters(sc.objdict):
         self.connectors = sc.autolist()
         self.interventions = sc.autolist()  # The interventions present in this simulation; populated by the user
         self.analyzers = sc.autolist()  # The functions present in this simulation; populated by the user
-        self.timelimit = None  # Time limit for the simulation (seconds)
-        self.stopping_func = None  # A function to call to stop the sim partway through
 
         # Network parameters, generally initialized after the population has been constructed
         self.networks        = sc.autolist()  # Network types and parameters
