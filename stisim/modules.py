@@ -120,9 +120,9 @@ class Disease(Module):
         self.results += ss.Result(self.name, 'new_infections', sim.npts, dtype=int)
         return
 
-    def update_states_pre(self, sim):
+    def update_pre(self, sim):
         """
-        Carry out autonomous state changes at the start of the timestep
+        Carry out autonomous updates at the start of the timestep (prior to transmission)
 
         :param sim:
         :return:

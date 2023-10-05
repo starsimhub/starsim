@@ -47,14 +47,11 @@ class Parameters(sc.objdict):
         self.dt_demog        = 1.0           # Timestep for demographic updates (in years)
         self.rand_seed       = 1             # Random seed, if None, don't reset
         self.verbose         = ss.options.verbose # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
-        self.remove_dead     = True          # Remove dead agents each timestep
 
         # Events and interventions
         self.connectors = sc.autolist()
         self.interventions = sc.autolist()  # The interventions present in this simulation; populated by the user
         self.analyzers = sc.autolist()  # The functions present in this simulation; populated by the user
-        self.timelimit = None  # Time limit for the simulation (seconds)
-        self.stopping_func = None  # A function to call to stop the sim partway through
 
         # Network parameters, generally initialized after the population has been constructed
         self.networks        = sc.autolist()  # Network types and parameters

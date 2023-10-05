@@ -328,7 +328,7 @@ class Sim(sc.prettyobj):
         # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
         # to be applied to newly created agents
         for disease in self.diseases.values():
-            disease.update_states_pre(self)
+            disease.update_pre(self)
 
         # Update connectors -- TBC where this appears in the ordering
         for connector in self.connectors.values():
@@ -402,9 +402,6 @@ class Sim(sc.prettyobj):
 
             # Check if we were asked to stop
             elapsed = T.toc(output=True)
-            if self.pars['timelimit'] and elapsed > self.pars['timelimit']:
-                sc.printv(f"Time limit ({self.pars['timelimit']} s) exceeded", 1, verbose)
-                return
 
             # Print progress
             if verbose:
