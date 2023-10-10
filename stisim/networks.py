@@ -306,7 +306,8 @@ class Networks(ss.ndict):
 class mf(Network):
     """
     A class holding a single network of contact edges (connections) between people.
-    This network is built by **randomly pairing** males and female with variable relationship durations.
+    This network is built by **randomly pairing** males and female with variable
+    relationship durations.
     """
 
     def __init__(self, pars=None):
@@ -575,7 +576,7 @@ class mf_msm(NetworkConnector):
         bi_uids = ss.binomial_filter(self.pars.prop_bi, msm_uids)  # Males in both MSM and MF networks
         mf_excl_set = np.setdiff1d(uids, msm_uids)  # Set of males who aren't in the MSM network
 
-        # All these males need to be in the MF network. What remaining share to we need?
+        # What remaining share to we need?
         mf_df = mf.pars.part_rates.loc[mf.pars.part_rates.sex == 'm']  # Male participation in the MF network
         mf_pr = np.interp(people.year, mf_df['year'], mf_df['part_rates']) * mf.pars.rel_part_rates
         remaining_pr = max(mf_pr*len(uids)-len(bi_uids), 0)/len(mf_excl_set)

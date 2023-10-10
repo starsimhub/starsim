@@ -9,6 +9,14 @@ import matplotlib.pyplot as plt
 
 ppl = ss.People(10000)
 
+# This example uses a connector between the MF and MSM networks.
+# The connector overrides participation rates so that a given
+# percentage of males (prop_bi) in the MSM network are also in the
+# MF network.
+# This particular connector doesn't do anything with concurrency,
+# i.e. a male who participates in both networks and is currently in
+# a relationship in the MSM network is still considered available for
+# partnerships in the MF network.
 mf_pars = {'part_rates': 0.85}
 msm_pars = {'part_rates': 0.1}
 ppl.networks = ss.Networks(
