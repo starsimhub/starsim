@@ -341,6 +341,14 @@ class mf(Network):
     def active(self, people):
         return self.participant & (people.age > self.debut)
 
+    def available(self, people, sex):
+        # Currently assumes unpartnered people are available
+        # Could modify this to account for concurrency
+        # This property could also be overwritten by a NetworkConnector
+        # which could incorporate information about membership in other
+        # contact networks
+        return np.setdiff1d(people.uid[people[sex] & self.active(people)], self.members)
+
     def validate_pars(self):
         """ Validate parameters and expand assumptions """
 
@@ -386,15 +394,10 @@ class mf(Network):
 
         return
 
-    @staticmethod
-    def get_state_uids(people, sex, initial=False):
-        # If this is the initial time that these are being set, do the whole population
-        if initial:
-            uids = people.uid[people[sex]]
-        # Otherwise, set states at birth
-        else:
-            uids = people.uid[(people.age < people.dt) & people[sex]]
-        return uids
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.set_network_states(sim.people)
+        self.add_pairs(sim.people, ti=0)
 
     def set_network_states(self, people, upper_age=None):
         """ Set network states including age of entry into network and participation rates """
@@ -432,16 +435,9 @@ class mf(Network):
             debut_vals = ss.dist_dict[dist](mean, std)(len(uids)) * self.pars.rel_debut
             self.debut[uids] = debut_vals
 
-    def initialize(self, sim):
-        super().initialize(sim)
-        self.set_network_states(sim.people)
-        self.add_pairs(sim.people, ti=0)
-
     def add_pairs(self, people, ti=None):
-        # Find unpartnered males and females
-        available_m = np.setdiff1d(people.uid[people.male & self.participant], self.members)
-        available_f = np.setdiff1d(people.uid[people.female & self.participant], self.members)
-
+        available_m = self.available(people, 'male')
+        available_f = self.available(people, 'female')
         if len(available_m) <= len(available_f):
             p1 = available_m
             p2 = np.random.choice(available_f, len(p1), replace=False)
@@ -489,17 +485,40 @@ class msm(Network):
         self.pars = ss.omerge({
             'dur': ss.lognormal(5, 3),
             'part_rates': 0.1,
+            'debut': ss.lognormal(18, 2),
         }, self.pars)
 
-    def initialize(self, sim, fully=True):
+    def active(self, people):
+        return self.participant & (people.age > self.debut)
+
+    def available(self, people):
+        return np.setdiff1d(people.uid[people.male & self.active(people)], self.members)
+
+    def initialize(self, sim):
+        # Add more here in line with MF network, e.g. age of debut
+        # Or if too much replication then perhaps both these networks
+        # should be subclasss of a specific network type (ask LY/DK)
         super().initialize(sim)
-        if fully:
-            self.participant[sim.people.female] = False
-            self.add_pairs(sim.people, ti=0)
+        self.set_network_states(sim.people)
+        self.add_pairs(sim.people, ti=0)
+
+    def set_network_states(self, people, upper_age=None):
+        """ Set network states including age of entry into network and participation rates """
+        if upper_age is None: uids = people.uid[people.male]
+        else: uids = people.uid[people.male & (people.age < upper_age)]
+
+        # Participation
+        self.participant[people.female] = False
+        pr = self.pars.part_rates
+        dist = ss.choice([True, False], probabilities=[pr, 1-pr])(len(uids))
+        self.participant[uids] = dist
+
+        # Debut
+        self.debut[uids] = self.pars.debut(len(uids))
 
     def add_pairs(self, people, ti=None):
         # Pair all unpartnered MSM
-        available_m = np.setdiff1d(people.uid[self.participant], self.members)
+        available_m = self.available(people)
         n_pairs = int(len(available_m)/2)
         p1 = available_m[:n_pairs]
         p2 = available_m[n_pairs:n_pairs*2]
@@ -510,6 +529,7 @@ class msm(Network):
 
     def update(self, people, dt=None):
         self.end_pairs(people)
+        self.set_network_states(people, upper_age=people.dt)
         self.add_pairs(people)
 
 
@@ -552,7 +572,6 @@ class mf_msm(NetworkConnector):
         return
 
     def set_participation(self, people, upper_age=None):
-
         if upper_age is None:
             uids = people.uid
         else:
