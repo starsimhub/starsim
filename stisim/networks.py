@@ -695,8 +695,8 @@ class hpv_network(Network):
         m_active = ~female & active
 
         # Compute number of partners
-        f_partnered_inds, f_partnered_counts = np.unique(self['p1'], return_counts=True)
-        m_partnered_inds, m_partnered_counts = np.unique(self['p2'], return_counts=True)
+        f_partnered_inds, f_partnered_counts = np.unique(self.contacts.p1, return_counts=True)
+        m_partnered_inds, m_partnered_counts = np.unique(self.contacts.p2, return_counts=True)
         current_partners = np.zeros((len(people)))
         current_partners[f_partnered_inds] = f_partnered_counts
         current_partners[m_partnered_inds] = m_partnered_counts
@@ -814,10 +814,10 @@ class hpv_network(Network):
         if ti is None: ti = people.ti
         if dt is None: dt = people.dt
         # First remove any relationships due to end
-        self['dur'] = self['dur'] - dt
-        active = self['dur'] > 0
+        self.contacts.dur = self.contacts.dur - dt
+        active = self.contacts.dur > 0
         for key in self.meta.keys():
-            self[key] = self[key][active]
+            self.contacts[key] = self.contacts[key][active]
 
         # Then add new relationships
         self.add_pairs(people, ti=ti)
