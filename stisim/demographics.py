@@ -227,18 +227,11 @@ class Pregnancy(DemographicModule):
         self.susceptible = ss.State('fecund', bool, True)  # Applies to girls and women inside the fertility window
         self.pregnant = ss.State('pregnant', bool, False)  # Currently pregnant
         self.postpartum = ss.State('postpartum', bool, False)  # Currently post-partum
-<<<<<<< HEAD
-        self.ti_pregnant = ss.State('ti_pregnant', float, np.nan)  # Time pregnancy begins
-        self.ti_delivery = ss.State('ti_delivery', float, np.nan)  # Time of delivery
-        self.ti_postpartum = ss.State('ti_postpartum', float, np.nan)  # Time postpartum ends
-        self.ti_dead = ss.State('ti_dead', float, np.nan)  # Maternal mortality
-        self.conception_probs = ss.State('conception_probs', float, 0)
-=======
         self.ti_pregnant = ss.State('ti_pregnant', int, ss.INT_NAN)  # Time pregnancy begins
         self.ti_delivery = ss.State('ti_delivery', int, ss.INT_NAN)  # Time of delivery
         self.ti_postpartum = ss.State('ti_postpartum', int, ss.INT_NAN)  # Time postpartum ends
         self.ti_dead = ss.State('ti_dead', int, ss.INT_NAN)  # Maternal mortality
->>>>>>> network-connectors
+        self.conception_probs = ss.State('conception_probs', float, 0)
 
         self.pars = ss.omerge({
             'dur_pregnancy': 0.75,  # Make this a distribution?
