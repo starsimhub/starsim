@@ -8,7 +8,7 @@ import warnings
 import numpy as np
 import sciris as sc
 import stisim as ss
-
+import numba as nb
 
 # What functions are externally visible -- note, this gets populated in each section below
 __all__ = []
@@ -41,7 +41,7 @@ class ndict(sc.objdict):
     """
 
     def __init__(self, *args, name='name', type=None, strict=True, **kwargs):
-        self.setattribute('_name', name) # Since otherwise treated as keys
+        self.setattribute('_name', name)  # Since otherwise treated as keys
         self.setattribute('_type', type)
         self.setattribute('_strict', strict)
         self._initialize(*args, **kwargs)
@@ -238,6 +238,22 @@ def binomial_filter(prob, arr):
     return arr[(np.random.random(len(arr)) < prob).nonzero()[0]]
 
 
+def binomial_arr(prob_arr):
+    """
+    Binomial (Bernoulli) trials each with different probabilities.
+
+    Args:
+        prob_arr (array): array of probabilities
+
+    Returns:
+         Boolean array of which trials on the input array succeeded
+
+    **Example**::
+
+        outcomes = ss.binomial_arr([0.1, 0.1, 0.2, 0.2, 0.8, 0.8]) # Perform 6 trials with different probabilities
+    """
+    return np.random.random(prob_arr.shape) < prob_arr
+
 
 def n_poisson(rate, n):
     """
@@ -279,6 +295,34 @@ def n_neg_binomial(rate, dispersion, n, step=1):  # Numba not used due to incomp
 
 __all__ += ['true', 'false', 'defined', 'undefined']
 
+@nb.njit
+def _true(uids, values):
+    """
+    Returns the UIDs for indices where the value evaluates as True
+    """
+    out = np.empty(len(uids), dtype=uids.dtype)
+    j = 0
+    for i in range(len(values)):
+        out[j] = uids[i]
+        if values[i]:
+            j += 1
+    out = out[0:j]
+    return out
+
+@nb.njit
+def _false(uids, values):
+    """
+    Returns the UIDs for indices where the value evaluates as False
+    """
+    out = np.empty(len(uids), dtype=uids.dtype)
+    j = 0
+    for i in range(len(values)):
+        out[j] = uids[i]
+        if not values[i]:
+            j += 1
+    out = out[0:j]
+    return out
+
 
 def true(state):
     """
@@ -291,8 +335,7 @@ def true(state):
 
         inds = ss.true(people.alive) # Returns array of UIDs of alive agents
     """
-
-    return state.uid.__array__()[np.nonzero(state.__array__())]
+    return _true(state.uid.__array__(), state.__array__())
 
 
 def false(state):
@@ -306,7 +349,7 @@ def false(state):
 
         inds = ss.false(people.alive) # Returns array of UIDs of dead agents
     """
-    return state.uid.__array__()[np.nonzero(~state.__array__())]
+    return _false(state.uid.__array__(), state.__array__())
 
 
 def defined(arr):

@@ -5,13 +5,11 @@ Define analyzers
 import stisim as ss
 
 
-__all__ = ['Analyzer', 'Analyzers']
+__all__ = ['Analyzer']
 
 
 class Analyzer(ss.Module):
-    pass
 
+    def update_results(self, sim):
+        raise NotImplementedError
 
-class Analyzers(ss.ndict):
-    def __init__(self, *args, type=Analyzer, **kwargs):
-        return super().__init__(self, *args, type=type, **kwargs)

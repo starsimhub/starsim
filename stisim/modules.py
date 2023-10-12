@@ -6,7 +6,7 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 
-__all__ = ['Module', 'Modules', 'Disease']
+__all__ = ['Module', 'Disease']
 
 
 class Module(sc.prettyobj):
@@ -15,7 +15,7 @@ class Module(sc.prettyobj):
         self.pars = ss.omerge(pars)
         self.label = label if label else ''
         self.requires = sc.mergelists(requires)
-        self.results = ss.Results()
+        self.results = ss.ndict(type=ss.Result)
         self.initialized = False
         self.finalized = False
         return
@@ -37,14 +37,11 @@ class Module(sc.prettyobj):
         self.check_requires(sim)
 
         # Connect the states to the sim
-        for state in self.states.values():
+        for state in self.states:
             state.initialize(sim.people)
 
         self.initialized = True
         return
-
-    def apply(self, sim):
-        pass
 
     def finalize(self, sim):
         self.finalized = True
@@ -56,12 +53,18 @@ class Module(sc.prettyobj):
 
     @property
     def states(self):
-        return ss.ndict({k: v for k, v in self.__dict__.items() if isinstance(v, ss.State)})
+        """
+        Return a flat collection of all states
 
+        The base class returns all states that are contained in top-level attributes
+        of the Module. If a Module stores states in a non-standard location (e.g.,
+        within a list of states, or otherwise in some other nested structure - perhaps
+        due to supporting features like multiple genotypes) then the Module should
+        overload this attribute to ensure that all states appear in here.
 
-class Modules(ss.ndict):
-    def __init__(self, *args, type=Module, **kwargs):
-        return super().__init__(self, *args, type=type, **kwargs)
+        :return:
+        """
+        return [x for x in self.__dict__.values() if isinstance(x, ss.State)]
 
 
 class Disease(Module):
@@ -74,7 +77,7 @@ class Disease(Module):
         self.rel_trans = ss.State('rel_trans', float, 1)
         self.susceptible = ss.State('susceptible', bool, True)
         self.infected = ss.State('infected', bool, False)
-        self.ti_infected = ss.State('ti_infected', float, np.nan)
+        self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
 
         return
 
@@ -102,8 +105,8 @@ class Disease(Module):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        initial_cases = np.random.choice(sim.people.uid, self.pars['initial'])
-
+        n_init_cases = int(self.pars['init_prev'] * len(sim.people))
+        initial_cases = np.random.choice(sim.people.uid, n_init_cases, replace=False)
         self.set_prognoses(sim, initial_cases)
         return
 
@@ -117,41 +120,44 @@ class Disease(Module):
         self.results += ss.Result(self.name, 'new_infections', sim.npts, dtype=int)
         return
 
-    def update(self, sim):
+    def update_pre(self, sim):
         """
-        Perform all updates
-        """
-        self.update_states(sim)
-        self.make_new_cases(sim)
-        self.update_results(sim)
-        return
+        Carry out autonomous updates at the start of the timestep (prior to transmission)
 
-    def update_states(self, sim):
-        # Carry out any autonomous state changes at the start of the timestep
+        :param sim:
+        :return:
+        """
+
         pass
 
     def make_new_cases(self, sim):
         """ Add new cases of module, through transmission, incidence, etc. """
-        pars = sim.pars[self.name]
+        pars = self.pars
         for k, layer in sim.people.networks.items():
             if k in pars['beta']:
-                rel_trans = (self.infected & sim.people.alive).astype(float)
-                rel_sus = (self.susceptible & sim.people.alive).astype(float)
-                for a, b, beta in [[layer['p1'], layer['p2'], pars['beta'][k][0]],
-                                   [layer['p2'], layer['p1'], pars['beta'][k][1]]]:
+                contacts = layer.contacts
+                rel_trans = (self.infected & sim.people.alive).astype(float) * self.rel_trans
+                rel_sus = (self.susceptible & sim.people.alive).astype(float) * self.rel_sus
+                for a, b, beta in [[contacts.p1, contacts.p2, pars.beta[k][0]],
+                                   [contacts.p2, contacts.p1, pars.beta[k][1]]]:
                     # probability of a->b transmission
-                    p_transmit = rel_trans[a] * rel_sus[b] * layer['beta'] * beta
+                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta
                     new_cases = np.random.random(len(a)) < p_transmit
-                    if new_cases.any():
+                    if np.any(new_cases):
                         self.set_prognoses(sim, b[new_cases])
 
     def set_prognoses(self, sim, uids):
         pass
 
+    def set_congenital(self, sim, uids):
+        # Need to figure out whether we would have a methods like this here or make it
+        # part of a pregnancy/STI connector
+        pass
+
     def update_results(self, sim):
         self.results['n_susceptible'][sim.ti] = np.count_nonzero(self.susceptible)
         self.results['n_infected'][sim.ti] = np.count_nonzero(self.infected)
-        self.results['prevalence'][sim.ti] = self.results.n_infected[sim.ti] / len(sim.people)
+        self.results['prevalence'][sim.ti] = self.results.n_infected[sim.ti] / np.count_nonzero(sim.people.alive)
         self.results['new_infections'][sim.ti] = np.count_nonzero(self.ti_infected == sim.ti)
 
     def finalize_results(self, sim):

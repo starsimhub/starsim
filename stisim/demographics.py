@@ -7,10 +7,18 @@ import stisim as ss
 import sciris as sc
 import pandas as pd
 
-__all__ = ['births', 'background_deaths', 'Pregnancy']
+__all__ = ['DemographicModule', 'births', 'background_deaths', 'Pregnancy']
 
 
-class births(ss.Module):
+class DemographicModule(ss.Module):
+    # A demographic module typically handles births/deaths/migration and takes
+    # place at the start of the timestep, before networks are updated and before
+    # any disease modules are executed
+    pass
+    # TODO - add common demographic-related functionality here
+
+
+class births(DemographicModule):
     def __init__(self, pars=None):
         super().__init__(pars)
 
@@ -67,7 +75,7 @@ class births(ss.Module):
         br_year = p.birth_rates[p.data_cols['year']]
         br_val = p.birth_rates[p.data_cols['cbr']]
         this_birth_rate = np.interp(sim.year, br_year, br_val) * p.units_per_100 * p.rel_birth * sim.pars.dt_demog
-        n_new = sc.randround(len(sim.people) * this_birth_rate)
+        n_new = int(np.floor(np.count_nonzero(sim.people.alive) * this_birth_rate))
         return n_new
 
     def add_births(self, sim):
@@ -84,7 +92,7 @@ class births(ss.Module):
         self.results['cbr'] = self.results['new'] / sim.results['pop_size']
 
 
-class background_deaths(ss.Module):
+class background_deaths(DemographicModule):
     def __init__(self, pars=None):
         super().__init__(pars)
 
@@ -196,7 +204,8 @@ class background_deaths(ss.Module):
 
         # Get indices of people who die of other causes
         death_uids = ss.true(ss.binomial_arr(self.death_probs))
-        sim.people.ti_dead[death_uids] = sim.ti
+        death_uids = ss.true(sim.people.alive[death_uids])
+        sim.people.request_death(death_uids)
 
         return len(death_uids)
 
@@ -208,7 +217,7 @@ class background_deaths(ss.Module):
         self.results['mortality_rate'] = self.results['new'] / sim.results['pop_size']
 
 
-class Pregnancy(ss.Module):
+class Pregnancy(DemographicModule):
 
     def __init__(self, pars=None):
         super().__init__(pars)
@@ -218,11 +227,18 @@ class Pregnancy(ss.Module):
         self.susceptible = ss.State('fecund', bool, True)  # Applies to girls and women inside the fertility window
         self.pregnant = ss.State('pregnant', bool, False)  # Currently pregnant
         self.postpartum = ss.State('postpartum', bool, False)  # Currently post-partum
+<<<<<<< HEAD
         self.ti_pregnant = ss.State('ti_pregnant', float, np.nan)  # Time pregnancy begins
         self.ti_delivery = ss.State('ti_delivery', float, np.nan)  # Time of delivery
         self.ti_postpartum = ss.State('ti_postpartum', float, np.nan)  # Time postpartum ends
         self.ti_dead = ss.State('ti_dead', float, np.nan)  # Maternal mortality
         self.conception_probs = ss.State('conception_probs', float, 0)
+=======
+        self.ti_pregnant = ss.State('ti_pregnant', int, ss.INT_NAN)  # Time pregnancy begins
+        self.ti_delivery = ss.State('ti_delivery', int, ss.INT_NAN)  # Time of delivery
+        self.ti_postpartum = ss.State('ti_postpartum', int, ss.INT_NAN)  # Time postpartum ends
+        self.ti_dead = ss.State('ti_dead', int, ss.INT_NAN)  # Maternal mortality
+>>>>>>> network-connectors
 
         self.pars = ss.omerge({
             'dur_pregnancy': 0.75,  # Make this a distribution?
@@ -329,9 +345,7 @@ class Pregnancy(ss.Module):
 
         # Maternal deaths
         maternal_deaths = ss.true(self.ti_dead <= sim.ti)
-        if len(maternal_deaths):
-            sim.people.alive[maternal_deaths] = False
-            sim.people.ti_dead[maternal_deaths] = sim.ti
+        sim.people.request_death(maternal_deaths)
 
         return
 
@@ -407,4 +421,3 @@ class Pregnancy(ss.Module):
         self.results['pregnancies'][sim.ti] = np.count_nonzero(self.ti_pregnant == sim.ti)
         self.results['births'][sim.ti] = np.count_nonzero(self.ti_delivery == sim.ti)
         return
-

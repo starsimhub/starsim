@@ -55,6 +55,7 @@ class FusedArray(NDArrayOperatorsMixin):
         """
         out = np.empty(len(key), dtype=vals.dtype)
         new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
+
         for i in range(len(key)):
             idx = uid_map[key[i]]
             if idx == INT_NAN:
@@ -187,7 +188,7 @@ class FusedArray(NDArrayOperatorsMixin):
         return self.values.all(*args, **kwargs)
 
     def count_nonzero(self, *args, **kwargs):
-        return self.values.count_nonzero(*args, **kwargs)
+        return np.count_nonzero(self.values, *args, **kwargs)
 
     @property
     def shape(self):
@@ -234,7 +235,7 @@ class FusedArray(NDArrayOperatorsMixin):
 
 
 class DynamicView(NDArrayOperatorsMixin):
-    def __init__(self, dtype, fill_value=0, label=None):
+    def __init__(self, dtype, fill_value=0):
         """
         Args:
             name: name of the result as used in the model
@@ -245,9 +246,7 @@ class DynamicView(NDArrayOperatorsMixin):
         """
         self.dtype = dtype
         self.fill_value = fill_value
-
         self.n = 0  # Number of agents currently in use
-
         self._data = None  # The underlying memory array (length at least equal to n)
         self._view = None  # The view corresponding to what is actually accessible (length equal to n)
         return
@@ -328,7 +327,7 @@ class DynamicView(NDArrayOperatorsMixin):
 class State(FusedArray):
 
     def __init__(self, name, dtype, fill_value=0, label=None):
-        super().__init__(values=None, uid=None, uid_map=None) # Call the FusedArray constructor
+        super().__init__(values=None, uid=None, uid_map=None)  # Call the FusedArray constructor
         self._data = DynamicView(dtype=dtype, fill_value=fill_value)
         self.name = name
         self.label = label or name

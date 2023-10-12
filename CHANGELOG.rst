@@ -9,7 +9,13 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :depth: 1
 
 
-Version 0.0.7 (2023-09-06)
+Version 0.0.8 (2023-10-04)
+--------------------------
+- Enable removing people from simulations following death
+- *GitHub info*: PR `121 <https://github.com/amath-idm/stisim/pull/121>`_
+
+
+Version 0.0.7 (2023-09-08)
 --------------------------
 - Refactor distributions to use new Distribution class
 - *GitHub info*: PR `112 <https://github.com/amath-idm/stisim/pull/112>`_

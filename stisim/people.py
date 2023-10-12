@@ -29,6 +29,9 @@ class BasePeople(sc.prettyobj):
         self.uid.initialize(n)
         self.uid[:] = np.arange(0, n)
 
+        self.ti = None  # Track simulation time index
+        self.dt = np.nan  # Track simulation time step
+
         # We internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
         # e.g., across modules, but we will never change the size of a State multiple times in the same iteration over
         # _states. This is a hidden variable because it is internally used to synchronize the size of all States contained
@@ -157,7 +160,7 @@ class People(BasePeople):
 
         self.states = ss.ndict()
         self._initialize_states(states)
-        self.networks = ss.ndict(networks)
+        self.networks = ss.Networks(networks)
 
         # Set initial age distribution - likely move this somewhere else later
         age_data_dist = self.validate_age_data(age_data)
@@ -203,11 +206,11 @@ class People(BasePeople):
          - `sim.people.states['hiv.susceptible']`
         """
 
-        for state_name, state in module.states.items():
-            combined_name = module.name + '.' + state_name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
+        for state in module.states:
+            combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
             self.states[combined_name] = state  # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
             pre, _, post = combined_name.rpartition('.')
-            setattr(module_states, state_name, state)
+            setattr(module_states, state.name, state)
 
         return
 
@@ -218,30 +221,40 @@ class People(BasePeople):
         """
         return self.scale[inds].sum()
 
-    def update(self, sim):
-        """ Update demographics and networks """
-        self.update_demographics(sim.dt, sim.ti)
-
-        if sim.pars.remove_dead:
-            self.remove(self.uid[self.dead])
-
-        self.update_networks()
-
+    def remove_dead(self, sim):
+        """
+        Remove dead agents
+        """
+        uids_to_remove = ss.true(self.dead)
+        self.remove(uids_to_remove)
+        for network in self.networks.values():
+            network.remove_uids(uids_to_remove)
         return
 
-    def update_demographics(self, dt, ti):
-        """ Perform vital dynamic updates at the current timestep """
-        death_uids = ss.true(self.ti_dead <= ti)
+    def update_post(self, sim):
+        """
+        Final updates at the very end of the timestep
+
+        :param sim:
+        :return:
+        """
+        self.age[self.alive] += self.dt
+
+
+    def resolve_deaths(self):
+        """
+        Carry out any deaths that took place this timestep
+
+        :return:
+        """
+        death_uids = ss.true(self.ti_dead <= self.ti)
         self.alive[death_uids] = False
-        self.age += dt
-        return
 
     def update_networks(self):
         """
         Update networks
         """
-        for network in self.networks.values():
-            network.update(self)
+        self.networks.update(self)
 
     @property
     def active(self):
@@ -257,3 +270,51 @@ class People(BasePeople):
     def male(self):
         """ Male boolean """
         return ~self.female
+
+    @property
+    def f(self):
+        """ Shorthand for female """
+        return self.female
+
+    @property
+    def m(self):
+        """ Shorthand for male """
+        return self.male
+
+    def init_results(self, sim):
+        sim.results += ss.Result(None, 'n_alive', sim.npts, ss.int_)
+        sim.results += ss.Result(None, 'new_deaths', sim.npts, ss.int_)
+        return
+
+    def update_results(self, sim):
+        sim.results.n_alive[self.ti] = np.count_nonzero(self.alive)
+        sim.results.new_deaths[self.ti] = np.count_nonzero(self.ti_dead == self.ti)
+        return
+
+    def request_death(self, uids):
+        """
+        External-facing function to request an agent die at the current timestep
+
+        In general, users should not directly interact with `People.ti_dead` to minimize
+        interactions between modules (e.g., if a module requesting a future death, overwrites
+        death due to a different module taking place at the current timestep).
+
+        Modules that have a future time of death (e.g., due to disease duration) should keep
+        track of that internally. When the module is ready to cause the agent to die, it should
+        call this method, and can update its own results for the cause of death. This way, if
+        multiple modules request death on the same day, they can each record a death due to their
+        own cause.,
+
+        The actual deaths are resolved after modules have all run, but before analyzers. That way,
+        regardless of whether removing dead agents is enabled or not, analyzers will be able to
+        see and record outcomes for agents that died this timestep.
+
+        :param uids: Agent IDs to request deaths for
+        :return: UIDs of agents that have been scheduled to die on this timestep
+        """
+
+        # Only update the time of death for agents that are currently alive. This way modules cannot
+        # modify the time of death for agents that have already died. Noting that if remove_people is
+        # enabled then often such agents would not be present in the simulation anyway
+        uids = ss.true(self.alive[uids])
+        self.ti_dead[uids] = self.ti

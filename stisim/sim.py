@@ -13,35 +13,35 @@ __all__ = ['Sim', 'AlreadyRunError']
 
 class Sim(sc.prettyobj):
 
-    def __init__(self, pars=None, label=None, people=None, demographics=None, modules=None, **kwargs):
+    def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, connectors=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
         self.people = people  # People object
-        self.modules = ss.Modules(modules)  # List of modules to simulate
-        self.demographics = demographics  # Multiple formats accepted -- see init_demographics for details
-        self.connectors = None  # Placeholder storage while we determine what these are
-        self.results = ss.Results()  # For storing results
-        self.summary = None  # For storing a summary of the results
-        self.initialized = False  # Whether initialization is complete
-        self.complete = False  # Whether a simulation has completed running # TODO: replace with finalized?
+        self.demographics  = ss.ndict(demographics, type=ss.DemographicModule)
+        self.diseases      = ss.ndict(diseases, type=ss.Disease)
+        self.connectors    = ss.ndict(connectors, type=ss.Connector)
+        self.results       = ss.ndict(type=ss.Result)  # For storing results
+        self.summary       = None  # For storing a summary of the results
+        self.initialized   = False  # Whether initialization is complete
+        self.complete      = False  # Whether a simulation has completed running # TODO: replace with finalized?
         self.results_ready = False  # Whether results are ready
-        self.filename = None
+        self.filename      = None
 
         # Time indexing
-        self.ti = None  # The time index, e.g. 0, 1, 2 # TODO: do we need all of these?
+        self.ti      = None  # The time index, e.g. 0, 1, 2 # TODO: do we need all of these?
         self.yearvec = None
-        self.tivec = None
-        self.npts = None
+        self.tivec   = None
+        self.npts    = None
 
         # Make default parameters (using values from parameters.py)
         self.pars = ss.make_pars()  # Start with default pars
         self.pars.update_pars(sc.mergedicts(pars, kwargs))  # Update the parameters
 
         # Initialize other quantities
-        self.interventions = ss.Interventions()
-        self.analyzers = ss.Analyzers()
+        self.interventions = ss.ndict(type=ss.Intervention)
+        self.analyzers = ss.ndict(type=ss.Analyzer)
 
         return
 
@@ -53,15 +53,7 @@ class Sim(sc.prettyobj):
     def year(self):
         return self.yearvec[self.ti]
 
-    @property
-    def disease_list(self):
-        return [m for m in self.modules if isinstance(m, ss.Disease)]
-
-    @property
-    def diseases_present(self):
-        return len(self.disease_list) > 0
-
-    def initialize(self, reset=False, **kwargs):
+    def initialize(self, popdict=None, reset=False, **kwargs):
         """
         Perform all initializations on the sim.
         """
@@ -76,8 +68,9 @@ class Sim(sc.prettyobj):
         self.init_people(reset=reset, **kwargs)  # Create all the people (the heaviest step)
         self.init_demographics()
         self.init_networks()
-        self.init_results()
-        self.init_modules()
+        self.init_demographics()
+        self.init_diseases()
+        self.init_connectors()
         self.init_interventions()
         self.init_analyzers()
 
@@ -208,36 +201,35 @@ class Sim(sc.prettyobj):
         if not self.people.initialized:
             self.people.initialize()
 
-        # Add time attributes
+        # Set time attributes
         self.people.ti = self.ti
         self.people.dt = self.dt
-
+        self.people.year = self.year
+        self.people.init_results(self)
         return self
 
     def init_demographics(self):
-        """ Initialize demographic modules """
-        if sc.checktype(self.demographics, str):
-            # Should accept location string, plus other allowable keywords like "static" or "default"?
-            raise NotImplementedError
-        if sc.checktype(self.demographics, ss.Module):
-            self.demographics = sc.tolist(self.demographics)
-        if sc.checktype(self.demographics, list):
-            self.demographics = ss.Modules(self.demographics)
-        return
-
-    def init_modules(self):
-        """ Initialize modules and connectors to be simulated """
-        for module in self.modules.values():
+        for module in self.demographics.values():
             module.initialize(self)
-
-            # Add the module's parameters and results into the Sim's dicts
-            self.pars[module.name] = module.pars
             self.results[module.name] = module.results
 
-            # Add module states to the People's dicts
-            self.people.add_module(module)
+    def init_diseases(self):
+        """ Initialize modules and connectors to be simulated """
+        for disease in self.diseases.values():
+            disease.initialize(self)
+
+            # Add the disease's parameters and results into the Sim's dicts
+            self.pars[disease.name] = disease.pars
+            self.results[disease.name] = disease.results
+
+            # Add disease states to the People's dicts
+            self.people.add_module(disease)
 
         return
+
+    def init_connectors(self):
+        for connector in self.connectors.values():
+            connector.initialize(self)
 
     def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
@@ -246,31 +238,24 @@ class Sim(sc.prettyobj):
         # This means networks will be stored in self.pars['networks'] and we'll need to copy them to the people.
         if self.people.networks is None or len(self.people.networks) == 0:
             if self.pars['networks'] is not None:
-                self.people.networks = ss.ndict(self.pars['networks'])
+                self.people.networks = ss.Networks(self.pars['networks'])
 
-        for key, network in self.people.networks.items():
-            if network.label is not None:
-                layer_name = network.label
-            else:
-                layer_name = key
-                network.label = layer_name
-            network.initialize(self.people)
-            self.people.networks[layer_name] = network
+        if not isinstance(self.people.networks, ss.Networks):
+            self.people.networks = ss.Networks(networks=self.people.networks)
 
-        return
+        self.people.networks.initialize(self)
 
-    def init_results(self):
-        """
-        Create the main results structure.
-        """
-        # Make results
-        results = ss.Results(
-            ss.Result(None, 'n_alive', self.npts, ss.int_),
-        )
+        # for key, network in self.people.networks.networks.items():  # TODO rename
+            # if network.label is not None:
+            #     layer_name = network.label
+            # else:
+            #     layer_name = key
+            #     network.label = layer_name
+            # network.initialize(self)
 
-        # Final items
-        self.results = results
-        self.results_ready = False
+            # Add network states to the People's dicts
+            # self.people.add_module(network)
+            # self.people.networks[network.name] = network
 
         return
 
@@ -304,7 +289,7 @@ class Sim(sc.prettyobj):
                 raise TypeError(errormsg)
             self.analyzers += analyzer  # Add it in
 
-        for analyzer in self.analyzers:
+        for analyzer in self.analyzers.values():
             if isinstance(analyzer, ss.Analyzer):
                 analyzer.initialize(self)
 
@@ -316,9 +301,8 @@ class Sim(sc.prettyobj):
         TBC whether we keep this or incorporate the checks into the init methods
         """
         # Make sure that there's a contact network if any diseases are present
-        networks_present = len(self.people.networks.keys())
-        if self.diseases_present and not networks_present:
-            warnmsg = f'Warning: your simulation has {len(self.disease_list)} diseases but no contact network(s).'
+        if self.diseases and not self.people.networks:
+            warnmsg = f'Warning: simulation has {len(self.diseases)} diseases but no contact network(s).'
             ss.warn(warnmsg, die=False)
         return
 
@@ -329,44 +313,57 @@ class Sim(sc.prettyobj):
         if self.complete:
             raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
 
-        # Update states, modules, partnerships
-        self.people.update(self)
-        self.apply_interventions()
-        self.update_modules()
-        self.apply_analyzers()
+        # Clean up dead agents, if removing agents is enabled
+        if self.pars.remove_dead:
+            self.people.remove_dead(self)
+
+        # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
+        for module in self.demographics.values():
+            module.update(self)
+
+        # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
+        # to be applied to newly created agents
+        for disease in self.diseases.values():
+            disease.update_pre(self)
+
+        # Update connectors -- TBC where this appears in the ordering
+        for connector in self.connectors.values():
+            connector.update(self)
+
+        # Update networks - this takes place here in case autonomous state changes at this timestep
+        # affect eligibility for contacts
+        self.people.update_networks()
+
+        # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
+        # interventions, by running them at this point
+        for intervention in self.interventions.values():
+            intervention.apply(self)
+
+        # Carry out transmission/new cases
+        for disease in self.diseases.values():
+            disease.make_new_cases(self)
+
+        # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
+        # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
+        self.people.resolve_deaths()
 
         # Update results
-        self.results.n_alive[self.ti] = len(self.people)
+        self.people.update_results(self)
+
+        for disease in self.diseases.values():
+            disease.update_results(self)
+
+        for analyzer in self.analyzers.values():
+            analyzer.update_results(self)
 
         # Tidy up
         self.ti += 1
+        self.people.ti = self.ti
+        self.people.update_post(self)
+
         if self.ti == self.npts:
             self.complete = True
 
-        return
-
-    def apply_interventions(self):
-        """
-        Apply the interventions
-        """
-        for intervention in self.interventions.values():
-            intervention(self)
-        return
-
-    def update_modules(self):
-        """
-        Update modules
-        """
-        for module in self.modules.values():
-            module.update(self)
-        return
-
-    def apply_analyzers(self):
-        """
-        Apply the analyzers
-        """
-        for analyzer in self.analyzers.values():
-            analyzer(self)
         return
 
     def run(self, until=None, reset_seed=True, verbose=None):
@@ -401,12 +398,6 @@ class Sim(sc.prettyobj):
 
             # Check if we were asked to stop
             elapsed = T.toc(output=True)
-            if self.pars['timelimit'] and elapsed > self.pars['timelimit']:
-                sc.printv(f"Time limit ({self.pars['timelimit']} s) exceeded", 1, verbose)
-                return
-            elif self.pars['stopping_func'] and self.pars['stopping_func'](self):
-                sc.printv("Stopping function terminated the simulation", 1, verbose)
-                return
 
             # Print progress
             if verbose:

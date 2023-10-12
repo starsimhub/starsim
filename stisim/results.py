@@ -7,7 +7,7 @@ import sciris as sc
 import stisim as ss
 
 
-__all__ = ['Result', 'Results']
+__all__ = ['Result']
 
 
 class Result(np.ndarray):
@@ -28,7 +28,3 @@ class Result(np.ndarray):
     def to_df(self):
         return sc.dataframe({self.name:self})
     
-    
-class Results(ss.ndict):
-    def __init__(self, *args, **kwargs):
-        super().__init__(self, type=Result, *args, **kwargs)

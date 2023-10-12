@@ -16,7 +16,11 @@ class Gonorrhea(ss.Disease):
 
         # States additional to the default disease states (see base class)
         self.symptomatic = ss.State('symptomatic', float, False)
+<<<<<<< HEAD
         self.ti_clearance = ss.State('ti_clearance', float, np.nan)
+=======
+        self.ti_clearance = ss.State('ti_clearance', int, ss.INT_NAN)
+>>>>>>> network-connectors
         self.p_symp = ss.State('p_symp', float, 1)
 
         # Parameters
@@ -30,6 +34,7 @@ class Gonorrhea(ss.Disease):
         # Additional states dependent on parameter values, e.g. self.p_symp?
         # These might be useful for connectors to target, e.g. if HIV reduces p_clear
 
+<<<<<<< HEAD
         return
 
     def init_results(self, sim):
@@ -52,6 +57,29 @@ class Gonorrhea(ss.Disease):
         # I guess we could just check for it e.g., 'if HIV in sim.modules' or
         # 'if 'hiv' in sim.people' or something
 
+=======
+        return
+
+    def init_results(self, sim):
+        """
+        Initialize results
+        """
+        super().init_results(sim)
+        self.results += ss.Result(self.name, 'n_sympotmatic', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'new_clearances', sim.npts, dtype=int)
+        return
+
+    def update_results(self, sim):
+        super(Gonorrhea, self).update_results(sim)
+        self.results['n_sympotmatic'][sim.ti] = np.count_nonzero(self.symptomatic)
+        self.results['new_clearances'][sim.ti] = np.count_nonzero(self.ti_clearance == sim.ti)
+        return
+
+    def update_states_pre(self, sim):
+        # What if something in here should depend on another module?
+        # I guess we could just check for it e.g., 'if HIV in sim.modules' or
+        # 'if 'hiv' in sim.people' or something
+>>>>>>> network-connectors
         # Natural clearance
         clearances = self.ti_clearance <= sim.ti
         self.susceptible[clearances] = True
@@ -59,6 +87,13 @@ class Gonorrhea(ss.Disease):
         self.symptomatic[clearances] = False
         self.ti_clearance[clearances] = sim.ti
 
+<<<<<<< HEAD
+=======
+        return
+    
+    def update_results(self, sim):
+        super(Gonorrhea, self).update_results(sim)
+>>>>>>> network-connectors
         return
 
     def make_new_cases(self, sim):
