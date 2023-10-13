@@ -13,34 +13,36 @@ __all__ = ['Sim', 'AlreadyRunError']
 
 class Sim(sc.prettyobj):
 
-    def __init__(self, pars=None, label=None, people=None, modules=None, **kwargs):
+    def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
         self.people = people  # People object
-        self.modules = ss.Modules(modules)  # List of modules to simulate
-        self.connectors = None  # Placeholder storage while we determine what these are
-        self.results = ss.Results()  # For storing results
-        self.summary = None  # For storing a summary of the results
-        self.initialized = False  # Whether initialization is complete
-        self.complete = False  # Whether a simulation has completed running # TODO: replace with finalized?
+
+        self.demographics  = ss.ndict(demographics, type=ss.DemographicModule)
+        self.diseases      = ss.ndict(diseases, type=ss.Disease)
+        self.connectors    = None  # Placeholder storage while we determine what these are
+        self.results       = ss.ndict(type=ss.Result)  # For storing results
+        self.summary       = None  # For storing a summary of the results
+        self.initialized   = False  # Whether initialization is complete
+        self.complete      = False  # Whether a simulation has completed running # TODO: replace with finalized?
         self.results_ready = False  # Whether results are ready
-        self.filename = None
+        self.filename      = None
 
         # Time indexing
-        self.ti = None  # The time index, e.g. 0, 1, 2 # TODO: do we need all of these?
+        self.ti      = None  # The time index, e.g. 0, 1, 2 # TODO: do we need all of these?
         self.yearvec = None
-        self.tivec = None
-        self.npts = None
+        self.tivec   = None
+        self.npts    = None
 
         # Make default parameters (using values from parameters.py)
         self.pars = ss.make_pars()  # Start with default pars
         self.pars.update_pars(sc.mergedicts(pars, kwargs))  # Update the parameters
 
         # Initialize other quantities
-        self.interventions = ss.Interventions()
-        self.analyzers = ss.Analyzers()
+        self.interventions = ss.ndict(type=ss.Intervention)
+        self.analyzers = ss.ndict(type=ss.Analyzer)
 
         # Streams container
         self.streams = ss.Streams()
@@ -55,14 +57,6 @@ class Sim(sc.prettyobj):
     def year(self):
         return self.yearvec[self.ti]
 
-    @property
-    def disease_list(self):
-        return [m for m in self.modules if isinstance(m, ss.Disease)]
-
-    @property
-    def diseases_present(self):
-        return len(self.disease_list) > 0
-
     def initialize(self, popdict=None, reset=False, **kwargs):
         """
         Perform all initializations on the sim.
@@ -75,11 +69,11 @@ class Sim(sc.prettyobj):
         ss.set_seed(self.pars['rand_seed'])  # Reset the random seed before the population is created
 
         # Initialize the core sim components
-        self.streams.initialize(self.pars['rand_seed'] + 1) # +1 ensures that the base seed is not reused
+        self.streams.initialize(self.pars['rand_seed'] + 2) # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within streams
         self.init_people(popdict=popdict, reset=reset, **kwargs)  # Create all the people (the heaviest step)
         self.init_networks()
-        self.init_results()
-        self.init_modules()
+        self.init_demographics()
+        self.init_diseases()
         self.init_interventions()
         self.init_analyzers()
 
@@ -211,27 +205,32 @@ class Sim(sc.prettyobj):
         if self.pars['pop_scale'] is None:
             self.pars['pop_scale'] = total_pop / self.pars['n_agents']
 
-        # Finish initialization
+        # Any other initialization
         if not self.people.initialized:
-            self.people.initialize(popdict=popdict)  # Fully initialize the people
+            self.people.initialize()
 
-        # Add time attributes
+        # Set time attributes
         self.people.ti = self.ti
         self.people.dt = self.dt
-
+        self.people.init_results(self)
         return self
 
-    def init_modules(self):
-        """ Initialize modules and connectors to be simulated """
-        for module in self.modules.values():
+    def init_demographics(self):
+        for module in self.demographics.values():
             module.initialize(self)
-
-            # Add the module's parameters and results into the Sim's dicts
-            self.pars[module.name] = module.pars
             self.results[module.name] = module.results
 
-            # Add module states to the People's dicts
-            self.people.add_module(module)
+    def init_diseases(self):
+        """ Initialize modules and connectors to be simulated """
+        for disease in self.diseases.values():
+            disease.initialize(self)
+
+            # Add the disease's parameters and results into the Sim's dicts
+            self.pars[disease.name] = disease.pars
+            self.results[disease.name] = disease.results
+
+            # Add disease states to the People's dicts
+            self.people.add_module(disease)
 
         return
 
@@ -255,20 +254,6 @@ class Sim(sc.prettyobj):
 
         return
 
-    def init_results(self):
-        """
-        Create the main results structure.
-        """
-        # Make results
-        results = ss.Results(
-            ss.Result('n_alive', None, self.npts, ss.int_),
-        )
-
-        # Final items
-        self.results = results
-        self.results_ready = False
-
-        return
 
     def init_interventions(self):
         """ Initialize and validate the interventions """
@@ -315,9 +300,8 @@ class Sim(sc.prettyobj):
         TBC whether we keep this or incorporate the checks into the init methods
         """
         # Make sure that there's a contact network if any diseases are present
-        networks_present = len(self.people.networks.keys())
-        if self.diseases_present and not networks_present:
-            warnmsg = f'Warning: your simulation has {len(self.disease_list)} diseases but no contact network(s).'
+        if self.diseases and not self.people.networks:
+            warnmsg = f'Warning: simulation has {len(self.diseases)} diseases but no contact network(s).'
             ss.warn(warnmsg, die=False)
         return
 
@@ -328,43 +312,58 @@ class Sim(sc.prettyobj):
         if self.complete:
             raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
 
-        # Update states, modules, partnerships
-        self.streams.step(self.ti+1) # on first step, ti=0, but 0 used for initialization
-        self.people.update(self)
-        self.apply_interventions()
-        self.update_modules()
-        self.apply_analyzers()
+        # Advance streams forward to prepare for any random number calls that may be necessary on this step
+        self.streams.step(self.ti+1) # +1 offset because streams for ti=0 are used on initialization
+
+        # Clean up dead agents, if removing agents is enabled
+        if self.pars.remove_dead:
+            self.people.remove_dead(self)
+
+        # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
+        for module in self.demographics.values():
+            module.update(self)
+
+        # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
+        # to be applied to newly created agents
+        for disease in self.diseases.values():
+            disease.update_pre(self)
+
+        # Update networks - this takes place here in case autonomous state changes at this timestep
+        # affect eligibility for contacts
+        self.people.update_networks()
+
+        # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
+        # interventions, by running them at this point
+        for intervention in self.interventions.values():
+            intervention.apply(self)
+
+        # Carry out transmission/new cases
+        for disease in self.diseases.values():
+            disease.make_new_cases(self)
+
+        # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
+        # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
+        self.people.resolve_deaths()
+
+        # Update results
+        self.people.update_results(self)
+
+        for disease in self.diseases.values():
+            disease.update_results(self)
+
+        for analyzer in self.analyzers.values():
+            analyzer.update_results(self)
 
         # Tidy up
         self.ti += 1
+        self.people.ti = self.ti
+        self.people.update_post(self)
+
         if self.ti == self.npts:
             self.complete = True
 
         return
 
-    def apply_interventions(self):
-        """
-        Apply the interventions
-        """
-        for intervention in self.interventions.values():
-            intervention(self)
-        return
-
-    def update_modules(self):
-        """
-        Update modules
-        """
-        for module in self.modules.values():
-            module.update(self)
-        return
-
-    def apply_analyzers(self):
-        """
-        Apply the analyzers
-        """
-        for analyzer in self.analyzers.values():
-            analyzer(self)
-        return
 
     def run(self, until=None, reset_seed=True, verbose=None):
         """ Run the model once """
@@ -398,12 +397,6 @@ class Sim(sc.prettyobj):
 
             # Check if we were asked to stop
             elapsed = T.toc(output=True)
-            if self.pars['timelimit'] and elapsed > self.pars['timelimit']:
-                sc.printv(f"Time limit ({self.pars['timelimit']} s) exceeded", 1, verbose)
-                return
-            elif self.pars['stopping_func'] and self.pars['stopping_func'](self):
-                sc.printv("Stopping function terminated the simulation", 1, verbose)
-                return
 
             # Print progress
             if verbose:

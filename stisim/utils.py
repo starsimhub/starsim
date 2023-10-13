@@ -8,14 +8,19 @@ import warnings
 import numpy as np
 import sciris as sc
 import stisim as ss
-
+import numba as nb
 
 # What functions are externally visible -- note, this gets populated in each section below
 __all__ = []
 
+# System constants
+__all__ += ['INT_NAN']
+
+INT_NAN = np.iinfo(np.int32).max  # Value to use to flag invalid content (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
+
 
 # %% Helper functions
-__all__ += ['ndict', 'omerge']
+__all__ += ['ndict', 'omerge', 'warn', 'unique', 'find_contacts']
 
 
 class ndict(sc.objdict):
@@ -142,7 +147,6 @@ def warn(msg, category=None, verbose=None, die=None):
     return
 
 
-# %% The core functions
 def unique(arr):
     """
     Find the unique elements and counts in an array.
@@ -173,7 +177,7 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
     return pairing_partners
 
 
-# %% Sampling and seed methods
+# %% Seed methods
 
 __all__ += ['set_seed']
 
@@ -197,6 +201,34 @@ def set_seed(seed=None):
 
 __all__ += ['true', 'false', 'defined', 'undefined']
 
+@nb.njit
+def _true(uids, values):
+    """
+    Returns the UIDs for indices where the value evaluates as True
+    """
+    out = np.empty(len(uids), dtype=uids.dtype)
+    j = 0
+    for i in range(len(values)):
+        out[j] = uids[i]
+        if values[i]:
+            j += 1
+    out = out[0:j]
+    return out
+
+@nb.njit
+def _false(uids, values):
+    """
+    Returns the UIDs for indices where the value evaluates as False
+    """
+    out = np.empty(len(uids), dtype=uids.dtype)
+    j = 0
+    for i in range(len(values)):
+        out[j] = uids[i]
+        if not values[i]:
+            j += 1
+    out = out[0:j]
+    return out
+
 
 def true(state):
     """
@@ -209,8 +241,7 @@ def true(state):
 
         inds = ss.true(people.alive) # Returns array of UIDs of alive agents
     """
-
-    return state.uid.__array__()[np.nonzero(state.__array__())]
+    return _true(state.uid.__array__(), state.__array__())
 
 
 def false(state):
@@ -224,7 +255,7 @@ def false(state):
 
         inds = ss.false(people.alive) # Returns array of UIDs of dead agents
     """
-    return state.uid.__array__()[np.nonzero(~state.__array__())]
+    return _false(state.uid.__array__(), state.__array__())
 
 
 def defined(arr):

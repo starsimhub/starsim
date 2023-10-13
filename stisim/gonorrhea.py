@@ -26,7 +26,7 @@ class Gonorrhea(ss.Disease):
 
         self.pars = ss.omerge({
             'dur_inf': 3,  # not modelling diagnosis or treatment explicitly here
-            'p_death': 0.2,
+            'p_death': 0,
             'initial': 3,
             'eff_condoms': 0.7,
         }, self.pars)
@@ -37,11 +37,15 @@ class Gonorrhea(ss.Disease):
         # What if something in here should depend on another module?
         # I guess we could just check for it e.g., 'if HIV in sim.modules' or
         # 'if 'hiv' in sim.people' or something
-        gonorrhea_deaths = self.ti_dead <= sim.ti
-        sim.people.alive[gonorrhea_deaths] = False
-        sim.people.ti_dead[gonorrhea_deaths] = sim.ti
 
-        self.results.new_deaths += len(gonorrhea_deaths)
+        # Recovery
+        recovered = ss.true(self.infected & (self.ti_recovered <= sim.ti))
+        self.infected[recovered] = False
+        self.susceptible[recovered] = True
+
+        # Schedule death for anyone that is due to die
+        gonorrhea_deaths = ss.true(self.ti_dead <= sim.ti)
+        sim.people.request_death(gonorrhea_deaths)
 
         return
     

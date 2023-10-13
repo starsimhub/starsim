@@ -112,7 +112,7 @@ class Network(sc.objdict):
 
     def __repr__(self, **kwargs):
         """ Convert to a dataframe for printing """
-        namestr = self.__class__.__name__
+        namestr = self.name
         labelstr = f'"{self.label}"' if self.label else '<no label>'
         keys_str = ', '.join(self.keys())
         output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", f, m, beta)
@@ -174,7 +174,7 @@ class Network(sc.objdict):
                 self[key] = np.delete(self[key], inds)  # Remove from the original
         return output
 
-    def pop_inds(self, inds):
+    def pop_inds(self, inds, do_return=True):
         """
         "Pop" the specified indices from the edgelist and return them as a dict.
         Returns arguments in the right format to be used with network.append().
@@ -182,7 +182,9 @@ class Network(sc.objdict):
         Args:
             inds (int, array, slice): the indices to be removed
         """
-        return self.get_inds(inds, remove=True)
+        popped_inds = self.get_inds(inds, remove=True)
+        if do_return: return popped_inds
+        else: return
 
     def append(self, contacts):
         """
@@ -262,9 +264,21 @@ class Network(sc.objdict):
         """ Define how pairs of people are formed """
         pass
 
-    def update(self):
+    def update(self, people):
         """ Define how pairs/connections evolve (in time) """
-        pass
+        return
+
+    def remove_uids(self, uids):
+        """
+        Remove interactions involving specified UIDs
+
+        This method is typically called via `People.remove()` and
+        is specifically used when removing agents from the simulation.
+
+        """
+        keep = ~(np.isin(self.p1, uids) | np.isin(self.p2, uids))
+        for k in self.meta_keys():
+            self[k] = self[k][keep]
 
 
 class Networks(ss.ndict):
@@ -331,6 +345,7 @@ class simple_sexual(Network):
         self['dur'] = np.concatenate([self['dur'], dur])
 
     def update(self, people, dt=None):
+        super().update(people)
         if dt is None: dt = people.dt
         # First remove any relationships due to end
         self['dur'] = self['dur'] - dt
@@ -423,18 +438,19 @@ class hpv_network(Network):
 
         # Define default parameters
         self.pars = dict()
-        self.pars['cross_layer'] = 0.05  # Proportion of agents who have concurrent cross-layer relationships
-        self.pars['partners'] = dict(dist='poisson', par1=0.01)  # The number of concurrent sexual partners # TODO: Stream-ify
-        self.pars['acts'] = dict(dist='neg_binomial', par1=80, par2=40)  # The number of sexual acts per year # TODO: Stream-ify
-        self.pars['age_act_pars'] = dict(peak=30, retirement=100, debut_ratio=0.5, retirement_ratio=0.1) # Parameters describing changes in coital frequency over agent lifespans
-        self.pars['condoms'] = 0.2  # The proportion of acts in which condoms are used
-        self.pars['dur_pship'] = dict(dist='normal_pos', par1=1, par2=1)  # Duration of partnerships # TODO: Stream-ify
+        self.pars['cross_layer']   = 0.05  # Proportion of agents who have concurrent cross-layer relationships
+        self.pars['partners']      = ss.poisson(rate=0.01)  # The number of concurrent sexual partners
+        self.pars['acts']          = ss.neg_binomial(mean=80, dispersion=40)  # The number of sexual acts per year
+        self.pars['age_act_pars']  = dict(peak=30, retirement=100, debut_ratio=0.5, retirement_ratio=0.1) # Parameters describing changes in coital frequency over agent lifespans
+        self.pars['condoms']       = 0.2  # The proportion of acts in which condoms are used
+        self.pars['dur_pship']     = ss.normal_pos(mean=1, std=1)  # Duration of partnerships
         self.pars['participation'] = None  # Incidence of partnership formation by age
-        self.pars['mixing'] = None  # Mixing matrices for storing age differences in partnerships
+        self.pars['mixing']        = None  # Mixing matrices for storing age differences in partnerships
 
-        self.rng_partners = ss.Stream(self.multistream)('partners')
-        self.rng_acts = ss.Stream(self.multistream)('acts')
-        self.rng_dur_pship = ss.Stream(self.multistream)('dur_pship')
+        # Define random number streams
+        self.rng_partners  = ss.Stream('partners')
+        self.rng_acts      = ss.Stream('acts')
+        self.rng_dur_pship = ss.Stream('dur_pship')
 
         self.update_pars(pars)
         self.get_layer_probs()
@@ -442,9 +458,15 @@ class hpv_network(Network):
     def initialize(self, sim):
         super().initialize(sim)
 
+        # Initialize streams and connect to Distributions
         self.rng_partners.initialize(sim.streams)
+        self.pars['partners'].set_stream(self.rng_partners)
+
         self.rng_acts.initialize(sim.streams)
+        self.pars['acts'].set_stream(self.rng_acts)
+
         self.rng_dur_pship.initialize(sim.streams)
+        self.pars['dur_pship'].set_stream(self.rng_dur_pship)
 
         self.add_pairs(sim.people, ti=0)
         return
@@ -506,7 +528,7 @@ class hpv_network(Network):
         current_partners = np.zeros((len(people)))
         current_partners[f_partnered_inds] = f_partnered_counts
         current_partners[m_partnered_inds] = m_partnered_counts
-        partners = ss.sample(self.rng_partners, **self.pars['partners'], size=len(people)) + 1
+        partners = self.pars['partners'].sample(len(people)) + 1
         underpartnered = current_partners < partners  # Indices of underpartnered people
         f_eligible = f_active & underpartnered
         m_eligible = m_active & underpartnered
@@ -535,7 +557,8 @@ class hpv_network(Network):
             m += these_m_contacts.tolist()
 
         # Create preference matrix between eligible females and males that combines age and geo mixing
-        age_bins_f = np.digitize(people.age[f], bins=bins) - 1  # Age bins of females that are entering new relationships
+        age_bins_f = np.digitize(people.age[f],
+                                 bins=bins) - 1  # Age bins of females that are entering new relationships
         age_bins_m = np.digitize(people.age[m], bins=bins) - 1  # Age bins of active and participating males
         age_f, age_m = np.meshgrid(age_bins_f, age_bins_m)
         pair_probs = self.pars['mixing'][age_m, age_f + 1]
@@ -564,8 +587,8 @@ class hpv_network(Network):
         p1 = np.array(f)
         p2 = selected_males
         n_partnerships = len(p1)
-        dur = ss.sample(self.rng_dur_pship, **self.pars['dur_pship'], size=n_partnerships)
-        acts = ss.sample(self.rng_acts, **self.pars['acts'], size=n_partnerships)
+        dur = self.pars['dur_pship'].sample(n_partnerships)
+        acts = self.pars['acts'].sample(n_partnerships)
         age_p1 = people.age[p1]
         age_p2 = people.age[p2]
 
@@ -584,15 +607,16 @@ class hpv_network(Network):
 
         # Get indices of people at different stages
         below_peak_inds = avg_age <= self.pars['age_act_pars']['peak']
-        above_peak_inds = (avg_age > self.pars['age_act_pars']['peak']) & (avg_age < self.pars['age_act_pars']['retirement'])
+        above_peak_inds = (avg_age > self.pars['age_act_pars']['peak']) & (
+                    avg_age < self.pars['age_act_pars']['retirement'])
         retired_inds = avg_age > self.pars['age_act_pars']['retirement']
 
         # Set values by linearly scaling the number of acts for each partnership according to
         # the age of the couple at the commencement of the relationship
         below_peak_vals = acts[below_peak_inds] * (dr + (1 - dr) / (peak - avg_debut[below_peak_inds]) * (
-                    avg_age[below_peak_inds] - avg_debut[below_peak_inds]))
+                avg_age[below_peak_inds] - avg_debut[below_peak_inds]))
         above_peak_vals = acts[above_peak_inds] * (
-                    rr + (1 - rr) / (peak - retire) * (avg_age[above_peak_inds] - retire))
+                rr + (1 - rr) / (peak - retire) * (avg_age[above_peak_inds] - retire))
         retired_vals = 0
 
         # Set values and return

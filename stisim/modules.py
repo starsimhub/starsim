@@ -6,12 +6,11 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 
-
-__all__ = ['Module', 'Modules', 'Disease']
+__all__ = ['Module', 'Disease']
 
 
 class Module(sc.prettyobj):
-    
+
     def __init__(self, pars=None, label=None, requires=None, *args, **kwargs):
 
         default_pars = {'multistream': True}
@@ -19,7 +18,7 @@ class Module(sc.prettyobj):
         
         self.label = label if label else ''
         self.requires = sc.mergelists(requires)
-        self.results = ss.Results()
+        self.results = ss.ndict(type=ss.Result)
         self.initialized = False
         self.finalized = False
 
@@ -44,12 +43,12 @@ class Module(sc.prettyobj):
             if req not in sim.modules:
                 raise Exception(f'{self.__name__} requires module {req} but the Sim did not contain this module')
         return
-    
+
     def initialize(self, sim):
         self.check_requires(sim)
 
-        # Connect the states to the people
-        for state in self.states.values():
+        # Connect the states to the sim
+        for state in self.states:
             state.initialize(sim.people)
 
         # Connect the streams to the sim
@@ -59,9 +58,6 @@ class Module(sc.prettyobj):
 
         self.initialized = True
         return
-
-    def apply(self, sim):
-        pass
 
     def finalize(self, sim):
         self.finalized = True
@@ -73,31 +69,37 @@ class Module(sc.prettyobj):
 
     @property
     def states(self):
-        return ss.ndict({k:v for k,v in self.__dict__.items() if isinstance(v, ss.State)})
+        """
+        Return a flat collection of all states
 
-    @property
-    def streams(self):
-        return ss.ndict({k:v for k,v in self.__dict__.items() if isinstance(v, (ss.MultiStream, ss.CentralizedStream))})
+        The base class returns all states that are contained in top-level attributes
+        of the Module. If a Module stores states in a non-standard location (e.g.,
+        within a list of states, or otherwise in some other nested structure - perhaps
+        due to supporting features like multiple genotypes) then the Module should
+        overload this attribute to ensure that all states appear in here.
 
-
-class Modules(ss.ndict):
-    def __init__(self, *args, type=Module, **kwargs):
-        return super().__init__(self, *args, type=type, **kwargs)
+        :return:
+        """
+        return [x for x in self.__dict__.values() if isinstance(x, ss.State)]
 
 
 class Disease(Module):
     """ Base module contains states/attributes that all modules have """
-    
+
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__(pars, *args, **kwargs)
         self.rel_sus = ss.State('rel_sus', float, 1)
         self.rel_sev = ss.State('rel_sev', float, 1)
         self.rel_trans = ss.State('rel_trans', float, 1)
+        self.susceptible = ss.State('susceptible', bool, True)
+        self.infected = ss.State('infected', bool, False)
+        self.ti_infected = ss.State('ti_infected', float, np.nan)
+
         return
-    
+
     def initialize(self, sim):
         super().initialize(sim)
-        
+
         # Initialization steps
         self.validate_pars(sim)
         self.set_initial_states(sim)
@@ -111,7 +113,6 @@ class Disease(Module):
         if 'beta' not in self.pars:
             self.pars.beta = sc.objdict({k: [1, 1] for k in sim.people.networks})
         return
-
 
     def set_initial_states(self, sim):
         """
@@ -142,17 +143,14 @@ class Disease(Module):
         self.results += ss.Result(self.name, 'new_deaths', sim.npts, dtype=int)
         return
 
-    def update(self, sim):
+    def update_pre(self, sim):
         """
-        Perform all updates
-        """
-        self.update_states(sim)
-        self.make_new_cases(sim)
-        self.update_results(sim)
-        return
+        Carry out autonomous updates at the start of the timestep (prior to transmission)
 
-    def update_states(self, sim):
-        # Carry out any autonomous state changes at the start of the timestep
+        :param sim:
+        :return:
+        """
+
         pass
 
     def make_new_cases(self, sim):
@@ -210,7 +208,7 @@ class Disease(Module):
     def update_results(self, sim):
         self.results['n_susceptible'][sim.ti]  = np.count_nonzero(self.susceptible)
         self.results['n_infected'][sim.ti]     = np.count_nonzero(self.infected)
-        self.results['prevalence'][sim.ti]     = self.results.n_infected[sim.ti] / sim.people.alive.sum()
+        self.results['prevalence'][sim.ti]     = self.results.n_infected[sim.ti] / np.count_nonzero(sim.people.alive)
         self.results['new_infections'][sim.ti] = np.count_nonzero(self.ti_infected == sim.ti)
 
     def finalize_results(self, sim):

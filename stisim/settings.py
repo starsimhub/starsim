@@ -57,6 +57,9 @@ class Options(sc.objdict):
         optdesc = sc.objdict()  # Help for the options
         options = sc.objdict()  # The options
 
+        optdesc.multistream = 'Enable or disable the "multistream" functionality.'
+        options.multistream = False
+
         optdesc.verbose = 'Set default level of verbosity (i.e. logging detail): e.g., 0.1 is an update every 10 simulated timesteps.'
         options.verbose = float(os.getenv('STISIM_VERBOSE', 0.1))
 

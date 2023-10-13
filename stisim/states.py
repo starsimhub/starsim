@@ -2,11 +2,11 @@ import pandas as pd
 import numpy as np
 import sciris as sc
 import numba as nb
+from stisim.utils import INT_NAN
 from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
 
-__all__ = ['State', 'DynamicView', 'INT_NAN']
+__all__ = ['State', 'DynamicView']
 
-INT_NAN = np.iinfo(int).max  # Value to use to flag removed UIDs (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
 
 
 class FusedArray(NDArrayOperatorsMixin):
@@ -55,8 +55,12 @@ class FusedArray(NDArrayOperatorsMixin):
         """
         out = np.empty(len(key), dtype=vals.dtype)
         new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
+
         for i in range(len(key)):
-            out[i] = vals[uid_map[key[i]]]
+            idx = uid_map[key[i]]
+            if idx == INT_NAN:
+                raise IndexError('UID not present in array')
+            out[i] = vals[idx]
             new_uid_map[key[i]] = i
         return out, key, new_uid_map
 
@@ -73,7 +77,10 @@ class FusedArray(NDArrayOperatorsMixin):
         :return:
         """
         for i in range(len(key)):
-            vals[uid_map[key[i]]] = value[i]
+            idx = uid_map[key[i]]
+            if idx == INT_NAN:
+                raise IndexError('UID not present in array')
+            vals[idx] = value[i]
 
     @staticmethod
     @nb.njit
@@ -88,7 +95,10 @@ class FusedArray(NDArrayOperatorsMixin):
         :return:
         """
         for i in range(len(key)):
-            vals[uid_map[key[i]]] = value
+            idx = uid_map[key[i]]
+            if idx == INT_NAN:
+                raise IndexError('UID not present in array')
+            vals[idx] = value
 
     def __getitem__(self, key):
         try:
@@ -163,16 +173,22 @@ class FusedArray(NDArrayOperatorsMixin):
         return self.values.__contains__(*args, **kwargs)
 
     def astype(self, *args, **kwargs):
-        return self.values.astype(*args, **kwargs)
+        return FusedArray(values=self.values.astype(*args, **kwargs), uid=self.uid, uid_map=self._uid_map)
 
-    def sum(self):
-        return self.values.sum()
+    def sum(self, *args, **kwargs):
+        return self.values.sum(*args, **kwargs)
 
-    def mean(self):
-        return self.values.mean()
+    def mean(self, *args, **kwargs):
+        return self.values.mean(*args, **kwargs)
 
-    def count_nonzero(self):
-        return self.values.count_nonzero()
+    def any(self, *args, **kwargs):
+        return self.values.any(*args, **kwargs)
+
+    def all(self, *args, **kwargs):
+        return self.values.all(*args, **kwargs)
+
+    def count_nonzero(self, *args, **kwargs):
+        return np.count_nonzero(self.values, *args, **kwargs)
 
     @property
     def shape(self):
@@ -265,13 +281,12 @@ class DynamicView(NDArrayOperatorsMixin):
         self._map_arrays()
 
     def grow(self, n):
-
         if self.n + n > self._s:
-            # Grow the underlying _data
-            num_to_add = max(n, int(self._s / 2))  # Minimum 50% growth
-            self._data = np.concatenate([self._data, self._new_items(num_to_add)], axis=0)
+            # If the total number of agents exceeds the array size, extend the storage array
+            n_new = max(n, int(self._s / 2))  # Minimum 50% growth
+            self._data = np.concatenate([self._data, self._new_items(n_new)], axis=0)
 
-        self.n += n
+        self.n += n  # Increase the count of the number of agents by `n` (the requested number of new agents)
         self._map_arrays()
 
     def _trim(self, inds):

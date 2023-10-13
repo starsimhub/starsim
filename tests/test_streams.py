@@ -33,7 +33,6 @@ def test_seed(n=5):
     streams = ss.Streams()
     streams.initialize(base_seed=10)
 
-
     rng0 = ss.MultiStream('stream0')
     rng0.initialize(streams)
 
@@ -46,7 +45,7 @@ def test_seed(n=5):
 def test_reset(n=5):
     """ Sample, step, sample """
     sc.heading('Testing sample, step, sample')
-    streams = ss.MultiStream()
+    streams = ss.Streams()
     streams.initialize(base_seed=10)
 
     rng = ss.MultiStream('stream0')

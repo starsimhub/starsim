@@ -21,29 +21,26 @@ figdir = os.path.join(os.getcwd(), 'figs', choice)
 sc.path(figdir).mkdir(parents=True, exist_ok=True)
 
 def run_sim(n, intv_cov, rand_seed, multistream):
+
+    ss.options(multistream=multistream)
     ppl = ss.People(n)
 
-    net_pars = {'multistream': multistream}
-    ppl.networks = ss.ndict(ss.simple_embedding(pars=net_pars), ss.maternal(pars=net_pars))
+    ppl.networks = ss.ndict(ss.simple_embedding(), ss.maternal())
 
     hiv_pars = {
         'beta': {'simple_embedding': [0.10, 0.08], 'maternal': [0.2,0]},
         'initial': 10,
-        'multistream': multistream,
     }
     hiv = ss.HIV(hiv_pars)
 
-    preg_pars = {'multistream': multistream}
-    pregnancy = ss.Pregnancy(preg_pars)
+    pregnancy = ss.Pregnancy()
 
-    intv_pars = {'multistream': multistream}
-    intv = intervention[choice](t=[0, 1], coverage=[0, intv_cov], pars=intv_pars)
+    intv = intervention[choice](t=[0, 1], coverage=[0, intv_cov])
     pars = {
         'start': 1980,
         'end': 2010,
         'interventions': [intv],
         'rand_seed': rand_seed,
-        'multistream': multistream,
     }
     sim = ss.Sim(people=ppl, modules=[hiv, pregnancy], pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}')
     sim.initialize()

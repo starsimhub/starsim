@@ -74,7 +74,7 @@ def test_microsim():
     # sexual  network, p1 is male and p2 is female. In the maternal network, p1=mothers, p2=babies.
     hiv.pars['beta'] = {'simple_sexual': [0.0008, 0.0004], 'maternal': [0.2, 0]}
 
-    sim = ss.Sim(people=ppl, modules=[hiv, ss.Pregnancy()])
+    sim = ss.Sim(people=ppl, demographics=ss.Pregnancy(), diseases=hiv)
     sim.initialize()
     sim.run()
 
@@ -87,10 +87,10 @@ def test_microsim():
 def test_ppl_construction():
 
     sim_pars = {'networks': [ss.simple_sexual()], 'n_agents': 100}
-    gon_pars = {'beta': {'simple_sexual': [0.08, 0.04]}}
+    gon_pars = {'beta': {'simple_sexual': [0.08, 0.04]}, 'p_death': 0.2}
     gon = ss.Gonorrhea(pars=gon_pars)
 
-    sim = ss.Sim(pars=sim_pars, modules=[gon])
+    sim = ss.Sim(pars=sim_pars, diseases=[gon])
     sim.initialize()
     sim.run()
     plt.figure()

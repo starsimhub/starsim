@@ -11,9 +11,10 @@ import seaborn as sns
 
 n = 1_000 # Agents
 n_rand_seeds = 250
-x_beta_levels = [0.8, 0.92, 1.05, 1.2] + [1] # Must include 1 as that's the baseline | roughly np.logspace(np.log2(0.8), np.log2(1.2), 4, base=2)
+#x_beta_levels = [0.8, 0.92, 1.05, 1.2] + [1] # Must include 1 as that's the baseline | roughly np.logspace(np.log2(0.8), np.log2(1.2), 4, base=2)
+x_beta_levels = [0.9, 0.96, 1.03, 1.1] + [1] # Must include 1 as that's the baseline | roughly np.logspace(np.log2(0.8), np.log2(1.2), 4, base=2)
 
-figdir = os.path.join(os.getcwd(), 'figs', 'BetaSweep')
+figdir = os.path.join(os.getcwd(), 'figs', 'BetaSweepSmall')
 sc.path(figdir).mkdir(parents=True, exist_ok=True)
 
 def run_sim(n, x_beta, rand_seed, multistream):
