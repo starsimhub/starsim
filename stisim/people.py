@@ -173,7 +173,7 @@ class People(BasePeople):
         """ Validate age data """
         if age_data is None: return ss.uniform(0, 100)
         if sc.checktype(age_data, pd.DataFrame):
-            return ss.from_data(vals=age_data['value'].values, bins=age_data['age'].values)
+            return ss.data_dist(vals=age_data['value'].values, bins=age_data['age'].values)
 
     def initialize(self):
         """ Initialization - TBC what needs to go here """

@@ -15,11 +15,14 @@ Example usage
 
 import numpy as np
 import sciris as sc
+from .utils import get_subclasses
 
 __all__ = [
     'Distribution', 'uniform', 'choice', 'normal', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int',
-    'poisson', 'neg_binomial', 'beta', 'gamma', 'from_data', 'dist_dict'
+    'poisson', 'neg_binomial', 'beta', 'gamma', 'data_dist',
 ]
+
+
 
 
 class Distribution():
@@ -46,8 +49,24 @@ class Distribution():
         """
         raise NotImplementedError
 
+    @classmethod
+    def create(cls, name, *args, **kwargs):
+        """
+        Create a distribution instance by name
 
-class from_data(Distribution):
+        :param name: A string with the name of a distribution class e.g., 'normal'
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        for subcls in get_subclasses(cls):
+            if subcls.__name__ == name:
+                return subcls(*args, **kwargs)
+        else:
+            raise KeyError(f'Distribution "{name}" did not match any known distributions')
+
+
+class data_dist(Distribution):
     """ Sample from data """
 
     def __init__(self, vals, bins):
@@ -236,19 +255,4 @@ class gamma(Distribution):
 
     def sample(self, n=1):
         return np.random.gamma(shape=self.shape, scale=self.scale, size=n)
-
-
-dist_dict = {
-    'uniform': uniform,
-    'choice': choice,
-    'normal': normal,
-    'normal_pos': normal_pos,
-    'normal_int': normal_int,
-    'lognormal': lognormal,
-    'lognormal_int': lognormal_int,
-    'poisson': poisson,
-    'neg_binomial': neg_binomial,
-    'beta': beta,
-    'gamma': gamma
-}
 
