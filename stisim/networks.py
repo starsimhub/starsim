@@ -432,7 +432,7 @@ class mf(Network):
             mean = np.interp(people.year, df['year'], df['debut'])
             std = np.interp(people.year, df['year'], df['std'])
             dist = df.loc[df.year == nearest_year].dist.iloc[0]
-            debut_vals = ss.dist_dict[dist](mean, std)(len(uids)) * self.pars.rel_debut
+            debut_vals = ss.Distribution.create(dist, mean, std)(len(uids)) * self.pars.rel_debut
             self.debut[uids] = debut_vals
 
     def add_pairs(self, people, ti=None):
@@ -454,7 +454,7 @@ class mf(Network):
         mean = np.interp(people.year, self.pars.dur['year'], self.pars.dur['dur'])
         std = np.interp(people.year, self.pars.dur['year'], self.pars.dur['std'])
         dur_dist = self.pars.dur.loc[self.pars.dur.year == nearest_year].dist.iloc[0]
-        dur_vals = ss.dist_dict[dur_dist](mean, std)(len(p1))
+        dur_vals = ss.Distribution.create(dur_dist, mean, std)(len(p1))
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
