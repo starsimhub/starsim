@@ -267,6 +267,9 @@ class DynamicView(NDArrayOperatorsMixin):
         return self._view.__repr__()
 
     def _new_items(self, n):
+        # Fill with empty values
+        return np.empty(n, dtype=self.dtype)
+        '''
         # Create new arrays of the correct dtype and fill them based on the (optionally callable) fill value
         if callable(self.fill_value):
             new = np.empty(n, dtype=self.dtype)
@@ -274,6 +277,16 @@ class DynamicView(NDArrayOperatorsMixin):
         else:
             new = np.full(n, dtype=self.dtype, fill_value=self.fill_value)
         return new
+        '''
+
+    def _fill_data(self, n0, n1):
+        # Fill data
+        n = n1-n0
+        if callable(self.fill_value):
+            self._data[n0:n1] = self.fill_value(n)
+        else:
+            self._data[n0:n1] = self.fill_value
+        return
 
     def initialize(self, n):
         self._data = self._new_items(n)
@@ -294,7 +307,7 @@ class DynamicView(NDArrayOperatorsMixin):
         # Note that these are indices, not UIDs!
         n = len(inds)
         self._data[:n] = self._data[inds]
-        self._data[n:self.n] = self.fill_value(self.n-n) if callable(self.fill_value) else self.fill_value
+        # DJK MOVING TO MAP: self._data[n:self.n] = self.fill_value(self.n-n) if callable(self.fill_value) else self.fill_value
         self.n = n
         self._map_arrays()
 
@@ -305,6 +318,9 @@ class DynamicView(NDArrayOperatorsMixin):
         This method should be called whenever the number of agents required changes
         (regardless of whether or not the underlying arrays have been resized)
         """
+        n0 = len(self._view) if self._view is not None else 0
+        if self.n > n0:
+            self._fill_data(n0, self.n) # Fill the new data
         self._view = self._data[:self.n]
 
     def __getitem__(self, key):

@@ -20,9 +20,8 @@ class Gonorrhea(ss.Disease):
         self.ti_recovered   = ss.State('ti_recovered', float, 0)
         self.ti_dead        = ss.State('ti_dead', float, np.nan)  # Death due to gonorrhea
 
-        self.rng_prog       = ss.Stream(self.multistream)('prog_dur')
-        self.rng_dead       = ss.Stream(self.multistream)('dead')
-        self.rng_dur_inf    = ss.Stream(self.multistream)('dur_inf')
+        self.rng_dead       = ss.Stream(f'dead_{self.name}')
+        self.rng_dur_inf    = ss.Stream(f'dur_inf_{self.name}')
 
         self.pars = ss.omerge({
             'dur_inf': 3,  # not modelling diagnosis or treatment explicitly here

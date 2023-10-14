@@ -13,21 +13,17 @@ class Module(sc.prettyobj):
 
     def __init__(self, pars=None, label=None, requires=None, *args, **kwargs):
 
-        default_pars = {'multistream': True}
-        self.pars = sc.mergedicts(default_pars, pars)
-        
+        self.pars = pars
         self.label = label if label else ''
         self.requires = sc.mergelists(requires)
         self.results = ss.ndict(type=ss.Result)
         self.initialized = False
         self.finalized = False
 
-        self.multistream = self.pars['multistream']
-
         # Random number streams
-        self.rng_init_cases      = ss.Stream(self.multistream)(f'initial_cases_{self.name}')
-        self.rng_trans           = ss.Stream(self.multistream)(f'trans_{self.name}')
-        self.rng_choose_infector = ss.Stream(self.multistream)(f'choose_infector_{self.name}')
+        self.rng_init_cases      = ss.Stream(f'initial_cases_{self.name}')
+        self.rng_trans           = ss.Stream(f'trans_{self.name}')
+        self.rng_choose_infector = ss.Stream(f'choose_infector_{self.name}')
 
         return
 
@@ -52,7 +48,7 @@ class Module(sc.prettyobj):
             state.initialize(sim.people)
 
         # Connect the streams to the sim
-        for stream in self.streams.values():
+        for stream in self.streams:
             if not stream.initialized:
                 stream.initialize(sim.streams)
 
@@ -81,6 +77,15 @@ class Module(sc.prettyobj):
         :return:
         """
         return [x for x in self.__dict__.values() if isinstance(x, ss.State)]
+
+    @property
+    def streams(self):
+        """
+        Return a flat collection of all streams, as with states above
+
+        :return:
+        """
+        return [x for x in self.__dict__.values() if isinstance(x, (ss.MultiStream, ss.CentralizedStream))]
 
 
 class Disease(Module):
@@ -126,8 +131,8 @@ class Disease(Module):
 
         #initial_cases = np.random.choice(sim.people.uid, self.pars['initial'])
         #rng = sim.rngs.get(f'initial_cases_{self.name}')
-        #initial_cases = ss.binomial_filter_rng(prob=self.pars['initial']/len(sim.people), arr=sim.people.uid, rng=rng, block_size=len(sim.people._uid_map))
-        initial_cases = self.rng_init_cases.bernoulli_filter(arr=sim.people.uid, prob=self.pars['initial']/len(sim.people))
+        #initial_cases = ss.binomial_filter_rng(prob=self.pars['initial']/len(sim.people), size=sim.people.uid, rng=rng, block_size=len(sim.people._uid_map))
+        initial_cases = self.rng_init_cases.bernoulli_filter(size=sim.people.uid, prob=self.pars['initial']/len(sim.people))
 
         self.set_prognoses(sim, initial_cases, from_uids=None) # TODO: sentinel value to indicate seeds?
         return
@@ -159,11 +164,13 @@ class Disease(Module):
 
         # Probability of each node acquiring a case
         # TODO: Just people that who are alive?
-        p_acq_node = np.zeros( len(sim.people._uid_map) )
-        node_from_node = np.ones( (sim.people._uid_map.n, sim.people._uid_map.n) ) 
+        n = len(sim.people.uid)
+        p_acq_node = np.zeros( n )
+        node_from_node = np.ones( (n,n) ) 
 
         for lkey, layer in sim.people.networks.items():
             if lkey in pars['beta']:
+                # TODO: Likely no longer need alive here, at least not if dead people are removed
                 rel_trans = self.rel_trans * (self.infected & sim.people.alive)
                 rel_sus = self.rel_sus * (self.susceptible & sim.people.alive)
 
@@ -175,17 +182,21 @@ class Disease(Module):
                     
                     # Check for new transmission from a --> b
                     # TODO: Will need to be more efficient here - can maintain edge to node matrix
-                    node_from_edge = np.ones( (sim.people._uid_map.n, len(a)) )
-                    node_from_edge[b, np.arange(len(a))] = 1 - rel_trans[a] * rel_sus[b] * layer['beta'] * beta
+                    node_from_edge = np.ones( (n, len(a)) )
+                    ai = sim.people._uid_map[a] # Indices of a and b (rather than uid)
+                    bi = sim.people._uid_map[b]
+                    p_not_acq = 1 - rel_trans[a] * rel_sus[b] * layer['beta'] * beta # Needs DT
+
+                    node_from_edge[bi, np.arange(len(a))] = p_not_acq
                     p_not_acq_by_node_this_layer_b_from_a = node_from_edge.prod(axis=1) # (1-p1)*(1-p2)*...
                     p_acq_node = 1 - (1-p_acq_node) * p_not_acq_by_node_this_layer_b_from_a
 
-                    node_from_node_this_layer_b_from_a = np.ones( (sim.people._uid_map.n, sim.people._uid_map.n) ) 
-                    node_from_node_this_layer_b_from_a[b, a] = 1 - rel_trans[a] * rel_sus[b] * layer['beta'] * beta
+                    node_from_node_this_layer_b_from_a = np.ones( (n,n) ) 
+                    node_from_node_this_layer_b_from_a[bi, ai] = p_not_acq
                     node_from_node *= node_from_node_this_layer_b_from_a
 
-        new_cases_bool = self.rng_trans.bernoulli(sim.people._uid_map._view, p_acq_node)
-        new_cases = sim.people._uid_map._view[new_cases_bool]
+        new_cases_bool = self.rng_trans.bernoulli(size=sim.people.uid, prob=p_acq_node)
+        new_cases = sim.people.uid[new_cases_bool]
 
         if not len(new_cases):
             return 0
@@ -193,10 +204,11 @@ class Disease(Module):
         # Decide whom the infection came from using one random number for each b (aligned by block size)
         frm = np.zeros_like(new_cases)
         r = self.rng_choose_infector.random(new_cases)
-        prob = (1-node_from_node[new_cases])
+        new_cases_idx = new_cases_bool.nonzero()[0]
+        prob = (1-node_from_node[new_cases_idx]) # Prob of acquiring from each node | can constrain to just neighbors?
         cumsum = (prob / ((prob.sum(axis=1)[:,np.newaxis]))).cumsum(axis=1)
-        frm = np.argmax( cumsum >= r[:,np.newaxis], axis=1)
-        #frm = a[frm_idx]
+        frm_idx = np.argmax( cumsum >= r[:,np.newaxis], axis=1)
+        frm = sim.people.uid[frm_idx]
         self.set_prognoses(sim, new_cases, frm)
         
         return len(new_cases) # number of new cases made

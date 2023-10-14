@@ -10,7 +10,7 @@ import numpy as np
 import networkx as nx
 import sys
 
-multistream = True # Can set multistream to False for comparison
+ss.options(multistream = True) # Can set multistream to False for comparison
 plot_graph = True
 
 class Graph():
@@ -57,7 +57,7 @@ class rng_analyzer(ss.Analyzer):
         self.initialized = True
         return
 
-    def apply(self, sim):
+    def update_results(self, sim):
         nodes = pd.DataFrame({
             'female': sim.people.female.values,
             'dead': sim.people.dead.values,
@@ -81,31 +81,28 @@ class rng_analyzer(ss.Analyzer):
 def run_sim(n=25, intervention=False, analyze=False):
     ppl = ss.People(n)
 
-    net_pars = {'multistream': multistream}
-    ppl.networks = ss.ndict(ss.stable_monogamy(pars=net_pars))#, ss.maternal(net_pars))
+    ppl.networks = ss.ndict(ss.stable_monogamy())#, ss.maternal(net_pars))
 
     hiv_pars = {
         'beta': {'stable_monogamy': [0.06, 0.04]},
         'initial': 0,
-        'multistream': multistream,
     }
     hiv = ss.HIV(hiv_pars)
 
-    art_pars = {'multistream': multistream}
-    art = ss.hiv.ART(0, 0.5, pars=art_pars)
+    art = ss.hiv.ART(0, 0.5)
 
     pars = {
         'start': 1980,
         'end': 2010,
+        'remove_dead': False, # So we can see who dies
         'interventions': [art] if intervention else [],
         'rand_seed': 0,
-        'analyzers': [rng_analyzer(pars={'multistream': multistream})] if analyze else [],
-        'multistream': multistream,
+        'analyzers': [rng_analyzer()] if analyze else [],
     }
-    sim = ss.Sim(people=ppl, modules=[hiv], pars=pars, label=f'Sim with {n} agents and intv={intervention}')
+    sim = ss.Sim(people=ppl, diseases=[hiv], pars=pars, label=f'Sim with {n} agents and intv={intervention}')
     sim.initialize()
 
-    sim.modules['hiv'].set_prognoses(sim, np.arange(0,n,2), from_uids=None)
+    sim.diseases['hiv'].set_prognoses(sim, np.arange(0,n,2), from_uids=None)
 
     sim.run()
 

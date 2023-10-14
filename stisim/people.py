@@ -77,6 +77,11 @@ class BasePeople(sc.prettyobj):
 
         :param uids_to_remove: An int/list/array containing the UID(s) to remove
         """
+
+        # Shortcut exit if nothing to do
+        if len(uids_to_remove) == 0:
+            return
+
         # Calculate the *indices* to keep
         keep_uids = self.uid[~np.in1d(self.uid, uids_to_remove)]  # Calculate UIDs to keep
         keep_inds = self._uid_map[keep_uids]  # Calculate indices to keep
@@ -140,7 +145,7 @@ class People(BasePeople):
 
     # %% Basic methods
 
-    def __init__(self, n, age_data=None, extra_states=None, networks=None):
+    def __init__(self, n, age_data=None, extra_states=None, networks=None, rand_seed=0):
         """ Initialize """
 
         super().__init__(n)
@@ -149,45 +154,44 @@ class People(BasePeople):
         self.version = ss.__version__  # Store version info
 
         self.rng_female  = ss.Stream('female')
-
         states = [
             ss.State('age', float, 0),
-            ss.State('female', bool, ss.choice([True, False], self.rng_female)),
+            ss.State('female', bool, ss.bernoulli(0.5, rng=self.rng_female)),
             ss.State('debut', float),
             ss.State('alive', bool, True),
             ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
             ss.State('scale', float, 1.0),
         ]
         states.extend(sc.promotetolist(extra_states))
-
-        self.states = ss.ndict()
-        self._initialize_states(states)
+        self.states = ss.ndict(states)
         self.networks = ss.ndict(networks)
 
         # Set initial age distribution - likely move this somewhere else later
-        age_data_dist = self.get_age_dist(age_data)
-        self.age[:] = age_data_dist.sample(len(self))
+        self.rng_agedist  = ss.Stream('agedist')
+        self.age_data_dist = self.get_age_dist(age_data, self.rng_agedist)
 
         return
 
     @staticmethod
-    def get_age_dist(age_data):
+    def get_age_dist(age_data, rng):
         """ Return an age distribution based on provided data """
-        if age_data is None: return ss.uniform(0, 100)
+        if age_data is None: return ss.uniform(0, 100, rng=rng)
         if sc.checktype(age_data, pd.DataFrame):
-            return ss.from_data(vals=age_data['value'].values, bins=age_data['age'].values)
+            return ss.from_data(vals=age_data['value'].values, bins=age_data['age'].values, rng=rng)
 
-    def initialize(self):
-        """ Initialization - TBC what needs to go here """
-        self.initialized = True
-        return
+    def initialize(self, sim):
+        """ Initialization """
+        self.rng_female.initialize(sim.streams)
+        self.rng_agedist.initialize(sim.streams)
 
-    def _initialize_states(self, states):
-        for state in states:
+        for name, state in self.states.items():
             self.add_state(state)  # Register the state internally for dynamic growth
-            self.states.append(state)  # Expose these states with their original names
+            #self.states.append(state)  # Expose these states with their original names
             state.initialize(self)  # Connect the state to this people instance
-            setattr(self, state.name, state)
+            setattr(self, name, state)
+
+        self.age[:] = self.age_data_dist.sample(len(self))
+        self.initialized = True
         return
 
     def add_module(self, module, force=False):
@@ -229,8 +233,6 @@ class People(BasePeople):
         """
         uids_to_remove = ss.true(self.dead)
         self.remove(uids_to_remove)
-        for network in self.networks.values():
-            network.remove_uids(uids_to_remove)
         return
 
     def update_post(self, sim):
@@ -241,7 +243,7 @@ class People(BasePeople):
         :return:
         """
         self.age[self.alive] += self.dt
-
+        return
 
     def resolve_deaths(self):
         """
@@ -251,6 +253,7 @@ class People(BasePeople):
         """
         death_uids = ss.true(self.ti_dead <= self.ti)
         self.alive[death_uids] = False
+        return
 
     def update_networks(self):
         """
@@ -258,6 +261,7 @@ class People(BasePeople):
         """
         for network in self.networks.values():
             network.update(self)
+        return
 
     @property
     def active(self):
@@ -296,7 +300,7 @@ class People(BasePeople):
         track of that internally. When the module is ready to cause the agent to die, it should
         call this method, and can update its own results for the cause of death. This way, if
         multiple modules request death on the same day, they can each record a death due to their
-        own cause.,
+        own cause.
 
         The actual deaths are resolved after modules have all run, but before analyzers. That way,
         regardless of whether removing dead agents is enabled or not, analyzers will be able to

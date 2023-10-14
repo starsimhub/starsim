@@ -1,5 +1,5 @@
+import hashlib
 import numpy as np
-import sciris as sc
 import stisim as ss
 
 __all__ = ['Streams', 'MultiStream', 'CentralizedStream', 'Stream']
@@ -35,7 +35,7 @@ class Streams:
             raise RepeatNameException(f'A Stream with name {stream.name} has already been added.')
 
         if stream.seed_offset is None:
-            seed = abs(hash(stream.name))
+            seed = int(hashlib.sha256(stream.name.encode('utf-8')).hexdigest(), 16) % 10**8 #abs(hash(stream.name))
         elif stream.seed_offset in self.used_seeds:
             raise SeedRepeatException(f'Requested seed offset {stream.seed_offset} for stream {stream} has already been used.')
         else:
@@ -96,15 +96,18 @@ def _pre_draw(func):
     def check_ready(self, *args, **kwargs):
         """ Validation before drawing """
 
-        # Check for zero length arr
-        if 'arr' in kwargs.keys():
-            arr = kwargs['arr']
+        # Check for zero length size
+        if 'size' in kwargs.keys():
+            size = kwargs['size']
         else:
-            arr = args[0]
-        if isinstance(arr, int):
+            size = args[0]
+        if isinstance(size, int):
             # If an integer, the user wants "n" samples
-            kwargs['arr'] = np.arange(arr)
-        elif len(arr) == 0:
+            if size == 0:
+                return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
+            else:
+                kwargs['size'] = np.arange(size)
+        elif len(size) == 0:
             return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
 
         if not self.initialized:
@@ -185,52 +188,52 @@ class MultiStream(np.random.Generator):
 
         return
 
-    def draw_size(self, arr):
-        """ Determine how many random numbers to draw for a given arr """
+    def draw_size(self, size):
+        """ Determine how many random numbers to draw for a given size """
 
-        if isinstance(arr, ss.states.FusedArray):
-            v = arr.values
-        elif isinstance(arr, ss.states.DynamicView):
-            v = arr._view
+        if isinstance(size, ss.states.FusedArray):
+            v = size.values
+        elif isinstance(size, ss.states.DynamicView):
+            v = size._view
         else:
-            v = arr
+            v = size
 
         if v.dtype == bool:
-            return len(arr)
+            return len(size)
 
         return v.max()+1
 
     @_pre_draw
-    def random(self, arr):
-        return super(MultiStream, self).random(self.draw_size(arr))[arr]
+    def random(self, size):
+        return super(MultiStream, self).random(size=self.draw_size(size))[size]
 
     @_pre_draw
-    def uniform(self, arr, **kwargs):
-        return super(MultiStream, self).uniform(self.draw_size(arr), **kwargs)[arr]
+    def uniform(self, size, **kwargs):
+        return super(MultiStream, self).uniform(size=self.draw_size(size), **kwargs)[size]
 
     @_pre_draw
-    def poisson(self, arr, lam):
-        return super(MultiStream, self).poisson(lam=lam, size=self.draw_size(arr))[arr]
+    def poisson(self, size, lam):
+        return super(MultiStream, self).poisson(size=self.draw_size(size), lam=lam)[size]
 
     @_pre_draw
-    def normal(self, arr, mu=0, std=1):
-        return mu + std*super(MultiStream, self).normal(size=self.draw_size(arr))[arr]
+    def normal(self, size, mu=0, std=1):
+        return mu + std*super(MultiStream, self).normal(size=self.draw_size(size))[size]
 
     @_pre_draw
-    def negative_binomial(self, arr, **kwargs): #n=nbn_n, p=nbn_p, size=n)
-        return super(MultiStream, self).negative_binomial(**kwargs, size=self.draw_size(arr))[arr]
+    def negative_binomial(self, size, **kwargs): #n=nbn_n, p=nbn_p, size=n)
+        return super(MultiStream, self).negative_binomial(size=self.draw_size(size), **kwargs)[size]
 
     @_pre_draw
-    def bernoulli(self, arr, prob):
-        #return super(MultiStream, self).choice([True, False], size=arr.max()+1) # very slow
-        #return (super(MultiStream, self).binomial(n=1, p=prob, size=arr.max()+1))[arr].astype(bool) # pretty fast
-        return super(MultiStream, self).random(self.draw_size(arr))[arr] < prob # fastest
+    def bernoulli(self, size, prob):
+        #return super(MultiStream, self).choice([True, False], size=size.max()+1) # very slow
+        #return (super(MultiStream, self).binomial(n=1, p=prob, size=size.max()+1))[size].astype(bool) # pretty fast
+        return super(MultiStream, self).random(size=self.draw_size(size))[size] < prob # fastest
 
     # @_pre_draw <-- handled by call to self.bernoullli
-    def bernoulli_filter(self, arr, prob):
-        return arr[self.bernoulli(arr, prob)] # Slightly faster on my machine for bernoulli to typecast
+    def bernoulli_filter(self, size, prob):
+        return size[self.bernoulli(size, prob)] # Slightly faster on my machine for bernoulli to typecast
 
-    def choice(self, arr, prob):
+    def choice(self, size, a, **kwargs):
         # Consider raising a warning instead?
         raise NotStreamSafeException('The "choice" function is not MultiStream-safe.')
 
@@ -270,43 +273,43 @@ class CentralizedStream(np.random.Generator):
     def step(self, ti):
         pass
 
-    def draw_size(self, arr):
-        """ Determine how many random numbers to draw for a given arr """
+    def draw_size(self, size):
+        """ Determine how many random numbers to draw for a given size """
 
-        if isinstance(arr, int):
-            return arr
-        elif isinstance(arr, ss.states.FusedArray):
-            v = arr.values
-        elif isinstance(arr, ss.states.DynamicView):
-            v = arr._view
+        if isinstance(size, int):
+            return size
+        elif isinstance(size, ss.states.FusedArray):
+            v = size.values
+        elif isinstance(size, ss.states.DynamicView):
+            v = size._view
         else:
-            v = arr
+            v = size
 
         if v.dtype == bool:
-            return arr.sum()
+            return size.sum()
 
-        return len(arr)
+        return len(size)
 
-    def random(self, arr):
-        return np.random.random(self.draw_size(arr))
+    def random(self, size):
+        return np.random.random(self.draw_size(size))
 
-    def uniform(self, arr, **kwargs):
-        return np.random.uniform(self.draw_size(arr), **kwargs)
+    def uniform(self, size, **kwargs):
+        return np.random.uniform(size=self.draw_size(size), **kwargs)
 
-    def poisson(self, arr, lam):
-        return np.random.poisson(lam=lam, size=self.draw_size(arr))
+    def poisson(self, size, lam):
+        return np.random.poisson(lam=lam, size=self.draw_size(size))
 
-    def normal(self, arr, mu=0, std=1):
-        return mu + std*np.random.normal(size=self.draw_size(arr), loc=mu, scale=std)
+    def normal(self, size, mu=0, std=1):
+        return mu + std*np.random.normal(size=self.draw_size(size), loc=mu, scale=std)
 
-    def negative_binomial(self, arr, **kwargs): #n=nbn_n, p=nbn_p, size=n)
-        return np.random.negative_binomial(**kwargs, size=self.draw_size(arr))
+    def negative_binomial(self, size, **kwargs): #n=nbn_n, p=nbn_p, size=n)
+        return np.random.negative_binomial(**kwargs, size=self.draw_size(size))
 
-    def bernoulli(self, arr, prob):
-        return np.random.random(self.draw_size(arr)) < prob
+    def bernoulli(self, size, prob):
+        return np.random.random(self.draw_size(size)) < prob
 
-    def bernoulli_filter(self, arr, prob):
-        return arr[self.bernoulli(arr, prob)] # Slightly faster on my machine for bernoulli to typecast
+    def bernoulli_filter(self, size, prob):
+        return size[self.bernoulli(size, prob)] # Slightly faster on my machine for bernoulli to typecast
 
-    def choice(self, arr, **kwargs):
-        return self.stream.choice(size=self.draw_size(arr), **kwargs)
+    def choice(self, size, a, **kwargs):
+        return np.random.choice(a, size=self.draw_size(size), **kwargs)

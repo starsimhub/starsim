@@ -10,7 +10,7 @@ import pandas as pd
 import seaborn as sns
 
 n = 1_000 # Agents
-n_rand_seeds = 250
+n_rand_seeds = 100
 intv_cov_levels = [0.025, 0.05, 0.10, 0.73] + [0] # Must include 0 as that's the baseline
 
 # Choose ART or PrEP
@@ -28,7 +28,8 @@ def run_sim(n, intv_cov, rand_seed, multistream):
     ppl.networks = ss.ndict(ss.simple_embedding(), ss.maternal())
 
     hiv_pars = {
-        'beta': {'simple_embedding': [0.10, 0.08], 'maternal': [0.2,0]},
+        #'beta': {'simple_embedding': [0.10, 0.08], 'maternal': [0.2,0]},
+        'beta': {'simple_embedding': [0.40, 0.35], 'maternal': [0.2,0]},
         'initial': 10,
     }
     hiv = ss.HIV(hiv_pars)
@@ -38,11 +39,13 @@ def run_sim(n, intv_cov, rand_seed, multistream):
     intv = intervention[choice](t=[0, 1], coverage=[0, intv_cov])
     pars = {
         'start': 1980,
-        'end': 2010,
+        'end': 2020,
         'interventions': [intv],
         'rand_seed': rand_seed,
+        'verbose': 0,
+        #'remove_dead': False,
     }
-    sim = ss.Sim(people=ppl, modules=[hiv, pregnancy], pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}')
+    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[pregnancy], pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}')
     sim.initialize()
     sim.run()
 
@@ -104,7 +107,7 @@ def plot_scenarios(df):
         g.set_titles(col_template='{col_name}', row_template='Coverage: {row_name}')
         g.fig.suptitle('Multistream' if ms else 'Centralized')
         g.fig.subplots_adjust(top=0.88)
-        g.set_xlabels(r'Value - Reference at $t_i$')
+        g.set_xlabels(r'Timestep $t_i$')
         g.fig.savefig(os.path.join(figdir, 'diff_multistream.png' if ms else 'diff_centralized.png'), bbox_inches='tight', dpi=300)
 
     ## FINAL TIME

@@ -17,15 +17,18 @@ import numpy as np
 import sciris as sc
 
 __all__ = [
-    'Distribution', 'uniform', 'choice', 'normal', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int',
+    'Distribution', 'bernoulli', 'uniform', 'choice', 'normal', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int',
     'poisson', 'neg_binomial', 'beta', 'gamma', 'from_data'
 ]
 
 
 class Distribution():
 
-    def __init__(self):
-        self.stream = np.random.defaut_rng() # Default to centralized random number generator
+    def __init__(self, rng=None):
+        if rng is None:
+            self.stream = np.random.default_rng() # Default to centralized random number generator
+        else:
+            self.stream = rng
         return
 
     def set_stream(self, stream):
@@ -41,10 +44,10 @@ class Distribution():
         """
         raise NotImplementedError
 
-    def __call__(self, n=1, **kwargs):
-        return self.sample(n, **kwargs)
+    def __call__(self, size=1, **kwargs):
+        return self.sample(size, **kwargs)
 
-    def sample(cls, n=1, **kwargs):
+    def sample(cls, size=1, **kwargs):
         """
         Return a specified number of samples from the distribution
         """
@@ -54,19 +57,20 @@ class Distribution():
 class from_data(Distribution):
     """ Sample from data """
 
-    def __init__(self, vals, bins):
+    def __init__(self, vals, bins, **kwargs):
+        super().__init__(**kwargs)
         self.vals = vals
         self.bins = bins
 
     def mean(self):
         return
 
-    def sample(self, n=1):
+    def sample(self, size=1):
         """ Sample using CDF """
         bin_midpoints = self.bins[:-1] + np.diff(self.bins) / 2
         cdf = np.cumsum(self.vals)
         cdf = cdf / cdf[-1]
-        values = self.stream.rand(n)
+        values = self.stream.rand(size)
         value_bins = np.searchsorted(cdf, values)
         return bin_midpoints[value_bins]
 
@@ -76,15 +80,31 @@ class uniform(Distribution):
     Uniform distribution
     """
 
-    def __init__(self, low, high):
+    def __init__(self, low, high, **kwargs):
+        super().__init__(**kwargs)
         self.low = low
         self.high = high
 
     def mean(self):
         return (self.low + self.high) / 2
 
-    def sample(self, n=1):
-        return self.stream.uniform(low=self.low, high=self.high, size=n)
+    def sample(self, size=1):
+        return self.stream.uniform(low=self.low, high=self.high, size=size)
+
+class bernoulli(Distribution):
+    """
+    Bernoulli distribution, returns sequence of True or False from independent trials
+    """
+
+    def __init__(self, p, **kwargs):
+        super().__init__(**kwargs)
+        self.p = p
+
+    def mean(self):
+        return self.p
+
+    def sample(self, size=1):
+        return self.stream.bernoulli(prob=self.p, size=size)
 
 
 class choice(Distribution):
@@ -92,13 +112,14 @@ class choice(Distribution):
     Choose from samples, optionally with specific probabilities
     """
 
-    def __init__(self, choices, probabilities=None, replace=True):
+    def __init__(self, choices, probabilities=None, replace=True, **kwargs):
+        super().__init__(**kwargs)
         self.choices = choices
         self.probabilities = probabilities
         self.replace = replace
 
-    def sample(self, n):
-        return self.stream.choice(a=self.choices, p=self.probabilities, replace=self.replace, size=n)
+    def sample(self, size):
+        return self.stream.choice(a=self.choices, p=self.probabilities, replace=self.replace, size=size)
 
 
 class normal(Distribution):
@@ -106,12 +127,13 @@ class normal(Distribution):
     Normal distribution
     """
 
-    def __init__(self, mean, std):
+    def __init__(self, mean, std, **kwargs):
+        super().__init__(**kwargs)
         self.mean = mean
         self.std = std
 
-    def sample(self, n=1):
-        return self.stream.normal(loc=self.mean, scale=self.std, size=n)
+    def sample(self, size=1):
+        return self.stream.normal(loc=self.mean, scale=self.std, size=size)
 
 
 class normal_pos(normal):
@@ -121,8 +143,8 @@ class normal_pos(normal):
     WARNING - this function came from hpvsim but confirm that the implementation is correct?
     """
 
-    def sample(self, n=1):
-        return np.abs(super().sample(n))
+    def sample(self, size=1):
+        return np.abs(super().sample(size))
 
 
 class normal_int(Distribution):
@@ -130,8 +152,8 @@ class normal_int(Distribution):
     Normal distribution returning only integer values
     """
 
-    def sample(self, n=1):
-        return np.round(super().sample(n))
+    def sample(self, size=1):
+        return np.round(super().sample(size))
 
 
 class lognormal(Distribution):
@@ -143,18 +165,19 @@ class lognormal(Distribution):
     function assumes the user wants to specify the mean and std of the lognormal distribution.
     """
 
-    def __init__(self, mean, std):
+    def __init__(self, mean, std, **kwargs):
+        super().__init__(**kwargs)
         self.mean = mean
         self.std = std
         self.underlying_mean = np.log(mean ** 2 / np.sqrt(std ** 2 + mean ** 2))  # Computes the mean of the underlying normal distribution
         self.underlying_std = np.sqrt(np.log(std ** 2 / mean ** 2 + 1))  # Computes sigma for the underlying normal distribution
 
-    def sample(self, n=1):
+    def sample(self, size=1):
 
         if (sc.isnumber(self.mean) and self.mean > 0) or (sc.checktype(self.mean, 'arraylike') and (self.mean > 0).all()):
-            return self.stream.lognormal(mean=self.underlying_mean, sigma=self.underlying_std, size=n)
+            return self.stream.lognormal(mean=self.underlying_mean, sigma=self.underlying_std, size=size)
         else:
-            return np.zeros(n)
+            return np.zeros(size)
 
 
 class lognormal_int(lognormal):
@@ -162,8 +185,8 @@ class lognormal_int(lognormal):
     Lognormal returning only integer values
     """
 
-    def sample(self, n=1):
-        return np.round(super().sample(n))
+    def sample(self, size=1):
+        return np.round(super().sample(size))
 
 
 class poisson(Distribution):
@@ -171,14 +194,15 @@ class poisson(Distribution):
     Poisson distribution
     """
 
-    def __init__(self, rate):
+    def __init__(self, rate, **kwargs):
+        super().__init__(**kwargs)
         self.rate = rate
 
     def mean(self):
         return self.rate
 
-    def sample(self, n=1):
-        return self.stream.poisson(self.rate, n)
+    def sample(self, size=1):
+        return self.stream.poisson(self.rate, size)
 
 
 class neg_binomial(Distribution):
@@ -193,21 +217,20 @@ class neg_binomial(Distribution):
     the mean.
     """
 
-    def __init__(self, mean, dispersion, step=1):
+    def __init__(self, mean, dispersion, **kwargs):
         """
         mean (float): the rate of the process (same as Poisson)
         dispersion (float):  dispersion parameter; lower is more dispersion, i.e. 0 = infinite, ∞ = Poisson
         n (int): number of trials
-        step (float): the step size to use if non-integer outputs are desired
         """
+        super().__init__(**kwargs)
         self.mean = mean
         self.dispersion = dispersion
-        self.step = step
 
-    def sample(self, n=1):
+    def sample(self, size=1):
         nbn_n = self.dispersion
         nbn_p = self.dispersion / (self.mean / self.step + self.dispersion)
-        return self.stream.negative_binomial(n=nbn_n, p=nbn_p, arr=n)# * self.step
+        return self.stream.negative_binomial(n=nbn_n, p=nbn_p, size=size)
 
 
 class beta(Distribution):
@@ -215,15 +238,16 @@ class beta(Distribution):
     Beta distribution
     """
 
-    def __init__(self, alpha, beta):
+    def __init__(self, alpha, beta, **kwargs):
+        super().__init__(**kwargs)
         self.alpha = alpha
         self.beta = beta
 
     def mean(self):
         return self.alpha / (self.alpha + self.beta)
 
-    def sample(self, n=1):
-        return self.stream.beta(a=self.alpha, b=self.beta, size=n)
+    def sample(self, size=1):
+        return self.stream.beta(a=self.alpha, b=self.beta, size=size)
 
 
 class gamma(Distribution):
@@ -231,12 +255,13 @@ class gamma(Distribution):
     Gamma distribution
     """
 
-    def __init__(self, shape, scale):
+    def __init__(self, shape, scale, **kwargs):
+        super().__init__(**kwargs)
         self.shape = shape
         self.scale = scale
 
     def mean(self):
         return self.shape * self.scale
 
-    def sample(self, n=1):
-        return self.stream.gamma(shape=self.shape, scale=self.scale, size=n)
+    def sample(self, size=1):
+        return self.stream.gamma(shape=self.shape, scale=self.scale, size=size)

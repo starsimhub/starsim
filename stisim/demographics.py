@@ -241,8 +241,11 @@ class Pregnancy(DemographicModule):
             'initial': 3,  # Number of women initially pregnant
         }, self.pars)
 
-        self.rng_sex = ss.Stream(self.multistream)('sex_at_birth')
-        self.rng_conception = ss.Stream(self.multistream)('conception')
+        self.rng_female = ss.Stream(f'female_{self.name}')
+        self.female_dist = ss.bernoulli(p=0.5, rng=self.rng_female) # Replace 0.5 with sex ratio at birth
+
+        self.rng_conception = ss.Stream('conception')
+        self.rng_dead = ss.Stream(f'dead_{self.name}')
 
         return
 
@@ -308,7 +311,7 @@ class Pregnancy(DemographicModule):
         if self.pars.inci > 0:
             denom_conds = ppl.female & ppl.active & self.susceptible
             inds_to_choose_from = ss.true(denom_conds)
-            uids = self.rng_conception.bernoulli_filter(arr=inds_to_choose_from, prob=self.pars.inci)
+            uids = self.rng_conception.bernoulli_filter(size=inds_to_choose_from, prob=self.pars.inci)
 
             # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
             n_unborn_agents = len(uids)
@@ -316,7 +319,8 @@ class Pregnancy(DemographicModule):
                 # Grow the arrays and set properties for the unborn agents
                 new_uids = sim.people.grow(n_unborn_agents)
                 sim.people.age[new_uids] = -self.pars.dur_pregnancy
-                sim.people.female[new_uids] = self.rng_sex.bernoulli(arr=uids, prob=0.5) # Replace 0.5 with sex ratio at birth
+                #sim.people.female[new_uids] = self.rng_sex.bernoulli(size=uids, prob=0.5) # Replace 0.5 with sex ratio at birth
+                sim.people.female[new_uids] = self.female_dist.sample(uids)
 
                 # Add connections to any vertical transmission layers
                 # Placeholder code to be moved / refactored. The maternal network may need to be
@@ -346,7 +350,7 @@ class Pregnancy(DemographicModule):
 
         # Outcomes for pregnancies
         dur = np.full(len(to_uids), sim.ti + self.pars.dur_pregnancy / sim.dt)
-        dead = np.random.random(len(to_uids)) < self.pars.p_death
+        dead = self.rng_dead.bernoulli(size=to_uids, prob=self.pars.p_death)
         self.ti_delivery[to_uids] = dur  # Currently assumes maternal deaths still result in a live baby
         dur_post_partum = np.full(len(to_uids), dur + self.pars.dur_postpartum / sim.dt)
         self.ti_postpartum[to_uids] = dur_post_partum

@@ -60,16 +60,11 @@ class Network(sc.objdict):
             'beta': ss.float_,
         }
 
-        default_pars = {'multistream': True}
-        self.pars = sc.mergedicts(default_pars, pars)
-
         self.meta = sc.mergedicts(default_keys, key_dict)
         self.vertical = vertical  # Whether transmission is bidirectional
         self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
         self.label = label
         self.initialized = False
-
-        self.multistream = self.pars['multistream']
 
         # Handle args
         kwargs = sc.mergedicts(*args, kwargs)
@@ -276,9 +271,13 @@ class Network(sc.objdict):
         is specifically used when removing agents from the simulation.
 
         """
+        if len(uids) == 0:
+            return
+
         keep = ~(np.isin(self.p1, uids) | np.isin(self.p2, uids))
         for k in self.meta_keys():
             self[k] = self[k][keep]
+        return
 
 
 class Networks(ss.ndict):
@@ -306,9 +305,9 @@ class simple_sexual(Network):
         self.mean_dur = mean_dur
 
         # Define random streams
-        self.rng_pair_12 = ss.Stream(self.multistream)('pair_12')
-        self.rng_pair_21 = ss.Stream(self.multistream)('pair_21')
-        self.rng_mean_dur = ss.Stream(self.multistream)('mean_dur')
+        self.rng_pair_12 = ss.Stream('pair_12')
+        self.rng_pair_21 = ss.Stream('pair_21')
+        self.rng_mean_dur = ss.Stream('mean_dur')
 
         return
 
@@ -332,10 +331,10 @@ class simple_sexual(Network):
 
         if len(available_m) <= len(available_f):
             p1 = available_m
-            p2 = self.rng_pair_12.choice(available_f, size=len(p1), replace=False) # TODO: Stream-ify
+            p2 = self.rng_pair_12.choice(a=available_f, size=len(p1), replace=False) # TODO: Stream-ify
         else:
             p2 = available_f
-            p1 = self.rng_pair_21.choice(available_m, size=len(p2), replace=False) # TODO: Stream-ify
+            p1 = self.rng_pair_21.choice(a=available_m, size=len(p2), replace=False) # TODO: Stream-ify
 
         beta = np.ones_like(p1)
         dur = self.rng_mean_dur.poisson(p1, self.mean_dur) # TODO: Stream-ify
@@ -368,28 +367,24 @@ class simple_embedding(simple_sexual):
         # Find unpartnered males and females - could in principle check other contact layers too
         # by having the People object passed in here
 
-        available_m = np.setdiff1d(ss.true(~people.female), self.members)
-        available_f = np.setdiff1d(ss.true(people.female), self.members)
-
-        # slow:
-        available_m = ss.true(people.alive[available_m])
-        available_f = ss.true(people.alive[available_f])
+        available_m = np.setdiff1d(ss.true(~people.female & people.alive), self.members)
+        available_f = np.setdiff1d(ss.true(people.female & people.alive), self.members)
 
         if not len(available_m) or not len(available_f):
             if ss.options.verbose > 1:
                 print('No pairs to add')
             return 0
 
-        loc_m = people.age[available_m].values - 5 + self.rng_pair_12.normal(arr=available_m, std=3)
-        loc_f = people.age[available_f].values     + self.rng_pair_21.normal(arr=available_f, std=3)
+        loc_m = people.age[available_m].values - 5 + self.rng_pair_12.normal(size=available_m, std=3)
+        loc_f = people.age[available_f].values     + self.rng_pair_21.normal(size=available_f, std=3)
         dist_mat = sps.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
 
         ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
         # loc_f[ind_f[0]] is close to loc_m[ind_m[0]]
 
         n_pairs = len(ind_f)
-        self['p1'] = np.concatenate([self['p1'], ind_m])
-        self['p2'] = np.concatenate([self['p2'], ind_f])
+        self['p1'] = np.concatenate([self['p1'], available_m[ind_m]])
+        self['p2'] = np.concatenate([self['p2'], available_f[ind_f]])
 
         beta = np.ones(n_pairs)
         dur = self.rng_mean_dur.poisson(ind_m, self.mean_dur)
@@ -414,7 +409,7 @@ class stable_monogamy(simple_sexual):
         self['p1'] = np.arange(0,n,2) # EVEN
         self['p2'] = np.arange(1,n,2) # ODD
         self['beta'] = np.ones(len(self['p1']))
-        self['dur'] = np.iinfo(int).max
+        self['dur'] = np.full(len(self['p1']), fill_value=np.iinfo(int).max, dtype=int)
         return
     
     def update(self, people, dt=None):

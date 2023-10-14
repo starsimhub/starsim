@@ -207,7 +207,7 @@ class Sim(sc.prettyobj):
 
         # Any other initialization
         if not self.people.initialized:
-            self.people.initialize()
+            self.people.initialize(self)
 
         # Set time attributes
         self.people.ti = self.ti
@@ -216,9 +216,10 @@ class Sim(sc.prettyobj):
         return self
 
     def init_demographics(self):
-        for module in self.demographics.values():
-            module.initialize(self)
-            self.results[module.name] = module.results
+        for demog in self.demographics.values():
+            demog.initialize(self)
+            self.results[demog.name] = demog.results
+        return
 
     def init_diseases(self):
         """ Initialize modules and connectors to be simulated """
@@ -271,7 +272,7 @@ class Sim(sc.prettyobj):
                 errormsg = f'Intervention {intervention} does not seem to be a valid intervention: must be a function or Intervention subclass'
                 raise TypeError(errormsg)
 
-            for stream in intervention.streams.values():
+            for stream in intervention.streams:
                 stream.initialize(self.streams)
 
         return
@@ -320,13 +321,13 @@ class Sim(sc.prettyobj):
             self.people.remove_dead(self)
 
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
-        for module in self.demographics.values():
-            module.update(self)
+        for demog in self.demographics.values():
+            demog.update(self)
 
         # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
         # to be applied to newly created agents
         for disease in self.diseases.values():
-            disease.update_pre(self)
+            disease.update_states(self)
 
         # Update networks - this takes place here in case autonomous state changes at this timestep
         # affect eligibility for contacts
@@ -426,8 +427,11 @@ class Sim(sc.prettyobj):
             # otherwise the scale factor will be applied multiple times
             raise AlreadyRunError('Simulation has already been finalized')
 
-        for module in self.modules.values():
-            module.finalize(self)
+        for demog in self.demographics.values():
+            demog.finalize(self)
+
+        for disease in self.diseases.values():
+            disease.finalize(self)
 
         for intervention in self.interventions.values():
             intervention.finalize(self)
