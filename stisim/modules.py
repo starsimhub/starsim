@@ -20,11 +20,6 @@ class Module(sc.prettyobj):
         self.initialized = False
         self.finalized = False
 
-        # Random number streams
-        self.rng_init_cases      = ss.Stream(f'initial_cases_{self.name}')
-        self.rng_trans           = ss.Stream(f'trans_{self.name}')
-        self.rng_choose_infector = ss.Stream(f'choose_infector_{self.name}')
-
         return
 
     def __call__(self, *args, **kwargs):
@@ -99,6 +94,11 @@ class Disease(Module):
         self.susceptible = ss.State('susceptible', bool, True)
         self.infected = ss.State('infected', bool, False)
         self.ti_infected = ss.State('ti_infected', float, np.nan)
+
+        # Random number streams
+        self.rng_init_cases      = ss.Stream(f'initial_cases_{self.name}')
+        self.rng_trans           = ss.Stream(f'trans_{self.name}')
+        self.rng_choose_infector = ss.Stream(f'choose_infector_{self.name}')
 
         return
 
@@ -218,8 +218,8 @@ class Disease(Module):
         pass
 
     def update_results(self, sim):
-        self.results['n_susceptible'][sim.ti]  = np.count_nonzero(self.susceptible)
-        self.results['n_infected'][sim.ti]     = np.count_nonzero(self.infected)
+        self.results['n_susceptible'][sim.ti]  = np.count_nonzero(self.susceptible & sim.people.alive)
+        self.results['n_infected'][sim.ti]     = np.count_nonzero(self.infected & sim.people.alive)
         self.results['prevalence'][sim.ti]     = self.results.n_infected[sim.ti] / np.count_nonzero(sim.people.alive)
         self.results['new_infections'][sim.ti] = np.count_nonzero(self.ti_infected == sim.ti)
 

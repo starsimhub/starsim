@@ -387,7 +387,7 @@ class simple_embedding(simple_sexual):
         self['p2'] = np.concatenate([self['p2'], available_f[ind_f]])
 
         beta = np.ones(n_pairs)
-        dur = self.rng_mean_dur.poisson(ind_m, self.mean_dur)
+        dur = self.rng_mean_dur.poisson(available_m[ind_m], self.mean_dur)
         self['beta'] = np.concatenate([self['beta'], beta])
         self['dur'] = np.concatenate([self['dur'], dur])
 

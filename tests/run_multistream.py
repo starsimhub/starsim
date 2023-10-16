@@ -8,9 +8,10 @@ import stisim as ss
 import sciris as sc
 import pandas as pd
 import seaborn as sns
+import numpy as np
 
 n = 1_000 # Agents
-n_rand_seeds = 100
+n_rand_seeds = 250
 intv_cov_levels = [0.025, 0.05, 0.10, 0.73] + [0] # Must include 0 as that's the baseline
 
 # Choose ART or PrEP
@@ -25,18 +26,21 @@ def run_sim(n, intv_cov, rand_seed, multistream):
     ss.options(multistream=multistream)
     ppl = ss.People(n)
 
-    ppl.networks = ss.ndict(ss.simple_embedding(), ss.maternal())
+    ppl.networks = ss.ndict(
+        ss.simple_embedding(mean_dur=4),
+        ##################ss.maternal()
+        )
 
     hiv_pars = {
-        #'beta': {'simple_embedding': [0.10, 0.08], 'maternal': [0.2,0]},
-        'beta': {'simple_embedding': [0.40, 0.35], 'maternal': [0.2,0]},
-        'initial': 10,
+        #'beta': {'simple_embedding': [0.10, 0.08], 'maternal': [0.2, 0]},
+        'beta': {'simple_embedding': [0.2, 0.15], 'maternal': [0.2, 0]},
+        'initial': int(np.maximum(10, np.ceil(0.05*n))),
     }
     hiv = ss.HIV(hiv_pars)
 
     pregnancy = ss.Pregnancy()
 
-    intv = intervention[choice](t=[0, 1], coverage=[0, intv_cov])
+    intv = intervention[choice](t=[0, 10, 20], coverage=[0, intv_cov/3, intv_cov])
     pars = {
         'start': 1980,
         'end': 2020,
@@ -45,7 +49,8 @@ def run_sim(n, intv_cov, rand_seed, multistream):
         'verbose': 0,
         #'remove_dead': False,
     }
-    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[pregnancy], pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}')
+    ##############################sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[pregnancy], pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}')
+    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=None, pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}')
     sim.initialize()
     sim.run()
 
@@ -54,7 +59,7 @@ def run_sim(n, intv_cov, rand_seed, multistream):
         #'hiv.n_infected': sim.results.hiv.n_infected,
         'hiv.prevalence': sim.results.hiv.prevalence,
         'hiv.cum_deaths': sim.results.hiv.new_deaths.cumsum(),
-        'pregnancy.cum_births': sim.results.pregnancy.births.cumsum(),
+        #################################'pregnancy.cum_births': sim.results.pregnancy.births.cumsum(),
     })
     df['intv_cov'] = intv_cov
     df['rand_seed'] = rand_seed

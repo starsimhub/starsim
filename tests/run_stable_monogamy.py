@@ -9,9 +9,16 @@ import pandas as pd
 import numpy as np
 import networkx as nx
 import sys
+import os
+import argparse
+import sciris as sc
+import seaborn as sns
 
 ss.options(multistream = True) # Can set multistream to False for comparison
 plot_graph = True
+
+figdir = os.path.join(os.getcwd(), 'figs', 'stable_monogamy')
+sc.path(figdir).mkdir(parents=True, exist_ok=True)
 
 class Graph():
     def __init__(self, nodes, edges):
@@ -20,7 +27,7 @@ class Graph():
         nx.set_node_attributes(self.graph, nodes.transpose().to_dict())
         return
 
-    def draw_nodes(self, filter, ax, **kwargs):
+    def draw_nodes(self, filter, pos, ax, **kwargs):
         inds = [i for i,n in self.graph.nodes.data() if filter(n)]
         nc = ['red' if nd['hiv'] else 'lightgray' for i, nd in self.graph.nodes.data() if i in inds]
         ec = ['green' if nd['on_art'] or nd['on_prep'] else 'black' for i, nd in self.graph.nodes.data() if i in inds]
@@ -28,8 +35,8 @@ class Graph():
             nx.draw_networkx_nodes(self.graph, nodelist=inds, pos=pos, ax=ax, node_color=nc, edgecolors=ec, **kwargs)
         return
 
-    def plot(self, pos, ax=None):
-        kwargs = dict(node_shape='x', node_size=250, linewidths=2, ax=ax)
+    def plot(self, pos, edge_labels=False, ax=None):
+        kwargs = dict(node_shape='x', node_size=250, linewidths=2, ax=ax, pos=pos)
         self.draw_nodes(lambda n: n['dead'], **kwargs)
 
         kwargs['node_shape'] = 'o'
@@ -40,11 +47,12 @@ class Graph():
 
         nx.draw_networkx_edges(self.graph, pos=pos, ax=ax)
         nx.draw_networkx_labels(self.graph, labels={i:int(a['cd4']) for i,a in self.graph.nodes.data()}, font_size=8, pos=pos, ax=ax)
-        #nx.draw_networkx_edge_labels(self.graph, edge_labels={(i,j): int(a['dur']) for i,j,a in self.graph.edges.data()}, font_size=8, pos=pos, ax=ax)
+        if edge_labels:
+            nx.draw_networkx_edge_labels(self.graph, edge_labels={(i,j): int(a['dur']) for i,j,a in self.graph.edges.data()}, font_size=8, pos=pos, ax=ax)
         return
 
 
-class rng_analyzer(ss.Analyzer):
+class GraphAnalyzer(ss.Analyzer):
     ''' Simple analyzer to assess if random streams are working '''
 
     def __init__(self, **kwargs):
@@ -55,10 +63,12 @@ class rng_analyzer(ss.Analyzer):
 
     def initialize(self, sim):
         self.initialized = True
+        self.update_results(sim, init=True)
         return
 
-    def update_results(self, sim):
+    def update_results(self, sim, init=False):
         nodes = pd.DataFrame({
+            'age': sim.people.age.values,
             'female': sim.people.female.values,
             'dead': sim.people.dead.values,
             'hiv': sim.people.hiv.infected.values,
@@ -70,7 +80,8 @@ class rng_analyzer(ss.Analyzer):
 
         edges = pd.DataFrame(sim.people.networks[0].to_dict()) #sim.people.networks['simple_embedding'].to_df() #TODO: repr issues
 
-        self.graphs[sim.ti] = Graph(nodes, edges)
+        idx = sim.ti if not init else -1
+        self.graphs[idx] = Graph(nodes, edges)
         return
 
     def finalize(self, sim):
@@ -78,14 +89,16 @@ class rng_analyzer(ss.Analyzer):
         return
 
 
+
 def run_sim(n=25, intervention=False, analyze=False):
     ppl = ss.People(n)
 
-    ppl.networks = ss.ndict(ss.stable_monogamy())#, ss.maternal(net_pars))
+    ppl.networks = ss.ndict(ss.simple_embedding(mean_dur=5))#, ss.maternal())
 
     hiv_pars = {
-        'beta': {'stable_monogamy': [0.06, 0.04]},
-        'initial': 0,
+        #'beta': {'simple_embedding': [0.06, 0.04]},
+        'beta': {'simple_embedding': [0.3, 0.25]},
+        'initial': 0.25 * n,
     }
     hiv = ss.HIV(hiv_pars)
 
@@ -93,34 +106,47 @@ def run_sim(n=25, intervention=False, analyze=False):
 
     pars = {
         'start': 1980,
-        'end': 2010,
-        'remove_dead': False, # So we can see who dies
+        'end': 2020,
+        'remove_dead': False, # So we can see who dies, sim results should not change with True
         'interventions': [art] if intervention else [],
         'rand_seed': 0,
-        'analyzers': [rng_analyzer()] if analyze else [],
+        'analyzers': [GraphAnalyzer()] if analyze else [],
     }
-    sim = ss.Sim(people=ppl, diseases=[hiv], pars=pars, label=f'Sim with {n} agents and intv={intervention}')
+    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[ss.Pregnancy()], pars=pars, label=f'Sim with {n} agents and intv={intervention}')
     sim.initialize()
 
-    sim.diseases['hiv'].set_prognoses(sim, np.arange(0,n,2), from_uids=None)
+    #sim.diseases['hiv'].set_prognoses(sim, np.arange(0,n,2), from_uids=None)
 
     sim.run()
 
     return sim
 
-n = 10
-sim2 = run_sim(n, intervention=True, analyze=plot_graph)
-sim1 = run_sim(n, intervention=False, analyze=plot_graph)
 
-if plot_graph:
+def run_scenario(n=10, analyze=True):
+    #sim2 = run_sim(n, intervention=True, analyze=analyze)
+    #sim1 = run_sim(n, intervention=False, analyze=analyze)
+    sims = sc.parallelize(run_sim, kwargs={'n':n, 'analyze': analyze}, iterkwargs=[{'intervention':True}, {'intervention':False}], die=True)
+
+    for i, sim in enumerate(sims):
+        sim.save(os.path.join(figdir, f'sim{i}.obj'))
+
+    return sims
+
+
+def plot_graph(sim1, sim2):
     g1 = sim1.analyzers[0].graphs
     g2 = sim2.analyzers[0].graphs
 
-    pos = {i:(np.cos(2*np.pi*i/n), np.sin(2*np.pi*i/n)) for i in range(n)}
+    n = len(g1[0].graph)
+    el = n <= 10 # Edge labels
+    #pos = {i:(np.cos(2*np.pi*i/n), np.sin(2*np.pi*i/n)) for i in range(n)}
+    pos = {i:(nd['age'], 2*nd['female']-1 + np.random.uniform(-0.3, 0.3)) for i, nd in g1[0].graph.nodes.data()}
+    #pos = nx.spring_layout(g1[0].graph, k=None, pos=None, fixed=None, iterations=50, threshold=0.0001, weight=None, scale=1, center=None, dim=2, seed=None)
+    #pos = nx.multipartite_layout(g1[0].graph, subset_key='female', align='vertical', scale=10, center=None)
 
     fig, axv = plt.subplots(1, 2, figsize=(10,5))
     global ti
-    ti = 0
+    ti = -1 # Initial state is -1
     timax = sim1.tivec[-1]
     def on_press(event):
         print('press', event.key)
@@ -129,14 +155,14 @@ if plot_graph:
         if event.key == 'right':
             ti = min(ti+1, timax)
         elif event.key == 'left':
-            ti = max(ti-1, 0)
+            ti = max(ti-1, -1)
 
         # Clear
         axv[0].clear()
         axv[1].clear()
 
-        g1[ti].plot(pos, ax=axv[0])
-        g2[ti].plot(pos, ax=axv[1])
+        g1[ti].plot(pos, edge_labels=el, ax=axv[0])
+        g2[ti].plot(pos, edge_labels=el, ax=axv[1])
         fig.suptitle(f'Time is {ti}')
         fig.canvas.draw()
 
@@ -144,23 +170,168 @@ if plot_graph:
 
     g1[ti].plot(pos, ax=axv[0])
     g2[ti].plot(pos, ax=axv[1])
+    fig.suptitle(f'Time is {ti}')
+
+    # Plot
+    fig, axv = plt.subplots(2,1, sharex=True)
+    axv[0].plot(sim1.tivec, sim1.results.hiv.n_infected, label='Baseline')
+    axv[0].plot(sim2.tivec, sim2.results.hiv.n_infected, ls=':', label='Intervention')
+    axv[0].set_title('HIV number of infections')
+
+    axv[1].plot(sim1.tivec, sim1.results.hiv.new_deaths, label='Baseline')
+    axv[1].plot(sim2.tivec, sim2.results.hiv.new_deaths, ls=':', label='Intervention')
+    axv[1].set_title('HIV Deaths')
+
+    ''' Gonorrhea removed for now
+    axv[2].plot(sim1.tivec, sim1.results.gonorrhea.n_infected, label='Baseline')
+    axv[2].plot(sim2.tivec, sim2.results.gonorrhea.n_infected, ls=':', label='Intervention')
+    axv[2].set_title('Gonorrhea number of infections')
+    '''
+    plt.legend()
+
+def analyze_people(sim):
+    p = sim.people
+    years_lived = np.full(len(p), sim.ti)
+    years_lived[p.dead] = p.ti_dead[p.dead]
+    age_initial = p.age.values - years_lived
+
+    df = pd.DataFrame({
+        'uid': p.uid._view,
+        'age_initial': age_initial,
+        'years_lived': years_lived,
+        'ti_infected': p.hiv.ti_infected.values,
+        'ti_art': p.hiv.ti_art.values,
+        'ti_dead': p.ti_dead.values,
+    })
+    df.replace(to_replace=ss.INT_NAN, value=np.nan, inplace=True)
+    df['age_infected'] = df['age_initial'] + df['ti_infected']
+    df['age_art']      = df['age_initial'] + df['ti_art']
+    df['age_dead']     = df['age_initial'] + df['ti_dead']
+    return df
+        
+def life_bars(data, **kwargs):
+    age_final = data['age_initial'] + data['years_lived']
+    plt.barh(y=data.index, left=data['age_initial'], width=age_final-data['age_initial'], color='k')
+
+    # Define bools
+    infected = ~data['ti_infected'].isna()
+    art = ~data['ti_art'].isna()
+    dead = ~data['ti_dead'].isna()
+
+    # Infected
+    plt.barh(y=data.index[infected], left=data.loc[infected]['age_infected'], width=age_final[infected]-data.loc[infected]['age_infected'], color='r')
+
+    # ART
+    plt.barh(y=data.index[art], left=data.loc[art]['age_art'], width=age_final[art]-data.loc[art]['age_art'], color='g')
+
+    # Dead
+    #plt.barh(y=data.index[dead], left=data.loc[dead]['age_dead'], width=age_final[dead]-data.loc[dead]['age_dead'], color='k')
+    plt.scatter(y=data.index[dead], x=data.loc[dead]['age_dead'], color='k', marker='|')
+
+    return
+
+def life_bars_nested(df):
+
+    N = df['sim'].nunique()
+    height = 0.9/N
+
+    fig, ax = plt.subplots(figsize=(10,6))
+
+    for n, (lbl, data) in enumerate(df.groupby('sim')):
+        ys = n/(N+1) # Leave space
+
+        age_final = data['age_initial'] + data['years_lived']
+        plt.barh(y=data.index + ys, left=data['age_initial'], width=age_final-data['age_initial'], color='k', height=height)
+
+        # Define bools
+        infected = ~data['ti_infected'].isna()
+        art = ~data['ti_art'].isna()
+        dead = ~data['ti_dead'].isna()
+
+        # Infected
+        plt.barh(y=data.index[infected] + ys, left=data.loc[infected]['age_infected'], width=age_final[infected]-data.loc[infected]['age_infected'], color='r', height=height)
+
+        # ART
+        plt.barh(y=data.index[art] + ys, left=data.loc[art]['age_art'], width=age_final[art]-data.loc[art]['age_art'], color='g', height=height)
+
+        # Dead
+        plt.scatter(y=data.index[dead] + ys, x=data.loc[dead]['age_dead'], color='k', marker='|')
+
+    return fig
+
+def ti_bars_nested(df):
+
+    N = df['sim'].nunique()
+    height = 0.5/N
+
+    fig, ax = plt.subplots(figsize=(10,6))
+
+    for n, (lbl, data) in enumerate(df.groupby('sim')):
+        ys = n/(N+1) # Leave space
+
+        ti_initial = np.maximum(-data['age_initial'], 0)
+        ti_final = data['ti_dead'].fillna(40)
+        plt.barh(y=data.index + ys, left=ti_initial, width=ti_final - ti_initial, color='k', height=height)
+
+        # Define bools
+        infected = ~data['ti_infected'].isna()
+        art = ~data['ti_art'].isna()
+        dead = ~data['ti_dead'].isna()
+
+        # Infected
+        plt.barh(y=data.index[infected] + ys, left=data.loc[infected]['ti_infected'], width=ti_final[infected]-data.loc[infected]['ti_infected'], color='r', height=height)
+
+        # ART
+        plt.barh(y=data.index[art] + ys, left=data.loc[art]['ti_art'], width=ti_final[art]-data.loc[art]['ti_art'], color='g', height=height)
+
+        # Dead
+        plt.scatter(y=data.index[dead] + ys, x=data.loc[dead]['ti_dead'], color='k', marker='|')
+
+    return fig
+
+
+def plot_longitudinal(sim1, sim2):
+
+    df1 = analyze_people(sim1)
+    df1['sim'] = 'Baseline'
+    df2 = analyze_people(sim2)
+    df2['sim'] = 'With ART'
+
+    df = pd.concat([df1, df2]).set_index('uid')
+    #age_vars = ['age_initial', 'age_infected', 'age_art', 'age_dead']
+    #age_vars = ['age_end', 'age_dead', 'age_art', 'age_infected', 'age_initial']
+    #dfm = df.melt(id_vars=['uid', 'sim'], value_vars=age_vars, var_name='event', value_name='age')
+    #g = sns.catplot(kind='bar', col='sim', data=dfm.reset_index(), y='uid', x='age', hue='event', orient='h', hue_order=age_vars, dodge=False,
+    #                palette=sns.blend_palette(colors=['black', 'green', 'red', 'gray', 'white'], n_colors=len(age_vars)))
+
+    #f = life_bars_nested(df)
+    f = ti_bars_nested(df)
+
+    #g = sns.FacetGrid(data=df, col='sim')
+    #g.map_dataframe(life_bars)
+    
+
+    return
+
+
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-p', '--plot', help='Plot from a cached CSV file', type=str)
+    parser.add_argument('-n', help='Number of agents', type=int, default=100)
+    args = parser.parse_args()
+
+    if args.plot:
+        print('Reading files', args.plot)
+        sim1 = sc.load(os.path.join(args.plot, 'sim1.obj'))
+        sim2 = sc.load(os.path.join(args.plot, 'sim2.obj'))
+    else:
+        print('Running scenarios')
+        [sim1, sim2] = run_scenario(n=args.n)
+
+    #plot_graph(sim1, sim2)
+    plot_longitudinal(sim1, sim2)
+
     plt.show()
-
-# Plot
-fig, axv = plt.subplots(2,1, sharex=True)
-axv[0].plot(sim1.tivec, sim1.results.hiv.n_infected, label='Baseline')
-axv[0].plot(sim2.tivec, sim2.results.hiv.n_infected, ls=':', label='Intervention')
-axv[0].set_title('HIV number of infections')
-
-axv[1].plot(sim1.tivec, sim1.results.hiv.new_deaths, label='Baseline')
-axv[1].plot(sim2.tivec, sim2.results.hiv.new_deaths, ls=':', label='Intervention')
-axv[1].set_title('HIV Deaths')
-
-''' Gonorrhea removed for now
-axv[2].plot(sim1.tivec, sim1.results.gonorrhea.n_infected, label='Baseline')
-axv[2].plot(sim2.tivec, sim2.results.gonorrhea.n_infected, ls=':', label='Intervention')
-axv[2].set_title('Gonorrhea number of infections')
-'''
-plt.legend()
-plt.show()
-print('Done')
+    print('Done')
