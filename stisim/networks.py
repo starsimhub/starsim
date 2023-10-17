@@ -167,7 +167,7 @@ class Network(ss.Module):
                 self.contacts[key] = np.delete(self.contacts[key], inds)  # Remove from the original
         return output
 
-    def pop_inds(self, inds, do_return=True):
+    def pop_inds(self, inds):
         """
         "Pop" the specified indices from the edgelist and return them as a dict.
         Returns arguments in the right format to be used with network.append().
@@ -176,10 +176,7 @@ class Network(ss.Module):
             inds (int, array, slice): the indices to be removed
         """
         popped_inds = self.get_inds(inds, remove=True)
-        if do_return:
-            return popped_inds
-        else:
-            return
+        return popped_inds
 
     def append(self, contacts):
         """
