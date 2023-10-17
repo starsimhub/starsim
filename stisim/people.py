@@ -3,98 +3,14 @@ Defines the People class and functions associated with making people
 """
 
 # %% Imports
-import functools
 import numpy as np
+import pandas as pd
 import sciris as sc
 import stisim as ss
 
-__all__ = ['State', 'BasePeople', 'People']
-
-
-# %% States
-
-class State(sc.prettyobj):
-    def __init__(self, name, dtype, fill_value=0, shape=None, distdict=None, eligibility=None, na_val=False,
-                 label=None):
-        """
-        Args:
-            name: name of the result as used in the model
-            dtype: datatype
-            fill_value: default value for this state upon model initialization
-            shape: If not none, set to match a string in `pars` containing the dimensionality
-            distdict: dictionary with distribution definition
-            eligibility: string/callable which defines the people who are eligible to assume this state
-            na_val: value of this state for people who are not eligible for it (default False)
-            label: text used to construct labels for the result for displaying on plots and other outputs
-        """
-        self.name = name
-        self.dtype = dtype
-        self.fill_value = fill_value
-        self.shape = shape
-        self.distdict = distdict
-        self.eligibility = eligibility
-        self.na_val = na_val
-        self.is_dist = distdict is not None  # Set this by default, but allow it to be overridden
-        self.label = label or name
-        return
-
-    @property
-    def ndim(self):
-        return len(sc.tolist(self.shape)) + 1
-
-    def get_eligibility(self, people):
-        """ Get a boolean array of the people who are eligible to assume this state """
-        if self.eligibility is None:
-            return np.full(len(people), True, dtype=bool)
-        elif callable(self.eligibility):
-            eligible = self.eligibility(people)
-        elif isinstance(self.eligibility, str):
-            eligible = people[self.eligibility]
-        return eligible
-
-    def new(self, n, people=None):
-        if people is not None:
-            full_out = self.new_scalar(n, fill_value=self.na_val)
-            inds = ss.true(self.get_eligibility(people))
-            defined_vals = self.new(len(inds))
-            full_out[inds] = defined_vals
-            return full_out
-
-        else:
-            if self.is_dist:
-                return self.new_dist(n)
-            else:
-                return self.new_scalar(n)
-
-    def new_scalar(self, n, fill_value=None):
-        if fill_value is None: fill_value = self.fill_value
-        shape = sc.tolist(self.shape)
-        shape.append(n)
-        out = np.full(shape, dtype=self.dtype, fill_value=fill_value)
-        return out
-
-    def new_dist(self, n):
-        shape = sc.tolist(self.shape)
-        shape.append(n)
-        out = ss.sample(**self.distdict, size=tuple(shape))
-        return out
-
-
-base_states = ss.ndict(
-    State('uid', int),
-    State('age', float),
-    State('female', bool, distdict=dict(dist='choice', par1=[True, False], par2=[0.5, 0.5])),
-    State('debut', float),
-    State('alive', bool, True),
-    State('ti_dead', float, np.nan),  # Time index for death
-    State('scale', float, 1.0),
-)
+__all__ = ['BasePeople', 'People']
 
 # %% Main people class
-
-base_key = 'uid'  # Define the key used by default for getting length, etc.
-
-
 class BasePeople(sc.prettyobj):
     """
     A class to handle all the boilerplate for people -- everything interesting 
@@ -102,77 +18,83 @@ class BasePeople(sc.prettyobj):
     interesting implementation details.
     """
 
+    def __init__(self, n):
+
+        self.initialized = False
+        self._uid_map = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs ever created
+        self.uid = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs currently in use
+
+        self._uid_map.initialize(n)
+        self._uid_map[:] = np.arange(0, n)
+        self.uid.initialize(n)
+        self.uid[:] = np.arange(0, n)
+
+        self.ti = None  # Track simulation time index
+        self.dt = np.nan  # Track simulation time step
+
+        # We internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
+        # e.g., across modules, but we will never change the size of a State multiple times in the same iteration over
+        # _states. This is a hidden variable because it is internally used to synchronize the size of all States contained
+        # within the sim, regardless of where they are. In contrast, `People.states` offers a more user-friendly way to access
+        # a selection of the states e.g., module states could be added in there, while intervention states might not
+        self._states = {}
+
     def __len__(self):
         """ Length of people """
-        return len(self[base_key])
+        return len(self.uid)
 
-
-    def _len_arrays(self):
-        """ Length of underlying arrays """
-        return len(self._data[base_key])
-    
-
-    def _grow(self, n):
-        """
-        Increase the number of agents stored
-
-        Automatically reallocate underlying arrays if required
-        
-        Args:
-            n (int): Number of new agents to add
-        """
-        orig_n = self._n
-        new_total = orig_n + n
-        if new_total > self._s:
-            n_new = max(n, int(self._s / 2))  # Minimum 50% growth
-            for state_name, state in self.states.items():
-                self._data[state_name] = np.concatenate([self._data[state_name], state.new(n_new, people=self)],
-                                                        axis=self._data[state_name].ndim - 1)
-            self._s += n_new
-        self._n += n
-        self._map_arrays()
-        new_inds = np.arange(orig_n, self._n)
-        return new_inds
-
-
-    def _map_arrays(self, keys=None):
-        """
-        Set main simulation attributes to be views of the underlying data
-
-        This method should be called whenever the number of agents required changes
-        (regardless of whether the underlying arrays have been resized)
-        """
-
-        # CK: consider refactor
-        def rsetattr(obj, attr, val):
-            pre, _, post = attr.rpartition('.')
-            return setattr(rgetattr(obj, pre) if pre else obj, post, val)
-
-        def rgetattr(obj, attr, *args):
-            def _getattr(obj, attr):
-                return getattr(obj, attr, *args)
-
-            return functools.reduce(_getattr, [obj] + attr.split('.'))
-
-        row_inds = slice(None, self._n)
-
-        # Handle keys
-        if keys is None: keys = self.states.keys()
-        keys = sc.tolist(keys)
-
-        # Map arrays for selected keys
-        for k in keys:
-            arr = self._data[k]
-            if arr.ndim == 1:
-                rsetattr(self, k, arr[row_inds])
-            elif arr.ndim == 2:
-                rsetattr(self, k, arr[:, row_inds])
-            else:
-                errormsg = 'Can only operate on 1D or 2D arrays'
-                raise TypeError(errormsg)
-
+    def add_state(self, state):
+        if id(state) not in self._states:
+            self._states[id(state)] = state
         return
 
+    def grow(self, n):
+        """
+        Increase the number of agents
+
+        :param n: Integer number of agents to add
+        """
+        start_uid = len(self._uid_map)
+        start_idx = len(self.uid)
+
+        new_uids = np.arange(start_uid, start_uid + n)
+        new_inds = np.arange(start_idx, start_idx + n)
+
+        self._uid_map.grow(n)
+        self._uid_map[new_uids] = new_inds
+
+        self.uid.grow(n)
+        self.uid[new_inds] = new_uids
+
+        for state in self._states.values():
+            state.grow(n)
+
+        return new_uids
+
+    def remove(self, uids_to_remove):
+        """
+        Reduce the number of agents
+
+        :param uids_to_remove: An int/list/array containing the UID(s) to remove
+        """
+        # Calculate the *indices* to keep
+        keep_uids = self.uid[~np.in1d(self.uid, uids_to_remove)]  # Calculate UIDs to keep
+        keep_inds = self._uid_map[keep_uids]  # Calculate indices to keep
+
+        # Trim the UIDs and states
+        self.uid._trim(keep_inds)
+        for state in self._states.values():
+            state._trim(keep_inds)
+
+        # Update the UID map
+        self._uid_map[:] = ss.INT_NAN  # Clear out all previously used UIDs
+        self._uid_map[keep_uids] = np.arange(0, len(keep_uids))  # Assign the array indices for all of the current UIDs
+
+        # Remove the UIDs from the network too
+        for network in self.networks.values():
+            network.remove_uids(uids_to_remove)
+
+        return
 
     def __getitem__(self, key):
         """
@@ -180,36 +102,18 @@ class BasePeople(sc.prettyobj):
         If the key is an integer, alias `people.person()` to return a `Person` instance
         """
         if isinstance(key, int):
-            return self.person(key) # TODO: need to re-implement
+            return self.person(key)  # TODO: need to re-implement
         else:
             return self.__getattribute__(key)
-
 
     def __setitem__(self, key, value):
         """ Ditto """
         return self.__setattr__(key, value)
 
-
     def __iter__(self):
         """ Iterate over people """
         for i in range(len(self)):
             yield self[i]
-
-            
-    @property
-    def active(self):
-        """ Indices of everyone sexually active  """
-        return (self.age >= self.debut) & self.alive
-
-    @property
-    def male(self):
-        """ Indices of males  """
-        return ~self.female
-
-    @property
-    def dead(self):
-        """ Dead boolean """
-        return ~self.alive
 
 
 class People(BasePeople):
@@ -236,96 +140,79 @@ class People(BasePeople):
 
     # %% Basic methods
 
-    def __init__(self, n, states=None, networks=None):
-        """
-        Initialize
-        """
+    def __init__(self, n, age_data=None, extra_states=None, networks=None):
+        """ Initialize """
+
+        super().__init__(n)
 
         self.initialized = False
         self.version = ss.__version__  # Store version info
 
-        # Initialize states, networks, modules
-        self.states = ss.ndict(base_states, states)
-        self.networks = ss.ndict(networks)
+        states = [
+            ss.State('age', float, 0),
+            ss.State('female', bool, ss.choice([True, False])),
+            ss.State('debut', float),
+            ss.State('alive', bool, True),
+            ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
+            ss.State('scale', float, 1.0),
+        ]
+        states.extend(sc.promotetolist(extra_states))
 
-        # Private variables relating to dynamic allocation
-        self._data = dict()
-        self._n = n  # Number of agents (initial)
-        self._s = self._n  # Underlying array sizes
-        self._inds = None  # No filtering indices
+        self.states = ss.ndict()
+        self._initialize_states(states)
+        self.networks = ss.Networks(networks)
 
-        # Initialize underlying storage and map arrays
-        for state_name, state in self.states.items():
-            self._data[state_name] = state.new(self._n)
-        self._map_arrays()
-        self['uid'][:] = np.arange(self._n)
+        # Set initial age distribution - likely move this somewhere else later
+        age_data_dist = self.validate_age_data(age_data)
+        self.age[:] = age_data_dist.sample(len(self))
+
         return
 
-    def initialize(self, popdict=None):
-        """ Initialize people by setting their attributes """
-        if popdict is None: # TODO: update
-            self['age'][:] = np.random.random(size=len(self)) * 100
-            self['female'][:] = np.random.choice([False, True], size=len(self))
-        else:
-            # Use random defaults
-            self['age'][:] = popdict['age']
-            self['female'][:] = popdict['female']
+    @staticmethod
+    def validate_age_data(age_data):
+        """ Validate age data """
+        if age_data is None: return ss.uniform(0, 100)
+        if sc.checktype(age_data, pd.DataFrame):
+            return ss.from_data(vals=age_data['value'].values, bins=age_data['age'].values)
+
+    def initialize(self):
+        """ Initialization - TBC what needs to go here """
         self.initialized = True
         return
 
-    def add_state(self, state=None, name=None, dtype=None, fill_value=0, shape=None, distdict=None,
-                  eligibility=None, na_val=0, label=None):
-        """
-        Add a state to people. Most useful when adding a state whose value depends on other states,
-        e.g. MSM, FSW, clients.
-
-        Examples:
-             ppl = ss.People(100) # Create people
-             ppl.add_state('rural', bool) # Add flag for rural, all False by default
-
-            ppl = ss.People(100) # Create people
-            fsw_distdict = dict(dist='choice', par1=[1, 0], par2=[0.15, 0.85]) # Let 15% of the female population be FSW
-            ppl.add_state('fsw', bool, eligibility='female', distdict=fsw_distdict, na_val=False)
-
-            ppl = ss.People(100)
-            fsw_eligible = lambda ppl: (ppl.age>20) & (ppl.age<30) & ppl.female
-            ppl.add_state('fsw', bool, eligibility=fsw_eligible, distdict=fsw_distdict, na_val=False)
-        """
-        # Define state and add
-        if state is None:
-            state = State(name, dtype, fill_value=fill_value, shape=shape, distdict=distdict,
-                          eligibility=eligibility, na_val=na_val, label=label)
-        self.states[name] = state
-
-        # Add to data and map arrays
-        self._data[name] = state.new(self._n, people=self)
-        self._map_arrays(name)
-
+    def _initialize_states(self, states):
+        for state in states:
+            self.add_state(state)  # Register the state internally for dynamic growth
+            self.states.append(state)  # Expose these states with their original names
+            state.initialize(self)  # Connect the state to this people instance
+            setattr(self, state.name, state)
         return
 
-    def add_substates(self, obj):
-        for state_name, state in obj.states.items():
-            combined_name = obj.name + '.' + state_name
-            self._data[combined_name] = state.new(self._n, self)
-            self._map_arrays(keys=combined_name)
-            self.states[combined_name] = state
-
     def add_module(self, module, force=False):
-        # Initialize all the states associated with a module
-        # This is implemented as People.add_module rather than
-        # Module.add_to_people(people) or similar because its primary
-        # role is to modify the People object
+        # Map the module's states into the People state ndict
         if hasattr(self, module.name) and not force:
             raise Exception(f'Module {module.name} already added')
         self.__setattr__(module.name, sc.objdict())
-        self.add_substates(module)
-        return
 
-    def add_network(self, network, force=False):
-        if hasattr(self, network.name) and not force:
-            raise Exception(f'Network {network.name} already added')
-        self.__setattr__(network.name, network)
-        # self.add_substates(network) # not needed on new branch
+        # The entries created below make it possible to do `sim.people.hiv.susceptible` or
+        # `sim.people.states['hiv.susceptible']` and have both of them work
+        module_states = sc.objdict()
+        setattr(self, module.name, module_states)
+        self._register_module_states(module, module_states)
+
+    def _register_module_states(self, module, module_states):
+        """Enable dot notation for module specific states:
+         - `sim.people.hiv.susceptible` or
+         - `sim.people.states['hiv.susceptible']`
+        """
+
+        for state in module.states:
+            combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
+            self.states[combined_name] = state  # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
+            pre, _, post = combined_name.rpartition('.')
+            setattr(module_states, state.name, state)
+
+        return
 
     def scale_flows(self, inds):
         """
@@ -334,21 +221,81 @@ class People(BasePeople):
         """
         return self.scale[inds].sum()
 
-    def update(self, sim):
-        """ Update demographics and networks """
-        self.update_demographics(sim.dt, sim.ti)
-        self.update_networks()
-        return
-
-    def update_demographics(self, dt, ti):
-        """ Perform vital dynamic updates at the current timestep """
-        self.age[self.alive] += dt
-        self.alive[self.ti_dead <= ti] = False
+    def remove_dead(self, sim):
+        """
+        Remove dead agents
+        """
+        uids_to_remove = ss.true(self.dead)
+        self.remove(uids_to_remove)
+        for network in self.networks.values():
+            network.remove_uids(uids_to_remove)
         return
 
     def update_networks(self):
         """
         Update networks
         """
-        for network in self.networks.values():
-            network.update(self)
+        self.networks.update(self)
+
+    @property
+    def active(self):
+        """ Indices of everyone sexually active  """
+        return (self.age >= self.debut) & self.alive
+
+    @property
+    def dead(self):
+        """ Dead boolean """
+        return ~self.alive
+
+    @property
+    def male(self):
+        """ Male boolean """
+        return ~self.female
+
+    @property
+    def f(self):
+        """ Shorthand for female """
+        return self.female
+
+    @property
+    def m(self):
+        """ Shorthand for male """
+        return self.male
+
+    def init_results(self, sim):
+        sim.results += ss.Result(None, 'n_alive', sim.npts, ss.int_)
+        sim.results += ss.Result(None, 'new_deaths', sim.npts, ss.int_)
+        return
+
+    def update_results(self, sim):
+        sim.results.n_alive[self.ti] = np.count_nonzero(self.alive)
+        sim.results.new_deaths[self.ti] = np.count_nonzero(self.ti_dead == self.ti)
+        return
+
+    def request_death(self, uids):
+        """
+        External-facing function to request an agent die at the current timestep
+
+        In general, users should not directly interact with `People.ti_dead` to minimize
+        interactions between modules (e.g., if a module requesting a future death, overwrites
+        death due to a different module taking place at the current timestep).
+
+        Modules that have a future time of death (e.g., due to disease duration) should keep
+        track of that internally. When the module is ready to cause the agent to die, it should
+        call this method, and can update its own results for the cause of death. This way, if
+        multiple modules request death on the same day, they can each record a death due to their
+        own cause.,
+
+        The actual deaths are resolved after modules have all run, but before analyzers. That way,
+        regardless of whether removing dead agents is enabled or not, analyzers will be able to
+        see and record outcomes for agents that died this timestep.
+
+        :param uids: Agent IDs to request deaths for
+        :return: UIDs of agents that have been scheduled to die on this timestep
+        """
+
+        # Only update the time of death for agents that are currently alive. This way modules cannot
+        # modify the time of death for agents that have already died. Noting that if remove_people is
+        # enabled then often such agents would not be present in the simulation anyway
+        uids = ss.true(self.alive[uids])
+        self.ti_dead[uids] = self.ti

@@ -13,41 +13,36 @@ class HIV(ss.Disease):
 
     def __init__(self, pars=None):
         super().__init__(pars)
-        self.states = ss.ndict(
-            ss.State('susceptible', bool, True),
-            ss.State('infected', bool, False),
-            ss.State('ti_infected', float, 0),
-            ss.State('on_art', bool, False),
-            ss.State('cd4', float, 500),
-            self.states,
-        )
+
+        # States additional to the default disease states (see base class)
+        self.on_art = ss.State('on_art', bool, False)
+        self.cd4 = ss.State('cd4', float, 500)
 
         self.pars = ss.omerge({
             'cd4_min': 100,
             'cd4_max': 500,
             'cd4_rate': 5,
-            'initial': 30,
+            'init_prev': 0.05,
             'eff_condoms': 0.7,
         }, self.pars)
+
         return
 
-    def update_states(self, sim):
+    def update_states_pre(self, sim):
         """ Update CD4 """
-        hivppl = sim.people.hiv
-        hivppl.cd4[sim.people.alive & hivppl.infected & hivppl.on_art] += (sim.pars.hiv.cd4_max - hivppl.cd4[
-            sim.people.alive & hivppl.infected & hivppl.on_art]) / sim.pars.hiv.cd4_rate
-        hivppl.cd4[sim.people.alive & hivppl.infected & ~hivppl.on_art] += (sim.pars.hiv.cd4_min - hivppl.cd4[
-            sim.people.alive & hivppl.infected & ~hivppl.on_art]) / sim.pars.hiv.cd4_rate
+        self.cd4[sim.people.alive & self.infected & self.on_art] += (self.pars.cd4_max - self.cd4[sim.people.alive & self.infected & self.on_art])/self.pars.cd4_rate
+        self.cd4[sim.people.alive & self.infected & ~self.on_art] += (self.pars.cd4_min - self.cd4[sim.people.alive & self.infected & ~self.on_art])/self.pars.cd4_rate
         return
 
     def init_results(self, sim):
+        """
+        Initialize results
+        """
         super().init_results(sim)
-        self.results['n_art'] = ss.Result('n_art', self.name, sim.npts, dtype=int)
         return
 
     def update_results(self, sim):
         super(HIV, self).update_results(sim)
-        sim.results[self.name]['n_art'] = np.count_nonzero(sim.people.alive & sim.people[self.name].on_art)
         return
 
     def make_new_cases(self, sim):
@@ -56,9 +51,12 @@ class HIV(ss.Disease):
         return
 
     def set_prognoses(self, sim, uids):
-        sim.people[self.name].susceptible[uids] = False
-        sim.people[self.name].infected[uids] = True
-        sim.people[self.name].ti_infected[uids] = sim.ti
+        self.susceptible[uids] = False
+        self.infected[uids] = True
+        self.ti_infected[uids] = sim.ti
+
+    def set_congenital(self, sim, uids):
+        self.set_prognoses(sim, uids)  # Pass back?
 
 
 # %% Interventions
@@ -69,6 +67,9 @@ class ART(ss.Intervention):
         self.requires = HIV
         self.t = sc.promotetoarray(t)
         self.capacity = sc.promotetoarray(capacity)
+
+    def initialize(self, sim):
+        sim.hiv.results += ss.Result(self.name, 'n_art', sim.npts, dtype=int)
 
     def apply(self, sim):
         if sim.t < self.t[0]:
@@ -90,6 +91,9 @@ class ART(ss.Intervention):
             eligible = sim.people.alive & sim.people.hiv.infected & sim.people.hiv.on_art
             inds = np.random.choice(ss.true(eligible), min(n_change), replace=False)
             sim.people.hiv.on_art[inds] = False
+
+        # Add result
+        sim.results.hiv.n_art = np.count_nonzero(sim.people.alive & sim.people.hiv.on_art)
 
         return
 
