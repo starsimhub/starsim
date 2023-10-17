@@ -231,6 +231,23 @@ class People(BasePeople):
             network.remove_uids(uids_to_remove)
         return
 
+    def update_post(self, sim):
+        """
+        Final updates at the very end of the timestep
+        :param sim:
+        :return:
+        """
+        self.age[self.alive] += self.dt
+
+
+    def resolve_deaths(self):
+        """
+        Carry out any deaths that took place this timestep
+        :return:
+        """
+        death_uids = ss.true(self.ti_dead <= self.ti)
+        self.alive[death_uids] = False
+
     def update_networks(self):
         """
         Update networks
