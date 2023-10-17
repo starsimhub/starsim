@@ -12,7 +12,6 @@ import sys
 import os
 import argparse
 import sciris as sc
-import seaborn as sns
 
 ss.options(multistream = True) # Can set multistream to False for comparison
 plot_graph = True
@@ -89,8 +88,7 @@ class GraphAnalyzer(ss.Analyzer):
         return
 
 
-
-def run_sim(n=25, intervention=False, analyze=False):
+def run_sim(n=25, rand_seed=0, intervention=False, analyze=False):
     ppl = ss.People(n)
 
     ppl.networks = ss.ndict(ss.simple_embedding(mean_dur=5))#, ss.maternal())
@@ -109,7 +107,7 @@ def run_sim(n=25, intervention=False, analyze=False):
         'end': 2020,
         'remove_dead': False, # So we can see who dies, sim results should not change with True
         'interventions': [art] if intervention else [],
-        'rand_seed': 0,
+        'rand_seed': rand_seed,
         'analyzers': [GraphAnalyzer()] if analyze else [],
         'n_agents': len(ppl), # TODO: Build into Sim
     }
@@ -123,8 +121,10 @@ def run_sim(n=25, intervention=False, analyze=False):
     return sim
 
 
-def run_scenario(n=10, analyze=True):
-    sims = sc.parallelize(run_sim, kwargs={'n':n, 'analyze': analyze}, iterkwargs=[{'intervention':True}, {'intervention':False}], die=True)
+def run_scenario(n=10, rand_seed=0, analyze=True):
+    sims = sc.parallelize(run_sim,
+                          kwargs={'n':n, 'analyze': analyze, 'rand_seed': rand_seed},
+                          iterkwargs=[{'intervention':True}, {'intervention':False}], die=True)
 
     for i, sim in enumerate(sims):
         sim.save(os.path.join(figdir, f'sim{i}.obj'))
@@ -191,18 +191,24 @@ def plot_graph(sim1, sim2):
 def analyze_people(sim):
     p = sim.people
     ever_alive = ss.false(np.isnan(p.age))
-    years_lived = np.full(len(p), sim.ti)
+    years_lived = np.full(len(p), sim.ti+1) # Actually +1 dt here, I think
     years_lived[p.dead] = p.ti_dead[p.dead]
     years_lived = years_lived[ever_alive] # Trim, could be more efficient
     age_initial = p.age[ever_alive].values - years_lived
+    age_initial = age_initial.astype(np.float32) # For better hash comparability, there are small differences at float64
 
     df = pd.DataFrame({
-        'uid': p.uid[ever_alive], # if slicing, don't need ._view,
+        #'uid': p.uid[ever_alive], # if slicing, don't need ._view,
+        'id': [hash((p.slot[i], age_initial[i], p.female[i])) for i in ever_alive], # if slicing, don't need ._view,
         'age_initial': age_initial,
         'years_lived': years_lived,
         'ti_infected': p.hiv.ti_infected[ever_alive].values,
         'ti_art': p.hiv.ti_art[ever_alive].values,
         'ti_dead': p.ti_dead[ever_alive].values,
+
+        # Useful for debugging, but not needed for plotting
+        'slot': p.slot[ever_alive].values,
+        'female': p.female[ever_alive].values,
     })
     df.replace(to_replace=ss.INT_NAN, value=np.nan, inplace=True)
     df['age_infected'] = df['age_initial'] + df['ti_infected']
@@ -231,36 +237,15 @@ def life_bars(data, **kwargs):
 
     return
 
-def life_bars_nested(df):
+def plot_longitudinal(sim1, sim2):
 
-    N = df['sim'].nunique()
-    height = 0.9/N
+    df1 = analyze_people(sim1)
+    df1['sim'] = 'Baseline'
+    df2 = analyze_people(sim2)
+    df2['sim'] = 'With ART'
 
-    fig, ax = plt.subplots(figsize=(10,6))
-
-    for n, (lbl, data) in enumerate(df.groupby('sim')):
-        ys = n/(N+1) # Leave space
-
-        age_final = data['age_initial'] + data['years_lived']
-        plt.barh(y=data.index + ys, left=data['age_initial'], width=age_final-data['age_initial'], color='k', height=height)
-
-        # Define bools
-        infected = ~data['ti_infected'].isna()
-        art = ~data['ti_art'].isna()
-        dead = ~data['ti_dead'].isna()
-
-        # Infected
-        plt.barh(y=data.index[infected] + ys, left=data.loc[infected]['age_infected'], width=age_final[infected]-data.loc[infected]['age_infected'], color='r', height=height)
-
-        # ART
-        plt.barh(y=data.index[art] + ys, left=data.loc[art]['age_art'], width=age_final[art]-data.loc[art]['age_art'], color='g', height=height)
-
-        # Dead
-        plt.scatter(y=data.index[dead] + ys, x=data.loc[dead]['age_dead'], color='k', marker='|')
-
-    return fig
-
-def ti_bars_nested(df):
+    df = pd.concat([df1, df2]).set_index('id')
+    #f = ti_bars_nested(df)
 
     df['ypos'] = pd.factorize(df.index.values)[0]
     N = df['sim'].nunique()
@@ -275,53 +260,32 @@ def ti_bars_nested(df):
         ti_final = data['ti_dead'].fillna(40)
         plt.barh(y=yp, left=ti_initial, width=ti_final - ti_initial, color='k', height=height)
 
-        # Define bools
-        infected = ~data['ti_infected'].isna()
-        art = ~data['ti_art'].isna()
-        dead = ~data['ti_dead'].isna()
+        # Infected before birth
+        vertical = data['age_infected']<0
+        plt.barh(y=yp[vertical], left=data.loc[vertical]['ti_infected'], width=ti_final[vertical]-data.loc[vertical]['ti_infected'], color='m', height=height)
 
         # Infected
-        plt.barh(y=yp[infected], left=data.loc[infected]['ti_infected'], width=ti_final[infected]-data.loc[infected]['ti_infected'], color='r', height=height)
+        infected = ~data['ti_infected'].isna()
+        ai = data.loc[infected]['age_infected'].values # Adjust for vertical transmission
+        ai[~(ai<0)] = 0
+        plt.barh(y=yp[infected], left=data.loc[infected]['ti_infected']-ai, width=ti_final[infected]-data.loc[infected]['ti_infected']+ai, color='r', height=height)
 
         # ART
+        art = ~data['ti_art'].isna()
         plt.barh(y=yp[art], left=data.loc[art]['ti_art'], width=ti_final[art]-data.loc[art]['ti_art'], color='g', height=height)
 
         # Dead
+        dead = ~data['ti_dead'].isna()
         plt.scatter(y=yp[dead], x=data.loc[dead]['ti_dead'], color='k', marker='|')
 
     return fig
-
-
-def plot_longitudinal(sim1, sim2):
-
-    df1 = analyze_people(sim1)
-    df1['sim'] = 'Baseline'
-    df2 = analyze_people(sim2)
-    df2['sim'] = 'With ART'
-
-    df = pd.concat([df1, df2]).set_index('uid')
-    #age_vars = ['age_initial', 'age_infected', 'age_art', 'age_dead']
-    #age_vars = ['age_end', 'age_dead', 'age_art', 'age_infected', 'age_initial']
-    #dfm = df.melt(id_vars=['uid', 'sim'], value_vars=age_vars, var_name='event', value_name='age')
-    #g = sns.catplot(kind='bar', col='sim', data=dfm.reset_index(), y='uid', x='age', hue='event', orient='h', hue_order=age_vars, dodge=False,
-    #                palette=sns.blend_palette(colors=['black', 'green', 'red', 'gray', 'white'], n_colors=len(age_vars)))
-
-    #f = life_bars_nested(df)
-    f = ti_bars_nested(df)
-
-    #g = sns.FacetGrid(data=df, col='sim')
-    #g.map_dataframe(life_bars)
-    
-
-    return
-
-
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--plot', help='Plot from a cached CSV file', type=str)
     parser.add_argument('-n', help='Number of agents', type=int, default=100)
+    parser.add_argument('-s', help='Rand seed', type=int, default=2)
     args = parser.parse_args()
 
     if args.plot:
@@ -330,7 +294,7 @@ if __name__ == '__main__':
         sim2 = sc.load(os.path.join(args.plot, 'sim2.obj'))
     else:
         print('Running scenarios')
-        [sim1, sim2] = run_scenario(n=args.n)
+        [sim1, sim2] = run_scenario(n=args.n, rand_seed=args.s)
 
     #plot_graph(sim1, sim2)
     plot_longitudinal(sim1, sim2)

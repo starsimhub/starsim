@@ -129,7 +129,7 @@ class Disease(Module):
         if self.pars['initial'] <= 0:
             return
 
-        initial_cases = self.rng_init_cases.bernoulli_filter(size=sim.people.uid, prob=self.pars['initial']/len(sim.people))
+        initial_cases = self.rng_init_cases.bernoulli_filter(uids=sim.people.uid, prob=self.pars['initial']/len(sim.people))
 
         self.set_prognoses(sim, initial_cases, from_uids=None) # TODO: sentinel value to indicate seeds?
         return
@@ -192,7 +192,7 @@ class Disease(Module):
                     node_from_node_this_layer_b_from_a[bi, ai] = p_not_acq
                     node_from_node *= node_from_node_this_layer_b_from_a
 
-        new_cases_bool = self.rng_trans.bernoulli(size=sim.people.uid, prob=p_acq_node)
+        new_cases_bool = self.rng_trans.bernoulli(uids=sim.people.uid, prob=p_acq_node)
         new_cases = sim.people.uid[new_cases_bool]
 
         if not len(new_cases):
@@ -200,7 +200,7 @@ class Disease(Module):
 
         # Decide whom the infection came from using one random number for each b (aligned by block size)
         frm = np.zeros_like(new_cases)
-        r = self.rng_choose_infector.random( new_cases )
+        r = self.rng_choose_infector.random(uids=new_cases)
         new_cases_idx = new_cases_bool.nonzero()[0]
         prob = (1-node_from_node[new_cases_idx]) # Prob of acquiring from each node | can constrain to just neighbors?
         cumsum = (prob / ((prob.sum(axis=1)[:,np.newaxis]))).cumsum(axis=1)

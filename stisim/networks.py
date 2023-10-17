@@ -375,8 +375,8 @@ class simple_embedding(simple_sexual):
                 print('No pairs to add')
             return 0
 
-        loc_m = people.age[available_m].values - 5 + self.rng_pair_12.normal(size=available_m, std=3)
-        loc_f = people.age[available_f].values     + self.rng_pair_21.normal(size=available_f, std=3)
+        loc_m = people.age[available_m].values - 5 + self.rng_pair_12.normal(uids=available_m, std=3)
+        loc_f = people.age[available_f].values     + self.rng_pair_21.normal(uids=available_f, std=3)
         dist_mat = sps.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
 
         ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
@@ -387,7 +387,7 @@ class simple_embedding(simple_sexual):
         self['p2'] = np.concatenate([self['p2'], available_f[ind_f]])
 
         beta = np.ones(n_pairs)
-        dur = self.rng_mean_dur.poisson(available_m[ind_m], self.mean_dur)
+        dur = self.rng_mean_dur.poisson(uids=available_m[ind_m], lam=self.mean_dur)
         self['beta'] = np.concatenate([self['beta'], beta])
         self['dur'] = np.concatenate([self['dur'], dur])
 

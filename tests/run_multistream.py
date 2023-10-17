@@ -10,8 +10,8 @@ import pandas as pd
 import seaborn as sns
 import numpy as np
 
-n = 250 # Agents
-n_rand_seeds = 100
+n = 100 # Agents
+n_rand_seeds = 10
 intv_cov_levels = [0.025, 0.05, 0.10, 0.73] + [0] # Must include 0 as that's the baseline
 
 # Choose ART or PrEP

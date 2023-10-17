@@ -225,7 +225,7 @@ class People(BasePeople):
                 # Initialize here in case other states use random streams that depend on slots being initialized
                 self.slot[:] = np.copy(self.uid) # TODO: .values and [:] needed?
 
-        self.age[:] = self.age_data_dist.sample(len(self))
+        self.age[:] = self.age_data_dist.sample(size=len(self))
         self.initialized = True
         return
 

@@ -5,6 +5,10 @@ import stisim as ss
 __all__ = ['Streams', 'MultiStream', 'CentralizedStream', 'Stream']
 
 
+SIZE  = 0
+UIDS  = 1
+BOOLS = 2
+
 class Streams:
     """
     Class for managing a collection random number streams
@@ -93,22 +97,49 @@ def Stream(*args, **kwargs):
 
 
 def _pre_draw(func):
-    def check_ready(self, *args, **kwargs):
+    def check_ready(self, **kwargs):
         """ Validation before drawing """
+
+        if 'size' in kwargs and 'uids' in kwargs and not ((kwargs['size'] is None) ^ (kwargs['uids'] is None)):
+            raise Exception('Specify either "uids" or "size", but not both.')
 
         # Check for zero length size
         if 'size' in kwargs.keys():
-            size = kwargs['size']
-        else:
-            size = args[0]
-        if isinstance(size, int):
-            # If an integer, the user wants "n" samples
+            # size-based
+            size = kwargs.pop('size')
+
+            if not isinstance(size, int):
+                raise Exception('Input "size" must be an integer')
+
+            if size < 0:
+                raise Exception('Input "size" cannot be negative')
+
             if size == 0:
                 return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
+
+            basis = SIZE
+
+        else:
+            # uid-based
+            uids = kwargs['uids']
+
+            if len(uids) == 0:
+                return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
+
+            if isinstance(uids, ss.states.FusedArray):
+                v = uids.values
+            elif isinstance(uids, ss.states.DynamicView):
+                v = uids._view
             else:
-                kwargs['size'] = np.arange(size)
-        elif len(size) == 0:
-            return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
+                v = uids
+
+            if v.dtype == bool:
+                size = len(uids)
+                basis = BOOLS
+            else:
+                #size = self.slots.values[v.max()] + 1
+                size = self.slots.values[v].max() + 1
+                basis = UIDS
 
         if not self.initialized:
             msg = f'Stream {self.name} has not been initialized!'
@@ -117,7 +148,9 @@ def _pre_draw(func):
             msg = f'Stream {self.name} has already been sampled on this timestep!'
             raise NotResetException(msg)
         self.ready = False
-        return func(self, *args, **kwargs)
+
+        return func(self, basis=basis, size=size, **kwargs)
+
     return check_ready
 
 
@@ -205,43 +238,96 @@ class MultiStream(np.random.Generator):
         return v.max()+1
 
     @_pre_draw
-    def random(self, size):
-        slots = self.slots.values[size]
-        return super(MultiStream, self).random(size=self.draw_size(slots))[slots]
+    def random(self, size, basis, uids=None):
+        if basis==SIZE:
+            return super(MultiStream, self).random(size=size)
+        elif basis == UIDS:
+            slots = self.slots.values[uids]
+            return super(MultiStream, self).random(size=size)[slots]
+        elif basis == BOOLS:
+            return super(MultiStream, self).random(size=size)[uids]
+        else:
+            raise Exception('TODO BASISEXCPETION')
 
     @_pre_draw
-    def uniform(self, size, **kwargs):
-        slots = self.slots.values[size]
-        return super(MultiStream, self).uniform(size=self.draw_size(slots), **kwargs)[slots]
+    def uniform(self, size, basis, low, high, uids=None):
+        if basis == SIZE:
+            return super(MultiStream, self).uniform(size=size, low=low, high=high)
+        elif basis == UIDS:
+            slots = self.slots.values[uids]
+            return super(MultiStream, self).uniform(size=size, low=low, high=high)[slots]
+        elif basis == BOOLS:
+            return super(MultiStream, self).uniform(size=size, low=low, high=high)[uids]
+        else:
+            raise Exception('TODO BASISEXCPETION')
 
     @_pre_draw
-    def poisson(self, size, lam):
-        slots = self.slots.values[size]
-        return super(MultiStream, self).poisson(size=self.draw_size(slots), lam=lam)[slots]
+    def integers(self, size, basis, low, high, uids=None, **kwargs):
+        if basis == SIZE:
+            return super(MultiStream, self).integers(size=size, low=low, high=high, **kwargs)
+        elif basis == UIDS:
+            slots = self.slots.values[uids]
+            return super(MultiStream, self).integers(size=size, low=low, high=high, **kwargs)[slots]
+        elif basis == BOOLS:
+            return super(MultiStream, self).integers(size=size, low=low, high=high, **kwargs)[uids]
+        else:
+            raise Exception('TODO BASISEXCPETION')
 
     @_pre_draw
-    def normal(self, size, mu=0, std=1):
-        slots = self.slots.values[size]
-        return mu + std*super(MultiStream, self).normal(size=self.draw_size(slots))[slots]
+    def poisson(self, size, basis, lam, uids=None):
+        if basis == SIZE:
+            return super(MultiStream, self).poisson(size=size, lam=lam)
+        elif basis == UIDS:
+            slots = self.slots.values[uids]
+            return super(MultiStream, self).poisson(size=size, lam=lam)[slots]
+        elif basis == BOOLS:
+            return super(MultiStream, self).poisson(size=size, lam=lam)[uids]
+        else:
+            raise Exception('TODO BASISEXCPETION')
 
     @_pre_draw
-    def negative_binomial(self, size, **kwargs): #n=nbn_n, p=nbn_p, size=n)
-        slots = self.slots.values[size]
-        return super(MultiStream, self).negative_binomial(size=self.draw_size(slots), **kwargs)[slots]
+    def normal(self, size, basis, mu=0, std=1, uids=None):
+        if basis == SIZE:
+            return mu + std*super(MultiStream, self).normal(size=size)
+        elif basis == UIDS:
+            slots = self.slots.values[uids]
+            return mu + std*super(MultiStream, self).normal(size=size)[slots]
+        elif basis == BOOLS:
+            return mu + std*super(MultiStream, self).normal(size=size)[uids]
+        else:
+            raise Exception('TODO BASISEXCPETION')
 
     @_pre_draw
-    def bernoulli(self, size, prob):
+    def negative_binomial(self, size, basis, n, p, uids=None): #n=nbn_n, p=nbn_p, size=n)
+        if basis == SIZE:
+            return super(MultiStream, self).negative_binomial(size=size, n=n, p=p)
+        elif basis == UIDS:
+            slots = self.slots.values[uids]
+            return super(MultiStream, self).negative_binomial(size=size, n=n, p=p)[slots]
+        elif basis == BOOLS:
+            return super(MultiStream, self).negative_binomial(size=size, n=n, p=p)[uids]
+        else:
+            raise Exception('TODO BASISEXCPETION')
+
+    @_pre_draw
+    def bernoulli(self, prob, size, basis, uids=None):
         #return super(MultiStream, self).choice([True, False], size=size.max()+1) # very slow
         #return (super(MultiStream, self).binomial(n=1, p=prob, size=size.max()+1))[size].astype(bool) # pretty fast
-        slots = self.slots.values[size]
-        return super(MultiStream, self).random(size=self.draw_size(slots))[slots] < prob # fastest
+        if basis == SIZE:
+            return super(MultiStream, self).random(size=size) < prob # fastest
+        elif basis == UIDS:
+            slots = self.slots.values[uids]
+            return super(MultiStream, self).random(size=size)[slots] < prob # fastest
+        elif basis == BOOLS:
+            return super(MultiStream, self).random(size=size)[uids] < prob # fastest
+        else:
+            raise Exception('TODO BASISEXCPETION')
 
     # @_pre_draw <-- handled by call to self.bernoullli
-    def bernoulli_filter(self, size, prob):
-        #slots = self.slots[size[:]]
-        return size[self.bernoulli(size, prob)] # Slightly faster on my machine for bernoulli to typecast
+    def bernoulli_filter(self, uids, prob):
+        return uids[self.bernoulli(uids=uids, prob=prob)]
 
-    def choice(self, size, a, **kwargs):
+    def choice(self, size, basis, a, **kwargs):
         # Consider raising a warning instead?
         raise NotStreamSafeException('The "choice" function is not MultiStream-safe.')
 

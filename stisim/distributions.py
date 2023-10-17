@@ -44,10 +44,10 @@ class Distribution():
         """
         raise NotImplementedError
 
-    def __call__(self, size=1, **kwargs):
-        return self.sample(size, **kwargs)
+    def __call__(self, size=None, uids=None, **kwargs):
+        return self.sample(size=size, uids=uids, **kwargs)
 
-    def sample(cls, size=1, **kwargs):
+    def sample(cls, size=None, uids=None, **kwargs):
         """
         Return a specified number of samples from the distribution
         """
@@ -65,7 +65,7 @@ class from_data(Distribution):
     def mean(self):
         return
 
-    def sample(self, size=1):
+    def sample(self, size, **kwargs):
         """ Sample using CDF """
         bin_midpoints = self.bins[:-1] + np.diff(self.bins) / 2
         cdf = np.cumsum(self.vals)
@@ -88,8 +88,8 @@ class uniform(Distribution):
     def mean(self):
         return (self.low + self.high) / 2
 
-    def sample(self, size=1):
-        return self.stream.uniform(low=self.low, high=self.high, size=size)
+    def sample(self, **kwargs):
+        return self.stream.uniform(low=self.low, high=self.high, **kwargs)
 
 class bernoulli(Distribution):
     """
@@ -103,8 +103,8 @@ class bernoulli(Distribution):
     def mean(self):
         return self.p
 
-    def sample(self, size=1):
-        return self.stream.bernoulli(prob=self.p, size=size)
+    def sample(self, **kwargs):
+        return self.stream.bernoulli(prob=self.p, **kwargs)
 
 
 class choice(Distribution):
@@ -118,8 +118,8 @@ class choice(Distribution):
         self.probabilities = probabilities
         self.replace = replace
 
-    def sample(self, size):
-        return self.stream.choice(a=self.choices, p=self.probabilities, replace=self.replace, size=size)
+    def sample(self, **kwargs):
+        return self.stream.choice(a=self.choices, p=self.probabilities, replace=self.replace, **kwargs)
 
 
 class normal(Distribution):
@@ -132,8 +132,8 @@ class normal(Distribution):
         self.mean = mean
         self.std = std
 
-    def sample(self, size=1):
-        return self.stream.normal(loc=self.mean, scale=self.std, size=size)
+    def sample(self, **kwargs):
+        return self.stream.normal(loc=self.mean, scale=self.std, **kwargs)
 
 
 class normal_pos(normal):
@@ -143,8 +143,8 @@ class normal_pos(normal):
     WARNING - this function came from hpvsim but confirm that the implementation is correct?
     """
 
-    def sample(self, size=1):
-        return np.abs(super().sample(size))
+    def sample(self, **kwargs):
+        return np.abs(super().sample(**kwargs))
 
 
 class normal_int(Distribution):
@@ -152,8 +152,8 @@ class normal_int(Distribution):
     Normal distribution returning only integer values
     """
 
-    def sample(self, size=1):
-        return np.round(super().sample(size))
+    def sample(self, **kwargs):
+        return np.round(super().sample(**kwargs))
 
 
 class lognormal(Distribution):
@@ -172,12 +172,17 @@ class lognormal(Distribution):
         self.underlying_mean = np.log(mean ** 2 / np.sqrt(std ** 2 + mean ** 2))  # Computes the mean of the underlying normal distribution
         self.underlying_std = np.sqrt(np.log(std ** 2 / mean ** 2 + 1))  # Computes sigma for the underlying normal distribution
 
-    def sample(self, size=1):
+    def sample(self, **kwargs):
 
         if (sc.isnumber(self.mean) and self.mean > 0) or (sc.checktype(self.mean, 'arraylike') and (self.mean > 0).all()):
-            return self.stream.lognormal(mean=self.underlying_mean, sigma=self.underlying_std, size=size)
+            return self.stream.lognormal(mean=self.underlying_mean, sigma=self.underlying_std, **kwargs)
         else:
-            return np.zeros(size)
+            if 'size' in kwargs:
+                return np.zeros(kwargs['size'])
+            elif 'uids' in kwargs:
+                return np.zeros(len(kwargs['uids']))
+            else:
+                raise Exception('TODO')
 
 
 class lognormal_int(lognormal):
@@ -185,8 +190,8 @@ class lognormal_int(lognormal):
     Lognormal returning only integer values
     """
 
-    def sample(self, size=1):
-        return np.round(super().sample(size))
+    def sample(self, **kwargs):
+        return np.round(super().sample(**kwargs))
 
 
 class poisson(Distribution):
@@ -201,8 +206,8 @@ class poisson(Distribution):
     def mean(self):
         return self.rate
 
-    def sample(self, size=1):
-        return self.stream.poisson(self.rate, size)
+    def sample(self, **kwargs):
+        return self.stream.poisson(self.rate, **kwargs)
 
 
 class neg_binomial(Distribution):
@@ -227,10 +232,10 @@ class neg_binomial(Distribution):
         self.mean = mean
         self.dispersion = dispersion
 
-    def sample(self, size=1):
+    def sample(self, **kwargs):
         nbn_n = self.dispersion
         nbn_p = self.dispersion / (self.mean / self.step + self.dispersion)
-        return self.stream.negative_binomial(n=nbn_n, p=nbn_p, size=size)
+        return self.stream.negative_binomial(n=nbn_n, p=nbn_p, **kwargs)
 
 
 class beta(Distribution):
@@ -246,8 +251,8 @@ class beta(Distribution):
     def mean(self):
         return self.alpha / (self.alpha + self.beta)
 
-    def sample(self, size=1):
-        return self.stream.beta(a=self.alpha, b=self.beta, size=size)
+    def sample(self, **kwargs):
+        return self.stream.beta(a=self.alpha, b=self.beta, **kwargs)
 
 
 class gamma(Distribution):
@@ -263,5 +268,5 @@ class gamma(Distribution):
     def mean(self):
         return self.shape * self.scale
 
-    def sample(self, size=1):
-        return self.stream.gamma(shape=self.shape, scale=self.scale, size=size)
+    def sample(self, **kwargs):
+        return self.stream.gamma(shape=self.shape, scale=self.scale, **kwargs)

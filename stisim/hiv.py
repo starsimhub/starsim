@@ -44,7 +44,7 @@ class HIV(ss.Disease):
 
         hiv_death_prob = 0.05 / (self.pars.cd4_min - self.pars.cd4_max)**2 *  (self.cd4 - self.pars.cd4_max)**2
         can_die = ss.true(sim.people.alive & sim.people.hiv.infected)
-        hiv_deaths = self.rng_dead.bernoulli_filter(size=can_die, prob=hiv_death_prob[can_die])
+        hiv_deaths = self.rng_dead.bernoulli_filter(uids=can_die, prob=hiv_death_prob[can_die])
         sim.people.alive[hiv_deaths] = False
         sim.people.ti_dead[hiv_deaths] = sim.ti
         self.results['new_deaths'][sim.ti] = len(hiv_deaths)
@@ -96,7 +96,7 @@ class ART(ss.Intervention):
 
         coverage = self.coverage[np.where(self.t <= sim.ti)[0][-1]]
         recently_infected = ss.true((sim.people.hiv.ti_infected == sim.ti-2) & sim.people.alive) # 2 year (step) delay
-        inds = self.rng_add_ART.bernoulli_filter(size=recently_infected, prob=coverage)
+        inds = self.rng_add_ART.bernoulli_filter(uids=recently_infected, prob=coverage)
         sim.people.hiv.on_art[inds] = True
         sim.people.hiv.ti_art[inds] = sim.ti
 
@@ -137,14 +137,14 @@ class PrEP(ss.Intervention):
             eligible = ss.true(sim.people.alive & ~sim.people.hiv.infected & ~sim.people.hiv.on_prep)
             n_eligible = len(eligible)
             if n_eligible:
-                inds = self.rng_add_PrEP.bernoulli_filter(size=eligible, prob=min(n_eligible, n_change)/n_eligible)
+                inds = self.rng_add_PrEP.bernoulli_filter(uids=eligible, prob=min(n_eligible, n_change)/n_eligible)
                 sim.people.hiv.on_prep[inds] = True
         elif n_change < 0:
             # Take some people off PrEP
             eligible = ss.true(sim.people.alive & ~sim.people.hiv.infected & sim.people.hiv.on_prep)
             n_eligible = len(eligible)
             if n_eligible:
-                inds = self.rng_remove_PrEP.bernoulli_filter(size=eligible, prob=-n_change/n_eligible)
+                inds = self.rng_remove_PrEP.bernoulli_filter(uids=eligible, prob=-n_change/n_eligible)
                 sim.people.hiv.on_prep[inds] = False
 
         # Add result
