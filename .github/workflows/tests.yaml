@@ -1,0 +1,35 @@
+name: STIsim CI tests
+on: [pull_request]
+
+jobs:
+  install_and_test:
+    timeout-minutes: 8
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        os: ['ubuntu-latest']
+        python-version: ['3.9', '3.11']
+    runs-on: ${{ matrix.os }}
+    name: Install and test
+    steps:
+      - name: Checkout sources
+        uses: actions/checkout@v2
+      - uses: actions/setup-python@master
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: x64
+      - name: Install STIsim
+        run: pip install -e .
+      - name: Install tests
+        working-directory: ./tests
+        run: pip install -r requirements.txt
+      - name: Run API tests
+        working-directory: ./tests
+        run: pytest test_*.py -n auto --durations=0 --junitxml=test-results.xml # Run actual tests
+      - name: Upload test results
+        uses: actions/upload-artifact@v1
+        if: failure()
+        with:
+          name: test_results
+          path: tests/test-results.xml

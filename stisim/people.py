@@ -3,22 +3,120 @@ Defines the People class and functions associated with making people
 """
 
 # %% Imports
-import sciris as sc
 import numpy as np
-from . import base as ssb
-from . import misc as ssm
-from . import utils as ssu
-from . import settings as sss
-from .data import loaders as ssdata
+import pandas as pd
+import sciris as sc
+import stisim as ss
 
-
-__all__ = ['People', 'make_popdict']
-
+__all__ = ['BasePeople', 'People']
 
 # %% Main people class
+class BasePeople(sc.prettyobj):
+    """
+    A class to handle all the boilerplate for people -- everything interesting 
+    happens in the People class, whereas this class exists to handle the less 
+    interesting implementation details.
+    """
+
+    def __init__(self, n):
+
+        self.initialized = False
+        self._uid_map = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs ever created
+        self.uid = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs currently in use
+
+        self._uid_map.initialize(n)
+        self._uid_map[:] = np.arange(0, n)
+        self.uid.initialize(n)
+        self.uid[:] = np.arange(0, n)
+
+        self.ti = None  # Track simulation time index
+        self.dt = np.nan  # Track simulation time step
+
+        # We internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
+        # e.g., across modules, but we will never change the size of a State multiple times in the same iteration over
+        # _states. This is a hidden variable because it is internally used to synchronize the size of all States contained
+        # within the sim, regardless of where they are. In contrast, `People.states` offers a more user-friendly way to access
+        # a selection of the states e.g., module states could be added in there, while intervention states might not
+        self._states = {}
+
+    def __len__(self):
+        """ Length of people """
+        return len(self.uid)
+
+    def add_state(self, state):
+        if id(state) not in self._states:
+            self._states[id(state)] = state
+        return
+
+    def grow(self, n):
+        """
+        Increase the number of agents
+
+        :param n: Integer number of agents to add
+        """
+        start_uid = len(self._uid_map)
+        start_idx = len(self.uid)
+
+        new_uids = np.arange(start_uid, start_uid + n)
+        new_inds = np.arange(start_idx, start_idx + n)
+
+        self._uid_map.grow(n)
+        self._uid_map[new_uids] = new_inds
+
+        self.uid.grow(n)
+        self.uid[new_inds] = new_uids
+
+        for state in self._states.values():
+            state.grow(n)
+
+        return new_uids
+
+    def remove(self, uids_to_remove):
+        """
+        Reduce the number of agents
+
+        :param uids_to_remove: An int/list/array containing the UID(s) to remove
+        """
+        # Calculate the *indices* to keep
+        keep_uids = self.uid[~np.in1d(self.uid, uids_to_remove)]  # Calculate UIDs to keep
+        keep_inds = self._uid_map[keep_uids]  # Calculate indices to keep
+
+        # Trim the UIDs and states
+        self.uid._trim(keep_inds)
+        for state in self._states.values():
+            state._trim(keep_inds)
+
+        # Update the UID map
+        self._uid_map[:] = ss.INT_NAN  # Clear out all previously used UIDs
+        self._uid_map[keep_uids] = np.arange(0, len(keep_uids))  # Assign the array indices for all of the current UIDs
+
+        # Remove the UIDs from the network too
+        for network in self.networks.values():
+            network.remove_uids(uids_to_remove)
+
+        return
+
+    def __getitem__(self, key):
+        """
+        Allow people['attr'] instead of getattr(people, 'attr')
+        If the key is an integer, alias `people.person()` to return a `Person` instance
+        """
+        if isinstance(key, int):
+            return self.person(key)  # TODO: need to re-implement
+        else:
+            return self.__getattribute__(key)
+
+    def __setitem__(self, key, value):
+        """ Ditto """
+        return self.__setattr__(key, value)
+
+    def __iter__(self):
+        """ Iterate over people """
+        for i in range(len(self)):
+            yield self[i]
 
 
-class People(ssb.BasePeople):
+class People(BasePeople):
     """
     A class to perform all the operations on the people
     This class is usually created automatically by the sim. The only required input
@@ -42,34 +140,77 @@ class People(ssb.BasePeople):
 
     # %% Basic methods
 
-    def __init__(self, n, states=None, strict=True, **kwargs):
-        """
-        Initialize
-        """
-        super().__init__(n, states=states)
-        if strict: self.lock()  # If strict is true, stop further keys from being set (does not affect attributes)
-        self.kwargs = kwargs
+    def __init__(self, n, age_data=None, extra_states=None, networks=None):
+        """ Initialize """
+
+        super().__init__(n)
+
+        self.initialized = False
+        self.version = ss.__version__  # Store version info
+
+        states = [
+            ss.State('age', float, 0),
+            ss.State('female', bool, ss.choice([True, False])),
+            ss.State('debut', float),
+            ss.State('alive', bool, True),
+            ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
+            ss.State('scale', float, 1.0),
+        ]
+        states.extend(sc.promotetolist(extra_states))
+
+        self.states = ss.ndict()
+        self._initialize_states(states)
+        self.networks = ss.ndict(networks)
+
+        # Set initial age distribution - likely move this somewhere else later
+        age_data_dist = self.validate_age_data(age_data)
+        self.age[:] = age_data_dist.sample(len(self))
+
         return
 
-    def initialize(self, popdict=None):
-        """ Perform initializations """
-        super().initialize(popdict=popdict)  # Initialize states
+    @staticmethod
+    def validate_age_data(age_data):
+        """ Validate age data """
+        if age_data is None: return ss.uniform(0, 100)
+        if sc.checktype(age_data, pd.DataFrame):
+            return ss.from_data(vals=age_data['value'].values, bins=age_data['age'].values)
+
+    def initialize(self):
+        """ Initialization - TBC what needs to go here """
+        self.initialized = True
+        return
+
+    def _initialize_states(self, states):
+        for state in states:
+            self.add_state(state)  # Register the state internally for dynamic growth
+            self.states.append(state)  # Expose these states with their original names
+            state.initialize(self)  # Connect the state to this people instance
+            setattr(self, state.name, state)
         return
 
     def add_module(self, module, force=False):
-        # Initialize all the states associated with a module
-        # This is implemented as People.add_module rather than
-        # Module.add_to_people(people) or similar because its primary
-        # role is to modify the People object
+        # Map the module's states into the People state ndict
         if hasattr(self, module.name) and not force:
             raise Exception(f'Module {module.name} already added')
         self.__setattr__(module.name, sc.objdict())
 
-        for state_name, state in module.states.items():
-            combined_name = module.name + '.' + state_name
-            self._data[combined_name] = state.new(self._n)
-            self._map_arrays(keys=combined_name)
-            self.states[combined_name] = state
+        # The entries created below make it possible to do `sim.people.hiv.susceptible` or
+        # `sim.people.states['hiv.susceptible']` and have both of them work
+        module_states = sc.objdict()
+        setattr(self, module.name, module_states)
+        self._register_module_states(module, module_states)
+
+    def _register_module_states(self, module, module_states):
+        """Enable dot notation for module specific states:
+         - `sim.people.hiv.susceptible` or
+         - `sim.people.states['hiv.susceptible']`
+        """
+
+        for state in module.states:
+            combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
+            self.states[combined_name] = state  # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
+            pre, _, post = combined_name.rpartition('.')
+            setattr(module_states, state.name, state)
 
         return
 
@@ -80,74 +221,91 @@ class People(ssb.BasePeople):
         """
         return self.scale[inds].sum()
 
-    def update_states(self, sim):
-        """ Perform all state updates at the current timestep """
-
-        self.age[~self.dead] += sim.dt
-        self.dead[self.ti_dead <= sim.ti] = True
-
-        for module in sim.modules.values():
-            module.update_states(sim)
-
-        # Perform network updates
-        for lkey, layer in self.networks.items():
-            layer.update(self)
-
+    def remove_dead(self, sim):
+        """
+        Remove dead agents
+        """
+        uids_to_remove = ss.true(self.dead)
+        self.remove(uids_to_remove)
+        for network in self.networks.values():
+            network.remove_uids(uids_to_remove)
         return
 
+    def update_post(self, sim):
+        """
+        Final updates at the very end of the timestep
 
-# %% Helper functions to create popdicts
-
-def set_static(new_n, existing_n=0, pars=None, f_ratio=0.5):
-    """
-    Set static population characteristics that do not change over time.
-    Can be used when adding new births, in which case the existing popsize can be given.
-    """
-    uid = np.arange(existing_n, existing_n+new_n, dtype=sss.default_int)
-    female = np.random.choice([True, False], size=new_n, p=f_ratio)
-    n_females = len(ssu.true(female))
-    debut = np.full(new_n, np.nan, dtype=sss.default_float)
-    debut[female] = ssu.sample(**pars['debut']['m'], size=n_females)
-    debut[~female] = ssu.sample(**pars['debut']['f'], size=new_n-n_females)
-    return uid, female, debut
+        :param sim:
+        :return:
+        """
+        self.age[self.alive] += self.dt
 
 
-def make_popdict(n=None, location=None, year=None, verbose=None, f_ratio=0.5, dt_round_age=True, dt=None):
-    """ Create a location-specific population dictionary """
+    def resolve_deaths(self):
+        """
+        Carry out any deaths that took place this timestep
 
-    # Initialize total pop size
-    total_pop = None
+        :return:
+        """
+        death_uids = ss.true(self.ti_dead <= self.ti)
+        self.alive[death_uids] = False
 
-    # Load age data for this location if available
-    if verbose:
-        print(f'Loading location-specific data for "{location}"')
-    try:
-        age_data = ssdata.get_age_distribution(location, year=year)
-        total_pop = sum(age_data[:, 2])  # Return the total population
-    except ValueError as E:
-        warnmsg = f'Could not load age data for requested location "{location}" ({str(E)})'
-        ssm.warn(warnmsg, die=True)
+    def update_networks(self):
+        """
+        Update networks
+        """
+        for network in self.networks.values():
+            network.update(self)
 
-    uid, female, debut = set_static(n, f_ratio=f_ratio)
+    @property
+    def active(self):
+        """ Indices of everyone sexually active  """
+        return (self.age >= self.debut) & self.alive
 
-    # Set ages, rounding to nearest timestep if requested
-    age_data_min = age_data[:, 0]
-    age_data_max = age_data[:, 1]
-    age_data_range = age_data_max - age_data_min
-    age_data_prob = age_data[:, 2]
-    age_data_prob /= age_data_prob.sum()  # Ensure it sums to 1
-    age_bins = ssu.n_multinomial(age_data_prob, n)  # Choose age bins
-    if dt_round_age:
-        ages = age_data_min[age_bins] + np.random.randint(
-            age_data_range[age_bins] / dt) * dt  # Uniformly distribute within this age bin
-    else:
-        ages = age_data_min[age_bins] + age_data_range[age_bins] * np.random.random(n)  # Uniform  within this age bin
+    @property
+    def dead(self):
+        """ Dead boolean """
+        return ~self.alive
 
-    # Store output
-    popdict = dict(
-        uid=uid,
-        age=ages,
-        female=female
-    )
+    @property
+    def male(self):
+        """ Male boolean """
+        return ~self.female
 
-    return total_pop, popdict
+    def init_results(self, sim):
+        sim.results += ss.Result(None, 'n_alive', sim.npts, ss.int_)
+        sim.results += ss.Result(None, 'new_deaths', sim.npts, ss.int_)
+        return
+
+    def update_results(self, sim):
+        sim.results.n_alive[self.ti] = np.count_nonzero(self.alive)
+        sim.results.new_deaths[self.ti] = np.count_nonzero(self.ti_dead == self.ti)
+        return
+
+    def request_death(self, uids):
+        """
+        External-facing function to request an agent die at the current timestep
+
+        In general, users should not directly interact with `People.ti_dead` to minimize
+        interactions between modules (e.g., if a module requesting a future death, overwrites
+        death due to a different module taking place at the current timestep).
+
+        Modules that have a future time of death (e.g., due to disease duration) should keep
+        track of that internally. When the module is ready to cause the agent to die, it should
+        call this method, and can update its own results for the cause of death. This way, if
+        multiple modules request death on the same day, they can each record a death due to their
+        own cause.,
+
+        The actual deaths are resolved after modules have all run, but before analyzers. That way,
+        regardless of whether removing dead agents is enabled or not, analyzers will be able to
+        see and record outcomes for agents that died this timestep.
+
+        :param uids: Agent IDs to request deaths for
+        :return: UIDs of agents that have been scheduled to die on this timestep
+        """
+
+        # Only update the time of death for agents that are currently alive. This way modules cannot
+        # modify the time of death for agents that have already died. Noting that if remove_people is
+        # enabled then often such agents would not be present in the simulation anyway
+        uids = ss.true(self.alive[uids])
+        self.ti_dead[uids] = self.ti

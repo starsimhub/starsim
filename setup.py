@@ -43,5 +43,6 @@ setup(
         'sciris>=3.0.0',
         'matplotlib',
         'seaborn',
+        'numba',
     ],
 )
