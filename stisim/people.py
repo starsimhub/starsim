@@ -160,7 +160,7 @@ class People(BasePeople):
 
         self.states = ss.ndict()
         self._initialize_states(states)
-        self.networks = ss.ndict(networks)
+        self.networks = ss.Networks(networks)
 
         # Set initial age distribution - likely move this somewhere else later
         age_data_dist = self.validate_age_data(age_data)
@@ -254,8 +254,7 @@ class People(BasePeople):
         """
         Update networks
         """
-        for network in self.networks.values():
-            network.update(self)
+        self.networks.update(self)
 
     @property
     def active(self):
@@ -271,6 +270,16 @@ class People(BasePeople):
     def male(self):
         """ Male boolean """
         return ~self.female
+
+    @property
+    def f(self):
+        """ Shorthand for female """
+        return self.female
+
+    @property
+    def m(self):
+        """ Shorthand for male """
+        return self.male
 
     def init_results(self, sim):
         sim.results += ss.Result(None, 'n_alive', sim.npts, ss.int_)
