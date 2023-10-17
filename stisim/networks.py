@@ -65,7 +65,6 @@ class Network(ss.Module):
         }
         self.meta = ss.omerge(default_keys, key_dict)
         self.vertical = vertical  # Whether transmission is bidirectional
-        self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
 
         # Initialize the keys of the network
         self.contacts = sc.objdict()
@@ -91,7 +90,7 @@ class Network(ss.Module):
 
     def __len__(self):
         try:
-            return len(self[self.basekey])
+            return len(self.contacts.p1)
         except:  # pragma: no cover
             return 0
 
@@ -140,7 +139,7 @@ class Network(ss.Module):
         If dtype is incorrect, try to convert automatically; if length is incorrect,
         do not.
         """
-        n = len(self.contacts[self.basekey])
+        n = len(self.contacts.p1)
         for key, dtype in self.meta.items():
             if dtype:
                 actual = self.contacts[key].dtype
