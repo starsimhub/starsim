@@ -71,6 +71,34 @@ class BasePeople(sc.prettyobj):
 
         return new_uids
 
+    def grow_uids(self, uids):
+        """
+        Increase the number of agents given new uids to add
+
+        :param uids: uids of agents to add, but need to check for collisions
+        """
+        start_uid = len(self._uid_map)
+        ids_in_map = np.intersect1d(uids, self._uid_map, assume_unique=False, return_indices=True)[1]
+        if len(ids_in_map):
+            is_collision = ~np.isnan(self.age[uids[ids_in_map]])
+            #collisions = ss.false(is_collision)
+            if is_collision.any():
+                n_collisions = is_collision.sum()
+                uids[ids_in_map[is_collision]] = np.arange(start_uid, start_uid + n_collisions) # Put at end, will mess up rng coherence slightly
+                #raise Exception('no bueno')
+                print(f'Encountered {n_collisions} collisions')
+
+        n = uids.max() - start_uid + 1
+        if n > 0:
+            new_uids = self.grow(n)
+            self.alive[new_uids] = False # Override the default
+
+        # Restore sensible defaults
+        self.age[uids] = 0
+        self.alive[uids] = True
+        
+        return uids # MAY NEED TO MODIFY IF COLLISION
+
     def remove(self, uids_to_remove):
         """
         Reduce the number of agents
@@ -155,10 +183,11 @@ class People(BasePeople):
 
         self.rng_female  = ss.Stream('female')
         states = [
-            ss.State('age', float, 0),
+            ss.State('slot', int, ss.INT_NAN), # MUST BE FIRST
+            ss.State('age', float, np.nan), # NaN until conceived
             ss.State('female', bool, ss.bernoulli(0.5, rng=self.rng_female)),
             ss.State('debut', float),
-            ss.State('alive', bool, True),
+            ss.State('alive', bool, True), # Redundant with ti_dead == ss.INT_NAN
             ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
             ss.State('scale', float, 1.0),
         ]
@@ -181,14 +210,20 @@ class People(BasePeople):
 
     def initialize(self, sim):
         """ Initialization """
-        self.rng_female.initialize(sim.streams)
-        self.rng_agedist.initialize(sim.streams)
+
+        # Slot first... TODO
+
+        self.rng_female.initialize(sim.streams, self.states['slot'])
+        self.rng_agedist.initialize(sim.streams, self.states['slot'])
 
         for name, state in self.states.items():
             self.add_state(state)  # Register the state internally for dynamic growth
             #self.states.append(state)  # Expose these states with their original names
             state.initialize(self)  # Connect the state to this people instance
             setattr(self, name, state)
+            if name == 'slot':
+                # Initialize here in case other states use random streams that depend on slots being initialized
+                self.slot[:] = np.copy(self.uid) # TODO: .values and [:] needed?
 
         self.age[:] = self.age_data_dist.sample(len(self))
         self.initialized = True

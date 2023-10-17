@@ -111,6 +111,7 @@ def run_sim(n=25, intervention=False, analyze=False):
         'interventions': [art] if intervention else [],
         'rand_seed': 0,
         'analyzers': [GraphAnalyzer()] if analyze else [],
+        'n_agents': len(ppl), # TODO: Build into Sim
     }
     sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[ss.Pregnancy()], pars=pars, label=f'Sim with {n} agents and intv={intervention}')
     sim.initialize()
@@ -123,8 +124,6 @@ def run_sim(n=25, intervention=False, analyze=False):
 
 
 def run_scenario(n=10, analyze=True):
-    #sim2 = run_sim(n, intervention=True, analyze=analyze)
-    #sim1 = run_sim(n, intervention=False, analyze=analyze)
     sims = sc.parallelize(run_sim, kwargs={'n':n, 'analyze': analyze}, iterkwargs=[{'intervention':True}, {'intervention':False}], die=True)
 
     for i, sim in enumerate(sims):
@@ -191,17 +190,19 @@ def plot_graph(sim1, sim2):
 
 def analyze_people(sim):
     p = sim.people
+    ever_alive = ss.false(np.isnan(p.age))
     years_lived = np.full(len(p), sim.ti)
     years_lived[p.dead] = p.ti_dead[p.dead]
-    age_initial = p.age.values - years_lived
+    years_lived = years_lived[ever_alive] # Trim, could be more efficient
+    age_initial = p.age[ever_alive].values - years_lived
 
     df = pd.DataFrame({
-        'uid': p.uid._view,
+        'uid': p.uid[ever_alive], # if slicing, don't need ._view,
         'age_initial': age_initial,
         'years_lived': years_lived,
-        'ti_infected': p.hiv.ti_infected.values,
-        'ti_art': p.hiv.ti_art.values,
-        'ti_dead': p.ti_dead.values,
+        'ti_infected': p.hiv.ti_infected[ever_alive].values,
+        'ti_art': p.hiv.ti_art[ever_alive].values,
+        'ti_dead': p.ti_dead[ever_alive].values,
     })
     df.replace(to_replace=ss.INT_NAN, value=np.nan, inplace=True)
     df['age_infected'] = df['age_initial'] + df['ti_infected']
@@ -261,17 +262,18 @@ def life_bars_nested(df):
 
 def ti_bars_nested(df):
 
+    df['ypos'] = pd.factorize(df.index.values)[0]
     N = df['sim'].nunique()
     height = 0.5/N
 
     fig, ax = plt.subplots(figsize=(10,6))
 
     for n, (lbl, data) in enumerate(df.groupby('sim')):
-        ys = n/(N+1) # Leave space
+        yp = data['ypos'] + n/(N+1) # Leave space
 
         ti_initial = np.maximum(-data['age_initial'], 0)
         ti_final = data['ti_dead'].fillna(40)
-        plt.barh(y=data.index + ys, left=ti_initial, width=ti_final - ti_initial, color='k', height=height)
+        plt.barh(y=yp, left=ti_initial, width=ti_final - ti_initial, color='k', height=height)
 
         # Define bools
         infected = ~data['ti_infected'].isna()
@@ -279,13 +281,13 @@ def ti_bars_nested(df):
         dead = ~data['ti_dead'].isna()
 
         # Infected
-        plt.barh(y=data.index[infected] + ys, left=data.loc[infected]['ti_infected'], width=ti_final[infected]-data.loc[infected]['ti_infected'], color='r', height=height)
+        plt.barh(y=yp[infected], left=data.loc[infected]['ti_infected'], width=ti_final[infected]-data.loc[infected]['ti_infected'], color='r', height=height)
 
         # ART
-        plt.barh(y=data.index[art] + ys, left=data.loc[art]['ti_art'], width=ti_final[art]-data.loc[art]['ti_art'], color='g', height=height)
+        plt.barh(y=yp[art], left=data.loc[art]['ti_art'], width=ti_final[art]-data.loc[art]['ti_art'], color='g', height=height)
 
         # Dead
-        plt.scatter(y=data.index[dead] + ys, x=data.loc[dead]['ti_dead'], color='k', marker='|')
+        plt.scatter(y=yp[dead], x=data.loc[dead]['ti_dead'], color='k', marker='|')
 
     return fig
 

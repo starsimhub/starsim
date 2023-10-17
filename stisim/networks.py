@@ -315,9 +315,9 @@ class simple_sexual(Network):
         super().initialize(sim)
         
         # Initialize random streams
-        self.rng_pair_12.initialize(sim.streams)
-        self.rng_pair_21.initialize(sim.streams)
-        self.rng_mean_dur.initialize(sim.streams)
+        self.rng_pair_12.initialize(sim.streams, sim.people.slot)
+        self.rng_pair_21.initialize(sim.streams, sim.people.slot)
+        self.rng_mean_dur.initialize(sim.streams, sim.people.slot)
 
         self.add_pairs(sim.people, ti=0)
         return

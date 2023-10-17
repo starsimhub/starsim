@@ -151,13 +151,14 @@ class MultiStream(np.random.Generator):
         self.ready = True
         return
 
-    def initialize(self, streams):
+    def initialize(self, streams, slots):
         if self.initialized:
             # TODO: Raise warning
             assert not self.initialized
             return
 
         self.seed = streams.add(self)
+        self.slots = slots # E.g. sim.people.slots (instead of using uid as the slots directly)
 
         if 'bit_generator' not in self.kwargs:
             self.kwargs['bit_generator'] = np.random.PCG64(seed=self.seed)
@@ -205,32 +206,39 @@ class MultiStream(np.random.Generator):
 
     @_pre_draw
     def random(self, size):
-        return super(MultiStream, self).random(size=self.draw_size(size))[size]
+        slots = self.slots.values[size]
+        return super(MultiStream, self).random(size=self.draw_size(slots))[slots]
 
     @_pre_draw
     def uniform(self, size, **kwargs):
-        return super(MultiStream, self).uniform(size=self.draw_size(size), **kwargs)[size]
+        slots = self.slots.values[size]
+        return super(MultiStream, self).uniform(size=self.draw_size(slots), **kwargs)[slots]
 
     @_pre_draw
     def poisson(self, size, lam):
-        return super(MultiStream, self).poisson(size=self.draw_size(size), lam=lam)[size]
+        slots = self.slots.values[size]
+        return super(MultiStream, self).poisson(size=self.draw_size(slots), lam=lam)[slots]
 
     @_pre_draw
     def normal(self, size, mu=0, std=1):
-        return mu + std*super(MultiStream, self).normal(size=self.draw_size(size))[size]
+        slots = self.slots.values[size]
+        return mu + std*super(MultiStream, self).normal(size=self.draw_size(slots))[slots]
 
     @_pre_draw
     def negative_binomial(self, size, **kwargs): #n=nbn_n, p=nbn_p, size=n)
-        return super(MultiStream, self).negative_binomial(size=self.draw_size(size), **kwargs)[size]
+        slots = self.slots.values[size]
+        return super(MultiStream, self).negative_binomial(size=self.draw_size(slots), **kwargs)[slots]
 
     @_pre_draw
     def bernoulli(self, size, prob):
         #return super(MultiStream, self).choice([True, False], size=size.max()+1) # very slow
         #return (super(MultiStream, self).binomial(n=1, p=prob, size=size.max()+1))[size].astype(bool) # pretty fast
-        return super(MultiStream, self).random(size=self.draw_size(size))[size] < prob # fastest
+        slots = self.slots.values[size]
+        return super(MultiStream, self).random(size=self.draw_size(slots))[slots] < prob # fastest
 
     # @_pre_draw <-- handled by call to self.bernoullli
     def bernoulli_filter(self, size, prob):
+        #slots = self.slots[size[:]]
         return size[self.bernoulli(size, prob)] # Slightly faster on my machine for bernoulli to typecast
 
     def choice(self, size, a, **kwargs):

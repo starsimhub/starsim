@@ -10,8 +10,8 @@ import pandas as pd
 import seaborn as sns
 import numpy as np
 
-n = 1_000 # Agents
-n_rand_seeds = 250
+n = 250 # Agents
+n_rand_seeds = 100
 intv_cov_levels = [0.025, 0.05, 0.10, 0.73] + [0] # Must include 0 as that's the baseline
 
 # Choose ART or PrEP
@@ -21,20 +21,22 @@ intervention = {'ART': ss.hiv.ART, 'PrEP': ss.hiv.PrEP}
 figdir = os.path.join(os.getcwd(), 'figs', choice)
 sc.path(figdir).mkdir(parents=True, exist_ok=True)
 
-def run_sim(n, intv_cov, rand_seed, multistream):
+def run_sim(n, idx, intv_cov, rand_seed, multistream):
+
+    print(f'Starting sim {idx} with rand_seed={rand_seed} and intv_cov={intv_cov}, multistream={multistream}')
 
     ss.options(multistream=multistream)
     ppl = ss.People(n)
 
     ppl.networks = ss.ndict(
         ss.simple_embedding(mean_dur=4),
-        ##################ss.maternal()
+        ss.maternal() # PROBLEM
         )
 
     hiv_pars = {
         #'beta': {'simple_embedding': [0.10, 0.08], 'maternal': [0.2, 0]},
         'beta': {'simple_embedding': [0.2, 0.15], 'maternal': [0.2, 0]},
-        'initial': int(np.maximum(10, np.ceil(0.05*n))),
+        'initial': int(np.maximum(10, np.ceil(0.01*n))),
     }
     hiv = ss.HIV(hiv_pars)
 
@@ -47,10 +49,11 @@ def run_sim(n, intv_cov, rand_seed, multistream):
         'interventions': [intv],
         'rand_seed': rand_seed,
         'verbose': 0,
-        #'remove_dead': False,
+        'remove_dead': False, # PROBLEM
+        'n_agents': len(ppl), # TODO
     }
-    ##############################sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[pregnancy], pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}')
-    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=None, pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}')
+    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[pregnancy], pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}') # PROBLEM
+    ########################sim = ss.Sim(people=ppl, diseases=[hiv], demographics=None, pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}') # FIX
     sim.initialize()
     sim.run()
 
@@ -59,11 +62,13 @@ def run_sim(n, intv_cov, rand_seed, multistream):
         #'hiv.n_infected': sim.results.hiv.n_infected,
         'hiv.prevalence': sim.results.hiv.prevalence,
         'hiv.cum_deaths': sim.results.hiv.new_deaths.cumsum(),
-        #################################'pregnancy.cum_births': sim.results.pregnancy.births.cumsum(),
+        'pregnancy.cum_births': sim.results.pregnancy.births.cumsum(), # PROBLEM
     })
     df['intv_cov'] = intv_cov
     df['rand_seed'] = rand_seed
     df['multistream'] = multistream
+
+    print(f'Finishing sim {idx} with rand_seed={rand_seed} and intv_cov={intv_cov}, multistream={multistream}')
 
     return df
 
@@ -74,9 +79,9 @@ def run_scenarios():
         cfgs = []
         for rs in range(n_rand_seeds):
             for intv_cov in intv_cov_levels:
-                cfgs.append({'intv_cov':intv_cov, 'rand_seed':rs, 'multistream':multistream})
+                cfgs.append({'intv_cov':intv_cov, 'rand_seed':rs, 'multistream':multistream, 'idx':len(cfgs)})
         T = sc.tic()
-        results += sc.parallelize(run_sim, kwargs={'n': n}, iterkwargs=cfgs, die=True)
+        results += sc.parallelize(run_sim, kwargs={'n': n}, iterkwargs=cfgs, die=True, serial=True)
         times[f'Multistream={multistream}'] = sc.toc(T, output=True)
 
     print('Timings:', times)

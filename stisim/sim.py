@@ -273,7 +273,7 @@ class Sim(sc.prettyobj):
                 raise TypeError(errormsg)
 
             for stream in intervention.streams:
-                stream.initialize(self.streams)
+                stream.initialize(self.streams, self.people.slot)
 
         return
 

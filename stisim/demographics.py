@@ -247,6 +247,8 @@ class Pregnancy(DemographicModule):
         self.rng_conception = ss.Stream('conception')
         self.rng_dead = ss.Stream(f'dead_{self.name}')
 
+        self.rng_uids = ss.Stream(f'uids_{self.name}')
+
         return
 
     def initialize(self, sim):
@@ -316,10 +318,15 @@ class Pregnancy(DemographicModule):
             # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
             n_unborn_agents = len(uids)
             if n_unborn_agents > 0:
+
+                new_slots = self.rng_uids.integers(low=sim.pars['n_agents'], high=10*sim.pars['n_agents'], size=uids.max()+1, dtype=int)[uids]
+
                 # Grow the arrays and set properties for the unborn agents
-                new_uids = sim.people.grow(n_unborn_agents)
+                new_uids = sim.people.grow(len(new_slots))
+
                 sim.people.age[new_uids] = -self.pars.dur_pregnancy
                 #sim.people.female[new_uids] = self.rng_sex.bernoulli(size=uids, prob=0.5) # Replace 0.5 with sex ratio at birth
+                sim.people.slot[new_uids] = new_slots # Before sampling female_dist
                 sim.people.female[new_uids] = self.female_dist.sample(uids)
 
                 # Add connections to any vertical transmission layers

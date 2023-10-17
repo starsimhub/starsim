@@ -281,7 +281,7 @@ class DynamicView(NDArrayOperatorsMixin):
 
     def _fill_data(self, n0, n1):
         # Fill data
-        n = n1-n0
+        n = int(n1-n0)
         if callable(self.fill_value):
             self._data[n0:n1] = self.fill_value(n)
         else:
@@ -293,25 +293,25 @@ class DynamicView(NDArrayOperatorsMixin):
         self.n = n
         self._map_arrays()
 
-    def grow(self, n):
+    def grow(self, n, fill=True):
         if self.n + n > self._s:
             # If the total number of agents exceeds the array size, extend the storage array
             n_new = max(n, int(self._s / 2))  # Minimum 50% growth
             self._data = np.concatenate([self._data, self._new_items(n_new)], axis=0)
 
         self.n += n  # Increase the count of the number of agents by `n` (the requested number of new agents)
-        self._map_arrays()
+        self._map_arrays(fill)
 
-    def _trim(self, inds):
+    def _trim(self, inds, fill=True):
         # Keep only specified indices
         # Note that these are indices, not UIDs!
         n = len(inds)
         self._data[:n] = self._data[inds]
         # DJK MOVING TO MAP: self._data[n:self.n] = self.fill_value(self.n-n) if callable(self.fill_value) else self.fill_value
         self.n = n
-        self._map_arrays()
+        self._map_arrays(fill)
 
-    def _map_arrays(self):
+    def _map_arrays(self, fill=True):
         """
         Set main simulation attributes to be views of the underlying data
 
@@ -319,7 +319,7 @@ class DynamicView(NDArrayOperatorsMixin):
         (regardless of whether or not the underlying arrays have been resized)
         """
         n0 = len(self._view) if self._view is not None else 0
-        if self.n > n0:
+        if fill and self.n > n0:
             self._fill_data(n0, self.n) # Fill the new data
         self._view = self._data[:self.n]
 

@@ -45,7 +45,7 @@ class Module(sc.prettyobj):
         # Connect the streams to the sim
         for stream in self.streams:
             if not stream.initialized:
-                stream.initialize(sim.streams)
+                stream.initialize(sim.streams, sim.people.slot)
 
         self.initialized = True
         return
@@ -129,9 +129,6 @@ class Disease(Module):
         if self.pars['initial'] <= 0:
             return
 
-        #initial_cases = np.random.choice(sim.people.uid, self.pars['initial'])
-        #rng = sim.rngs.get(f'initial_cases_{self.name}')
-        #initial_cases = ss.binomial_filter_rng(prob=self.pars['initial']/len(sim.people), size=sim.people.uid, rng=rng, block_size=len(sim.people._uid_map))
         initial_cases = self.rng_init_cases.bernoulli_filter(size=sim.people.uid, prob=self.pars['initial']/len(sim.people))
 
         self.set_prognoses(sim, initial_cases, from_uids=None) # TODO: sentinel value to indicate seeds?
@@ -203,7 +200,7 @@ class Disease(Module):
 
         # Decide whom the infection came from using one random number for each b (aligned by block size)
         frm = np.zeros_like(new_cases)
-        r = self.rng_choose_infector.random(new_cases)
+        r = self.rng_choose_infector.random( new_cases )
         new_cases_idx = new_cases_bool.nonzero()[0]
         prob = (1-node_from_node[new_cases_idx]) # Prob of acquiring from each node | can constrain to just neighbors?
         cumsum = (prob / ((prob.sum(axis=1)[:,np.newaxis]))).cumsum(axis=1)
