@@ -222,21 +222,6 @@ class MultiStream(np.random.Generator):
 
         return
 
-    def draw_size(self, size):
-        """ Determine how many random numbers to draw for a given size """
-
-        if isinstance(size, ss.states.FusedArray):
-            v = size.values
-        elif isinstance(size, ss.states.DynamicView):
-            v = size._view
-        else:
-            v = size
-
-        if v.dtype == bool:
-            return len(size)
-
-        return v.max()+1
-
     @_pre_draw
     def random(self, size, basis, uids=None):
         if basis==SIZE:
@@ -332,6 +317,48 @@ class MultiStream(np.random.Generator):
         raise NotStreamSafeException('The "choice" function is not MultiStream-safe.')
 
 
+def _pre_draw_centralized(func):
+    def check_ready(self, **kwargs):
+        """ Validation before drawing """
+
+        uids = None
+        if 'uids' in kwargs:
+            uids = kwargs.pop('uids')
+
+        size = None
+        if 'size' in kwargs:
+            size = kwargs.pop('size')
+
+        if not ((size is None) ^ (uids is None)):
+            raise Exception('Specify either "uids" or "size", but not both.')
+
+        # Check for zero length size
+        if size is not None:
+            # size-based
+            if not isinstance(size, int):
+                raise Exception('Input "size" must be an integer')
+
+            if size < 0:
+                raise Exception('Input "size" cannot be negative')
+
+            if size == 0:
+                return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
+
+        else:
+            # uid-based
+            if len(uids) == 0:
+                return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
+
+            size = len(uids)
+
+        if not self.initialized:
+            msg = f'Stream {self.name} has not been initialized!'
+            raise NotInitializedException(msg)
+
+        return func(self, size=size, **kwargs)
+
+    return check_ready
+
 class CentralizedStream(np.random.Generator):
     """
     Class to imitate the behavior of a centralized random number generator
@@ -351,7 +378,7 @@ class CentralizedStream(np.random.Generator):
         self.seed_offset = None # Not used, so override to avoid potential seed collisions in Streams.
         return
 
-    def initialize(self, streams):
+    def initialize(self, streams, slots=None):
         if self.initialized:
             # TODO: Raise warning
             assert not self.initialized
@@ -367,43 +394,37 @@ class CentralizedStream(np.random.Generator):
     def step(self, ti):
         pass
 
-    def draw_size(self, size):
-        """ Determine how many random numbers to draw for a given size """
+    @_pre_draw_centralized
+    def random(self, size, **kwargs):
+        return np.random.random(size=size, **kwargs)
 
-        if isinstance(size, int):
-            return size
-        elif isinstance(size, ss.states.FusedArray):
-            v = size.values
-        elif isinstance(size, ss.states.DynamicView):
-            v = size._view
-        else:
-            v = size
+    @_pre_draw_centralized
+    def uniform(self, size, low, high, **kwargs):
+        return np.random.uniform(size=size, low=low, high=high, **kwargs)
 
-        if v.dtype == bool:
-            return size.sum()
+    @_pre_draw_centralized
+    def integers(self, size, low, high, **kwargs):
+        return np.random.random_integers(size=size, low=low, high=high)
 
-        return len(size)
+    @_pre_draw_centralized
+    def poisson(self, size, lam, **kwargs):
+        return np.random.poisson(lam=lam, size=size, **kwargs)
 
-    def random(self, size):
-        return np.random.random(self.draw_size(size))
-
-    def uniform(self, size, **kwargs):
-        return np.random.uniform(size=self.draw_size(size), **kwargs)
-
-    def poisson(self, size, lam):
-        return np.random.poisson(lam=lam, size=self.draw_size(size))
-
+    @_pre_draw_centralized
     def normal(self, size, mu=0, std=1):
-        return mu + std*np.random.normal(size=self.draw_size(size), loc=mu, scale=std)
+        return mu + std*np.random.normal(size=size, loc=mu, scale=std)
 
-    def negative_binomial(self, size, **kwargs): #n=nbn_n, p=nbn_p, size=n)
-        return np.random.negative_binomial(**kwargs, size=self.draw_size(size))
+    @_pre_draw_centralized
+    def negative_binomial(self, size, n, p, **kwargs):
+        return np.random.negative_binomial(size=size, n=n, p=p, **kwargs)
 
-    def bernoulli(self, size, prob):
-        return np.random.random(self.draw_size(size)) < prob
+    @_pre_draw_centralized
+    def bernoulli(self, prob, size, **kwargs):
+        return np.random.random(size=size, **kwargs) < prob
 
-    def bernoulli_filter(self, size, prob):
-        return size[self.bernoulli(size, prob)] # Slightly faster on my machine for bernoulli to typecast
+    def bernoulli_filter(self, uids, prob):
+        return uids[self.bernoulli(uids=uids, prob=prob)]
 
+    @_pre_draw_centralized
     def choice(self, size, a, **kwargs):
-        return np.random.choice(a, size=self.draw_size(size), **kwargs)
+        return np.random.choice(a, size=size, **kwargs)
