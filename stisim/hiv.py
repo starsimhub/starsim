@@ -69,7 +69,8 @@ class ART(ss.Intervention):
         return
 
     def initialize(self, sim):
-        return sim.hiv.results += ss.Result(self.name, 'n_art', sim.npts, dtype=int)
+        sim.hiv.results += ss.Result(self.name, 'n_art', sim.npts, dtype=int)
+        return
 
     def apply(self, sim):
         if sim.t < self.t[0]:
