@@ -16,7 +16,7 @@ class HIV(ss.Disease):
 
         self.susceptible = ss.State('susceptible', bool, True)
         self.infected = ss.State('infected', bool, False)
-        self.ti_infected = ss.State('ti_infected', float, 0)
+        self.ti_infected = ss.State('ti_infected', ss.INT_NAN, 0)
         self.on_art = ss.State('on_art', bool, False)
         self.cd4 = ss.State('cd4', float, 500)
 
