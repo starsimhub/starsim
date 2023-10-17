@@ -11,7 +11,7 @@ import seaborn as sns
 import numpy as np
 
 n = 1000 # Agents
-n_rand_seeds = 100
+n_rand_seeds = 250
 intv_cov_levels = [0.025, 0.05, 0.10, 0.73] + [0] # Must include 0 as that's the baseline
 
 # Choose ART or PrEP
@@ -29,13 +29,13 @@ def run_sim(n, idx, intv_cov, rand_seed, multistream):
     ppl = ss.People(n)
 
     ppl.networks = ss.ndict(
-        ss.simple_embedding(mean_dur=4),
-        ss.maternal() # PROBLEM
+        ss.simple_embedding(mean_dur=5),
+        ss.maternal()
         )
 
     hiv_pars = {
         #'beta': {'simple_embedding': [0.10, 0.08], 'maternal': [0.2, 0]},
-        'beta': {'simple_embedding': [0.2, 0.15], 'maternal': [0.2, 0]},
+        'beta': {'simple_embedding': [0.25, 0.20], 'maternal': [0.2, 0]},
         'initial': int(np.maximum(10, np.ceil(0.01*n))),
     }
     hiv = ss.HIV(hiv_pars)
@@ -49,11 +49,10 @@ def run_sim(n, idx, intv_cov, rand_seed, multistream):
         'interventions': [intv],
         'rand_seed': rand_seed,
         'verbose': 0,
-        'remove_dead': False,
+        'remove_dead': True,
         'n_agents': len(ppl), # TODO
     }
-    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[pregnancy], pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}') # PROBLEM
-    ########################sim = ss.Sim(people=ppl, diseases=[hiv], demographics=None, pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}') # FIX
+    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[pregnancy], pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}')
     sim.initialize()
     sim.run()
 
@@ -62,7 +61,7 @@ def run_sim(n, idx, intv_cov, rand_seed, multistream):
         #'hiv.n_infected': sim.results.hiv.n_infected,
         'hiv.prevalence': sim.results.hiv.prevalence,
         'hiv.cum_deaths': sim.results.hiv.new_deaths.cumsum(),
-        'pregnancy.cum_births': sim.results.pregnancy.births.cumsum(), # PROBLEM
+        'pregnancy.cum_births': sim.results.pregnancy.births.cumsum(),
     })
     df['intv_cov'] = intv_cov
     df['rand_seed'] = rand_seed
@@ -75,7 +74,7 @@ def run_sim(n, idx, intv_cov, rand_seed, multistream):
 def run_scenarios():
     results = []
     times = {}
-    for multistream in [False, True]:
+    for multistream in [True, False]:
         cfgs = []
         for rs in range(n_rand_seeds):
             for intv_cov in intv_cov_levels:

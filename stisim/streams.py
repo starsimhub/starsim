@@ -138,7 +138,8 @@ def _pre_draw(func):
                 basis = BOOLS
             else:
                 #size = self.slots.values[v.max()] + 1
-                size = self.slots.values[v].max() + 1
+                #size = self.slots.values[v].max() + 1
+                size = self.slots[v].values.max() + 1
                 basis = UIDS
 
         if not self.initialized:
@@ -227,7 +228,8 @@ class MultiStream(np.random.Generator):
         if basis==SIZE:
             return super(MultiStream, self).random(size=size)
         elif basis == UIDS:
-            slots = self.slots.values[uids]
+            #slots = self.slots.values[uids]
+            slots = self.slots[uids].values
             return super(MultiStream, self).random(size=size)[slots]
         elif basis == BOOLS:
             return super(MultiStream, self).random(size=size)[uids]
@@ -239,7 +241,8 @@ class MultiStream(np.random.Generator):
         if basis == SIZE:
             return super(MultiStream, self).uniform(size=size, low=low, high=high)
         elif basis == UIDS:
-            slots = self.slots.values[uids]
+            #slots = self.slots.values[uids]
+            slots = self.slots[uids].values
             return super(MultiStream, self).uniform(size=size, low=low, high=high)[slots]
         elif basis == BOOLS:
             return super(MultiStream, self).uniform(size=size, low=low, high=high)[uids]
@@ -251,7 +254,8 @@ class MultiStream(np.random.Generator):
         if basis == SIZE:
             return super(MultiStream, self).integers(size=size, low=low, high=high, **kwargs)
         elif basis == UIDS:
-            slots = self.slots.values[uids]
+            #slots = self.slots.values[uids]
+            slots = self.slots[uids].values
             return super(MultiStream, self).integers(size=size, low=low, high=high, **kwargs)[slots]
         elif basis == BOOLS:
             return super(MultiStream, self).integers(size=size, low=low, high=high, **kwargs)[uids]
@@ -263,7 +267,8 @@ class MultiStream(np.random.Generator):
         if basis == SIZE:
             return super(MultiStream, self).poisson(size=size, lam=lam)
         elif basis == UIDS:
-            slots = self.slots.values[uids]
+            #slots = self.slots.values[uids]
+            slots = self.slots[uids].values
             return super(MultiStream, self).poisson(size=size, lam=lam)[slots]
         elif basis == BOOLS:
             return super(MultiStream, self).poisson(size=size, lam=lam)[uids]
@@ -275,7 +280,8 @@ class MultiStream(np.random.Generator):
         if basis == SIZE:
             return mu + std*super(MultiStream, self).normal(size=size)
         elif basis == UIDS:
-            slots = self.slots.values[uids]
+            #slots = self.slots.values[uids]
+            slots = self.slots[uids].values
             return mu + std*super(MultiStream, self).normal(size=size)[slots]
         elif basis == BOOLS:
             return mu + std*super(MultiStream, self).normal(size=size)[uids]
@@ -287,7 +293,8 @@ class MultiStream(np.random.Generator):
         if basis == SIZE:
             return super(MultiStream, self).negative_binomial(size=size, n=n, p=p)
         elif basis == UIDS:
-            slots = self.slots.values[uids]
+            #slots = self.slots.values[uids]
+            slots = self.slots[uids].values
             return super(MultiStream, self).negative_binomial(size=size, n=n, p=p)[slots]
         elif basis == BOOLS:
             return super(MultiStream, self).negative_binomial(size=size, n=n, p=p)[uids]
@@ -301,7 +308,8 @@ class MultiStream(np.random.Generator):
         if basis == SIZE:
             return super(MultiStream, self).random(size=size) < prob # fastest
         elif basis == UIDS:
-            slots = self.slots.values[uids]
+            #slots = self.slots.values[uids]
+            slots = self.slots[uids].values
             return super(MultiStream, self).random(size=size)[slots] < prob # fastest
         elif basis == BOOLS:
             return super(MultiStream, self).random(size=size)[uids] < prob # fastest
