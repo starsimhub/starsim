@@ -9,7 +9,7 @@ import stisim as ss
 import pandas as pd
 
 # Specify all externally visible functions this file defines
-__all__ = ['Networks', 'Network', 'NetworkConnector', 'mf', 'msm', 'mf_msm', 'hpv_network', 'maternal']
+__all__ = ['Networks', 'Network', 'NetworkConnector', 'SexualNetwork', 'mf', 'msm', 'mf_msm', 'hpv_network', 'maternal']
 
 
 class Network(ss.Module):
@@ -127,7 +127,7 @@ class Network(ss.Module):
         """
         Many network states depend on properties of people -- e.g. MSM depends on being male,
         age of debut varies by sex and over time, and participation rates vary by age.
-        Each time states are dynamically grown, this funciton should be called to set the network
+        Each time states are dynamically grown, this function should be called to set the network
         states that depend on other states.
         """
         pass
@@ -299,7 +299,23 @@ class Networks(ss.ndict):
             cn.update(people)
 
 
-class mf(Network):
+class SexualNetwork(Network):
+    def __init__(self, pars=None):
+        super().__init__(pars)
+
+    def active(self, people):
+        return self.participant & (people.age > self.debut)
+
+    def available(self, people, sex):
+        # Currently assumes unpartnered people are available
+        # Could modify this to account for concurrency
+        # This property could also be overwritten by a NetworkConnector
+        # which could incorporate information about membership in other
+        # contact networks
+        return np.setdiff1d(people.uid[people[sex] & self.active(people)], self.members)
+
+
+class mf(SexualNetwork):
     """
     A class holding a single network of contact edges (connections) between people.
     This network is built by **randomly pairing** males and female with variable
@@ -333,17 +349,6 @@ class mf(Network):
             'dur': {'year': 2000, 'age': 0, 'dur': [None], 'std': 0, 'dist': 'lognormal'},
         })
         self.validate_pars()
-
-    def active(self, people):
-        return self.participant & (people.age > self.debut)
-
-    def available(self, people, sex):
-        # Currently assumes unpartnered people are available
-        # Could modify this to account for concurrency
-        # This property could also be overwritten by a NetworkConnector
-        # which could incorporate information about membership in other
-        # contact networks
-        return np.setdiff1d(people.uid[people[sex] & self.active(people)], self.members)
 
     def validate_pars(self):
         """ Validate parameters and expand assumptions """
@@ -463,7 +468,7 @@ class mf(Network):
         self.add_pairs(people)
 
 
-class msm(Network):
+class msm(SexualNetwork):
     """
     A network that randomly pairs males
     """
@@ -483,9 +488,6 @@ class msm(Network):
             'part_rates': 0.1,
             'debut': ss.lognormal(18, 2),
         }, self.pars)
-
-    def active(self, people):
-        return self.participant & (people.age > self.debut)
 
     def available(self, people):
         return np.setdiff1d(people.uid[people.male & self.active(people)], self.members)
@@ -604,7 +606,7 @@ class mf_msm(NetworkConnector):
         return
 
 
-class hpv_network(Network):
+class hpv_network(SexualNetwork):
     def __init__(self, pars=None):
 
         key_dict = {
