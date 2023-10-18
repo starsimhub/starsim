@@ -255,10 +255,6 @@ class Network(ss.Module):
         """ Define how pairs of people are formed """
         pass
 
-    def end_pairs(self, people):
-        """ End relationships due to end """
-        pass
-
     def update(self, people):
         """ Define how pairs/connections evolve (in time) """
         pass
