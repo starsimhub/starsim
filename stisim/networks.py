@@ -271,8 +271,8 @@ class Network(ss.Module):
 
 
 class DynamicNetwork(Network):
-    def __init__(self, pars=None):
-        key_dict = {'dur': ss.float_}
+    def __init__(self, pars=None, key_dict=None):
+        key_dict = ss.omerge({'dur': ss.float_}, key_dict)
         super().__init__(pars, key_dict=key_dict)
 
     def end_pairs(self, people):
@@ -594,20 +594,16 @@ class mf_msm(NetworkConnector):
         return
 
 
-class hpv_network(SexualNetwork):
+class hpv_network(SexualNetwork, DynamicNetwork):
     def __init__(self, pars=None):
 
         key_dict = {
-            'p1': ss.int_,
-            'p2': ss.int_,
-            'dur': ss.float_,
             'acts': ss.float_,
             'start': ss.float_,
-            'beta': ss.float_,
         }
 
-        # Call init for the base class, which sets all the keys
-        super().__init__(key_dict=key_dict)
+        DynamicNetwork.__init__(self, key_dict=key_dict)
+        SexualNetwork.__init__(self, pars=pars)
 
         # Define default parameters
         self.pars = dict()
