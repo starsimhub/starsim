@@ -257,17 +257,11 @@ class Network(ss.Module):
 
     def end_pairs(self, people):
         """ End relationships due to end """
-        dt = people.dt
-        self.contacts.dur = self.contacts.dur - dt
-        active = self.contacts.dur > 0
-        self.contacts.p1 = self.contacts.p1[active]
-        self.contacts.p2 = self.contacts.p2[active]
-        self.contacts.beta = self.contacts.beta[active]
-        self.contacts.dur = self.contacts.dur[active]
+        pass
 
     def update(self, people):
         """ Define how pairs/connections evolve (in time) """
-        return
+        pass
 
     def remove_uids(self, uids):
         """
@@ -278,6 +272,21 @@ class Network(ss.Module):
         keep = ~(np.isin(self.contacts.p1, uids) | np.isin(self.contacts.p2, uids))
         for k in self.meta_keys():
             self.contacts[k] = self.contacts[k][keep]
+
+
+class DynamicNetwork(Network):
+    def __init__(self, pars=None):
+        key_dict = {'dur': ss.float_}
+        super().__init__(pars, key_dict=key_dict)
+
+    def end_pairs(self, people):
+        dt = people.dt
+        self.contacts.dur = self.contacts.dur - dt
+        active = self.contacts.dur > 0
+        self.contacts.p1 = self.contacts.p1[active]
+        self.contacts.p2 = self.contacts.p2[active]
+        self.contacts.beta = self.contacts.beta[active]
+        self.contacts.dur = self.contacts.dur[active]
 
 
 class Networks(ss.ndict):
@@ -300,6 +309,7 @@ class Networks(ss.ndict):
 
 
 class SexualNetwork(Network):
+    """ Base class for all sexual networks """
     def __init__(self, pars=None):
         super().__init__(pars)
 
@@ -315,25 +325,15 @@ class SexualNetwork(Network):
         return np.setdiff1d(people.uid[people[sex] & self.active(people)], self.members)
 
 
-class mf(SexualNetwork):
+class mf(SexualNetwork, DynamicNetwork):
     """
-    A class holding a single network of contact edges (connections) between people.
     This network is built by **randomly pairing** males and female with variable
     relationship durations.
     """
 
     def __init__(self, pars=None):
-        key_dict = {
-            'p1': ss.int_,
-            'p2': ss.int_,
-            'dur': ss.float_,
-            'beta': ss.float_,
-        }
-
-        # Call init for the base class, which sets all the keys
-        super().__init__(pars, key_dict=key_dict)
-
-        # Set other parameters
+        DynamicNetwork.__init__(self)
+        SexualNetwork.__init__(self, pars)
         self.pars = ss.omerge({
             'dur': ss.lognormal(15, 15),  # Can vary by age, year, and individual pair
             'part_rates': 0.9,  # Participation rates - can vary by sex and year
@@ -468,29 +468,21 @@ class mf(SexualNetwork):
         self.add_pairs(people)
 
 
-class msm(SexualNetwork):
+class msm(SexualNetwork, DynamicNetwork):
     """
     A network that randomly pairs males
     """
 
     def __init__(self, pars=None):
-        key_dict = {
-            'p1': ss.int_,
-            'p2': ss.int_,
-            'dur': ss.float_,
-            'beta': ss.float_,
-        }
-        super().__init__(pars, key_dict=key_dict)
-
-        # Set other parameters
+        DynamicNetwork.__init__(self)
+        SexualNetwork.__init__(self, pars)
         self.pars = ss.omerge({
             'dur': ss.lognormal(5, 3),
-            'part_rates': 0.1,
+            'part_rates': 0.1,  # Participation rates - can vary by sex and year
+            'rel_part_rates': 1.0,
             'debut': ss.lognormal(18, 2),
+            'rel_debut': 1.0,
         }, self.pars)
-
-    def available(self, people):
-        return np.setdiff1d(people.uid[people.male & self.active(people)], self.members)
 
     def initialize(self, sim):
         # Add more here in line with MF network, e.g. age of debut
@@ -516,7 +508,7 @@ class msm(SexualNetwork):
 
     def add_pairs(self, people, ti=None):
         # Pair all unpartnered MSM
-        available_m = self.available(people)
+        available_m = self.available(people, 'm')
         n_pairs = int(len(available_m)/2)
         p1 = available_m[:n_pairs]
         p2 = available_m[n_pairs:n_pairs*2]
