@@ -20,7 +20,7 @@ INT_NAN = np.iinfo(np.int32).max  # Value to use to flag invalid content (i.e., 
 
 
 # %% Helper functions
-__all__ += ['ndict', 'omerge', 'warn', 'unique', 'find_contacts']
+__all__ += ['ndict', 'omerge', 'warn', 'unique', 'find_contacts', 'get_subclasses']
 
 
 class ndict(sc.objdict):
@@ -41,7 +41,7 @@ class ndict(sc.objdict):
     """
 
     def __init__(self, *args, name='name', type=None, strict=True, **kwargs):
-        self.setattribute('_name', name) # Since otherwise treated as keys
+        self.setattribute('_name', name)  # Since otherwise treated as keys
         self.setattribute('_type', type)
         self.setattribute('_strict', strict)
         self._initialize(*args, **kwargs)
@@ -177,6 +177,11 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
     return pairing_partners
 
 
+def get_subclasses(cls):
+    for subclass in cls.__subclasses__():
+        yield from get_subclasses(subclass)
+        yield subclass
+
 # %% Seed methods
 
 __all__ += ['set_seed']
@@ -237,6 +242,22 @@ def binomial_filter(prob, arr):
     """
     return arr[(np.random.random(len(arr)) < prob).nonzero()[0]]
 
+
+def binomial_arr(prob_arr):
+    """
+    Binomial (Bernoulli) trials each with different probabilities.
+
+    Args:
+        prob_arr (array): array of probabilities
+
+    Returns:
+         Boolean array of which trials on the input array succeeded
+
+    **Example**::
+
+        outcomes = ss.binomial_arr([0.1, 0.1, 0.2, 0.2, 0.8, 0.8]) # Perform 6 trials with different probabilities
+    """
+    return np.random.random(prob_arr.shape) < prob_arr
 
 
 def n_poisson(rate, n):

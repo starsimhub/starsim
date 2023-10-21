@@ -224,8 +224,7 @@ class Pregnancy(DemographicModule):
 
         # Other, e.g. postpartum, on contraception...
         self.infertile = ss.State('infertile', bool, False)  # Applies to girls and women outside the fertility window
-        self.susceptible = ss.State('susceptible', bool,
-                                    True)  # Applies to girls and women inside the fertility window - needs renaming
+        self.susceptible = ss.State('susceptible', bool, True)  # Applies to girls and women inside the fertility window - needs renaming
         self.pregnant = ss.State('pregnant', bool, False)  # Currently pregnant
         self.postpartum = ss.State('postpartum', bool, False)  # Currently post-partum
         self.ti_pregnant = ss.State('ti_pregnant', int, ss.INT_NAN)  # Time pregnancy begins

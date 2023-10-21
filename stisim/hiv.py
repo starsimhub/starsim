@@ -14,9 +14,7 @@ class HIV(ss.Disease):
     def __init__(self, pars=None):
         super().__init__(pars)
 
-        self.susceptible = ss.State('susceptible', bool, True)
-        self.infected = ss.State('infected', bool, False)
-        self.ti_infected = ss.State('ti_infected', float, 0)
+        # States additional to the default disease states (see base class)
         self.on_art = ss.State('on_art', bool, False)
         self.cd4 = ss.State('cd4', float, 500)
 
@@ -24,25 +22,26 @@ class HIV(ss.Disease):
             'cd4_min': 100,
             'cd4_max': 500,
             'cd4_rate': 5,
-            'initial': 30,
+            'init_prev': 0.05,
             'eff_condoms': 0.7,
         }, self.pars)
 
         return
 
-    def update_states(self, sim):
+    def update_states_pre(self, sim):
         """ Update CD4 """
         self.cd4[sim.people.alive & self.infected & self.on_art] += (self.pars.cd4_max - self.cd4[sim.people.alive & self.infected & self.on_art])/self.pars.cd4_rate
         self.cd4[sim.people.alive & self.infected & ~self.on_art] += (self.pars.cd4_min - self.cd4[sim.people.alive & self.infected & ~self.on_art])/self.pars.cd4_rate
         return
 
     def init_results(self, sim):
-        super().init_results(sim)
-        return
+        """
+        Initialize results
+        """
+        return super().init_results(sim)
 
     def update_results(self, sim):
-        super(HIV, self).update_results(sim)
-        return
+        return super(HIV, self).update_results(sim)
 
     def make_new_cases(self, sim):
         # eff_condoms = sim.pars[self.name]['eff_condoms'] # TODO figure out how to add this
@@ -53,6 +52,10 @@ class HIV(ss.Disease):
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = sim.ti
+        return
+
+    def set_congenital(self, sim, uids):
+        return self.set_prognoses(sim, uids)  # Pass back?
 
 
 # %% Interventions
@@ -63,9 +66,11 @@ class ART(ss.Intervention):
         self.requires = HIV
         self.t = sc.promotetoarray(t)
         self.capacity = sc.promotetoarray(capacity)
+        return
 
     def initialize(self, sim):
         sim.hiv.results += ss.Result(self.name, 'n_art', sim.npts, dtype=int)
+        return
 
     def apply(self, sim):
         if sim.t < self.t[0]:
@@ -106,6 +111,8 @@ class CD4_analyzer(ss.Analyzer):
     def initialize(self, sim):
         super().initialize(sim)
         self.cd4 = np.zeros((sim.npts, sim.people.n), dtype=int)
+        return
 
     def apply(self, sim):
         self.cd4[sim.t] = sim.people.hiv.cd4
+        return

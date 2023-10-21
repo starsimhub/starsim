@@ -45,7 +45,6 @@ class Options(sc.objdict):
         self.setattribute('orig_options', sc.dcp(options))  # Copy the default options
         return
     
-    
     @staticmethod
     def get_orig_options():
         """
@@ -71,11 +70,10 @@ class Options(sc.objdict):
 
         return optdesc, options
 
-
     def __call__(self, *args, **kwargs):
         """Allow ``ss.options(dpi=150)`` instead of ``ss.options.set(dpi=150)`` """
-        return self.set(*args, **kwargs)
 
+        return self.set(*args, **kwargs)
 
     def __repr__(self):
         """ Brief representation """
@@ -84,11 +82,9 @@ class Options(sc.objdict):
         output += sc.pp(self.to_dict(), output=True)
         return output
 
-
     def __enter__(self):
         """ Allow to be used in a with block """
         return self
-
 
     def __exit__(self, *args, **kwargs):
         """ Allow to be used in a with block """
@@ -103,7 +99,6 @@ class Options(sc.objdict):
             errormsg = 'Please use ss.options.context() if using a with block'
             raise AttributeError(errormsg) from E
         return
-    
 
     def disp(self):
         """ Detailed representation """
@@ -116,7 +111,6 @@ class Options(sc.objdict):
             output += f'{keystr}{reprstr}'
         print(output)
         return
-
 
     def set(self, key=None, value=None, use=False, **kwargs):
         """
@@ -154,7 +148,6 @@ class Options(sc.objdict):
 
         return
 
-
     def context(self, **kwargs):
         """
         Alias to set() for non-plotting options, for use in a "with" block.
@@ -187,11 +180,9 @@ class Options(sc.objdict):
         self.set(**kwargs)
         return self
 
-
     def get_default(self, key):
         """ Helper function to get the original default options """
         return self.orig_options[key]
-
 
     def changed(self, key):
         """ Check if current setting has been changed from default """
@@ -199,11 +190,10 @@ class Options(sc.objdict):
             return self[key] != self.orig_options[key]
         else:
             return None
-        
+
 
 # Create the options on module load, and load the fonts
 options = Options()
-
 
 # Default for precision
 # Used in various places throughout the code, generally as:
@@ -218,5 +208,3 @@ elif options.precision == 64:  # pragma: no cover
     int_ = np.int64
 else:
     raise NotImplementedError(f'Precision must be either 32 bit or 64 bit, not {options.precision}')
-
-
