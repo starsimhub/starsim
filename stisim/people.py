@@ -173,7 +173,7 @@ class People(BasePeople):
         """ Validate age data """
         if age_data is None: return ss.uniform(0, 100)
         if sc.checktype(age_data, pd.DataFrame):
-            return ss.from_data(vals=age_data['value'].values, bins=age_data['age'].values)
+            return ss.data_dist(vals=age_data['value'].values, bins=age_data['age'].values)
 
     def initialize(self):
         """ Initialization - TBC what needs to go here """
@@ -199,6 +199,7 @@ class People(BasePeople):
         module_states = sc.objdict()
         setattr(self, module.name, module_states)
         self._register_module_states(module, module_states)
+        return
 
     def _register_module_states(self, module, module_states):
         """Enable dot notation for module specific states:
@@ -239,7 +240,7 @@ class People(BasePeople):
         :return:
         """
         self.age[self.alive] += self.dt
-
+        return
 
     def resolve_deaths(self):
         """
@@ -249,12 +250,13 @@ class People(BasePeople):
         """
         death_uids = ss.true(self.ti_dead <= self.ti)
         self.alive[death_uids] = False
+        return
 
     def update_networks(self):
         """
         Update networks
         """
-        self.networks.update(self)
+        return self.networks.update(self)
 
     @property
     def active(self):
@@ -318,3 +320,4 @@ class People(BasePeople):
         # enabled then often such agents would not be present in the simulation anyway
         uids = ss.true(self.alive[uids])
         self.ti_dead[uids] = self.ti
+        return

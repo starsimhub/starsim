@@ -102,6 +102,7 @@ class Sim(sc.prettyobj):
             if self.pars['verbose']:
                 warnmsg = f"Warning: Provided time step dt: {dt} resulted in a non-integer number of steps per year. Rounded to {rounded_dt}."
                 print(warnmsg)
+        return
 
     def validate_pars(self):
         """
@@ -151,6 +152,7 @@ class Sim(sc.prettyobj):
                                          step=self.pars['dt'])  # Includes all the timepoints in the last year
         self.npts = len(self.yearvec)
         self.tivec = np.arange(self.npts)
+        return
 
     def init_people(self, popdict=None, reset=False, verbose=None, **kwargs):
         """
@@ -511,9 +513,8 @@ class Sim(sc.prettyobj):
 
     @staticmethod
     def load(filename, *args, **kwargs):
-        """
-        Load from disk from a gzipped pickle.
-        """
+        """ Load from disk from a gzipped pickle.  """
+
         sim = sc.load(filename, *args, **kwargs)
         if not isinstance(sim, Sim):  # pragma: no cover
             errormsg = f'Cannot load object of {type(sim)} as a Sim object'
