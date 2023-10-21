@@ -45,6 +45,7 @@ class Module(sc.prettyobj):
 
     def finalize(self, sim):
         self.finalized = True
+        return
 
     @property
     def name(self):
@@ -78,7 +79,6 @@ class Disease(Module):
         self.susceptible = ss.State('susceptible', bool, True)
         self.infected = ss.State('infected', bool, False)
         self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
-
         return
 
     def initialize(self, sim):
@@ -127,7 +127,6 @@ class Disease(Module):
         :param sim:
         :return:
         """
-
         pass
 
     def make_new_cases(self, sim):
