@@ -9,7 +9,7 @@ import stisim as ss
 import pandas as pd
 
 # Specify all externally visible functions this file defines
-__all__ = ['Networks', 'Network', 'NetworkConnector', 'mf', 'msm', 'mf_msm', 'hpv_network', 'maternal']
+__all__ = ['Networks', 'Network', 'NetworkConnector', 'SexualNetwork', 'mf', 'msm', 'mf_msm', 'hpv_network', 'maternal']
 
 
 class Network(ss.Module):
@@ -65,7 +65,6 @@ class Network(ss.Module):
         }
         self.meta = ss.omerge(default_keys, key_dict)
         self.vertical = vertical  # Whether transmission is bidirectional
-        self.basekey = 'p1'  # Assign a base key for calculating lengths and performing other operations
 
         # Initialize the keys of the network
         self.contacts = sc.objdict()
@@ -80,6 +79,7 @@ class Network(ss.Module):
         # Define states using placeholder values
         self.participant = ss.State('participant', bool, fill_value=False)
         self.debut = ss.State('debut', float, fill_value=0)
+        return
 
     @property
     def name(self):
@@ -91,7 +91,7 @@ class Network(ss.Module):
 
     def __len__(self):
         try:
-            return len(self[self.basekey])
+            return len(self.contacts.p1)
         except:  # pragma: no cover
             return 0
 
@@ -100,7 +100,7 @@ class Network(ss.Module):
         namestr = self.name
         labelstr = f'"{self.label}"' if self.label else '<no label>'
         keys_str = ', '.join(self.contacts.keys())
-        output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", f, m, beta)
+        output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", p1, p2, beta)
         output += self.to_df().__repr__()
         return output
 
@@ -128,7 +128,7 @@ class Network(ss.Module):
         """
         Many network states depend on properties of people -- e.g. MSM depends on being male,
         age of debut varies by sex and over time, and participation rates vary by age.
-        Each time states are dynamically grown, this funciton should be called to set the network
+        Each time states are dynamically grown, this function should be called to set the network
         states that depend on other states.
         """
         pass
@@ -140,7 +140,7 @@ class Network(ss.Module):
         If dtype is incorrect, try to convert automatically; if length is incorrect,
         do not.
         """
-        n = len(self.contacts[self.basekey])
+        n = len(self.contacts.p1)
         for key, dtype in self.meta.items():
             if dtype:
                 actual = self.contacts[key].dtype
@@ -167,7 +167,7 @@ class Network(ss.Module):
                 self.contacts[key] = np.delete(self.contacts[key], inds)  # Remove from the original
         return output
 
-    def pop_inds(self, inds, do_return=True):
+    def pop_inds(self, inds):
         """
         "Pop" the specified indices from the edgelist and return them as a dict.
         Returns arguments in the right format to be used with network.append().
@@ -176,17 +176,14 @@ class Network(ss.Module):
             inds (int, array, slice): the indices to be removed
         """
         popped_inds = self.get_inds(inds, remove=True)
-        if do_return:
-            return popped_inds
-        else:
-            return
+        return popped_inds
 
     def append(self, contacts):
         """
         Append contacts to the current network.
 
         Args:
-            contacts (dict): a dictionary of arrays with keys f,m,beta, as returned from network.pop_inds()
+            contacts (dict): a dictionary of arrays with keys p1,p2,beta, as returned from network.pop_inds()
         """
         for key in self.meta_keys():
             new_arr = contacts[key]
@@ -221,7 +218,7 @@ class Network(ss.Module):
 
         For some purposes (e.g. contact tracing) it's necessary to find all the contacts
         associated with a subset of the people in this network. Since contacts are bidirectional
-        it's necessary to check both P1 and P2 for the target indices. The return type is a Set
+        it's necessary to check both p1 and p2 for the target indices. The return type is a Set
         so that there is no duplication of indices (otherwise if the Network has explicit
         symmetric interactions, they could appear multiple times). This is also for performance so
         that the calling code doesn't need to perform its own unique() operation. Note that
@@ -236,15 +233,15 @@ class Network(ss.Module):
             contact_inds (array): a set of indices for pairing partners
 
         Example: If there were a network with
-        - P1 = [1,2,3,4]
-        - P2 = [2,3,1,4]
+        - p1 = [1,2,3,4]
+        - p2 = [2,3,1,4]
         Then find_contacts([1,3]) would return {1,2,3}
         """
 
         # Check types
         if not isinstance(inds, np.ndarray):
             inds = sc.promotetoarray(inds)
-        if inds.dtype != np.int64:  # pragma: no cover # This is int64 since indices often come from hpv.true(), which returns int64
+        if inds.dtype != np.int64:  # pragma: no cover # This is int64 since indices often come from utils.true(), which returns int64
             inds = np.array(inds, dtype=np.int64)
 
         # Find the contacts
@@ -259,19 +256,9 @@ class Network(ss.Module):
         """ Define how pairs of people are formed """
         pass
 
-    def end_pairs(self, people):
-        """ End relationships due to end """
-        dt = people.dt
-        self.contacts.dur = self.contacts.dur - dt
-        active = self.contacts.dur > 0
-        self.contacts.p1 = self.contacts.p1[active]
-        self.contacts.p2 = self.contacts.p2[active]
-        self.contacts.beta = self.contacts.beta[active]
-        self.contacts.dur = self.contacts.dur[active]
-
     def update(self, people):
         """ Define how pairs/connections evolve (in time) """
-        return
+        pass
 
     def remove_uids(self, uids):
         """
@@ -282,6 +269,21 @@ class Network(ss.Module):
         keep = ~(np.isin(self.contacts.p1, uids) | np.isin(self.contacts.p2, uids))
         for k in self.meta_keys():
             self.contacts[k] = self.contacts[k][keep]
+
+
+class DynamicNetwork(Network):
+    def __init__(self, pars=None, key_dict=None):
+        key_dict = ss.omerge({'dur': ss.float_}, key_dict)
+        super().__init__(pars, key_dict=key_dict)
+
+    def end_pairs(self, people):
+        dt = people.dt
+        self.contacts.dur = self.contacts.dur - dt
+        active = self.contacts.dur > 0
+        self.contacts.p1 = self.contacts.p1[active]
+        self.contacts.p2 = self.contacts.p2[active]
+        self.contacts.beta = self.contacts.beta[active]
+        self.contacts.dur = self.contacts.dur[active]
 
 
 class Networks(ss.ndict):
@@ -303,25 +305,32 @@ class Networks(ss.ndict):
             cn.update(people)
 
 
-class mf(Network):
+class SexualNetwork(Network):
+    """ Base class for all sexual networks """
+    def __init__(self, pars=None):
+        super().__init__(pars)
+
+    def active(self, people):
+        return self.participant & (people.age > self.debut)
+
+    def available(self, people, sex):
+        # Currently assumes unpartnered people are available
+        # Could modify this to account for concurrency
+        # This property could also be overwritten by a NetworkConnector
+        # which could incorporate information about membership in other
+        # contact networks
+        return np.setdiff1d(people.uid[people[sex] & self.active(people)], self.members)
+
+
+class mf(SexualNetwork, DynamicNetwork):
     """
-    A class holding a single network of contact edges (connections) between people.
     This network is built by **randomly pairing** males and female with variable
     relationship durations.
     """
 
     def __init__(self, pars=None):
-        key_dict = {
-            'p1': ss.int_,
-            'p2': ss.int_,
-            'dur': ss.float_,
-            'beta': ss.float_,
-        }
-
-        # Call init for the base class, which sets all the keys
-        super().__init__(pars, key_dict=key_dict)
-
-        # Set other parameters
+        DynamicNetwork.__init__(self)
+        SexualNetwork.__init__(self, pars)
         self.pars = ss.omerge({
             'dur': ss.lognormal(15, 15),  # Can vary by age, year, and individual pair
             'part_rates': 0.9,  # Participation rates - can vary by sex and year
@@ -337,17 +346,7 @@ class mf(Network):
             'dur': {'year': 2000, 'age': 0, 'dur': [None], 'std': 0, 'dist': 'lognormal'},
         })
         self.validate_pars()
-
-    def active(self, people):
-        return self.participant & (people.age > self.debut)
-
-    def available(self, people, sex):
-        # Currently assumes unpartnered people are available
-        # Could modify this to account for concurrency
-        # This property could also be overwritten by a NetworkConnector
-        # which could incorporate information about membership in other
-        # contact networks
-        return np.setdiff1d(people.uid[people[sex] & self.active(people)], self.members)
+        return
 
     def validate_pars(self):
         """ Validate parameters and expand assumptions """
@@ -432,7 +431,7 @@ class mf(Network):
             mean = np.interp(people.year, df['year'], df['debut'])
             std = np.interp(people.year, df['year'], df['std'])
             dist = df.loc[df.year == nearest_year].dist.iloc[0]
-            debut_vals = ss.dist_dict[dist](mean, std)(len(uids)) * self.pars.rel_debut
+            debut_vals = ss.Distribution.create(dist, mean, std)(len(uids)) * self.pars.rel_debut
             self.debut[uids] = debut_vals
 
     def add_pairs(self, people, ti=None):
@@ -454,45 +453,36 @@ class mf(Network):
         mean = np.interp(people.year, self.pars.dur['year'], self.pars.dur['dur'])
         std = np.interp(people.year, self.pars.dur['year'], self.pars.dur['std'])
         dur_dist = self.pars.dur.loc[self.pars.dur.year == nearest_year].dist.iloc[0]
-        dur_vals = ss.dist_dict[dur_dist](mean, std)(len(p1))
+        dur_vals = ss.Distribution.create(dur_dist, mean, std)(len(p1))
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
         self.contacts.beta = np.concatenate([self.contacts.beta, beta])
         self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
+        return
 
     def update(self, people, dt=None):
         self.end_pairs(people)
         self.set_network_states(people, upper_age=people.dt)
         self.add_pairs(people)
+        return
 
 
-class msm(Network):
+class msm(SexualNetwork, DynamicNetwork):
     """
     A network that randomly pairs males
     """
 
     def __init__(self, pars=None):
-        key_dict = {
-            'p1': ss.int_,
-            'p2': ss.int_,
-            'dur': ss.float_,
-            'beta': ss.float_,
-        }
-        super().__init__(pars, key_dict=key_dict)
-
-        # Set other parameters
+        DynamicNetwork.__init__(self)
+        SexualNetwork.__init__(self, pars)
         self.pars = ss.omerge({
             'dur': ss.lognormal(5, 3),
-            'part_rates': 0.1,
+            'part_rates': 0.1,  # Participation rates - can vary by sex and year
+            'rel_part_rates': 1.0,
             'debut': ss.lognormal(18, 2),
+            'rel_debut': 1.0,
         }, self.pars)
-
-    def active(self, people):
-        return self.participant & (people.age > self.debut)
-
-    def available(self, people):
-        return np.setdiff1d(people.uid[people.male & self.active(people)], self.members)
 
     def initialize(self, sim):
         # Add more here in line with MF network, e.g. age of debut
@@ -518,7 +508,7 @@ class msm(Network):
 
     def add_pairs(self, people, ti=None):
         # Pair all unpartnered MSM
-        available_m = self.available(people)
+        available_m = self.available(people, 'm')
         n_pairs = int(len(available_m)/2)
         p1 = available_m[:n_pairs]
         p2 = available_m[n_pairs:n_pairs*2]
@@ -608,20 +598,16 @@ class mf_msm(NetworkConnector):
         return
 
 
-class hpv_network(Network):
+class hpv_network(SexualNetwork, DynamicNetwork):
     def __init__(self, pars=None):
 
         key_dict = {
-            'p1': ss.int_,
-            'p2': ss.int_,
-            'dur': ss.float_,
             'acts': ss.float_,
             'start': ss.float_,
-            'beta': ss.float_,
         }
 
-        # Call init for the base class, which sets all the keys
-        super().__init__(key_dict=key_dict)
+        DynamicNetwork.__init__(self, key_dict=key_dict)
+        SexualNetwork.__init__(self, pars=pars)
 
         # Define default parameters
         self.pars = dict()
@@ -637,9 +623,10 @@ class hpv_network(Network):
 
         self.update_pars(pars)
         self.get_layer_probs()
+        return
 
     def initialize(self, people):
-        self.add_pairs(people, ti=0)
+        return self.add_pairs(people, ti=0)
 
     def update_pars(self, pars):
         if pars is not None:
@@ -840,6 +827,7 @@ class maternal(Network):
         self.contacts.dur = self.contacts.dur - dt
         inactive = self.contacts.dur <= 0
         self.contacts.beta[inactive] = 0
+        return
 
     def initialize(self, sim):
         """ No pairs added upon initialization """
