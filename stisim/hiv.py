@@ -59,17 +59,35 @@ class HIV(ss.Disease):
 
 class SimpleDiagnosticTest(ss.Intervention):
 
-    def __init__(self, coverage=0.8, sensitivity=0.99, specificity=0.99, cd4_threshold=200 ):
+    first_time = True
+
+    def __init__(self, start=0, coverage=0.8, sensitivity=0.99, specificity=0.99, cd4_threshold=200 ):
         self.requires = HIV
         print( '... creating SimpleDiagnosticTest intervention' )
-        pass
+        return
 
     def initialize(self, sim):
         print('... initializing SimpleDiagnosticTest')
-        pass
+
+        # Add people states
+        sim.hiv.diagnosed = ss.State('diagnosed', bool, False)
+        sim.hiv.ti_diagnosed = ss.State('ti_diagnosed', float, np.nan)
+
+        # Add simulation results
+        sim.hiv.results += ss.Result(self.name, 'n_diagnosed', sim.npts, dtype=int)
+
+        return
 
     def apply(self, sim):
-        pass
+
+        if first_time:
+            print('... applying intervention in step ', sim.t )
+            self.first_time = False
+
+        #sim.people.alive
+        #sim.people.hiv.cd4
+
+        return
 
 
 class ART(ss.Intervention):
