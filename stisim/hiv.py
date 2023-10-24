@@ -64,33 +64,69 @@ class HIV(ss.Disease):
 
 class SimpleDiagnosticTest(ss.Intervention):
 
+    
     first_time = True
+    
+    # Time/step bounds for diagnostic test execution
+    start = None
+    end   = None
+    ti_start = None
+    ti_end   = None
+    
+    # Threshold for symptomatic cases
+    cd4_threshold = None
+    
+    # Test performance
+    coverage = None
+    sensitivity = None
+    
 
-    def __init__(self, start=0, coverage=0.8, sensitivity=0.99, specificity=0.99, cd4_threshold=200 ):
+    def __init__(self, start=None, end=None, coverage=0.8, sensitivity=0.99, specificity=0.99, symptoms_cd4_threshold=500 ):
         self.requires = HIV
-        print( '... creating SimpleDiagnosticTest intervention' )
+        
+        self.start = start if start is not None else 0
+        self.end   = end   if end   is not None else 3000
+        
+        self.cd4_threshold = symptoms_cd4_threshold
+
+        self.coverage = coverage
+        self.sensitivity = sensitivity
         return
 
+    
     def initialize(self, sim):
-        print('... initializing SimpleDiagnosticTest: ' )
-
+        
+        # Set time steps where the intervention is active
+        self.ti_start = np.clip( int( sim.dt*( self.start - sim.pars['start'] ) ), 0, sim.npts )
+        self.ti_end   = np.clip( int( sim.dt*( self.end   - sim.pars['start'] ) ), 0, sim.npts )
+        
         # Add simulation results
         sim.results.hiv += ss.Result('hiv', 'n_diagnosed', sim.npts, dtype=int)
 
         return
 
+    
     def apply(self, sim):
 
-        if self.first_time:
-            print('... applying intervention in step ', sim.ti, '/' ,sim.npts )
-            self.first_time = False
-
-        #sim.people.alive
-        #sim.people.hiv.cd4
-
+        if self.ti_start <= sim.ti <= self.ti_end: 
+        
+            symptomatic = sim.people.hiv.cd4 <= self.cd4_threshold
+            eligible = sim.people.alive & sim.people.hiv.infected & symptomatic & ~sim.people.hiv.diagnosed # Remove 'infected' as a condition once we get symptomatic working well (because cd4 levels are not going down now)
+            n_eligible = np.count_nonzero(eligible)           
+            # Create new diagnoses                
+            if n_eligible:
+                n_new_diagnoses = int( n_eligible * self.coverage * self.sensitivity )
+                inds = np.random.choice(ss.true(eligible), n_new_diagnoses, replace=False)
+                sim.people.hiv.diagnosed[inds] = True
+                sim.people.hiv.ti_diagnosed[inds] = sim.ti
+                    
+            # Add results
+            sim.results.hiv.n_diagnosed[sim.ti] = np.count_nonzero(sim.people.hiv.diagnosed)
+        
         return
 
 
+    
 class ART(ss.Intervention):
 
     def __init__(self, t: np.array, capacity: np.array):
