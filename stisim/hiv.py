@@ -9,7 +9,7 @@ import stisim as ss
 __all__ = ['HIV', 'ART', 'CD4_analyzer']
 
 
-class HIV(ss.Disease):
+class HIV(ss.STI):
 
     def __init__(self, pars=None):
         super().__init__(pars)

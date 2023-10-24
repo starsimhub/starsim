@@ -6,6 +6,7 @@ from .distributions import *
 from .states        import *
 from .people        import *
 from .modules       import *
+from .disease       import *
 from .networks      import *
 from .results       import *
 from .demographics  import *
