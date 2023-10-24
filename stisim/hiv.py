@@ -19,7 +19,12 @@ class HIV(ss.Disease):
         self.ti_infected = ss.State('ti_infected', float, 0)
         self.on_art = ss.State('on_art', bool, False)
         self.cd4 = ss.State('cd4', float, 500)
+        
+        # SimpleDiagnosticTest states (should this be done as part of SimpleDiagnosticTest.initialize()? )
+        self.diagnosed = ss.State('diagnosed', bool, False)
+        self.ti_diagnosed = ss.State('ti_diagnosed', float, np.nan)
 
+        # Default parameters
         self.pars = ss.omerge({
             'cd4_min': 100,
             'cd4_max': 500,
@@ -67,21 +72,17 @@ class SimpleDiagnosticTest(ss.Intervention):
         return
 
     def initialize(self, sim):
-        print('... initializing SimpleDiagnosticTest.')
-
-        # Add people states
-        sim.hiv.diagnosed = ss.State('diagnosed', bool, False)
-        sim.hiv.ti_diagnosed = ss.State('ti_diagnosed', float, np.nan)
+        print('... initializing SimpleDiagnosticTest: ' )
 
         # Add simulation results
-        sim.hiv.results += ss.Result(self.name, 'n_diagnosed', sim.npts, dtype=int)
+        sim.results.hiv += ss.Result('hiv', 'n_diagnosed', sim.npts, dtype=int)
 
         return
 
     def apply(self, sim):
 
         if self.first_time:
-            print('... applying intervention in step ', sim.t )
+            print('... applying intervention in step ', sim.ti, '/' ,sim.npts )
             self.first_time = False
 
         #sim.people.alive
