@@ -27,7 +27,7 @@ class HIV(ss.Disease):
             'initial': 30,
             'eff_condoms': 0.7,
         }, self.pars)
-        print('...HERE')
+        
         return
 
     def update_states(self, sim):
@@ -61,6 +61,7 @@ class SimpleDiagnosticTest(ss.Intervention):
 
     def __init__(self, coverage=0.8, sensitivity=0.99, specificity=0.99, cd4_threshold=200 ):
         self.requires = HIV
+        print( '... creating SimpleDiagnosticTest intervention' )
         pass
 
     def initialize(self, sim):
