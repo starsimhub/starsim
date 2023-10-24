@@ -6,7 +6,7 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 
-__all__ = ['HIV', 'ART', 'CD4_analyzer']
+__all__ = ['HIV', 'SimpleDiagnosticTest', 'ART', 'CD4_analyzer']
 
 
 class HIV(ss.Disease):
@@ -27,7 +27,7 @@ class HIV(ss.Disease):
             'initial': 30,
             'eff_condoms': 0.7,
         }, self.pars)
-
+        print('...HERE')
         return
 
     def update_states(self, sim):
@@ -56,6 +56,20 @@ class HIV(ss.Disease):
 
 
 # %% Interventions
+
+class SimpleDiagnosticTest(ss.Intervention):
+
+    def __init__(self, coverage=0.8, sensitivity=0.99, specificity=0.99, cd4_threshold=200 ):
+        self.requires = HIV
+        pass
+
+    def initialize(self, sim):
+        print('... initializing SimpleDiagnosticTest')
+        pass
+
+    def apply(self, sim):
+        pass
+
 
 class ART(ss.Intervention):
 
