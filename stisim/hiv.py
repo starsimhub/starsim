@@ -67,7 +67,7 @@ class SimpleDiagnosticTest(ss.Intervention):
         return
 
     def initialize(self, sim):
-        print('... initializing SimpleDiagnosticTest')
+        print('... initializing SimpleDiagnosticTest.')
 
         # Add people states
         sim.hiv.diagnosed = ss.State('diagnosed', bool, False)
@@ -80,7 +80,7 @@ class SimpleDiagnosticTest(ss.Intervention):
 
     def apply(self, sim):
 
-        if first_time:
+        if self.first_time:
             print('... applying intervention in step ', sim.t )
             self.first_time = False
 
