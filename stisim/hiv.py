@@ -63,11 +63,9 @@ class HIV(ss.Disease):
 # %% Interventions
 
 class SimpleDiagnosticTest(ss.Intervention):
+    """ Symtomatic testing intervention."""
 
-    
-    first_time = True
-    
-    # Time/step bounds for diagnostic test execution
+    # Initial and final simulation time for diagnostic test execution
     start = None
     end   = None
     ti_start = None
@@ -81,52 +79,72 @@ class SimpleDiagnosticTest(ss.Intervention):
     sensitivity = None
     
 
-    def __init__(self, start=None, end=None, coverage=0.8, sensitivity=0.99, specificity=0.99, symptoms_cd4_threshold=500 ):
+    def __init__(self, start=None, end=None, coverage=0.8, 
+                 sensitivity=0.99, specificity=0.99, 
+                 cd4_threshold=500 ):
+        """ Initializes the intervention instance.
+        
+        Args:
+          start: A float indicating the beginning time of the intervention.
+          end: A float indicating the ending time of the intervention.
+          coverage: A float indicating the fraction of symptomatic individuals covered by the intervention.
+          sensitivity: Proportion of infected individuals accurately receiving a positive diagnosis.
+          cd4_threshold: Level of CD4 that defines symptomatic cases; individuals whose CD4 levels are below this value are considered symptomatic.
+        """
         self.requires = HIV
         
-        self.start = start if start is not None else 0
-        self.end   = end   if end   is not None else 3000
+        self.start = 0 if start is None else start
+        self.end   = 3000 if end is None else end
         
-        self.cd4_threshold = symptoms_cd4_threshold
+        self.cd4_threshold = cd4_threshold
 
         self.coverage = coverage
         self.sensitivity = sensitivity
+        
         return
 
     
     def initialize(self, sim):
+        """ Configures the intervention in a specific sim instance."""
         
-        # Set time steps where the intervention is active
+        # Find the time steps where the intervention is active
         self.ti_start = np.clip( int( sim.dt*( self.start - sim.pars['start'] ) ), 0, sim.npts )
         self.ti_end   = np.clip( int( sim.dt*( self.end   - sim.pars['start'] ) ), 0, sim.npts )
         
-        # Add simulation results
-        sim.results.hiv += ss.Result('hiv', 'n_diagnosed', sim.npts, dtype=int)
+        # Create rrom for simulation results
+        sim.results.hiv += ss.Result('hiv', 'n_diagnosed'  , sim.npts, dtype=int)
+        sim.results.hiv += ss.Result('hiv', 'new_diagnoses', sim.npts, dtype=int)
 
         return
 
-    
-    def apply(self, sim):
 
+    def apply(self, sim):
+        """ Executes the intervention at time step sim.ti."""
+
+        inds = []
         if self.ti_start <= sim.ti <= self.ti_end: 
         
+            # Find eligible subjects
             symptomatic = sim.people.hiv.cd4 <= self.cd4_threshold
             eligible = sim.people.alive & sim.people.hiv.infected & symptomatic & ~sim.people.hiv.diagnosed # Remove 'infected' as a condition once we get symptomatic working well (because cd4 levels are not going down now)
-            n_eligible = np.count_nonzero(eligible)           
-            # Create new diagnoses                
+            n_eligible = np.count_nonzero(eligible)
+            
+            # Create new diagnoses
             if n_eligible:
                 n_new_diagnoses = int( n_eligible * self.coverage * self.sensitivity )
                 inds = np.random.choice(ss.true(eligible), n_new_diagnoses, replace=False)
                 sim.people.hiv.diagnosed[inds] = True
                 sim.people.hiv.ti_diagnosed[inds] = sim.ti
                     
-            # Add results
-            sim.results.hiv.n_diagnosed[sim.ti] = np.count_nonzero(sim.people.hiv.diagnosed)
+        # Add results
+        sim.results.hiv.n_diagnosed[sim.ti] = np.count_nonzero(sim.people.hiv.diagnosed)
+        sim.results.hiv.new_diagnoses[sim.ti] = len(inds)
         
         return
 
 
-    
+
+
 class ART(ss.Intervention):
 
     def __init__(self, t: np.array, capacity: np.array):
