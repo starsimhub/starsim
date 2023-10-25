@@ -157,19 +157,11 @@ class STI(Disease):
         self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
         return
 
-    def initialize(self, sim):
-        super().initialize(sim)
-
-        # Initialization steps
-        self.validate_pars(sim)
-        self.set_initial_states(sim)
-        self.init_results(sim)
-        return
-
     def validate_pars(self, sim):
         """
         Perform any parameter validation
         """
+        super().validate_pars(sim)
         if 'beta' not in self.pars:
             self.pars.beta = sc.objdict({k: [1, 1] for k in sim.people.networks})
         return
