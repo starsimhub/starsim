@@ -1,15 +1,16 @@
 """
-Defne gonorrhea
+Define default gonorrhea disease module and related interventions
 """
 
 import numpy as np
 import stisim as ss
+from .disease import STI
 
 
 __all__ = ['Gonorrhea']
 
 
-class Gonorrhea(ss.STI):
+class Gonorrhea(STI):
 
     def __init__(self, pars=None):
         super().__init__(pars)
