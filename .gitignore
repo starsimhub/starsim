@@ -1,6 +1,8 @@
 # HPVsim-generated files
 *.obj
 files/
+tests/figs/*
+figs/*
 modules.rst
 
 # Other files

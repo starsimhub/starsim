@@ -137,9 +137,7 @@ def _pre_draw(func):
                 size = len(uids)
                 basis = BOOLS
             else:
-                #size = self.slots.values[v.max()] + 1
-                #size = self.slots.values[v].max() + 1
-                size = self.slots[v].values.max() + 1
+                size = self.slots[v].__array__().max() + 1
                 basis = UIDS
 
         if not self.initialized:
@@ -192,13 +190,17 @@ class MultiStream(np.random.Generator):
             return
 
         self.seed = streams.add(self)
-        self.slots = slots # E.g. sim.people.slots (instead of using uid as the slots directly)
+
+        if isinstance(slots, int):
+            # Handle edge case in which the user wants n sequential slots, as used in testing.
+            self.slots = np.arange(slots)
+        else:
+            self.slots = slots # E.g. sim.people.slots (instead of using uid as the slots directly)
 
         if 'bit_generator' not in self.kwargs:
             self.kwargs['bit_generator'] = np.random.PCG64(seed=self.seed)
         super().__init__(**self.kwargs)
 
-        #self.rng = np.random.default_rng(seed=self.seed + self.seed_offset)
         self._init_state = self.bit_generator.state # Store the initial state
 
         self.initialized = True
@@ -228,8 +230,7 @@ class MultiStream(np.random.Generator):
         if basis==SIZE:
             return super(MultiStream, self).random(size=size)
         elif basis == UIDS:
-            #slots = self.slots.values[uids]
-            slots = self.slots[uids].values
+            slots = self.slots[uids].__array__()
             return super(MultiStream, self).random(size=size)[slots]
         elif basis == BOOLS:
             return super(MultiStream, self).random(size=size)[uids]
@@ -241,8 +242,7 @@ class MultiStream(np.random.Generator):
         if basis == SIZE:
             return super(MultiStream, self).uniform(size=size, low=low, high=high)
         elif basis == UIDS:
-            #slots = self.slots.values[uids]
-            slots = self.slots[uids].values
+            slots = self.slots[uids].__array__()
             return super(MultiStream, self).uniform(size=size, low=low, high=high)[slots]
         elif basis == BOOLS:
             return super(MultiStream, self).uniform(size=size, low=low, high=high)[uids]
@@ -254,8 +254,7 @@ class MultiStream(np.random.Generator):
         if basis == SIZE:
             return super(MultiStream, self).integers(size=size, low=low, high=high, **kwargs)
         elif basis == UIDS:
-            #slots = self.slots.values[uids]
-            slots = self.slots[uids].values
+            slots = self.slots[uids].__array__()
             return super(MultiStream, self).integers(size=size, low=low, high=high, **kwargs)[slots]
         elif basis == BOOLS:
             return super(MultiStream, self).integers(size=size, low=low, high=high, **kwargs)[uids]
@@ -267,8 +266,7 @@ class MultiStream(np.random.Generator):
         if basis == SIZE:
             return super(MultiStream, self).poisson(size=size, lam=lam)
         elif basis == UIDS:
-            #slots = self.slots.values[uids]
-            slots = self.slots[uids].values
+            slots = self.slots[uids].__array__()
             return super(MultiStream, self).poisson(size=size, lam=lam)[slots]
         elif basis == BOOLS:
             return super(MultiStream, self).poisson(size=size, lam=lam)[uids]
@@ -280,8 +278,7 @@ class MultiStream(np.random.Generator):
         if basis == SIZE:
             return mu + std*super(MultiStream, self).normal(size=size)
         elif basis == UIDS:
-            #slots = self.slots.values[uids]
-            slots = self.slots[uids].values
+            slots = self.slots[uids].__array__()
             return mu + std*super(MultiStream, self).normal(size=size)[slots]
         elif basis == BOOLS:
             return mu + std*super(MultiStream, self).normal(size=size)[uids]
@@ -289,12 +286,11 @@ class MultiStream(np.random.Generator):
             raise Exception('TODO BASISEXCPETION')
 
     @_pre_draw
-    def negative_binomial(self, size, basis, n, p, uids=None): #n=nbn_n, p=nbn_p, size=n)
+    def negative_binomial(self, size, basis, n, p, uids=None):
         if basis == SIZE:
             return super(MultiStream, self).negative_binomial(size=size, n=n, p=p)
         elif basis == UIDS:
-            #slots = self.slots.values[uids]
-            slots = self.slots[uids].values
+            slots = self.slots[uids].__array__()
             return super(MultiStream, self).negative_binomial(size=size, n=n, p=p)[slots]
         elif basis == BOOLS:
             return super(MultiStream, self).negative_binomial(size=size, n=n, p=p)[uids]
@@ -303,13 +299,10 @@ class MultiStream(np.random.Generator):
 
     @_pre_draw
     def bernoulli(self, prob, size, basis, uids=None):
-        #return super(MultiStream, self).choice([True, False], size=size.max()+1) # very slow
-        #return (super(MultiStream, self).binomial(n=1, p=prob, size=size.max()+1))[size].astype(bool) # pretty fast
         if basis == SIZE:
             return super(MultiStream, self).random(size=size) < prob # fastest
         elif basis == UIDS:
-            #slots = self.slots.values[uids]
-            slots = self.slots[uids].values
+            slots = self.slots[uids].__array__()
             return super(MultiStream, self).random(size=size)[slots] < prob # fastest
         elif basis == BOOLS:
             return super(MultiStream, self).random(size=size)[uids] < prob # fastest
@@ -357,7 +350,10 @@ def _pre_draw_centralized(func):
             if len(uids) == 0:
                 return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
 
-            size = len(uids)
+            if uids.dtype == bool:
+                size = uids.sum()
+            else:
+                size = len(uids)
 
         if not self.initialized:
             msg = f'Stream {self.name} has not been initialized!'
@@ -367,7 +363,8 @@ def _pre_draw_centralized(func):
 
     return check_ready
 
-class CentralizedStream(np.random.Generator):
+
+class CentralizedStream():
     """
     Class to imitate the behavior of a centralized random number generator
     """
@@ -380,7 +377,6 @@ class CentralizedStream(np.random.Generator):
         
         name: a name for this Stream, like "coin_flip"
         """
-        super().__init__(bit_generator=np.random.PCG64())
         self.name = name
         self.initialized = False
         self.seed_offset = None # Not used, so override to avoid potential seed collisions in Streams.

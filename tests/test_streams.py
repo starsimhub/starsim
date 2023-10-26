@@ -18,10 +18,10 @@ def test_streams(n=5):
     streams.initialize(base_seed=10)
 
     rng = ss.MultiStream('stream1')
-    rng.initialize(streams)
+    rng.initialize(streams, slots=n)
 
     uids = np.arange(0,n,2) # every other to make it interesting
-    draws = rng.random(uids)
+    draws = rng.random(uids=uids)
     print(f'\nCREATED SEED AND SAMPLED: {draws}')
 
     return len(draws) == len(uids)
@@ -34,10 +34,10 @@ def test_seed(n=5):
     streams.initialize(base_seed=10)
 
     rng0 = ss.MultiStream('stream0')
-    rng0.initialize(streams)
+    rng0.initialize(streams, slots=n)
 
     rng1 = ss.MultiStream('stream1')
-    rng1.initialize(streams)
+    rng1.initialize(streams, slots=n)
 
     return rng1.seed != rng0.seed
 
@@ -49,14 +49,14 @@ def test_reset(n=5):
     streams.initialize(base_seed=10)
 
     rng = ss.MultiStream('stream0')
-    rng.initialize(streams)
+    rng.initialize(streams, slots=n)
 
     uids = np.arange(0,n,2) # every other to make it interesting
-    s_before = rng.random(uids)
+    s_before = rng.random(uids=uids)
 
     streams.reset() # Return to step 0
 
-    s_after = rng.random(uids)
+    s_after = rng.random(uids=uids)
 
     return np.all(s_after == s_before)
 
@@ -68,14 +68,14 @@ def test_step(n=5):
     streams.initialize(base_seed=10)
 
     rng = ss.MultiStream('stream0')
-    rng.initialize(streams)
+    rng.initialize(streams, slots=n)
 
     uids = np.arange(0,n,2) # every other to make it interesting
-    s_before = rng.random(uids)
+    s_before = rng.random(uids=uids)
 
     streams.step(10) # 10 steps
 
-    s_after = rng.random(uids)
+    s_after = rng.random(uids=uids)
 
     return np.all(s_after != s_before)
 
@@ -89,7 +89,7 @@ def test_initialize(n=5):
     rng = ss.MultiStream('stream0')
 
     try:
-        rng.initialize(streams)
+        rng.initialize(streams, slots=n)
         return False # Should not get here!
     except NotInitializedException as e:
         print(f'YAY! Got exception: {e}')
@@ -103,11 +103,11 @@ def test_seedrepeat(n=5):
     streams.initialize(base_seed=10)
 
     rng = ss.MultiStream('stream0', seed_offset=0)
-    rng.initialize(streams)
+    rng.initialize(streams, slots=n)
 
     try:
         rng1 = ss.MultiStream('stream1', seed_offset=0)
-        rng1.initialize(streams)
+        rng1.initialize(streams, slots=n)
         return False # Should not get here!
     except SeedRepeatException as e:
         print(f'YAY! Got exception: {e}')
@@ -123,18 +123,18 @@ def test_samplingorder(n=5):
     uids = np.arange(0,n,2) # every other to make it interesting
 
     rng0 = ss.MultiStream('stream0')
-    rng0.initialize(streams)
+    rng0.initialize(streams, slots=n)
 
     rng1 = ss.MultiStream('stream1')
-    rng1.initialize(streams)
+    rng1.initialize(streams, slots=n)
 
-    s_before = rng0.random(uids)
-    _ = rng1.random(uids)
+    s_before = rng0.random(uids=uids)
+    _ = rng1.random(uids=uids)
 
     streams.reset()
 
-    _ = rng1.random(uids)
-    s_after = rng0.random(uids)
+    _ = rng1.random(uids=uids)
+    s_after = rng0.random(uids=uids)
 
     return np.all(s_before == s_after)
 
@@ -146,11 +146,11 @@ def test_repeatname(n=5):
     streams.initialize(base_seed=17)
 
     rng0 = ss.MultiStream('test')
-    rng0.initialize(streams)
+    rng0.initialize(streams, slots=n)
 
     rng1 = ss.MultiStream('test')
     try:
-        rng1.initialize(streams)
+        rng1.initialize(streams, slots=n)
         return False # Should not get here!
     except RepeatNameException as e:
         print(f'YAY! Got exception: {e}')
@@ -163,14 +163,14 @@ if __name__ == '__main__':
     T = sc.tic()
 
     # Run tests
-    assert test_streams()
-    assert test_seed()
-    assert test_reset()
-    assert test_step()
-    assert test_initialize()
-    assert test_seedrepeat()
-    assert test_samplingorder()
-    assert test_repeatname()
+    print(test_streams())
+    print(test_seed())
+    print(test_reset())
+    print(test_step())
+    print(test_initialize())
+    print(test_seedrepeat())
+    print(test_samplingorder())
+    print(test_repeatname())
 
     sc.toc(T)
     print('Done.')

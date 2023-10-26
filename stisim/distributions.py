@@ -234,7 +234,7 @@ class neg_binomial(Distribution):
 
     def sample(self, **kwargs):
         nbn_n = self.dispersion
-        nbn_p = self.dispersion / (self.mean / self.step + self.dispersion)
+        nbn_p = self.dispersion / (self.mean + self.dispersion)
         return self.stream.negative_binomial(n=nbn_n, p=nbn_p, **kwargs)
 
 

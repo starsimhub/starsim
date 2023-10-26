@@ -10,55 +10,52 @@ import pandas as pd
 import seaborn as sns
 import numpy as np
 
-n = 1000 # Agents
-n_rand_seeds = 250
-intv_cov_levels = [0.025, 0.05, 0.10, 0.73] + [0] # Must include 0 as that's the baseline
+n = 100 # Agents
+n_rand_seeds = 25
+intv_cov_levels = [0.01, 0.10, 0.25, 0.73] + [0] # Must include 0 as that's the baseline
 
-# Choose ART or PrEP
-choice = 'ART'
-intervention = {'ART': ss.hiv.ART, 'PrEP': ss.hiv.PrEP}
-
-figdir = os.path.join(os.getcwd(), 'figs', choice)
+figdir = os.path.join(os.getcwd(), 'figs', 'ART')
 sc.path(figdir).mkdir(parents=True, exist_ok=True)
 
 def run_sim(n, idx, intv_cov, rand_seed, multistream):
 
     print(f'Starting sim {idx} with rand_seed={rand_seed} and intv_cov={intv_cov}, multistream={multistream}')
 
-    ss.options(multistream=multistream)
     ppl = ss.People(n)
 
     ppl.networks = ss.ndict(
-        ss.simple_embedding(mean_dur=5),
+        ss.simple_embedding(mean_dur=4),
         ss.maternal()
         )
 
     hiv_pars = {
-        #'beta': {'simple_embedding': [0.10, 0.08], 'maternal': [0.2, 0]},
-        'beta': {'simple_embedding': [0.25, 0.20], 'maternal': [0.2, 0]},
+        'beta': {'simple_embedding': [0.2, 0.15], 'maternal': [0.3, 0]},
         'initial': int(np.maximum(10, np.ceil(0.01*n))),
+        'art_efficacy': 0.96,
     }
     hiv = ss.HIV(hiv_pars)
 
     pregnancy = ss.Pregnancy()
 
-    intv = intervention[choice](t=[0, 10, 20], coverage=[0, intv_cov/3, intv_cov])
     pars = {
         'start': 1980,
-        'end': 2020,
-        'interventions': [intv],
+        'end': 2070,
         'rand_seed': rand_seed,
         'verbose': 0,
         'remove_dead': True,
         'n_agents': len(ppl), # TODO
     }
+
+    if intv_cov > 0:
+        pars['interventions'] = [ ss.hiv.ART(t=[0, 10, 20], coverage=[0, intv_cov/3, intv_cov]) ]
+
     sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[pregnancy], pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}')
     sim.initialize()
     sim.run()
 
     df = pd.DataFrame( {
         'ti': sim.tivec,
-        #'hiv.n_infected': sim.results.hiv.n_infected,
+        #'hiv.n_infected': sim.results.hiv.n_infected, # Optional, but mostly redundant with prevalence
         'hiv.prevalence': sim.results.hiv.prevalence,
         'hiv.cum_deaths': sim.results.hiv.new_deaths.cumsum(),
         'pregnancy.cum_births': sim.results.pregnancy.births.cumsum(),
@@ -74,7 +71,8 @@ def run_sim(n, idx, intv_cov, rand_seed, multistream):
 def run_scenarios():
     results = []
     times = {}
-    for multistream in [True, False]:
+    for multistream in [False, True]:
+        ss.options(multistream=multistream)
         cfgs = []
         for rs in range(n_rand_seeds):
             for intv_cov in intv_cov_levels:

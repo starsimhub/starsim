@@ -19,7 +19,6 @@ class HIV(ss.Disease):
         self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
         self.on_art      = ss.State('on_art', bool, False)
         self.ti_art      = ss.State('ti_art', int, ss.INT_NAN)
-        self.on_prep     = ss.State('on_prep', bool, False)
         self.cd4         = ss.State('cd4', float, 500)
 
         self.rng_dead = ss.Stream(f'dead_{self.name}')
@@ -30,6 +29,7 @@ class HIV(ss.Disease):
             'cd4_rate': 5,
             'initial': 30,
             'eff_condoms': 0.7,
+            'art_efficacy': 0.96,
         }, self.pars)
 
         return
@@ -39,8 +39,7 @@ class HIV(ss.Disease):
         self.cd4[sim.people.alive & self.infected & self.on_art] += (self.pars.cd4_max - self.cd4[sim.people.alive & self.infected & self.on_art])/self.pars.cd4_rate
         self.cd4[sim.people.alive & self.infected & ~self.on_art] += (self.pars.cd4_min - self.cd4[sim.people.alive & self.infected & ~self.on_art])/self.pars.cd4_rate
 
-        self.rel_sus[sim.people.alive & ~self.infected & self.on_prep] = 0.04
-        self.rel_trans[sim.people.alive & self.infected & self.on_art] = 0.04
+        self.rel_trans[sim.people.alive & self.infected & self.on_art] = 1 - self.pars['art_efficacy']
 
         hiv_death_prob = 0.05 / (self.pars.cd4_min - self.pars.cd4_max)**2 *  (self.cd4 - self.pars.cd4_max)**2
         can_die = ss.true(sim.people.alive & sim.people.hiv.infected)
@@ -95,7 +94,8 @@ class ART(ss.Intervention):
             return
 
         coverage = self.coverage[np.where(self.t <= sim.ti)[0][-1]]
-        recently_infected = ss.true((sim.people.hiv.ti_infected == sim.ti-2) & sim.people.alive) # 2 year (step) delay
+        ti_delay = 1 # 1 time step delay
+        recently_infected = ss.true((sim.people.hiv.ti_infected == sim.ti-ti_delay) & sim.people.alive)
         inds = self.rng_add_ART.bernoulli_filter(uids=recently_infected, prob=coverage)
         sim.people.hiv.on_art[inds] = True
         sim.people.hiv.ti_art[inds] = sim.ti
@@ -104,53 +104,6 @@ class ART(ss.Intervention):
         sim.results.hiv.n_art = np.count_nonzero(sim.people.alive & sim.people.hiv.on_art)
 
         return len(inds)
-
-class PrEP(ss.Intervention):
-
-    def __init__(self, t: np.array, coverage: np.array, **kwargs):
-        self.requires = HIV
-        self.t = sc.promotetoarray(t)
-        self.coverage = sc.promotetoarray(coverage)
-
-        super().__init__(**kwargs)
-
-        self.rng_add_PrEP = ss.Stream('add_PrEP')
-        self.rng_remove_PrEP = ss.Stream('remove_PrEP')
-
-        return
-
-    def initialize(self, sim):
-        sim.results.hiv += ss.Result(self.name, 'n_prep', sim.npts, dtype=int)
-        self.initialized = True
-        return
-
-    def apply(self, sim):
-        if sim.ti < self.t[0]:
-            return
-
-        coverage = self.coverage[np.where(self.t <= sim.ti)[0][-1]]
-        on_prep = sim.people.alive & sim.people.hiv.on_prep
-        sus = sim.people.alive & ~sim.people.hiv.infected
-        n_change = np.round(coverage * sus.sum() - on_prep.sum()).astype(int)
-        if n_change > 0:
-            # Add more PrEP
-            eligible = ss.true(sim.people.alive & ~sim.people.hiv.infected & ~sim.people.hiv.on_prep)
-            n_eligible = len(eligible)
-            if n_eligible:
-                inds = self.rng_add_PrEP.bernoulli_filter(uids=eligible, prob=min(n_eligible, n_change)/n_eligible)
-                sim.people.hiv.on_prep[inds] = True
-        elif n_change < 0:
-            # Take some people off PrEP
-            eligible = ss.true(sim.people.alive & ~sim.people.hiv.infected & sim.people.hiv.on_prep)
-            n_eligible = len(eligible)
-            if n_eligible:
-                inds = self.rng_remove_PrEP.bernoulli_filter(uids=eligible, prob=-n_change/n_eligible)
-                sim.people.hiv.on_prep[inds] = False
-
-        # Add result
-        sim.results.hiv.n_prep = np.count_nonzero(sim.people.alive & sim.people.hiv.on_prep)
-
-        return
 
 
 #%% Analyzers
