@@ -318,7 +318,6 @@ class Pregnancy(DemographicModule):
             # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
             n_unborn_agents = len(uids)
             if n_unborn_agents > 0:
-                # TODO: User configure the bounds
                 new_slots = self.rng_uids.integers(low=sim.pars['n_agents'], high=sim.pars['slot_scale']*sim.pars['n_agents'], uids=uids, dtype=int)
 
                 # Grow the arrays and set properties for the unborn agents
