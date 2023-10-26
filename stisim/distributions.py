@@ -182,7 +182,7 @@ class lognormal(Distribution):
             elif 'uids' in kwargs:
                 return np.zeros(len(kwargs['uids']))
             else:
-                raise Exception('TODO')
+                raise Exception('When calling sample(), please provide either "size" or "uids".')
 
 
 class lognormal_int(lognormal):

@@ -160,8 +160,7 @@ class Disease(Module):
         pars = sim.pars[self.name]
 
         # Probability of each node acquiring a case
-        # TODO: Just people that who are alive?
-        n = len(sim.people.uid)
+        n = len(sim.people.uid) # TODO: possibly could be shortened to just the people who are alive
         p_acq_node = np.zeros( n )
         node_from_node = np.ones( (n,n) ) 
 
@@ -178,7 +177,6 @@ class Disease(Module):
                         continue
                     
                     # Check for new transmission from a --> b
-                    # TODO: Will need to be more efficient here - can maintain edge to node matrix
                     node_from_edge = np.ones( (n, len(a)) )
                     ai = sim.people._uid_map[a] # Indices of a and b (rather than uid)
                     bi = sim.people._uid_map[b]
@@ -188,6 +186,7 @@ class Disease(Module):
                     p_not_acq_by_node_this_layer_b_from_a = node_from_edge.prod(axis=1) # (1-p1)*(1-p2)*...
                     p_acq_node = 1 - (1-p_acq_node) * p_not_acq_by_node_this_layer_b_from_a
 
+                    # TODO: Will need to be more efficient here - can maintain edge to node matrix
                     node_from_node_this_layer_b_from_a = np.ones( (n,n) ) 
                     node_from_node_this_layer_b_from_a[bi, ai] = p_not_acq
                     node_from_node *= node_from_node_this_layer_b_from_a

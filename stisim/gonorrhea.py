@@ -61,7 +61,7 @@ class Gonorrhea(ss.Disease):
         self.infected[to_uids] = True
         self.ti_infected[to_uids] = sim.ti
 
-        dur = sim.ti + self.rng_dur_inf.poisson(to_uids, self.pars['dur_inf']/sim.pars.dt) # By whom infected from??? TODO
+        dur = sim.ti + self.rng_dur_inf.poisson(to_uids, self.pars['dur_inf']/sim.pars.dt)
         dead = self.rng_dead.bernoulli(to_uids, self.pars.p_death)
 
         self.ti_recovered[to_uids[~dead]] = dur[~dead]
