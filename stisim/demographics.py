@@ -319,7 +319,7 @@ class Pregnancy(DemographicModule):
             n_unborn_agents = len(uids)
             if n_unborn_agents > 0:
                 # TODO: User configure the bounds
-                new_slots = self.rng_uids.integers(low=sim.pars['n_agents'], high=10*sim.pars['n_agents'], uids=uids, dtype=int)
+                new_slots = self.rng_uids.integers(low=sim.pars['n_agents'], high=sim.pars['slot_scale']*sim.pars['n_agents'], uids=uids, dtype=int)
 
                 # Grow the arrays and set properties for the unborn agents
                 new_uids = sim.people.grow(len(new_slots))
