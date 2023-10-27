@@ -24,7 +24,7 @@ def run_sim(n, idx, intv_cov, rand_seed, multistream):
     ppl = ss.People(n)
 
     ppl.networks = ss.ndict(
-        ss.embedding(mean_dur=4),
+        ss.embedding(pars={'dur': ss.lognormal(5, 3)}),
         ss.maternal()
         )
 

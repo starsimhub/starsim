@@ -341,15 +341,16 @@ class mf(SexualNetwork, DynamicNetwork):
         DynamicNetwork.__init__(self)
         SexualNetwork.__init__(self, pars)
 
-        self.rng_dur = ss.Stream(f'dur_{self.name}')
-
         self.pars = ss.omerge({
-            'dur': ss.lognormal(15, 15, rng=self.rng_dur),  # Can vary by age, year, and individual pair
+            'dur': ss.lognormal(15, 15),  # Can vary by age, year, and individual pair
             'part_rates': 0.9,  # Participation rates - can vary by sex and year
             'rel_part_rates': 1.0,
             'debut': 16,  # Age of debut can vary by sex, year, and individual
             'rel_debut': 1.0,
-        }, self.pars)
+        }, pars)
+
+        self.rng_dur = ss.Stream(f'dur_{self.name}')
+        self.pars.dur.set_stream(self.rng_dur) # Maintain stream even if user changes 'dur' parameter
 
         # Set metadata for select parameters - this tells us which dimensions are allowed to vary
         self.meta_pars = sc.objdict({
