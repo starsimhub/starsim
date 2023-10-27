@@ -3,6 +3,7 @@ Defne HIV
 """
 
 import numpy as np
+import pandas as pd
 import sciris as sc
 import stisim as ss
 
@@ -10,7 +11,7 @@ __all__ = ['HIV', 'SimpleDiagnosticTest', 'ART', 'CD4_analyzer']
 
 
 class HIV(ss.Disease):
-
+    
     def __init__(self, pars=None):
         super().__init__(pars)
 
@@ -34,11 +35,11 @@ class HIV(ss.Disease):
         }, self.pars)
         
         return
-
+    
     def update_states(self, sim):
         """ Update CD4 """
         self.cd4[sim.people.alive & self.infected & self.on_art] += (self.pars.cd4_max - self.cd4[sim.people.alive & self.infected & self.on_art])/self.pars.cd4_rate
-        self.cd4[sim.people.alive & self.infected & ~self.on_art] += (self.pars.cd4_min - self.cd4[sim.people.alive & self.infected & ~self.on_art])/self.pars.cd4_rate
+        self.cd4[sim.people.alive & self.infected & ~self.on_art] +=  (self.pars.cd4_min - self.cd4[sim.people.alive & self.infected & ~self.on_art])/self.pars.cd4_rate
         return
 
     def init_results(self, sim):
@@ -58,8 +59,11 @@ class HIV(ss.Disease):
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = sim.ti
-
-
+        self.update_states(sim)   # Added this here because states were not being updated anyware else
+        return
+        
+        
+        
 # %% Interventions
 
 class SimpleDiagnosticTest(ss.Intervention):
@@ -185,15 +189,31 @@ class ART(ss.Intervention):
 #%% Analyzers
 
 class CD4_analyzer(ss.Analyzer):
+    """ Track CD4 levels of each infected individual since the time of infection."""
 
+    history = None
+    history_arrays = {}
+    
     def __init__(self):
+        """ Initializes the analyzer instance."""
         self.requires = HIV
-        self.cd4 = None
         return
 
     def initialize(self, sim):
-        super().initialize(sim)
-        self.cd4 = np.zeros((sim.npts, sim.people.n), dtype=int)
+        pass
+        return
 
-    def apply(self, sim):
-        self.cd4[sim.t] = sim.people.hiv.cd4
+    def update_results(self, sim):
+        """ Add CD4 levels for this time step."""
+        # Update CD4 levels per user
+        uids = ss.true( sim.people.hiv.infected & (sim.people.hiv.ti_infected>=0) )
+        for uid in uids:
+            t_since_infection = int( sim.ti - sim.people.hiv.ti_infected[uid] )
+            if uid not in self.history_arrays:
+                self.history_arrays[uid] = np.full( sim.npts, np.nan )
+            self.history_arrays[uid][t_since_infection] = sim.people.hiv.cd4[uid]
+        
+        # Prepare output dataframe
+        if sim.ti == (sim.npts-1):
+            self.history = pd.DataFrame( self.history_arrays )        
+        return
