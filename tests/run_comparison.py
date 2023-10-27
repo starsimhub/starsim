@@ -14,10 +14,10 @@ import argparse
 import sciris as sc
 
 default_n_agents = 25
-network = ['stable_monogamy', 'embedding'][0]
+network = ['stable_monogamy', 'embedding'][1]
 
 do_plot_graph = True
-kind = ['bipartite', 'radial', 'spring', 'multipartite'][0]
+kind = ['radial', 'bipartite', 'spring', 'multipartite'][1]
 
 do_plot_longitudinal = True
 do_plot_timeseries = True
@@ -182,8 +182,8 @@ def plot_graph(sim1, sim2):
     g1 = sim1.analyzers[0].graphs
     g2 = sim2.analyzers[0].graphs
 
-    n = len(g1[0].graph)
-    el = n <= 10 # Edge labels
+    n = len(g1[-1].graph)
+    el = n <= 25 # Draw edge labels
 
     fig, axv = plt.subplots(1, 2, figsize=(10,5))
     global ti
@@ -192,7 +192,7 @@ def plot_graph(sim1, sim2):
     global pos
     pos = {}
     pos[-1] = getpos(0, g1, g2, kind=kind)
-    for ti in range(timax):
+    for ti in range(timax+1):
         pos[ti] = getpos(ti, g1, g2, guess=pos[ti-1], kind=kind)
 
     ti = -1 # Initial state is -1, representing the state before the first step

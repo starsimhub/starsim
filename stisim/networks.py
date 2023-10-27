@@ -282,7 +282,10 @@ class DynamicNetwork(Network):
     def end_pairs(self, people):
         dt = people.dt
         self.contacts.dur = self.contacts.dur - dt
-        active = self.contacts.dur > 0
+
+        # Non-alive agents are removed
+        active = (self.contacts.dur > 0) & people.alive[self.contacts.p1] & people.alive[self.contacts.p2]
+
         self.contacts.p1 = self.contacts.p1[active]
         self.contacts.p2 = self.contacts.p2[active]
         self.contacts.beta = self.contacts.beta[active]
@@ -300,12 +303,14 @@ class Networks(ss.ndict):
             nw.initialize(sim)
         for cn in self._connectors.values():
             cn.initialize(sim)
+        return
 
     def update(self, people):
         for nw in self.values():
             nw.update(people)
         for cn in self._connectors.values():
             cn.update(people)
+        return
 
 
 class SexualNetwork(Network):
@@ -314,7 +319,8 @@ class SexualNetwork(Network):
         super().__init__(pars)
 
     def active(self, people):
-        return self.participant & (people.age > self.debut)
+        # Exclude people who are not alive
+        return self.participant & (people.age > self.debut) & people.alive
 
     def available(self, people, sex):
         # Currently assumes unpartnered people are available
@@ -353,9 +359,10 @@ class mf(SexualNetwork, DynamicNetwork):
         })
         self.validate_pars()
 
-        # TODO DJK: Define random streams
-        #self.rng_pair_12 = ss.Stream('pair_12')
-        #self.rng_pair_21 = ss.Stream('pair_21')
+        # Define random streams
+        self.rng_participation_f = ss.Stream('participation_f')
+        self.rng_participation_m = ss.Stream('participation_m')
+        self.rng_debut = ss.Stream(f'debug_{self.name}')
 
         return
 
@@ -409,9 +416,9 @@ class mf(SexualNetwork, DynamicNetwork):
         
         # Initialize random streams
         self.rng_dur.initialize(sim.streams, sim.people.slot)
-        # TODO DJK
-        #self.rng_pair_12.initialize(sim.streams, sim.people.slot)
-        #self.rng_pair_21.initialize(sim.streams, sim.people.slot)
+        self.rng_participation_f.initialize(sim.streams, sim.people.slot)
+        self.rng_participation_m.initialize(sim.streams, sim.people.slot)
+        self.rng_debut.initialize(sim.streams, sim.people.slot)
 
         self.set_network_states(sim.people)
         self.add_pairs(sim.people, ti=0)
@@ -426,15 +433,16 @@ class mf(SexualNetwork, DynamicNetwork):
     def set_participation(self, people, upper_age=None):
         # Set people who will participate in the network at some point
         year = people.year
-        if upper_age is None: uids = people.uid
-        else: uids = people.uid[(people.age < upper_age)]
+        if upper_age is None:
+            eligible_uids = people.uid
+        else:
+            eligible_uids = people.uid[(people.age < upper_age)]
 
-        for sk in ['f', 'm']:
-            uids = ss.true(people[sk][uids])
+        for sk, rng in zip(['f', 'm'], (self.rng_participation_f, self.rng_participation_m)):
+            uids = ss.true(people[sk][eligible_uids])
             df = self.pars.part_rates.loc[self.pars.part_rates.sex == sk]
             pr = np.interp(year, df['year'], df['part_rates']) * self.pars.rel_part_rates
-            dist = ss.choice([True, False], probabilities=[pr, 1-pr])(len(uids))
-            self.participant[uids] = dist
+            self.participant[uids] = rng.bernoulli(uids=uids, prob=pr)
         return
 
     def set_debut(self, people, upper_age=None):
@@ -452,7 +460,7 @@ class mf(SexualNetwork, DynamicNetwork):
             mean = np.interp(people.year, df['year'], df['debut'])
             std = np.interp(people.year, df['year'], df['std'])
             dist = df.loc[df.year == nearest_year].dist.iloc[0]
-            debut_vals = ss.Distribution.create(dist, mean, std)(len(uids)) * self.pars.rel_debut
+            debut_vals = ss.Distribution.create(dist, mean, std, rng=self.rng_debut)(uids=uids) * self.pars.rel_debut
             self.debut[uids] = debut_vals
         return
 
@@ -461,10 +469,10 @@ class mf(SexualNetwork, DynamicNetwork):
         available_f = self.available(people, 'female')
         if len(available_m) <= len(available_f):
             p1 = available_m
-            p2 = self.rng_pair_12.choice(a=available_f, size=len(p1), replace=False) # TODO DJK: Stream-ify
+            p2 = np.random.choice(a=available_f, size=len(p1), replace=False) # Stream-ify?
         else:
             p2 = available_f
-            p1 = self.rng_pair_21.choice(a=available_m, size=len(p2), replace=False) # TODO DJK: Stream-ify
+            p1 = np.random.choice(a=available_m, size=len(p2), replace=False) # Stream-ify?
 
         beta = np.ones_like(p1)
 
@@ -557,6 +565,20 @@ class embedding(mf):
     Heterosexual age-assortative network based on a one-dimensional embedding. Could be made more generic.
     """
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+        # Define additional random streams
+        self.rng_loc = ss.Stream('loc')
+        return
+
+    def initialize(self, sim):
+        super().initialize(sim)
+
+        # Initialize additional random streams
+        self.rng_loc.initialize(sim.streams, sim.people.slot)
+        return
+
     def add_pairs(self, people, ti=None):
         available_m = self.available(people, 'male')
         available_f = self.available(people, 'female')
@@ -566,8 +588,14 @@ class embedding(mf):
                 print('No pairs to add')
             return 0
 
-        loc_m = people.age[available_m].values - 5 + self.rng_pair_12.normal(uids=available_m, std=3)
-        loc_f = people.age[available_f].values     + self.rng_pair_21.normal(uids=available_f, std=3)
+        available = np.concatenate((available_m, available_f))
+        draws = self.rng_loc.normal(uids=available)
+        draws_m, draws_f = draws[:len(available_m)], draws[len(available_m):]
+        # TODO DJK: Make parameters
+        male_shift = 5
+        std = 3
+        loc_m = people.age[available_m].values + std*draws_m - male_shift
+        loc_f = people.age[available_f].values + std*draws_f
         dist_mat = sps.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
 
         ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
@@ -584,10 +612,9 @@ class embedding(mf):
         mean = np.interp(people.year, self.pars.dur['year'], self.pars.dur['dur'])
         std = np.interp(people.year, self.pars.dur['year'], self.pars.dur['std'])
 
-        # TODO DJK:
+        # TODO DJK: Why let the user chose the distribution, but hard code mean and std???
         dur_dist = self.pars.dur.loc[self.pars.dur.year == nearest_year].dist.iloc[0]
-        dur_vals = ss.Distribution.create(dur_dist, mean, std)(n_pairs)
-        ###dur_vals = self.rng_mean_dur.poisson(uids=available_m[ind_m], lam=self.mean_dur)
+        dur_vals = ss.Distribution.create(dur_dist, mean, std, rng=self.rng_dur)(uids=available_m[ind_m])
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, available_m[ind_m]])
         self.contacts.p2 = np.concatenate([self.contacts.p2, available_f[ind_f]])

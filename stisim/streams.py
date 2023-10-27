@@ -100,14 +100,19 @@ def _pre_draw(func):
     def check_ready(self, **kwargs):
         """ Validation before drawing """
 
-        if 'size' in kwargs and 'uids' in kwargs and not ((kwargs['size'] is None) ^ (kwargs['uids'] is None)):
-            raise Exception('Specify either "uids" or "size", but not both.')
+        uids = None
+        if 'uids' in kwargs:
+            uids = kwargs['uids']
 
-        # Check for zero length size
-        if 'size' in kwargs.keys():
-            # size-based
+        size = None
+        if 'size' in kwargs:
             size = kwargs.pop('size')
 
+        if not ((size is None) ^ (uids is None)):
+            raise Exception('Specify either "uids" or "size", but not both.')
+
+        if size is not None:
+            # size-based
             if not isinstance(size, int):
                 raise Exception('Input "size" must be an integer')
 
@@ -120,9 +125,6 @@ def _pre_draw(func):
             basis = SIZE
 
         else:
-            # uid-based
-            uids = kwargs['uids']
-
             if len(uids) == 0:
                 return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
 
@@ -284,6 +286,18 @@ class MultiStream(np.random.Generator):
             raise Exception('TODO DJK BASISEXCPETION')
 
     @_pre_draw
+    def lognormal(self, size, basis, mean=0, sigma=1, uids=None):
+        if basis == SIZE:
+            return super(MultiStream, self).lognormal(size=size, mean=mean, sigma=sigma)
+        elif basis == UIDS:
+            slots = self.slots[uids].__array__()
+            return super(MultiStream, self).lognormal(size=size, mean=mean, sigma=sigma)[slots]
+        elif basis == BOOLS:
+            return super(MultiStream, self).lognormal(size=size, mean=mean, sigma=sigma)[uids]
+        else:
+            raise Exception('TODO DJK BASISEXCPETION')
+
+    @_pre_draw
     def negative_binomial(self, size, basis, n, p, uids=None):
         if basis == SIZE:
             return super(MultiStream, self).negative_binomial(size=size, n=n, p=p)
@@ -413,6 +427,10 @@ class CentralizedStream():
     @_pre_draw_centralized
     def normal(self, size, mu=0, std=1):
         return mu + std*np.random.normal(size=size, loc=mu, scale=std)
+
+    @_pre_draw_centralized
+    def lognormal(self, size, mean=0, sigma=1):
+        return np.random.lognormal(size=size, mean=mean, sigma=sigma)
 
     @_pre_draw_centralized
     def negative_binomial(self, size, n, p, **kwargs):

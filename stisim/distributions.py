@@ -194,18 +194,19 @@ class lognormal(Distribution):
         self.std = std
         self.underlying_mean = np.log(mean ** 2 / np.sqrt(std ** 2 + mean ** 2))  # Computes the mean of the underlying normal distribution
         self.underlying_std = np.sqrt(np.log(std ** 2 / mean ** 2 + 1))  # Computes sigma for the underlying normal distribution
+        return
 
     def sample(self, **kwargs):
 
         if (sc.isnumber(self.mean) and self.mean > 0) or (sc.checktype(self.mean, 'arraylike') and (self.mean > 0).all()):
             return self.stream.lognormal(mean=self.underlying_mean, sigma=self.underlying_std, **kwargs)
+        
+        if 'size' in kwargs:
+            return np.zeros(kwargs['size'])
+        elif 'uids' in kwargs:
+            return np.zeros(len(kwargs['uids']))
         else:
-            if 'size' in kwargs:
-                return np.zeros(kwargs['size'])
-            elif 'uids' in kwargs:
-                return np.zeros(len(kwargs['uids']))
-            else:
-                raise Exception('When calling sample(), please provide either "size" or "uids".')
+            raise Exception('When calling sample(), please provide either "size" or "uids".')
 
 
 class lognormal_int(lognormal):
