@@ -484,9 +484,8 @@ class mf(SexualNetwork, DynamicNetwork):
         mean = np.interp(people.year, self.pars.dur['year'], self.pars.dur['dur'])
         std = np.interp(people.year, self.pars.dur['year'], self.pars.dur['std'])
 
-        # TODO DJK:
         dur_dist = self.pars.dur.loc[self.pars.dur.year == nearest_year].dist.iloc[0]
-        dur_vals = ss.Distribution.create(dur_dist, mean, std)(len(p1))
+        dur_vals = ss.Distribution.create(dur_dist, mean, std)(size=len(p1)) # Getting a specified size of random numbers here, so no need to pass rng=self.rng_dur
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
@@ -746,28 +745,27 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         self.pars['participation'] = None  # Incidence of partnership formation by age
         self.pars['mixing']        = None  # Mixing matrices for storing age differences in partnerships
 
-        # Define random number streams
+        # Define random number streams and link to distributions
         self.rng_partners  = ss.Stream('partners')
+        self.pars['partners'].set_stream(self.rng_partners)
+
         self.rng_acts      = ss.Stream('acts')
+        self.pars['acts'].set_stream(self.rng_acts)
+
         self.rng_dur_pship = ss.Stream('dur_pship')
+        self.pars['dur_pship'].set_stream(self.rng_dur_pship)
 
         self.update_pars(pars)
         self.get_layer_probs()
         return
 
-    # TODO DJK: Now sim instead of people!
     def initialize(self, sim):
         super().initialize(sim)
 
-        # Initialize streams and connect to Distributions
+        # Initialize streams
         self.rng_partners.initialize(sim.streams)
-        self.pars['partners'].set_stream(self.rng_partners)
-
         self.rng_acts.initialize(sim.streams)
-        self.pars['acts'].set_stream(self.rng_acts)
-
         self.rng_dur_pship.initialize(sim.streams)
-        self.pars['dur_pship'].set_stream(self.rng_dur_pship)
 
         self.add_pairs(sim.people, ti=0)
         return self.add_pairs(sim.people, ti=0)

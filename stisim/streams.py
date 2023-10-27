@@ -425,11 +425,11 @@ class CentralizedStream():
         return np.random.poisson(lam=lam, size=size, **kwargs)
 
     @_pre_draw_centralized
-    def normal(self, size, mu=0, std=1):
+    def normal(self, size, mu=0, std=1, **kwargs):
         return mu + std*np.random.normal(size=size, loc=mu, scale=std)
 
     @_pre_draw_centralized
-    def lognormal(self, size, mean=0, sigma=1):
+    def lognormal(self, size, mean=0, sigma=1, **kwargs):
         return np.random.lognormal(size=size, mean=mean, sigma=sigma)
 
     @_pre_draw_centralized

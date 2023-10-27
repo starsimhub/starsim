@@ -47,8 +47,8 @@ class Distribution():
         """
         raise NotImplementedError
 
-    def __call__(self, size=None, uids=None, **kwargs):
-        return self.sample(size=size, uids=uids, **kwargs)
+    def __call__(self, size=None, **kwargs):
+        return self.sample(size=size, **kwargs)
 
     @property
     def name(self):

@@ -79,12 +79,12 @@ class Gonorrhea(ss.Disease):
         self.ti_infected[uids] = sim.ti
 
         # Set infection status
-        symptomatic_uids = self.rng_symp.bernoulli(uids, self.pars.p_symp)
+        symptomatic_uids = self.rng_symp.bernoulli(uids=uids, prob=self.pars.p_symp)
         self.symptomatic[symptomatic_uids] = True
 
         # Set natural clearance
-        clear_uids = self.rng_clear.bernoulli(uids, self.pars.p_clear)
-        dur = sim.ti + self.rng_dur_inf.poisson(uids, self.pars['dur_inf']/sim.pars.dt)
+        clear_uids = self.rng_clear.bernoulli(uids=uids, prob=self.pars.p_clear)
+        dur = sim.ti + self.rng_dur_inf.poisson(uids=uids, lam=self.pars['dur_inf']/sim.pars.dt)
         self.ti_clearance[clear_uids] = dur
 
         return
