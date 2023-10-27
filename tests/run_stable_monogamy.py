@@ -13,10 +13,10 @@ import os
 import argparse
 import sciris as sc
 
-do_plot_graph = True
-kind = ['radial', 'bipartite', 'spring', 'multipartite'][1]
-
 default_n_agents = 25
+
+do_plot_graph = True
+kind = ['bipartite', 'radial', 'spring', 'multipartite'][0]
 
 do_plot_longitudinal = True
 do_plot_timeseries = True

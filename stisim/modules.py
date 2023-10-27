@@ -129,7 +129,7 @@ class Disease(Module):
         if self.pars['initial'] <= 0:
             return
 
-        initial_cases = self.rng_init_cases.bernoulli_filter(uids=sim.people.uid, prob=self.pars['initial']/len(sim.people))
+        initial_cases = self.rng_init_cases.bernoulli_filter(uids=ss.true(sim.people.alive), prob=self.pars['initial']/len(sim.people))
 
         self.set_prognoses(sim, initial_cases, from_uids=None) # TODO: sentinel value to indicate seeds?
         return
@@ -162,7 +162,6 @@ class Disease(Module):
         # Probability of each node acquiring a case
         n = len(sim.people.uid) # TODO: possibly could be shortened to just the people who are alive
         p_acq_node = np.zeros( n )
-        node_from_node = np.ones( (n,n) ) 
 
         for lkey, layer in sim.people.networks.items():
             if lkey in pars['beta']:
@@ -186,25 +185,52 @@ class Disease(Module):
                     p_not_acq_by_node_this_layer_b_from_a = node_from_edge.prod(axis=1) # (1-p1)*(1-p2)*...
                     p_acq_node = 1 - (1-p_acq_node) * p_not_acq_by_node_this_layer_b_from_a
 
-                    # TODO: Will need to be more efficient here - can maintain edge to node matrix
-                    node_from_node_this_layer_b_from_a = np.ones( (n,n) ) 
-                    node_from_node_this_layer_b_from_a[bi, ai] = p_not_acq
-                    node_from_node *= node_from_node_this_layer_b_from_a
-
         new_cases_bool = self.rng_trans.bernoulli(uids=sim.people.uid, prob=p_acq_node)
         new_cases = sim.people.uid[new_cases_bool]
 
         if not len(new_cases):
             return 0
 
-        # Decide whom the infection came from using one random number for each b (aligned by block size)
         frm = np.zeros_like(new_cases)
         r = self.rng_choose_infector.random(uids=new_cases)
-        new_cases_idx = new_cases_bool.nonzero()[0]
-        prob = (1-node_from_node[new_cases_idx]) # Prob of acquiring from each node | can constrain to just neighbors?
-        cumsum = (prob / ((prob.sum(axis=1)[:,np.newaxis]))).cumsum(axis=1)
-        frm_idx = np.argmax( cumsum >= r[:,np.newaxis], axis=1)
-        frm = sim.people.uid[frm_idx]
+        for i, uid in enumerate(new_cases):
+            p_acqs = []
+            sources = []
+
+            for lkey, layer in sim.people.networks.items():
+                if lkey in pars['beta']:
+                    a_to_b = [layer['p1'], layer['p2'], pars['beta'][lkey][0]]
+                    b_to_a = [layer['p2'], layer['p1'], pars['beta'][lkey][1]]
+                    for a, b, beta in [a_to_b, b_to_a]:
+                        if beta == 0:
+                            continue
+                    
+                        inds = np.where(b==uid)[0]
+                        if len(inds) == 0:
+                            continue
+                        frms = a[inds]
+
+                        # TODO: Likely no longer need alive here, at least not if dead people are removed
+                        rel_trans = self.rel_trans[frms] * (self.infected[frms] & sim.people.alive[frms])
+                        rel_sus = self.rel_sus[uid] * (self.susceptible[uid] & sim.people.alive[uid])
+                        beta_combined = layer['beta'][inds] * beta
+
+                        # Check for new transmission from a --> b
+                        # TODO: Remove zeros from this...
+                        p_acqs.append((rel_trans * rel_sus * beta_combined).__array__()) # Needs DT
+                        sources.append(frms.__array__())
+
+            p_acqs = np.concatenate(p_acqs)
+            sources = np.concatenate(sources)
+
+            if len(sources) == 1:
+                frm[i] = sources[0]
+            else:
+                # Choose using draw r from above
+                cumsum = p_acqs / p_acqs.sum()
+                frm_idx = np.argmax( cumsum >= r[i])
+                frm[i] = sources[frm_idx]
+
         self.set_prognoses(sim, new_cases, frm)
         
         return len(new_cases) # number of new cases made

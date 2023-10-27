@@ -117,6 +117,8 @@ class FusedArray(NDArrayOperatorsMixin):
                 else:
                     # Access items by an array of integers. We do get a decent performance boost from using numba here
                     values, uids, new_uid_map = self._get_vals_uids(self.values, key, self._uid_map.__array__())
+            elif isinstance(key, DynamicView):
+                values, uids, new_uid_map = self._get_vals_uids(self.values, key.__array__(), self._uid_map.__array__())
             elif isinstance(key, slice):
                 if key.start is None and key.stop is None and key.step is None:
                     return sc.dcp(self)
