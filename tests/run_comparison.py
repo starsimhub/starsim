@@ -95,7 +95,7 @@ class GraphAnalyzer(ss.Analyzer):
         return
 
 
-def run_sim(n=25, rand_seed=0, intervention=False, analyze=False):
+def run_sim(n=25, rand_seed=0, intervention=False, analyze=False, lbl=None):
     ppl = ss.People(n)
 
     net_class = getattr(ss, network)
@@ -103,7 +103,7 @@ def run_sim(n=25, rand_seed=0, intervention=False, analyze=False):
 
     hiv_pars = {
         'beta': {network: [0.3, 0.25], 'maternal': [0.2, 0]},
-        'initial': 0.25 * n,
+        'init_prev': 0.25,
         'art_efficacy': 0.96,
     }
     hiv = ss.HIV(hiv_pars)
@@ -119,7 +119,7 @@ def run_sim(n=25, rand_seed=0, intervention=False, analyze=False):
         'analyzers': [GraphAnalyzer()] if analyze else [],
         'n_agents': len(ppl), # TODO: Build into Sim
     }
-    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[ss.Pregnancy()], pars=pars, label=f'Sim with {n} agents and intv={intervention}')
+    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[ss.Pregnancy()], pars=pars, label=lbl)
     sim.initialize()
 
     # Infecte every other per
@@ -133,7 +133,7 @@ def run_sim(n=25, rand_seed=0, intervention=False, analyze=False):
 def run_scenario(n=10, rand_seed=0, analyze=True):
     sims = sc.parallelize(run_sim,
                           kwargs={'n':n, 'analyze': analyze, 'rand_seed': rand_seed},
-                          iterkwargs=[{'intervention':True}, {'intervention':False}], die=True)
+                          iterkwargs=[{'intervention':False, 'lbl':'Baseline'}, {'intervention':True, 'lbl':'Intervention'}], die=True)
 
     for i, sim in enumerate(sims):
         sim.save(os.path.join(figdir, f'sim{i}.obj'))
@@ -213,6 +213,8 @@ def plot_graph(sim1, sim2):
         g1[ti].plot(pos[ti], edge_labels=el, ax=axv[0])
         g2[ti].plot(pos[ti], edge_labels=el, ax=axv[1])
         fig.suptitle(f'Time is {ti} (use the arrow keys to change)')
+        axv[0].set_title(sim1.label)
+        axv[1].set_title(sim2.label)
         fig.canvas.draw()
 
     fig.canvas.mpl_connect('key_press_event', on_press)
@@ -220,18 +222,20 @@ def plot_graph(sim1, sim2):
     g1[ti].plot(pos[ti], edge_labels=el, ax=axv[0])
     g2[ti].plot(pos[ti], edge_labels=el, ax=axv[1])
     fig.suptitle(f'Time is {ti} (use the arrow keys to change)')
+    axv[0].set_title(sim1.label)
+    axv[1].set_title(sim2.label)
     return fig
 
 
 def plot_ts():
     # Plot timeseries summary
     fig, axv = plt.subplots(2,1, sharex=True)
-    axv[0].plot(sim1.tivec, sim1.results.hiv.n_infected, label='Baseline')
-    axv[0].plot(sim2.tivec, sim2.results.hiv.n_infected, ls=':', label='Intervention')
+    axv[0].plot(sim1.tivec, sim1.results.hiv.n_infected, label=sim1.label)
+    axv[0].plot(sim2.tivec, sim2.results.hiv.n_infected, ls=':', label=sim2.label)
     axv[0].set_title('HIV number of infections')
 
-    axv[1].plot(sim1.tivec, sim1.results.hiv.new_deaths, label='Baseline')
-    axv[1].plot(sim2.tivec, sim2.results.hiv.new_deaths, ls=':', label='Intervention')
+    axv[1].plot(sim1.tivec, sim1.results.hiv.new_deaths, label=sim1.label)
+    axv[1].plot(sim2.tivec, sim2.results.hiv.new_deaths, ls=':', label=sim2.label)
     axv[1].set_title('HIV Deaths')
 
     plt.legend()

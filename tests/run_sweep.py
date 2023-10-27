@@ -24,7 +24,7 @@ def run_sim(n, x_beta, rand_seed, multistream):
 
     hiv_pars = {
         'beta': {'embedding': [x_beta * 0.10, x_beta * 0.08], 'maternal': [x_beta * 0.2, 0]},
-        'initial': 10,
+        'init_prev': 0.01,
     }
     hiv = ss.HIV(hiv_pars)
 

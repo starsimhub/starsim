@@ -243,7 +243,7 @@ class Pregnancy(DemographicModule):
             'dur_postpartum': 0.5,  # Make this a distribution?
             'inci': 0.03,  # Replace this with age-specific rates
             'p_death': 0,  # Probability of maternal death. Question, should this be linked to age and/or duration?
-            'initial': 3,  # Number of women initially pregnant
+            'init_prev': 0.3,  # Number of women initially pregnant # TODO: Default value
         }, self.pars)
 
         self.rng_female = ss.Stream(f'female_{self.name}')

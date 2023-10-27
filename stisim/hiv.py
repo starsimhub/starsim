@@ -101,14 +101,18 @@ class ART(ss.Intervention):
         coverage = self.coverage[np.where(self.t <= sim.ti)[0][-1]]
         ti_delay = 1 # 1 time step delay
         recently_infected = ss.true((sim.people.hiv.ti_infected == sim.ti-ti_delay) & sim.people.alive)
-        inds = self.rng_add_ART.bernoulli_filter(uids=recently_infected, prob=coverage)
-        sim.people.hiv.on_art[inds] = True
-        sim.people.hiv.ti_art[inds] = sim.ti
+
+        n_added = 0
+        if len(recently_infected) > 0:
+            inds = self.rng_add_ART.bernoulli_filter(uids=recently_infected, prob=coverage)
+            sim.people.hiv.on_art[inds] = True
+            sim.people.hiv.ti_art[inds] = sim.ti
+            n_added = len(inds)
 
         # Add result
         sim.results.hiv.n_art = np.count_nonzero(sim.people.alive & sim.people.hiv.on_art)
 
-        return len(inds)
+        return n_added
 
 
 #%% Analyzers

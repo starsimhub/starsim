@@ -30,7 +30,7 @@ def run_sim(n, idx, intv_cov, rand_seed, multistream):
 
     hiv_pars = {
         'beta': {'embedding': [0.2, 0.15], 'maternal': [0.3, 0]},
-        'initial': int(np.maximum(10, np.ceil(0.01*n))),
+        'init_prev': np.maximum(10/n, 0.01),
         'art_efficacy': 0.96,
     }
     hiv = ss.HIV(hiv_pars)
