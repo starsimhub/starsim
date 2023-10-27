@@ -341,7 +341,7 @@ class Sim(sc.prettyobj):
         # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
         # to be applied to newly created agents
         for disease in self.diseases.values():
-            disease.update_states(self)
+            disease.update_states_pre(self)
 
         # Update connectors -- TBC where this appears in the ordering
         for connector in self.connectors.values():

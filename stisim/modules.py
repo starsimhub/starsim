@@ -183,11 +183,12 @@ class Disease(Module):
 
         for lkey, layer in sim.people.networks.items():
             if lkey in pars['beta']:
+                contacts = layer.contacts
                 rel_trans = self.rel_trans * (self.infected & sim.people.alive)
                 rel_sus = self.rel_sus * (self.susceptible & sim.people.alive)
 
-                a_to_b = [layer['p1'], layer['p2'], pars['beta'][lkey][0]]
-                b_to_a = [layer['p2'], layer['p1'], pars['beta'][lkey][1]]
+                a_to_b = [contacts.p1, contacts.p2, pars.beta[lkey][0]]
+                b_to_a = [contacts.p2, contacts.p1, pars.beta[lkey][1]]
                 for a, b, beta in [a_to_b, b_to_a]:
                     if beta == 0:
                         continue
@@ -195,7 +196,7 @@ class Disease(Module):
                     # Check for new transmission from a --> b
                     node_from_edge = np.ones( (n, len(a)) )
                     bi = sim.people._uid_map[b] # Indices of b (rather than uid)
-                    p_not_acq = 1 - rel_trans[a] * rel_sus[b] * layer['beta'] * beta # Needs DT
+                    p_not_acq = 1 - rel_trans[a] * rel_sus[b] * contacts.beta * beta # Needs DT
 
                     node_from_edge[bi, np.arange(len(a))] = p_not_acq
                     p_not_acq_by_node_this_layer_b_from_a = node_from_edge.prod(axis=1) # (1-p1)*(1-p2)*...
@@ -216,8 +217,9 @@ class Disease(Module):
 
             for lkey, layer in sim.people.networks.items():
                 if lkey in pars['beta']:
-                    a_to_b = [layer['p1'], layer['p2'], pars['beta'][lkey][0]]
-                    b_to_a = [layer['p2'], layer['p1'], pars['beta'][lkey][1]]
+                    contacts = layer.contacts
+                    a_to_b = [contacts.p1, contacts.p2, pars.beta[lkey][0]]
+                    b_to_a = [contacts.p2, contacts.p1, pars.beta[lkey][1]]
                     for a, b, beta in [a_to_b, b_to_a]:
                         if beta == 0:
                             continue
@@ -230,7 +232,7 @@ class Disease(Module):
                         # TODO: Likely no longer need alive here, at least not if dead people are removed
                         rel_trans = self.rel_trans[frms] * (self.infected[frms] & sim.people.alive[frms])
                         rel_sus = self.rel_sus[uid] * (self.susceptible[uid] & sim.people.alive[uid])
-                        beta_combined = layer['beta'][inds] * beta
+                        beta_combined = contacts.beta[inds] * beta
 
                         # Check for new transmission from a --> b
                         # TODO: Remove zeros from this...
