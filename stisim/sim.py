@@ -13,16 +13,15 @@ __all__ = ['Sim', 'AlreadyRunError']
 
 class Sim(sc.prettyobj):
 
-    def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, **kwargs):
+    def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, connectors=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
         self.people = people  # People object
-
         self.demographics  = ss.ndict(demographics, type=ss.DemographicModule)
         self.diseases      = ss.ndict(diseases, type=ss.Disease)
-        self.connectors    = None  # Placeholder storage while we determine what these are
+        self.connectors    = ss.ndict(connectors, type=ss.Connector)
         self.results       = ss.ndict(type=ss.Result)  # For storing results
         self.summary       = None  # For storing a summary of the results
         self.initialized   = False  # Whether initialization is complete
@@ -74,6 +73,7 @@ class Sim(sc.prettyobj):
         self.init_networks()
         self.init_demographics()
         self.init_diseases()
+        self.init_connectors()
         self.init_interventions()
         self.init_analyzers()
 
@@ -106,6 +106,7 @@ class Sim(sc.prettyobj):
             if self.pars['verbose']:
                 warnmsg = f"Warning: Provided time step dt: {dt} resulted in a non-integer number of steps per year. Rounded to {rounded_dt}."
                 print(warnmsg)
+        return
 
     def validate_pars(self):
         """
@@ -155,6 +156,7 @@ class Sim(sc.prettyobj):
                                          step=self.pars['dt'])  # Includes all the timepoints in the last year
         self.npts = len(self.yearvec)
         self.tivec = np.arange(self.npts)
+        return
 
     def init_people(self, popdict=None, reset=False, verbose=None, **kwargs):
         """
@@ -212,6 +214,7 @@ class Sim(sc.prettyobj):
         # Set time attributes
         self.people.ti = self.ti
         self.people.dt = self.dt
+        self.people.year = self.year
         self.people.init_results(self)
         return self
 
@@ -235,6 +238,10 @@ class Sim(sc.prettyobj):
 
         return
 
+    def init_connectors(self):
+        for connector in self.connectors.values():
+            connector.initialize(self)
+
     def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
 
@@ -242,19 +249,26 @@ class Sim(sc.prettyobj):
         # This means networks will be stored in self.pars['networks'] and we'll need to copy them to the people.
         if self.people.networks is None or len(self.people.networks) == 0:
             if self.pars['networks'] is not None:
-                self.people.networks = ss.ndict(self.pars['networks'])
+                self.people.networks = ss.Networks(self.pars['networks'])
 
-        for key, network in self.people.networks.items():
-            if network.label is not None:
-                layer_name = network.label
-            else:
-                layer_name = key
-                network.label = layer_name
-            network.initialize(self)
-            self.people.networks[layer_name] = network
+        if not isinstance(self.people.networks, ss.Networks):
+            self.people.networks = ss.Networks(networks=self.people.networks)
+
+        self.people.networks.initialize(self)
+
+        # for key, network in self.people.networks.networks.items():  # TODO rename
+            # if network.label is not None:
+            #     layer_name = network.label
+            # else:
+            #     layer_name = key
+            #     network.label = layer_name
+            # network.initialize(self)
+
+            # Add network states to the People's dicts
+            # self.people.add_module(network)
+            # self.people.networks[network.name] = network
 
         return
-
 
     def init_interventions(self):
         """ Initialize and validate the interventions """
@@ -329,6 +343,10 @@ class Sim(sc.prettyobj):
         for disease in self.diseases.values():
             disease.update_states(self)
 
+        # Update connectors -- TBC where this appears in the ordering
+        for connector in self.connectors.values():
+            connector.update(self)
+
         # Update networks - this takes place here in case autonomous state changes at this timestep
         # affect eligibility for contacts
         self.people.update_networks()
@@ -364,7 +382,6 @@ class Sim(sc.prettyobj):
             self.complete = True
 
         return
-
 
     def run(self, until=None, reset_seed=True, verbose=None):
         """ Run the model once """
@@ -519,9 +536,8 @@ class Sim(sc.prettyobj):
 
     @staticmethod
     def load(filename, *args, **kwargs):
-        """
-        Load from disk from a gzipped pickle.
-        """
+        """ Load from disk from a gzipped pickle.  """
+
         sim = sc.load(filename, *args, **kwargs)
         if not isinstance(sim, Sim):  # pragma: no cover
             errormsg = f'Cannot load object of {type(sim)} as a Sim object'

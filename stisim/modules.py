@@ -52,6 +52,7 @@ class Module(sc.prettyobj):
 
     def finalize(self, sim):
         self.finalized = True
+        return
 
     @property
     def name(self):
@@ -93,7 +94,7 @@ class Disease(Module):
         self.rel_trans = ss.State('rel_trans', float, 1)
         self.susceptible = ss.State('susceptible', bool, True)
         self.infected = ss.State('infected', bool, False)
-        self.ti_infected = ss.State('ti_infected', float, np.nan)
+        self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
 
         # Random number streams
         self.rng_init_cases      = ss.Stream(f'initial_cases_{self.name}')
@@ -126,10 +127,10 @@ class Disease(Module):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        if self.pars['initial'] <= 0:
+        if self.pars['init_prev'] <= 0:
             return
 
-        initial_cases = self.rng_init_cases.bernoulli_filter(uids=ss.true(sim.people.alive), prob=self.pars['initial']/len(sim.people))
+        initial_cases = self.rng_init_cases.bernoulli_filter(uids=ss.true(sim.people.alive), prob=self.pars['init_prev'])
 
         self.set_prognoses(sim, initial_cases, from_uids=None) # TODO: sentinel value to indicate seeds?
         return
@@ -152,12 +153,29 @@ class Disease(Module):
         :param sim:
         :return:
         """
-
         pass
 
     def make_new_cases(self, sim):
         """ Add new cases of module, through transmission, incidence, etc. """
-        pars = sim.pars[self.name]
+        pars = self.pars
+
+        if not ss.options.multistream:
+            # Not stream-safe, but more efficient for when not using multistream feature
+            for k, layer in sim.people.networks.items():
+                if k in pars['beta']:
+                    contacts = layer.contacts
+                    rel_trans = (self.infected & sim.people.alive).astype(float) * self.rel_trans
+                    rel_sus = (self.susceptible & sim.people.alive).astype(float) * self.rel_sus
+                    for a, b, beta in [[contacts.p1, contacts.p2, pars.beta[k][0]],
+                                    [contacts.p2, contacts.p1, pars.beta[k][1]]]:
+                        # probability of a->b transmission
+                        p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta
+                        new_cases = np.random.random(len(a)) < p_transmit
+                        if np.any(new_cases):
+                            self.set_prognoses(sim, b[new_cases])
+            return len(new_cases)
+
+        # Multistream-safe transmission code below here
 
         # Probability of each node acquiring a case
         n = len(sim.people.uid) # TODO: possibly could be shortened to just the people who are alive
@@ -177,8 +195,7 @@ class Disease(Module):
                     
                     # Check for new transmission from a --> b
                     node_from_edge = np.ones( (n, len(a)) )
-                    ai = sim.people._uid_map[a] # Indices of a and b (rather than uid)
-                    bi = sim.people._uid_map[b]
+                    bi = sim.people._uid_map[b] # Indices of b (rather than uid)
                     p_not_acq = 1 - rel_trans[a] * rel_sus[b] * layer['beta'] * beta # Needs DT
 
                     node_from_edge[bi, np.arange(len(a))] = p_not_acq
@@ -191,6 +208,7 @@ class Disease(Module):
         if not len(new_cases):
             return 0
 
+        # Now determine who infected each case
         frm = np.zeros_like(new_cases)
         r = self.rng_choose_infector.random(uids=new_cases)
         for i, uid in enumerate(new_cases):
@@ -236,7 +254,12 @@ class Disease(Module):
         return len(new_cases) # number of new cases made
 
 
-    def set_prognoses(self, sim, to_uids, from_uids):
+    def set_prognoses(self, sim, uids, from_uids):
+        pass
+
+    def set_congenital(self, sim, uids):
+        # Need to figure out whether we would have a methods like this here or make it
+        # part of a pregnancy/STI connector
         pass
 
     def update_results(self, sim):

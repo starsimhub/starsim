@@ -192,8 +192,10 @@ class People(BasePeople):
             ss.State('scale', float, 1.0),
         ]
         states.extend(sc.promotetolist(extra_states))
-        self.states = ss.ndict(states)
-        self.networks = ss.ndict(networks)
+
+        self.states = ss.ndict()
+        self._initialize_states(states)
+        self.networks = ss.Networks(networks)
 
         # Set initial age distribution - likely move this somewhere else later
         self.rng_agedist  = ss.Stream('agedist')
@@ -206,7 +208,7 @@ class People(BasePeople):
         """ Return an age distribution based on provided data """
         if age_data is None: return ss.uniform(0, 100, rng=rng)
         if sc.checktype(age_data, pd.DataFrame):
-            return ss.from_data(vals=age_data['value'].values, bins=age_data['age'].values, rng=rng)
+            return ss.data_dist(vals=age_data['value'].values, bins=age_data['age'].values, rng=rng)
 
     def initialize(self, sim):
         """ Initialization """
@@ -240,6 +242,7 @@ class People(BasePeople):
         module_states = sc.objdict()
         setattr(self, module.name, module_states)
         self._register_module_states(module, module_states)
+        return
 
     def _register_module_states(self, module, module_states):
         """Enable dot notation for module specific states:
@@ -294,9 +297,7 @@ class People(BasePeople):
         """
         Update networks
         """
-        for network in self.networks.values():
-            network.update(self)
-        return
+        return self.networks.update(self)
 
     @property
     def active(self):
@@ -312,6 +313,16 @@ class People(BasePeople):
     def male(self):
         """ Male boolean """
         return ~self.female
+
+    @property
+    def f(self):
+        """ Shorthand for female """
+        return self.female
+
+    @property
+    def m(self):
+        """ Shorthand for male """
+        return self.male
 
     def init_results(self, sim):
         sim.results += ss.Result(None, 'n_alive', sim.npts, ss.int_)
@@ -350,3 +361,4 @@ class People(BasePeople):
         # enabled then often such agents would not be present in the simulation anyway
         uids = ss.true(self.alive[uids])
         self.ti_dead[uids] = self.ti
+        return

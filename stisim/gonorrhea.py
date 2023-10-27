@@ -14,56 +14,80 @@ class Gonorrhea(ss.Disease):
     def __init__(self, pars=None):
         super().__init__(pars)
 
-        self.susceptible    = ss.State('susceptible', bool, True)
-        self.infected       = ss.State('infected', bool, False)
-        self.ti_infected    = ss.State('ti_infected', float, 0)
-        self.ti_recovered   = ss.State('ti_recovered', float, 0)
-        self.ti_dead        = ss.State('ti_dead', float, np.nan)  # Death due to gonorrhea
+        # States additional to the default disease states (see base class)
+        self.symptomatic = ss.State('symptomatic', float, False)
+        self.ti_clearance = ss.State('ti_clearance', int, ss.INT_NAN)
+        self.p_symp = ss.State('p_symp', float, 1)
 
-        self.rng_dead       = ss.Stream(f'dead_{self.name}')
-        self.rng_dur_inf    = ss.Stream(f'dur_inf_{self.name}')
+        self.rng_clear   = ss.Stream(f'clear_{self.name}')
+        self.rng_symp    = ss.Stream(f'symp_{self.name}')
+        self.rng_dur_inf = ss.Stream(f'dur_inf_{self.name}')
 
+        # Parameters
         self.pars = ss.omerge({
-            'dur_inf': 3,  # not modelling diagnosis or treatment explicitly here
-            'p_death': 0,
-            'initial': 3,
-            'eff_condoms': 0.7,
+            'dur_inf': 10/365,  # Median for those who spontaneously clear: https://sti.bmj.com/content/96/8/556
+            'p_symp': 0.5,  # Share of infections that are symptomatic. Placeholder value
+            'p_clear': 0.2,  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
+            'init_prev': 0.03,
         }, self.pars)
+
+        # Additional states dependent on parameter values, e.g. self.p_symp?
+        # These might be useful for connectors to target, e.g. if HIV reduces p_clear
 
         return
 
-    def update_states(self, sim):
+    def init_results(self, sim):
+        """
+        Initialize results
+        """
+        super().init_results(sim)
+        self.results += ss.Result(self.name, 'n_sympotmatic', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'new_clearances', sim.npts, dtype=int)
+        return
+
+    def update_results(self, sim):
+        super(Gonorrhea, self).update_results(sim)
+        self.results['n_sympotmatic'][sim.ti] = np.count_nonzero(self.symptomatic)
+        self.results['new_clearances'][sim.ti] = np.count_nonzero(self.ti_clearance == sim.ti)
+        return
+
+    def update_states_pre(self, sim):
         # What if something in here should depend on another module?
         # I guess we could just check for it e.g., 'if HIV in sim.modules' or
         # 'if 'hiv' in sim.people' or something
+        # Natural clearance
+        clearances = self.ti_clearance <= sim.ti
+        self.susceptible[clearances] = True
+        self.infected[clearances] = False
+        self.symptomatic[clearances] = False
+        self.ti_clearance[clearances] = sim.ti
 
-        # Recovery
-        recovered = ss.true(self.infected & (self.ti_recovered <= sim.ti))
-        self.infected[recovered] = False
-        self.susceptible[recovered] = True
-
-        # Schedule death for anyone that is due to die
-        gonorrhea_deaths = ss.true(self.ti_dead <= sim.ti)
-        sim.people.request_death(gonorrhea_deaths)
-
-        return
-    
-    def update_results(self, sim):
-        super(Gonorrhea, self).update_results(sim)
         return
     
     def make_new_cases(self, sim):
         super(Gonorrhea, self).make_new_cases(sim)
         return
 
-    def set_prognoses(self, sim, to_uids, from_uids=None):
-        self.susceptible[to_uids] = False
-        self.infected[to_uids] = True
-        self.ti_infected[to_uids] = sim.ti
+    def set_prognoses(self, sim, uids. from_uids=None):
+        """
+        Natural history of gonorrhea for adult infection
+        """
 
-        dur = sim.ti + self.rng_dur_inf.poisson(to_uids, self.pars['dur_inf']/sim.pars.dt)
-        dead = self.rng_dead.bernoulli(to_uids, self.pars.p_death)
+        # Set infection status
+        self.susceptible[uids] = False
+        self.infected[uids] = True
+        self.ti_infected[uids] = sim.ti
 
-        self.ti_recovered[to_uids[~dead]] = dur[~dead]
-        self.ti_dead[to_uids[dead]] = dur[dead]
+        # Set infection status
+        symptomatic_uids = self.rng_symp.bernoulli(uids, self.pars.p_symp)
+        self.symptomatic[symptomatic_uids] = True
+
+        # Set natural clearance
+        clear_uids = self.rng_clear.bernoulli(uids, self.pars.p_clear)
+        dur = sim.ti + self.rng_dur_inf.poisson(uids, self.pars['dur_inf']/sim.pars.dt)
+        self.ti_clearance[clear_uids] = dur
+
         return
+
+    def set_congenital(self, sim, uids):
+        pass

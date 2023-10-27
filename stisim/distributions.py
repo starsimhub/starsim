@@ -15,11 +15,14 @@ Example usage
 
 import numpy as np
 import sciris as sc
+from .utils import get_subclasses
 
 __all__ = [
     'Distribution', 'bernoulli', 'uniform', 'choice', 'normal', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int',
     'poisson', 'neg_binomial', 'beta', 'gamma', 'from_data'
 ]
+
+
 
 
 class Distribution():
@@ -47,14 +50,34 @@ class Distribution():
     def __call__(self, size=None, uids=None, **kwargs):
         return self.sample(size=size, uids=uids, **kwargs)
 
+    @property
+    def name(self):
+        return self.__class__.__name__
+
     def sample(cls, size=None, uids=None, **kwargs):
         """
         Return a specified number of samples from the distribution
         """
         raise NotImplementedError
 
+    @classmethod
+    def create(cls, name, *args, **kwargs):
+        """
+        Create a distribution instance by name
 
-class from_data(Distribution):
+        :param name: A string with the name of a distribution class e.g., 'normal'
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        for subcls in get_subclasses(cls):
+            if subcls.__name__ == name:
+                return subcls(*args, **kwargs)
+        else:
+            raise KeyError(f'Distribution "{name}" did not match any known distributions')
+
+
+class data_dist(Distribution):
     """ Sample from data """
 
     def __init__(self, vals, bins, **kwargs):
@@ -147,7 +170,7 @@ class normal_pos(normal):
         return np.abs(super().sample(**kwargs))
 
 
-class normal_int(Distribution):
+class normal_int(normal):
     """
     Normal distribution returning only integer values
     """

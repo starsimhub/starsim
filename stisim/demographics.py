@@ -203,7 +203,7 @@ class background_deaths(DemographicModule):
         self.death_probs *= p.rel_death  # Adjust overall death probabilities
 
         # Get indices of people who die of other causes
-        death_uids = ss.true(ss.binomial_arr(self.death_probs))
+        death_uids = ss.true(ss.binomial_arr(self.death_probs)) # TODO: Fix
         death_uids = ss.true(sim.people.alive[death_uids])
         sim.people.request_death(death_uids)
 
@@ -224,8 +224,7 @@ class Pregnancy(DemographicModule):
 
         # Other, e.g. postpartum, on contraception...
         self.infertile = ss.State('infertile', bool, False)  # Applies to girls and women outside the fertility window
-        self.susceptible = ss.State('susceptible', bool,
-                                    True)  # Applies to girls and women inside the fertility window - needs renaming
+        self.susceptible = ss.State('susceptible', bool, True)  # Applies to girls and women inside the fertility window - needs renaming
         self.pregnant = ss.State('pregnant', bool, False)  # Currently pregnant
         self.postpartum = ss.State('postpartum', bool, False)  # Currently post-partum
         self.ti_pregnant = ss.State('ti_pregnant', int, ss.INT_NAN)  # Time pregnancy begins
@@ -341,7 +340,7 @@ class Pregnancy(DemographicModule):
 
         return
 
-    def set_prognoses(self, sim, to_uids, from_uids=None):
+    def set_prognoses(self, sim, uids, from_uids=None):
         """
         Make pregnancies
         Add miscarriage/termination logic here
@@ -350,19 +349,19 @@ class Pregnancy(DemographicModule):
         """
 
         # Change states for the newly pregnant woman
-        self.susceptible[to_uids] = False
-        self.pregnant[to_uids] = True
-        self.ti_pregnant[to_uids] = sim.ti
+        self.susceptible[uids] = False
+        self.pregnant[uids] = True
+        self.ti_pregnant[uids] = sim.ti
 
         # Outcomes for pregnancies
-        dur = np.full(len(to_uids), sim.ti + self.pars.dur_pregnancy / sim.dt)
-        dead = self.rng_dead.bernoulli(uids=to_uids, prob=self.pars.p_death)
-        self.ti_delivery[to_uids] = dur  # Currently assumes maternal deaths still result in a live baby
-        dur_post_partum = np.full(len(to_uids), dur + self.pars.dur_postpartum / sim.dt)
-        self.ti_postpartum[to_uids] = dur_post_partum
+        dur = np.full(len(uids), sim.ti + self.pars.dur_pregnancy / sim.dt)
+        dead = self.rng_dead.bernoulli(uids=uids, prob=self.pars.p_death)
+        self.ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
+        dur_post_partum = np.full(len(uids), dur + self.pars.dur_postpartum / sim.dt)
+        self.ti_postpartum[uids] = dur_post_partum
 
         if np.count_nonzero(dead):
-            self.ti_dead[to_uids[dead]] = dur[dead]
+            self.ti_dead[uids[dead]] = dur[dead]
         return
 
     def update_results(self, sim):
