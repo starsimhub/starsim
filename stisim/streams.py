@@ -16,7 +16,7 @@ class Streams:
 
     def __init__(self):
         self._streams = ss.ndict()
-        self.used_seeds = []
+        self.used_seed_offsets = []
         self.initialized = False
         return
 
@@ -25,7 +25,7 @@ class Streams:
         self.initialized = True
         return
     
-    def add(self, stream):
+    def add(self, stream, check_repeats=True):
         """
         Add a stream
         
@@ -33,22 +33,19 @@ class Streams:
         Otherwise, return value will be used as the seed offset for this stream
         """
         if not self.initialized:
-            raise NotInitializedException('Please call initialize before adding a stream to Streams.')
+            raise Exception('Please call initialize before adding a stream to Streams.')
 
         if stream.name in self._streams:
-            raise RepeatNameException(f'A Stream with name {stream.name} has already been added.')
+            raise Exception(f'A Stream with name {stream.name} has already been added.')
 
-        if stream.seed_offset is None:
-            seed = int(hashlib.sha256(stream.name.encode('utf-8')).hexdigest(), 16) % 10**8 #abs(hash(stream.name))
-        elif stream.seed_offset in self.used_seeds:
-            raise SeedRepeatException(f'Requested seed offset {stream.seed_offset} for stream {stream} has already been used.')
-        else:
-            seed = stream.seed_offset
-        self.used_seeds.append(seed)
+        if check_repeats:
+            if stream.seed_offset in self.used_seed_offsets:
+                raise Exception(f'Requested seed offset {stream.seed_offset} for stream {stream} has already been used.')
+            self.used_seed_offsets.append(stream.seed_offset)
 
         self._streams.append(stream)
 
-        return self.base_seed + seed
+        return self.base_seed + stream.seed_offset # Add in the base seed
 
     def step(self, ti):
         for stream in self._streams.dict_values():
@@ -59,31 +56,6 @@ class Streams:
         for stream in self._streams.dict_values():
             stream.reset()
         return
-
-
-class NotResetException(Exception):
-    "Raised when stream is called when not ready."
-    pass
-
-
-class NotInitializedException(Exception):
-    "Raised when stream is called when not initialized."
-    pass
-
-
-class RepeatNameException(Exception):
-    "Raised when adding a stream to streams when the stream name has already been used."
-    pass
-
-
-class SeedRepeatException(Exception):
-    "Raised when stream is called when not initialized."
-    pass
-
-
-class NotStreamSafeException(Exception):
-    "Raised when an unsafe-for-streams function is called."
-    pass
 
 
 def Stream(*args, **kwargs):
@@ -112,7 +84,7 @@ def _pre_draw(func):
             raise Exception('Specify either "uids" or "size", but not both.')
 
         if size is not None:
-            # size-based
+            # Size-based
             if not isinstance(size, int):
                 raise Exception('Input "size" must be an integer')
 
@@ -125,16 +97,11 @@ def _pre_draw(func):
             basis = SIZE
 
         else:
+            # UID-based
             if len(uids) == 0:
                 return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
 
-            if isinstance(uids, ss.states.FusedArray):
-                v = uids.values
-            elif isinstance(uids, ss.states.DynamicView):
-                v = uids._view
-            else:
-                v = uids
-
+            v = uids.__array__()
             if v.dtype == bool:
                 size = len(uids)
                 basis = BOOLS
@@ -144,10 +111,10 @@ def _pre_draw(func):
 
         if not self.initialized:
             msg = f'Stream {self.name} has not been initialized!'
-            raise NotInitializedException(msg)
+            raise Exception(msg)
         if not self.ready:
             msg = f'Stream {self.name} has already been sampled on this timestep!'
-            raise NotResetException(msg)
+            raise Exception(msg)
         self.ready = False
 
         return func(self, basis=basis, size=size, **kwargs)
@@ -164,23 +131,22 @@ class MultiStream(np.random.Generator):
         """
         Create a random number stream
 
-        seed_offset will be automatically assigned (sequentially in first-come order) if None
+        seed_offset will be automatically assigned (based on hashing the name) if None
         
         name: a name for this Stream, like "coin_flip"
         """
 
-        '''
-        if 'bit_generator' not in kwargs:
-            kwargs['bit_generator'] = np.random.PCG64(seed=self.seed + self.seed_offset)
-        super().__init__(bit_generator=np.random.PCG64())
-        '''
-
         self.name = name
-        self.seed_offset = seed_offset
         self.kwargs = kwargs
-        
-        self.seed = None
 
+        if seed_offset is None:
+            # Obtain the seed offset by hashing the class name. Don't use python's hash because it is randomized.
+            self.seed_offset = int(hashlib.sha256(self.name.encode('utf-8')).hexdigest(), 16) % 10**8
+        else:
+            # Use user-provided seed_offset (unlikely)
+            self.seed_offset = seed_offset
+
+        self.seed = None # Will be determined once added to Streams
         self.initialized = False
         self.ready = True
         return
@@ -189,7 +155,7 @@ class MultiStream(np.random.Generator):
         if self.initialized:
             return
 
-        self.seed = streams.add(self)
+        self.seed = streams.add(self) # base_seed + seed_offset
 
         if isinstance(slots, int):
             # Handle edge case in which the user wants n sequential slots, as used in testing.
@@ -222,104 +188,59 @@ class MultiStream(np.random.Generator):
         # Now take ti jumps
         # jumped returns a new bit_generator, use directly instead of setting state?
         self.bit_generator.state = self.bit_generator.jumped(jumps=ti).state
-
         return
+
+    def _select(self, vals, basis, uids):
+        """ Select from the values given the basis and uids """
+        if basis==SIZE:
+            return vals
+        elif basis == UIDS:
+            slots = self.slots[uids].__array__()
+            return vals[slots]
+        elif basis == BOOLS:
+            return vals[uids]
+        else:
+            raise Exception(f'Invalid basis: {basis}. Valid choices are [{SIZE}, {UIDS}, {BOOLS}]')
 
     @_pre_draw
     def random(self, size, basis, uids=None):
-        if basis==SIZE:
-            return super(MultiStream, self).random(size=size)
-        elif basis == UIDS:
-            slots = self.slots[uids].__array__()
-            return super(MultiStream, self).random(size=size)[slots]
-        elif basis == BOOLS:
-            return super(MultiStream, self).random(size=size)[uids]
-        else:
-            raise Exception('TODO DJK BASISEXCPETION')
+        vals = super(MultiStream, self).random(size=size)
+        return self._select(vals, basis, uids)
 
     @_pre_draw
     def uniform(self, size, basis, low, high, uids=None):
-        if basis == SIZE:
-            return super(MultiStream, self).uniform(size=size, low=low, high=high)
-        elif basis == UIDS:
-            slots = self.slots[uids].__array__()
-            return super(MultiStream, self).uniform(size=size, low=low, high=high)[slots]
-        elif basis == BOOLS:
-            return super(MultiStream, self).uniform(size=size, low=low, high=high)[uids]
-        else:
-            raise Exception('TODO DJK BASISEXCPETION')
+        vals = super(MultiStream, self).uniform(size=size, low=low, high=high)
+        return self._select(vals, basis, uids)
 
     @_pre_draw
     def integers(self, size, basis, low, high, uids=None, **kwargs):
-        if basis == SIZE:
-            return super(MultiStream, self).integers(size=size, low=low, high=high, **kwargs)
-        elif basis == UIDS:
-            slots = self.slots[uids].__array__()
-            return super(MultiStream, self).integers(size=size, low=low, high=high, **kwargs)[slots]
-        elif basis == BOOLS:
-            return super(MultiStream, self).integers(size=size, low=low, high=high, **kwargs)[uids]
-        else:
-            raise Exception('TODO DJK BASISEXCPETION')
+        vals = super(MultiStream, self).integers(size=size, low=low, high=high, **kwargs)
+        return self._select(vals, basis, uids)
 
     @_pre_draw
     def poisson(self, size, basis, lam, uids=None):
-        if basis == SIZE:
-            return super(MultiStream, self).poisson(size=size, lam=lam)
-        elif basis == UIDS:
-            slots = self.slots[uids].__array__()
-            return super(MultiStream, self).poisson(size=size, lam=lam)[slots]
-        elif basis == BOOLS:
-            return super(MultiStream, self).poisson(size=size, lam=lam)[uids]
-        else:
-            raise Exception('TODO DJK BASISEXCPETION')
+        vals = super(MultiStream, self).poisson(size=size, lam=lam)
+        return self._select(vals, basis, uids)
 
     @_pre_draw
     def normal(self, size, basis, mu=0, std=1, uids=None):
-        if basis == SIZE:
-            return mu + std*super(MultiStream, self).normal(size=size)
-        elif basis == UIDS:
-            slots = self.slots[uids].__array__()
-            return mu + std*super(MultiStream, self).normal(size=size)[slots]
-        elif basis == BOOLS:
-            return mu + std*super(MultiStream, self).normal(size=size)[uids]
-        else:
-            raise Exception('TODO DJK BASISEXCPETION')
+        vals = mu + std*super(MultiStream, self).normal(size=size)
+        return self._select(vals, basis, uids)
 
     @_pre_draw
     def lognormal(self, size, basis, mean=0, sigma=1, uids=None):
-        if basis == SIZE:
-            return super(MultiStream, self).lognormal(size=size, mean=mean, sigma=sigma)
-        elif basis == UIDS:
-            slots = self.slots[uids].__array__()
-            return super(MultiStream, self).lognormal(size=size, mean=mean, sigma=sigma)[slots]
-        elif basis == BOOLS:
-            return super(MultiStream, self).lognormal(size=size, mean=mean, sigma=sigma)[uids]
-        else:
-            raise Exception('TODO DJK BASISEXCPETION')
+        vals = super(MultiStream, self).lognormal(size=size, mean=mean, sigma=sigma)
+        return self._select(vals, basis, uids)
 
     @_pre_draw
     def negative_binomial(self, size, basis, n, p, uids=None):
-        if basis == SIZE:
-            return super(MultiStream, self).negative_binomial(size=size, n=n, p=p)
-        elif basis == UIDS:
-            slots = self.slots[uids].__array__()
-            return super(MultiStream, self).negative_binomial(size=size, n=n, p=p)[slots]
-        elif basis == BOOLS:
-            return super(MultiStream, self).negative_binomial(size=size, n=n, p=p)[uids]
-        else:
-            raise Exception('TODO DJK BASISEXCPETION')
+        vals = super(MultiStream, self).negative_binomial(size=size, n=n, p=p)
+        return self._select(vals, basis, uids)
 
     @_pre_draw
     def bernoulli(self, prob, size, basis, uids=None):
-        if basis == SIZE:
-            return super(MultiStream, self).random(size=size) < prob # fastest
-        elif basis == UIDS:
-            slots = self.slots[uids].__array__()
-            return super(MultiStream, self).random(size=size)[slots] < prob # fastest
-        elif basis == BOOLS:
-            return super(MultiStream, self).random(size=size)[uids] < prob # fastest
-        else:
-            raise Exception('TODO DJK BASISEXCPETION')
+        vals = super(MultiStream, self).random(size=size)
+        return self._select(vals, basis, uids) < prob
 
     # @_pre_draw <-- handled by call to self.bernoullli
     def bernoulli_filter(self, uids, prob):
@@ -327,7 +248,7 @@ class MultiStream(np.random.Generator):
 
     def choice(self, size, basis, a, **kwargs):
         # Consider raising a warning instead?
-        raise NotStreamSafeException('The "choice" function is not MultiStream-safe.')
+        raise Exception('The "choice" function is not MultiStream-safe.')
 
 
 def _pre_draw_centralized(func):
@@ -369,7 +290,7 @@ def _pre_draw_centralized(func):
 
         if not self.initialized:
             msg = f'Stream {self.name} has not been initialized!'
-            raise NotInitializedException(msg)
+            raise Exception(msg)
 
         return func(self, size=size, **kwargs)
 
@@ -391,14 +312,14 @@ class CentralizedStream():
         """
         self.name = name
         self.initialized = False
-        self.seed_offset = None # Not used, so override to avoid potential seed collisions in Streams.
+        self.seed_offset = 0 # For compatibility with MultiStream
         return
 
     def initialize(self, streams, slots=None):
         if self.initialized:
             return
 
-        streams.add(self) # Seed is returned, but not used here
+        streams.add(self, check_repeats=False) # Seed is returned, but not used here as we're using the global np.random stream which has been seeded elsewhere
         self.initialized = True
         return
 

@@ -23,8 +23,6 @@ __all__ = [
 ]
 
 
-
-
 class Distribution():
 
     def __init__(self, rng=None):
@@ -84,6 +82,7 @@ class data_dist(Distribution):
         super().__init__(**kwargs)
         self.vals = vals
         self.bins = bins
+        return
 
     def mean(self):
         return
@@ -107,6 +106,7 @@ class uniform(Distribution):
         super().__init__(**kwargs)
         self.low = low
         self.high = high
+        return
 
     def mean(self):
         return (self.low + self.high) / 2
@@ -122,6 +122,7 @@ class bernoulli(Distribution):
     def __init__(self, p, **kwargs):
         super().__init__(**kwargs)
         self.p = p
+        return
 
     def mean(self):
         return self.p
@@ -140,6 +141,7 @@ class choice(Distribution):
         self.choices = choices
         self.probabilities = probabilities
         self.replace = replace
+        return
 
     def sample(self, **kwargs):
         return self.stream.choice(a=self.choices, p=self.probabilities, replace=self.replace, **kwargs)
@@ -154,6 +156,7 @@ class normal(Distribution):
         super().__init__(**kwargs)
         self.mean = mean
         self.std = std
+        return
 
     def sample(self, **kwargs):
         return self.stream.normal(loc=self.mean, scale=self.std, **kwargs)
@@ -226,6 +229,7 @@ class poisson(Distribution):
     def __init__(self, rate, **kwargs):
         super().__init__(**kwargs)
         self.rate = rate
+        return
 
     def mean(self):
         return self.rate
@@ -255,6 +259,7 @@ class neg_binomial(Distribution):
         super().__init__(**kwargs)
         self.mean = mean
         self.dispersion = dispersion
+        return
 
     def sample(self, **kwargs):
         nbn_n = self.dispersion
@@ -271,6 +276,7 @@ class beta(Distribution):
         super().__init__(**kwargs)
         self.alpha = alpha
         self.beta = beta
+        return
 
     def mean(self):
         return self.alpha / (self.alpha + self.beta)
@@ -288,6 +294,7 @@ class gamma(Distribution):
         super().__init__(**kwargs)
         self.shape = shape
         self.scale = scale
+        return
 
     def mean(self):
         return self.shape * self.scale

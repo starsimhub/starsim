@@ -71,7 +71,7 @@ def run_sim(n, idx, intv_cov, rand_seed, multistream):
 def run_scenarios():
     results = []
     times = {}
-    for multistream in [False, True]:
+    for multistream in [True, False]:
         ss.options(multistream=multistream)
         cfgs = []
         for rs in range(n_rand_seeds):
