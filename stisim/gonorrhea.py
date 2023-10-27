@@ -68,7 +68,7 @@ class Gonorrhea(ss.Disease):
         super(Gonorrhea, self).make_new_cases(sim)
         return
 
-    def set_prognoses(self, sim, uids. from_uids=None):
+    def set_prognoses(self, sim, uids, from_uids=None):
         """
         Natural history of gonorrhea for adult infection
         """

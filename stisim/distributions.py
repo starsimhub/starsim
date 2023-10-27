@@ -19,7 +19,7 @@ from .utils import get_subclasses
 
 __all__ = [
     'Distribution', 'bernoulli', 'uniform', 'choice', 'normal', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int',
-    'poisson', 'neg_binomial', 'beta', 'gamma', 'from_data'
+    'poisson', 'neg_binomial', 'beta', 'gamma', 'data_dist'
 ]
 
 

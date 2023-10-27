@@ -20,10 +20,10 @@ sc.path(figdir).mkdir(parents=True, exist_ok=True)
 def run_sim(n, x_beta, rand_seed, multistream):
     ppl = ss.People(n)
 
-    ppl.networks = ss.ndict(ss.simple_embedding(), ss.maternal())
+    ppl.networks = ss.ndict(ss.embedding(), ss.maternal())
 
     hiv_pars = {
-        'beta': {'simple_embedding': [x_beta * 0.10, x_beta * 0.08], 'maternal': [x_beta * 0.2, 0]},
+        'beta': {'embedding': [x_beta * 0.10, x_beta * 0.08], 'maternal': [x_beta * 0.2, 0]},
         'initial': 10,
     }
     hiv = ss.HIV(hiv_pars)

@@ -193,8 +193,7 @@ class People(BasePeople):
         ]
         states.extend(sc.promotetolist(extra_states))
 
-        self.states = ss.ndict()
-        self._initialize_states(states)
+        self.states = ss.ndict(states)
         self.networks = ss.Networks(networks)
 
         # Set initial age distribution - likely move this somewhere else later
@@ -219,12 +218,12 @@ class People(BasePeople):
 
         for name, state in self.states.items():
             self.add_state(state)  # Register the state internally for dynamic growth
-            #self.states.append(state)  # Expose these states with their original names
+            #self.states.append(state)  # Expose these states with their original names # TODO DJK: Remove if not needed
             state.initialize(self)  # Connect the state to this people instance
             setattr(self, name, state)
             if name == 'slot':
                 # Initialize here in case other states use random streams that depend on slots being initialized
-                self.slot[:] = np.copy(self.uid)
+                self.slot[:] = self.uid #TODO DJK: .__array__()
 
         self.age[:] = self.age_data_dist.sample(size=len(self))
         self.initialized = True

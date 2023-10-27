@@ -24,12 +24,12 @@ def run_sim(n, idx, intv_cov, rand_seed, multistream):
     ppl = ss.People(n)
 
     ppl.networks = ss.ndict(
-        ss.simple_embedding(mean_dur=4),
+        ss.embedding(mean_dur=4),
         ss.maternal()
         )
 
     hiv_pars = {
-        'beta': {'simple_embedding': [0.2, 0.15], 'maternal': [0.3, 0]},
+        'beta': {'embedding': [0.2, 0.15], 'maternal': [0.3, 0]},
         'initial': int(np.maximum(10, np.ceil(0.01*n))),
         'art_efficacy': 0.96,
     }
