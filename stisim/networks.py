@@ -13,7 +13,6 @@ import pandas as pd
 
 # Specify all externally visible functions this file defines
 __all__ = ['Networks', 'Network', 'NetworkConnector', 'SexualNetwork', 'mf', 'msm', 'mf_msm', 'hpv_network', 'maternal']
-#TODO new versions of: 'simple_sexual', 'simple_embedding', 'stable_monogamy'
 
 
 class Network(ss.Module):
@@ -354,7 +353,7 @@ class mf(SexualNetwork, DynamicNetwork):
         })
         self.validate_pars()
 
-        # TODO: Define random streams
+        # TODO DJK: Define random streams
         #self.rng_pair_12 = ss.Stream('pair_12')
         #self.rng_pair_21 = ss.Stream('pair_21')
 
@@ -410,7 +409,7 @@ class mf(SexualNetwork, DynamicNetwork):
         
         # Initialize random streams
         self.rng_dur.initialize(sim.streams, sim.people.slot)
-        # TODO
+        # TODO DJK
         #self.rng_pair_12.initialize(sim.streams, sim.people.slot)
         #self.rng_pair_21.initialize(sim.streams, sim.people.slot)
 
@@ -462,10 +461,10 @@ class mf(SexualNetwork, DynamicNetwork):
         available_f = self.available(people, 'female')
         if len(available_m) <= len(available_f):
             p1 = available_m
-            p2 = self.rng_pair_12.choice(a=available_f, size=len(p1), replace=False) # TODO: Stream-ify
+            p2 = self.rng_pair_12.choice(a=available_f, size=len(p1), replace=False) # TODO DJK: Stream-ify
         else:
             p2 = available_f
-            p1 = self.rng_pair_21.choice(a=available_m, size=len(p2), replace=False) # TODO: Stream-ify
+            p1 = self.rng_pair_21.choice(a=available_m, size=len(p2), replace=False) # TODO DJK: Stream-ify
 
         beta = np.ones_like(p1)
 
@@ -476,7 +475,7 @@ class mf(SexualNetwork, DynamicNetwork):
         mean = np.interp(people.year, self.pars.dur['year'], self.pars.dur['dur'])
         std = np.interp(people.year, self.pars.dur['year'], self.pars.dur['std'])
 
-        # TODO:
+        # TODO DJK:
         dur_dist = self.pars.dur.loc[self.pars.dur.year == nearest_year].dist.iloc[0]
         dur_vals = ss.Distribution.create(dur_dist, mean, std)(len(p1))
 
@@ -553,19 +552,14 @@ class msm(SexualNetwork, DynamicNetwork):
         return
 
 
-# TODO: REFACTOR
-class simple_embedding(simple_sexual):
+class embedding(mf):
     """
-    A class holding a single network of contact edges (connections) between people.
-    This network is built by **randomly pairing** males and female with variable relationship durations.
+    Heterosexual age-assortative network based on a one-dimensional embedding. Could be made more generic.
     """
 
     def add_pairs(self, people, ti=None):
-        # Find unpartnered males and females - could in principle check other contact layers too
-        # by having the People object passed in here
-
-        available_m = np.setdiff1d(ss.true(~people.female & people.alive), self.members)
-        available_f = np.setdiff1d(ss.true(people.female & people.alive), self.members)
+        available_m = self.available(people, 'male')
+        available_f = self.available(people, 'female')
 
         if not len(available_m) or not len(available_f):
             if ss.options.verbose > 1:
@@ -580,19 +574,29 @@ class simple_embedding(simple_sexual):
         # loc_f[ind_f[0]] is close to loc_m[ind_m[0]]
 
         n_pairs = len(ind_f)
-        self['p1'] = np.concatenate([self['p1'], available_m[ind_m]])
-        self['p2'] = np.concatenate([self['p2'], available_f[ind_f]])
 
         beta = np.ones(n_pairs)
-        dur = self.rng_mean_dur.poisson(uids=available_m[ind_m], lam=self.mean_dur)
-        self['beta'] = np.concatenate([self['beta'], beta])
-        self['dur'] = np.concatenate([self['dur'], dur])
 
-        return n_pairs
+        # Figure out durations
+        all_years = self.pars.dur.year.values
+        year_ind = sc.findnearest(all_years, people.year)
+        nearest_year = all_years[year_ind]
+        mean = np.interp(people.year, self.pars.dur['year'], self.pars.dur['dur'])
+        std = np.interp(people.year, self.pars.dur['year'], self.pars.dur['std'])
+
+        # TODO DJK:
+        dur_dist = self.pars.dur.loc[self.pars.dur.year == nearest_year].dist.iloc[0]
+        dur_vals = ss.Distribution.create(dur_dist, mean, std)(n_pairs)
+        ###dur_vals = self.rng_mean_dur.poisson(uids=available_m[ind_m], lam=self.mean_dur)
+
+        self.contacts.p1 = np.concatenate([self.contacts.p1, available_m[ind_m]])
+        self.contacts.p2 = np.concatenate([self.contacts.p2, available_f[ind_f]])
+        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
+        self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
+        return
 
 
-# TODO: REFACTOR
-class stable_monogamy(simple_sexual):
+class stable_monogamy(SexualNetwork):
     """
     Very simple network for debugging in which edges are:
     1-2, 3-4, 5-6, ...
@@ -604,15 +608,11 @@ class stable_monogamy(simple_sexual):
 
     def initialize(self, sim):
         n = len(sim.people._uid_map)
-        self['p1'] = np.arange(0,n,2) # EVEN
-        self['p2'] = np.arange(1,n,2) # ODD
-        self['beta'] = np.ones(len(self['p1']))
-        self['dur'] = np.full(len(self['p1']), fill_value=np.iinfo(int).max, dtype=int)
+        self.contacts.p1 = np.arange(0,n,2) # EVEN
+        self.contacts.p2 = np.arange(1,n,2) # ODD
+        self.contacts.beta = np.ones(len(self['p1']))
         return
     
-    def update(self, people, dt=None):
-        pass
-
 
 class NetworkConnector(ss.Module):
     """
@@ -726,7 +726,7 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         self.get_layer_probs()
         return
 
-    # TODO: Now sim instead of people!
+    # TODO DJK: Now sim instead of people!
     def initialize(self, sim):
         super().initialize(sim)
 
@@ -845,12 +845,12 @@ class hpv_network(SexualNetwork, DynamicNetwork):
             choices = []
             fems = np.arange(len(f))
             f_paired_bools = np.full(len(fems), True, dtype=bool)
-            np.random.shuffle(fems) # TODO: Stream-ify
+            np.random.shuffle(fems) # TODO: Stream-ify?
             for fem in fems:
                 m_col = pair_probs[:, fem]
                 if m_col.sum() > 0:
                     m_col_norm = m_col / m_col.sum()
-                    choice = np.random.choice(len(m_col_norm), 1, replace=False, p=m_col_norm) # TODO: Stream-ify
+                    choice = np.random.choice(len(m_col_norm), 1, replace=False, p=m_col_norm) # TODO: Stream-ify?
                     choices.append(choice)
                     pair_probs[choice, :] = 0  # Once male partner is assigned, remove from eligible pool
                 else:

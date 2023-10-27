@@ -185,8 +185,6 @@ class MultiStream(np.random.Generator):
 
     def initialize(self, streams, slots):
         if self.initialized:
-            # TODO: Raise warning
-            assert not self.initialized
             return
 
         self.seed = streams.add(self)
@@ -235,7 +233,7 @@ class MultiStream(np.random.Generator):
         elif basis == BOOLS:
             return super(MultiStream, self).random(size=size)[uids]
         else:
-            raise Exception('TODO BASISEXCPETION')
+            raise Exception('TODO DJK BASISEXCPETION')
 
     @_pre_draw
     def uniform(self, size, basis, low, high, uids=None):
@@ -247,7 +245,7 @@ class MultiStream(np.random.Generator):
         elif basis == BOOLS:
             return super(MultiStream, self).uniform(size=size, low=low, high=high)[uids]
         else:
-            raise Exception('TODO BASISEXCPETION')
+            raise Exception('TODO DJK BASISEXCPETION')
 
     @_pre_draw
     def integers(self, size, basis, low, high, uids=None, **kwargs):
@@ -259,7 +257,7 @@ class MultiStream(np.random.Generator):
         elif basis == BOOLS:
             return super(MultiStream, self).integers(size=size, low=low, high=high, **kwargs)[uids]
         else:
-            raise Exception('TODO BASISEXCPETION')
+            raise Exception('TODO DJK BASISEXCPETION')
 
     @_pre_draw
     def poisson(self, size, basis, lam, uids=None):
@@ -271,7 +269,7 @@ class MultiStream(np.random.Generator):
         elif basis == BOOLS:
             return super(MultiStream, self).poisson(size=size, lam=lam)[uids]
         else:
-            raise Exception('TODO BASISEXCPETION')
+            raise Exception('TODO DJK BASISEXCPETION')
 
     @_pre_draw
     def normal(self, size, basis, mu=0, std=1, uids=None):
@@ -283,7 +281,7 @@ class MultiStream(np.random.Generator):
         elif basis == BOOLS:
             return mu + std*super(MultiStream, self).normal(size=size)[uids]
         else:
-            raise Exception('TODO BASISEXCPETION')
+            raise Exception('TODO DJK BASISEXCPETION')
 
     @_pre_draw
     def negative_binomial(self, size, basis, n, p, uids=None):
@@ -295,7 +293,7 @@ class MultiStream(np.random.Generator):
         elif basis == BOOLS:
             return super(MultiStream, self).negative_binomial(size=size, n=n, p=p)[uids]
         else:
-            raise Exception('TODO BASISEXCPETION')
+            raise Exception('TODO DJK BASISEXCPETION')
 
     @_pre_draw
     def bernoulli(self, prob, size, basis, uids=None):
@@ -307,7 +305,7 @@ class MultiStream(np.random.Generator):
         elif basis == BOOLS:
             return super(MultiStream, self).random(size=size)[uids] < prob # fastest
         else:
-            raise Exception('TODO BASISEXCPETION')
+            raise Exception('TODO DJK BASISEXCPETION')
 
     # @_pre_draw <-- handled by call to self.bernoullli
     def bernoulli_filter(self, uids, prob):
@@ -384,8 +382,6 @@ class CentralizedStream():
 
     def initialize(self, streams, slots=None):
         if self.initialized:
-            # TODO: Raise warning
-            assert not self.initialized
             return
 
         streams.add(self) # Seed is returned, but not used here

@@ -213,8 +213,7 @@ class People(BasePeople):
     def initialize(self, sim):
         """ Initialization """
 
-        # Slot first... TODO
-
+        # TODO DJK: Initialize slot first? Prob okay, was working!
         self.rng_female.initialize(sim.streams, self.states['slot'])
         self.rng_agedist.initialize(sim.streams, self.states['slot'])
 
@@ -225,7 +224,7 @@ class People(BasePeople):
             setattr(self, name, state)
             if name == 'slot':
                 # Initialize here in case other states use random streams that depend on slots being initialized
-                self.slot[:] = np.copy(self.uid) # TODO: .values and [:] needed?
+                self.slot[:] = np.copy(self.uid)
 
         self.age[:] = self.age_data_dist.sample(size=len(self))
         self.initialized = True

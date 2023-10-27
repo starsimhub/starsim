@@ -183,7 +183,6 @@ class Disease(Module):
 
         for lkey, layer in sim.people.networks.items():
             if lkey in pars['beta']:
-                # TODO: Likely no longer need alive here, at least not if dead people are removed
                 rel_trans = self.rel_trans * (self.infected & sim.people.alive)
                 rel_sus = self.rel_sus * (self.susceptible & sim.people.alive)
 

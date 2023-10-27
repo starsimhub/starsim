@@ -43,7 +43,7 @@ def run_sim(n, idx, intv_cov, rand_seed, multistream):
         'rand_seed': rand_seed,
         'verbose': 0,
         'remove_dead': True,
-        'n_agents': len(ppl), # TODO
+        'n_agents': len(ppl), # TODO DJK
     }
 
     if intv_cov > 0:

@@ -110,6 +110,11 @@ class background_deaths(DemographicModule):
         # Set death probs
         self.death_probs = ss.State('death_probs', float, 0)
 
+        # Define random streams
+        self.rng_dead = ss.Stream(f'dead_{self.name}')
+
+        return
+
     def set_death_rates(self, death_rates):
         """Standardize/validate death rates"""
 
@@ -203,8 +208,9 @@ class background_deaths(DemographicModule):
         self.death_probs *= p.rel_death  # Adjust overall death probabilities
 
         # Get indices of people who die of other causes
-        death_uids = ss.true(ss.binomial_arr(self.death_probs)) # TODO: Fix
-        death_uids = ss.true(sim.people.alive[death_uids])
+        #death_uids = ss.true(ss.binomial_arr(self.death_probs)) # TODO DJK: Fix
+        #death_uids = ss.true(sim.people.alive[death_uids])
+        death_uids = self.rng_dead.bernoulli_filter(p=self.death_probs, uids=sim.people.alive)
         sim.people.request_death(death_uids)
 
         return len(death_uids)
