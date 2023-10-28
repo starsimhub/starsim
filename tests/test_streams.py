@@ -21,7 +21,7 @@ def test_streams(n=5):
     rng.initialize(streams, slots=n)
 
     uids = np.arange(0,n,2) # every other to make it interesting
-    draws = rng.random(uids=uids)
+    draws = rng.random(uids)
     print(f'\nCREATED SEED AND SAMPLED: {draws}')
 
     return len(draws) == len(uids)
@@ -52,11 +52,11 @@ def test_reset(n=5):
     rng.initialize(streams, slots=n)
 
     uids = np.arange(0,n,2) # every other to make it interesting
-    s_before = rng.random(uids=uids)
+    s_before = rng.random(uids)
 
     streams.reset() # Return to step 0
 
-    s_after = rng.random(uids=uids)
+    s_after = rng.random(uids)
 
     return np.all(s_after == s_before)
 
@@ -71,11 +71,11 @@ def test_step(n=5):
     rng.initialize(streams, slots=n)
 
     uids = np.arange(0,n,2) # every other to make it interesting
-    s_before = rng.random(uids=uids)
+    s_before = rng.random(uids)
 
     streams.step(10) # 10 steps
 
-    s_after = rng.random(uids=uids)
+    s_after = rng.random(uids)
 
     return np.all(s_after != s_before)
 
@@ -128,13 +128,13 @@ def test_samplingorder(n=5):
     rng1 = ss.MultiStream('stream1')
     rng1.initialize(streams, slots=n)
 
-    s_before = rng0.random(uids=uids)
-    _ = rng1.random(uids=uids)
+    s_before = rng0.random(uids)
+    _ = rng1.random(uids)
 
     streams.reset()
 
-    _ = rng1.random(uids=uids)
-    s_after = rng0.random(uids=uids)
+    _ = rng1.random(uids)
+    s_after = rng0.random(uids)
 
     return np.all(s_before == s_after)
 

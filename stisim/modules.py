@@ -202,7 +202,7 @@ class Disease(Module):
                     p_not_acq_by_node_this_layer_b_from_a = node_from_edge.prod(axis=1) # (1-p1)*(1-p2)*...
                     p_acq_node = 1 - (1-p_acq_node) * p_not_acq_by_node_this_layer_b_from_a
 
-        new_cases_bool = self.rng_trans.bernoulli(uids=sim.people.uid, prob=p_acq_node)
+        new_cases_bool = self.rng_trans.bernoulli(sim.people.uid, prob=p_acq_node)
         new_cases = sim.people.uid[new_cases_bool]
 
         if not len(new_cases):
@@ -210,7 +210,7 @@ class Disease(Module):
 
         # Now determine who infected each case
         frm = np.zeros_like(new_cases)
-        r = self.rng_choose_infector.random(uids=new_cases)
+        r = self.rng_choose_infector.random(new_cases)
         for i, uid in enumerate(new_cases):
             p_acqs = []
             sources = []

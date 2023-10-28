@@ -33,14 +33,14 @@ class Streams:
         Otherwise, return value will be used as the seed offset for this stream
         """
         if not self.initialized:
-            raise Exception('Please call initialize before adding a stream to Streams.')
+            raise NotInitializedException('Please call initialize before adding a stream to Streams.')
 
         if stream.name in self._streams:
-            raise Exception(f'A Stream with name {stream.name} has already been added.')
+            raise RepeatNameException(f'A Stream with name {stream.name} has already been added.')
 
         if check_repeats:
             if stream.seed_offset in self.used_seed_offsets:
-                raise Exception(f'Requested seed offset {stream.seed_offset} for stream {stream} has already been used.')
+                raise SeedRepeatException(f'Requested seed offset {stream.seed_offset} for stream {stream} has already been used.')
             self.used_seed_offsets.append(stream.seed_offset)
 
         self._streams.append(stream)
@@ -58,6 +58,26 @@ class Streams:
         return
 
 
+class NotResetException(Exception):
+    "Raised when stream is called when not ready."
+    pass
+
+
+class NotInitializedException(Exception):
+    "Raised when stream is called when not initialized."
+    pass
+
+
+class SeedRepeatException(Exception):
+    "Raised when two streams have the same seed."
+    pass
+
+
+class RepeatNameException(Exception):
+    "Raised when adding a stream to streams when the stream name has already been used."
+    pass
+
+
 def Stream(*args, **kwargs):
     """
     Class to choose a stream
@@ -69,25 +89,20 @@ def Stream(*args, **kwargs):
 
 
 def _pre_draw(func):
-    def check_ready(self, **kwargs):
+    def check_ready(self, *args, **kwargs):
         """ Validation before drawing """
 
-        uids = None
-        if 'uids' in kwargs:
-            uids = kwargs['uids']
-
-        size = None
         if 'size' in kwargs:
             size = kwargs.pop('size')
+        elif len(args) == 1:
+            size = args[0]
+        elif len(args) > 1:
+            raise Exception('Only one argument is allowed, please use key=value pairs for inputs other than size.')
+        else:
+            raise Exception('Could not assess the size of the random draw.')
 
-        if not ((size is None) ^ (uids is None)):
-            raise Exception('Specify either "uids" or "size", but not both.')
-
-        if size is not None:
+        if isinstance(size, int):
             # Size-based
-            if not isinstance(size, int):
-                raise Exception('Input "size" must be an integer')
-
             if size < 0:
                 raise Exception('Input "size" cannot be negative')
 
@@ -97,7 +112,10 @@ def _pre_draw(func):
             basis = SIZE
 
         else:
-            # UID-based
+            # UID-based (size should be an array)
+            uids = size
+            kwargs['uids'] = uids
+
             if len(uids) == 0:
                 return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
 
@@ -111,13 +129,13 @@ def _pre_draw(func):
 
         if not self.initialized:
             msg = f'Stream {self.name} has not been initialized!'
-            raise Exception(msg)
+            raise NotInitializedException(msg)
         if not self.ready:
             msg = f'Stream {self.name} has already been sampled on this timestep!'
-            raise Exception(msg)
+            raise NotResetException(msg)
         self.ready = False
 
-        return func(self, basis=basis, size=size, **kwargs)
+        return func(self, size=size, basis=basis, **kwargs)
 
     return check_ready
 
@@ -223,8 +241,8 @@ class MultiStream(np.random.Generator):
         return self._select(vals, basis, uids)
 
     @_pre_draw
-    def normal(self, size, basis, mu=0, std=1, uids=None):
-        vals = mu + std*super(MultiStream, self).normal(size=size)
+    def normal(self, size, basis, loc=0, scale=1, uids=None):
+        vals = loc + scale*super(MultiStream, self).normal(size=size)
         return self._select(vals, basis, uids)
 
     @_pre_draw
@@ -238,13 +256,13 @@ class MultiStream(np.random.Generator):
         return self._select(vals, basis, uids)
 
     @_pre_draw
-    def bernoulli(self, prob, size, basis, uids=None):
+    def bernoulli(self, size, prob, basis, uids=None):
         vals = super(MultiStream, self).random(size=size)
         return self._select(vals, basis, uids) < prob
 
     # @_pre_draw <-- handled by call to self.bernoullli
     def bernoulli_filter(self, uids, prob):
-        return uids[self.bernoulli(uids=uids, prob=prob)]
+        return uids[self.bernoulli(size=uids, prob=prob)]
 
     def choice(self, size, basis, a, **kwargs):
         # Consider raising a warning instead?
@@ -252,22 +270,19 @@ class MultiStream(np.random.Generator):
 
 
 def _pre_draw_centralized(func):
-    def check_ready(self, **kwargs):
+    def check_ready(self, *args, **kwargs):
         """ Validation before drawing """
-
-        uids = None
-        if 'uids' in kwargs:
-            uids = kwargs.pop('uids')
-
-        size = None
         if 'size' in kwargs:
             size = kwargs.pop('size')
-
-        if not ((size is None) ^ (uids is None)):
-            raise Exception('Specify either "uids" or "size", but not both.')
+        elif len(args) == 1:
+            size = args[0]
+        elif len(args) > 1:
+            raise Exception('Only one argument is allowed, please use key=value pairs for inputs other than size.')
+        else:
+            raise Exception('Could not assess the size of the random draw.')
 
         # Check for zero length size
-        if size is not None:
+        if isinstance(size, int):
             # size-based
             if not isinstance(size, int):
                 raise Exception('Input "size" must be an integer')
@@ -279,7 +294,9 @@ def _pre_draw_centralized(func):
                 return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
 
         else:
-            # uid-based
+            # UID-based (size should be an array)
+            uids = size
+
             if len(uids) == 0:
                 return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
 
@@ -290,7 +307,7 @@ def _pre_draw_centralized(func):
 
         if not self.initialized:
             msg = f'Stream {self.name} has not been initialized!'
-            raise Exception(msg)
+            raise NotInitializedException(msg)
 
         return func(self, size=size, **kwargs)
 
@@ -343,7 +360,7 @@ class CentralizedStream():
 
     @_pre_draw_centralized
     def poisson(self, size, lam, **kwargs):
-        return np.random.poisson(lam=lam, size=size, **kwargs)
+        return np.random.poisson(size=size, lam=lam, **kwargs)
 
     @_pre_draw_centralized
     def normal(self, size, mu=0, std=1, **kwargs):
@@ -358,11 +375,11 @@ class CentralizedStream():
         return np.random.negative_binomial(size=size, n=n, p=p, **kwargs)
 
     @_pre_draw_centralized
-    def bernoulli(self, prob, size, **kwargs):
+    def bernoulli(self, size, prob, **kwargs):
         return np.random.random(size=size, **kwargs) < prob
 
     def bernoulli_filter(self, uids, prob):
-        return uids[self.bernoulli(uids=uids, prob=prob)]
+        return uids[self.bernoulli(size=uids, prob=prob)]
 
     @_pre_draw_centralized
     def choice(self, size, a, **kwargs):

@@ -210,7 +210,7 @@ class background_deaths(DemographicModule):
         # Get indices of people who die of other causes
         #death_uids = ss.true(ss.binomial_arr(self.death_probs)) # TODO DJK: Fix
         #death_uids = ss.true(sim.people.alive[death_uids])
-        death_uids = self.rng_dead.bernoulli_filter(p=self.death_probs, uids=sim.people.alive)
+        death_uids = self.rng_dead.bernoulli_filter(sim.people.alive, prob=self.death_probs)
         sim.people.request_death(death_uids)
 
         return len(death_uids)
@@ -318,20 +318,19 @@ class Pregnancy(DemographicModule):
         if self.pars.inci > 0:
             denom_conds = ppl.female & ppl.active & self.susceptible
             inds_to_choose_from = ss.true(denom_conds)
-            uids = self.rng_conception.bernoulli_filter(uids=inds_to_choose_from, prob=self.pars.inci)
+            uids = self.rng_conception.bernoulli_filter(inds_to_choose_from, prob=self.pars.inci)
 
             # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
             n_unborn_agents = len(uids)
             if n_unborn_agents > 0:
-                new_slots = self.rng_uids.integers(low=sim.pars['n_agents'], high=sim.pars['slot_scale']*sim.pars['n_agents'], uids=uids, dtype=int)
+                new_slots = self.rng_uids.integers(uids, low=sim.pars['n_agents'], high=sim.pars['slot_scale']*sim.pars['n_agents'], dtype=int)
 
                 # Grow the arrays and set properties for the unborn agents
                 new_uids = sim.people.grow(len(new_slots))
 
                 sim.people.age[new_uids] = -self.pars.dur_pregnancy
-                #sim.people.female[new_uids] = self.rng_sex.bernoulli(uids=uids, prob=0.5) # Replace 0.5 with sex ratio at birth
                 sim.people.slot[new_uids] = new_slots # Before sampling female_dist
-                sim.people.female[new_uids] = self.female_dist.sample(uids=uids)
+                sim.people.female[new_uids] = self.female_dist.sample(uids)
 
                 # Add connections to any vertical transmission layers
                 # Placeholder code to be moved / refactored. The maternal network may need to be
@@ -361,7 +360,7 @@ class Pregnancy(DemographicModule):
 
         # Outcomes for pregnancies
         dur = np.full(len(uids), sim.ti + self.pars.dur_pregnancy / sim.dt)
-        dead = self.rng_dead.bernoulli(uids=uids, prob=self.pars.p_death)
+        dead = self.rng_dead.bernoulli(uids, prob=self.pars.p_death)
         self.ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
         dur_post_partum = np.full(len(uids), dur + self.pars.dur_postpartum / sim.dt)
         self.ti_postpartum[uids] = dur_post_partum

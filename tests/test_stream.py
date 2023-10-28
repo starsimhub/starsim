@@ -27,7 +27,7 @@ def test_sample(n=5):
     rng = make_rng(n)
     uids = np.arange(0,n,2) # every other to make it interesting
 
-    draws = rng.random(uids=uids)
+    draws = rng.random(uids)
     print(f'\nSAMPLE({n}): {draws}')
 
     return len(draws) == len(uids)
@@ -49,7 +49,7 @@ def test_neg_binomial(n=5):
     rng.step(1) # Prepare to call again
     # Now try calling with UIDs instead of n
     uids = np.arange(0,n,2) # every other to make it interesting
-    draws_u = nb.sample(uids=uids)
+    draws_u = nb.sample(uids)
 
     print(f'\nSAMPLE({n}): {draws}')
     return len(draws) == n and len(draws_u) == len(uids)
@@ -61,13 +61,13 @@ def test_reset(n=5):
     rng = make_rng(n)
     uids = np.arange(0,n,2) # every other to make it interesting
 
-    draws1 = rng.random(uids=uids)
+    draws1 = rng.random(uids)
     print(f'\nSAMPLE({n}): {draws1}')
 
     print(f'\nRESET')
     rng.reset()
 
-    draws2 = rng.random(uids=uids)
+    draws2 = rng.random(uids)
     print(f'\nSAMPLE({n}): {draws2}')
 
     return np.all(np.equal(draws1, draws2))
@@ -79,13 +79,13 @@ def test_step(n=5):
     rng = make_rng(n)
     uids = np.arange(0,n,2) # every other to make it interesting
 
-    draws1 = rng.random(uids=uids)
+    draws1 = rng.random(uids)
     print(f'\nSAMPLE({n}): {draws1}')
 
     print(f'\nSTEP(1) - sample should change')
     rng.step(1)
 
-    draws2 = rng.random(uids=uids)
+    draws2 = rng.random(uids)
     print(f'\nSAMPLE({n}): {draws2}')
     
     return np.all(np.equal(draws1, draws2))
@@ -97,11 +97,11 @@ def test_seed(n=5):
     uids = np.arange(0,n,2) # every other to make it interesting
 
     rng0 = make_rng(n, base_seed=0)
-    draws0 = rng0.random(uids=uids)
+    draws0 = rng0.random(uids)
     print(f'\nSAMPLE({n}): {draws0}')
 
     rng1 = make_rng(n, base_seed=1)
-    draws1 = rng1.random(uids=uids)
+    draws1 = rng1.random(uids)
     print(f'\nSAMPLE({n}): {draws1}')
 
     return np.all(np.equal(draws0, draws1))
@@ -113,12 +113,12 @@ def test_repeat(n=5):
     rng = make_rng(n)
     uids = np.arange(0,n,2) # every other to make it interesting
 
-    draws1 = rng.random(uids=uids)
+    draws1 = rng.random(uids)
     print(f'\nSAMPLE({n}): {draws1}')
     
     print(f'\nSAMPLE({n}): [should raise an exception as neither reset() nor step() have been called]')
     try:
-        rng.random(uids=uids)
+        rng.random(uids)
         return False # Should not get here!
     except NotResetException as e:
         print(f'YAY! Got exception: {e}')
@@ -133,12 +133,12 @@ def test_boolmask(n=5):
     mask = np.full(n, False)
     mask[uids] = True
 
-    draws_bool = rng.random(uids=mask)
+    draws_bool = rng.random(mask)
     print(f'\nSAMPLE({n}): {draws_bool}')
 
     rng.reset()
 
-    draws_uids = rng.random(uids=uids)
+    draws_uids = rng.random(uids)
     print(f'\nSAMPLE({n}): {draws_uids}')
 
     return np.all(np.equal(draws_bool, draws_uids))
@@ -149,7 +149,7 @@ def test_empty():
     sc.heading('Testing empty draw')
     rng = make_rng(n)
     uids = np.array([]) # EMPTY
-    draws = rng.random(uids=uids)
+    draws = rng.random(uids)
     print(f'\nSAMPLE: {draws}')
 
     return len(draws) == 0

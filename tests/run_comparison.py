@@ -14,9 +14,11 @@ import argparse
 import sciris as sc
 
 default_n_agents = 25
-network = ['stable_monogamy', 'embedding'][1]
+# Three choices for network here, note that only the first two are stream safe
+network = ['stable_monogamy', 'embedding', 'hpv_network'][1]
 
 do_plot_graph = True
+# Several choices for how to layout the graph when plotting
 kind = ['radial', 'bipartite', 'spring', 'multipartite'][1]
 
 do_plot_longitudinal = True

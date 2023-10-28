@@ -443,7 +443,7 @@ class mf(SexualNetwork, DynamicNetwork):
             uids = ss.true(people[sk][eligible_uids])
             df = self.pars.part_rates.loc[self.pars.part_rates.sex == sk]
             pr = np.interp(year, df['year'], df['part_rates']) * self.pars.rel_part_rates
-            self.participant[uids] = rng.bernoulli(uids=uids, prob=pr)
+            self.participant[uids] = rng.bernoulli(uids, prob=pr)
         return
 
     def set_debut(self, people, upper_age=None):
@@ -461,7 +461,7 @@ class mf(SexualNetwork, DynamicNetwork):
             mean = np.interp(people.year, df['year'], df['debut'])
             std = np.interp(people.year, df['year'], df['std'])
             dist = df.loc[df.year == nearest_year].dist.iloc[0]
-            debut_vals = ss.Distribution.create(dist, mean, std, rng=self.rng_debut)(uids=uids) * self.pars.rel_debut
+            debut_vals = ss.Distribution.create(dist, mean, std, rng=self.rng_debut)(uids) * self.pars.rel_debut
             self.debut[uids] = debut_vals
         return
 
@@ -491,7 +491,7 @@ class mf(SexualNetwork, DynamicNetwork):
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
         self.contacts.beta = np.concatenate([self.contacts.beta, beta])
         self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
-        return
+        return len(p1)
 
     def update(self, people, dt=None):
         self.end_pairs(people)
@@ -551,7 +551,7 @@ class msm(SexualNetwork, DynamicNetwork):
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
         self.contacts.beta = np.concatenate([self.contacts.beta, np.ones_like(p1)])
         self.contacts.dur = np.concatenate([self.contacts.dur, self.pars.dur.sample(len(p1))])
-        return
+        return len(p1)
 
     def update(self, people, dt=None):
         self.end_pairs(people)
@@ -589,7 +589,7 @@ class embedding(mf):
             return 0
 
         available = np.concatenate((available_m, available_f))
-        draws = self.rng_loc.normal(uids=available)
+        draws = self.rng_loc.normal(available)
         draws_m, draws_f = draws[:len(available_m)], draws[len(available_m):]
         # TODO DJK: Make parameters
         male_shift = 5
@@ -614,13 +614,13 @@ class embedding(mf):
 
         # TODO DJK: Why let the user chose the distribution, but hard code mean and std???
         dur_dist = self.pars.dur.loc[self.pars.dur.year == nearest_year].dist.iloc[0]
-        dur_vals = ss.Distribution.create(dur_dist, mean, std, rng=self.rng_dur)(uids=available_m[ind_m])
+        dur_vals = ss.Distribution.create(dur_dist, mean, std, rng=self.rng_dur)(available_m[ind_m])
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, available_m[ind_m]])
         self.contacts.p2 = np.concatenate([self.contacts.p2, available_f[ind_f]])
         self.contacts.beta = np.concatenate([self.contacts.beta, beta])
         self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
-        return
+        return len(beta)
 
 
 class stable_monogamy(SexualNetwork):
@@ -674,6 +674,9 @@ class mf_msm(NetworkConnector):
             'prop_bi': 0.5,  # Could vary over time -- but not by age or sex or individual
         }, self.pars)
 
+        self.rng_bi  = ss.Stream('bi')
+        self.rng_excl  = ss.Stream('excl')
+
         # TODO: Ensure that networks includes 'mf' and 'msm' as they are needed below
         if self.networks is None:
             self.networks = ['mf', 'msm']
@@ -681,6 +684,8 @@ class mf_msm(NetworkConnector):
 
     def initialize(self, sim):
         super().initialize(sim)
+        self.rng_bi.initialize(sim.streams, sim.people.slot)
+        self.rng_excl.initialize(sim.streams, sim.people.slot)
         self.set_participation(sim.people)
         return
 
@@ -705,14 +710,14 @@ class mf_msm(NetworkConnector):
 
         # Now we take the MSM participants and determine which are also in the MF network
         msm_uids = ss.true(msm.participant[uids])  # Males in the MSM network
-        bi_uids = ss.binomial_filter(self.pars.prop_bi, msm_uids)  # Males in both MSM and MF networks
+        bi_uids = self.rng_bi.binomial_filter(uids=msm_uids, prob=self.pars.prop_bi)  # Males in both MSM and MF networks
         mf_excl_set = np.setdiff1d(uids, msm_uids)  # Set of males who aren't in the MSM network
 
         # What remaining share to we need?
         mf_df = mf.pars.part_rates.loc[mf.pars.part_rates.sex == 'm']  # Male participation in the MF network
         mf_pr = np.interp(people.year, mf_df['year'], mf_df['part_rates']) * mf.pars.rel_part_rates
         remaining_pr = max(mf_pr*len(uids)-len(bi_uids), 0)/len(mf_excl_set)
-        mf_excl_uids = ss.binomial_filter(remaining_pr, mf_excl_set)  # Males in MF network only
+        mf_excl_uids = self.rng_excl.binomial_filter(uids=mf_excl_set, prob=remaining_pr)  # Males in MF network only
         mf.participant[bi_uids] = True
         mf.participant[mf_excl_uids] = True
         return
@@ -755,6 +760,11 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         self.rng_dur_pship = ss.Stream('dur_pship')
         self.pars['dur_pship'].set_stream(self.rng_dur_pship)
 
+        # These streams are called multiple times per step, and thus are not stream safe
+        # Thus we use the CentralizedStream
+        self.rng_f_contacts  = ss.CentralizedStream('f_contacts')
+        self.rng_m_contacts  = ss.CentralizedStream('m_contacts')
+
         self.update_pars(pars)
         self.get_layer_probs()
         return
@@ -763,11 +773,12 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         super().initialize(sim)
 
         # Initialize streams
-        self.rng_partners.initialize(sim.streams)
-        self.rng_acts.initialize(sim.streams)
-        self.rng_dur_pship.initialize(sim.streams)
+        self.rng_partners.initialize(sim.streams, sim.people.slot)
+        self.rng_acts.initialize(sim.streams, sim.people.slot)
+        self.rng_dur_pship.initialize(sim.streams, sim.people.slot)
+        self.rng_f_contacts.initialize(sim.streams, sim.people.slot)
+        self.rng_m_contacts.initialize(sim.streams, sim.people.slot)
 
-        self.add_pairs(sim.people, ti=0)
         return self.add_pairs(sim.people, ti=0)
 
     def update_pars(self, pars):
@@ -843,9 +854,9 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         bin_range_f = np.unique(age_bins_f)  # Range of bins
         f = []  # Initialize the female partners
         for ab in bin_range_f:  # Loop over age bins
-            these_f_contacts = ss.binomial_filter(self.pars['participation'][1][ab], f_eligible_inds[
-                age_bins_f == ab])  # Select females according to their participation rate in this layer
-            f += these_f_contacts.tolist()
+            these_f_contacts = self.rng_f_contacts.bernoulli_filter(uids=f_eligible_inds[ age_bins_f == ab], prob=self.pars['participation'][1][ab])  # Select females according to their participation rate in this layer
+            f.append(these_f_contacts)
+        f = np.concatenate(f)
 
         # Select males according to their participation rate in this layer
         m_eligible_inds = ss.true(m_eligible)
@@ -853,9 +864,9 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         bin_range_m = np.unique(age_bins_m)  # Range of bins
         m = []  # Initialize the male partners
         for ab in bin_range_m:
-            these_m_contacts = ss.binomial_filter(self.pars['participation'][2][ab], m_eligible_inds[
-                age_bins_m == ab])  # Select males according to their participation rate in this layer
-            m += these_m_contacts.tolist()
+            these_m_contacts = self.rng_m_contacts.bernoulli_filter(uids=m_eligible_inds[age_bins_m == ab], prob=self.pars['participation'][2][ab])  # Select males according to their participation rate in this layer
+            m.append(these_m_contacts)
+        m = np.concatenate(m)
 
         # Create preference matrix between eligible females and males that combines age and geo mixing
         age_bins_f = np.digitize(people.age[f],
@@ -865,7 +876,8 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         pair_probs = self.pars['mixing'][age_m, age_f + 1]
 
         f_to_remove = pair_probs.max(axis=0) == 0  # list of female inds to remove if no male partners are found for her
-        f = [i for i, flag in zip(f, f_to_remove) if ~flag]  # remove the inds who don't get paired on this timestep
+        #f = [i for i, flag in zip(f, f_to_remove) if ~flag]  # remove the inds who don't get paired on this timestep
+        f = f[~f_to_remove]
         selected_males = []
         if len(f):
             pair_probs = pair_probs[:, np.invert(f_to_remove)]
@@ -877,15 +889,15 @@ class hpv_network(SexualNetwork, DynamicNetwork):
                 m_col = pair_probs[:, fem]
                 if m_col.sum() > 0:
                     m_col_norm = m_col / m_col.sum()
-                    choice = np.random.choice(len(m_col_norm), 1, replace=False, p=m_col_norm) # TODO: Stream-ify?
+                    choice = np.random.choice(len(m_col_norm), p=m_col_norm) # TODO: Stream-ify?
                     choices.append(choice)
                     pair_probs[choice, :] = 0  # Once male partner is assigned, remove from eligible pool
                 else:
                     f_paired_bools[fem] = False
-            selected_males = np.array(m)[np.array(choices).flatten()]
-            f = np.array(f)[f_paired_bools]
+            selected_males = m[np.array(choices).flatten()]
+            f = f[f_paired_bools]
 
-        p1 = np.array(f)
+        p1 = f
         p2 = selected_males
         n_partnerships = len(p1)
         dur = self.pars['dur_pship'].sample(n_partnerships)
@@ -937,7 +949,7 @@ class hpv_network(SexualNetwork, DynamicNetwork):
             beta=beta
         )
         self.append(new_contacts)
-        return
+        return len(new_contacts)
 
     def update(self, people, ti=None, dt=None):
         if ti is None: ti = people.ti
@@ -984,4 +996,4 @@ class maternal(Network):
         self.contacts.p2 = np.concatenate([self.contacts.p2, unborn_inds])
         self.contacts.beta = np.concatenate([self.contacts.beta, beta])
         self.contacts.dur = np.concatenate([self.contacts.dur, dur])
-        return
+        return len(mother_inds)
