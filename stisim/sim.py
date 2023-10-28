@@ -113,17 +113,15 @@ class Sim(sc.prettyobj):
         Some parameters can take multiple types; this makes them consistent.
         """
         # Handle n_agents
-        if self.pars['n_agents'] is not None:
+        if self.people is not None:
+            self.pars['n_agents'] = len(self.people)
+        elif self.popdict is not None:
+            self.pars['n_agents'] = len(self.popdict)
+        elif self.pars['n_agents'] is not None:
             self.pars['n_agents'] = int(self.pars['n_agents'])
         else:
-            if self.people is not None:
-                self.pars['n_agents'] = len(self.people)
-            else:
-                if self.popdict is not None:
-                    self.pars['n_agents'] = len(self.popdict)
-                else:
-                    errormsg = 'Must supply n_agents, a people object, or a popdict'
-                    raise ValueError(errormsg)
+            errormsg = 'Must supply n_agents, a people object, or a popdict'
+            raise ValueError(errormsg)
 
         # Handle end and n_years
         if self.pars['end']:

@@ -212,18 +212,16 @@ class People(BasePeople):
     def initialize(self, sim):
         """ Initialization """
 
-        # TODO DJK: Initialize slot first? Prob okay, was working!
         self.rng_female.initialize(sim.streams, self.states['slot'])
         self.rng_agedist.initialize(sim.streams, self.states['slot'])
 
         for name, state in self.states.items():
             self.add_state(state)  # Register the state internally for dynamic growth
-            #self.states.append(state)  # Expose these states with their original names # TODO DJK: Remove if not needed
             state.initialize(self)  # Connect the state to this people instance
             setattr(self, name, state)
             if name == 'slot':
                 # Initialize here in case other states use random streams that depend on slots being initialized
-                self.slot[:] = self.uid #TODO DJK: .__array__()
+                self.slot[:] = self.uid
 
         self.age[:] = self.age_data_dist.sample(len(self))
         self.initialized = True

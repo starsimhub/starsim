@@ -85,8 +85,7 @@ class GraphAnalyzer(ss.Analyzer):
             'cd4': sim.people.hiv.cd4.values,
         })
 
-        #edges = pd.DataFrame(sim.people.networks[0].to_dict()) #sim.people.networks['embedding'].to_df() #TODO DJK: repr issues
-        edges = sim.people.networks[network].to_df() #TODO DJK: Not working? # TODO DJK: choose network here too!
+        edges = sim.people.networks[network].to_df()
 
         idx = sim.ti if not init else -1
         self.graphs[idx] = Graph(nodes, edges)
@@ -119,7 +118,6 @@ def run_sim(n=25, rand_seed=0, intervention=False, analyze=False, lbl=None):
         'interventions': [art] if intervention else [],
         'rand_seed': rand_seed,
         'analyzers': [GraphAnalyzer()] if analyze else [],
-        'n_agents': len(ppl), # TODO: Build into Sim
     }
     sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[ss.Pregnancy(), ss.background_deaths()], pars=pars, label=lbl)
     sim.initialize()

@@ -565,8 +565,18 @@ class embedding(mf):
     Heterosexual age-assortative network based on a one-dimensional embedding. Could be made more generic.
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, male_shift=5, std=3, **kwargs):
+        """
+        Create a sexual network from a 1D embedding based on age
+
+        male_shift is the average age that males are older than females in partnerships
+        std is the standard deviation of noise added to the age of each individual when seeking a pair. Larger values will created more diversity in age gaps.
+        
+        """
         super().__init__(**kwargs)
+
+        self.male_shift = male_shift
+        self.std = std
 
         # Define additional random streams
         self.rng_loc = ss.Stream('loc')
@@ -591,11 +601,8 @@ class embedding(mf):
         available = np.concatenate((available_m, available_f))
         draws = self.rng_loc.normal(available)
         draws_m, draws_f = draws[:len(available_m)], draws[len(available_m):]
-        # TODO DJK: Make parameters
-        male_shift = 5
-        std = 3
-        loc_m = people.age[available_m].values + std*draws_m - male_shift
-        loc_f = people.age[available_f].values + std*draws_f
+        loc_m = people.age[available_m].values + self.std * draws_m - self.male_shift
+        loc_f = people.age[available_f].values + self.std * draws_f
         dist_mat = sps.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
 
         ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
@@ -612,7 +619,7 @@ class embedding(mf):
         mean = np.interp(people.year, self.pars.dur['year'], self.pars.dur['dur'])
         std = np.interp(people.year, self.pars.dur['year'], self.pars.dur['std'])
 
-        # TODO DJK: Why let the user chose the distribution, but hard code mean and std???
+        # TODO: Why let the user chose the distribution, but hard code mean and std???
         dur_dist = self.pars.dur.loc[self.pars.dur.year == nearest_year].dist.iloc[0]
         dur_vals = ss.Distribution.create(dur_dist, mean, std, rng=self.rng_dur)(available_m[ind_m])
 
