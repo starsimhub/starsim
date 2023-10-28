@@ -250,8 +250,7 @@ class Pregnancy(DemographicModule):
 
         self.rng_conception = ss.Stream('conception')
         self.rng_dead = ss.Stream(f'dead_{self.name}')
-
-        self.rng_uids = ss.Stream(f'uids_{self.name}')
+        self.rng_choose_slots = ss.Stream(f'uids_{self.name}')
 
         return
 
@@ -322,7 +321,7 @@ class Pregnancy(DemographicModule):
             # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
             n_unborn_agents = len(uids)
             if n_unborn_agents > 0:
-                new_slots = self.rng_uids.integers(uids, low=sim.pars['n_agents'], high=sim.pars['slot_scale']*sim.pars['n_agents'], dtype=int)
+                new_slots = self.rng_choose_slots.integers(uids, low=sim.pars['n_agents'], high=sim.pars['slot_scale']*sim.pars['n_agents'], dtype=int)
 
                 # Grow the arrays and set properties for the unborn agents
                 new_uids = sim.people.grow(len(new_slots))
