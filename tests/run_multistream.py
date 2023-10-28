@@ -36,6 +36,7 @@ def run_sim(n, idx, intv_cov, rand_seed, multistream):
     hiv = ss.HIV(hiv_pars)
 
     pregnancy = ss.Pregnancy()
+    deaths = ss.background_deaths()
 
     pars = {
         'start': 1980,
@@ -49,7 +50,7 @@ def run_sim(n, idx, intv_cov, rand_seed, multistream):
     if intv_cov > 0:
         pars['interventions'] = [ ss.hiv.ART(t=[0, 10, 20], coverage=[0, intv_cov/3, intv_cov]) ]
 
-    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[pregnancy], pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}')
+    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[pregnancy, deaths], pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}')
     sim.initialize()
     sim.run()
 

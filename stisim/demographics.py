@@ -105,7 +105,7 @@ class background_deaths(DemographicModule):
         }, self.pars)
 
         # Validate death rate inputs
-        self.set_death_rates(pars['death_rates'])
+        self.set_death_rates(self.pars['death_rates'])
 
         # Set death probs
         self.death_probs = ss.State('death_probs', float, 0)
@@ -208,9 +208,8 @@ class background_deaths(DemographicModule):
         self.death_probs *= p.rel_death  # Adjust overall death probabilities
 
         # Get indices of people who die of other causes
-        #death_uids = ss.true(ss.binomial_arr(self.death_probs)) # TODO DJK: Fix
-        #death_uids = ss.true(sim.people.alive[death_uids])
-        death_uids = self.rng_dead.bernoulli_filter(sim.people.alive, prob=self.death_probs)
+        alive_uids = ss.true(sim.people.alive)
+        death_uids = self.rng_dead.bernoulli_filter(uids=alive_uids, prob=self.death_probs[alive_uids])
         sim.people.request_death(death_uids)
 
         return len(death_uids)
@@ -220,7 +219,7 @@ class background_deaths(DemographicModule):
 
     def finalize(self, sim):
         self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['mortality_rate'] = self.results['new'] / sim.results['pop_size']
+        self.results['mortality_rate'] = self.results['new'] / sim.results['n_alive']
 
 
 class Pregnancy(DemographicModule):

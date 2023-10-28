@@ -121,10 +121,10 @@ def run_sim(n=25, rand_seed=0, intervention=False, analyze=False, lbl=None):
         'analyzers': [GraphAnalyzer()] if analyze else [],
         'n_agents': len(ppl), # TODO: Build into Sim
     }
-    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[ss.Pregnancy()], pars=pars, label=lbl)
+    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[ss.Pregnancy(), ss.background_deaths()], pars=pars, label=lbl)
     sim.initialize()
 
-    # Infecte every other per
+    # Infect every other person, useful for exploration in conjunction with init_prev=0
     #sim.diseases['hiv'].set_prognoses(sim, np.arange(0,n,2), from_uids=None)
 
     sim.run()
@@ -280,7 +280,6 @@ def plot_longitudinal(sim1, sim2):
     df2['sim'] = 'With ART'
 
     df = pd.concat([df1, df2]).set_index('id')
-    #f = ti_bars_nested(df)
 
     df['ypos'] = pd.factorize(df.index.values)[0]
     N = df['sim'].nunique()
@@ -288,30 +287,37 @@ def plot_longitudinal(sim1, sim2):
 
     fig, ax = plt.subplots(figsize=(10,6))
 
+    # For the legend:
+    plt.barh(y=0, left=0, width=1e-6, color='k', height=height, label='Alive')
+    plt.barh(y=0, left=0, width=1e-6, color='m', height=height, label='Infected before birth')
+    plt.barh(y=0, left=0, width=1e-6, color='r', height=height, label='Infected')
+    plt.barh(y=0, left=0, width=1e-6, color='g', height=height, label='ART')
+    plt.scatter(y=0, x=0, color='c', marker='|', label='Death')
+
     for n, (lbl, data) in enumerate(df.groupby('sim')):
         yp = data['ypos'] + n/(N+1) # Leave space
 
         ti_initial = np.maximum(-data['age_initial'], 0)
         ti_final = data['ti_dead'].fillna(40)
-        plt.barh(y=yp, left=ti_initial, width=ti_final - ti_initial, color='k', height=height, label='Alive' if n==0 else None)
+        plt.barh(y=yp, left=ti_initial, width=ti_final - ti_initial, color='k', height=height)
 
         # Infected before birth
         vertical = data['age_infected']<0
-        plt.barh(y=yp[vertical], left=data.loc[vertical]['ti_infected'], width=ti_final[vertical]-data.loc[vertical]['ti_infected'], color='m', height=height, label='Infected before birth' if n==0 else None)
+        plt.barh(y=yp[vertical], left=data.loc[vertical]['ti_infected'], width=ti_final[vertical]-data.loc[vertical]['ti_infected'], color='m', height=height)
 
         # Infected
         infected = ~data['ti_infected'].isna()
         ai = data.loc[infected]['age_infected'].values # Adjust for vertical transmission
         ai[~(ai<0)] = 0
-        plt.barh(y=yp[infected], left=data.loc[infected]['ti_infected']-ai, width=ti_final[infected]-data.loc[infected]['ti_infected']+ai, color='r', height=height, label='Infected' if n==0 else None)
+        plt.barh(y=yp[infected], left=data.loc[infected]['ti_infected']-ai, width=ti_final[infected]-data.loc[infected]['ti_infected']+ai, color='r', height=height)
 
         # ART
         art = ~data['ti_art'].isna()
-        plt.barh(y=yp[art], left=data.loc[art]['ti_art'], width=ti_final[art]-data.loc[art]['ti_art'], color='g', height=height, label='ART' if n==0 else None)
+        plt.barh(y=yp[art], left=data.loc[art]['ti_art'], width=ti_final[art]-data.loc[art]['ti_art'], color='g', height=height)
 
         # Dead
         dead = ~data['ti_dead'].isna()
-        plt.scatter(y=yp[dead], x=data.loc[dead]['ti_dead'], color='c', marker='|', label='Death' if n==0 else None)
+        plt.scatter(y=yp[dead], x=data.loc[dead]['ti_dead'], color='c', marker='|')
 
     ax.set_xlabel('Age (years)')
     ax.set_ylabel('UID')
