@@ -147,7 +147,7 @@ def test_boolmask(n=5):
 def test_empty():
     """ Simple sample with a boolean mask"""
     sc.heading('Testing empty draw')
-    rng = make_rng()
+    rng = make_rng(5) # Number of slots is arbitrary
     uids = np.array([]) # EMPTY
     draws = rng.random(uids)
     print(f'\nSAMPLE: {draws}')
