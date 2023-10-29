@@ -13,7 +13,7 @@ class Module(sc.prettyobj):
 
     def __init__(self, pars=None, label=None, requires=None, *args, **kwargs):
 
-        self.pars = sc.objdict(pars)
+        self.pars = pars
         self.label = label if label else ''
         self.requires = sc.mergelists(requires)
         self.results = ss.ndict(type=ss.Result)

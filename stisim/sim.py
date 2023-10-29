@@ -115,8 +115,8 @@ class Sim(sc.prettyobj):
         # Handle n_agents
         if self.people is not None:
             self.pars['n_agents'] = len(self.people)
-        elif self.popdict is not None:
-            self.pars['n_agents'] = len(self.popdict)
+        #elif self.popdict is not None: # STIsim does not currenlty support self.popdict
+            #self.pars['n_agents'] = len(self.popdict)
         elif self.pars['n_agents'] is not None:
             self.pars['n_agents'] = int(self.pars['n_agents'])
         else:
@@ -185,15 +185,12 @@ class Sim(sc.prettyobj):
         if popdict is None:
             if self.pars['location'] is not None:
                 # Check where to get total_pop from
-                if self.pars[
-                    'total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
+                if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
                     errormsg = 'You can either define total_pop explicitly or via the location, but not both'
                     raise ValueError(errormsg)
                 total_pop, popdict = ss.make_popdict(n=self.pars['n_agents'], location=self.pars['location'], verbose=self.pars['verbose'])
-
             else:
-                if self.pars[
-                    'total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
+                if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
                     total_pop = self.pars['total_pop']
                 else:
                     if self.pars['pop_scale'] is not None:
