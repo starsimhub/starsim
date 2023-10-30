@@ -857,7 +857,7 @@ class maternal(Network):
         return
 
 class static(Network):
-    """ A network class of static partnerships converted from networkx graph """
+    """ A network class of static partnerships converted from a networkx graph. """
     def __init__(self, graph):
         self.graph = graph
         super().__init__()
@@ -866,6 +866,7 @@ class static(Network):
     def initialize(self, sim):
         super().initialize(sim)
         self.get_contacts()
+        self.validate()
         return
 
     def get_contacts(self):

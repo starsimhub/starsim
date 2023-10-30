@@ -1,5 +1,5 @@
 """
-Static networks from networkx or .csv files
+Static networks from networkx
 """
 
 # %% Imports and settings
@@ -9,10 +9,11 @@ import networkx as nx
 
 ppl = ss.People(10000)
 
-# This example
-G = nx.erdos_renyi_graph(10000, 0.0001)
+# This example runs on two independent static networks + the maternal network
+g1 = nx.erdos_renyi_graph(10000, 0.001)
+g2 = nx.scale_free_graph(10000)
 ppl.networks = ss.Networks(
-    ss.static(graph=G), ss.maternal()
+    ss.static(graph=g1), ss.static(graph=g2), ss.maternal()
 )
 
 hiv = ss.HIV()
