@@ -9,7 +9,7 @@ import stisim as ss
 import pandas as pd
 
 # Specify all externally visible functions this file defines
-__all__ = ['Networks', 'Network', 'NetworkConnector', 'mf', 'msm', 'mf_msm', 'hpv_network', 'maternal']
+__all__ = ['Networks', 'Network', 'NetworkConnector', 'mf', 'msm', 'mf_msm', 'hpv_network', 'maternal', 'static']
 
 
 class Network(ss.Module):
@@ -855,3 +855,23 @@ class maternal(Network):
         self.contacts.beta = np.concatenate([self.contacts.beta, beta])
         self.contacts.dur = np.concatenate([self.contacts.dur, dur])
         return
+
+class static(Network):
+    """ A network class of static partnerships converted from networkx graph """
+    def __init__(self, graph):
+        self.graph = graph
+        return
+
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.get_contacts()
+        return
+
+    def get_contacts(self):
+        for edge in self.graph.edges():
+            p1, p2 = edge
+            self.contacts.p1.append(p1)
+            self.contacts.p2.append(p2)
+        return
+
+
