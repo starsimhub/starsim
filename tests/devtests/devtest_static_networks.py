@@ -10,7 +10,7 @@ import networkx as nx
 ppl = ss.People(10000)
 
 # This example
-G = nx.erdos_renyi_graph(10000, 0.1)
+G = nx.erdos_renyi_graph(10000, 0.0001)
 ppl.networks = ss.Networks(
     ss.static(graph=G), ss.maternal()
 )

@@ -860,6 +860,7 @@ class static(Network):
     """ A network class of static partnerships converted from networkx graph """
     def __init__(self, graph):
         self.graph = graph
+        super().__init__()
         return
 
     def initialize(self, sim):
@@ -868,10 +869,15 @@ class static(Network):
         return
 
     def get_contacts(self):
+        p1s = []
+        p2s = []
         for edge in self.graph.edges():
             p1, p2 = edge
-            self.contacts.p1.append(p1)
-            self.contacts.p2.append(p2)
+            p1s.append(p1)
+            p2s.append(p2)
+        self.contacts.p1 = np.concatenate([self.contacts.p1, p1s])
+        self.contacts.p2 = np.concatenate([self.contacts.p2, p2s])
+        self.contacts.beta = np.concatenate([self.contacts.beta, np.ones_like(p1s)])
         return
 
 
