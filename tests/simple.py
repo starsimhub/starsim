@@ -20,4 +20,3 @@ sim.run()
 plt.figure()
 plt.plot(sim.tivec, sim.results.hiv.n_infected)
 plt.title('HIV number of infections')
-
