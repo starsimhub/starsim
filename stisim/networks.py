@@ -857,7 +857,8 @@ class maternal(Network):
         return
 
 class static(Network):
-    """ A network class of static partnerships converted from a networkx graph. """
+    """ A network class of static partnerships converted from a networkx graph. There's no formation of new partnerships
+    and initialized partnerships only end when one of the partners dies."""
     def __init__(self, graph):
         self.graph = graph
         super().__init__()
