@@ -89,6 +89,12 @@ def Stream(*args, **kwargs):
 
 
 def _pre_draw(func):
+    """
+    Decorator function that does quite a bit to empower calls to the sampling distributions in the MultiStream class.
+
+    The size parameter, from either kwargs or args[0], is used to determine if the user is seeking a fixed number of samples (if size is an integer), or instead if the user is providing an array.
+    If size is an array, it could contain UIDs or be of boolean type. If UIDS, assume the user wants random numbers for these specific agents. If boolean, select random numbers based on the provided array. N.b. the approach based on UIDs is likely to be more "stream safe".
+    """
     def check_ready(self, *args, **kwargs):
         """ Validation before drawing """
 
@@ -142,7 +148,51 @@ def _pre_draw(func):
 
 class MultiStream(np.random.Generator):
     """
-    Class for tracking one random number stream associated with one decision per timestep
+    Class for tracking one random number stream associated with one decision per timestep.
+
+    The main use case is to sample random numbers from various distributions
+    that are specific to each agent (per decision and timestep) so as to enable
+    variance reduction between simulations through the use of common random
+    numbers. For example, the user might create a stream called rng and
+    ultimately ask for randomly distributed random numbers for agents with UIDs
+    1 and 4:
+
+    >>> import stisim as ss
+    >>> import numpy as np
+    >>> rng = ss.MultiStream('Test') # The hashed name determines the stream offset.
+    >>> rng.initialize(streams=None, slots=5) # In practice, slots will be sim.people.slots. When scalar (for testing), an np.arange will be used.
+    >>> uids = np.array([1,4])
+    >>> rng.random(uids)
+    array([0.88110549, 0.86915719])
+
+    In theory, what this is doing is drawing 5 random numbers and returning the
+    draws at positions 1 and 4.
+
+    In practice, using UIDs as "slots" (the indices into the larger draw) falls
+    apart when new agents are born.  The issue is that one simulation might have
+    more births than another, so an agent born in one simulation may not
+    get the same UID as that same agent in a comparison simulation.
+    
+    The solution applied here is for each agent to have a property called "slot"
+    that is precisely the index used when selecting from an array of random
+    numbers.  When new agents are born, the mother uses her UID to sample a
+    random integer for the newborn that is used as the "slot".  With this
+    approach, newborns will be identical between two different simulations,
+    unless an intervention mechanistically drove a change.
+
+    The slot-based approach is not without challenges.
+    * Two newborn agents may received the same "slot," and thus will receive the
+      same random draws.
+    * The chance of overlapping slots can be reduced by
+      allowing mothers to choose from a larger number of possible slots (say up
+      to one-million). However, as slots are used as indices, the number of
+      random variables drawn for each query must number the maximum slot. So if
+      one agent has a slot of 1M, then 1M random numbers will be drawn,
+      consuming more time than would be necessary if the maximum slot was
+      smaller.
+    * The maximum slot is now determined by a new configure parameter named
+      "slot_scale". A value of 5 will mean that new agents will be assigned
+      slots between 1*N and 5*N, where N is sim.pars['n_agents'].
     """
     
     def __init__(self, name, seed_offset=None, **kwargs):
@@ -173,7 +223,11 @@ class MultiStream(np.random.Generator):
         if self.initialized:
             return
 
-        self.seed = streams.add(self) # base_seed + seed_offset
+        if streams is not None:
+            self.seed = streams.add(self) # base_seed + seed_offset
+        else:
+            # Enable use of MultiStream without streams
+            self.seed = self.seed_offset
 
         if isinstance(slots, int):
             # Handle edge case in which the user wants n sequential slots, as used in testing.
@@ -270,6 +324,9 @@ class MultiStream(np.random.Generator):
 
 
 def _pre_draw_centralized(func):
+    """
+    Decorator for CentralizedStream
+    """
     def check_ready(self, *args, **kwargs):
         """ Validation before drawing """
         if 'size' in kwargs:
@@ -333,10 +390,15 @@ class CentralizedStream():
         return
 
     def initialize(self, streams, slots=None):
+        """
+        Slots are not used by the CentralizedStream, but here for compatibility with the MultiStream
+        """
         if self.initialized:
             return
 
-        streams.add(self, check_repeats=False) # Seed is returned, but not used here as we're using the global np.random stream which has been seeded elsewhere
+        if streams is not None:
+            streams.add(self, check_repeats=False) # Seed is returned, but not used here as we're using the global np.random stream which has been seeded elsewhere
+
         self.initialized = True
         return
 

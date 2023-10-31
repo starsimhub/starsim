@@ -9,21 +9,32 @@ import sciris as sc
 import pandas as pd
 import seaborn as sns
 
-n = 100 # Agents
+n = 1_000 # Agents
 n_rand_seeds = 25
-x_beta_levels = [0.5, 0.8, 1.26, 2.0] + [1] # Must include 1 as that's the baseline | roughly np.logspace(np.log2(0.5), np.log2(20), 4, base=2)
+xf_levels = [0.5, 0.8, 1.26, 2.0] + [1] # Must include 1 as that's the baseline | roughly np.logspace(np.log2(0.5), np.log2(20), 4, base=2)
 
-figdir = os.path.join(os.getcwd(), 'figs', 'BetaSweep')
+figdir = os.path.join(os.getcwd(), 'figs', 'Sweep')
 sc.path(figdir).mkdir(parents=True, exist_ok=True)
 
-def run_sim(n, x_beta, rand_seed, multistream):
+def run_sim(n, xf, rand_seed, multistream):
     ppl = ss.People(n)
 
-    ppl.networks = ss.ndict(ss.embedding(), ss.maternal())
+    rel_pars = {
+        'male_shift': 5,
+        'std': 3,
+        'pars': {
+            'dur': ss.lognormal(15*xf, 15*xf),  # Can vary by age, year, and individual pair
+            'part_rates': 0.9,  # Participation rates - can vary by sex and year
+            'rel_part_rates': 1.0,
+            'debut': 16,  # Age of debut can vary by sex, year, and individual
+            'rel_debut': 1.0,
+        }} 
+    ppl.networks = ss.ndict(ss.embedding(**rel_pars), ss.maternal())
 
     hiv_pars = {
-        'beta': {'embedding': [x_beta * 0.10, x_beta * 0.08], 'maternal': [x_beta * 0.2, 0]},
-        'init_prev': 0.01,
+        #'beta': {'embedding': [xf * 0.30, xf * 0.25], 'maternal': [xf * 0.2, 0]},
+        'beta': {'embedding': [0.30, 0.25], 'maternal': [0.2, 0]},
+        'init_prev': 0.05
     }
     hiv = ss.HIV(hiv_pars)
 
@@ -34,7 +45,7 @@ def run_sim(n, x_beta, rand_seed, multistream):
         'end': 2020,
         'rand_seed': rand_seed,
     }
-    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[pregnancy], pars=pars, label=f'Sim with {n} agents and x_beta={x_beta}')
+    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[pregnancy], pars=pars, label=f'Sim with {n} agents and xf={xf}')
     sim.initialize()
     sim.run()
 
@@ -45,7 +56,7 @@ def run_sim(n, x_beta, rand_seed, multistream):
         'hiv.cum_deaths': sim.results.hiv.new_deaths.cumsum(),
         'pregnancy.cum_births': sim.results.pregnancy.births.cumsum(),
     })
-    df['x_beta'] = x_beta
+    df['xf'] = xf
     df['rand_seed'] = rand_seed
     df['multistream'] = multistream
 
@@ -58,8 +69,8 @@ def run_scenarios(figdir):
         ss.options(multistream=multistream)
         cfgs = []
         for rs in range(n_rand_seeds):
-            for x_beta in x_beta_levels:
-                cfgs.append({'x_beta':x_beta, 'rand_seed':rs, 'multistream':multistream})
+            for xf in xf_levels:
+                cfgs.append({'xf':xf, 'rand_seed':rs, 'multistream':multistream})
         T = sc.tic()
         results += sc.parallelize(run_sim, kwargs={'n': n}, iterkwargs=cfgs, die=True)
         times[f'Multistream={multistream}'] = sc.toc(T, output=True)
@@ -72,12 +83,12 @@ def run_scenarios(figdir):
 
 
 def plot_scenarios(df, figdir):
-    d = pd.melt(df, id_vars=['ti', 'rand_seed', 'x_beta', 'multistream'], var_name='channel', value_name='Value')
-    d['baseline'] = d['x_beta']==1
+    d = pd.melt(df, id_vars=['ti', 'rand_seed', 'xf', 'multistream'], var_name='channel', value_name='Value')
+    d['baseline'] = d['xf']==1
     bl = d.loc[d['baseline']]
     scn = d.loc[~d['baseline']]
-    bl = bl.set_index(['ti', 'channel', 'rand_seed', 'x_beta', 'multistream'])[['Value']].reset_index('x_beta')
-    scn = scn.set_index(['ti', 'channel', 'rand_seed', 'x_beta', 'multistream'])[['Value']].reset_index('x_beta')
+    bl = bl.set_index(['ti', 'channel', 'rand_seed', 'xf', 'multistream'])[['Value']].reset_index('xf')
+    scn = scn.set_index(['ti', 'channel', 'rand_seed', 'xf', 'multistream'])[['Value']].reset_index('xf')
     mrg = scn.merge(bl, on=['ti', 'channel', 'rand_seed', 'multistream'], suffixes=('', '_ref'))
     mrg['Value - Reference'] = mrg['Value'] - mrg['Value_ref']
     mrg = mrg.sort_index()
@@ -85,7 +96,7 @@ def plot_scenarios(df, figdir):
     fkw = {'sharey': False, 'sharex': 'col', 'margin_titles': True}
 
     ## TIMESERIES
-    g = sns.relplot(kind='line', data=d, x='ti', y='Value', hue='x_beta', col='channel', row='multistream',
+    g = sns.relplot(kind='line', data=d, x='ti', y='Value', hue='xf', col='channel', row='multistream',
         height=5, aspect=1.2, palette='Set1', errorbar='sd', lw=2, facet_kws=fkw)
     g.set_titles(col_template='{col_name}', row_template='Multistream: {row_name}')
     g.set_xlabels(r'$t_i$')
@@ -93,7 +104,7 @@ def plot_scenarios(df, figdir):
 
     ## DIFF TIMESERIES
     for ms, mrg_by_ms in mrg.groupby('multistream'):
-        g = sns.relplot(kind='line', data=mrg_by_ms, x='ti', y='Value - Reference', hue='x_beta', col='channel', row='x_beta',
+        g = sns.relplot(kind='line', data=mrg_by_ms, x='ti', y='Value - Reference', hue='xf', col='channel', row='xf',
             height=3, aspect=1.0, palette='Set1', estimator=None, units='rand_seed', lw=0.5, facet_kws=fkw) #errorbar='sd', lw=2, 
         g.set_titles(col_template='{col_name}', row_template='Beta: {row_name}')
         g.fig.suptitle('Multistream' if ms else 'Centralized')
@@ -104,7 +115,7 @@ def plot_scenarios(df, figdir):
     ## FINAL TIME
     tf = df['ti'].max()
     mtf = mrg.loc[tf]
-    g = sns.displot(data=mtf.reset_index(), kind='kde', fill=True, rug=True, cut=0, hue='x_beta', x='Value - Reference', col='channel', row='multistream',
+    g = sns.displot(data=mtf.reset_index(), kind='kde', fill=True, rug=True, cut=0, hue='xf', x='Value - Reference', col='channel', row='multistream',
         height=5, aspect=1.2, facet_kws=fkw, palette='Set1')
     g.set_titles(col_template='{col_name}', row_template='Multistream: {row_name}')
     g.set_xlabels(f'Value - Reference at $t_i={{{tf}}}$')
@@ -112,7 +123,7 @@ def plot_scenarios(df, figdir):
 
     ## FINAL TIME function of beta
     dtf = d.set_index(['ti', 'rand_seed']).sort_index().loc[tf]
-    g = sns.relplot(kind='line', data=dtf.reset_index(), x='x_beta', y='Value', col='channel', row='multistream',
+    g = sns.relplot(kind='line', data=dtf.reset_index(), x='xf', y='Value', col='channel', row='multistream',
         height=5, aspect=1.2, facet_kws=fkw, estimator=None, units='rand_seed', lw=0.25)
     g.set_titles(col_template='{col_name}', row_template='Multistream: {row_name}')
     g.set_ylabels(f'Value at $t_i={{{tf}}}$')

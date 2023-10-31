@@ -52,7 +52,7 @@ class Distribution():
     def name(self):
         return self.__class__.__name__
 
-    def sample(cls, size=None, uids=None, **kwargs):
+    def sample(cls, size=None, **kwargs):
         """
         Return a specified number of samples from the distribution
         """
