@@ -9,7 +9,7 @@ import stisim as ss
 import pandas as pd
 
 # Specify all externally visible functions this file defines
-__all__ = ['Networks', 'Network', 'NetworkConnector', 'DynamicNetwork', SexualNetwork', 'mf', 'msm', 'mf_msm', 'hpv_network', 'maternal', 'static']
+__all__ = ['Networks', 'Network', 'NetworkConnector', 'DynamicNetwork', 'SexualNetwork', 'mf', 'msm', 'mf_msm', 'hpv_network', 'maternal', 'static']
 
 
 class Network(ss.Module):
