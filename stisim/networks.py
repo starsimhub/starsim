@@ -845,15 +845,34 @@ class maternal(Network):
         return
 
 class static(Network):
-    """ A network class of static partnerships converted from a networkx graph. There's no formation of new partnerships
-    and initialized partnerships only end when one of the partners dies."""
+    """
+    A network class of static partnerships converted from a networkx graph. There's no formation of new partnerships
+    and initialized partnerships only end when one of the partners dies. The networkx graph can be created outside STIsim
+    if population size is known. Or the graph can be created by passing a networkx generator function to STIsim.
+
+    **Examples**::
+
+    # Generate a networkx graph and pass to STIsim
+    import networkx as nx
+    import stisim as ss
+    g = nx.scale_free_graph(n=10000)
+    ss.static(graph=g)
+
+    # Pass a networkx graph generator to STIsim
+    ss.static(graph=nx.erdos_renyi_graph, p=0.0001)
+
+    """
     def __init__(self, graph, **kwargs):
         self.graph = graph
+        self.kwargs = kwargs
         super().__init__()
         return
 
     def initialize(self, sim):
-        self.validate_pop(sim.pars['n_agents'])
+        popsize = sim.pars['n_agents']
+        if callable(self.graph):
+            self.graph = self.graph(n = popsize, **self.kwargs)
+        self.validate_pop(popsize)
         super().initialize(sim)
         self.get_contacts()
         return
