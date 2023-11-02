@@ -9,11 +9,10 @@ import networkx as nx
 
 ppl = ss.People(10000)
 
-# This example runs on two independent static networks + the maternal network
-g1 = nx.erdos_renyi_graph(10000, 0.001)
-g2 = nx.scale_free_graph(10000)
+# This example runs on one static networks + the maternal network
+g1 = nx.scale_free_graph(1000)
 ppl.networks = ss.Networks(
-    ss.static(graph=g1), ss.static(graph=g2), ss.maternal()
+    ss.static(graph=g1), ss.maternal()
 )
 
 hiv = ss.HIV()

@@ -847,16 +847,22 @@ class maternal(Network):
 class static(Network):
     """ A network class of static partnerships converted from a networkx graph. There's no formation of new partnerships
     and initialized partnerships only end when one of the partners dies."""
-    def __init__(self, graph):
+    def __init__(self, graph, **kwargs):
         self.graph = graph
         super().__init__()
         return
 
     def initialize(self, sim):
+        self.validate_pop(sim.pars['n_agents'])
         super().initialize(sim)
         self.get_contacts()
-        self.validate()
         return
+
+    def validate_pop(self, popsize):
+        n_nodes =  self.graph.number_of_nodes()
+        if n_nodes > popsize:
+            errormsg = f'Please ensure the number of nodes in graph {n_nodes} is smaller than population size {popsize}.'
+            raise ValueError(errormsg)
 
     def get_contacts(self):
         p1s = []
