@@ -71,34 +71,6 @@ class BasePeople(sc.prettyobj):
 
         return new_uids
 
-    def grow_uids(self, uids):
-        """
-        Increase the number of agents given new uids to add
-
-        :param uids: uids of agents to add, but need to check for collisions
-        """
-        start_uid = len(self._uid_map)
-        ids_in_map = np.intersect1d(uids, self._uid_map, assume_unique=False, return_indices=True)[1]
-        if len(ids_in_map):
-            is_collision = ~np.isnan(self.age[uids[ids_in_map]])
-            #collisions = ss.false(is_collision)
-            if is_collision.any():
-                n_collisions = is_collision.sum()
-                uids[ids_in_map[is_collision]] = np.arange(start_uid, start_uid + n_collisions) # Put at end, will mess up rng coherence slightly
-                #raise Exception('no bueno')
-                print(f'Encountered {n_collisions} collisions')
-
-        n = uids.max() - start_uid + 1
-        if n > 0:
-            new_uids = self.grow(n)
-            self.alive[new_uids] = False # Override the default
-
-        # Restore sensible defaults
-        self.age[uids] = 0
-        self.alive[uids] = True
-        
-        return uids # MAY NEED TO MODIFY IF COLLISION
-
     def remove(self, uids_to_remove):
         """
         Reduce the number of agents

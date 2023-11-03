@@ -415,12 +415,6 @@ class mf(SexualNetwork, DynamicNetwork):
     def initialize(self, sim):
         super().initialize(sim)
         
-        # Initialize random streams
-        self.rng_dur.initialize(sim.streams, sim.people.slot)
-        self.rng_participation_f.initialize(sim.streams, sim.people.slot)
-        self.rng_participation_m.initialize(sim.streams, sim.people.slot)
-        self.rng_debut.initialize(sim.streams, sim.people.slot)
-
         self.set_network_states(sim.people)
         self.add_pairs(sim.people, ti=0)
         return

@@ -14,9 +14,6 @@ class HIV(ss.Disease):
     def __init__(self, pars=None):
         super().__init__(pars)
 
-        self.susceptible = ss.State('susceptible', bool, True)
-        self.infected    = ss.State('infected', bool, False)
-        self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
         self.on_art      = ss.State('on_art', bool, False)
         self.ti_art      = ss.State('ti_art', int, ss.INT_NAN)
         self.cd4         = ss.State('cd4', float, 500)

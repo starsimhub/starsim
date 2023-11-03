@@ -250,7 +250,7 @@ class Pregnancy(DemographicModule):
 
         self.rng_conception = ss.Stream('conception')
         self.rng_dead = ss.Stream(f'dead_{self.name}')
-        self.rng_choose_slots = ss.Stream(f'uids_{self.name}')
+        self.rng_choose_slots = ss.Stream('choose_slots')
 
         return
 
