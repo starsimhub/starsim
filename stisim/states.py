@@ -267,23 +267,14 @@ class DynamicView(NDArrayOperatorsMixin):
         return self._view.__repr__()
 
     def _new_items(self, n):
-        # Fill with empty values
+        # New items are empty in this implementation, real values are filled reactively by _fill_data.
         return np.empty(n, dtype=self.dtype)
-        '''
-        # Create new arrays of the correct dtype and fill them based on the (optionally callable) fill value
-        if callable(self.fill_value):
-            new = np.empty(n, dtype=self.dtype)
-            new[:] = self.fill_value(n)
-        else:
-            new = np.full(n, dtype=self.dtype, fill_value=self.fill_value)
-        return new
-        '''
 
     def _fill_data(self, n0, n1):
         # Fill data
         n = int(n1-n0)
         if callable(self.fill_value):
-            self._data[n0:n1] = self.fill_value(n)
+            self._data[n0:n1] = self.fill_value(n) # <-- TODO: This line likely is not CRN safe because the selected fill values will not be slot-dependent.
         else:
             self._data[n0:n1] = self.fill_value
         return

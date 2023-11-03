@@ -78,10 +78,6 @@ class BasePeople(sc.prettyobj):
         :param uids_to_remove: An int/list/array containing the UID(s) to remove
         """
 
-        # Shortcut exit if nothing to do
-        if len(uids_to_remove) == 0:
-            return
-
         # Calculate the *indices* to keep
         keep_uids = self.uid[~np.in1d(self.uid, uids_to_remove)]  # Calculate UIDs to keep
         keep_inds = self._uid_map[keep_uids]  # Calculate indices to keep
@@ -238,7 +234,8 @@ class People(BasePeople):
         Remove dead agents
         """
         uids_to_remove = ss.true(self.dead)
-        self.remove(uids_to_remove)
+        if len(uids_to_remove):
+            self.remove(uids_to_remove)
         return
 
     def update_post(self, sim):
