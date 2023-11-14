@@ -9,7 +9,7 @@ import stisim as ss
 __all__ = ['Gonorrhea']
 
 
-class Gonorrhea(ss.Disease):
+class Gonorrhea(ss.STI):
 
     def __init__(self, pars=None):
         super().__init__(pars)
@@ -37,7 +37,7 @@ class Gonorrhea(ss.Disease):
         Initialize results
         """
         super().init_results(sim)
-        self.results += ss.Result(self.name, 'n_sympotmatic', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'n_symptomatic', sim.npts, dtype=int)
         self.results += ss.Result(self.name, 'new_clearances', sim.npts, dtype=int)
         return
 
