@@ -1,3 +1,7 @@
+"""
+Base classes for diseases
+"""
+
 import numpy as np
 import sciris as sc
 import stisim as ss
@@ -5,17 +9,31 @@ import stisim as ss
 __all__ = ['Disease', 'STI']
 
 class Disease(ss.Module):
-    """ Base module contains states/attributes that all modules have """
+    """ Base module class for diseases """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.results = ss.ndict(type=ss.Result)
 
+    @property
+    def _boolean_states(self):
+        """
+        Iterator over states with boolean type
+        
+        For diseases, these states typically represent attributes like 'susceptible',
+        'infectious', 'diagnosed' etc. These variables are typically useful to  
+        
+        :return: 
+        """
+        for state in self.states:
+            if state.dtype == bool:
+                yield state
+
     def initialize(self, sim):
         super().initialize(sim)
         self.validate_pars(sim)
-        self.set_initial_states(sim)
         self.init_results(sim)
+        self.set_initial_states(sim)
         return
 
     def finalize(self, sim):
@@ -46,13 +64,20 @@ class Disease(ss.Module):
     def init_results(self, sim):
         """
         Initialize results
+
+        By default, diseases all report on counts for any boolean states e.g., if
+        a disease contains a boolean state 'susceptible' it will automatically contain a
+        Result for 'n_susceptible'
         """
-        pass
+        for state in self._boolean_states:
+            self.results += ss.Result(self.name, f'n_{state.name}', sim.npts, dtype=int)
+        return
 
     def finalize_results(self, sim):
         """
         Finalize results
         """
+        # TODO - will probably need to account for rescaling outputs for the default results here
         pass
 
     def update_pre(self, sim):
@@ -60,6 +85,27 @@ class Disease(ss.Module):
         Carry out autonomous updates at the start of the timestep (prior to transmission)
 
         :param sim:
+        :return:
+        """
+        pass
+
+    def update_death(self, sim, uids):
+        """
+        Carry out state changes upon death
+
+        This function is triggered after deaths are resolved, and before analyzers are run.
+        See the SIR example model for a typical use case - deaths are requested as an autonomous
+        update, to take effect after transmission on the same timestep. State changes that occur
+        upon death (e.g., clearing an `infected` flag) are executed in this function. That also
+        allows an intervention to avert a death scheduled on the same timestep, without having
+        to undo any state changes that have already been applied (because they only run via this
+        function if the death actually occurs).
+
+        Depending on the module and the results it produces, it may or may not be necessary
+        to implement this.
+
+        :param sim:
+        :param uids:
         :return:
         """
         pass
@@ -86,12 +132,20 @@ class Disease(ss.Module):
         This allows result updates at this point to capture outcomes dependent on multiple
         modules, where relevant.
         """
-        pass
+        for state in self._boolean_states:
+            self.results[f'n_{state.name}'][sim.ti] = np.count_nonzero(state & sim.people.alive)
+        return
 
 
 
 class STI(Disease):
-    """ Base module contains states/attributes that all modules have """
+    """
+    Base class for STIs used in STIsim
+
+    This class contains specializations for STI transmission (i.e., implements network-based
+    transmission with directional beta values) and defines attributes that STIsim connectors
+    operate on to capture co-infection
+    """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -103,19 +157,11 @@ class STI(Disease):
         self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
         return
 
-    def initialize(self, sim):
-        super().initialize(sim)
-
-        # Initialization steps
-        self.validate_pars(sim)
-        self.set_initial_states(sim)
-        self.init_results(sim)
-        return
-
     def validate_pars(self, sim):
         """
         Perform any parameter validation
         """
+        super().validate_pars(sim)
         if 'beta' not in self.pars:
             self.pars.beta = sc.objdict({k: [1, 1] for k in sim.people.networks})
         return
@@ -136,8 +182,7 @@ class STI(Disease):
         """
         Initialize results
         """
-        self.results += ss.Result(self.name, 'n_susceptible', sim.npts, dtype=int)
-        self.results += ss.Result(self.name, 'n_infected', sim.npts, dtype=int)
+        super().init_results(sim)
         self.results += ss.Result(self.name, 'prevalence', sim.npts, dtype=float)
         self.results += ss.Result(self.name, 'new_infections', sim.npts, dtype=int)
         return
@@ -176,7 +221,6 @@ class STI(Disease):
         pass
 
     def update_results(self, sim):
-        self.results['n_susceptible'][sim.ti] = np.count_nonzero(self.susceptible)
-        self.results['n_infected'][sim.ti] = np.count_nonzero(self.infected)
+        super().update_results(sim)
         self.results['prevalence'][sim.ti] = self.results.n_infected[sim.ti] / np.count_nonzero(sim.people.alive)
         self.results['new_infections'][sim.ti] = np.count_nonzero(self.ti_infected == sim.ti)

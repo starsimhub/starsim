@@ -250,7 +250,7 @@ class People(BasePeople):
         """
         death_uids = ss.true(self.ti_dead <= self.ti)
         self.alive[death_uids] = False
-        return
+        return death_uids
 
     def update_networks(self):
         """
@@ -305,11 +305,15 @@ class People(BasePeople):
         track of that internally. When the module is ready to cause the agent to die, it should
         call this method, and can update its own results for the cause of death. This way, if
         multiple modules request death on the same day, they can each record a death due to their
-        own cause.,
+        own cause.
 
         The actual deaths are resolved after modules have all run, but before analyzers. That way,
         regardless of whether removing dead agents is enabled or not, analyzers will be able to
         see and record outcomes for agents that died this timestep.
+
+        **WARNING** - this function allows multiple modules to each independently carry out and
+        record state changes associated with death. It is therefore important that they can
+        guarantee that after requesting death, the death is guaranteed to occur.
 
         :param uids: Agent IDs to request deaths for
         :return: UIDs of agents that have been scheduled to die on this timestep

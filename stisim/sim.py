@@ -363,7 +363,9 @@ class Sim(sc.prettyobj):
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
-        self.people.resolve_deaths()
+        uids = self.people.resolve_deaths()
+        for disease in self.diseases.values():
+            disease.update_death(self, uids)
 
         # Update results
         self.people.update_results(self)
