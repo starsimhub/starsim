@@ -296,8 +296,8 @@ class MultiStream(np.random.Generator):
 
     @_pre_draw
     def normal(self, size, basis, loc=0, scale=1, uids=None):
-        vals = loc + scale*super(MultiStream, self).normal(size=size)
-        return self._select(vals, basis, uids)
+        vals = super(MultiStream, self).normal(size=size)
+        return loc + scale*self._select(vals, basis, uids)
 
     @_pre_draw
     def lognormal(self, size, basis, mean=0, sigma=1, uids=None):
@@ -426,7 +426,7 @@ class CentralizedStream():
 
     @_pre_draw_centralized
     def normal(self, size, mu=0, std=1, **kwargs):
-        return mu + std*np.random.normal(size=size, loc=mu, scale=std)
+        return np.random.normal(size=size, loc=mu, scale=std)
 
     @_pre_draw_centralized
     def lognormal(self, size, mean=0, sigma=1, **kwargs):
