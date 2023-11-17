@@ -327,7 +327,7 @@ def _pre_draw_centralized(func):
     """
     Decorator for CentralizedStream
     """
-    def check_ready(self, *args, **kwargs):
+    def check_ready(*args, **kwargs):
         """ Validation before drawing """
         if 'size' in kwargs:
             size = kwargs.pop('size')
@@ -362,11 +362,7 @@ def _pre_draw_centralized(func):
             else:
                 size = len(uids)
 
-        if not self.initialized:
-            msg = f'Stream {self.name} has not been initialized!'
-            raise NotInitializedException(msg)
-
-        return func(self, size=size, **kwargs)
+        return func(size=size, **kwargs)
 
     return check_ready
 
@@ -408,41 +404,29 @@ class CentralizedStream():
     def step(self, ti):
         pass
 
-    @_pre_draw_centralized
-    def random(self, size, **kwargs):
-        return np.random.random(size=size, **kwargs)
+    def __getattr__(self, attr):
+        # Returns wrapped numpy.random.(attr) if not a property
+        try:
+            return self.__getattribute__(attr)
+        except Exception:
+            try:
+                numpy_func = getattr(np.random, attr)
+                return _pre_draw_centralized(numpy_func)
+            except Exception:
+                errormsg = f'"{attr}" is not a member of this class or numpy.random'
+                raise Exception(errormsg)
 
+    @staticmethod
     @_pre_draw_centralized
-    def uniform(self, size, low, high, **kwargs):
-        return np.random.uniform(size=size, low=low, high=high, **kwargs)
-
-    @_pre_draw_centralized
-    def integers(self, size, low, high, **kwargs):
+    def integers(size, low, high, **kwargs):
+        # provide integers via random_integers
         return np.random.random_integers(size=size, low=low, high=high)
 
+    @staticmethod
     @_pre_draw_centralized
-    def poisson(self, size, lam, **kwargs):
-        return np.random.poisson(size=size, lam=lam, **kwargs)
-
-    @_pre_draw_centralized
-    def normal(self, size, mu=0, std=1, **kwargs):
-        return np.random.normal(size=size, loc=mu, scale=std)
-
-    @_pre_draw_centralized
-    def lognormal(self, size, mean=0, sigma=1, **kwargs):
-        return np.random.lognormal(size=size, mean=mean, sigma=sigma)
-
-    @_pre_draw_centralized
-    def negative_binomial(self, size, n, p, **kwargs):
-        return np.random.negative_binomial(size=size, n=n, p=p, **kwargs)
-
-    @_pre_draw_centralized
-    def bernoulli(self, size, prob, **kwargs):
+    def bernoulli(size, prob, **kwargs):
         return np.random.random(size=size, **kwargs) < prob
 
-    def bernoulli_filter(self, uids, prob):
-        return uids[self.bernoulli(size=uids, prob=prob)]
-
-    @_pre_draw_centralized
-    def choice(self, size, a, **kwargs):
-        return np.random.choice(a, size=size, **kwargs)
+    @staticmethod
+    def bernoulli_filter(uids, prob):
+        return uids[CentralizedStream.bernoulli(size=uids, prob=prob)]
