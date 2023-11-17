@@ -16,7 +16,7 @@ class Streams:
 
     def __init__(self):
         self._streams = ss.ndict()
-        self.used_seed_offsets = []
+        self.used_seed_offsets = set()
         self.initialized = False
         return
 
@@ -41,7 +41,7 @@ class Streams:
         if check_repeats:
             if stream.seed_offset in self.used_seed_offsets:
                 raise SeedRepeatException(f'Requested seed offset {stream.seed_offset} for stream {stream} has already been used.')
-            self.used_seed_offsets.append(stream.seed_offset)
+            self.used_seed_offsets.add(stream.seed_offset)
 
         self._streams.append(stream)
 
