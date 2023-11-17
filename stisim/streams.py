@@ -33,14 +33,14 @@ class Streams:
         Otherwise, return value will be used as the seed offset for this stream
         """
         if not self.initialized:
-            raise NotInitializedException('Please call initialize before adding a stream to Streams.')
+            raise NotInitializedException()
 
         if stream.name in self._streams:
-            raise RepeatNameException(f'A Stream with name {stream.name} has already been added.')
+            raise RepeatNameException(stream.name)
 
         if check_repeats:
             if stream.seed_offset in self.used_seed_offsets:
-                raise SeedRepeatException(f'Requested seed offset {stream.seed_offset} for stream {stream} has already been used.')
+                raise SeedRepeatException(stream.name, stream.seed_offset)
             self.used_seed_offsets.add(stream.seed_offset)
 
         self._streams.append(stream)
@@ -59,23 +59,38 @@ class Streams:
 
 
 class NotResetException(Exception):
-    "Raised when stream is called when not ready."
-    pass
+    "Raised when an object is called twice in one timestep."
+    def __init__(self, stream_name):
+        msg = f'Stream {stream_name} has already been sampled on this timestep!'
+        super().__init__(msg)
+        return
 
 
 class NotInitializedException(Exception):
-    "Raised when stream is called when not initialized."
-    pass
+    "Raised when streams or stream object is called when not initialized."
+    def __init__(self, obj_name=None):
+        if obj_name is None: 
+            msg = f'An object is being used without proper initialization.'
+        else:
+            msg = f'The object named {obj_name} is being used prior to initialization.'
+        super().__init__(msg)
+        return
 
 
 class SeedRepeatException(Exception):
     "Raised when two streams have the same seed."
-    pass
+    def __init__(self, stream_name, seed_offset):
+        msg = f'Requested seed offset {seed_offset} for stream {stream_name} has already been used.'
+        super().__init__(msg)
+        return
 
 
 class RepeatNameException(Exception):
     "Raised when adding a stream to streams when the stream name has already been used."
-    pass
+    def __init__(self, stream_name):
+        msg = f'A Stream with name {stream_name} has already been added.'
+        super().__init__(msg)
+        return
 
 
 def Stream(*args, **kwargs):
@@ -134,11 +149,9 @@ def _pre_draw(func):
                 basis = UIDS
 
         if not self.initialized:
-            msg = f'Stream {self.name} has not been initialized!'
-            raise NotInitializedException(msg)
+            raise NotInitializedException(self.name)
         if not self.ready:
-            msg = f'Stream {self.name} has already been sampled on this timestep!'
-            raise NotResetException(msg)
+            raise NotResetException(self.name)
         self.ready = False
 
         return func(self, size=size, basis=basis, **kwargs)
