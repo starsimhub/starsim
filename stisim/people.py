@@ -149,7 +149,7 @@ class People(BasePeople):
         self.initialized = False
         self.version = ss.__version__  # Store version info
 
-        self.rng_female  = ss.Stream('female')
+        self.rng_female  = ss.RNG('female')
         states = [
             ss.State('slot', int, ss.INT_NAN), # MUST BE FIRST
             ss.State('age', float, np.nan), # NaN until conceived
@@ -165,7 +165,7 @@ class People(BasePeople):
         self.networks = ss.Networks(networks)
 
         # Set initial age distribution - likely move this somewhere else later
-        self.rng_agedist  = ss.Stream('agedist')
+        self.rng_agedist  = ss.RNG('agedist')
         self.age_data_dist = self.get_age_dist(age_data, self.rng_agedist)
 
         return
@@ -180,15 +180,15 @@ class People(BasePeople):
     def initialize(self, sim):
         """ Initialization """
 
-        self.rng_female.initialize(sim.streams, self.states['slot'])
-        self.rng_agedist.initialize(sim.streams, self.states['slot'])
+        self.rng_female.initialize(sim.rng_container, self.states['slot'])
+        self.rng_agedist.initialize(sim.rng_container, self.states['slot'])
 
         for name, state in self.states.items():
             self.add_state(state)  # Register the state internally for dynamic growth
             state.initialize(self)  # Connect the state to this people instance
             setattr(self, name, state)
             if name == 'slot':
-                # Initialize here in case other states use random streams that depend on slots being initialized
+                # Initialize here in case other states use random number generators that depend on slots being initialized
                 self.slot[:] = self.uid
 
         self.age[:] = self.age_data_dist.sample(len(self))

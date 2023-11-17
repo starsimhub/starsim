@@ -14,7 +14,7 @@ import argparse
 import sciris as sc
 
 default_n_agents = 25
-# Three choices for network here, note that only the first two are stream safe
+# Three choices for network here, note that only the first two are common-random-number safe
 network = ['stable_monogamy', 'embedding', 'hpv_network'][1]
 
 do_plot_graph = True
@@ -24,7 +24,7 @@ kind = ['radial', 'bipartite', 'spring', 'multipartite'][1]
 do_plot_longitudinal = True
 do_plot_timeseries = True
 
-ss.options(multistream = True) # Can set multistream to False for comparison
+ss.options(multirng = True) # Can set multirng to False for comparison
 
 figdir = os.path.join(os.getcwd(), 'figs', network)
 sc.path(figdir).mkdir(parents=True, exist_ok=True)
@@ -62,7 +62,7 @@ class Graph():
 
 
 class GraphAnalyzer(ss.Analyzer):
-    ''' Simple analyzer to assess if random streams are working '''
+    ''' Simple analyzer to assess if common random numbers are working '''
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs) # Initialize the Analyzer object

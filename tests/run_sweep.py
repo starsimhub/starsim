@@ -16,7 +16,7 @@ xf_levels = [0.5, 0.8, 1.26, 2.0] + [1] # Must include 1 as that's the baseline 
 figdir = os.path.join(os.getcwd(), 'figs', 'Sweep')
 sc.path(figdir).mkdir(parents=True, exist_ok=True)
 
-def run_sim(n, xf, rand_seed, multistream):
+def run_sim(n, xf, rand_seed, multirng):
     ppl = ss.People(n)
 
     rel_pars = {
@@ -58,22 +58,22 @@ def run_sim(n, xf, rand_seed, multistream):
     })
     df['xf'] = xf
     df['rand_seed'] = rand_seed
-    df['multistream'] = multistream
+    df['multirng'] = multirng
 
     return df
 
 def run_scenarios(figdir):
     results = []
     times = {}
-    for multistream in [True, False]:
-        ss.options(multistream=multistream)
+    for multirng in [True, False]:
+        ss.options(multirng=multirng)
         cfgs = []
         for rs in range(n_rand_seeds):
             for xf in xf_levels:
-                cfgs.append({'xf':xf, 'rand_seed':rs, 'multistream':multistream})
+                cfgs.append({'xf':xf, 'rand_seed':rs, 'multirng':multirng})
         T = sc.tic()
         results += sc.parallelize(run_sim, kwargs={'n': n}, iterkwargs=cfgs, die=True)
-        times[f'Multistream={multistream}'] = sc.toc(T, output=True)
+        times[f'multirng={multirng}'] = sc.toc(T, output=True)
 
     print('Timings:', times)
 
@@ -83,49 +83,49 @@ def run_scenarios(figdir):
 
 
 def plot_scenarios(df, figdir):
-    d = pd.melt(df, id_vars=['ti', 'rand_seed', 'xf', 'multistream'], var_name='channel', value_name='Value')
+    d = pd.melt(df, id_vars=['ti', 'rand_seed', 'xf', 'multirng'], var_name='channel', value_name='Value')
     d['baseline'] = d['xf']==1
     bl = d.loc[d['baseline']]
     scn = d.loc[~d['baseline']]
-    bl = bl.set_index(['ti', 'channel', 'rand_seed', 'xf', 'multistream'])[['Value']].reset_index('xf')
-    scn = scn.set_index(['ti', 'channel', 'rand_seed', 'xf', 'multistream'])[['Value']].reset_index('xf')
-    mrg = scn.merge(bl, on=['ti', 'channel', 'rand_seed', 'multistream'], suffixes=('', '_ref'))
+    bl = bl.set_index(['ti', 'channel', 'rand_seed', 'xf', 'multirng'])[['Value']].reset_index('xf')
+    scn = scn.set_index(['ti', 'channel', 'rand_seed', 'xf', 'multirng'])[['Value']].reset_index('xf')
+    mrg = scn.merge(bl, on=['ti', 'channel', 'rand_seed', 'multirng'], suffixes=('', '_ref'))
     mrg['Value - Reference'] = mrg['Value'] - mrg['Value_ref']
     mrg = mrg.sort_index()
 
     fkw = {'sharey': False, 'sharex': 'col', 'margin_titles': True}
 
     ## TIMESERIES
-    g = sns.relplot(kind='line', data=d, x='ti', y='Value', hue='xf', col='channel', row='multistream',
+    g = sns.relplot(kind='line', data=d, x='ti', y='Value', hue='xf', col='channel', row='multirng',
         height=5, aspect=1.2, palette='Set1', errorbar='sd', lw=2, facet_kws=fkw)
-    g.set_titles(col_template='{col_name}', row_template='Multistream: {row_name}')
+    g.set_titles(col_template='{col_name}', row_template='multirng: {row_name}')
     g.set_xlabels(r'$t_i$')
     g.fig.savefig(os.path.join(figdir, 'timeseries.png'), bbox_inches='tight', dpi=300)
 
     ## DIFF TIMESERIES
-    for ms, mrg_by_ms in mrg.groupby('multistream'):
+    for ms, mrg_by_ms in mrg.groupby('multirng'):
         g = sns.relplot(kind='line', data=mrg_by_ms, x='ti', y='Value - Reference', hue='xf', col='channel', row='xf',
             height=3, aspect=1.0, palette='Set1', estimator=None, units='rand_seed', lw=0.5, facet_kws=fkw) #errorbar='sd', lw=2, 
         g.set_titles(col_template='{col_name}', row_template='Beta: {row_name}')
-        g.fig.suptitle('MultiStream' if ms else 'SingleStream')
+        g.fig.suptitle('MultiRNG' if ms else 'SingleRNG')
         g.fig.subplots_adjust(top=0.88)
         g.set_xlabels(r'Value - Reference at $t_i$')
-        g.fig.savefig(os.path.join(figdir, 'diff_multistream.png' if ms else 'diff_centralized.png'), bbox_inches='tight', dpi=300)
+        g.fig.savefig(os.path.join(figdir, 'diff_multi.png' if ms else 'diff_single.png'), bbox_inches='tight', dpi=300)
 
     ## FINAL TIME
     tf = df['ti'].max()
     mtf = mrg.loc[tf]
-    g = sns.displot(data=mtf.reset_index(), kind='kde', fill=True, rug=True, cut=0, hue='xf', x='Value - Reference', col='channel', row='multistream',
+    g = sns.displot(data=mtf.reset_index(), kind='kde', fill=True, rug=True, cut=0, hue='xf', x='Value - Reference', col='channel', row='multirng',
         height=5, aspect=1.2, facet_kws=fkw, palette='Set1')
-    g.set_titles(col_template='{col_name}', row_template='Multistream: {row_name}')
+    g.set_titles(col_template='{col_name}', row_template='multirng: {row_name}')
     g.set_xlabels(f'Value - Reference at $t_i={{{tf}}}$')
     g.fig.savefig(os.path.join(figdir, 'final.png'), bbox_inches='tight', dpi=300)
 
     ## FINAL TIME function of beta
     dtf = d.set_index(['ti', 'rand_seed']).sort_index().loc[tf]
-    g = sns.relplot(kind='line', data=dtf.reset_index(), x='xf', y='Value', col='channel', row='multistream',
+    g = sns.relplot(kind='line', data=dtf.reset_index(), x='xf', y='Value', col='channel', row='multirng',
         height=5, aspect=1.2, facet_kws=fkw, estimator=None, units='rand_seed', lw=0.25)
-    g.set_titles(col_template='{col_name}', row_template='Multistream: {row_name}')
+    g.set_titles(col_template='{col_name}', row_template='multirng: {row_name}')
     g.set_ylabels(f'Value at $t_i={{{tf}}}$')
     g.fig.savefig(os.path.join(figdir, 'final_beta.png'), bbox_inches='tight', dpi=300)
 

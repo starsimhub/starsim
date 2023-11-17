@@ -42,10 +42,10 @@ class Module(sc.prettyobj):
         for state in self.states:
             state.initialize(sim.people)
 
-        # Connect the streams to the sim
-        for stream in self.streams:
-            if not stream.initialized:
-                stream.initialize(sim.streams, sim.people.slot)
+        # Connect the random number generators to the sim
+        for rng in self.rngs:
+            if not rng.initialized:
+                rng.initialize(sim.rng_container, sim.people.slot)
 
         self.initialized = True
         return
@@ -75,13 +75,13 @@ class Module(sc.prettyobj):
         return [x for x in self.__dict__.values() if isinstance(x, ss.State)]
 
     @property
-    def streams(self):
+    def rngs(self):
         """
-        Return a flat collection of all streams, as with states above
+        Return a flat collection of all random number generators, as with states above
 
         :return:
         """
-        return [x for x in self.__dict__.values() if isinstance(x, (ss.MultiStream, ss.SingleStream))]
+        return [x for x in self.__dict__.values() if isinstance(x, (ss.MultiRNG, ss.SingleRNG))]
 
 
 class Disease(Module):
@@ -96,10 +96,10 @@ class Disease(Module):
         self.infected = ss.State('infected', bool, False)
         self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
 
-        # Random number streams
-        self.rng_init_cases      = ss.Stream(f'initial_cases_{self.name}')
-        self.rng_trans           = ss.Stream(f'trans_{self.name}')
-        self.rng_choose_infector = ss.Stream(f'choose_infector_{self.name}')
+        # Random number generators
+        self.rng_init_cases      = ss.RNG(f'initial_cases_{self.name}')
+        self.rng_trans           = ss.RNG(f'trans_{self.name}')
+        self.rng_choose_infector = ss.RNG(f'choose_infector_{self.name}')
 
         return
 
@@ -159,8 +159,8 @@ class Disease(Module):
         """ Add new cases of module, through transmission, incidence, etc. """
         pars = self.pars
 
-        if not ss.options.multistream:
-            # Not stream-safe, but more efficient for when not using multistream feature
+        if not ss.options.multirng:
+            # Not common-random-number-safe, but more efficient for when not using the multirng feature
             for k, layer in sim.people.networks.items():
                 if k in pars['beta']:
                     contacts = layer.contacts
@@ -175,7 +175,7 @@ class Disease(Module):
                             self.set_prognoses(sim, b[new_cases])
             return len(new_cases)
 
-        # Multistream-safe transmission code below here
+        # Common-random-number-safe transmission code below here
 
         # Probability of each node acquiring a case
         n = len(sim.people.uid) # TODO: possibly could be shortened to just the people who are alive

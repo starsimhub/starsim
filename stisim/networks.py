@@ -349,8 +349,8 @@ class mf(SexualNetwork, DynamicNetwork):
             'rel_debut': 1.0,
         }, pars)
 
-        self.rng_dur = ss.Stream(f'dur_{self.name}')
-        self.pars.dur.set_stream(self.rng_dur) # Maintain stream even if user changes 'dur' parameter
+        self.rng_dur = ss.RNG(f'dur_{self.name}')
+        self.pars.dur.set_rng(self.rng_dur) # Use the same rng even if user changes 'dur' distribution
 
         # Set metadata for select parameters - this tells us which dimensions are allowed to vary
         self.meta_pars = sc.objdict({
@@ -360,10 +360,10 @@ class mf(SexualNetwork, DynamicNetwork):
         })
         self.validate_pars()
 
-        # Define random streams
-        self.rng_participation_f = ss.Stream('participation_f')
-        self.rng_participation_m = ss.Stream('participation_m')
-        self.rng_debut = ss.Stream(f'debug_{self.name}')
+        # Define random number generators
+        self.rng_participation_f = ss.RNG('participation_f')
+        self.rng_participation_m = ss.RNG('participation_m')
+        self.rng_debut = ss.RNG(f'debug_{self.name}')
 
         return
 
@@ -572,15 +572,15 @@ class embedding(mf):
         self.male_shift = male_shift
         self.std = std
 
-        # Define additional random streams
-        self.rng_loc = ss.Stream('loc')
+        # Define additional random number generators
+        self.rng_loc = ss.RNG('loc')
         return
 
     def initialize(self, sim):
         super().initialize(sim)
 
-        # Initialize additional random streams
-        self.rng_loc.initialize(sim.streams, sim.people.slot)
+        # Initialize additional random number generators
+        self.rng_loc.initialize(sim.rng_container, sim.people.slot)
         return
 
     def add_pairs(self, people, ti=None):
@@ -675,8 +675,8 @@ class mf_msm(NetworkConnector):
             'prop_bi': 0.5,  # Could vary over time -- but not by age or sex or individual
         }, self.pars)
 
-        self.rng_bi  = ss.Stream('bi')
-        self.rng_excl  = ss.Stream('excl')
+        self.rng_bi  = ss.RNG('bi')
+        self.rng_excl  = ss.RNG('excl')
 
         # TODO: Ensure that networks includes 'mf' and 'msm' as they are needed below
         if self.networks is None:
@@ -685,8 +685,8 @@ class mf_msm(NetworkConnector):
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.rng_bi.initialize(sim.streams, sim.people.slot)
-        self.rng_excl.initialize(sim.streams, sim.people.slot)
+        self.rng_bi.initialize(sim.rng_container, sim.people.slot)
+        self.rng_excl.initialize(sim.rng_container, sim.people.slot)
         self.set_participation(sim.people)
         return
 
@@ -751,20 +751,20 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         self.pars['participation'] = None  # Incidence of partnership formation by age
         self.pars['mixing']        = None  # Mixing matrices for storing age differences in partnerships
 
-        # Define random number streams and link to distributions
-        self.rng_partners  = ss.Stream('partners')
-        self.pars['partners'].set_stream(self.rng_partners)
+        # Define random number generators and link to distributions
+        self.rng_partners  = ss.RNG('partners')
+        self.pars['partners'].set_rng(self.rng_partners)
 
-        self.rng_acts      = ss.Stream('acts')
-        self.pars['acts'].set_stream(self.rng_acts)
+        self.rng_acts      = ss.RNG('acts')
+        self.pars['acts'].set_rng(self.rng_acts)
 
-        self.rng_dur_pship = ss.Stream('dur_pship')
-        self.pars['dur_pship'].set_stream(self.rng_dur_pship)
+        self.rng_dur_pship = ss.RNG('dur_pship')
+        self.pars['dur_pship'].set_rng(self.rng_dur_pship)
 
-        # These streams are called multiple times per step, and thus are not stream safe
-        # Thus we use the SingleStream
-        self.rng_f_contacts  = ss.SingleStream('f_contacts')
-        self.rng_m_contacts  = ss.SingleStream('m_contacts')
+        # These random number generators are called multiple times per step, and thus are not common-random-number safe
+        # Thus we use the SingleRNG
+        self.rng_f_contacts  = ss.SingleRNG('f_contacts')
+        self.rng_m_contacts  = ss.SingleRNG('m_contacts')
 
         self.update_pars(pars)
         self.get_layer_probs()
@@ -773,12 +773,12 @@ class hpv_network(SexualNetwork, DynamicNetwork):
     def initialize(self, sim):
         super().initialize(sim)
 
-        # Initialize streams
-        self.rng_partners.initialize(sim.streams, sim.people.slot)
-        self.rng_acts.initialize(sim.streams, sim.people.slot)
-        self.rng_dur_pship.initialize(sim.streams, sim.people.slot)
-        self.rng_f_contacts.initialize(sim.streams, sim.people.slot)
-        self.rng_m_contacts.initialize(sim.streams, sim.people.slot)
+        # Initialize random number generators
+        self.rng_partners.initialize(sim.rng_container, sim.people.slot)
+        self.rng_acts.initialize(sim.rng_container, sim.people.slot)
+        self.rng_dur_pship.initialize(sim.rng_container, sim.people.slot)
+        self.rng_f_contacts.initialize(sim.rng_container, sim.people.slot)
+        self.rng_m_contacts.initialize(sim.rng_container, sim.people.slot)
 
         return self.add_pairs(sim.people, ti=0)
 

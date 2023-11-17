@@ -22,8 +22,8 @@ class RandomWalk(ss.Disease):
         super().__init__(pars)
 
         self.position = ss.State('position', int, 0)
-        self.rng_choose = ss.Stream('choose')
-        self.rng_step = ss.Stream('step')
+        self.rng_choose = ss.RNG('choose')
+        self.rng_step = ss.RNG('step')
 
         self.pars = ss.omerge({
             'p': 0.5, # Probability of stepping to the right
@@ -57,9 +57,9 @@ class RandomWalk(ss.Disease):
         pass # No prognoses
 
 
-def run_sim(n, idx, p, rand_seed, multistream):
+def run_sim(n, idx, p, rand_seed, multirng):
 
-    print(f'Starting sim {idx} with rand_seed={rand_seed} and p={p}, multistream={multistream}')
+    print(f'Starting sim {idx} with rand_seed={rand_seed} and p={p}, multirng={multirng}')
 
     ppl = ss.People(n)
 
@@ -90,24 +90,24 @@ def run_sim(n, idx, p, rand_seed, multistream):
     })
     df['p'] = p
     df['rand_seed'] = rand_seed
-    df['multistream'] = multistream
+    df['multirng'] = multirng
 
-    print(f'Finishing sim {idx} with rand_seed={rand_seed} and p={p}, multistream={multistream}')
+    print(f'Finishing sim {idx} with rand_seed={rand_seed} and p={p}, multirng={multirng}')
 
     return df
 
 def run_scenarios():
     results = []
     times = {}
-    for multistream in [False, True]:
-        ss.options(multistream=multistream)
+    for multirng in [False, True]:
+        ss.options(multirng=multirng)
         cfgs = []
         for rs in range(n_rand_seeds):
             for p in p_levels:
-                cfgs.append({'p':p, 'rand_seed':rs, 'multistream':multistream, 'idx':len(cfgs)})
+                cfgs.append({'p':p, 'rand_seed':rs, 'multirng':multirng, 'idx':len(cfgs)})
         T = sc.tic()
         results += sc.parallelize(run_sim, kwargs={'n': n}, iterkwargs=cfgs, die=True, serial=False)
-        times[f'Multistream={multistream}'] = sc.toc(T, output=True)
+        times[f'multirng={multirng}'] = sc.toc(T, output=True)
 
     print('Timings:', times)
 
@@ -116,41 +116,41 @@ def run_scenarios():
     return df
 
 def plot_scenarios(df):
-    d = pd.melt(df, id_vars=['ti', 'rand_seed', 'p', 'multistream'], var_name='channel', value_name='Value')
+    d = pd.melt(df, id_vars=['ti', 'rand_seed', 'p', 'multirng'], var_name='channel', value_name='Value')
     d['baseline'] = d['p'] == 0.5
     bl = d.loc[d['baseline']]
     scn = d.loc[~d['baseline']]
-    bl = bl.set_index(['ti', 'channel', 'rand_seed', 'p', 'multistream'])[['Value']].reset_index('p')
-    scn = scn.set_index(['ti', 'channel', 'rand_seed', 'p', 'multistream'])[['Value']].reset_index('p')
-    mrg = scn.merge(bl, on=['ti', 'channel', 'rand_seed', 'multistream'], suffixes=('', '_ref'))
+    bl = bl.set_index(['ti', 'channel', 'rand_seed', 'p', 'multirng'])[['Value']].reset_index('p')
+    scn = scn.set_index(['ti', 'channel', 'rand_seed', 'p', 'multirng'])[['Value']].reset_index('p')
+    mrg = scn.merge(bl, on=['ti', 'channel', 'rand_seed', 'multirng'], suffixes=('', '_ref'))
     mrg['Value - Reference'] = mrg['Value'] - mrg['Value_ref']
     mrg = mrg.sort_index()
 
     fkw = {'sharey': False, 'sharex': 'col', 'margin_titles': True}
 
     ## TIMESERIES
-    g = sns.relplot(kind='line', data=d, x='ti', y='Value', hue='p', col='channel', row='multistream',
+    g = sns.relplot(kind='line', data=d, x='ti', y='Value', hue='p', col='channel', row='multirng',
         height=5, aspect=1.2, palette='Set1', errorbar='sd', lw=2, facet_kws=fkw)
-    g.set_titles(col_template='{col_name}', row_template='Multistream: {row_name}')
+    g.set_titles(col_template='{col_name}', row_template='multirng: {row_name}')
     g.set_xlabels(r'$t_i$')
     g.fig.savefig(os.path.join(figdir, 'timeseries.png'), bbox_inches='tight', dpi=300)
 
     ## DIFF TIMESERIES
-    for ms, mrg_by_ms in mrg.groupby('multistream'):
+    for ms, mrg_by_ms in mrg.groupby('multirng'):
         g = sns.relplot(kind='line', data=mrg_by_ms, x='ti', y='Value - Reference', hue='p', col='channel', row='p',
             height=3, aspect=1.0, palette='Set1', estimator=None, units='rand_seed', lw=0.5, facet_kws=fkw) #errorbar='sd', lw=2, 
         g.set_titles(col_template='{col_name}', row_template='Coverage: {row_name}')
-        g.fig.suptitle('MultiStream' if ms else 'SingleStream')
+        g.fig.suptitle('MultiRNG' if ms else 'SingleRNG')
         g.fig.subplots_adjust(top=0.88)
         g.set_xlabels(r'Timestep $t_i$')
-        g.fig.savefig(os.path.join(figdir, 'diff_multistream.png' if ms else 'diff_centralized.png'), bbox_inches='tight', dpi=300)
+        g.fig.savefig(os.path.join(figdir, 'diff_multi.png' if ms else 'diff_single.png'), bbox_inches='tight', dpi=300)
 
     ## FINAL TIME
     tf = df['ti'].max()
     mtf = mrg.loc[tf]
-    g = sns.displot(data=mtf.reset_index(), kind='kde', fill=True, rug=True, cut=0, hue='p', x='Value - Reference', col='channel', row='multistream',
+    g = sns.displot(data=mtf.reset_index(), kind='kde', fill=True, rug=True, cut=0, hue='p', x='Value - Reference', col='channel', row='multirng',
         height=5, aspect=1.2, facet_kws=fkw, palette='Set1')
-    g.set_titles(col_template='{col_name}', row_template='Multistream: {row_name}')
+    g.set_titles(col_template='{col_name}', row_template='multirng: {row_name}')
     g.set_xlabels(f'Value - Reference at $t_i={{{tf}}}$')
     g.fig.savefig(os.path.join(figdir, 'final.png'), bbox_inches='tight', dpi=300)
 

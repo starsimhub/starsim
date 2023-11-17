@@ -27,16 +27,16 @@ class Distribution():
 
     def __init__(self, rng=None):
         if rng is None:
-            self.stream = np.random.default_rng() # Default to centralized random number generator
+            self.rng = np.random.default_rng() # Default to a single centralized random number generator
         else:
-            self.stream = rng
+            self.rng = rng
         return
 
-    def set_stream(self, stream):
+    def set_rng(self, rng):
         """
-        Switch to a user-supplied random number stream
+        Switch to a user-supplied random number generator
         """
-        self.stream = stream
+        self.rng = rng
         return
 
     def mean(self):
@@ -92,7 +92,7 @@ class data_dist(Distribution):
         bin_midpoints = self.bins[:-1] + np.diff(self.bins) / 2
         cdf = np.cumsum(self.vals)
         cdf = cdf / cdf[-1]
-        values = self.stream.rand(size)
+        values = self.rng.rand(size)
         value_bins = np.searchsorted(cdf, values)
         return bin_midpoints[value_bins]
 
@@ -112,7 +112,7 @@ class uniform(Distribution):
         return (self.low + self.high) / 2
 
     def sample(self, size):
-        return self.stream.uniform(size, low=self.low, high=self.high)
+        return self.rng.uniform(size, low=self.low, high=self.high)
 
 class bernoulli(Distribution):
     """
@@ -128,7 +128,7 @@ class bernoulli(Distribution):
         return self.p
 
     def sample(self, size):
-        return self.stream.bernoulli(size, prob=self.p)
+        return self.rng.bernoulli(size, prob=self.p)
 
 
 class choice(Distribution):
@@ -144,7 +144,7 @@ class choice(Distribution):
         return
 
     def sample(self, size, **kwargs):
-        return self.stream.choice(size, a=self.choices, p=self.probabilities, replace=self.replace, **kwargs)
+        return self.rng.choice(size, a=self.choices, p=self.probabilities, replace=self.replace, **kwargs)
 
 
 class normal(Distribution):
@@ -159,7 +159,7 @@ class normal(Distribution):
         return
 
     def sample(self, size, **kwargs):
-        return self.stream.normal(size, loc=self.mean, scale=self.std, **kwargs)
+        return self.rng.normal(size, loc=self.mean, scale=self.std, **kwargs)
 
 
 class normal_pos(normal):
@@ -202,7 +202,7 @@ class lognormal(Distribution):
     def sample(self, **kwargs):
 
         if (sc.isnumber(self.mean) and self.mean > 0) or (sc.checktype(self.mean, 'arraylike') and (self.mean > 0).all()):
-            return self.stream.lognormal(mean=self.underlying_mean, sigma=self.underlying_std, **kwargs)
+            return self.rng.lognormal(mean=self.underlying_mean, sigma=self.underlying_std, **kwargs)
         
         if 'size' in kwargs:
             return np.zeros(kwargs['size'])
@@ -235,7 +235,7 @@ class poisson(Distribution):
         return self.rate
 
     def sample(self, size):
-        return self.stream.poisson(size, lam=self.rate)
+        return self.rng.poisson(size, lam=self.rate)
 
 
 class neg_binomial(Distribution):
@@ -264,7 +264,7 @@ class neg_binomial(Distribution):
     def sample(self, size):
         nbn_n = self.dispersion
         nbn_p = self.dispersion / (self.mean + self.dispersion)
-        return self.stream.negative_binomial(size, n=nbn_n, p=nbn_p)
+        return self.rng.negative_binomial(size, n=nbn_n, p=nbn_p)
 
 
 class beta(Distribution):
@@ -282,7 +282,7 @@ class beta(Distribution):
         return self.alpha / (self.alpha + self.beta)
 
     def sample(self, **kwargs):
-        return self.stream.beta(a=self.alpha, b=self.beta, **kwargs)
+        return self.rng.beta(a=self.alpha, b=self.beta, **kwargs)
 
 
 class gamma(Distribution):
@@ -300,4 +300,4 @@ class gamma(Distribution):
         return self.shape * self.scale
 
     def sample(self, **kwargs):
-        return self.stream.gamma(shape=self.shape, scale=self.scale, **kwargs)
+        return self.rng.gamma(shape=self.shape, scale=self.scale, **kwargs)

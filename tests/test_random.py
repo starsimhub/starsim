@@ -1,20 +1,20 @@
 """
-Test the Stream object from streams.py
+Test the RNG object from random.py
 """
 
 # %% Imports and settings
 import numpy as np
 import sciris as sc
 import stisim as ss
-from stisim.streams import NotResetException, Stream
+from stisim.random import NotResetException, RNG
 
 
 def make_rng(slots, base_seed=1, name='Test'):
-    """ Create and initialize a stream """
-    streams = ss.Streams()
-    streams.initialize(base_seed=base_seed)
-    rng = Stream(name)
-    rng.initialize(streams, slots=slots)
+    """ Create and initialize a random number generator within a container """
+    rng_container = ss.RNGContainer()
+    rng_container.initialize(base_seed=base_seed)
+    rng = RNG(name)
+    rng.initialize(rng_container, slots=slots)
 
     return rng
 
@@ -23,7 +23,7 @@ def make_rng(slots, base_seed=1, name='Test'):
 
 def test_sample(n=5):
     """ Simple sample """
-    sc.heading('Testing stream object')
+    sc.heading('Testing RNG object')
     rng = make_rng(n)
     uids = np.arange(0,n,2) # every other to make it interesting
 
@@ -43,7 +43,7 @@ def test_neg_binomial(n=5):
 
     # Or through a Distribution
     nb = ss.neg_binomial(mean=80, dispersion=40)
-    nb.set_stream(rng)
+    nb.set_rng(rng)
     draws = nb.sample(size=n)
 
     rng.step(1) # Prepare to call again
@@ -88,11 +88,11 @@ def test_step(n=5):
     draws2 = rng.random(uids)
     print(f'\nSAMPLE({n}): {draws2}')
     
-    return np.all(np.equal(draws1, draws2))
+    return ~np.all(np.equal(draws1, draws2))
 
 
 def test_seed(n=5):
-    """ Sample, step, sample """
+    """ Changing seeds """
     sc.heading('Testing sample with seeds 0 and 1')
     uids = np.arange(0,n,2) # every other to make it interesting
 
@@ -104,7 +104,7 @@ def test_seed(n=5):
     draws1 = rng1.random(uids)
     print(f'\nSAMPLE({n}): {draws1}')
 
-    return np.all(np.equal(draws0, draws1))
+    return ~np.all(np.equal(draws0, draws1))
 
 
 def test_repeat(n=5):
@@ -127,7 +127,7 @@ def test_repeat(n=5):
 
 def test_boolmask(n=5):
     """ Simple sample with a boolean mask"""
-    sc.heading('Testing stream object')
+    sc.heading('Testing RNG object with a boolean mask')
     rng = make_rng(n)
     uids = np.arange(0,n,2) # every other to make it interesting
     mask = np.full(n, False)
@@ -162,11 +162,11 @@ if __name__ == '__main__':
 
     n=5
 
-    for multistream in [True, False]:
-        ss.options(multistream=multistream)
-        print('Testing with multistream set to', multistream)
+    for multirng in [True, False]:
+        ss.options(multirng=multirng)
+        sc.heading('TESTING WITH MULTIRNG SET TO', multirng)
 
-        # Run tests - some will only pass if multistream is True
+        # Run tests - some will only pass if multirng is True
         print(test_sample(n))
         print(test_neg_binomial(n))
         print(test_reset(n))

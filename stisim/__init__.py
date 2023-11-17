@@ -4,7 +4,7 @@ from .parameters    import *
 from .utils         import *
 from .distributions import *
 from .states        import *
-from .streams       import *
+from .random        import *
 from .people        import *
 from .modules       import *
 from .networks      import *

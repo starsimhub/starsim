@@ -110,8 +110,8 @@ class background_deaths(DemographicModule):
         # Set death probs
         self.death_probs = ss.State('death_probs', float, 0)
 
-        # Define random streams
-        self.rng_dead = ss.Stream(f'dead_{self.name}')
+        # Define random number generators
+        self.rng_dead = ss.RNG(f'dead_{self.name}')
 
         return
 
@@ -245,12 +245,12 @@ class Pregnancy(DemographicModule):
             'init_prev': 0.3,  # Number of women initially pregnant # TODO: Default value
         }, self.pars)
 
-        self.rng_female = ss.Stream(f'female_{self.name}')
+        self.rng_female = ss.RNG(f'female_{self.name}')
         self.female_dist = ss.bernoulli(p=0.5, rng=self.rng_female) # Replace 0.5 with sex ratio at birth
 
-        self.rng_conception = ss.Stream('conception')
-        self.rng_dead = ss.Stream(f'dead_{self.name}')
-        self.rng_choose_slots = ss.Stream('choose_slots')
+        self.rng_conception = ss.RNG('conception')
+        self.rng_dead = ss.RNG(f'dead_{self.name}')
+        self.rng_choose_slots = ss.RNG('choose_slots')
 
         return
 

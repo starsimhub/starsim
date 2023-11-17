@@ -19,9 +19,9 @@ class Gonorrhea(ss.Disease):
         self.ti_clearance = ss.State('ti_clearance', int, ss.INT_NAN)
         self.p_symp = ss.State('p_symp', float, 1)
 
-        self.rng_clear   = ss.Stream(f'clear_{self.name}')
-        self.rng_symp    = ss.Stream(f'symp_{self.name}')
-        self.rng_dur_inf = ss.Stream(f'dur_inf_{self.name}')
+        self.rng_clear   = ss.RNG(f'clear_{self.name}')
+        self.rng_symp    = ss.RNG(f'symp_{self.name}')
+        self.rng_dur_inf = ss.RNG(f'dur_inf_{self.name}')
 
         # Parameters
         self.pars = ss.omerge({

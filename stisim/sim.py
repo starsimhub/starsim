@@ -43,8 +43,8 @@ class Sim(sc.prettyobj):
         self.interventions = ss.ndict(type=ss.Intervention)
         self.analyzers = ss.ndict(type=ss.Analyzer)
 
-        # Streams container
-        self.streams = ss.Streams()
+        # Initialize the random number generator container
+        self.rng_container = ss.RNGContainer()
 
         return
 
@@ -68,7 +68,7 @@ class Sim(sc.prettyobj):
         ss.set_seed(self.pars['rand_seed'])  # Reset the random seed before the population is created
 
         # Initialize the core sim components
-        self.streams.initialize(self.pars['rand_seed'] + 2) # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within streams
+        self.rng_container.initialize(self.pars['rand_seed'] + 2) # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rng_container
         self.init_people(popdict=popdict, reset=reset, **kwargs)  # Create all the people (the heaviest step)
         self.init_networks()
         self.init_demographics()
@@ -82,7 +82,7 @@ class Sim(sc.prettyobj):
 
         # Reset the random seed to the default run seed, so that if the simulation is run with
         # reset_seed=False right after initialization, it will still produce the same output
-        ss.set_seed(self.pars['rand_seed'] + 1) # Hopefully not used now that we have streams
+        ss.set_seed(self.pars['rand_seed'] + 1) # Hopefully not used now that we can use multiple random number generators
 
         # Final steps
         self.initialized = True
@@ -281,8 +281,8 @@ class Sim(sc.prettyobj):
                 errormsg = f'Intervention {intervention} does not seem to be a valid intervention: must be a function or Intervention subclass'
                 raise TypeError(errormsg)
 
-            for stream in intervention.streams:
-                stream.initialize(self.streams, self.people.slot)
+            for rng in intervention.rngs:
+                rng.initialize(self.rng_container, self.people.slot)
 
         return
 
@@ -322,8 +322,8 @@ class Sim(sc.prettyobj):
         if self.complete:
             raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
 
-        # Advance streams forward to prepare for any random number calls that may be necessary on this step
-        self.streams.step(self.ti+1) # +1 offset because streams for ti=0 are used on initialization
+        # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
+        self.rng_container.step(self.ti+1) # +1 offset because ti=0 is used on initialization
 
         # Clean up dead agents, if removing agents is enabled
         if self.pars.remove_dead:

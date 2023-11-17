@@ -18,7 +18,7 @@ class HIV(ss.Disease):
         self.ti_art      = ss.State('ti_art', int, ss.INT_NAN)
         self.cd4         = ss.State('cd4', float, 500)
 
-        self.rng_dead = ss.Stream(f'dead_{self.name}')
+        self.rng_dead = ss.RNG(f'dead_{self.name}')
 
         self.pars = ss.omerge({
             'cd4_min': 100,
@@ -82,7 +82,7 @@ class ART(ss.Intervention):
 
         super().__init__(**kwargs)
 
-        self.rng_add_ART = ss.Stream('add_ART')
+        self.rng_add_ART = ss.RNG('add_ART')
 
         return
 

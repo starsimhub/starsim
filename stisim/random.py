@@ -2,20 +2,20 @@ import hashlib
 import numpy as np
 import stisim as ss
 
-__all__ = ['Streams', 'MultiStream', 'SingleStream', 'Stream']
+__all__ = ['RNGContainer', 'MultiRNG', 'SingleRNG', 'RNG']
 
 
 SIZE  = 0
 UIDS  = 1
 BOOLS = 2
 
-class Streams:
+class RNGContainer:
     """
-    Class for managing a collection random number streams
+    Class for managing a collection random number generators (MultiRNG or SingleRNG instances)
     """
 
     def __init__(self):
-        self._streams = ss.ndict()
+        self._rngs = ss.ndict()
         self.used_seed_offsets = set()
         self.initialized = False
         return
@@ -25,49 +25,49 @@ class Streams:
         self.initialized = True
         return
     
-    def add(self, stream, check_repeats=True):
+    def add(self, rng, check_repeats=True):
         """
-        Add a stream
+        Add a random number generator
         
         Can request an offset, will check for overlap
-        Otherwise, return value will be used as the seed offset for this stream
+        Otherwise, return value will be used as the seed offset for this rng
         """
         if not self.initialized:
             raise NotInitializedException()
 
-        if stream.name in self._streams:
-            raise RepeatNameException(stream.name)
+        if rng.name in self._rngs:
+            raise RepeatNameException(rng.name)
 
         if check_repeats:
-            if stream.seed_offset in self.used_seed_offsets:
-                raise SeedRepeatException(stream.name, stream.seed_offset)
-            self.used_seed_offsets.add(stream.seed_offset)
+            if rng.seed_offset in self.used_seed_offsets:
+                raise SeedRepeatException(rng.name, rng.seed_offset)
+            self.used_seed_offsets.add(rng.seed_offset)
 
-        self._streams.append(stream)
+        self._rngs.append(rng)
 
-        return self.base_seed + stream.seed_offset # Add in the base seed
+        return self.base_seed + rng.seed_offset # Add in the base seed
 
     def step(self, ti):
-        for stream in self._streams.dict_values():
-            stream.step(ti)
+        for rng in self._rngs.dict_values():
+            rng.step(ti)
         return
 
     def reset(self):
-        for stream in self._streams.dict_values():
-            stream.reset()
+        for rng in self._rngs.dict_values():
+            rng.reset()
         return
 
 
 class NotResetException(Exception):
     "Raised when an object is called twice in one timestep."
-    def __init__(self, stream_name):
-        msg = f'Stream {stream_name} has already been sampled on this timestep!'
+    def __init__(self, rng_name):
+        msg = f'The random number generator with name {rng_name} has already been sampled on this timestep!'
         super().__init__(msg)
         return
 
 
 class NotInitializedException(Exception):
-    "Raised when streams or stream object is called when not initialized."
+    "Raised when a random number generator or a RNGContainer object is called when not initialized."
     def __init__(self, obj_name=None):
         if obj_name is None: 
             msg = f'An object is being used without proper initialization.'
@@ -78,37 +78,37 @@ class NotInitializedException(Exception):
 
 
 class SeedRepeatException(Exception):
-    "Raised when two streams have the same seed."
-    def __init__(self, stream_name, seed_offset):
-        msg = f'Requested seed offset {seed_offset} for stream {stream_name} has already been used.'
+    "Raised when two random number generators have the same seed."
+    def __init__(self, rng_name, seed_offset):
+        msg = f'Requested seed offset {seed_offset} for the random number generator named {rng_name} has already been used.'
         super().__init__(msg)
         return
 
 
 class RepeatNameException(Exception):
-    "Raised when adding a stream to streams when the stream name has already been used."
-    def __init__(self, stream_name):
-        msg = f'A Stream with name {stream_name} has already been added.'
+    "Raised when adding a random number generator to a RNGContainer when the rng name has already been used."
+    def __init__(self, rng_name):
+        msg = f'A random number generator with name {rng_name} has already been added.'
         super().__init__(msg)
         return
 
 
-def Stream(*args, **kwargs):
+def RNG(*args, **kwargs):
     """
-    Class to choose a stream
+    Class to choose a random number generator class
     """
-    if ss.options.multistream:
-        return MultiStream(*args, **kwargs)
+    if ss.options.multirng:
+        return MultiRNG(*args, **kwargs)
     
-    return SingleStream(*args, **kwargs)
+    return SingleRNG(*args, **kwargs)
 
 
-def _pre_draw(func):
+def _pre_draw_multi(func):
     """
-    Decorator function that does quite a bit to empower calls to the sampling distributions in the MultiStream class.
+    Decorator function that does quite a bit to empower calls to the sampling distributions in the MultiRNG class.
 
     The size parameter, from either kwargs or args[0], is used to determine if the user is seeking a fixed number of samples (if size is an integer), or instead if the user is providing an array.
-    If size is an array, it could contain UIDs or be of boolean type. If UIDS, assume the user wants random numbers for these specific agents. If boolean, select random numbers based on the provided array. N.b. the approach based on UIDs is likely to be more "stream safe".
+    If size is an array, it could contain UIDs or be of boolean type. If UIDS, assume the user wants random numbers for these specific agents. If boolean, select random numbers based on the provided array. N.b. the approach based on UIDs is likely to be more "common random number safe".
     """
     def check_ready(self, *args, **kwargs):
         """ Validation before drawing """
@@ -159,21 +159,21 @@ def _pre_draw(func):
     return check_ready
 
 
-class MultiStream(np.random.Generator):
+class MultiRNG(np.random.Generator):
     """
-    Class for tracking one random number stream associated with one decision per timestep.
+    Class for tracking one random number generators associated with one decision per timestep.
 
     The main use case is to sample random numbers from various distributions
     that are specific to each agent (per decision and timestep) so as to enable
     variance reduction between simulations through the use of common random
-    numbers. For example, the user might create a stream called rng and
-    ultimately ask for randomly distributed random numbers for agents with UIDs
-    1 and 4:
+    numbers. For example, the user might create a random number generator called
+    rng and ultimately ask for randomly distributed random numbers for agents
+    with UIDs 1 and 4:
 
     >>> import stisim as ss
     >>> import numpy as np
-    >>> rng = ss.MultiStream('Test') # The hashed name determines the stream offset.
-    >>> rng.initialize(streams=None, slots=5) # In practice, slots will be sim.people.slots. When scalar (for testing), an np.arange will be used.
+    >>> rng = ss.MultiRNG('Test') # The hashed name determines the seed offset.
+    >>> rng.initialize(container=None, slots=5) # In practice, slots will be sim.people.slots. When scalar (for testing), an np.arange will be used.
     >>> uids = np.array([1,4])
     >>> rng.random(uids)
     array([0.88110549, 0.86915719])
@@ -210,11 +210,11 @@ class MultiStream(np.random.Generator):
     
     def __init__(self, name, seed_offset=None, **kwargs):
         """
-        Create a random number stream
+        Create a random number generator
 
         seed_offset will be automatically assigned (based on hashing the name) if None
         
-        name: a name for this Stream, like "coin_flip"
+        name: a name for this random number generator, like "coin_flip"
         """
 
         self.name = name
@@ -227,19 +227,19 @@ class MultiStream(np.random.Generator):
             # Use user-provided seed_offset (unlikely)
             self.seed_offset = seed_offset
 
-        self.seed = None # Will be determined once added to Streams
+        self.seed = None # Will be determined once added to the RNG Container
         self.initialized = False
         self.ready = True
         return
 
-    def initialize(self, streams, slots):
+    def initialize(self, container, slots):
         if self.initialized:
             return
 
-        if streams is not None:
-            self.seed = streams.add(self) # base_seed + seed_offset
+        if container is not None:
+            self.seed = container.add(self) # base_seed + seed_offset
         else:
-            # Enable use of MultiStream without streams
+            # Enable use of MultiRNG without a container
             self.seed = self.seed_offset
 
         if isinstance(slots, int):
@@ -287,58 +287,58 @@ class MultiStream(np.random.Generator):
         else:
             raise Exception(f'Invalid basis: {basis}. Valid choices are [{SIZE}, {UIDS}, {BOOLS}]')
 
-    @_pre_draw
+    @_pre_draw_multi
     def random(self, size, basis, uids=None):
-        vals = super(MultiStream, self).random(size=size)
+        vals = super(MultiRNG, self).random(size=size)
         return self._select(vals, basis, uids)
 
-    @_pre_draw
+    @_pre_draw_multi
     def uniform(self, size, basis, low, high, uids=None):
-        vals = super(MultiStream, self).uniform(size=size, low=low, high=high)
+        vals = super(MultiRNG, self).uniform(size=size, low=low, high=high)
         return self._select(vals, basis, uids)
 
-    @_pre_draw
+    @_pre_draw_multi
     def integers(self, size, basis, low, high, uids=None, **kwargs):
-        vals = super(MultiStream, self).integers(size=size, low=low, high=high, **kwargs)
+        vals = super(MultiRNG, self).integers(size=size, low=low, high=high, **kwargs)
         return self._select(vals, basis, uids)
 
-    @_pre_draw
+    @_pre_draw_multi
     def poisson(self, size, basis, lam, uids=None):
-        vals = super(MultiStream, self).poisson(size=size, lam=lam)
+        vals = super(MultiRNG, self).poisson(size=size, lam=lam)
         return self._select(vals, basis, uids)
 
-    @_pre_draw
+    @_pre_draw_multi
     def normal(self, size, basis, loc=0, scale=1, uids=None):
-        vals = super(MultiStream, self).normal(size=size)
+        vals = super(MultiRNG, self).normal(size=size)
         return loc + scale*self._select(vals, basis, uids)
 
-    @_pre_draw
+    @_pre_draw_multi
     def lognormal(self, size, basis, mean=0, sigma=1, uids=None):
-        vals = super(MultiStream, self).lognormal(size=size, mean=mean, sigma=sigma)
+        vals = super(MultiRNG, self).lognormal(size=size, mean=mean, sigma=sigma)
         return self._select(vals, basis, uids)
 
-    @_pre_draw
+    @_pre_draw_multi
     def negative_binomial(self, size, basis, n, p, uids=None):
-        vals = super(MultiStream, self).negative_binomial(size=size, n=n, p=p)
+        vals = super(MultiRNG, self).negative_binomial(size=size, n=n, p=p)
         return self._select(vals, basis, uids)
 
-    @_pre_draw
+    @_pre_draw_multi
     def bernoulli(self, size, prob, basis, uids=None):
-        vals = super(MultiStream, self).random(size=size)
+        vals = super(MultiRNG, self).random(size=size)
         return self._select(vals, basis, uids) < prob
 
-    # @_pre_draw <-- handled by call to self.bernoullli
+    # @_pre_draw_multi <-- handled by call to self.bernoullli
     def bernoulli_filter(self, uids, prob):
         return uids[self.bernoulli(size=uids, prob=prob)]
 
     def choice(self, size, basis, a, **kwargs):
         # Consider raising a warning instead?
-        raise Exception('The "choice" function is not MultiStream-safe.')
+        raise Exception('The "choice" function is not MultiRNG-safe.')
 
 
-def _pre_draw_centralized(func):
+def _pre_draw_single(func):
     """
-    Decorator for SingleStream
+    Decorator for SingleRNG
     """
     def check_ready(*args, **kwargs):
         """ Validation before drawing """
@@ -380,33 +380,33 @@ def _pre_draw_centralized(func):
     return check_ready
 
 
-class SingleStream():
+class SingleRNG():
     """
     Class to imitate the behavior of a centralized random number generator
     """
 
     def __init__(self, name, seed_offset=None, **kwargs):
         """
-        Create a random number stream
+        Create a random number generator
 
         seed_offset will be automatically assigned (sequentially in first-come order) if None
         
-        name: a name for this Stream, like "coin_flip"
+        name: a name for this random number generator, like "coin_flip"
         """
         self.name = name
         self.initialized = False
-        self.seed_offset = 0 # For compatibility with MultiStream
+        self.seed_offset = 0 # For compatibility with MultiRNG
         return
 
-    def initialize(self, streams, slots=None):
+    def initialize(self, container, slots=None):
         """
-        Slots are not used by the SingleStream, but here for compatibility with the MultiStream
+        Slots are not used by the SingleRNG, but here for compatibility with the MultiRNG
         """
         if self.initialized:
             return
 
-        if streams is not None:
-            streams.add(self, check_repeats=False) # Seed is returned, but not used here as we're using the global np.random stream which has been seeded elsewhere
+        if container is not None:
+            container.add(self, check_repeats=False) # Seed is returned, but not used here as we're using the global np.random generator which has been seeded elsewhere
 
         self.initialized = True
         return
@@ -424,22 +424,22 @@ class SingleStream():
         except Exception:
             try:
                 numpy_func = getattr(np.random, attr)
-                return _pre_draw_centralized(numpy_func)
+                return _pre_draw_single(numpy_func)
             except Exception:
                 errormsg = f'"{attr}" is not a member of this class or numpy.random'
                 raise Exception(errormsg)
 
     @staticmethod
-    @_pre_draw_centralized
+    @_pre_draw_single
     def integers(size, low, high, **kwargs):
         # provide integers via random_integers
         return np.random.random_integers(size=size, low=low, high=high)
 
     @staticmethod
-    @_pre_draw_centralized
+    @_pre_draw_single
     def bernoulli(size, prob, **kwargs):
         return np.random.random(size=size, **kwargs) < prob
 
     @staticmethod
     def bernoulli_filter(uids, prob):
-        return uids[SingleStream.bernoulli(size=uids, prob=prob)]
+        return uids[SingleRNG.bernoulli(size=uids, prob=prob)]
