@@ -12,7 +12,7 @@ import pandas as pd
 
 
 # Specify all externally visible functions this file defines
-__all__ = ['Networks', 'Network', 'NetworkConnector', 'SexualNetwork', 'mf', 'msm', 'mf_msm', 'hpv_network', 'maternal', 'embedding', 'stable_monogamy']
+__all__ = ['Networks', 'Network', 'NetworkConnector', 'SexualNetwork', 'mf', 'msm', 'mf_msm', 'hpv_network', 'maternal', 'embedding']
 
 
 class Network(ss.Module):
@@ -461,12 +461,15 @@ class mf(SexualNetwork, DynamicNetwork):
     def add_pairs(self, people, ti=None):
         available_m = self.available(people, 'male')
         available_f = self.available(people, 'female')
+
+        # random.choice is not common-random-number safe, and therefore we do
+        # not try to Stream-ify the following draws at this time.
         if len(available_m) <= len(available_f):
             p1 = available_m
-            p2 = np.random.choice(a=available_f, size=len(p1), replace=False) # Stream-ify?
+            p2 = np.random.choice(a=available_f, size=len(p1), replace=False)
         else:
             p2 = available_f
-            p1 = np.random.choice(a=available_m, size=len(p2), replace=False) # Stream-ify?
+            p1 = np.random.choice(a=available_m, size=len(p2), replace=False)
 
         beta = np.ones_like(p1)
 
@@ -622,25 +625,6 @@ class embedding(mf):
         self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
         return len(beta)
 
-
-class stable_monogamy(SexualNetwork):
-    """
-    Very simple network for debugging in which edges are:
-    1-2, 3-4, 5-6, ...
-    """
-    def __init__(self, **kwargs):
-        # Call init for the base class, which sets all the keys
-        super().__init__(**kwargs)
-        return
-
-    def initialize(self, sim):
-        n = len(sim.people._uid_map)
-        n_edges = n//2
-        self.contacts.p1 = np.arange(0, 2*n_edges, 2) # EVEN
-        self.contacts.p2 = np.arange(1, 2*n_edges, 2) # ODD
-        self.contacts.beta = np.ones(n_edges)
-        return
-    
 
 class NetworkConnector(ss.Module):
     """

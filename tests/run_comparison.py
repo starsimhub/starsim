@@ -15,11 +15,11 @@ import sciris as sc
 
 default_n_agents = 25
 # Three choices for network here, note that only the first two are common-random-number safe
-network = ['stable_monogamy', 'embedding', 'hpv_network'][1]
+network = ['stable_monogamy', 'embedding', 'hpv_network'][0]
 
 do_plot_graph = True
 # Several choices for how to layout the graph when plotting
-kind = ['radial', 'bipartite', 'spring', 'multipartite'][1]
+kind = ['radial', 'bipartite', 'spring', 'multipartite'][0]
 
 do_plot_longitudinal = True
 do_plot_timeseries = True
@@ -28,6 +28,26 @@ ss.options(multirng = True) # Can set multirng to False for comparison
 
 figdir = os.path.join(os.getcwd(), 'figs', network)
 sc.path(figdir).mkdir(parents=True, exist_ok=True)
+
+
+class stable_monogamy(ss.SexualNetwork):
+    """
+    Very simple network for debugging in which edges are:
+    1-2, 3-4, 5-6, ...
+    """
+    def __init__(self, **kwargs):
+        # Call init for the base class, which sets all the keys
+        super().__init__(**kwargs)
+        return
+
+    def initialize(self, sim):
+        n = len(sim.people._uid_map)
+        n_edges = n//2
+        self.contacts.p1 = np.arange(0, 2*n_edges, 2) # EVEN
+        self.contacts.p2 = np.arange(1, 2*n_edges, 2) # ODD
+        self.contacts.beta = np.ones(n_edges)
+        return
+
 
 class Graph():
     def __init__(self, nodes, edges):
@@ -57,7 +77,7 @@ class Graph():
         nx.draw_networkx_edges(self.graph, pos=pos, ax=ax)
         nx.draw_networkx_labels(self.graph, labels={i:int(a['cd4']) for i,a in self.graph.nodes.data()}, font_size=8, pos=pos, ax=ax)
         if edge_labels:
-            nx.draw_networkx_edge_labels(self.graph, edge_labels={(i,j): int(a['dur']) for i,j,a in self.graph.edges.data()}, font_size=8, pos=pos, ax=ax)
+            nx.draw_networkx_edge_labels(self.graph, edge_labels={(i,j): int(a['dur']) if 'dur' in a else np.nan for i,j,a in self.graph.edges.data()}, font_size=8, pos=pos, ax=ax)
         return
 
 
@@ -99,7 +119,10 @@ class GraphAnalyzer(ss.Analyzer):
 def run_sim(n=25, rand_seed=0, intervention=False, analyze=False, lbl=None):
     ppl = ss.People(n)
 
-    net_class = getattr(ss, network)
+    try:
+        net_class = eval(network)
+    except Exception as e:
+        net_class = getattr(ss, network)
     ppl.networks = ss.ndict(net_class(), ss.maternal())
 
     hiv_pars = {
