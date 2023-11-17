@@ -349,8 +349,6 @@ class mf(SexualNetwork, DynamicNetwork):
             'rel_debut': 1.0,
         }, pars)
 
-        self.rng_dur = ss.RNG(f'dur_{self.name}')
-        self.pars.dur.set_rng(self.rng_dur) # Use the same rng even if user changes 'dur' distribution
 
         # Set metadata for select parameters - this tells us which dimensions are allowed to vary
         self.meta_pars = sc.objdict({
@@ -364,6 +362,7 @@ class mf(SexualNetwork, DynamicNetwork):
         self.rng_participation_f = ss.RNG('participation_f')
         self.rng_participation_m = ss.RNG('participation_m')
         self.rng_debut = ss.RNG(f'debug_{self.name}')
+        self.rng_dur = ss.RNG(f'dur_{self.name}')
 
         return
 
@@ -751,7 +750,11 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         self.pars['participation'] = None  # Incidence of partnership formation by age
         self.pars['mixing']        = None  # Mixing matrices for storing age differences in partnerships
 
-        # Define random number generators and link to distributions
+        self.update_pars(pars)
+        self.get_layer_probs()
+        self.validate_pars()
+
+        # Define random number generators and link to distributions (after validation)
         self.rng_partners  = ss.RNG('partners')
         self.pars['partners'].set_rng(self.rng_partners)
 
@@ -766,8 +769,8 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         self.rng_f_contacts  = ss.SingleRNG('f_contacts')
         self.rng_m_contacts  = ss.SingleRNG('m_contacts')
 
-        self.update_pars(pars)
-        self.get_layer_probs()
+
+
         return
 
     def initialize(self, sim):
@@ -781,6 +784,11 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         self.rng_m_contacts.initialize(sim.rng_container, sim.people.slot)
 
         return self.add_pairs(sim.people, ti=0)
+
+    def validate_pars(self):
+        for par in ['partners', 'acts', 'dur_pship']:
+            if not isinstance(self.pars[par], ss.Distribution):
+                raise Exception(f'Network parameter {par} must be an instance of a Distribution')
 
     def update_pars(self, pars):
         if pars is not None:
