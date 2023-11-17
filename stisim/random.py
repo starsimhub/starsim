@@ -93,14 +93,27 @@ class RepeatNameException(Exception):
         return
 
 
-def RNG(*args, **kwargs):
+def RNG(*args, set_for=None, **kwargs):
     """
-    Class to choose a random number generator class
+    Class to choose a random number generator class.
+    
+    Parameters:
+    set_for (Distribution): Connect this RNG instance to the provided Distribution [Optional]
+
+    Returns:
+    SingleRNG or MultiRNG: Instance of a random number generator
     """
     if ss.options.multirng:
-        return MultiRNG(*args, **kwargs)
-    
-    return SingleRNG(*args, **kwargs)
+        rng = MultiRNG(*args, **kwargs)
+    else:
+        rng = SingleRNG(*args, **kwargs)
+
+    if set_for:
+        if not isinstance(set_for, ss.Distribution):
+            raise Exception('The "set_for" argument on is intended to connect this RNG to a Distribution, however the value passed in was not a Distribution.')
+        set_for.set_rng(rng)
+
+    return rng
 
 
 def _pre_draw_multi(func):
@@ -425,7 +438,10 @@ class SingleRNG():
             try:
                 numpy_func = getattr(np.random, attr)
                 return _pre_draw_single(numpy_func)
-            except Exception:
+            except Exception as e:
+                if '__getstate__' in str(e):
+                    # Must be from pickle, return a callable function that returns None
+                    return lambda: None
                 errormsg = f'"{attr}" is not a member of this class or numpy.random'
                 raise Exception(errormsg)
 

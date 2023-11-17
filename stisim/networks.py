@@ -739,21 +739,14 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         self.validate_pars()
 
         # Define random number generators and link to distributions (after validation)
-        self.rng_partners  = ss.RNG('partners')
-        self.pars['partners'].set_rng(self.rng_partners)
+        self.rng_partners  = ss.RNG('partners', set_for=self.pars['partners'])
+        self.rng_acts      = ss.RNG('acts', set_for=self.pars['acts'])
+        self.rng_dur_pship = ss.RNG('dur_pship', set_for=self.pars['dur_pship'])
 
-        self.rng_acts      = ss.RNG('acts')
-        self.pars['acts'].set_rng(self.rng_acts)
-
-        self.rng_dur_pship = ss.RNG('dur_pship')
-        self.pars['dur_pship'].set_rng(self.rng_dur_pship)
-
-        # These random number generators are called multiple times per step, and thus are not common-random-number safe
-        # Thus we use the SingleRNG
+        # This network algorithm is not common-random-number safe AND these
+        # generators are called multiple times per step, so we use a SingleRNG.
         self.rng_f_contacts  = ss.SingleRNG('f_contacts')
         self.rng_m_contacts  = ss.SingleRNG('m_contacts')
-
-
 
         return
 
