@@ -155,105 +155,120 @@ class Disease(Module):
         """
         pass
 
-    def make_new_cases(self, sim):
-        """ Add new cases of module, through transmission, incidence, etc. """
-        pars = self.pars
-
-        if not ss.options.multirng:
-            # Not common-random-number-safe, but more efficient for when not using the multirng feature
-            for k, layer in sim.people.networks.items():
-                if k in pars['beta']:
-                    contacts = layer.contacts
-                    rel_trans = (self.infected & sim.people.alive) * self.rel_trans
-                    rel_sus = (self.susceptible & sim.people.alive) * self.rel_sus
-                    for a, b, beta in [[contacts.p1, contacts.p2, pars.beta[k][0]],
-                                    [contacts.p2, contacts.p1, pars.beta[k][1]]]:
-                        # probability of a->b transmission
-                        p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta
-                        new_cases = np.random.random(len(a)) < p_transmit
-                        if np.any(new_cases):
-                            self.set_prognoses(sim, b[new_cases])
-            return len(new_cases)
-
-        # Common-random-number-safe transmission code below here
-
-        # Probability of each node acquiring a case
-        n = len(sim.people.uid) # TODO: possibly could be shortened to just the people who are alive
-        p_acq_node = np.zeros( n )
-
-        for lkey, layer in sim.people.networks.items():
-            if lkey in pars['beta']:
+    def _make_new_cases_singlerng(self, sim):
+        # Not common-random-number-safe, but more efficient for when not using the multirng feature
+        new_cases = []
+        sources = []
+        for k, layer in sim.people.networks.items():
+            if k in self.pars['beta']:
                 contacts = layer.contacts
-                rel_trans = self.rel_trans * (self.infected & sim.people.alive)
-                rel_sus = self.rel_sus * (self.susceptible & sim.people.alive)
+                rel_trans = (self.infected & sim.people.alive) * self.rel_trans
+                rel_sus = (self.susceptible & sim.people.alive) * self.rel_sus
+                for a, b, beta in [[contacts.p1, contacts.p2, self.pars.beta[k][0]],
+                                [contacts.p2, contacts.p1, self.pars.beta[k][1]]]:
+                    if beta == 0:
+                        continue
+                    # probability of a->b transmission
+                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta # TODO: Needs DT
+                    #new_cases.append(ss.true(np.random.random(len(a)) < p_transmit))
+                    new_cases_bool = np.random.random(len(a)) < p_transmit
+                    new_cases.append(b[new_cases_bool])
+                    sources.append(a[new_cases_bool])
+        return np.concatenate(new_cases), np.concatenate(sources)
 
-                a_to_b = [contacts.p1, contacts.p2, pars.beta[lkey][0]]
-                b_to_a = [contacts.p2, contacts.p1, pars.beta[lkey][1]]
-                for a, b, beta in [a_to_b, b_to_a]:
+    def _choose_new_cases_multirng(self, people):
+        '''
+        Common-random-number-safe transmission code works by computing the
+        probability of each _node_ acquiring a case rather than checking if each
+        _edge_ transmits.
+        '''
+        n = len(people.uid) # TODO: possibly could be shortened to just the people who are alive
+        p_acq_node = np.zeros(n)
+
+        for lkey, layer in people.networks.items():
+            if lkey in self.pars['beta']:
+                contacts = layer.contacts
+                rel_trans = self.rel_trans * (self.infected & people.alive)
+                rel_sus = self.rel_sus * (self.susceptible & people.alive)
+
+                a_to_b = [contacts.p1, contacts.p2, self.pars.beta[lkey][0]]
+                b_to_a = [contacts.p2, contacts.p1, self.pars.beta[lkey][1]]
+                for a, b, beta in [a_to_b, b_to_a]: # Transmission from a --> b
                     if beta == 0:
                         continue
                     
-                    # Check for new transmission from a --> b
+                    # Accumulate acquisition probability for each person (node)
                     node_from_edge = np.ones( (n, len(a)) )
-                    bi = sim.people._uid_map[b] # Indices of b (rather than uid)
-                    p_not_acq = 1 - rel_trans[a] * rel_sus[b] * contacts.beta * beta # Needs DT
+                    bi = people._uid_map[b] # Indices of b (rather than uid)
+                    node_from_edge[bi, np.arange(len(a))] = 1 - rel_trans[a] * rel_sus[b] * contacts.beta * beta # TODO: Needs DT
+                    p_acq_node = 1 - (1-p_acq_node) * node_from_edge.prod(axis=1) # (1-p1)*(1-p2)*...
 
-                    node_from_edge[bi, np.arange(len(a))] = p_not_acq
-                    p_not_acq_by_node_this_layer_b_from_a = node_from_edge.prod(axis=1) # (1-p1)*(1-p2)*...
-                    p_acq_node = 1 - (1-p_acq_node) * p_not_acq_by_node_this_layer_b_from_a
+        new_cases_bool = self.rng_trans.bernoulli(people.uid, prob=p_acq_node)
+        new_cases = people.uid[new_cases_bool]
+        return new_cases
 
-        new_cases_bool = self.rng_trans.bernoulli(sim.people.uid, prob=p_acq_node)
-        new_cases = sim.people.uid[new_cases_bool]
-
-        if not len(new_cases):
-            return 0
-
-        # Now determine who infected each case
-        frm = np.zeros_like(new_cases)
-        r = self.rng_choose_infector.random(new_cases)
+    def _determine_case_source_multirng(self, people, new_cases):
+        '''
+        Given the uids of new cases, determine which agents are the source of each case
+        '''
+        sources = np.zeros_like(new_cases)
+        r = self.rng_choose_infector.random(new_cases) # Random number slotted to each new case
         for i, uid in enumerate(new_cases):
             p_acqs = []
-            sources = []
+            possible_sources = []
 
-            for lkey, layer in sim.people.networks.items():
-                if lkey in pars['beta']:
+            for lkey, layer in people.networks.items():
+                if lkey in self.pars['beta']:
                     contacts = layer.contacts
-                    a_to_b = [contacts.p1, contacts.p2, pars.beta[lkey][0]]
-                    b_to_a = [contacts.p2, contacts.p1, pars.beta[lkey][1]]
-                    for a, b, beta in [a_to_b, b_to_a]:
+                    a_to_b = [contacts.p1, contacts.p2, self.pars.beta[lkey][0]]
+                    b_to_a = [contacts.p2, contacts.p1, self.pars.beta[lkey][1]]
+                    for a, b, beta in [a_to_b, b_to_a]: # Transmission from a --> b
                         if beta == 0:
                             continue
                     
                         inds = np.where(b==uid)[0]
                         if len(inds) == 0:
                             continue
-                        frms = a[inds]
+                        neighbors = a[inds]
 
-                        # TODO: Likely no longer need alive here, at least not if dead people are removed
-                        rel_trans = self.rel_trans[frms] * (self.infected[frms] & sim.people.alive[frms])
-                        rel_sus = self.rel_sus[uid] * (self.susceptible[uid] & sim.people.alive[uid])
+                        rel_trans = self.rel_trans[neighbors] * (self.infected[neighbors] & people.alive[neighbors])
+                        rel_sus = self.rel_sus[uid] * (self.susceptible[uid] & people.alive[uid])
                         beta_combined = contacts.beta[inds] * beta
 
-                        # Check for new transmission from a --> b
-                        # TODO: Remove zeros from this...
+                        # Compute acquisition probabilities from neighbors --> uid
+                        # TODO: Could remove zeros
                         p_acqs.append((rel_trans * rel_sus * beta_combined).__array__()) # Needs DT
-                        sources.append(frms.__array__())
+                        possible_sources.append(neighbors.__array__())
 
+            # Concatenate across layers and directions (p1->p2 vs p2->p1)
             p_acqs = np.concatenate(p_acqs)
-            sources = np.concatenate(sources)
+            possible_sources = np.concatenate(possible_sources)
 
-            if len(sources) == 1:
-                frm[i] = sources[0]
+            if len(possible_sources) == 1: # Easy if only one possible source
+                sources[i] = possible_sources[0]
             else:
-                # Choose using draw r from above
+                # Roulette selection using slotted draw r associated with this new case
                 cumsum = p_acqs / p_acqs.sum()
-                frm_idx = np.argmax( cumsum >= r[i])
-                frm[i] = sources[frm_idx]
+                source_idx = np.argmax(cumsum >= r[i])
+                sources[i] = possible_sources[source_idx]
+        return sources
 
-        self.set_prognoses(sim, new_cases, frm)
+    def make_new_cases(self, sim):
+        """ Add new cases of module, through transmission, incidence, etc. """
+        if not ss.options.multirng:
+            # Determine new cases for singlerng
+            new_cases, sources = self._make_new_cases_singlerng(sim)
+        else:
+            # Determine new cases for multirng
+            new_cases = self._choose_new_cases_multirng(sim.people)
+            if len(new_cases):
+                # Now determine whom infected each case
+                sources = self._determine_case_source_multirng(sim.people, new_cases)
+
+        if len(new_cases):
+            self.set_prognoses(sim, new_cases, sources)
         
         return len(new_cases) # number of new cases made
-
 
     def set_prognoses(self, sim, uids, from_uids):
         pass
