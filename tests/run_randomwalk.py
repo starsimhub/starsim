@@ -140,7 +140,7 @@ def plot_scenarios(df):
         g = sns.relplot(kind='line', data=mrg_by_ms, x='ti', y='Value - Reference', hue='p', col='channel', row='p',
             height=3, aspect=1.0, palette='Set1', estimator=None, units='rand_seed', lw=0.5, facet_kws=fkw) #errorbar='sd', lw=2, 
         g.set_titles(col_template='{col_name}', row_template='Coverage: {row_name}')
-        g.fig.suptitle('Multistream' if ms else 'Centralized')
+        g.fig.suptitle('MultiStream' if ms else 'SingleStream')
         g.fig.subplots_adjust(top=0.88)
         g.set_xlabels(r'Timestep $t_i$')
         g.fig.savefig(os.path.join(figdir, 'diff_multistream.png' if ms else 'diff_centralized.png'), bbox_inches='tight', dpi=300)

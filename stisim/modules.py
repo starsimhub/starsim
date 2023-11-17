@@ -81,7 +81,7 @@ class Module(sc.prettyobj):
 
         :return:
         """
-        return [x for x in self.__dict__.values() if isinstance(x, (ss.MultiStream, ss.CentralizedStream))]
+        return [x for x in self.__dict__.values() if isinstance(x, (ss.MultiStream, ss.SingleStream))]
 
 
 class Disease(Module):

@@ -762,9 +762,9 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         self.pars['dur_pship'].set_stream(self.rng_dur_pship)
 
         # These streams are called multiple times per step, and thus are not stream safe
-        # Thus we use the CentralizedStream
-        self.rng_f_contacts  = ss.CentralizedStream('f_contacts')
-        self.rng_m_contacts  = ss.CentralizedStream('m_contacts')
+        # Thus we use the SingleStream
+        self.rng_f_contacts  = ss.SingleStream('f_contacts')
+        self.rng_m_contacts  = ss.SingleStream('m_contacts')
 
         self.update_pars(pars)
         self.get_layer_probs()

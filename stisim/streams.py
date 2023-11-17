@@ -2,7 +2,7 @@ import hashlib
 import numpy as np
 import stisim as ss
 
-__all__ = ['Streams', 'MultiStream', 'CentralizedStream', 'Stream']
+__all__ = ['Streams', 'MultiStream', 'SingleStream', 'Stream']
 
 
 SIZE  = 0
@@ -100,7 +100,7 @@ def Stream(*args, **kwargs):
     if ss.options.multistream:
         return MultiStream(*args, **kwargs)
     
-    return CentralizedStream(*args, **kwargs)
+    return SingleStream(*args, **kwargs)
 
 
 def _pre_draw(func):
@@ -338,7 +338,7 @@ class MultiStream(np.random.Generator):
 
 def _pre_draw_centralized(func):
     """
-    Decorator for CentralizedStream
+    Decorator for SingleStream
     """
     def check_ready(*args, **kwargs):
         """ Validation before drawing """
@@ -380,7 +380,7 @@ def _pre_draw_centralized(func):
     return check_ready
 
 
-class CentralizedStream():
+class SingleStream():
     """
     Class to imitate the behavior of a centralized random number generator
     """
@@ -400,7 +400,7 @@ class CentralizedStream():
 
     def initialize(self, streams, slots=None):
         """
-        Slots are not used by the CentralizedStream, but here for compatibility with the MultiStream
+        Slots are not used by the SingleStream, but here for compatibility with the MultiStream
         """
         if self.initialized:
             return
@@ -442,4 +442,4 @@ class CentralizedStream():
 
     @staticmethod
     def bernoulli_filter(uids, prob):
-        return uids[CentralizedStream.bernoulli(size=uids, prob=prob)]
+        return uids[SingleStream.bernoulli(size=uids, prob=prob)]
