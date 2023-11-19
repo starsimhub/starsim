@@ -49,7 +49,9 @@ class HIV(STI):
         super().make_new_cases(sim)
         return
 
-    def set_prognoses(self, sim, uids):
+    def set_prognoses(self, sim, uids, from_uids=None):
+        super().set_prognoses(sim, uids, from_uids)
+
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = sim.ti
