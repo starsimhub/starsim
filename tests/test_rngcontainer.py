@@ -13,7 +13,7 @@ from stisim.random import NotInitializedException, SeedRepeatException, RepeatNa
 
 def test_container(n=5):
     """ Simple sample """
-    sc.heading('Testing RNGContainer object')
+    sc.heading('test_container: Testing RNGContainer object')
     rng_container = ss.RNGContainer()
     rng_container.initialize(base_seed=10)
 
@@ -22,14 +22,15 @@ def test_container(n=5):
 
     uids = np.arange(0,n,2) # every other to make it interesting
     draws = rng.random(uids)
-    print(f'\nCREATED SEED AND SAMPLED: {draws}')
+    print(f'Created seed and sampled: {draws}')
 
-    return len(draws) == len(uids)
+    assert len(draws) == len(uids)
+    return draws
 
 
 def test_seed(n=5):
-    """ Sample, reset, sample """
-    sc.heading('Testing RNGContainer reset')
+    """ Test assignment of seeds """
+    sc.heading('test_seed: Testing assignment of seeds')
     rng_container = ss.RNGContainer()
     rng_container.initialize(base_seed=10)
 
@@ -38,13 +39,15 @@ def test_seed(n=5):
 
     rng1 = ss.MultiRNG('rng1')
     rng1.initialize(rng_container, slots=n)
+    print(f'Random generators rng0 and rng1 were assigned seeds {rng0.seed} and {rng1.seed}, respectively')
 
-    return rng1.seed != rng0.seed
+    assert rng1.seed != rng0.seed
+    return rng0, rng1
 
 
 def test_reset(n=5):
-    """ Sample, step, sample """
-    sc.heading('Testing sample, step, sample')
+    """ Sample, reset, sample """
+    sc.heading('test_reset: Testing sample, reset, sample')
     rng_container = ss.RNGContainer()
     rng_container.initialize(base_seed=10)
 
@@ -58,12 +61,17 @@ def test_reset(n=5):
 
     s_after = rng.random(uids)
 
-    return np.all(s_after == s_before)
+    print(f'Initial sample', s_before)
+    print('Reset')
+    print(f'After reset sample', s_after)
+
+    assert np.array_equal(s_after, s_before)
+    return s_before, s_after
 
 
 def test_step(n=5):
     """ Sample, step, sample """
-    sc.heading('Testing sample, step, sample')
+    sc.heading('test_step: Testing sample, step, sample')
     rng_container = ss.RNGContainer()
     rng_container.initialize(base_seed=10)
 
@@ -77,28 +85,33 @@ def test_step(n=5):
 
     s_after = rng.random(uids)
 
-    return np.all(s_after != s_before)
+    print(f'Initial sample', s_before)
+    print('Step')
+    print(f'Subsequent sample', s_after)
+
+    assert not np.array_equal(s_after, s_before)
+    return s_before, s_after
 
 
 def test_initialize(n=5):
     """ Sample without initializing, should raise exception """
-    sc.heading('Testing without initializing, should raise exception.')
+    sc.heading('test_initialize: Testing without initializing, should raise exception.')
     rng_container = ss.RNGContainer()
-    #rng_container.initialize(base_seed=3)
+    #rng_container.initialize(base_seed=3) # Do not initialize
 
     rng = ss.MultiRNG('rng0')
 
     try:
         rng.initialize(rng_container, slots=n)
-        return False # Should not get here!
+        assert False # Should not get here!
     except NotInitializedException as e:
         print(f'YAY! Got exception: {e}')
-    return True
+    return rng
 
 
 def test_seedrepeat(n=5):
     """ Two random number generators with the same seed, should raise exception """
-    sc.heading('Testing two random number generators with the same seed, should raise exception.')
+    sc.heading('test_seedrepeat: Testing two random number generators with the same seed, should raise exception.')
     rng_container = ss.RNGContainer()
     rng_container.initialize(base_seed=10)
 
@@ -108,15 +121,15 @@ def test_seedrepeat(n=5):
     try:
         rng1 = ss.MultiRNG('rng1', seed_offset=0)
         rng1.initialize(rng_container, slots=n)
-        return False # Should not get here!
+        assert False # Should not get here!
     except SeedRepeatException as e:
         print(f'YAY! Got exception: {e}')
-    return True
+    return rng, rng1
 
 
 def test_samplingorder(n=5):
     """ Ensure sampling from one RNG doesn't affect another """
-    sc.heading('Testing from multiple random number generators to test if sampling order matters')
+    sc.heading('test_samplingorder: Testing from multiple random number generators to test if sampling order matters')
     rng_container = ss.RNGContainer()
     rng_container.initialize(base_seed=10)
 
@@ -136,12 +149,17 @@ def test_samplingorder(n=5):
     _ = rng1.random(uids)
     s_after = rng0.random(uids)
 
-    return np.all(s_before == s_after)
+    print(f'When sampling rng0 before rng1:', s_before)
+    print('Reset')
+    print(f'When sampling rng0 after rng1:', s_after)
+
+    assert np.array_equal(s_before, s_after)
+    return s_before, s_after
 
 
 def test_repeatname(n=5):
     """ Test two random number generators with the same name """
-    sc.heading('Testing if two random number generators with the same name are allowed')
+    sc.heading('test_repeatname: Testing if two random number generators with the same name are allowed')
     rng_container = ss.RNGContainer()
     rng_container.initialize(base_seed=17)
 
@@ -151,10 +169,10 @@ def test_repeatname(n=5):
     rng1 = ss.MultiRNG('test')
     try:
         rng1.initialize(rng_container, slots=n)
-        return False # Should not get here!
+        assert False # Should not get here!
     except RepeatNameException as e:
         print(f'YAY! Got exception: {e}')
-    return True
+    return rng0, rng1
 
 
 # %% Run as a script
@@ -163,14 +181,14 @@ if __name__ == '__main__':
     T = sc.tic()
 
     # Run tests
-    print(test_container())
-    print(test_seed())
-    print(test_reset())
-    print(test_step())
-    print(test_initialize())
-    print(test_seedrepeat())
-    print(test_samplingorder())
-    print(test_repeatname())
+    test_container()
+    test_seed()
+    test_reset()
+    test_step()
+    test_initialize()
+    test_seedrepeat()
+    test_samplingorder()
+    test_repeatname()
 
     sc.toc(T)
     print('Done.')
