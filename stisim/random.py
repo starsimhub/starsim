@@ -262,7 +262,7 @@ class MultiRNG(np.random.Generator):
             self.slots = slots # E.g. sim.people.slots (instead of using uid as the slots directly)
 
         if 'bit_generator' not in self.kwargs:
-            self.kwargs['bit_generator'] = np.random.PCG64(seed=self.seed)
+            self.kwargs['bit_generator'] = np.random.PCG64DXSM(seed=self.seed)
         super().__init__(**self.kwargs)
 
         self._init_state = self.bit_generator.state # Store the initial state

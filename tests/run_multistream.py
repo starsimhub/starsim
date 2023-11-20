@@ -10,6 +10,11 @@ import pandas as pd
 import seaborn as sns
 import numpy as np
 
+# Suppress warning from seaborn
+import warnings
+warnings.filterwarnings("ignore", "is_categorical_dtype")
+warnings.filterwarnings("ignore", "use_inf_as_na")
+
 n = 100 # Agents
 n_rand_seeds = 25
 intv_cov_levels = [0.01, 0.10, 0.25, 0.73] + [0] # Must include 0 as that's the baseline
