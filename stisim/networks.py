@@ -361,7 +361,7 @@ class mf(SexualNetwork, DynamicNetwork):
         # Define random number generators
         self.rng_participation_f = ss.RNG('participation_f')
         self.rng_participation_m = ss.RNG('participation_m')
-        self.rng_debut = ss.RNG(f'debug_{self.name}')
+        self.rng_debut = ss.RNG(f'debut_{self.name}')
         self.rng_dur = ss.RNG(f'dur_{self.name}')
 
         return
@@ -738,7 +738,7 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         self.get_layer_probs()
         self.validate_pars()
 
-        # Define random number generators and link to distributions (after validation)
+        # Define random number generators and link to distributions (now that validation is done)
         self.rng_partners  = ss.RNG('partners', set_for=self.pars['partners'])
         self.rng_acts      = ss.RNG('acts', set_for=self.pars['acts'])
         self.rng_dur_pship = ss.RNG('dur_pship', set_for=self.pars['dur_pship'])
@@ -752,14 +752,6 @@ class hpv_network(SexualNetwork, DynamicNetwork):
 
     def initialize(self, sim):
         super().initialize(sim)
-
-        # Initialize random number generators
-        self.rng_partners.initialize(sim.rng_container, sim.people.slot)
-        self.rng_acts.initialize(sim.rng_container, sim.people.slot)
-        self.rng_dur_pship.initialize(sim.rng_container, sim.people.slot)
-        self.rng_f_contacts.initialize(sim.rng_container, sim.people.slot)
-        self.rng_m_contacts.initialize(sim.rng_container, sim.people.slot)
-
         return self.add_pairs(sim.people, ti=0)
 
     def validate_pars(self):
@@ -840,7 +832,7 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         bin_range_f = np.unique(age_bins_f)  # Range of bins
         f = []  # Initialize the female partners
         for ab in bin_range_f:  # Loop over age bins
-            these_f_contacts = self.rng_f_contacts.bernoulli_filter(uids=f_eligible_inds[ age_bins_f == ab], prob=self.pars['participation'][1][ab])  # Select females according to their participation rate in this layer
+            these_f_contacts = self.rngs.f_contacts.bernoulli_filter(uids=f_eligible_inds[ age_bins_f == ab], prob=self.pars['participation'][1][ab])  # Select females according to their participation rate in this layer
             f.append(these_f_contacts)
         f = np.concatenate(f)
 
@@ -850,7 +842,7 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         bin_range_m = np.unique(age_bins_m)  # Range of bins
         m = []  # Initialize the male partners
         for ab in bin_range_m:
-            these_m_contacts = self.rng_m_contacts.bernoulli_filter(uids=m_eligible_inds[age_bins_m == ab], prob=self.pars['participation'][2][ab])  # Select males according to their participation rate in this layer
+            these_m_contacts = self.rngs.m_contacts.bernoulli_filter(uids=m_eligible_inds[age_bins_m == ab], prob=self.pars['participation'][2][ab])  # Select males according to their participation rate in this layer
             m.append(these_m_contacts)
         m = np.concatenate(m)
 
