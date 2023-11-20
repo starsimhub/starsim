@@ -7,6 +7,7 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 from stisim.random import NotResetException, RNG
+import pytest
 
 
 def make_rng(slots, base_seed=1, name='Test'):
@@ -127,12 +128,9 @@ def test_repeat(n=5):
     print(f'Random sample for uids {uids} returned {draws1}')
 
     print('Attempting to sample again without resetting, should raise and exception.')
-    try:
+    with pytest.raises(NotResetException):
         rng.random(uids)
-        return False # Should not get here!
-    except NotResetException as e:
-        print(f'YAY! Got exception: {e}')
-    return True
+    return rng
 
 
 def test_boolmask(n=5):
@@ -186,9 +184,11 @@ if __name__ == '__main__':
         test_reset(n)
         test_step(n)
         test_seed(n)
-        test_repeat(n)
         test_boolmask(n)
         test_empty()
+
+        if multirng:
+            test_repeat(n)
 
     sc.toc(T)
     print('Done.')

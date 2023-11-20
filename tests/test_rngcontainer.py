@@ -7,6 +7,7 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 from stisim.random import NotInitializedException, SeedRepeatException, RepeatNameException
+import pytest
 
 
 # %% Define the tests
@@ -101,11 +102,8 @@ def test_initialize(n=5):
 
     rng = ss.MultiRNG('rng0')
 
-    try:
+    with pytest.raises(NotInitializedException):
         rng.initialize(rng_container, slots=n)
-        assert False # Should not get here!
-    except NotInitializedException as e:
-        print(f'YAY! Got exception: {e}')
     return rng
 
 
@@ -118,12 +116,9 @@ def test_seedrepeat(n=5):
     rng = ss.MultiRNG('rng0', seed_offset=0)
     rng.initialize(rng_container, slots=n)
 
-    try:
+    with pytest.raises(SeedRepeatException):
         rng1 = ss.MultiRNG('rng1', seed_offset=0)
         rng1.initialize(rng_container, slots=n)
-        assert False # Should not get here!
-    except SeedRepeatException as e:
-        print(f'YAY! Got exception: {e}')
     return rng, rng1
 
 
@@ -167,11 +162,8 @@ def test_repeatname(n=5):
     rng0.initialize(rng_container, slots=n)
 
     rng1 = ss.MultiRNG('test')
-    try:
+    with pytest.raises(RepeatNameException):
         rng1.initialize(rng_container, slots=n)
-        assert False # Should not get here!
-    except RepeatNameException as e:
-        print(f'YAY! Got exception: {e}')
     return rng0, rng1
 
 
