@@ -132,7 +132,7 @@ def run_sim(n=25, rand_seed=0, intervention=False, analyze=False, lbl=None):
     }
     hiv = ss.HIV(hiv_pars)
 
-    art = ss.hiv.ART(0, 0.4) # 40% coverage from day 0
+    art = ss.hiv.ART(0, 0.6) # 60% coverage from day 0
 
     pars = {
         'start': 1980,
