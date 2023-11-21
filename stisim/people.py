@@ -67,7 +67,7 @@ class BasePeople(sc.prettyobj):
         self.uid[new_inds] = new_uids
 
         for state in self._states.values():
-            state.grow(n)
+            state.grow(new_uids)
 
         return new_uids
 
@@ -153,7 +153,7 @@ class People(BasePeople):
         states = [
             ss.State('slot', int, ss.INT_NAN), # MUST BE FIRST
             ss.State('age', float, np.nan), # NaN until conceived
-            ss.State('female', bool, ss.bernoulli(0.5, rng=self.rng_female)),
+            ss.State('female', bool, ss.bernoulli(0.5), rng=self.rng_female),
             ss.State('debut', float),
             ss.State('alive', bool, True), # Redundant with ti_dead == ss.INT_NAN
             ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
@@ -166,16 +166,17 @@ class People(BasePeople):
 
         # Set initial age distribution - likely move this somewhere else later
         self.rng_agedist  = ss.RNG('agedist')
-        self.age_data_dist = self.get_age_dist(age_data, self.rng_agedist)
+        self.age_data_dist = self.get_age_dist(age_data)
 
         return
 
     @staticmethod
-    def get_age_dist(age_data, rng):
+    def get_age_dist(age_data):
         """ Return an age distribution based on provided data """
-        if age_data is None: return ss.uniform(0, 100, rng=rng)
+        if age_data is None:
+            return ss.uniform(0, 100)
         if sc.checktype(age_data, pd.DataFrame):
-            return ss.data_dist(vals=age_data['value'].values, bins=age_data['age'].values, rng=rng)
+            return ss.data_dist(vals=age_data['value'].values, bins=age_data['age'].values)
 
     def initialize(self, sim):
         """ Initialization """
@@ -191,7 +192,7 @@ class People(BasePeople):
                 # Initialize here in case other states use random number generators that depend on slots being initialized
                 self.slot[:] = self.uid
 
-        self.age[:] = self.age_data_dist.sample(len(self))
+        self.age[:] = self.rng_agedist.sample(self.age_data_dist,len(self))
         self.initialized = True
         return
 

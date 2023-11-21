@@ -130,7 +130,7 @@ class Disease(Module):
         if self.pars['init_prev'] <= 0:
             return
 
-        initial_cases = self.rng_init_cases.bernoulli_filter(uids=ss.true(sim.people.alive), prob=self.pars['init_prev'])
+        initial_cases = self.rng_init_cases.bernoulli_filter(ss.bernoulli(self.pars['init_prev']), uids=ss.true(sim.people.alive))
 
         self.set_prognoses(sim, initial_cases, from_uids=None) # TODO: sentinel value to indicate seeds?
         return
@@ -203,8 +203,7 @@ class Disease(Module):
                     node_from_edge[bi, np.arange(len(a))] = 1 - rel_trans[a] * rel_sus[b] * contacts.beta * beta # TODO: Needs DT
                     p_acq_node = 1 - (1-p_acq_node) * node_from_edge.prod(axis=1) # (1-p1)*(1-p2)*...
 
-        new_cases_bool = self.rng_trans.bernoulli(people.uid, prob=p_acq_node)
-        new_cases = people.uid[new_cases_bool]
+        new_cases = self.rng_trans.bernoulli_filter(p_acq_node, people.uid)
         return new_cases
 
     def _determine_case_source_multirng(self, people, new_cases):
@@ -212,7 +211,7 @@ class Disease(Module):
         Given the uids of new cases, determine which agents are the source of each case
         '''
         sources = np.zeros_like(new_cases)
-        r = self.rng_choose_infector.random(new_cases) # Random number slotted to each new case
+        r = self.rng_choose_infector.sample(ss.uniform(0,1), new_cases) # Random number slotted to each new case
         for i, uid in enumerate(new_cases):
             p_acqs = []
             possible_sources = []

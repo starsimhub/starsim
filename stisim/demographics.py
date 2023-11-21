@@ -241,12 +241,12 @@ class Pregnancy(DemographicModule):
             'dur_pregnancy': 0.75,  # Make this a distribution?
             'dur_postpartum': 0.5,  # Make this a distribution?
             'inci': 0.03,  # Replace this with age-specific rates
-            'p_death': 0,  # Probability of maternal death. Question, should this be linked to age and/or duration?
+            'p_death': ss.bernoulli(0),  # Probability of maternal death. Question, should this be linked to age and/or duration?
             'init_prev': 0.3,  # Number of women initially pregnant # TODO: Default value
         }, self.pars)
 
         self.rng_female = ss.RNG(f'female_{self.name}')
-        self.female_dist = ss.bernoulli(p=0.5, rng=self.rng_female) # Replace 0.5 with sex ratio at birth
+        self.female_dist = ss.bernoulli(p=0.5)
 
         self.rng_conception = ss.RNG('conception')
         self.rng_dead = ss.RNG(f'dead_{self.name}')
@@ -316,19 +316,21 @@ class Pregnancy(DemographicModule):
         if self.pars.inci > 0:
             denom_conds = ppl.female & ppl.active & self.susceptible
             inds_to_choose_from = ss.true(denom_conds)
-            uids = self.rng_conception.bernoulli_filter(inds_to_choose_from, prob=self.pars.inci)
+            uids = self.rng_conception.bernoulli_filter(ss.bernoulli(self.pars.inci), inds_to_choose_from)
 
             # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
             n_unborn_agents = len(uids)
             if n_unborn_agents > 0:
-                new_slots = self.rng_choose_slots.integers(uids, low=sim.pars['n_agents'], high=sim.pars['slot_scale']*sim.pars['n_agents'], dtype=int)
+
+                # Choose slots for the unborn agents
+                new_slots = self.rng_choose_slots.sample(ss.uniform_int(sim.pars['n_agents'],sim.pars['slot_scale']*sim.pars['n_agents']), uids)
 
                 # Grow the arrays and set properties for the unborn agents
                 new_uids = sim.people.grow(len(new_slots))
 
                 sim.people.age[new_uids] = -self.pars.dur_pregnancy
                 sim.people.slot[new_uids] = new_slots # Before sampling female_dist
-                sim.people.female[new_uids] = self.female_dist.sample(uids)
+                sim.people.female[new_uids] = self.rng_female.sample(self.female_dist,uids)
 
                 # Add connections to any vertical transmission layers
                 # Placeholder code to be moved / refactored. The maternal network may need to be
@@ -358,7 +360,7 @@ class Pregnancy(DemographicModule):
 
         # Outcomes for pregnancies
         dur = np.full(len(uids), sim.ti + self.pars.dur_pregnancy / sim.dt)
-        dead = self.rng_dead.bernoulli(uids, prob=self.pars.p_death)
+        dead = self.rng_dead.sample(self.pars.p_death, uids)
         self.ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
         dur_post_partum = np.full(len(uids), dur + self.pars.dur_postpartum / sim.dt)
         self.ti_postpartum[uids] = dur_post_partum

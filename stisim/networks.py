@@ -436,7 +436,7 @@ class mf(SexualNetwork, DynamicNetwork):
             uids = ss.true(people[sk][eligible_uids])
             df = self.pars.part_rates.loc[self.pars.part_rates.sex == sk]
             pr = np.interp(year, df['year'], df['part_rates']) * self.pars.rel_part_rates
-            self.participant[uids] = rng.bernoulli(uids, prob=pr)
+            self.participant[uids] = rng.sample(ss.bernoulli(pr), uids)
         return
 
     def set_debut(self, people, upper_age=None):
@@ -454,7 +454,7 @@ class mf(SexualNetwork, DynamicNetwork):
             mean = np.interp(people.year, df['year'], df['debut'])
             std = np.interp(people.year, df['year'], df['std'])
             dist = df.loc[df.year == nearest_year].dist.iloc[0]
-            debut_vals = ss.Distribution.create(dist, mean, std, rng=self.rng_debut)(uids) * self.pars.rel_debut
+            debut_vals = self.rng_debut.sample(ss.Distribution.create(dist, mean, std),uids) * self.pars.rel_debut
             self.debut[uids] = debut_vals
         return
 
@@ -739,9 +739,9 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         self.validate_pars()
 
         # Define random number generators and link to distributions (now that validation is done)
-        self.rng_partners  = ss.RNG('partners', set_for=self.pars['partners'])
-        self.rng_acts      = ss.RNG('acts', set_for=self.pars['acts'])
-        self.rng_dur_pship = ss.RNG('dur_pship', set_for=self.pars['dur_pship'])
+        self.rng_partners  = ss.RNG('partners')#, set_for=self.pars['partners'])
+        self.rng_acts      = ss.RNG('acts')#, set_for=self.pars['acts'])
+        self.rng_dur_pship = ss.RNG('dur_pship')#, set_for=self.pars['dur_pship'])
 
         # This network algorithm is not common-random-number safe AND these
         # generators are called multiple times per step, so we use a SingleRNG.

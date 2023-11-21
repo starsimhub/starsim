@@ -3,6 +3,8 @@ import numpy as np
 import sciris as sc
 import numba as nb
 from stisim.utils import INT_NAN
+from stisim.distributions import Distribution
+from stisim.utils import warn
 from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
 
 __all__ = ['State', 'DynamicView']
@@ -237,17 +239,17 @@ class FusedArray(NDArrayOperatorsMixin):
 
 
 class DynamicView(NDArrayOperatorsMixin):
-    def __init__(self, dtype, fill_value=0):
+    def __init__(self, dtype, fill_value=None):
         """
         Args:
             name: name of the result as used in the model
             dtype: datatype
-            fill_value: default value for this state upon model initialization. If callable, it is called with a single argument for the number of samples
+            fill_value: default value for this state upon model initialization. If not provided, it will use the default value for the dtype
             shape: If not none, set to match a string in `pars` containing the dimensionality
             label: text used to construct labels for the result for displaying on plots and other outputs
         """
         self.dtype = dtype
-        self.fill_value = fill_value
+        self.fill_value = fill_value if fill_value is not None else dtype()
         self.n = 0  # Number of agents currently in use
         self._data = None  # The underlying memory array (length at least equal to n)
         self._view = None  # The view corresponding to what is actually accessible (length equal to n)
@@ -267,51 +269,39 @@ class DynamicView(NDArrayOperatorsMixin):
         return self._view.__repr__()
 
     def _new_items(self, n):
-        # New items are empty in this implementation, real values are filled reactively by _fill_data.
-        return np.empty(n, dtype=self.dtype)
-
-    def _fill_data(self, n0, n1):
-        # Fill data
-        n = int(n1-n0)
-        if callable(self.fill_value):
-            self._data[n0:n1] = self.fill_value(n) # <-- TODO: This line likely is not CRN safe because the selected fill values will not be slot-dependent.
-        else:
-            self._data[n0:n1] = self.fill_value
-        return
+        # Create new arrays of the correct dtype and fill value
+        new = np.full(n, dtype=self.dtype, fill_value=self.fill_value)
+        return new
 
     def initialize(self, n):
         self._data = self._new_items(n)
         self.n = n
         self._map_arrays()
 
-    def grow(self, n, fill=True):
+    def grow(self, n):
+        # If the total number of agents exceeds the array size, extend the underlying arrays
         if self.n + n > self._s:
-            # If the total number of agents exceeds the array size, extend the storage array
             n_new = max(n, int(self._s / 2))  # Minimum 50% growth
             self._data = np.concatenate([self._data, self._new_items(n_new)], axis=0)
-
         self.n += n  # Increase the count of the number of agents by `n` (the requested number of new agents)
-        self._map_arrays(fill)
+        self._map_arrays()
 
-    def _trim(self, inds, fill=True):
+    def _trim(self, inds):
         # Keep only specified indices
         # Note that these are indices, not UIDs!
         n = len(inds)
         self._data[:n] = self._data[inds]
-        # DJK MOVING TO MAP: self._data[n:self.n] = self.fill_value(self.n-n) if callable(self.fill_value) else self.fill_value
+        self._data[n:self.n] = self.fill_value
         self.n = n
-        self._map_arrays(fill)
+        self._map_arrays()
 
-    def _map_arrays(self, fill=True):
+    def _map_arrays(self):
         """
         Set main simulation attributes to be views of the underlying data
 
         This method should be called whenever the number of agents required changes
         (regardless of whether or not the underlying arrays have been resized)
         """
-        n0 = len(self._view) if self._view is not None else 0
-        if fill and self.n > n0:
-            self._fill_data(n0, self.n) # Fill the new data
         self._view = self._data[:self.n]
 
     def __getitem__(self, key):
@@ -335,8 +325,26 @@ class DynamicView(NDArrayOperatorsMixin):
 
 class State(FusedArray):
 
-    def __init__(self, name, dtype, fill_value=0, label=None):
+    def __init__(self, name, dtype, fill_value=None, rng=None, label=None):
+        """
+
+        :param name:
+        :param dtype:
+        :param fill_value: A scalar, callable, or ss.Distribution instance
+        :param rng: Optionally provide an RNG stream to use with a ss.Distribution fill value. This allows RNG-safe default values
+        :param label:
+        """
+
         super().__init__(values=None, uid=None, uid_map=None)  # Call the FusedArray constructor
+
+        if isinstance(fill_value, Distribution) and rng is None:
+            warn("fill_value is a distribution but no RNG was provided, sampling will not be RNG-safe")
+        elif rng is not None and not isinstance(fill_value, Distribution):
+            warn("fill_value is not a ss.Distribution instance, the provided RNG stream will not be used")
+
+        self.fill_value = fill_value
+        self.rng = rng
+
         self._data = DynamicView(dtype=dtype, fill_value=fill_value)
         self.name = name
         self.label = label or name
@@ -360,11 +368,32 @@ class State(FusedArray):
         self.values = self._data._view
         self._initialized = True
 
-    def grow(self, n):
+
+    def grow(self, uids):
+        """
+        Add state for new agents
+
+        This method is normally only called via `People.grow()`.
+
+        :param uids: Numpy array of UIDs for the new agents being added This array should have length n
+        """
+
+        n = len(uids)
         self._data.grow(n)
         self.values = self._data._view
 
+        if isinstance(self.fill_value, Distribution):
+            new_vals = self.rng.sample(self.fill_value, uids)
+        elif callable(self.fill_value):
+            new_vals = self.fill_value(n)
+        else:
+            new_vals = self.fill_value
+
+        self._data[-n:] = new_vals
+
+
     def _trim(self, inds):
+        # Trim arrays to remove agents - should only be called via `People.remove()`
         self._data._trim(inds)
         self.values = self._data._view
 

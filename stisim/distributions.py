@@ -16,28 +16,16 @@ Example usage
 import numpy as np
 import sciris as sc
 from .utils import get_subclasses
+import functools
 
 __all__ = [
-    'Distribution', 'bernoulli', 'uniform', 'choice', 'normal', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int',
-    'poisson', 'neg_binomial', 'beta', 'gamma', 'data_dist'
+    'Distribution', 'bernoulli', 'uniform', 'uniform_int', 'choice', 'normal', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int',
+    'poisson', 'neg_binomial', 'beta', 'gamma', 'data_dist', 'delta',
 ]
 
+_default_rng = np.random.default_rng()
 
 class Distribution():
-
-    def __init__(self, rng=None):
-        if rng is None:
-            self.rng = np.random.default_rng() # Default to a single centralized random number generator
-        else:
-            self.rng = rng
-        return
-
-    def set_rng(self, rng):
-        """
-        Switch to a user-supplied random number generator
-        """
-        self.rng = rng
-        return
 
     def mean(self):
         """
@@ -52,7 +40,7 @@ class Distribution():
     def name(self):
         return self.__class__.__name__
 
-    def sample(cls, size=None, **kwargs):
+    def sample(self, size=None, rng=None, **kwargs):
         """
         Return a specified number of samples from the distribution
         """
@@ -75,6 +63,19 @@ class Distribution():
             raise KeyError(f'Distribution "{name}" did not match any known distributions')
 
 
+class delta(Distribution):
+    """
+    Delta function at specified value
+    """
+
+    def __init__(self, value, **kwargs):
+        super().__init__(**kwargs)
+        self.value = value
+
+    def sample(self, size=1):
+        return np.full(size, fill_value=self.value)
+
+
 class data_dist(Distribution):
     """ Sample from data """
 
@@ -87,12 +88,13 @@ class data_dist(Distribution):
     def mean(self):
         return
 
-    def sample(self, size, **kwargs):
+    def sample(self, size=None, rng=None, **kwargs):
         """ Sample using CDF """
+        rng = rng or _default_rng
         bin_midpoints = self.bins[:-1] + np.diff(self.bins) / 2
         cdf = np.cumsum(self.vals)
         cdf = cdf / cdf[-1]
-        values = self.rng.rand(size)
+        values = rng.rand(size)
         value_bins = np.searchsorted(cdf, values)
         return bin_midpoints[value_bins]
 
@@ -111,8 +113,19 @@ class uniform(Distribution):
     def mean(self):
         return (self.low + self.high) / 2
 
-    def sample(self, size):
-        return self.rng.uniform(size, low=self.low, high=self.high)
+    def sample(self, size=None, rng=None):
+        rng = rng or _default_rng
+        return rng.uniform(size=size, low=self.low, high=self.high)
+
+class uniform_int(uniform):
+    """
+    Uniform distribution returning only integer values
+
+    Note that like its continuous counterpart, the upper endpoint is not included in the range.
+    """
+
+    def sample(self, size=None, rng=None, **kwargs):
+        return super().sample(size, rng, **kwargs).astype(int)
 
 class bernoulli(Distribution):
     """
@@ -127,8 +140,9 @@ class bernoulli(Distribution):
     def mean(self):
         return self.p
 
-    def sample(self, size):
-        return self.rng.bernoulli(size, prob=self.p)
+    def sample(self, size=None, rng=None):
+        rng = rng or _default_rng
+        return rng.random(size=size) < self.p
 
 
 class choice(Distribution):
@@ -143,8 +157,9 @@ class choice(Distribution):
         self.replace = replace
         return
 
-    def sample(self, size, **kwargs):
-        return self.rng.choice(size, a=self.choices, p=self.probabilities, replace=self.replace, **kwargs)
+    def sample(self, size=None, rng=None, **kwargs):
+        rng = rng or _default_rng
+        return rng.choice(size=size, a=self.choices, p=self.probabilities, replace=self.replace, **kwargs)
 
 
 class normal(Distribution):
@@ -158,8 +173,9 @@ class normal(Distribution):
         self.std = std
         return
 
-    def sample(self, size, **kwargs):
-        return self.rng.normal(size, loc=self.mean, scale=self.std, **kwargs)
+    def sample(self, size=None, rng=None, **kwargs):
+        rng = rng or _default_rng
+        return rng.normal(size=size, loc=self.mean, scale=self.std, **kwargs)
 
 
 class normal_pos(normal):
@@ -169,8 +185,8 @@ class normal_pos(normal):
     WARNING - this function came from hpvsim but confirm that the implementation is correct?
     """
 
-    def sample(self, size, **kwargs):
-        return np.abs(super().sample(size, **kwargs))
+    def sample(self, size=None, rng=None, **kwargs):
+        return np.abs(super().sample(size, rng, **kwargs))
 
 
 class normal_int(normal):
@@ -178,8 +194,8 @@ class normal_int(normal):
     Normal distribution returning only integer values
     """
 
-    def sample(self, size, **kwargs):
-        return np.round(super().sample(size, **kwargs))
+    def sample(self, size=None, rng=None, **kwargs):
+        return np.round(super().sample(size, rng, **kwargs))
 
 
 class lognormal(Distribution):
@@ -199,17 +215,13 @@ class lognormal(Distribution):
         self.underlying_std = np.sqrt(np.log(std ** 2 / mean ** 2 + 1))  # Computes sigma for the underlying normal distribution
         return
 
-    def sample(self, **kwargs):
+    def sample(self, size=1, rng=None, **kwargs):
+        rng = rng or _default_rng
 
         if (sc.isnumber(self.mean) and self.mean > 0) or (sc.checktype(self.mean, 'arraylike') and (self.mean > 0).all()):
-            return self.rng.lognormal(mean=self.underlying_mean, sigma=self.underlying_std, **kwargs)
-        
-        if 'size' in kwargs:
-            return np.zeros(kwargs['size'])
-        elif 'uids' in kwargs:
-            return np.zeros(len(kwargs['uids']))
+            return rng.lognormal(size=size, mean=self.underlying_mean, sigma=self.underlying_std, **kwargs)
         else:
-            raise Exception('When calling sample(), please provide either "size" or "uids".')
+            return np.zeros(1)
 
 
 class lognormal_int(lognormal):
@@ -217,8 +229,8 @@ class lognormal_int(lognormal):
     Lognormal returning only integer values
     """
 
-    def sample(self, size, **kwargs):
-        return np.round(super().sample(size, **kwargs))
+    def sample(self, size=None, rng=None, **kwargs):
+        return np.round(super().sample(size, rng, **kwargs))
 
 
 class poisson(Distribution):
@@ -234,8 +246,9 @@ class poisson(Distribution):
     def mean(self):
         return self.rate
 
-    def sample(self, size):
-        return self.rng.poisson(size, lam=self.rate)
+    def sample(self, size=None, rng=None):
+        rng = rng or _default_rng
+        return rng.poisson(size=size, lam=self.rate)
 
 
 class neg_binomial(Distribution):
@@ -261,10 +274,11 @@ class neg_binomial(Distribution):
         self.dispersion = dispersion
         return
 
-    def sample(self, size):
+    def sample(self, size=None, rng=None):
+        rng = rng or _default_rng
         nbn_n = self.dispersion
         nbn_p = self.dispersion / (self.mean + self.dispersion)
-        return self.rng.negative_binomial(size, n=nbn_n, p=nbn_p)
+        return rng.negative_binomial(size=size, n=nbn_n, p=nbn_p)
 
 
 class beta(Distribution):
@@ -281,8 +295,9 @@ class beta(Distribution):
     def mean(self):
         return self.alpha / (self.alpha + self.beta)
 
-    def sample(self, **kwargs):
-        return self.rng.beta(a=self.alpha, b=self.beta, **kwargs)
+    def sample(self,size,rng=None, **kwargs):
+        rng = rng or _default_rng
+        return rng.beta(size=size, a=self.alpha, b=self.beta, **kwargs)
 
 
 class gamma(Distribution):
@@ -299,5 +314,6 @@ class gamma(Distribution):
     def mean(self):
         return self.shape * self.scale
 
-    def sample(self, **kwargs):
-        return self.rng.gamma(shape=self.shape, scale=self.scale, **kwargs)
+    def sample(self,size, rng=None, **kwargs):
+        rng = rng or _default_rng
+        return rng.gamma(size=size, shape=self.shape, scale=self.scale, **kwargs)

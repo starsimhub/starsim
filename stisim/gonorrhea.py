@@ -25,9 +25,9 @@ class Gonorrhea(ss.Disease):
 
         # Parameters
         self.pars = ss.omerge({
-            'dur_inf': 10/365,  # Median for those who spontaneously clear: https://sti.bmj.com/content/96/8/556
-            'p_symp': 0.5,  # Share of infections that are symptomatic. Placeholder value
-            'p_clear': 0.2,  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
+            'dur_inf': ss.poisson(10/365),  # Median for those who spontaneously clear: https://sti.bmj.com/content/96/8/556
+            'p_symp': ss.bernoulli(0.5),  # Share of infections that are symptomatic. Placeholder value
+            'p_clear': ss.bernoulli(0.2),  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
             'init_prev': 0.03,
         }, self.pars)
 
@@ -79,12 +79,12 @@ class Gonorrhea(ss.Disease):
         self.ti_infected[uids] = sim.ti
 
         # Set infection status
-        symptomatic_uids = self.rng_symp.bernoulli(uids, prob=self.pars.p_symp)
+        symptomatic_uids = self.rng_symp.sample(self.pars.p_symp, uids)
         self.symptomatic[symptomatic_uids] = True
 
         # Set natural clearance
-        clear_uids = self.rng_clear.bernoulli_filter(uids, prob=self.pars.p_clear)
-        dur = sim.ti + self.rng_dur_inf.poisson(clear_uids, lam=self.pars['dur_inf']/sim.pars.dt)
+        clear_uids = self.rng_clear.bernoulli_filter(self.pars.p_clear, uids)
+        dur = sim.ti + self.rng_dur_inf.sample(self.pars['dur_inf'], clear_uids)/sim.pars.dt
         self.ti_clearance[clear_uids] = dur
 
         return

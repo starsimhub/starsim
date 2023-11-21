@@ -45,8 +45,7 @@ def test_neg_binomial(n=5):
 
     # Or through a Distribution
     nb = ss.neg_binomial(mean=80, dispersion=40)
-    nb.set_rng(rng)
-    draws = nb.sample(size=n)
+    draws = rng.sample(nb, n)
     print(f'Sampling n={n} negative binomial draws via ss.neg_binomial returned {draws}.')
 
     print('Step')
@@ -54,7 +53,7 @@ def test_neg_binomial(n=5):
 
     # Now try calling with UIDs instead of n
     uids = np.arange(0,n,2) # every other to make it interesting
-    draws_u = nb.sample(uids)
+    draws_u = rng.sample(nb, n)
     print(f'Now sampling for uids {uids} returned {draws_u}.')
 
     assert len(draws) == n and len(draws_u) == len(uids)
