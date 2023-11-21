@@ -5,10 +5,6 @@ import stisim as ss
 __all__ = ['RNGContainer', 'MultiRNG', 'SingleRNG', 'RNG']
 
 
-SIZE  = 0
-UIDS  = 1
-BOOLS = 2
-
 class RNGContainer:
     """
     Class for managing a collection random number generators (MultiRNG or SingleRNG instances)
@@ -70,7 +66,7 @@ class NotInitializedException(Exception):
     "Raised when a random number generator or a RNGContainer object is called when not initialized."
     def __init__(self, obj_name=None):
         if obj_name is None: 
-            msg = f'An object is being used without proper initialization.'
+            msg = 'An object is being used without proper initialization.'
         else:
             msg = f'The object named {obj_name} is being used prior to initialization.'
         super().__init__(msg)
@@ -121,7 +117,7 @@ def _pre_draw_multi(func):
     Decorator function that does quite a bit to empower calls to the sampling distributions in the MultiRNG class.
 
     The size parameter, from either kwargs or args[0], is used to determine if the user is seeking a fixed number of samples (if size is an integer), or instead if the user is providing an array.
-    If size is an array, it could contain UIDs or be of boolean type. If UIDS, assume the user wants random numbers for these specific agents. If boolean, select random numbers based on the provided array. N.b. the approach based on UIDs is likely to be more "common random number safe".
+    If size is an array, it could contain UIDs or be of boolean type. If 'uids', assume the user wants random numbers for these specific agents. If boolean, select random numbers based on the provided array. N.b. the approach based on UIDs is likely to be more "common random number safe".
     """
     def check_ready(self, *args, **kwargs):
         """ Validation before drawing """
@@ -143,7 +139,7 @@ def _pre_draw_multi(func):
             if size == 0:
                 return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
 
-            basis = SIZE
+            basis = 'size'
 
         else:
             # UID-based (size should be an array)
@@ -156,10 +152,10 @@ def _pre_draw_multi(func):
             v = uids.__array__()
             if v.dtype == bool:
                 size = len(uids)
-                basis = BOOLS
+                basis = 'bools'
             else:
                 size = self.slots[v].__array__().max() + 1
-                basis = UIDS
+                basis = 'uids'
 
         if not self.initialized:
             raise NotInitializedException(self.name)
@@ -290,15 +286,15 @@ class MultiRNG(np.random.Generator):
 
     def _select(self, vals, basis, uids):
         """ Select from the values given the basis and uids """
-        if basis==SIZE:
+        if basis == 'size':
             return vals
-        elif basis == UIDS:
+        elif basis == 'uids':
             slots = self.slots[uids].__array__()
             return vals[slots]
-        elif basis == BOOLS:
+        elif basis == 'bools':
             return vals[uids]
         else:
-            raise Exception(f'Invalid basis: {basis}. Valid choices are [{SIZE}, {UIDS}, {BOOLS}]')
+            raise Exception(f"Invalid basis: {basis}. Valid choices are 'size', 'uids', or 'bools'")
 
     @_pre_draw_multi
     def random(self, size, basis, uids=None):
