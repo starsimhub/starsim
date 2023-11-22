@@ -211,7 +211,7 @@ class Disease(Module):
         Given the uids of new cases, determine which agents are the source of each case
         '''
         sources = np.zeros_like(new_cases)
-        r = self.rng_choose_infector.sample(ss.uniform(0,1), new_cases) # Random number slotted to each new case
+        r = self.rng_choose_infector.random(new_cases) # Random number slotted to each new case
         for i, uid in enumerate(new_cases):
             p_acqs = []
             possible_sources = []

@@ -104,7 +104,7 @@ class uniform(Distribution):
     Uniform distribution
     """
 
-    def __init__(self, low, high, **kwargs):
+    def __init__(self, low=0, high=1, **kwargs):
         super().__init__(**kwargs)
         self.low = low
         self.high = high

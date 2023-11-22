@@ -455,6 +455,7 @@ class mf(SexualNetwork, DynamicNetwork):
             std = np.interp(people.year, df['year'], df['std'])
             dist = df.loc[df.year == nearest_year].dist.iloc[0]
             debut_vals = self.rng_debut.sample(ss.Distribution.create(dist, mean, std),uids) * self.pars.rel_debut
+            self.rng_debut.reset() # Reset the RNG, it's OK to resample because we'll be drawing from different UIDs at the next iteration
             self.debut[uids] = debut_vals
         return
 
