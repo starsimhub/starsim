@@ -39,14 +39,15 @@ class Module(sc.prettyobj):
         """
         self.check_requires(sim)
 
-        # Connect the states to the sim
-        for state in self.states:
-            state.initialize(sim.people)
-
-        # Connect the random number generators to the sim
+        # Connect the random number generators to the sim. The RNGs for this module should be initialized
+        # first as some of the module's State instances may require them to generate initial values
         for rng in self.rngs:
             if not rng.initialized:
                 rng.initialize(sim.rng_container, sim.people.slot)
+
+        # Connect the states to the sim
+        for state in self.states:
+            state.initialize(sim.people)
 
         self.initialized = True
         return
