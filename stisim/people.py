@@ -186,7 +186,7 @@ class People(BasePeople):
 
         self.rng_female  = ss.RNG('female')
 
-        self.states.append(ss.State('age', float, np.nan)) # NaN until conceived
+        self.states.append(ss.State('age', float, 0))
         self.states.append(ss.State('female', bool, ss.bernoulli(0.5), rng=self.rng_female))
         self.states.append(ss.State('debut', float))
         self.states.append(ss.State('alive', bool, True)) # Redundant with ti_dead == ss.INT_NAN
