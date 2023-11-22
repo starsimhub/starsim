@@ -1,15 +1,16 @@
 """
-Defne HIV
+Define default HIV disease module and related interventions
 """
 
 import numpy as np
 import sciris as sc
 import stisim as ss
+from .disease import STI
 
 __all__ = ['HIV', 'ART', 'CD4_analyzer']
 
 
-class HIV(ss.Disease):
+class HIV(STI):
 
     def __init__(self, pars=None):
         super().__init__(pars)
@@ -71,7 +72,7 @@ class HIV(ss.Disease):
         return self.set_prognoses(sim, uids)  # Pass back?
 
 
-# %% Interventions
+# %% HIV-related interventions
 
 class ART(ss.Intervention):
 

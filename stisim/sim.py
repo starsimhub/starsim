@@ -6,7 +6,7 @@ Define core Sim classes
 import numpy as np
 import sciris as sc
 import stisim as ss
-
+import itertools
 
 __all__ = ['Sim', 'AlreadyRunError']
 
@@ -55,6 +55,18 @@ class Sim(sc.prettyobj):
     @property
     def year(self):
         return self.yearvec[self.ti]
+
+    @property
+    def modules(self):
+        # Return iterator over all Module instances (stored in standard places) in the Sim
+        return itertools.chain(
+            self.demographics.values(),
+            self.people.networks.values(),
+            self.diseases.values(),
+            self.connectors.values(),
+            self.interventions.values(),
+            self.analyzers.values(),
+        )
 
     def initialize(self, popdict=None, reset=False, **kwargs):
         """
@@ -214,10 +226,9 @@ class Sim(sc.prettyobj):
         return self
 
     def init_demographics(self):
-        for demog in self.demographics.values():
-            demog.initialize(self)
-            self.results[demog.name] = demog.results
-        return
+        for module in self.demographics.values():
+            module.initialize(self)
+            self.results[module.name] = module.results
 
     def init_diseases(self):
         """ Initialize modules and connectors to be simulated """
@@ -330,13 +341,13 @@ class Sim(sc.prettyobj):
             self.people.remove_dead(self)
 
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
-        for demog in self.demographics.values():
-            demog.update(self)
+        for module in self.demographics.values():
+            module.update(self)
 
         # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
         # to be applied to newly created agents
         for disease in self.diseases.values():
-            disease.update_states_pre(self)
+            disease.update_pre(self)
 
         # Update connectors -- TBC where this appears in the ordering
         for connector in self.connectors.values():
@@ -357,7 +368,9 @@ class Sim(sc.prettyobj):
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
-        self.people.resolve_deaths()
+        uids = self.people.resolve_deaths()
+        for disease in self.diseases.values():
+            disease.update_death(self, uids)
 
         # Update results
         self.people.update_results(self)
@@ -439,19 +452,9 @@ class Sim(sc.prettyobj):
             # otherwise the scale factor will be applied multiple times
             raise AlreadyRunError('Simulation has already been finalized')
 
-        for demog in self.demographics.values():
-            demog.finalize(self)
+        for module in self.modules:
+            module.finalize(self)
 
-        for disease in self.diseases.values():
-            disease.finalize(self)
-
-        for intervention in self.interventions.values():
-            intervention.finalize(self)
-
-        for analyzer in self.analyzers.values():
-            analyzer.finalize(self)
-
-        # Final settings
         self.results_ready = True  # Set this first so self.summary() knows to print the results
         self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
         return

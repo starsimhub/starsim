@@ -84,9 +84,6 @@ class Network(ss.Module):
         self.debut = ss.State('debut', float, fill_value=0)
         return
 
-    @property
-    def name(self):
-        return self.__class__.__name__.lower()
 
     def initialize(self, sim):
         super().initialize(sim)

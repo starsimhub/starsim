@@ -62,6 +62,16 @@ class Distribution():
         else:
             raise KeyError(f'Distribution "{name}" did not match any known distributions')
 
+class delta(Distribution):
+    """
+    Delta function at specified value
+    """
+
+    def __init__(self, value):
+        self.value = value
+
+    def sample(self, n=1):
+        return np.full(n, fill_value=self.value)
 
 class delta(Distribution):
     """
