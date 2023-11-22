@@ -136,8 +136,8 @@ if __name__ == '__main__':
                     s.values[uid_map[uids]] = vals
 
     lookup('SINGLE ITEM LOOKUP', single_item_uid)
-    lookup('MULTIPLE ITEM LOOKUP', multiple_items_uid)
-    lookup('MULTIPLE ITEM LOOKUP (FEW)', multiple_items_few_uid)
+    lookup('MULTIPLE ITEM LOOKUP (state lookup also includes construction of a FusedArray)', multiple_items_uid)
+    lookup('MULTIPLE ITEM LOOKUP (FEW) (state lookup also includes construction of a FusedArray)', multiple_items_few_uid)
     lookup('BOOLEAN ARRAY LOOKUP', boolean)
 
     assign('SINGLE ITEM ASSIGNMENT', single_item_uid, 1)
