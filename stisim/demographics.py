@@ -68,9 +68,9 @@ class births(DemographicModule):
         return
 
     def update(self, sim):
-        n_new = self.add_births(sim)
-        self.update_results(n_new, sim)
-        return
+        new_uids = self.add_births(sim)
+        self.update_results(len(new_uids), sim)
+        return new_uids
 
     def get_birth_rate(self, sim):
         """
@@ -87,8 +87,8 @@ class births(DemographicModule):
     def add_births(self, sim):
         # Add n_new births to each state in the sim
         n_new = self.get_birth_rate(sim)
-        sim.people.grow(n_new)
-        return n_new
+        new_uids = sim.people.grow(n_new)
+        return new_uids
 
     def update_results(self, n_new, sim):
         self.results['new'][sim.ti] = n_new
@@ -96,7 +96,7 @@ class births(DemographicModule):
     def finalize(self, sim):
         super().finalize(sim)
         self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['cbr'] = self.results['new'] / sim.results['pop_size']
+        self.results['cbr'] = self.results['new'] / sim.results['n_alive']
 
 
 class background_deaths(DemographicModule):
@@ -211,7 +211,7 @@ class background_deaths(DemographicModule):
 
         # Get indices of people who die of other causes
         alive_uids = ss.true(sim.people.alive)
-        death_uids = self.rng_dead.bernoulli_filter(uids=alive_uids, prob=self.death_probs[alive_uids])
+        death_uids = self.rng_dead.bernoulli_filter(self.death_probs[alive_uids], alive_uids)
         sim.people.request_death(death_uids)
 
         return len(death_uids)

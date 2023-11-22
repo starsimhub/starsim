@@ -54,6 +54,10 @@ class BasePeople(sc.prettyobj):
 
         :param n: Integer number of agents to add
         """
+
+        if n == 0:
+            return np.array([], dtype=ss.int_)
+
         start_uid = len(self._uid_map)
         start_idx = len(self.uid)
 
