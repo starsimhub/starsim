@@ -32,12 +32,43 @@ class BasePeople(sc.prettyobj):
         self.ti = None  # Track simulation time index
         self.dt = np.nan  # Track simulation time step
 
-        # We internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
+        # User-facing collection of states
+        self.states = ss.ndict(type=ss.State)
+
+        # We also internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
         # e.g., across modules, but we will never change the size of a State multiple times in the same iteration over
         # _states. This is a hidden variable because it is internally used to synchronize the size of all States contained
         # within the sim, regardless of where they are. In contrast, `People.states` offers a more user-friendly way to access
         # a selection of the states e.g., module states could be added in there, while intervention states might not
         self._states = {}
+
+        # Add a state for RNG slots, and an RNG to choose them
+        self.states.append(ss.State('slot', int, ss.INT_NAN))
+
+    @property
+    def rngs(self):
+        return [x for x in self.__dict__.values() if isinstance(x, (ss.MultiRNG, ss.SingleRNG))]
+
+    def initialize(self, sim):
+        """ Initialization """
+
+        # For People initialization, first initialize slots, then initialize RNGs, then initialize remaining states
+        # This is because some states may depend on RNGs being initialized to generate initial values
+        self.states['slot'].initialize(self)
+        self.states['slot'][:] = self.uid
+
+        # Initialize all RNGs (noting that includes those that are declared in child classes)
+        for rng in self.rngs:
+            rng.initialize(sim.rng_container, self.states['slot'])
+
+        # Initialize remaining states
+        for name, state in self.states.items():
+            self.add_state(state)  # Register the state internally for dynamic growth
+            state.initialize(self)  # Connect the state to this people instance
+            setattr(self, name, state)
+
+        self.initialized = True
+        return
 
     def __len__(self):
         """ Length of people """
@@ -69,10 +100,10 @@ class BasePeople(sc.prettyobj):
 
         self.uid.grow(n)
         self.uid[new_inds] = new_uids
-
         for state in self._states.values():
             state.grow(new_uids)
 
+        self.slot[new_inds] = new_uids
         return new_uids
 
     def remove(self, uids_to_remove):
@@ -154,18 +185,18 @@ class People(BasePeople):
         self.version = ss.__version__  # Store version info
 
         self.rng_female  = ss.RNG('female')
-        states = [
-            ss.State('slot', int, ss.INT_NAN), # MUST BE FIRST
-            ss.State('age', float, np.nan), # NaN until conceived
-            ss.State('female', bool, ss.bernoulli(0.5), rng=self.rng_female),
-            ss.State('debut', float),
-            ss.State('alive', bool, True), # Redundant with ti_dead == ss.INT_NAN
-            ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
-            ss.State('scale', float, 1.0),
-        ]
-        states.extend(sc.promotetolist(extra_states))
 
-        self.states = ss.ndict(states)
+        self.states.append(ss.State('age', float, np.nan)) # NaN until conceived
+        self.states.append(ss.State('female', bool, ss.bernoulli(0.5), rng=self.rng_female))
+        self.states.append(ss.State('debut', float))
+        self.states.append(ss.State('alive', bool, True)) # Redundant with ti_dead == ss.INT_NAN
+        self.states.append(ss.State('ti_dead', int, ss.INT_NAN))  # Time index for death
+        self.states.append(ss.State('scale', float, 1.0))
+
+        if extra_states is not None:
+            for state in extra_states:
+                self.states.append(state)
+
         self.networks = ss.Networks(networks)
 
         # Set initial age distribution - likely move this somewhere else later
@@ -184,20 +215,8 @@ class People(BasePeople):
 
     def initialize(self, sim):
         """ Initialization """
-
-        self.rng_female.initialize(sim.rng_container, self.states['slot'])
-        self.rng_agedist.initialize(sim.rng_container, self.states['slot'])
-
-        for name, state in self.states.items():
-            self.add_state(state)  # Register the state internally for dynamic growth
-            state.initialize(self)  # Connect the state to this people instance
-            setattr(self, name, state)
-            if name == 'slot':
-                # Initialize here in case other states use random number generators that depend on slots being initialized
-                self.slot[:] = self.uid
-
+        super().initialize(sim)
         self.age[:] = self.rng_agedist.sample(self.age_data_dist,len(self))
-        self.initialized = True
         return
 
     def add_module(self, module, force=False):
