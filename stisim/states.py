@@ -337,10 +337,13 @@ class State(FusedArray):
     def __init__(self, name, dtype, fill_value=None, rng=None, label=None):
         """
 
-        :param name:
-        :param dtype:
-        :param fill_value: A scalar, callable, or ss.Distribution instance
-        :param rng: Optionally provide an RNG stream to use with a ss.Distribution fill value. This allows RNG-safe default values
+        :param name: A string name for the state
+        :param dtype: The dtype to use for this instance
+        :param fill_value: Specify default value for new agents. This can be
+            - A scalar with the same dtype (or castable to the same dtype) as the State
+            - A callable, with a single argument for the number of values to produce
+            - An ss.Distribution instance
+        :param rng: Optionally provide an RNG stream to use with a ss.Distribution fill value. This allows RNG-safe stochastic default values
         :param label:
         """
 
@@ -352,9 +355,9 @@ class State(FusedArray):
             warn("fill_value is not a ss.Distribution instance, the provided RNG stream will not be used")
 
         self.fill_value = fill_value
-        self.rng = rng
+        self.rng = rng  # If fill_value is a distribution, this is the RNG stream to use when sampling default values
 
-        self._data = DynamicView(dtype=dtype, fill_value=fill_value)
+        self._data = DynamicView(dtype=dtype)
         self.name = name
         self.label = label or name
         self.values = self._data._view
@@ -366,6 +369,15 @@ class State(FusedArray):
         else:
             return FusedArray.__repr__(self)
 
+    def _new_vals(self, uids):
+        if isinstance(self.fill_value, Distribution):
+            new_vals = self.rng.sample(self.fill_value, uids)
+        elif callable(self.fill_value):
+            new_vals = self.fill_value(len(uids))
+        else:
+            new_vals = self.fill_value
+        return new_vals
+
     def initialize(self, people):
         if self._initialized:
             return
@@ -374,6 +386,7 @@ class State(FusedArray):
         self._uid_map = people._uid_map
         self.uid = people.uid
         self._data.initialize(len(self.uid))
+        self._data[:len(self.uid)] = self._new_vals(self.uid)
         self.values = self._data._view
         self._initialized = True
 
@@ -390,16 +403,7 @@ class State(FusedArray):
         n = len(uids)
         self._data.grow(n)
         self.values = self._data._view
-
-        if isinstance(self.fill_value, Distribution):
-            new_vals = self.rng.sample(self.fill_value, uids)
-        elif callable(self.fill_value):
-            new_vals = self.fill_value(n)
-        else:
-            new_vals = self.fill_value
-
-        self._data[-n:] = new_vals
-
+        self._data[-n:] = self._new_vals(uids)
 
     def _trim(self, inds):
         # Trim arrays to remove agents - should only be called via `People.remove()`
