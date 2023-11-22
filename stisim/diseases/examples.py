@@ -139,6 +139,10 @@ class NCD(Disease):
         self.at_risk = ss.State('at_risk', bool, False)
         self.affected = ss.State('affected', bool, False)
         self.ti_dead = ss.State('ti_dead', float, np.nan)
+
+        self.rng_death = ss.RNG('death')
+        self.rng_cases = ss.RNG('cases')
+
         return
 
     @property
@@ -152,17 +156,18 @@ class NCD(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
+        # TODO - make RNG-safe. The STI class shows how to do this with an initial prevalance, but what would be best practice for a fixed initial number of cases?
         initial_cases = np.random.choice(sim.people.uid, int(len(sim.people)*self.pars['risk_prev']), replace=False)
         self.at_risk[initial_cases] = True
         return initial_cases
 
     def update_pre(self, sim):
-        deaths = ss.binomial_filter(sim.dt*self.pars['p_death_given_risk'], ss.true(self.affected))
+        deaths = self.rng_death.bernoulli_filter(sim.dt*self.pars['p_death_given_risk'], ss.true(self.affected))
         sim.people.request_death(deaths)
         return
 
     def make_new_cases(self, sim):
-        new_cases = ss.binomial_filter(self.pars['p_affected_given_risk'], ss.true(self.at_risk))
+        new_cases = self.rng_cases.bernoulli_filter(self.pars['p_affected_given_risk'], ss.true(self.at_risk))
         self.affected[new_cases] = True
         return new_cases
 
