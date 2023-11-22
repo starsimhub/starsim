@@ -257,17 +257,26 @@ class DynamicView(NDArrayOperatorsMixin):
             shape: If not none, set to match a string in `pars` containing the dimensionality
             label: text used to construct labels for the result for displaying on plots and other outputs
         """
-        self.dtype = dtype
         self.fill_value = fill_value if fill_value is not None else dtype()
         self.n = 0  # Number of agents currently in use
-        self._data = None  # The underlying memory array (length at least equal to n)
+        self._data = np.empty(0, dtype=dtype)  # The underlying memory array (length at least equal to n)
         self._view = None  # The view corresponding to what is actually accessible (length equal to n)
+        self._map_arrays()
         return
 
     @property
     def _s(self):
         # Return the size of the underlying array (maximum number of agents that can be stored without reallocation)
         return len(self._data)
+
+    @property
+    def dtype(self):
+        # The specified dtype and the underlying array dtype can be different. For instance, the user might pass in
+        # DynamicView(dtype=int) but the underlying array's dtype will be np.dtype('int32'). This distinction is important
+        # because the numpy dtype has attributes like 'kind' that the input dtype may not have. We need the DynamicView's
+        # dtype to match that of the underlying array so that it can be more seamlessly exchanged with direct numpy arrays
+        # Therefore, we retain the original dtype in DynamicView._dtype() and use
+        return self._data.dtype
 
     def __len__(self):
         # Return the number of active elements
@@ -277,21 +286,11 @@ class DynamicView(NDArrayOperatorsMixin):
         # Print out the numpy view directly
         return self._view.__repr__()
 
-    def _new_items(self, n):
-        # Create new arrays of the correct dtype and fill value
-        new = np.full(n, dtype=self.dtype, fill_value=self.fill_value)
-        return new
-
-    def initialize(self, n):
-        self._data = self._new_items(n)
-        self.n = n
-        self._map_arrays()
-
     def grow(self, n):
         # If the total number of agents exceeds the array size, extend the underlying arrays
         if self.n + n > self._s:
             n_new = max(n, int(self._s / 2))  # Minimum 50% growth
-            self._data = np.concatenate([self._data, self._new_items(n_new)], axis=0)
+            self._data = np.concatenate([self._data, np.full(n_new, dtype=self.dtype, fill_value=self.fill_value)], axis=0)
         self.n += n  # Increase the count of the number of agents by `n` (the requested number of new agents)
         self._map_arrays()
 
@@ -385,7 +384,7 @@ class State(FusedArray):
         people.add_state(self)
         self._uid_map = people._uid_map
         self.uid = people.uid
-        self._data.initialize(len(self.uid))
+        self._data.grow(len(self.uid))
         self._data[:len(self.uid)] = self._new_vals(self.uid)
         self.values = self._data._view
         self._initialized = True

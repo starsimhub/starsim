@@ -35,9 +35,9 @@ class DynamicPeople():
 
     def initialize(self, n):
 
-        self._uid_map.initialize(n)
+        self._uid_map.grow(n)
         self._uid_map[:] = np.arange(0, n)
-        self.uid.initialize(n)
+        self.uid.grow(n)
         self.uid[:] = np.arange(0, n)
 
         for state in self.states:

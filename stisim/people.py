@@ -24,9 +24,9 @@ class BasePeople(sc.prettyobj):
         self._uid_map = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs ever created
         self.uid = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs currently in use
 
-        self._uid_map.initialize(n)
+        self._uid_map.grow(n)
         self._uid_map[:] = np.arange(0, n)
-        self.uid.initialize(n)
+        self.uid.grow(n)
         self.uid[:] = np.arange(0, n)
 
         self.ti = None  # Track simulation time index
