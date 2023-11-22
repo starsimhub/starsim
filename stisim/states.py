@@ -78,10 +78,15 @@ class FusedArray(NDArrayOperatorsMixin):
         :param value: A 1D np.ndarray the same length as ``key`` containing values to insert
         :return:
         """
+
         for i in range(len(key)):
+            if key[i] >= len(uid_map):
+                raise IndexError('UID not present in array (requested UID is larger than the maximum UID in use)')
             idx = uid_map[key[i]]
             if idx == INT_NAN:
                 raise IndexError('UID not present in array')
+            elif idx >= len(vals):
+                raise Exception(f'Attempted to write to a non-existant index - this can happen if attempting to write to new entries that have not yet been allocated via grow()')
             vals[idx] = value[i]
 
     @staticmethod
@@ -97,9 +102,13 @@ class FusedArray(NDArrayOperatorsMixin):
         :return:
         """
         for i in range(len(key)):
+            if key[i] >= len(uid_map):
+                raise IndexError('UID not present in array (requested UID is larger than the maximum UID in use)')
             idx = uid_map[key[i]]
             if idx == INT_NAN:
                 raise IndexError('UID not present in array')
+            elif idx >= len(vals):
+                raise Exception('Attempted to write to a non-existant index - this can happen if attempting to write to new entries that have not yet been allocated via grow()')
             vals[idx] = value
 
     def __getitem__(self, key):
