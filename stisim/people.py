@@ -100,10 +100,12 @@ class BasePeople(sc.prettyobj):
 
         self.uid.grow(n)
         self.uid[new_inds] = new_uids
+
         for state in self._states.values():
             state.grow(new_uids)
 
-        self.slot[new_inds] = new_uids
+        self.slot[new_uids] = new_uids
+
         return new_uids
 
     def remove(self, uids_to_remove):
