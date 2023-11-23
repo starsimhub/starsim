@@ -29,6 +29,11 @@ class BasePeople(sc.prettyobj):
         self.uid.grow(n)
         self.uid[:] = np.arange(0, n)
 
+        # A slot is a special state managed internally by BasePeople
+        # This is because it needs to be updated separately from any other states, as other states
+        # might have fill_values that depend on the slot
+        self.slot = ss.State('slot', int, ss.INT_NAN)
+
         self.ti = None  # Track simulation time index
         self.dt = np.nan  # Track simulation time step
 
@@ -42,9 +47,6 @@ class BasePeople(sc.prettyobj):
         # a selection of the states e.g., module states could be added in there, while intervention states might not
         self._states = {}
 
-        # Add a state for RNG slots, and an RNG to choose them
-        self.states.append(ss.State('slot', int, ss.INT_NAN))
-
     @property
     def rngs(self):
         return [x for x in self.__dict__.values() if isinstance(x, (ss.MultiRNG, ss.SingleRNG))]
@@ -54,12 +56,12 @@ class BasePeople(sc.prettyobj):
 
         # For People initialization, first initialize slots, then initialize RNGs, then initialize remaining states
         # This is because some states may depend on RNGs being initialized to generate initial values
-        self.states['slot'].initialize(self)
-        self.states['slot'][:] = self.uid
+        self.slot.initialize(self)
+        self.slot[:] = self.uid
 
         # Initialize all RNGs (noting that includes those that are declared in child classes)
         for rng in self.rngs:
-            rng.initialize(sim.rng_container, self.states['slot'])
+            rng.initialize(sim.rng_container, self.slot)
 
         # Initialize remaining states
         for name, state in self.states.items():
@@ -79,11 +81,12 @@ class BasePeople(sc.prettyobj):
             self._states[id(state)] = state
         return
 
-    def grow(self, n):
+    def grow(self, n, new_slots=None):
         """
         Increase the number of agents
 
         :param n: Integer number of agents to add
+        :param new_slots: Optionally specify the slots to assign for the new agents. Otherwise, it will default to the new UIDs
         """
 
         if n == 0:
@@ -101,10 +104,12 @@ class BasePeople(sc.prettyobj):
         self.uid.grow(n)
         self.uid[new_inds] = new_uids
 
+        # We need to grow the
+        self.slot.grow(new_uids)
+        self.slot[new_uids] = new_slots if new_slots is not None else new_uids
+
         for state in self._states.values():
             state.grow(new_uids)
-
-        self.slot[new_uids] = new_uids
 
         return new_uids
 
@@ -121,6 +126,8 @@ class BasePeople(sc.prettyobj):
 
         # Trim the UIDs and states
         self.uid._trim(keep_inds)
+        self.slot._trim(keep_inds)
+
         for state in self._states.values():
             state._trim(keep_inds)
 
