@@ -116,7 +116,7 @@ class FusedArray(NDArrayOperatorsMixin):
             if isinstance(key, (int, np.integer)):
                 # Handle getting a single item by UID
                 return self.values[self._uid_map[key]]
-            elif isinstance(key, (np.ndarray, FusedArray)):
+            elif isinstance(key, (np.ndarray, FusedArray, DynamicView)):
                 if key.dtype.kind == 'b':
                     # Handle accessing items with a logical array. Surprisingly, it seems faster to use nonzero() to convert
                     # it to indices first. Also, the pure Python implementation is difficult to improve upon using numba
@@ -127,9 +127,7 @@ class FusedArray(NDArrayOperatorsMixin):
                     values = self.values[mapped_key]
                 else:
                     # Access items by an array of integers. We do get a decent performance boost from using numba here
-                    values, uids, new_uid_map = self._get_vals_uids(self.values, key, self._uid_map.__array__())
-            elif isinstance(key, DynamicView):
-                values, uids, new_uid_map = self._get_vals_uids(self.values, key.__array__(), self._uid_map.__array__())
+                    values, uids, new_uid_map = self._get_vals_uids(self.values, key.__array__(), self._uid_map.__array__())
             elif isinstance(key, slice):
                 if key.start is None and key.stop is None and key.step is None:
                     return sc.dcp(self)
