@@ -48,7 +48,11 @@ class FusedArray(NDArrayOperatorsMixin):
     @nb.njit
     def _get_vals_uids(vals, key, uid_map):
         """
-        Extract valued from a collection of UIDs
+        Extract values from a collection of UIDs
+
+        This function is used to retreive values based on UID. As indexing a FusedArray returns a new FusedArray,
+        this method also populates the new UID map for use in the subsequently created FusedArray, avoiding the
+        need to re-compute it separately.
 
         :param vals: A 1D np.ndarray containing the values
         :param key: A 1D np.ndnarray of integers containing the UIDs to query
