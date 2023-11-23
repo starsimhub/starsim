@@ -9,24 +9,19 @@ import stisim as ss
 from stisim.random import NotResetException, RNG
 import pytest
 
-@pytest.fixture(params=['single','multi'])
+@pytest.fixture
 def rng(request, slots=5, base_seed=1, name='Test', **kwargs):
-    return make_rng(request.param, slots, base_seed, name, **kwargs)
+    return make_rng(slots, base_seed, name, **kwargs)
 
-def make_rng(rng_type, slots=5, base_seed=1, name='Test', **kwargs):
+def make_rng(slots=5, base_seed=1, name='Test', **kwargs):
     rng_container = ss.RNGContainer()
     rng_container.initialize(base_seed=base_seed)
-    if rng_type == "multi":
-        rng = ss.MultiRNG(name, **kwargs)
-    else:
-        rng = ss.SingleRNG(name, **kwargs)
+    rng = ss.RNG(name, **kwargs)
     rng.initialize(rng_container, slots=slots)
-
     return rng
 
 
 # %% Define the tests
-
 def test_sample(rng, n=5):
     """ Simple non-RNG safe sample """
     sc.heading('test_sample: Testing RNG object')
@@ -74,7 +69,7 @@ def test_reset(rng, n=5):
     draws2 = rng.random(uids)
     print(f'After reset, random sample for uids {uids} returned {draws2}')
 
-    if ss.options.multirng:
+    if isinstance(rng, ss.MultiRNG):
         assert np.array_equal(draws1, draws2)
     return draws1, draws2
 
@@ -98,18 +93,17 @@ def test_step(rng, n=5):
         assert not np.array_equal(draws1, draws2)
     return draws1, draws2
 
-@pytest.mark.parametrize("rng_type", ['single','multi'])
-def test_seed(rng_type, n=5):
+def test_seed(n=5):
     """ Changing seeds """
     sc.heading('test_seed: Testing sample with seeds 0 and 1')
     uids = np.arange(0,n,2) # every other to make it interesting
     dist = ss.uniform()
 
-    rng0 = make_rng(rng_type, n, base_seed=0)
+    rng0 = make_rng(n, base_seed=0)
     draws0 = rng0.sample(dist, uids)
     print(f'Random sample for uids {uids} for rng0 with seed {rng0.seed} returned {draws0}')
 
-    rng1 = make_rng(rng_type, n, base_seed=1)
+    rng1 = make_rng(n, base_seed=1)
     draws1 = rng1.sample(dist, uids)
     print(f'Random sample for uids {uids} for rng1 with seed {rng1.seed} returned {draws1}')
 

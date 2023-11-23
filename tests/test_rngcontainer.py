@@ -18,19 +18,9 @@ def rng_container():
     rng_container.initialize(base_seed=10)
     return rng_container
 
-@pytest.fixture(params=['single','multi'])
+@pytest.fixture
 def rngs(request):
-    if request.param == 'multi':
-        return multi_rngs()
-    else:
-        return single_rngs()
-
-def multi_rngs():
-    return [ss.MultiRNG('rng0'), ss.MultiRNG('rng1')]
-
-def single_rngs():
-    return [ss.SingleRNG('rng0'), ss.SingleRNG('rng1')]
-
+    return [ss.RNG('rng0'), ss.RNG('rng1')]
 
 def test_container(rng_container, rngs, n=5):
     """ Simple sample """
@@ -47,25 +37,28 @@ def test_container(rng_container, rngs, n=5):
     return draws
 
 
-def test_seed(rng_container, n=5):
+def test_seed(rng_container, rngs, n=5):
     """ Test assignment of seeds """
     sc.heading('test_seed: Testing assignment of seeds')
 
-    rng0, rng1 = multi_rngs()
+    rng0, rng1 = rngs
     rng0.initialize(rng_container, slots=n)
     rng1.initialize(rng_container, slots=n)
 
     print(f'Random generators rng0 and rng1 were assigned seeds {rng0.seed} and {rng1.seed}, respectively')
 
-    assert rng1.seed != rng0.seed
+    if ss.options.multirng:
+        assert rng1.seed != rng0.seed
+    else:
+        assert rng1.seed == rng0.seed
     return rng0, rng1
 
 
-def test_reset(rng_container, n=5):
+def test_reset(rng_container, rngs, n=5):
     """ Sample, reset, sample """
     sc.heading('test_reset: Testing sample, reset, sample')
 
-    rng0 = multi_rngs()[0]
+    rng0 = rngs[0]
     rng0.initialize(rng_container, slots=n)
 
     uids = np.arange(0,n,2) # every other to make it interesting
@@ -79,7 +72,10 @@ def test_reset(rng_container, n=5):
     print('Reset')
     print(f'After reset sample', s_after)
 
-    assert np.array_equal(s_after, s_before)
+    if ss.options.multirng:
+        assert np.array_equal(s_after, s_before)
+    else:
+        assert not np.array_equal(s_after, s_before)
     return s_before, s_after
 
 
@@ -130,13 +126,13 @@ def test_seedrepeat(rng_container, n=5):
     return rng0, rng1
 
 
-def test_samplingorder(rng_container, n=5):
+def test_samplingorder(rng_container, rngs, n=5):
     """ Ensure sampling from one RNG doesn't affect another """
     sc.heading('test_samplingorder: Testing from multiple random number generators to test if sampling order matters')
 
     uids = np.arange(0,n,2) # every other to make it interesting
 
-    rng0, rng1 = multi_rngs()
+    rng0, rng1 = rngs
     rng0.initialize(rng_container, slots=n)
     rng1.initialize(rng_container, slots=n)
 
@@ -152,7 +148,11 @@ def test_samplingorder(rng_container, n=5):
     print('Reset')
     print(f'When sampling rng0 after rng1:', s_after)
 
-    assert np.array_equal(s_before, s_after)
+    if ss.options.multirng:
+        assert np.array_equal(s_before, s_after)
+    else:
+        assert not np.array_equal(s_before, s_after)
+
     return s_before, s_after
 
 
@@ -160,10 +160,10 @@ def test_repeatname(rng_container, n=5):
     """ Test two random number generators with the same name """
     sc.heading('test_repeatname: Testing if two random number generators with the same name are allowed')
 
-    rng0 = ss.MultiRNG('test')
+    rng0 = ss.RNG('test')
     rng0.initialize(rng_container, slots=n)
 
-    rng1 = ss.MultiRNG('test')
+    rng1 = ss.RNG('test')
     with pytest.raises(RepeatNameException):
         rng1.initialize(rng_container, slots=n)
     return rng0, rng1
