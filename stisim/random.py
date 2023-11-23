@@ -244,7 +244,7 @@ class MultiRNG(np.random.Generator):
             raise NotResetException(self.name)
 
         # Work out how many samples to draw. If sampling by UID, this depends on the number of slots
-        if isinstance(size, int):
+        if np.isscalar(size):
             if size < 0:
                 raise Exception('Input "size" cannot be negative')
             elif size == 0:
@@ -257,7 +257,10 @@ class MultiRNG(np.random.Generator):
             n_samples = len(size)
         elif size.dtype == int:
             v = size.__array__() # TODO - check if this works without calling __array__()?
-            n_samples = self.slots[v].__array__().max() + 1
+            max_slot = self.slots[v].__array__().max()
+            if max_slot == ss.INT_NAN:
+                raise Exception('Attempted to sample from an INT_NAN slot')
+            n_samples = max_slot + 1
         else:
             raise Exception("Unrecognized input type")
 
@@ -267,7 +270,7 @@ class MultiRNG(np.random.Generator):
         vals = distribution.sample(n_samples, rng=self, **kwargs)
         self.ready = False
 
-        if isinstance(size, int):
+        if np.isscalar(size):
             return vals
         elif size.dtype == bool:
             return vals[size]
