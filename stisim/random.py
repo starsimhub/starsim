@@ -89,7 +89,7 @@ class RepeatNameException(Exception):
         return
 
 
-def RNG(*args, set_for=None, **kwargs):
+def RNG(*args, **kwargs):
     """
     Class to choose a random number generator class.
     
@@ -103,14 +103,7 @@ def RNG(*args, set_for=None, **kwargs):
         rng = MultiRNG(*args, **kwargs)
     else:
         rng = SingleRNG(*args, **kwargs)
-
-    # if set_for:
-    #     if not isinstance(set_for, ss.Distribution):
-    #         raise Exception('The "set_for" argument on is intended to connect this RNG to a Distribution, however the value passed in was not a Distribution.')
-    #     set_for.set_rng(rng)
-
     return rng
-
 
 
 class MultiRNG(np.random.Generator):
