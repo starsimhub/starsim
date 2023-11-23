@@ -150,7 +150,7 @@ class bernoulli(Distribution):
     def mean(self):
         return self.p
 
-    def sample(self, size=None, rng=None):
+    def sample(self, size=1, rng=None):
         rng = rng or _default_rng
         return rng.random(size=size) < self.p
 
