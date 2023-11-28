@@ -102,7 +102,7 @@ class data_dist(Distribution):
         bin_midpoints = self.bins[:-1] + np.diff(self.bins) / 2
         cdf = np.cumsum(self.vals)
         cdf = cdf / cdf[-1]
-        values = self.rng.rand(size=size)
+        values = self.rng.random(size=size)
         value_bins = np.searchsorted(cdf, values)
         return bin_midpoints[value_bins]
 
