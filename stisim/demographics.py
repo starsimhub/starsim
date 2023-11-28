@@ -96,7 +96,8 @@ class births(DemographicModule):
     def finalize(self, sim):
         super().finalize(sim)
         self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['cbr'] = self.results['new'] / sim.results['pop_size']
+        self.results['cbr'] = np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
+
 
 
 class background_deaths(DemographicModule):
@@ -177,7 +178,7 @@ class background_deaths(DemographicModule):
     def init_results(self, sim):
         self.results += ss.Result(self.name, 'new', sim.npts, dtype=int)
         self.results += ss.Result(self.name, 'cumulative', sim.npts, dtype=int)
-        self.results += ss.Result(self.name, 'mortality_rate', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'cmr', sim.npts, dtype=int)
         return
 
     def update(self, sim):
@@ -221,7 +222,7 @@ class background_deaths(DemographicModule):
 
     def finalize(self, sim):
         self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['mortality_rate'] = self.results['new'] / sim.results['n_alive']
+        self.results['cmr'] = np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
 
 
 class Pregnancy(DemographicModule):
