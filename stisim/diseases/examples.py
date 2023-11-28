@@ -157,6 +157,7 @@ class NCD(Disease):
     def update_pre(self, sim):
         deaths = ss.binomial_filter(sim.dt*self.pars['p_death_given_risk'], ss.true(self.affected))
         sim.people.request_death(deaths)
+        self.ti_dead[deaths] = sim.ti
         return
 
     def make_new_cases(self, sim):
@@ -170,7 +171,7 @@ class NCD(Disease):
         """
         super().init_results(sim)
         self.results += ss.Result(self.name, 'n_not_at_risk', sim.npts, dtype=int)
-        self.results += ss.Result(self.name, 'prevalence', sim.npts, dtype=float) # DJK TODO Prevalence in base class?
+        self.results += ss.Result(self.name, 'prevalence', sim.npts, dtype=float)
         self.results += ss.Result(self.name, 'new_deaths', sim.npts, dtype=int)
         return
 

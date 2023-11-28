@@ -18,6 +18,7 @@ class HIV(STI):
         self.on_art      = ss.State('on_art', bool, False)
         self.ti_art      = ss.State('ti_art', int, ss.INT_NAN)
         self.cd4         = ss.State('cd4', float, 500)
+        self.ti_dead     = ss.State('ti_dead', int, ss.INT_NAN) # Time of HIV-cause death
 
         self.rng_dead = ss.RNG(f'dead_{self.name}')
 
@@ -32,7 +33,7 @@ class HIV(STI):
 
         return
 
-    def update_states_pre(self, sim):
+    def update_pre(self, sim):
         """ Update CD4 """
         self.cd4[sim.people.alive & self.infected & self.on_art] += (self.pars.cd4_max - self.cd4[sim.people.alive & self.infected & self.on_art])/self.pars.cd4_rate
         self.cd4[sim.people.alive & self.infected & ~self.on_art] += (self.pars.cd4_min - self.cd4[sim.people.alive & self.infected & ~self.on_art])/self.pars.cd4_rate
@@ -42,20 +43,23 @@ class HIV(STI):
         hiv_death_prob = 0.05 / (self.pars.cd4_min - self.pars.cd4_max)**2 *  (self.cd4 - self.pars.cd4_max)**2
         can_die = ss.true(sim.people.alive & sim.people.hiv.infected)
         hiv_deaths = self.rng_dead.bernoulli_filter(can_die, prob=hiv_death_prob[can_die])
-        sim.people.alive[hiv_deaths] = False
-        sim.people.ti_dead[hiv_deaths] = sim.ti
-        self.results['new_deaths'][sim.ti] = len(hiv_deaths)
-
+        
+        sim.people.request_death(hiv_deaths)
+        self.ti_dead[hiv_deaths] = sim.ti
         return
 
     def init_results(self, sim):
         """
         Initialize results
         """
-        return super().init_results(sim)
+        super().init_results(sim)
+        self.results += ss.Result(self.name, 'new_deaths', sim.npts, dtype=int)
+        return
 
     def update_results(self, sim):
-        return super(HIV, self).update_results(sim)
+        super(HIV, self).update_results(sim)
+        self.results['new_deaths'][sim.ti] = np.count_nonzero(self.ti_dead == sim.ti)
+        return 
 
     def make_new_cases(self, sim):
         # eff_condoms = sim.pars[self.name]['eff_condoms'] # TODO figure out how to add this
