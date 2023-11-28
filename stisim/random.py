@@ -438,6 +438,9 @@ class SingleRNG():
                 if '__getstate__' in str(e):
                     # Must be from pickle, return a callable function that returns None
                     return lambda: None
+                elif '__await__' in str(e):
+                    # Must be from async programming?
+                    return None
                 errormsg = f'"{attr}" is not a member of this class or numpy.random'
                 raise Exception(errormsg)
 
@@ -445,7 +448,7 @@ class SingleRNG():
     @_pre_draw_single
     def integers(size, low, high, **kwargs):
         # provide integers via random_integers
-        return np.random.random_integers(size=size, low=low, high=high)
+        return np.random.randint(size=size, low=low, high=high)
 
     @staticmethod
     @_pre_draw_single

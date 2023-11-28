@@ -127,9 +127,10 @@ def test_repeat(n=5):
     draws1 = rng.random(uids)
     print(f'Random sample for uids {uids} returned {draws1}')
 
-    print('Attempting to sample again without resetting, should raise and exception.')
-    with pytest.raises(NotResetException):
-        rng.random(uids)
+    if ss.options.multirng:
+        print('Attempting to sample again without resetting, should raise and exception.')
+        with pytest.raises(NotResetException):
+            rng.random(uids)
     return rng
 
 
