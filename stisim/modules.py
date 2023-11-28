@@ -24,8 +24,8 @@ class Module(sc.prettyobj):
 
     def check_requires(self, sim):
         for req in self.requires:
-            if req not in sim.modules:
-                raise Exception(f'{self.name} (label={self.label}) requires module {req} but the Sim did not contain this module')
+            if req not in [m.__class__ for m in sim.modules]:
+                raise Exception(f'{self.name} (label={self.label}) requires module {req} but the Sim did not contain a module of this type.')
         return
 
     def initialize(self, sim):
