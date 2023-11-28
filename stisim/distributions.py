@@ -102,7 +102,7 @@ class data_dist(Distribution):
         bin_midpoints = self.bins[:-1] + np.diff(self.bins) / 2
         cdf = np.cumsum(self.vals)
         cdf = cdf / cdf[-1]
-        values = self.rng.rand(size)
+        values = self.rng.rand(size=size)
         value_bins = np.searchsorted(cdf, values)
         return bin_midpoints[value_bins]
 
@@ -122,7 +122,7 @@ class uniform(Distribution):
         return (self.low + self.high) / 2
 
     def sample(self, size):
-        return self.rng.uniform(size, low=self.low, high=self.high)
+        return self.rng.uniform(size=size, low=self.low, high=self.high)
 
 class bernoulli(Distribution):
     """
@@ -138,7 +138,7 @@ class bernoulli(Distribution):
         return self.p
 
     def sample(self, size):
-        return self.rng.bernoulli(size, prob=self.p)
+        return self.rng.bernoulli(size=size, prob=self.p)
 
 
 class choice(Distribution):
@@ -154,7 +154,7 @@ class choice(Distribution):
         return
 
     def sample(self, size, **kwargs):
-        return self.rng.choice(size, a=self.choices, p=self.probabilities, replace=self.replace, **kwargs)
+        return self.rng.choice(size=size, a=self.choices, p=self.probabilities, replace=self.replace, **kwargs)
 
 
 class normal(Distribution):
@@ -169,7 +169,7 @@ class normal(Distribution):
         return
 
     def sample(self, size, **kwargs):
-        return self.rng.normal(size, loc=self.mean, scale=self.std, **kwargs)
+        return self.rng.normal(size=size, loc=self.mean, scale=self.std, **kwargs)
 
 
 class normal_pos(normal):
@@ -245,7 +245,7 @@ class poisson(Distribution):
         return self.rate
 
     def sample(self, size):
-        return self.rng.poisson(size, lam=self.rate)
+        return self.rng.poisson(size=size, lam=self.rate)
 
 
 class neg_binomial(Distribution):

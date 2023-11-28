@@ -691,14 +691,14 @@ class mf_msm(NetworkConnector):
 
         # Now we take the MSM participants and determine which are also in the MF network
         msm_uids = ss.true(msm.participant[uids])  # Males in the MSM network
-        bi_uids = self.rng_bi.binomial_filter(uids=msm_uids, prob=self.pars.prop_bi)  # Males in both MSM and MF networks
+        bi_uids = self.rng_bi.bernoulli_filter(uids=msm_uids, prob=self.pars.prop_bi)  # Males in both MSM and MF networks
         mf_excl_set = np.setdiff1d(uids, msm_uids)  # Set of males who aren't in the MSM network
 
         # What remaining share to we need?
         mf_df = mf.pars.part_rates.loc[mf.pars.part_rates.sex == 'm']  # Male participation in the MF network
         mf_pr = np.interp(people.year, mf_df['year'], mf_df['part_rates']) * mf.pars.rel_part_rates
         remaining_pr = max(mf_pr*len(uids)-len(bi_uids), 0)/len(mf_excl_set)
-        mf_excl_uids = self.rng_excl.binomial_filter(uids=mf_excl_set, prob=remaining_pr)  # Males in MF network only
+        mf_excl_uids = self.rng_excl.bernoulli_filter(uids=mf_excl_set, prob=remaining_pr)  # Males in MF network only
         mf.participant[bi_uids] = True
         mf.participant[mf_excl_uids] = True
         return

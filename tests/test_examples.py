@@ -15,13 +15,15 @@ def test_sir():
 
     plt.figure()
     plt.stackplot(
-        sim.tivec,
+        sim.yearvec,
         sir.results.n_susceptible,
         sir.results.n_infected,
         sir.results.n_recovered,
         sim.results.new_deaths.cumsum(),
     )
-    plt.legend(['Susceptible', 'Infected', 'Recovered', 'Dead'])
+    plt.legend(['Susceptible', 'Infected', 'Recovered', 'Cum Deaths (All Cause)'])
+    plt.xlabel('Year')
+    plt.title('SIR')
     return
 
 
@@ -34,16 +36,19 @@ def test_ncd():
 
     plt.figure()
     plt.stackplot(
-        sim.tivec,
+        sim.yearvec,
         ncd.results.n_not_at_risk,
         ncd.results.n_at_risk-ncd.results.n_affected,
         ncd.results.n_affected,
         sim.results.new_deaths.cumsum(),
     )
-    plt.legend(['Not at risk','At risk','Affected', 'Dead'])
+    plt.legend(['Not at risk','At risk','Affected', 'Cum Deaths (All Cause)'])
+    plt.xlabel('Year')
+    plt.title('NCD')
     return
 
 
 if __name__ == '__main__':
     sim1 = test_sir()
     sim2 = test_ncd()
+    plt.show()

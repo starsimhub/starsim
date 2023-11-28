@@ -137,6 +137,9 @@ class NCD(Disease):
         self.at_risk = ss.State('at_risk', bool, False)
         self.affected = ss.State('affected', bool, False)
         self.ti_dead = ss.State('ti_dead', int, ss.INT_NAN)
+
+        self.rng_affected = ss.RNG(f'affected_{self.name}')
+        self.rng_dead = ss.RNG(f'dead_{self.name}')
         return
 
     @property
@@ -155,13 +158,13 @@ class NCD(Disease):
         return initial_cases
 
     def update_pre(self, sim):
-        deaths = ss.binomial_filter(sim.dt*self.pars['p_death_given_risk'], ss.true(self.affected))
+        deaths = self.rng_dead.bernoulli_filter(ss.true(self.affected), prob = sim.dt*self.pars['p_death_given_risk'])
         sim.people.request_death(deaths)
         self.ti_dead[deaths] = sim.ti
         return
 
     def make_new_cases(self, sim):
-        new_cases = ss.binomial_filter(self.pars['p_affected_given_risk'], ss.true(self.at_risk))
+        new_cases = self.rng_affected.bernoulli_filter(ss.true(self.at_risk), prob = self.pars['p_affected_given_risk'])
         self.affected[new_cases] = True
         return new_cases
 
