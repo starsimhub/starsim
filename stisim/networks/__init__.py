@@ -1,2 +1,2 @@
 from .networks import *
-from .random import *
+from .randnet import *
