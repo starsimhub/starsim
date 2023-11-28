@@ -97,3 +97,4 @@ if __name__ == '__main__':
     ax[3].set_title('Number of agents')
 
     fig.tight_layout()
+    plt.show()
