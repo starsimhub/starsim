@@ -17,13 +17,13 @@ class simple_hiv_ng(Connector):
     """ Simple connector whereby rel_sus to NG doubles if CD4 count is <200"""
 
     def __init__(self, pars=None):
-        pars = ss.omerge({
+        super().__init__(pars=pars, label='HIV-Gonorrhea', diseases=[ss.HIV, ss.Gonorrhea])
+        self.pars = ss.omerge({
             'rel_trans_hiv': 2,
             'rel_trans_aids': 5,
             'rel_sus_hiv': 2,
             'rel_sus_aids': 5,
-        }, pars)
-        super().__init__(pars=pars, label='HIV-Gonorrhea', diseases=[ss.HIV, ss.Gonorrhea])#diseases=['hiv', 'gonorrhea'])
+        }, self.pars)
         return
 
     def update(self, sim):

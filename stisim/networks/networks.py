@@ -628,16 +628,7 @@ class NetworkConnector(ss.Module):
     Template for a connector between networks.
     """
     def __init__(self, *args, networks=None, pars=None, **kwargs):
-        super().__init__(pars, *args, **kwargs)
-        self.networks = networks
-        self.pars = ss.omerge(pars)
-
-    def initialize(self, sim):
-        # Check that the requested networks are in the sim
-        avail = set(sim.people.networks.keys())
-        if not set(self.networks).issubset(avail):
-            errormsg = f'Connection between {self.networks} has been requested, but available networks are {avail}.'
-            raise ValueError(errormsg)
+        super().__init__(pars, requires=networks, *args, **kwargs)
         return
 
     def set_participation(self, people):
@@ -649,7 +640,8 @@ class NetworkConnector(ss.Module):
 
 class mf_msm(NetworkConnector):
     """ Combines the MF and MSM networks """
-    def __init__(self, networks=None, pars=None):
+    def __init__(self, pars=None):
+        networks = [ss.mf, ss.msm]
         super().__init__(networks=networks, pars=pars)
         self.pars = ss.omerge({
             'prop_bi': 0.5,  # Could vary over time -- but not by age or sex or individual
@@ -657,10 +649,6 @@ class mf_msm(NetworkConnector):
 
         self.rng_bi  = ss.RNG('bi')
         self.rng_excl  = ss.RNG('excl')
-
-        # TODO: Ensure that networks includes 'mf' and 'msm' as they are needed below
-        if self.networks is None:
-            self.networks = ['mf', 'msm']
         return
 
     def initialize(self, sim):

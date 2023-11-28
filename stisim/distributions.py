@@ -205,21 +205,21 @@ class lognormal(Distribution):
         super().__init__(**kwargs)
         self.mean = mean
         self.std = std
+        self.check()
+
         self.underlying_mean = np.log(mean ** 2 / np.sqrt(std ** 2 + mean ** 2))  # Computes the mean of the underlying normal distribution
         self.underlying_std = np.sqrt(np.log(std ** 2 / mean ** 2 + 1))  # Computes sigma for the underlying normal distribution
+
+
         return
-
-    def sample(self, **kwargs):
-
+    
+    def check(self):
         if (sc.isnumber(self.mean) and self.mean > 0) or (sc.checktype(self.mean, 'arraylike') and (self.mean > 0).all()):
-            return self.rng.lognormal(mean=self.underlying_mean, sigma=self.underlying_std, **kwargs)
-        
-        if 'size' in kwargs:
-            return np.zeros(kwargs['size'])
-        elif 'uids' in kwargs:
-            return np.zeros(len(kwargs['uids']))
-        else:
-            raise Exception('When calling sample(), please provide either "size" or "uids".')
+            return True
+        raise Exception('The mean parameter passed to the lognormal distribution must be a positive number or array with all positive values.')
+
+    def sample(self, size, **kwargs):
+        return self.rng.lognormal(size=size, mean=self.underlying_mean, sigma=self.underlying_std, **kwargs)
 
 
 class lognormal_int(lognormal):
@@ -228,7 +228,7 @@ class lognormal_int(lognormal):
     """
 
     def sample(self, size, **kwargs):
-        return np.round(super().sample(size, **kwargs))
+        return np.round(super().sample(size=size, **kwargs))
 
 
 class poisson(Distribution):
