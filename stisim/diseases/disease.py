@@ -137,7 +137,6 @@ class Disease(ss.Module):
         return
 
 
-
 class STI(Disease):
     """
     Base class for STIs used in STIsim
@@ -149,11 +148,11 @@ class STI(Disease):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.rel_sus = ss.State('rel_sus', float, 1)
-        self.rel_sev = ss.State('rel_sev', float, 1)
-        self.rel_trans = ss.State('rel_trans', float, 1)
+        self.rel_sus     = ss.State('rel_sus', float, 1)
+        self.rel_sev     = ss.State('rel_sev', float, 1)
+        self.rel_trans   = ss.State('rel_trans', float, 1)
         self.susceptible = ss.State('susceptible', bool, True)
-        self.infected = ss.State('infected', bool, False)
+        self.infected    = ss.State('infected', bool, False)
         self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
 
         # Random number generators

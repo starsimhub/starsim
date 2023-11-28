@@ -13,7 +13,9 @@ class SIR(Disease):
 
     This class implements a basic SIR model with states for susceptible,
     infected/infectious, and recovered. It also includes deaths, and basic
-    results
+    results.
+
+    Note that this class is not currently compatible with common random numbers.
     """
 
     default_pars = {
@@ -34,6 +36,9 @@ class SIR(Disease):
         self.t_infected = ss.State('t_infected', float, np.nan)
         self.t_recovered = ss.State('t_recovered', float, np.nan)
         self.t_dead = ss.State('t_dead', float, np.nan)
+
+        # Define a random number generator for deciding which agents will die
+        self.rng_dead = ss.RNG(f'dead_{self.name}')
         return
 
     def init_results(self, sim):
@@ -90,7 +95,7 @@ class SIR(Disease):
 
         # Calculate and schedule future outcomes for recovery/death
         dur_inf = self.pars['dur_inf'].sample(len(uids))
-        dead = np.random.random(len(uids)) < self.pars.p_death # DJK TODO
+        dead = np.random.random(len(uids)) < self.pars.p_death
         self.t_recovered[uids[~dead]] = sim.year + dur_inf[~dead]
         self.t_dead[uids[dead]] = sim.year + dur_inf[dead]
 
@@ -134,12 +139,13 @@ class NCD(Disease):
 
     def __init__(self, pars=None):
         ss.Module.__init__(self, ss.omerge(self.default_pars, pars))
-        self.at_risk = ss.State('at_risk', bool, False)
+        self.at_risk  = ss.State('at_risk', bool, False)
         self.affected = ss.State('affected', bool, False)
-        self.ti_dead = ss.State('ti_dead', int, ss.INT_NAN)
+        self.ti_dead  = ss.State('ti_dead', int, ss.INT_NAN)
 
+        self.rng_initial  = ss.RNG(f'initial_{self.name}')
         self.rng_affected = ss.RNG(f'affected_{self.name}')
-        self.rng_dead = ss.RNG(f'dead_{self.name}')
+        self.rng_dead     = ss.RNG(f'dead_{self.name}')
         return
 
     @property
@@ -153,7 +159,7 @@ class NCD(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        initial_cases = np.random.choice(sim.people.uid, int(len(sim.people)*self.pars['risk_prev']), replace=False)
+        initial_cases = self.rng_initial.bernoulli_filter(ss.true(sim.people.alive), prob = self.pars['risk_prev'])
         self.at_risk[initial_cases] = True
         return initial_cases
 

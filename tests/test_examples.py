@@ -21,7 +21,7 @@ def test_sir():
         sir.results.n_recovered,
         sim.results.new_deaths.cumsum(),
     )
-    plt.legend(['Susceptible', 'Infected', 'Recovered', 'Cum Deaths (All Cause)'])
+    plt.legend(['Susceptible', 'Infected', 'Recovered', 'Dead'])
     plt.xlabel('Year')
     plt.title('SIR')
     return
@@ -42,7 +42,7 @@ def test_ncd():
         ncd.results.n_affected,
         sim.results.new_deaths.cumsum(),
     )
-    plt.legend(['Not at risk','At risk','Affected', 'Cum Deaths (All Cause)'])
+    plt.legend(['Not at risk','At risk','Affected', 'Dead'])
     plt.xlabel('Year')
     plt.title('NCD')
     return
