@@ -230,7 +230,7 @@ class Disease(ss.Module):
             for target in uids:
                 self.log.append(np.nan, target, sim.year)
         else:
-            for source, target in zip(uids, from_uids):
+            for target, source in zip(uids, from_uids):
                 self.log.append(source, target, sim.year)
 
 
