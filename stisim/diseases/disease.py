@@ -79,6 +79,14 @@ class InfectionLog(nx.MultiDiGraph):
         df = pd.DataFrame.from_records(entries)
         df = df.sort_values(['t','source','target'])
         df = df.reset_index(drop=True)
+
+        # Use Pandas "Int64" type to allow nullable integers. This allows the 'source' column
+        # to have an integer type corresponding to UIDs while simultaneously supporting the use
+        # of null values to represent exogenous/seed infections
+        df = df.fillna(pd.NA)
+        df['source'] = df['source'].astype("Int64")
+        df['target'] = df['target'].astype("Int64")
+
         return df
 
 
