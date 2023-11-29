@@ -137,7 +137,7 @@ class NCD(Disease):
     }
 
     def __init__(self, pars=None):
-        ss.Module.__init__(self, ss.omerge(self.default_pars, pars))
+        super().__init__(ss.omerge(self.default_pars, pars))
         self.at_risk = ss.State('at_risk', bool, False)
         self.affected = ss.State('affected', bool, False)
         self.ti_dead = ss.State('ti_dead', float, np.nan)
@@ -167,7 +167,7 @@ class NCD(Disease):
         new_cases = ss.binomial_filter(self.pars['p_affected_given_risk'], ss.true(self.at_risk))
         self.affected[new_cases] = True
 
-        super().set_prognoses(self, sim, new_cases)
+        super().set_prognoses(sim, new_cases)
 
         return new_cases
 
