@@ -137,7 +137,6 @@ class Disease(ss.Module):
         return
 
 
-
 class STI(Disease):
     """
     Base class for STIs used in STIsim
@@ -149,17 +148,16 @@ class STI(Disease):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
-        self.rel_sus = ss.State('rel_sus', float, 1)
-        self.rel_sev = ss.State('rel_sev', float, 1)
-        self.rel_trans = ss.State('rel_trans', float, 1)
+        self.rel_sus     = ss.State('rel_sus', float, 1)
+        self.rel_sev     = ss.State('rel_sev', float, 1)
+        self.rel_trans   = ss.State('rel_trans', float, 1)
         self.susceptible = ss.State('susceptible', bool, True)
-        self.infected = ss.State('infected', bool, False)
+        self.infected    = ss.State('infected', bool, False)
         self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
 
         # Random number generators
-        self.rng_init_cases = ss.RNG(f'initial_cases_{self.name}')
-        self.rng_trans = ss.RNG(f'trans_{self.name}')
+        self.rng_init_cases      = ss.RNG(f'initial_cases_{self.name}')
+        self.rng_trans           = ss.RNG(f'trans_{self.name}')
         self.rng_choose_infector = ss.RNG(f'choose_infector_{self.name}')
         return
 
@@ -181,9 +179,7 @@ class STI(Disease):
         """
         if self.pars['init_prev'] <= 0:
             return
-
         initial_cases = self.rng_init_cases.bernoulli_filter(ss.bernoulli(self.pars['init_prev']), uids=ss.true(sim.people.alive))
-
         self.set_prognoses(sim, initial_cases, from_uids=None)  # TODO: sentinel value to indicate seeds?
         return
 
@@ -220,7 +216,6 @@ class STI(Disease):
                         continue
                     # probability of a->b transmission
                     p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta  # TODO: Needs DT
-                    # new_cases.append(ss.true(np.random.random(len(a)) < p_transmit))
                     new_cases_bool = np.random.random(len(a)) < p_transmit
                     new_cases.append(b[new_cases_bool])
                     sources.append(a[new_cases_bool])
@@ -232,7 +227,8 @@ class STI(Disease):
         probability of each _node_ acquiring a case rather than checking if each
         _edge_ transmits.
         '''
-        n = len(people.uid)  # TODO: possibly could be shortened to just the people who are alive
+
+        n = len(people.uid) # TODO: possibly could be shortened to just the people who are alive
         p_acq_node = np.zeros(n)
 
         for lkey, layer in people.networks.items():
@@ -261,7 +257,7 @@ class STI(Disease):
         Given the uids of new cases, determine which agents are the source of each case
         '''
         sources = np.zeros_like(new_cases)
-        r = self.rng_choose_infector.random(new_cases)  # Random number slotted to each new case
+        r = self.rng_choose_infector.random(new_cases) # Random number slotted to each new case
         for i, uid in enumerate(new_cases):
             p_acqs = []
             possible_sources = []
@@ -271,11 +267,12 @@ class STI(Disease):
                     contacts = layer.contacts
                     a_to_b = [contacts.p1, contacts.p2, self.pars.beta[lkey][0]]
                     b_to_a = [contacts.p2, contacts.p1, self.pars.beta[lkey][1]]
-                    for a, b, beta in [a_to_b, b_to_a]:  # Transmission from a --> b
+
+                    for a, b, beta in [a_to_b, b_to_a]: # Transmission from a --> b
                         if beta == 0:
                             continue
-
-                        inds = np.where(b == uid)[0]
+                    
+                        inds = np.where(b==uid)[0]
                         if len(inds) == 0:
                             continue
                         neighbors = a[inds]
@@ -286,14 +283,16 @@ class STI(Disease):
 
                         # Compute acquisition probabilities from neighbors --> uid
                         # TODO: Could remove zeros
-                        p_acqs.append((rel_trans * rel_sus * beta_combined).__array__())  # Needs DT
+
+                        p_acqs.append((rel_trans * rel_sus * beta_combined).__array__()) # Needs DT
                         possible_sources.append(neighbors.__array__())
 
             # Concatenate across layers and directions (p1->p2 vs p2->p1)
             p_acqs = np.concatenate(p_acqs)
             possible_sources = np.concatenate(possible_sources)
 
-            if len(possible_sources) == 1:  # Easy if only one possible source
+
+            if len(possible_sources) == 1: # Easy if only one possible source
                 sources[i] = possible_sources[0]
             else:
                 # Roulette selection using slotted draw r associated with this new case
@@ -331,3 +330,4 @@ class STI(Disease):
         super().update_results(sim)
         self.results['prevalence'][sim.ti] = self.results.n_infected[sim.ti] / np.count_nonzero(sim.people.alive)
         self.results['new_infections'][sim.ti] = np.count_nonzero(self.ti_infected == sim.ti)
+        return

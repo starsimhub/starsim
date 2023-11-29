@@ -185,12 +185,12 @@ class Sim(sc.prettyobj):
             verbose = self.pars['verbose']
         if verbose > 0:
             resetstr = ''
-            if self.people:
-                resetstr = ' (resetting people)' if reset else ' (warning: not resetting sim.people)'
+            if self.people and reset:
+                resetstr = ' (resetting people)'
             print(f'Initializing sim{resetstr} with {self.pars["n_agents"]:0n} agents')
 
         # If people have not been supplied, make them
-        if self.people is None:
+        if self.people is None or reset:
             self.people = ss.People(n=self.pars['n_agents'], **kwargs)  # This just assigns UIDs and length
 
         # If a popdict has not been supplied, we can make one from location data

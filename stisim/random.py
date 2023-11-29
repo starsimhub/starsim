@@ -339,12 +339,6 @@ class SingleRNG():
     def sample(self, distribution, size, **kwargs):
         """
         Sample from a ss.Distribution
-
-        :return:
-        """
-
-        """
-        Decorator for SingleRNG
         """
 
         if not self.ready:

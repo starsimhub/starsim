@@ -36,8 +36,7 @@ def run_test(remove_dead=True, do_plot=False, rand_seed=0, verbose=False):
     gon = ss.Gonorrhea({'p_death': 0.5, 'init_prev': 0.1})
 
     sim = ss.Sim(people=ppl, demographics=[births,deaths], diseases=[gon], networks=ss.mf(), remove_dead=remove_dead, n_years=100, analyzers=[agent_analyzer()], rand_seed=rand_seed, verbose=verbose)
-    # sim = ss.Sim(people=ppl, modules=[births, deaths], networks=ss.simple_sexual(), remove_dead=remove_dead, n_years=100, analyzers=[agent_analyzer()], rand_seed=rand_seed, verbose=False)
-
+    # sim = ss.Sim(people=ppl, modules=[births, deaths], networks=ss.mf(), remove_dead=remove_dead, n_years=100, analyzers=[agent_analyzer()], rand_seed=rand_seed, verbose=False)
     sim.initialize()
     sim.run()
 
@@ -97,3 +96,4 @@ if __name__ == '__main__':
     ax[3].set_title('Number of agents')
 
     fig.tight_layout()
+    plt.show()

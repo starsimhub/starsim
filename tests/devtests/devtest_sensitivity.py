@@ -9,6 +9,11 @@ import sciris as sc
 import pandas as pd
 import seaborn as sns
 
+# Suppress warning from seaborn
+import warnings
+warnings.filterwarnings("ignore", "is_categorical_dtype")
+warnings.filterwarnings("ignore", "use_inf_as_na")
+
 n = 1_000 # Agents
 n_rand_seeds = 25
 xf_levels = [0.5, 0.8, 1.26, 2.0] + [1] # Must include 1 as that's the baseline | roughly np.logspace(np.log2(0.5), np.log2(20), 4, base=2)

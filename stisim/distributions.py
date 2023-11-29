@@ -40,7 +40,7 @@ class Distribution():
     def name(self):
         return self.__class__.__name__
 
-    def sample(self, size=None, rng=None, **kwargs):
+    def sample(self, size=1, rng=None, **kwargs):
         """
         Return a specified number of samples from the distribution
         """
@@ -104,7 +104,7 @@ class data_dist(Distribution):
         bin_midpoints = self.bins[:-1] + np.diff(self.bins) / 2
         cdf = np.cumsum(self.vals)
         cdf = cdf / cdf[-1]
-        values = rng.rand(size)
+        values = rng.uniform(size=size)
         value_bins = np.searchsorted(cdf, values)
         return bin_midpoints[value_bins]
 
@@ -153,7 +153,6 @@ class bernoulli(Distribution):
     def sample(self, size=1, rng=None):
         rng = rng or _default_rng
         return rng.random(size=size) < self.p
-
 
 class choice(Distribution):
     """
@@ -221,18 +220,22 @@ class lognormal(Distribution):
         super().__init__(**kwargs)
         self.mean = mean
         self.std = std
+        self.check()
+
         self.underlying_mean = np.log(mean ** 2 / np.sqrt(std ** 2 + mean ** 2))  # Computes the mean of the underlying normal distribution
         self.underlying_std = np.sqrt(np.log(std ** 2 / mean ** 2 + 1))  # Computes sigma for the underlying normal distribution
+
+
         return
 
     def sample(self, size=1, rng=None, **kwargs):
         rng = rng or _default_rng
+        return rng.lognormal(size=size, mean=self.underlying_mean, sigma=self.underlying_std, **kwargs)
 
+    def check(self):
         if (sc.isnumber(self.mean) and self.mean > 0) or (sc.checktype(self.mean, 'arraylike') and (self.mean > 0).all()):
-            return rng.lognormal(size=size, mean=self.underlying_mean, sigma=self.underlying_std, **kwargs)
-        else:
-            return np.zeros(1)
-
+            return True
+        raise Exception('The mean parameter passed to the lognormal distribution must be a positive number or array with all positive values.')
 
 class lognormal_int(lognormal):
     """

@@ -13,7 +13,9 @@ class SIR(Disease):
 
     This class implements a basic SIR model with states for susceptible,
     infected/infectious, and recovered. It also includes deaths, and basic
-    results
+    results.
+
+    Note that this class is not currently compatible with common random numbers.
     """
 
     default_pars = {
@@ -35,8 +37,9 @@ class SIR(Disease):
         self.t_recovered = ss.State('t_recovered', float, np.nan)
         self.t_dead = ss.State('t_dead', float, np.nan)
 
+        # Define a random number generator for deciding which agents will die
+        self.rng_dead = ss.RNG(f'dead_{self.name}')
         return
-
 
     def init_results(self, sim):
         """
@@ -45,7 +48,7 @@ class SIR(Disease):
         super().init_results(sim)
         self.results += ss.Result(self.name, 'prevalence', sim.npts, dtype=float)
         self.results += ss.Result(self.name, 'new_infections', sim.npts, dtype=int)
-
+        return
 
     def update_pre(self, sim):
         # Progress infectious -> recovered
@@ -56,7 +59,7 @@ class SIR(Disease):
         # Trigger deaths
         deaths = ss.true(self.t_dead <= sim.year)
         sim.people.request_death(deaths)
-
+        return len(deaths)
 
     def update_death(self, sim, uids):
         # Reset infected/recovered flags for dead agents
@@ -101,7 +104,7 @@ class SIR(Disease):
         self.results['new_infections'][sim.ti] += len(uids)
         return
 
-    def make_new_cases(self, sim):
+    def make_new_cases(self, sim): # DJK TODO: Why not use the base class here?
         for k, layer in sim.people.networks.items():
             if k in self.pars['beta']:
                 rel_trans = (self.infected & sim.people.alive).astype(float)
@@ -136,13 +139,13 @@ class NCD(Disease):
 
     def __init__(self, pars=None):
         ss.Module.__init__(self, ss.omerge(self.default_pars, pars))
-        self.at_risk = ss.State('at_risk', bool, False)
+        self.at_risk  = ss.State('at_risk', bool, False)
         self.affected = ss.State('affected', bool, False)
-        self.ti_dead = ss.State('ti_dead', float, np.nan)
+        self.ti_dead  = ss.State('ti_dead', int, ss.INT_NAN)
 
-        self.rng_death = ss.RNG('death')
-        self.rng_cases = ss.RNG('cases')
-
+        self.rng_initial  = ss.RNG(f'initial_{self.name}')
+        self.rng_affected = ss.RNG(f'affected_{self.name}')
+        self.rng_dead     = ss.RNG(f'dead_{self.name}')
         return
 
     @property
@@ -156,18 +159,18 @@ class NCD(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        # TODO - make RNG-safe. The STI class shows how to do this with an initial prevalance, but what would be best practice for a fixed initial number of cases?
-        initial_cases = np.random.choice(sim.people.uid, int(len(sim.people)*self.pars['risk_prev']), replace=False)
+        initial_cases = self.rng_initial.bernoulli_filter(self.pars['risk_prev'], ss.true(sim.people.alive))
         self.at_risk[initial_cases] = True
         return initial_cases
 
     def update_pre(self, sim):
         deaths = self.rng_death.bernoulli_filter(sim.dt*self.pars['p_death_given_risk'], ss.true(self.affected))
         sim.people.request_death(deaths)
+        self.ti_dead[deaths] = sim.ti
         return
 
     def make_new_cases(self, sim):
-        new_cases = self.rng_cases.bernoulli_filter(self.pars['p_affected_given_risk'], ss.true(self.at_risk))
+        new_cases = self.rng_affected.bernoulli_filter(self.pars['p_affected_given_risk'], ss.true(self.at_risk))
         self.affected[new_cases] = True
         return new_cases
 

@@ -11,7 +11,7 @@ __all__ = ['Module']
 
 class Module(sc.prettyobj):
 
-    def __init__(self, pars=None, name = None, label=None, requires=None, *args, **kwargs):
+    def __init__(self, pars=None, name=None, label=None, requires=None, *args, **kwargs):
         self.pars = ss.omerge(pars)
         self.name = name if name else self.__class__.__name__.lower() # Default name is the class name
         self.label = label if label else ''
@@ -24,8 +24,8 @@ class Module(sc.prettyobj):
 
     def check_requires(self, sim):
         for req in self.requires:
-            if req not in sim.modules:
-                raise Exception(f'{self.name} (label={self.label}) requires module {req} but the Sim did not contain this module')
+            if req not in [m.__class__ for m in sim.modules]:
+                raise Exception(f'{self.name} (label={self.label}) requires module {req} but the Sim did not contain a module of this type.')
         return
 
     def initialize(self, sim):
@@ -75,10 +75,6 @@ class Module(sc.prettyobj):
     def rngs(self):
         """
         Return a flat collection of all random number generators, as with states above
-
-        :return:
         """
         return [x for x in self.__dict__.values() if isinstance(x, (ss.MultiRNG, ss.SingleRNG))]
-
-
 

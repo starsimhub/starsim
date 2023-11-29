@@ -1,5 +1,5 @@
 """
-Exploring multisim (on vs off) for a model HIV system sweeping coverage of either ART or PrEP.
+Exploring singlerng vs multirng for a model HIV system sweeping coverage of ART.
 """
 
 # %% Imports and settings

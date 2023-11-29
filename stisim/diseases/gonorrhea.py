@@ -52,7 +52,7 @@ class Gonorrhea(STI):
         self.results['new_clearances'][sim.ti] = np.count_nonzero(self.ti_clearance == sim.ti)
         return
 
-    def update_states_pre(self, sim):
+    def update_pre(self, sim):
         # What if something in here should depend on another module?
         # I guess we could just check for it e.g., 'if HIV in sim.modules' or
         # 'if 'hiv' in sim.people' or something

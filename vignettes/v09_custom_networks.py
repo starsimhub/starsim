@@ -58,9 +58,9 @@ sim = ss.Sim(network_structure='hybrid', modules=syph)
 
 # Case 2: adding a custom network
 ppl = ss.People(100)
-nwk = ss.simple_sexual()
+nwk = ss.mf()
 syph = ss.syphilis()
-sim['syphilis']['beta']['simple_sexual'] *= 2  # Increase beta for syph transmission
+sim['syphilis']['beta']['mf'] *= 2  # Increase beta for syph transmission
 sim = ss.Sim(people=ppl, networks=nwk, modules=syph)
 
 
