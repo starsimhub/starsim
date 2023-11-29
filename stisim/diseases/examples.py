@@ -164,7 +164,7 @@ class NCD(Disease):
         return initial_cases
 
     def update_pre(self, sim):
-        deaths = self.rng_death.bernoulli_filter(sim.dt*self.pars['p_death_given_risk'], ss.true(self.affected))
+        deaths = self.rng_dead.bernoulli_filter(sim.dt*self.pars['p_death_given_risk'], ss.true(self.affected))
         sim.people.request_death(deaths)
         self.ti_dead[deaths] = sim.ti
         return
