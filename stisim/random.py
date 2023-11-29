@@ -249,7 +249,9 @@ class MultiRNG(np.random.Generator):
         elif size.dtype == bool:
             n_samples = len(size)
         elif size.dtype == int:
-            v = size.__array__() # TODO - check if this works without calling __array__()?
+            # This could use `max_slot = np.max(self.slots[size])` as a simplification
+            # However, the creation of an intermediate FusedArray means it's around 10% slower
+            v = size.__array__()
             max_slot = self.slots[v].__array__().max()
             if max_slot == ss.INT_NAN:
                 raise Exception('Attempted to sample from an INT_NAN slot')
