@@ -81,10 +81,12 @@ class SIR(Disease):
         taken place by the time this method is called.
         """
         initial_cases = np.random.choice(sim.people.uid, self.pars['initial'], replace=False)
-        self.infect(sim, initial_cases)
+        self.infect(sim, initial_cases, None)
         return
 
-    def infect(self, sim, uids):
+    def infect(self, sim, uids, from_uids):
+        super().set_prognoses(sim, uids, from_uids)
+
         # Carry out state changes associated with infection
         self.susceptible[uids] = False
         self.infected[uids] = True
@@ -112,7 +114,7 @@ class SIR(Disease):
                     p_transmit = rel_trans[a] * rel_sus[b] * layer.contacts['beta'] * beta * sim.dt
                     new_cases = np.random.random(len(a)) < p_transmit
                     if new_cases.any():
-                        self.infect(sim, b[new_cases])
+                        self.infect(sim, b[new_cases], a[new_cases])
         return
 
     def update_results(self, sim):
@@ -164,6 +166,9 @@ class NCD(Disease):
     def make_new_cases(self, sim):
         new_cases = ss.binomial_filter(self.pars['p_affected_given_risk'], ss.true(self.at_risk))
         self.affected[new_cases] = True
+
+        super().set_prognoses(self, sim, new_cases)
+
         return new_cases
 
     def init_results(self, sim):
