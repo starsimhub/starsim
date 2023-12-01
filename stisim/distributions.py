@@ -17,6 +17,7 @@ import numpy as np
 import sciris as sc
 from .utils import get_subclasses
 from stisim.utils import INT_NAN
+from stisim.random import SingleRNG, MultiRNG, RNG
 
 __all__ = [
     'Distribution', 'bernoulli', 'uniform', 'uniform_int', 'choice', 'normal', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int',
@@ -28,16 +29,38 @@ _default_rng = np.random.default_rng()
 class Distribution():
 
     def __init__(self, rng=None):
+        """
+        Create a Distribution object.
+
+        :param rng: A random number generator instance or string used to create
+        a random generator. A centralized random number generator will be used
+        by default.
+        :return:
+        """
         self.sim = None # Only needed if using callable parameters.
-        self.fill_value = 1 # Default fill value
+        self.fill_value = 1 # Default fill value, only used if the Distribution needs_full_pars
+
         if rng is None:
             self.rng = _default_rng # Default to a single centralized random number generator
         else:
-            self.rng = rng
+            if isinstance(rng, (MultiRNG, SingleRNG)):
+                self.rng = rng
+            elif isinstance(rng, str):
+                self.rng = RNG(rng)
         return
 
     def initialize(self, sim):
+        """
+        Initialize the Distribution object. If a string name was provided as the
+        rng, also initialize the rng.
+
+        :param sim: The simulation object.
+        :return:
+        """
         self.sim = sim
+        if not self.rng.initialized:
+            self.rng.initialize(sim.rng_container, sim.people.slot)
+        return
 
     def set_rng(self, rng):
         """

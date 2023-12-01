@@ -10,12 +10,12 @@ from stisim.random import RNG
 
 
 # %% Define the tests
-def test_uniform_scalar(rng):
+def test_uniform_scalar(n):
     """ Create a uniform distribution """
     sc.heading('test_uniform: Testing uniform with scalar parameters')
 
     rng = ss.MultiRNG('Uniform')
-    rng.initialize(container=None, slots=5)
+    rng.initialize(container=None, slots=n)
     d = ss.uniform(low=1, high=5, rng=rng)
 
     uids = np.array([1,3])
@@ -25,20 +25,33 @@ def test_uniform_scalar(rng):
     assert len(draws) == len(uids)
     return draws
 
+def test_uniform_scalar_str(n):
+    """ Create a uniform distribution """
+    sc.heading('test_uniform: Testing uniform with scalar parameters')
 
-def test_uniform_callable(rng):
+    #rng = ss.MultiRNG('Uniform')
+    #rng.initialize(container=None, slots=n)
+    d = ss.uniform(low=1, high=5, rng='Uniform')
+    d.rng.initialize(container=None, slots=n) # Only really needed for testing as initializing the distribution will do something similar.
+
+    uids = np.array([1,3])
+    draws = d._sample(uids)
+    print(f'Uniform sample for uids {uids} returned {draws}')
+
+    assert len(draws) == len(uids)
+    return draws
+
+
+def test_uniform_callable(n):
     """ Create a uniform distribution """
     sc.heading('test_uniform: Testing uniform with callable parameters')
 
     sim = ss.Sim().initialize()
 
-    rng = ss.MultiRNG('Uniform')
-    rng.initialize(container=sim.rng_container, slots=sim.people.slot)
-
     low = lambda sim, uids: sim.people.age[uids]
     high = lambda sim, uids: sim.people.age[uids] + 1
-    d = ss.uniform(low=low, high=high, rng=rng)
-    d.initialize(sim)
+    d = ss.uniform(low=low, high=high, rng='Uniform')
+    d.initialize(sim) # Only needed when using callable parameters
 
     uids = np.array([1,3])
     draws = d._sample(uids)
@@ -49,12 +62,12 @@ def test_uniform_callable(rng):
     return draws
 
 
-def test_uniform_array(rng):
+def test_uniform_array(n):
     """ Create a uniform distribution """
     sc.heading('test_uniform: Testing uniform with a array parameters')
 
     rng = ss.MultiRNG('Uniform')
-    rng.initialize(container=None, slots=5)
+    rng.initialize(container=None, slots=n)
 
     uids = np.array([1, 3])
     low = np.array([4, 5])
@@ -68,12 +81,12 @@ def test_uniform_array(rng):
     return draws
 
 
-def test_gamma_scalar(rng):
+def test_gamma_scalar(n):
     """ Create a gamma distribution """
     sc.heading('test_gamma: Testing gamma with scalar parameters')
 
     rng = ss.MultiRNG('gamma')
-    rng.initialize(container=None, slots=5)
+    rng.initialize(container=None, slots=n)
     d = ss.gamma(shape=1, scale=2, rng=rng)
 
     uids = np.array([1,3])
@@ -84,7 +97,7 @@ def test_gamma_scalar(rng):
     return draws
 
 
-def test_gamma_callable(rng):
+def test_gamma_callable(n):
     """ Create a gamma distribution """
     sc.heading('test_gamma: Testing gamma with callable parameters')
 
@@ -105,7 +118,8 @@ def test_gamma_callable(rng):
     assert len(draws) == len(uids)
     return draws
 
-def test_gamma_callable_bool(rng):
+
+def test_gamma_callable_bool(n):
     """ Create a gamma distribution """
     sc.heading('test_gamma: Testing gamma with callable parameters and boolean UIDs')
 
@@ -117,7 +131,7 @@ def test_gamma_callable_bool(rng):
     shape = lambda sim, uids: sim.people.age[uids]
     scale = lambda sim, uids: sim.people.age[uids] + 1
     d = ss.gamma(shape=shape, scale=scale, rng=rng)
-    d.initialize(sim)
+    d.initialize(sim) # Only needed when using callable parameters
 
     uids = sim.people.age < 15
     draws = d._sample(uids)
@@ -127,7 +141,7 @@ def test_gamma_callable_bool(rng):
     return draws
 
 
-def test_gamma_array(rng):
+def test_gamma_array(n):
     """ Create a gamma distribution """
     sc.heading('test_gamma: Testing gamma with a array parameters')
 
@@ -145,10 +159,11 @@ def test_gamma_array(rng):
     assert len(draws) == len(uids)
     return draws
 
+
 # %% Run as a script
 if __name__ == '__main__':
     # Start timing
-    T = sc.tic()
+    ###T = sc.tic()
 
     n=5
 
@@ -156,15 +171,22 @@ if __name__ == '__main__':
         ss.options(multirng=multirng)
         sc.heading('Testing with multirng set to', multirng)
 
-        # Run tests - some will only pass if multirng is True
-        test_uniform_scalar(n)
-        test_uniform_callable(n)
-        test_uniform_array(n)
+        times = []
+        for trial in range(5):
+            T = sc.tic()
+            # Run tests - some will only pass if multirng is True
+            test_uniform_scalar(n)
+            test_uniform_scalar_str(n)
+            test_uniform_callable(n)
+            test_uniform_array(n)
 
-        test_gamma_scalar(n)
-        test_gamma_callable(n)
-        test_gamma_array(n)
-        test_gamma_callable_bool(n)
+            test_gamma_scalar(n)
+            test_gamma_callable(n)
+            test_gamma_array(n)
+            test_gamma_callable_bool(n)
 
-    sc.toc(T)
+            times.append(sc.toc(T, doprint=False, output=True))
+
+    print(times)
+    ###sc.toc(T)
     print('Done.')
