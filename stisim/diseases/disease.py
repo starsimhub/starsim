@@ -19,11 +19,11 @@ class Disease(ss.Module):
     def _boolean_states(self):
         """
         Iterator over states with boolean type
-        
+
         For diseases, these states typically represent attributes like 'susceptible',
-        'infectious', 'diagnosed' etc. These variables are typically useful to  
-        
-        :return: 
+        'infectious', 'diagnosed' etc. These variables are typically useful to
+
+        :return:
         """
         for state in self.states:
             if state.dtype == bool:
@@ -177,8 +177,12 @@ class STI(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        initial_cases = self.rng_init_cases.bernoulli_filter(uids=ss.true(sim.people.alive), prob=self.pars['init_prev'])
-        self.set_prognoses(sim, initial_cases, from_uids=None) # TODO: sentinel value to indicate seeds?
+        if self.pars['init_prev'] <= 0:
+            return
+
+        initial_cases = self.rng_init_cases.bernoulli_filter(self.pars['init_prev'], ss.true(sim.people.alive))
+
+        self.set_prognoses(sim, initial_cases, from_uids=None)  # TODO: sentinel value to indicate seeds?
         return
 
     def init_results(self, sim):
@@ -209,7 +213,7 @@ class STI(Disease):
                 rel_trans = (self.infected & sim.people.alive) * self.rel_trans
                 rel_sus = (self.susceptible & sim.people.alive) * self.rel_sus
                 for a, b, beta in [[contacts.p1, contacts.p2, self.pars.beta[k][0]],
-                                [contacts.p2, contacts.p1, self.pars.beta[k][1]]]:
+                                   [contacts.p2, contacts.p1, self.pars.beta[k][1]]]:
                     if beta == 0:
                         continue
                     # probability of a->b transmission
@@ -242,12 +246,12 @@ class STI(Disease):
                         continue
                     
                     # Accumulate acquisition probability for each person (node)
-                    node_from_edge = np.ones( (n, len(a)) )
+                    node_from_edge = np.ones((n, len(a)))
                     bi = people._uid_map[b] # Indices of b (rather than uid)
                     node_from_edge[bi, np.arange(len(a))] = 1 - rel_trans[a] * rel_sus[b] * contacts.beta * beta # TODO: Needs DT
                     p_acq_node = 1 - (1-p_acq_node) * node_from_edge.prod(axis=1) # (1-p1)*(1-p2)*...
 
-        new_cases_bool = self.rng_trans.bernoulli(people.uid, prob=p_acq_node)
+        new_cases_bool = self.rng_trans.sample(ss.bernoulli(p_acq_node), people.uid)
         new_cases = people.uid[new_cases_bool]
         return new_cases
 
@@ -270,7 +274,7 @@ class STI(Disease):
                         if beta == 0:
                             continue
                     
-                        inds = np.where(b==uid)[0]
+                        inds = np.where(b == uid)[0]
                         if len(inds) == 0:
                             continue
                         neighbors = a[inds]
@@ -314,7 +318,7 @@ class STI(Disease):
         
         return len(new_cases) # number of new cases made
 
-    def set_prognoses(self, sim, uids):
+    def set_prognoses(self, sim, uids, from_uids):
         pass
 
     def set_congenital(self, sim, uids):

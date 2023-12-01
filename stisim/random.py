@@ -66,7 +66,7 @@ class NotInitializedException(Exception):
     "Raised when a random number generator or a RNGContainer object is called when not initialized."
     def __init__(self, obj_name=None):
         if obj_name is None: 
-            msg = 'An object is being used without proper initialization.'
+            msg = f'An object is being used without proper initialization.'
         else:
             msg = f'The object named {obj_name} is being used prior to initialization.'
         super().__init__(msg)
@@ -89,13 +89,10 @@ class RepeatNameException(Exception):
         return
 
 
-def RNG(*args, set_for=None, **kwargs):
+def RNG(*args, **kwargs):
     """
     Class to choose a random number generator class.
     
-    Parameters:
-    set_for (Distribution): Connect this RNG instance to the provided Distribution [Optional]
-
     Returns:
     SingleRNG or MultiRNG: Instance of a random number generator
     """
@@ -103,69 +100,7 @@ def RNG(*args, set_for=None, **kwargs):
         rng = MultiRNG(*args, **kwargs)
     else:
         rng = SingleRNG(*args, **kwargs)
-
-    if set_for:
-        if not isinstance(set_for, ss.Distribution):
-            raise Exception('The "set_for" argument on is intended to connect this RNG to a Distribution, however the value passed in was not a Distribution.')
-        set_for.set_rng(rng)
-
     return rng
-
-
-def _pre_draw_multi(func):
-    """
-    Decorator function that does quite a bit to empower calls to the sampling distributions in the MultiRNG class.
-
-    The size parameter, from either kwargs or args[0], is used to determine if the user is seeking a fixed number of samples (if size is an integer), or instead if the user is providing an array.
-    If size is an array, it could contain UIDs or be of boolean type. If 'uids', assume the user wants random numbers for these specific agents. If boolean, select random numbers based on the provided array. N.b. the approach based on UIDs is likely to be more "common random number safe".
-    """
-    def check_ready(self, *args, **kwargs):
-        """ Validation before drawing """
-
-        if 'size' in kwargs:
-            size = kwargs.pop('size')
-        elif len(args) == 1:
-            size = args[0]
-        elif len(args) > 1:
-            raise Exception('Only one argument is allowed, please use key=value pairs for inputs other than size.')
-        else:
-            raise Exception('Could not assess the size of the random draw.')
-
-        if isinstance(size, int):
-            # Size-based
-            if size < 0:
-                raise Exception('Input "size" cannot be negative')
-
-            if size == 0:
-                return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
-
-            basis = 'size'
-
-        else:
-            # UID-based (size should be an array)
-            uids = size
-            kwargs['uids'] = uids
-
-            if len(uids) == 0:
-                return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
-
-            v = uids.__array__()
-            if v.dtype == bool:
-                size = len(uids)
-                basis = 'bools'
-            else:
-                size = self.slots[v].__array__().max() + 1
-                basis = 'uids'
-
-        if not self.initialized:
-            raise NotInitializedException(self.name)
-        if not self.ready:
-            raise NotResetException(self.name)
-        self.ready = False
-
-        return func(self, size=size, basis=basis, **kwargs)
-
-    return check_ready
 
 
 class MultiRNG(np.random.Generator):
@@ -284,109 +219,78 @@ class MultiRNG(np.random.Generator):
         self.bit_generator.state = self.bit_generator.jumped(jumps=ti).state
         return
 
-    def _select(self, vals, basis, uids):
-        """ Select from the values given the basis and uids """
-        if basis == 'size':
-            return vals
-        elif basis == 'uids':
-            slots = self.slots[uids].__array__()
-            return vals[slots]
-        elif basis == 'bools':
-            return vals[uids]
-        else:
-            raise Exception(f"Invalid basis: {basis}. Valid choices are 'size', 'uids', or 'bools'")
+    def sample(self, distribution, size=None, **kwargs):
+        """
+        Sample from a ss.Distribution
 
-    @_pre_draw_multi
-    def random(self, size, basis, uids=None):
-        vals = super(MultiRNG, self).random(size=size)
-        return self._select(vals, basis, uids)
+        :param size: can be
+            - Integer (returns fixed number of samples)
+            - Boolean array (returns samples for True values)
+            - Array of UIDs (returns samples for each UID using slots)    <---- If sampling per-agent, this is likely the desired option
+        :return:
+        """
 
-    @_pre_draw_multi
-    def uniform(self, size, basis, low, high, uids=None):
-        vals = super(MultiRNG, self).uniform(size=size, low=low, high=high)
-        return self._select(vals, basis, uids)
+        if not self.ready:
+            raise NotResetException(self.name)
 
-    @_pre_draw_multi
-    def integers(self, size, basis, low, high, uids=None, **kwargs):
-        vals = super(MultiRNG, self).integers(size=size, low=low, high=high, **kwargs)
-        return self._select(vals, basis, uids)
-
-    @_pre_draw_multi
-    def poisson(self, size, basis, lam, uids=None):
-        vals = super(MultiRNG, self).poisson(size=size, lam=lam)
-        return self._select(vals, basis, uids)
-
-    @_pre_draw_multi
-    def normal(self, size, basis, loc=0, scale=1, uids=None):
-        vals = super(MultiRNG, self).normal(size=size)
-        return loc + scale*self._select(vals, basis, uids)
-
-    @_pre_draw_multi
-    def lognormal(self, size, basis, mean=0, sigma=1, uids=None):
-        vals = super(MultiRNG, self).lognormal(size=size, mean=mean, sigma=sigma)
-        return self._select(vals, basis, uids)
-
-    @_pre_draw_multi
-    def negative_binomial(self, size, basis, n, p, uids=None):
-        vals = super(MultiRNG, self).negative_binomial(size=size, n=n, p=p)
-        return self._select(vals, basis, uids)
-
-    @_pre_draw_multi
-    def bernoulli(self, size, prob, basis, uids=None):
-        vals = super(MultiRNG, self).random(size=size)
-        return self._select(vals, basis, uids) < prob
-
-    # @_pre_draw_multi <-- handled by call to self.bernoullli
-    def bernoulli_filter(self, uids, prob):
-        return uids[self.bernoulli(size=uids, prob=prob)]
-
-    def choice(self, size, basis, a, **kwargs):
-        # Consider raising a warning instead?
-        raise Exception('The "choice" function is not MultiRNG-safe.')
-
-
-def _pre_draw_single(func):
-    """
-    Decorator for SingleRNG
-    """
-    def check_ready(*args, **kwargs):
-        """ Validation before drawing """
-        if 'size' in kwargs:
-            size = kwargs.pop('size')
-        elif len(args) == 1:
-            size = args[0]
-        elif len(args) > 1:
-            raise Exception('Only one argument is allowed, please use key=value pairs for inputs other than size.')
-        else:
-            raise Exception('Could not assess the size of the random draw.')
-
-        # Check for zero length size
-        if isinstance(size, int):
-            # size-based
-            if not isinstance(size, int):
-                raise Exception('Input "size" must be an integer')
-
+        # Work out how many samples to draw. If sampling by UID, this depends on the number of slots
+        if np.isscalar(size):
             if size < 0:
                 raise Exception('Input "size" cannot be negative')
-
-            if size == 0:
-                return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
-
-        else:
-            # UID-based (size should be an array)
-            uids = size
-
-            if len(uids) == 0:
-                return np.array([], dtype=int) # int dtype allows use as index, e.g. bernoulli_filter
-
-            if uids.dtype == bool:
-                size = uids.sum()
+            elif size == 0:
+                return np.array([], dtype=int)
             else:
-                size = len(uids)
+                n_samples = size
+        elif len(size) == 0:
+            return np.array([], dtype=int)  # int dtype allows use as index, e.g. bernoulli_filter
+        elif size.dtype == bool:
+            n_samples = len(size)
+        elif size.dtype == int:
+            v = size.__array__() # TODO - check if this works without calling __array__()?
+            max_slot = self.slots[v].__array__().max()
+            if max_slot == ss.INT_NAN:
+                raise Exception('Attempted to sample from an INT_NAN slot')
+            n_samples = max_slot + 1
+        else:
+            raise Exception("Unrecognized input type")
 
-        return func(size=size, **kwargs)
+        if isinstance(distribution, ss.choice):
+            raise Exception('The "choice" function is not MultiRNG-safe.')
 
-    return check_ready
+        ######vals = distribution._sample(n_samples, rng=self, **kwargs)
+        vals = distribution._sample(n_samples, **kwargs)
+        self.ready = False
+
+        if np.isscalar(size):
+            return vals
+        elif size.dtype == bool:
+            return vals[size]
+        else:
+            slots = self.slots[size].__array__()
+            return vals[slots]
+
+    def random(self, size=1):
+        return self.sample(ss.uniform(), size=size)
+
+    def bernoulli_filter(self, p, uids):
+        """
+        Bernoulli filtering of UIDs in an RNG-safe way
+
+        :param p: Probability of success. Supported types are
+            - A float in the range [0,1]
+            - An array the same length as UIDs
+            - A distribution instance, where the probability of success is given by the mean of the distribution
+        :param uids: Array of UIDs for the agents to filter
+        :return: An array of UIDs that 'succeeded'
+        """
+
+        if isinstance(p, ss.bernoulli):
+            vals = self.sample(p, uids)
+            return uids[vals]
+
+        #vals = self.sample(ss.uniform(), uids)
+        vals = self.random(size=uids) # Draw RNG-safe samples
+        return uids[vals < p]
 
 
 class SingleRNG():
@@ -405,6 +309,8 @@ class SingleRNG():
         self.name = name
         self.initialized = False
         self.seed_offset = 0 # For compatibility with MultiRNG
+        self.seed = None
+        self.ready = False
         return
 
     def initialize(self, container, slots=None):
@@ -418,43 +324,67 @@ class SingleRNG():
             container.add(self, check_repeats=False) # Seed is returned, but not used here as we're using the global np.random generator which has been seeded elsewhere
 
         self.initialized = True
+        self.reset()
         return
 
     def reset(self):
-        pass
+        self.ready = True
+
 
     def step(self, ti):
-        pass
+        self.reset()
 
-    def __getattr__(self, attr):
-        # Returns wrapped numpy.random.(attr) if not a property
-        try:
-            return self.__getattribute__(attr)
-        except Exception:
-            try:
-                numpy_func = getattr(np.random, attr)
-                return _pre_draw_single(numpy_func)
-            except Exception as e:
-                if '__getstate__' in str(e):
-                    # Must be from pickle, return a callable function that returns None
-                    return lambda: None
-                elif '__await__' in str(e):
-                    # Must be from async programming?
-                    return None
-                errormsg = f'"{attr}" is not a member of this class or numpy.random'
-                raise Exception(errormsg)
 
-    @staticmethod
-    @_pre_draw_single
-    def integers(size, low, high, **kwargs):
-        # provide integers via random_integers
-        return np.random.randint(size=size, low=low, high=high)
+    def sample(self, distribution, size, **kwargs):
+        """
+        Sample from a ss.Distribution
 
-    @staticmethod
-    @_pre_draw_single
-    def bernoulli(size, prob, **kwargs):
-        return np.random.random(size=size, **kwargs) < prob
+        :return:
+        """
 
-    @staticmethod
-    def bernoulli_filter(uids, prob):
-        return uids[SingleRNG.bernoulli(size=uids, prob=prob)]
+        """
+        Decorator for SingleRNG
+        """
+
+        if not self.ready:
+            raise NotResetException(self.name)
+        self.ready = False
+
+        # Check for zero length size
+        if isinstance(size, int):
+            # size-based
+            if not isinstance(size, int):
+                raise Exception('Input "size" must be an integer')
+
+            if size < 0:
+                raise Exception('Input "size" cannot be negative')
+
+            if size == 0:
+                return np.array([], dtype=int)  # int dtype allows use as index, e.g. bernoulli_filter
+
+        else:
+            # UID-based (size should be an array)
+            uids = size
+
+            if len(uids) == 0:
+                return np.array([], dtype=int)  # int dtype allows use as index, e.g. bernoulli_filter
+
+            if uids.dtype == bool:
+                size = uids.sum()
+            else:
+                size = len(uids)
+
+        vals = distribution._sample(size, rng=None)
+        self.ready = False
+        return vals
+
+    def random(self, size=1):
+        return self.sample(ss.uniform(), size=size)
+
+    def bernoulli_filter(self, p, uids):
+        if isinstance(p, ss.bernoulli):
+            vals = self.sample(p, uids)
+            return uids[vals]
+
+        vals = self.sample(ss.uniform(), uids)
+        return uids[vals < p]

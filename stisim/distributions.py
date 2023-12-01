@@ -6,31 +6,38 @@ Example usage
 >>> dist = stisim.normal(1,1) # Make a distribution
 >>> dist()  # Draw a sample
 >>> dist(10) # Draw several samples
->>> dist.sample(10) # Same as above
+>>> dist._sample(10) # Same as above
 >>> stisim.State('foo', float, fill_value=dist)  # Use distribution as the fill value for a state
 >>> disease.pars['immunity'] = dist  # Store the distribution as a parameter
->>> disease.pars['immunity'].sample(5)  # Draw some samples from the parameter
->>> stisim.poisson(rate=1).sample(n=10)  # Sample from a temporary distribution
+>>> disease.pars['immunity']._sample(5)  # Draw some samples from the parameter
+>>> stisim.poisson(rate=1)._sample(n=10)  # Sample from a temporary distribution
 """
 
 import numpy as np
 import sciris as sc
 from .utils import get_subclasses
+from stisim.utils import INT_NAN
 
 __all__ = [
-    'Distribution', 'bernoulli', 'uniform', 'choice', 'normal', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int',
-    'poisson', 'neg_binomial', 'beta', 'gamma', 'data_dist'
+    'Distribution', 'bernoulli', 'uniform', 'uniform_int', 'choice', 'normal', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int',
+    'poisson', 'neg_binomial', 'beta', 'gamma', 'data_dist', 'delta',
 ]
 
+_default_rng = np.random.default_rng()
 
 class Distribution():
 
     def __init__(self, rng=None):
+        self.sim = None # Only needed if using callable parameters.
+        self.fill_value = 1 # Default fill value
         if rng is None:
-            self.rng = np.random.default_rng() # Default to a single centralized random number generator
+            self.rng = _default_rng # Default to a single centralized random number generator
         else:
             self.rng = rng
         return
+
+    def initialize(self, sim):
+        self.sim = sim
 
     def set_rng(self, rng):
         """
@@ -39,24 +46,67 @@ class Distribution():
         self.rng = rng
         return
 
-    def mean(self):
-        """
-        Return the mean value
-        """
-        raise NotImplementedError
-
     def __call__(self, size):
-        return self.sample(size=size)
+        return self._sample(size=size)
 
     @property
     def name(self):
         return self.__class__.__name__
 
-    def sample(self, size=1, **kwargs):
+    def _sample(self, size=1, **kwargs):
         """
         Return a specified number of samples from the distribution
         """
-        raise NotImplementedError
+        # Work out how many samples to draw. If sampling by UID, this depends on the slots assigned to agents.
+        if np.isscalar(size):
+            if size < 0:
+                raise Exception('Input "size" cannot be negative')
+            elif size == 0:
+                return np.array([], dtype=int)
+            else:
+                n_samples = size
+        elif len(size) == 0:
+            return np.array([], dtype=int)  # int dtype allows use as index, e.g. bernoulli_filter
+        elif size.dtype == bool:
+            n_samples = len(size)
+        elif size.dtype == int:
+            v = size.__array__() # TODO - check if this works without calling __array__()?
+            max_slot = self.rng.slots[v].__array__().max()
+            if max_slot == INT_NAN:
+                raise Exception('Attempted to sample from an INT_NAN slot')
+            n_samples = max_slot + 1
+        else:
+            raise Exception("Unrecognized input type")
+
+        # Now handle distribution arguments
+        pars = {}
+        for k, v in kwargs.items():
+            if np.isscalar(v):
+                pars[k] = v
+            else:
+                if callable(v):
+                    vals = v(self.sim, size)
+                    pars[k] = vals
+                else:
+                    pars[k] = v
+                
+                if self.needs_full_pars:
+                    if len(pars[k]) != len(size): # Or sum of size if boolean?
+                        raise Exception('When providing an array of parameters, one for each agent, the length of the array must match the number of agents.')
+                    vals_all = np.full(n_samples, fill_value=self.fill_value)
+                    vals_all[size] = pars[k]
+                    pars[k] = vals_all
+
+        return n_samples, pars
+
+    def _select(self, vals, size):
+        if np.isscalar(size):
+            return vals
+        elif size.dtype == bool:
+            return vals[size]
+        else:
+            slots = self.rng.slots[size].__array__()
+            return vals[slots]
 
     @classmethod
     def create(cls, name, *args, **kwargs):
@@ -74,16 +124,48 @@ class Distribution():
         else:
             raise KeyError(f'Distribution "{name}" did not match any known distributions')
 
+
+class uniform(Distribution):
+    """ Uniform distribution """
+    def __init__(self, low=0, high=1, **kwargs):
+        super().__init__(**kwargs)
+        self.needs_full_pars = False
+        self.low = low
+        self.high = high
+        return
+
+    def _sample(self, size=None):
+        n_samples, pars = super()._sample(size, low=self.low, high=self.high)
+        vals = self.rng.uniform(size=n_samples) # Pars might be scalars or len(size) instead of length equal to n_samples
+        return pars['low'] + (pars['high'] - pars['low'])*self._select(vals, size)
+
+
+class gamma(Distribution):
+    """ Gamma distribution """
+    def __init__(self, shape, scale=1.0, **kwargs):
+        super().__init__(**kwargs)
+        self.needs_full_pars = True
+        self.shape = shape
+        self.scale = scale
+        return
+
+    def _sample(self, size=None):
+        n_samples, pars = super()._sample(size, shape=self.shape, scale=self.scale)
+        vals = self.rng.gamma(size=n_samples, **pars) # Because needs_full_pars, individual pars will be scalars or have length equal to n_samples
+        return self._select(vals, size)
+
 class delta(Distribution):
     """
     Delta function at specified value
     """
 
-    def __init__(self, value):
+    def __init__(self, value, **kwargs):
+        super().__init__(**kwargs)
         self.value = value
 
-    def sample(self, n=1):
-        return np.full(n, fill_value=self.value)
+    def _sample(self, size=1):
+        return np.full(size, fill_value=self.value)
+
 
 class data_dist(Distribution):
     """ Sample from data """
@@ -97,32 +179,25 @@ class data_dist(Distribution):
     def mean(self):
         return
 
-    def sample(self, size, **kwargs):
+    def _sample(self, size=None, rng=None, **kwargs):
         """ Sample using CDF """
+        rng = rng or _default_rng
         bin_midpoints = self.bins[:-1] + np.diff(self.bins) / 2
         cdf = np.cumsum(self.vals)
         cdf = cdf / cdf[-1]
-        values = self.rng.random(size=size)
+        values = rng.random(size=size)
         value_bins = np.searchsorted(cdf, values)
         return bin_midpoints[value_bins]
 
 
-class uniform(Distribution):
+class uniform_int(uniform):
     """
-    Uniform distribution
+    Uniform distribution returning only integer values
+    Note that like its continuous counterpart, the upper endpoint is not included in the range.
     """
 
-    def __init__(self, low, high, **kwargs):
-        super().__init__(**kwargs)
-        self.low = low
-        self.high = high
-        return
-
-    def mean(self):
-        return (self.low + self.high) / 2
-
-    def sample(self, size):
-        return self.rng.uniform(size=size, low=self.low, high=self.high)
+    def _sample(self, size=None, rng=None, **kwargs):
+        return super()._sample(size, rng, **kwargs).astype(int)
 
 class bernoulli(Distribution):
     """
@@ -137,9 +212,9 @@ class bernoulli(Distribution):
     def mean(self):
         return self.p
 
-    def sample(self, size):
-        return self.rng.bernoulli(size=size, prob=self.p)
-
+    def _sample(self, size=1, rng=None):
+        rng = rng or _default_rng
+        return rng.random(size=size) < self.p
 
 class choice(Distribution):
     """
@@ -153,8 +228,9 @@ class choice(Distribution):
         self.replace = replace
         return
 
-    def sample(self, size, **kwargs):
-        return self.rng.choice(size=size, a=self.choices, p=self.probabilities, replace=self.replace, **kwargs)
+    def _sample(self, size=None, rng=None, **kwargs):
+        rng = rng or _default_rng
+        return rng.choice(size=size, a=self.choices, p=self.probabilities, replace=self.replace, **kwargs)
 
 
 class normal(Distribution):
@@ -168,8 +244,9 @@ class normal(Distribution):
         self.std = std
         return
 
-    def sample(self, size, **kwargs):
-        return self.rng.normal(size=size, loc=self.mean, scale=self.std, **kwargs)
+    def _sample(self, size=None, rng=None, **kwargs):
+        rng = rng or _default_rng
+        return rng.normal(size=size, loc=self.mean, scale=self.std, **kwargs)
 
 
 class normal_pos(normal):
@@ -179,8 +256,8 @@ class normal_pos(normal):
     WARNING - this function came from hpvsim but confirm that the implementation is correct?
     """
 
-    def sample(self, size, **kwargs):
-        return np.abs(super().sample(size, **kwargs))
+    def _sample(self, size=None, rng=None, **kwargs):
+        return np.abs(super()._sample(size, rng, **kwargs))
 
 
 class normal_int(normal):
@@ -188,8 +265,8 @@ class normal_int(normal):
     Normal distribution returning only integer values
     """
 
-    def sample(self, size, **kwargs):
-        return np.round(super().sample(size, **kwargs))
+    def _sample(self, size=None, rng=None, **kwargs):
+        return np.round(super()._sample(size, rng, **kwargs))
 
 
 class lognormal(Distribution):
@@ -218,8 +295,9 @@ class lognormal(Distribution):
             return True
         raise Exception('The mean parameter passed to the lognormal distribution must be a positive number or array with all positive values.')
 
-    def sample(self, size, **kwargs):
-        return self.rng.lognormal(size=size, mean=self.underlying_mean, sigma=self.underlying_std, **kwargs)
+    def _sample(self, size=1, rng=None, **kwargs):
+        rng = rng or _default_rng
+        return rng.lognormal(size=size, mean=self.underlying_mean, sigma=self.underlying_std, **kwargs)
 
 
 class lognormal_int(lognormal):
@@ -227,8 +305,8 @@ class lognormal_int(lognormal):
     Lognormal returning only integer values
     """
 
-    def sample(self, size, **kwargs):
-        return np.round(super().sample(size=size, **kwargs))
+    def _sample(self, size=None, rng=None, **kwargs):
+        return np.round(super()._sample(size, rng, **kwargs))
 
 
 class poisson(Distribution):
@@ -244,8 +322,9 @@ class poisson(Distribution):
     def mean(self):
         return self.rate
 
-    def sample(self, size):
-        return self.rng.poisson(size=size, lam=self.rate)
+    def _sample(self, size=None, rng=None):
+        rng = rng or _default_rng
+        return rng.poisson(size=size, lam=self.rate)
 
 
 class neg_binomial(Distribution):
@@ -271,10 +350,11 @@ class neg_binomial(Distribution):
         self.dispersion = dispersion
         return
 
-    def sample(self, size):
+    def _sample(self, size=None, rng=None):
+        rng = rng or _default_rng
         nbn_n = self.dispersion
         nbn_p = self.dispersion / (self.mean + self.dispersion)
-        return self.rng.negative_binomial(size, n=nbn_n, p=nbn_p)
+        return rng.negative_binomial(size=size, n=nbn_n, p=nbn_p)
 
 
 class beta(Distribution):
@@ -291,10 +371,11 @@ class beta(Distribution):
     def mean(self):
         return self.alpha / (self.alpha + self.beta)
 
-    def sample(self, **kwargs):
-        return self.rng.beta(a=self.alpha, b=self.beta, **kwargs)
+    def _sample(self,size,rng=None, **kwargs):
+        rng = rng or _default_rng
+        return rng.beta(size=size, a=self.alpha, b=self.beta, **kwargs)
 
-
+'''
 class gamma(Distribution):
     """
     Gamma distribution
@@ -309,5 +390,7 @@ class gamma(Distribution):
     def mean(self):
         return self.shape * self.scale
 
-    def sample(self, **kwargs):
-        return self.rng.gamma(shape=self.shape, scale=self.scale, **kwargs)
+    def _sample(self,size, rng=None, **kwargs):
+        rng = rng or _default_rng
+        return rng.gamma(size=size, shape=self.shape, scale=self.scale, **kwargs)
+'''

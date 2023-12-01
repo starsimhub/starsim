@@ -3,6 +3,8 @@ import numpy as np
 import sciris as sc
 import numba as nb
 from stisim.utils import INT_NAN
+from stisim.distributions import Distribution
+from stisim.utils import warn
 from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
 
 __all__ = ['State', 'DynamicView']
@@ -46,7 +48,11 @@ class FusedArray(NDArrayOperatorsMixin):
     @nb.njit
     def _get_vals_uids(vals, key, uid_map):
         """
-        Extract valued from a collection of UIDs
+        Extract values from a collection of UIDs
+
+        This function is used to retreive values based on UID. As indexing a FusedArray returns a new FusedArray,
+        this method also populates the new UID map for use in the subsequently created FusedArray, avoiding the
+        need to re-compute it separately.
 
         :param vals: A 1D np.ndarray containing the values
         :param key: A 1D np.ndnarray of integers containing the UIDs to query
@@ -76,10 +82,15 @@ class FusedArray(NDArrayOperatorsMixin):
         :param value: A 1D np.ndarray the same length as ``key`` containing values to insert
         :return:
         """
+
         for i in range(len(key)):
+            if key[i] >= len(uid_map):
+                raise IndexError('UID not present in array (requested UID is larger than the maximum UID in use)')
             idx = uid_map[key[i]]
             if idx == INT_NAN:
                 raise IndexError('UID not present in array')
+            elif idx >= len(vals):
+                raise Exception(f'Attempted to write to a non-existant index - this can happen if attempting to write to new entries that have not yet been allocated via grow()')
             vals[idx] = value[i]
 
     @staticmethod
@@ -95,9 +106,13 @@ class FusedArray(NDArrayOperatorsMixin):
         :return:
         """
         for i in range(len(key)):
+            if key[i] >= len(uid_map):
+                raise IndexError('UID not present in array (requested UID is larger than the maximum UID in use)')
             idx = uid_map[key[i]]
             if idx == INT_NAN:
                 raise IndexError('UID not present in array')
+            elif idx >= len(vals):
+                raise Exception('Attempted to write to a non-existant index - this can happen if attempting to write to new entries that have not yet been allocated via grow()')
             vals[idx] = value
 
     def __getitem__(self, key):
@@ -105,7 +120,7 @@ class FusedArray(NDArrayOperatorsMixin):
             if isinstance(key, (int, np.integer)):
                 # Handle getting a single item by UID
                 return self.values[self._uid_map[key]]
-            elif isinstance(key, (np.ndarray, FusedArray)):
+            elif isinstance(key, (np.ndarray, FusedArray, DynamicView)):
                 if key.dtype.kind == 'b':
                     # Handle accessing items with a logical array. Surprisingly, it seems faster to use nonzero() to convert
                     # it to indices first. Also, the pure Python implementation is difficult to improve upon using numba
@@ -116,9 +131,7 @@ class FusedArray(NDArrayOperatorsMixin):
                     values = self.values[mapped_key]
                 else:
                     # Access items by an array of integers. We do get a decent performance boost from using numba here
-                    values, uids, new_uid_map = self._get_vals_uids(self.values, key, self._uid_map.__array__())
-            elif isinstance(key, DynamicView):
-                values, uids, new_uid_map = self._get_vals_uids(self.values, key.__array__(), self._uid_map.__array__())
+                    values, uids, new_uid_map = self._get_vals_uids(self.values, key.__array__(), self._uid_map.__array__())
             elif isinstance(key, slice):
                 if key.start is None and key.stop is None and key.step is None:
                     return sc.dcp(self)
@@ -237,26 +250,35 @@ class FusedArray(NDArrayOperatorsMixin):
 
 
 class DynamicView(NDArrayOperatorsMixin):
-    def __init__(self, dtype, fill_value=0):
+    def __init__(self, dtype, fill_value=None):
         """
         Args:
             name: name of the result as used in the model
             dtype: datatype
-            fill_value: default value for this state upon model initialization. If callable, it is called with a single argument for the number of samples
+            fill_value: default value for this state upon model initialization. If not provided, it will use the default value for the dtype
             shape: If not none, set to match a string in `pars` containing the dimensionality
             label: text used to construct labels for the result for displaying on plots and other outputs
         """
-        self.dtype = dtype
-        self.fill_value = fill_value
+        self.fill_value = fill_value if fill_value is not None else dtype()
         self.n = 0  # Number of agents currently in use
-        self._data = None  # The underlying memory array (length at least equal to n)
+        self._data = np.empty(0, dtype=dtype)  # The underlying memory array (length at least equal to n)
         self._view = None  # The view corresponding to what is actually accessible (length equal to n)
+        self._map_arrays()
         return
 
     @property
     def _s(self):
         # Return the size of the underlying array (maximum number of agents that can be stored without reallocation)
         return len(self._data)
+
+    @property
+    def dtype(self):
+        # The specified dtype and the underlying array dtype can be different. For instance, the user might pass in
+        # DynamicView(dtype=int) but the underlying array's dtype will be np.dtype('int32'). This distinction is important
+        # because the numpy dtype has attributes like 'kind' that the input dtype may not have. We need the DynamicView's
+        # dtype to match that of the underlying array so that it can be more seamlessly exchanged with direct numpy arrays
+        # Therefore, we retain the original dtype in DynamicView._dtype() and use
+        return self._data.dtype
 
     def __len__(self):
         # Return the number of active elements
@@ -266,52 +288,30 @@ class DynamicView(NDArrayOperatorsMixin):
         # Print out the numpy view directly
         return self._view.__repr__()
 
-    def _new_items(self, n):
-        # New items are empty in this implementation, real values are filled reactively by _fill_data.
-        return np.empty(n, dtype=self.dtype)
-
-    def _fill_data(self, n0, n1):
-        # Fill data
-        n = int(n1-n0)
-        if callable(self.fill_value):
-            self._data[n0:n1] = self.fill_value(n) # <-- TODO: This line likely is not CRN safe because the selected fill values will not be slot-dependent.
-        else:
-            self._data[n0:n1] = self.fill_value
-        return
-
-    def initialize(self, n):
-        self._data = self._new_items(n)
-        self.n = n
+    def grow(self, n):
+        # If the total number of agents exceeds the array size, extend the underlying arrays
+        if self.n + n > self._s:
+            n_new = max(n, int(self._s / 2))  # Minimum 50% growth
+            self._data = np.concatenate([self._data, np.full(n_new, dtype=self.dtype, fill_value=self.fill_value)], axis=0)
+        self.n += n  # Increase the count of the number of agents by `n` (the requested number of new agents)
         self._map_arrays()
 
-    def grow(self, n, fill=True):
-        if self.n + n > self._s:
-            # If the total number of agents exceeds the array size, extend the storage array
-            n_new = max(n, int(self._s / 2))  # Minimum 50% growth
-            self._data = np.concatenate([self._data, self._new_items(n_new)], axis=0)
-
-        self.n += n  # Increase the count of the number of agents by `n` (the requested number of new agents)
-        self._map_arrays(fill)
-
-    def _trim(self, inds, fill=True):
+    def _trim(self, inds):
         # Keep only specified indices
         # Note that these are indices, not UIDs!
         n = len(inds)
         self._data[:n] = self._data[inds]
-        # DJK MOVING TO MAP: self._data[n:self.n] = self.fill_value(self.n-n) if callable(self.fill_value) else self.fill_value
+        self._data[n:self.n] = self.fill_value
         self.n = n
-        self._map_arrays(fill)
+        self._map_arrays()
 
-    def _map_arrays(self, fill=True):
+    def _map_arrays(self):
         """
         Set main simulation attributes to be views of the underlying data
 
         This method should be called whenever the number of agents required changes
         (regardless of whether or not the underlying arrays have been resized)
         """
-        n0 = len(self._view) if self._view is not None else 0
-        if fill and self.n > n0:
-            self._fill_data(n0, self.n) # Fill the new data
         self._view = self._data[:self.n]
 
     def __getitem__(self, key):
@@ -335,9 +335,30 @@ class DynamicView(NDArrayOperatorsMixin):
 
 class State(FusedArray):
 
-    def __init__(self, name, dtype, fill_value=0, label=None):
+    def __init__(self, name, dtype, fill_value=None, rng=None, label=None):
+        """
+
+        :param name: A string name for the state
+        :param dtype: The dtype to use for this instance
+        :param fill_value: Specify default value for new agents. This can be
+            - A scalar with the same dtype (or castable to the same dtype) as the State
+            - A callable, with a single argument for the number of values to produce
+            - An ss.Distribution instance
+        :param rng: Optionally provide an RNG stream to use with a ss.Distribution fill value. This allows RNG-safe stochastic default values
+        :param label:
+        """
+
         super().__init__(values=None, uid=None, uid_map=None)  # Call the FusedArray constructor
-        self._data = DynamicView(dtype=dtype, fill_value=fill_value)
+
+        if isinstance(fill_value, Distribution) and rng is None:
+            warn("fill_value is a distribution but no RNG was provided, sampling will not be RNG-safe")
+        elif rng is not None and not isinstance(fill_value, Distribution):
+            warn("fill_value is not a ss.Distribution instance, the provided RNG stream will not be used")
+
+        self.fill_value = fill_value
+        self.rng = rng  # If fill_value is a distribution, this is the RNG stream to use when sampling default values
+
+        self._data = DynamicView(dtype=dtype)
         self.name = name
         self.label = label or name
         self.values = self._data._view
@@ -349,6 +370,15 @@ class State(FusedArray):
         else:
             return FusedArray.__repr__(self)
 
+    def _new_vals(self, uids):
+        if isinstance(self.fill_value, Distribution):
+            new_vals = self.rng.sample(self.fill_value, uids)
+        elif callable(self.fill_value):
+            new_vals = self.fill_value(len(uids))
+        else:
+            new_vals = self.fill_value
+        return new_vals
+
     def initialize(self, people):
         if self._initialized:
             return
@@ -356,15 +386,28 @@ class State(FusedArray):
         people.add_state(self)
         self._uid_map = people._uid_map
         self.uid = people.uid
-        self._data.initialize(len(self.uid))
+        self._data.grow(len(self.uid))
+        self._data[:len(self.uid)] = self._new_vals(self.uid)
         self.values = self._data._view
         self._initialized = True
 
-    def grow(self, n):
+
+    def grow(self, uids):
+        """
+        Add state for new agents
+
+        This method is normally only called via `People.grow()`.
+
+        :param uids: Numpy array of UIDs for the new agents being added This array should have length n
+        """
+
+        n = len(uids)
         self._data.grow(n)
         self.values = self._data._view
+        self._data[-n:] = self._new_vals(uids)
 
     def _trim(self, inds):
+        # Trim arrays to remove agents - should only be called via `People.remove()`
         self._data._trim(inds)
         self.values = self._data._view
 

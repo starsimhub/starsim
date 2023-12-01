@@ -433,7 +433,7 @@ class mf(SexualNetwork, DynamicNetwork):
             uids = ss.true(people[sk][eligible_uids])
             df = self.pars.part_rates.loc[self.pars.part_rates.sex == sk]
             pr = np.interp(year, df['year'], df['part_rates']) * self.pars.rel_part_rates
-            self.participant[uids] = rng.bernoulli(uids, prob=pr)
+            self.participant[uids] = rng.sample(ss.bernoulli(pr), uids)
         return
 
     def set_debut(self, people, upper_age=None):
@@ -451,7 +451,8 @@ class mf(SexualNetwork, DynamicNetwork):
             mean = np.interp(people.year, df['year'], df['debut'])
             std = np.interp(people.year, df['year'], df['std'])
             dist = df.loc[df.year == nearest_year].dist.iloc[0]
-            debut_vals = ss.Distribution.create(dist, mean, std, rng=self.rng_debut)(uids) * self.pars.rel_debut
+            debut_vals = self.rng_debut.sample(ss.Distribution.create(dist, mean, std),uids) * self.pars.rel_debut
+            self.rng_debut.reset() # Reset the RNG, it's OK to resample because we'll be drawing from different UIDs at the next iteration
             self.debut[uids] = debut_vals
         return
 
@@ -508,6 +509,7 @@ class msm(SexualNetwork, DynamicNetwork):
             'debut': ss.lognormal(18, 2),
             'rel_debut': 1.0,
         }, self.pars)
+        self.rng_dur = ss.RNG(f'dur_{self.name}')
         return
 
     def initialize(self, sim):
@@ -540,10 +542,11 @@ class msm(SexualNetwork, DynamicNetwork):
         n_pairs = int(len(available_m)/2)
         p1 = available_m[:n_pairs]
         p2 = available_m[n_pairs:n_pairs*2]
+        dur = self.rng_dur.sample(self.pars.dur, len(p1))
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
         self.contacts.beta = np.concatenate([self.contacts.beta, np.ones_like(p1)])
-        self.contacts.dur = np.concatenate([self.contacts.dur, self.pars.dur.sample(len(p1))])
+        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
         return len(p1)
 
     def update(self, people, dt=None):
@@ -613,8 +616,9 @@ class embedding(mf):
         std = np.interp(people.year, self.pars.dur['year'], self.pars.dur['std'])
 
         # TODO: Why let the user chose the distribution, but hard code mean and std???
-        dur_dist = self.pars.dur.loc[self.pars.dur.year == nearest_year].dist.iloc[0]
-        dur_vals = ss.Distribution.create(dur_dist, mean, std, rng=self.rng_dur)(available_m[ind_m])
+        dur_distname = self.pars.dur.loc[self.pars.dur.year == nearest_year].dist.iloc[0]
+        dur_dist = ss.Distribution.create(dur_distname, mean, std)
+        dur_vals = self.rng_dur.sample(dur_dist, available_m[ind_m])
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, available_m[ind_m]])
         self.contacts.p2 = np.concatenate([self.contacts.p2, available_f[ind_f]])
@@ -679,14 +683,14 @@ class mf_msm(NetworkConnector):
 
         # Now we take the MSM participants and determine which are also in the MF network
         msm_uids = ss.true(msm.participant[uids])  # Males in the MSM network
-        bi_uids = self.rng_bi.bernoulli_filter(uids=msm_uids, prob=self.pars.prop_bi)  # Males in both MSM and MF networks
+        bi_uids = self.rng_bi.bernoulli_filter(self.pars.prop_bi, msm_uids)  # Males in both MSM and MF networks
         mf_excl_set = np.setdiff1d(uids, msm_uids)  # Set of males who aren't in the MSM network
 
         # What remaining share to we need?
         mf_df = mf.pars.part_rates.loc[mf.pars.part_rates.sex == 'm']  # Male participation in the MF network
         mf_pr = np.interp(people.year, mf_df['year'], mf_df['part_rates']) * mf.pars.rel_part_rates
         remaining_pr = max(mf_pr*len(uids)-len(bi_uids), 0)/len(mf_excl_set)
-        mf_excl_uids = self.rng_excl.bernoulli_filter(uids=mf_excl_set, prob=remaining_pr)  # Males in MF network only
+        mf_excl_uids = self.rng_excl.bernoulli_filter(remaining_pr, mf_excl_set)  # Males in MF network only
         mf.participant[bi_uids] = True
         mf.participant[mf_excl_uids] = True
         return
@@ -709,13 +713,13 @@ class hpv_network(SexualNetwork, DynamicNetwork):
 
         # Define default parameters
         self.pars = dict()
-        self.pars['cross_layer'] = 0.05  # Proportion of agents who have concurrent cross-layer relationships
-        self.pars['partners'] = ss.poisson(rate=0.01)  # The number of concurrent sexual partners
-        self.pars['acts'] = ss.neg_binomial(mean=80, dispersion=40)  # The number of sexual acts per year
-        self.pars['age_act_pars'] = dict(peak=30, retirement=100, debut_ratio=0.5,
+        self.pars['cross_layer']   = 0.05  # Proportion of agents who have concurrent cross-layer relationships
+        self.pars['partners']      = ss.poisson(rate=0.01)  # The number of concurrent sexual partners
+        self.pars['acts']          = ss.neg_binomial(mean=80, dispersion=40)  # The number of sexual acts per year
+        self.pars['age_act_pars']  = dict(peak=30, retirement=100, debut_ratio=0.5,
                                          retirement_ratio=0.1)  # Parameters describing changes in coital frequency over agent lifespans
-        self.pars['condoms'] = 0.2  # The proportion of acts in which condoms are used
-        self.pars['dur_pship'] = ss.normal_pos(mean=1, std=1)  # Duration of partnerships
+        self.pars['condoms']       = 0.2  # The proportion of acts in which condoms are used
+        self.pars['dur_pship']     = ss.normal_pos(mean=1, std=1)  # Duration of partnerships
         self.pars['participation'] = None  # Incidence of partnership formation by age
         self.pars['mixing']        = None  # Mixing matrices for storing age differences in partnerships
 
@@ -724,9 +728,9 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         self.validate_pars()
 
         # Define random number generators and link to distributions (now that validation is done)
-        self.rng_partners  = ss.RNG('partners', set_for=self.pars['partners'])
-        self.rng_acts      = ss.RNG('acts', set_for=self.pars['acts'])
-        self.rng_dur_pship = ss.RNG('dur_pship', set_for=self.pars['dur_pship'])
+        self.rng_partners  = ss.RNG('partners')#, set_for=self.pars['partners']) ## DJK TODO!!!
+        self.rng_acts      = ss.RNG('acts')#, set_for=self.pars['acts'])
+        self.rng_dur_pship = ss.RNG('dur_pship')#, set_for=self.pars['dur_pship'])
 
         # This network algorithm is not common-random-number safe AND these
         # generators are called multiple times per step, so we use a SingleRNG.
@@ -803,7 +807,7 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         current_partners = np.zeros((len(people)))
         current_partners[f_partnered_inds] = f_partnered_counts
         current_partners[m_partnered_inds] = m_partnered_counts
-        partners = self.pars['partners'].sample(len(people)) + 1
+        partners = self.pars['partners'].sample(len(people)) + 1 # DJK TODO!
         underpartnered = current_partners < partners  # Indices of underpartnered people
         f_eligible = f_active & underpartnered
         m_eligible = m_active & underpartnered
@@ -817,7 +821,7 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         bin_range_f = np.unique(age_bins_f)  # Range of bins
         f = []  # Initialize the female partners
         for ab in bin_range_f:  # Loop over age bins
-            these_f_contacts = self.rngs.f_contacts.bernoulli_filter(uids=f_eligible_inds[ age_bins_f == ab], prob=self.pars['participation'][1][ab])  # Select females according to their participation rate in this layer
+            these_f_contacts = self.rngs.f_contacts.bernoulli_filter(self.pars['participation'][1][ab], f_eligible_inds[ age_bins_f == ab])  # Select females according to their participation rate in this layer
             f.append(these_f_contacts)
         f = np.concatenate(f)
 
@@ -827,7 +831,7 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         bin_range_m = np.unique(age_bins_m)  # Range of bins
         m = []  # Initialize the male partners
         for ab in bin_range_m:
-            these_m_contacts = self.rngs.m_contacts.bernoulli_filter(uids=m_eligible_inds[age_bins_m == ab], prob=self.pars['participation'][2][ab])  # Select males according to their participation rate in this layer
+            these_m_contacts = self.rngs.m_contacts.bernoulli_filter(self.pars['participation'][2][ab], m_eligible_inds[age_bins_m == ab])  # Select males according to their participation rate in this layer
             m.append(these_m_contacts)
         m = np.concatenate(m)
 

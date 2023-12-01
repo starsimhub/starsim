@@ -42,7 +42,7 @@ class HIV(STI):
 
         hiv_death_prob = 0.05 / (self.pars.cd4_min - self.pars.cd4_max)**2 *  (self.cd4 - self.pars.cd4_max)**2
         can_die = ss.true(sim.people.alive & sim.people.hiv.infected)
-        hiv_deaths = self.rng_dead.bernoulli_filter(can_die, prob=hiv_death_prob[can_die])
+        hiv_deaths = self.rng_dead.bernoulli_filter(hiv_death_prob[can_die], can_die)
         
         sim.people.request_death(hiv_deaths)
         self.ti_dead[hiv_deaths] = sim.ti
@@ -106,7 +106,7 @@ class ART(ss.Intervention):
 
         n_added = 0
         if len(recently_infected) > 0:
-            inds = self.rng_add_ART.bernoulli_filter(recently_infected, prob=coverage)
+            inds = self.rng_add_ART.bernoulli_filter(coverage, recently_infected)
             sim.people.hiv.on_art[inds] = True
             sim.people.hiv.ti_art[inds] = sim.ti
             n_added = len(inds)

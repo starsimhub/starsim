@@ -226,10 +226,9 @@ class Sim(sc.prettyobj):
         return self
 
     def init_demographics(self):
-        for demog in self.demographics.values():
-            demog.initialize(self)
-            self.results[demog.name] = demog.results
-        return
+        for module in self.demographics.values():
+            module.initialize(self)
+            self.results[module.name] = module.results
 
     def init_diseases(self):
         """ Initialize modules and connectors to be simulated """
@@ -342,8 +341,8 @@ class Sim(sc.prettyobj):
             self.people.remove_dead(self)
 
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
-        for demog in self.demographics.values():
-            demog.update(self)
+        for module in self.demographics.values():
+            module.update(self)
 
         # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
         # to be applied to newly created agents

@@ -159,18 +159,18 @@ class NCD(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        initial_cases = self.rng_initial.bernoulli_filter(ss.true(sim.people.alive), prob = self.pars['risk_prev'])
+        initial_cases = self.rng_initial.bernoulli_filter(self.pars['risk_prev'], ss.true(sim.people.alive))
         self.at_risk[initial_cases] = True
         return initial_cases
 
     def update_pre(self, sim):
-        deaths = self.rng_dead.bernoulli_filter(ss.true(self.affected), prob = sim.dt*self.pars['p_death_given_risk'])
+        deaths = self.rng_dead.bernoulli_filter(sim.dt*self.pars['p_death_given_risk'], ss.true(self.affected))
         sim.people.request_death(deaths)
         self.ti_dead[deaths] = sim.ti
         return
 
     def make_new_cases(self, sim):
-        new_cases = self.rng_affected.bernoulli_filter(ss.true(self.at_risk), prob = self.pars['p_affected_given_risk'])
+        new_cases = self.rng_affected.bernoulli_filter(self.pars['p_affected_given_risk'], ss.true(self.at_risk))
         self.affected[new_cases] = True
         return new_cases
 
