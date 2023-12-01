@@ -91,8 +91,8 @@ class Distribution():
                     pars[k] = v
                 
                 if self.needs_full_pars:
-                    if len(pars[k]) != len(size): # Or sum of size if boolean?
-                        raise Exception('When providing an array of parameters, one for each agent, the length of the array must match the number of agents.')
+                    if len(pars[k]) not in [len(size), sum(size)]: # Could handle uid and bool separately? len(size) for uid and sum(size) for bool
+                        raise Exception('When providing an array of parameters, the length of the parameters must match the number of agents for the selected size (uids).')
                     vals_all = np.full(n_samples, fill_value=self.fill_value)
                     vals_all[size] = pars[k]
                     pars[k] = vals_all

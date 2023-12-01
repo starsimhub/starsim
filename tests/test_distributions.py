@@ -100,7 +100,6 @@ def test_gamma_callable(rng):
 
     uids = np.array([1,3])
     draws = d._sample(uids)
-    print(sim.people.age)
     print(f'Gamma sample for uids {uids} returned {draws}')
 
     assert len(draws) == len(uids)
@@ -122,10 +121,9 @@ def test_gamma_callable_bool(rng):
 
     uids = sim.people.age < 15
     draws = d._sample(uids)
-    print(sim.people.age)
     print(f'Gamma sample for uids {uids} returned {draws}')
 
-    assert len(draws) == len(uids)
+    assert len(draws) == sum(uids)
     return draws
 
 
