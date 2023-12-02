@@ -19,7 +19,7 @@ def test_uniform_scalar(n):
     d = ss.uniform(low=1, high=5, rng=rng)
 
     uids = np.array([1,3])
-    draws = d._sample(uids)
+    draws = d.sample(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
     assert len(draws) == len(uids)
@@ -35,7 +35,7 @@ def test_uniform_scalar_str(n):
     d.rng.initialize(container=None, slots=n) # Only really needed for testing as initializing the distribution will do something similar.
 
     uids = np.array([1,3])
-    draws = d._sample(uids)
+    draws = d.sample(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
     assert len(draws) == len(uids)
@@ -51,10 +51,10 @@ def test_uniform_callable(n):
     low = lambda sim, uids: sim.people.age[uids]
     high = lambda sim, uids: sim.people.age[uids] + 1
     d = ss.uniform(low=low, high=high, rng='Uniform')
-    d.initialize(sim) # Only needed when using callable parameters
+    d.initialize(sim)
 
     uids = np.array([1,3])
-    draws = d._sample(uids)
+    draws = d.sample(uids)
     print(sim.people.age)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
@@ -74,7 +74,7 @@ def test_uniform_array(n):
     high = np.array([5, 6])
     d = ss.uniform(low=low, high=high, rng=rng)
 
-    draws = d._sample(uids)
+    draws = d.sample(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
     assert len(draws) == len(uids)
@@ -90,7 +90,7 @@ def test_gamma_scalar(n):
     d = ss.gamma(shape=1, scale=2, rng=rng)
 
     uids = np.array([1,3])
-    draws = d._sample(uids)
+    draws = d.sample(uids)
     print(f'Gamma sample for uids {uids} returned {draws}')
 
     assert len(draws) == len(uids)
@@ -112,7 +112,7 @@ def test_gamma_callable(n):
     d.initialize(sim)
 
     uids = np.array([1,3])
-    draws = d._sample(uids)
+    draws = d.sample(uids)
     print(f'Gamma sample for uids {uids} returned {draws}')
 
     assert len(draws) == len(uids)
@@ -131,10 +131,10 @@ def test_gamma_callable_bool(n):
     shape = lambda sim, uids: sim.people.age[uids]
     scale = lambda sim, uids: sim.people.age[uids] + 1
     d = ss.gamma(shape=shape, scale=scale, rng=rng)
-    d.initialize(sim) # Only needed when using callable parameters
+    d.initialize(sim)
 
     uids = sim.people.age < 15
-    draws = d._sample(uids)
+    draws = d.sample(uids)
     print(f'Gamma sample for uids {uids} returned {draws}')
 
     assert len(draws) == sum(uids)
@@ -153,7 +153,7 @@ def test_gamma_array(n):
     scale = np.array([5, 6])
     d = ss.gamma(shape=shape, scale=scale, rng=rng)
 
-    draws = d._sample(uids)
+    draws = d.sample(uids)
     print(f'Gamma sample for uids {uids} returned {draws}')
 
     assert len(draws) == len(uids)
@@ -167,12 +167,12 @@ if __name__ == '__main__':
 
     n=5
 
-    for multirng in [True]:#, False]:
+    for multirng in [True, False]:
         ss.options(multirng=multirng)
         sc.heading('Testing with multirng set to', multirng)
 
         times = []
-        for trial in range(5):
+        for trial in range(1):
             T = sc.tic()
             # Run tests - some will only pass if multirng is True
             test_uniform_scalar(n)

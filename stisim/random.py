@@ -230,6 +230,8 @@ class MultiRNG(np.random.Generator):
         :return:
         """
 
+        raise NotImplementedError
+
         if not self.ready:
             raise NotResetException(self.name)
 
@@ -269,8 +271,8 @@ class MultiRNG(np.random.Generator):
             slots = self.slots[size].__array__()
             return vals[slots]
 
-    def random(self, size=1):
-        return self.sample(ss.uniform(), size=size)
+    #def random(self, size=1):
+    #    return self.sample(ss.uniform(), size=size)
 
     def bernoulli_filter(self, p, uids):
         """
@@ -345,13 +347,14 @@ class SingleRNG():
         """
         Decorator for SingleRNG
         """
+        raise NotImplementedError
 
         if not self.ready:
             raise NotResetException(self.name)
         self.ready = False
 
         # Check for zero length size
-        if isinstance(size, int):
+        if np.isscalar(size):
             # size-based
             if not isinstance(size, int):
                 raise Exception('Input "size" must be an integer')
@@ -379,7 +382,10 @@ class SingleRNG():
         return vals
 
     def random(self, size=1):
-        return self.sample(ss.uniform(), size=size)
+        return np.random.random(size=size)
+
+    def poisson(self, *args, **kwargs):
+        return np.random.poisson(*args, **kwargs)
 
     def bernoulli_filter(self, p, uids):
         if isinstance(p, ss.bernoulli):

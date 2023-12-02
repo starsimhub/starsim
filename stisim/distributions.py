@@ -6,11 +6,11 @@ Example usage
 >>> dist = stisim.normal(1,1) # Make a distribution
 >>> dist()  # Draw a sample
 >>> dist(10) # Draw several samples
->>> dist._sample(10) # Same as above
+>>> dist.sample(10) # Same as above
 >>> stisim.State('foo', float, fill_value=dist)  # Use distribution as the fill value for a state
 >>> disease.pars['immunity'] = dist  # Store the distribution as a parameter
->>> disease.pars['immunity']._sample(5)  # Draw some samples from the parameter
->>> stisim.poisson(rate=1)._sample(n=10)  # Sample from a temporary distribution
+>>> disease.pars['immunity'].sample(5)  # Draw some samples from the parameter
+>>> stisim.poisson(rate=1).sample(n=10)  # Sample from a temporary distribution
 """
 
 import numpy as np
@@ -18,11 +18,12 @@ import sciris as sc
 from .utils import get_subclasses
 from stisim.utils import INT_NAN
 from stisim.random import SingleRNG, MultiRNG, RNG
+from stisim import options
 
 __all__ = [
-    'Distribution', 'bernoulli', 'uniform', 'uniform_int', 'choice', 'normal', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int',
-    'poisson', 'neg_binomial', 'beta', 'gamma', 'data_dist', 'delta',
-]
+    'Distribution', 'bernoulli', 'gamma', 'uniform', 'normal', 'poisson', 'weibull', 
+] #  , 'uniform_int', 'choice', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int', 'neg_binomial', 'beta', 'data_dist', 'delta',
+
 
 _default_rng = np.random.default_rng()
 
@@ -38,6 +39,26 @@ class Distribution():
         :return:
         """
         self.sim = None # Only needed if using callable parameters.
+        
+        # Often distribution parameters are scalars so that the same values are
+        # used for all samples.  But a user may want different parameters for
+        # each agent.
+        # A simple example is a binomial representing the probability of
+        # infection - each agent might have a different probability of
+        # infection given their susceptibiltiy and network connections.
+        # But a binomial is easy because we can simply draw the right number of
+        # random numbers between 0 and 1 and apply heterogeneous parameters
+        # thereafter.
+        # For other distributions, there may not be a convenient "standard"
+        # distribution from which the right number of samples can be drawn and
+        # later transformed according per-agent.
+        # For this reason, we provide "needs_full_pars," which defaults to
+        # False. When set to True, the parameter array will be expanded to match
+        # the length of the number of samples requested from the distribution.
+        # The "desired" samples can be selected thereafter.
+        # The fill_value is used only when creating a full-length parameter array.
+        # N.B. it's faster without needs_full_pars, so try to avoid if possible.
+        self.needs_full_pars = False
         self.fill_value = 1 # Default fill value, only used if the Distribution needs_full_pars
 
         if rng is None:
@@ -70,18 +91,20 @@ class Distribution():
         return
 
     def __call__(self, size):
-        return self._sample(size=size)
+        return self.sample(size=size)
 
     @property
     def name(self):
         return self.__class__.__name__
 
-    def _sample(self, size=1, **kwargs):
+    def sample(self, size=1, **kwargs):
         """
         Return a specified number of samples from the distribution
         """
         # Work out how many samples to draw. If sampling by UID, this depends on the slots assigned to agents.
         if np.isscalar(size):
+            if not isinstance(size, (int, np.int64)):
+                raise Exception('Input "size" must be an integer')
             if size < 0:
                 raise Exception('Input "size" cannot be negative')
             elif size == 0:
@@ -91,13 +114,16 @@ class Distribution():
         elif len(size) == 0:
             return np.array([], dtype=int)  # int dtype allows use as index, e.g. bernoulli_filter
         elif size.dtype == bool:
-            n_samples = len(size)
+            n_samples = len(size) if options.multirng else size.sum()
         elif size.dtype == int:
-            v = size.__array__() # TODO - check if this works without calling __array__()?
-            max_slot = self.rng.slots[v].__array__().max()
-            if max_slot == INT_NAN:
-                raise Exception('Attempted to sample from an INT_NAN slot')
-            n_samples = max_slot + 1
+            if not options.multirng:
+                n_samples = len(size)
+            else:
+                v = size.__array__() # TODO - check if this works without calling __array__()?
+                max_slot = self.rng.slots[v].__array__().max()
+                if max_slot == INT_NAN:
+                    raise Exception('Attempted to sample from an INT_NAN slot')
+                n_samples = max_slot + 1
         else:
             raise Exception("Unrecognized input type")
 
@@ -113,7 +139,7 @@ class Distribution():
                 else:
                     pars[k] = v
                 
-                if self.needs_full_pars:
+                if self.needs_full_pars and options.multirng:
                     if len(pars[k]) not in [len(size), sum(size)]: # Could handle uid and bool separately? len(size) for uid and sum(size) for bool
                         raise Exception('When providing an array of parameters, the length of the parameters must match the number of agents for the selected size (uids).')
                     vals_all = np.full(n_samples, fill_value=self.fill_value)
@@ -123,6 +149,9 @@ class Distribution():
         return n_samples, pars
 
     def _select(self, vals, size):
+        if not options.multirng:
+            return vals
+
         if np.isscalar(size):
             return vals
         elif size.dtype == bool:
@@ -152,15 +181,15 @@ class uniform(Distribution):
     """ Uniform distribution """
     def __init__(self, low=0, high=1, **kwargs):
         super().__init__(**kwargs)
-        self.needs_full_pars = False
         self.low = low
         self.high = high
         return
 
-    def _sample(self, size=None):
-        n_samples, pars = super()._sample(size, low=self.low, high=self.high)
-        vals = self.rng.uniform(size=n_samples) # Pars might be scalars or len(size) instead of length equal to n_samples
-        return pars['low'] + (pars['high'] - pars['low'])*self._select(vals, size)
+    def sample(self, size=None):
+        n_samples, pars = super().sample(size, low=self.low, high=self.high)
+        vals = self.rng.random(size=n_samples)
+        vals = self._select(vals, size)
+        return pars['low'] + (pars['high'] - pars['low'])*vals
 
 
 class gamma(Distribution):
@@ -172,11 +201,81 @@ class gamma(Distribution):
         self.scale = scale
         return
 
-    def _sample(self, size=None):
-        n_samples, pars = super()._sample(size, shape=self.shape, scale=self.scale)
+    def sample(self, size=None):
+        n_samples, pars = super().sample(size, shape=self.shape, scale=self.scale)
         vals = self.rng.gamma(size=n_samples, **pars) # Because needs_full_pars, individual pars will be scalars or have length equal to n_samples
         return self._select(vals, size)
 
+
+class bernoulli(Distribution):
+    """
+    Bernoulli distribution, returns sequence of True or False from independent trials
+    """
+    def __init__(self, p, **kwargs):
+        super().__init__(**kwargs)
+        self.p = p
+        return
+
+    def sample(self, size=1):
+        n_samples, pars = super().sample(size, p=self.p)
+        vals = self.rng.random(size=n_samples)
+        vals = self._select(vals, size)
+        return vals < pars['p']
+
+
+class normal(Distribution):
+    """ Normal distribution """
+    def __init__(self, mean, std, **kwargs):
+        super().__init__(**kwargs)
+        self.mean = mean
+        self.std = std
+        return
+
+    def sample(self, size=1):
+        n_samples, pars = super().sample(size, mean=self.mean, std=self.std)
+        vals = self.rng.normal(size=n_samples)
+        vals = self._select(vals, size)
+        return pars['mean'] + self['std'] * vals
+
+
+class poisson(Distribution):
+    """ Poisson distribution """
+    def __init__(self, rate, **kwargs):
+        super().__init__(**kwargs)
+        self.needs_full_pars = True
+        self.rate = rate
+        return
+
+    def sample(self, size=None):
+        n_samples, pars = super().sample(size, rate=self.rate)
+        vals = self.rng.poisson(size=n_samples, lam=pars['rate']) # Use full pars array here, before _select
+        vals = self._select(vals, size)
+        return vals
+
+
+class weibull(Distribution):
+    """
+    Weibull distribution parameterized in terms of:
+    - shape (k)
+    - scale (lambda)
+
+    """
+    def __init__(self, shape, scale, **kwargs):
+        super().__init__(**kwargs)
+        self.shape = shape # k
+        self.scale = scale # lambda
+        return
+
+    def sample(self, size=None):
+        n_samples, pars = super().sample(size, shape=self.shape, scale=self.scale)
+        vals = self.rng.random(size=n_samples)
+        vals = self._select(vals, size)
+        # If U ~ uniform(0,1), then W ~ scale * (-ln(U))^(1/shape) is Weibull with shape and scale
+        return pars['scale'] * (-np.log(vals))**(1/pars['shape'])
+
+######################################################
+
+'''
 class delta(Distribution):
     """
     Delta function at specified value
@@ -222,23 +321,6 @@ class uniform_int(uniform):
     def _sample(self, size=None, rng=None, **kwargs):
         return super()._sample(size, rng, **kwargs).astype(int)
 
-class bernoulli(Distribution):
-    """
-    Bernoulli distribution, returns sequence of True or False from independent trials
-    """
-
-    def __init__(self, p, **kwargs):
-        super().__init__(**kwargs)
-        self.p = p
-        return
-
-    def mean(self):
-        return self.p
-
-    def _sample(self, size=1, rng=None):
-        rng = rng or _default_rng
-        return rng.random(size=size) < self.p
-
 class choice(Distribution):
     """
     Choose from samples, optionally with specific probabilities
@@ -254,22 +336,6 @@ class choice(Distribution):
     def _sample(self, size=None, rng=None, **kwargs):
         rng = rng or _default_rng
         return rng.choice(size=size, a=self.choices, p=self.probabilities, replace=self.replace, **kwargs)
-
-
-class normal(Distribution):
-    """
-    Normal distribution
-    """
-
-    def __init__(self, mean, std, **kwargs):
-        super().__init__(**kwargs)
-        self.mean = mean
-        self.std = std
-        return
-
-    def _sample(self, size=None, rng=None, **kwargs):
-        rng = rng or _default_rng
-        return rng.normal(size=size, loc=self.mean, scale=self.std, **kwargs)
 
 
 class normal_pos(normal):
@@ -332,24 +398,6 @@ class lognormal_int(lognormal):
         return np.round(super()._sample(size, rng, **kwargs))
 
 
-class poisson(Distribution):
-    """
-    Poisson distribution
-    """
-
-    def __init__(self, rate, **kwargs):
-        super().__init__(**kwargs)
-        self.rate = rate
-        return
-
-    def mean(self):
-        return self.rate
-
-    def _sample(self, size=None, rng=None):
-        rng = rng or _default_rng
-        return rng.poisson(size=size, lam=self.rate)
-
-
 class neg_binomial(Distribution):
     """
     Negative binomial distribution
@@ -398,22 +446,4 @@ class beta(Distribution):
         rng = rng or _default_rng
         return rng.beta(size=size, a=self.alpha, b=self.beta, **kwargs)
 
-'''
-class gamma(Distribution):
-    """
-    Gamma distribution
-    """
-
-    def __init__(self, shape, scale, **kwargs):
-        super().__init__(**kwargs)
-        self.shape = shape
-        self.scale = scale
-        return
-
-    def mean(self):
-        return self.shape * self.scale
-
-    def _sample(self,size, rng=None, **kwargs):
-        rng = rng or _default_rng
-        return rng.gamma(size=size, shape=self.shape, scale=self.scale, **kwargs)
 '''

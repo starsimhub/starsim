@@ -18,16 +18,16 @@ class SIR(Disease):
     Note that this class is not currently compatible with common random numbers.
     """
 
-    default_pars = {
-        'dur_inf': ss.normal_pos(mean=5, std=1),
-        'p_death': 0.2,
-        'initial': 3,
-        'beta': None,
-    }
-
     def __init__(self, pars=None, *args, **kwargs):
 
-        super().__init__(pars=ss.omerge(self.default_pars, pars), *args, **kwargs)
+        default_pars = {
+            'dur_inf': ss.weibull(shape=5, scale=1, rng='Duration of SIR Infection'),
+            'p_death': 0.2,
+            'initial': 3,
+            'beta': None,
+        }
+
+        super().__init__(pars=ss.omerge(default_pars, pars), *args, **kwargs)
 
         self.susceptible = ss.State('susceptible', bool, True)
         self.infected = ss.State('infected', bool, False)
@@ -39,6 +39,11 @@ class SIR(Disease):
 
         # Define a random number generator for deciding which agents will die
         self.rng_dead = ss.RNG(f'dead_{self.name}')
+        return
+
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.pars['dur_inf'].initialize(sim)
         return
 
     def init_results(self, sim):
@@ -131,14 +136,14 @@ class NCD(Disease):
     (e.g., hypertension, diabetes), a state for having the condition, and associated
     mortality.
     """
-    default_pars = {
-        'risk_prev': 0.3, # Initial prevalence of risk factors
-        'p_affected_given_risk': 0.1, # 10% chance per year of acquiring
-        'p_death_given_risk': 0.05,  # 5% chance per year of death
-    }
-
     def __init__(self, pars=None):
-        ss.Module.__init__(self, ss.omerge(self.default_pars, pars))
+        default_pars = {
+            'risk_prev': 0.3, # Initial prevalence of risk factors
+            'p_affected_given_risk': 0.1, # 10% chance per year of acquiring
+            'p_death_given_risk': 0.05,  # 5% chance per year of death
+        }
+
+        ss.Module.__init__(self, ss.omerge(default_pars, pars))
         self.at_risk  = ss.State('at_risk', bool, False)
         self.affected = ss.State('affected', bool, False)
         self.ti_dead  = ss.State('ti_dead', int, ss.INT_NAN)

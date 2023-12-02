@@ -20,6 +20,7 @@ class RandomNetwork(Network):
 
     def initialize(self, sim):
         super().initialize(sim)
+        self.n_contacts.initialize(sim)
         self.update(sim.people, force=True)
 
     @staticmethod
