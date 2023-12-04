@@ -18,7 +18,7 @@ import sciris as sc
 from .utils import get_subclasses
 from stisim.utils import INT_NAN
 from stisim.random import SingleRNG, MultiRNG, RNG
-from stisim import options
+from stisim import options, int_
 
 __all__ = [
     'Distribution', 'bernoulli', 'gamma', 'uniform', 'normal', 'poisson', 'rate', 'weibull', 
@@ -103,7 +103,7 @@ class Distribution():
         """
         # Work out how many samples to draw. If sampling by UID, this depends on the slots assigned to agents.
         if np.isscalar(size):
-            if not isinstance(size, (int, np.int64)):
+            if not isinstance(size, (int, np.int64, int_)):
                 raise Exception('Input "size" must be an integer')
             if size < 0:
                 raise Exception('Input "size" cannot be negative')
@@ -115,7 +115,7 @@ class Distribution():
             return np.array([], dtype=int), kwargs  # int dtype allows use as index, e.g. bernoulli_filter
         elif size.dtype == bool:
             n_samples = len(size) if options.multirng else size.sum()
-        elif size.dtype == int:
+        elif size.dtype in [int, np.int64, int_]:
             if not options.multirng:
                 n_samples = len(size)
             else:

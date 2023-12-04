@@ -372,7 +372,6 @@ class State(FusedArray):
 
     def _new_vals(self, uids):
         if isinstance(self.fill_value, Distribution):
-            ####new_vals = self.rng.sample(self.fill_value, uids)
             new_vals = self.fill_value.sample(uids)
         elif callable(self.fill_value):
             new_vals = self.fill_value(len(uids))
