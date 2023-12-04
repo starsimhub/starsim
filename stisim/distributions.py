@@ -21,7 +21,7 @@ from stisim.random import SingleRNG, MultiRNG, RNG
 from stisim import options
 
 __all__ = [
-    'Distribution', 'bernoulli', 'gamma', 'uniform', 'normal', 'poisson', 'weibull', 
+    'Distribution', 'bernoulli', 'gamma', 'uniform', 'normal', 'poisson', 'rate', 'weibull', 
 ] #  , 'uniform_int', 'choice', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int', 'neg_binomial', 'beta', 'data_dist', 'delta',
 
 
@@ -148,6 +148,13 @@ class Distribution():
 
         return n_samples, pars
 
+    def filter(self, size, **kwargs):
+        """
+        Return the indices where the sample is True
+        """
+        #return ss.true(self.filter(size, **kwargs))
+        return size[self.sample(size, **kwargs)]
+
     def _select(self, vals, size):
         if not options.multirng:
             return vals
@@ -222,6 +229,22 @@ class bernoulli(Distribution):
         vals = self._select(vals, size)
         return vals < pars['p']
 
+'''
+class bernoulli_filter(Distribution):
+    """
+    Returns uids of True in a bernoulli draw
+    """
+    def __init__(self, p, **kwargs):
+        super().__init__(**kwargs)
+        self.p = p
+        return
+
+    def sample(self, size=1):
+        n_samples, pars = super().sample(size, p=self.p)
+        vals = self.rng.random(size=n_samples)
+        vals = self._select(vals, size)
+        return size[vals < pars['p']]
+'''
 
 class normal(Distribution):
     """ Normal distribution """
@@ -251,6 +274,44 @@ class poisson(Distribution):
         vals = self.rng.poisson(size=n_samples, lam=pars['rate']) # Use full pars array here, before _select
         vals = self._select(vals, size)
         return vals
+
+class exponential(Distribution):
+    """ Exponentials distribution """
+    def __init__(self, scale, **kwargs):
+        super().__init__(**kwargs)
+        self.scale = scale
+        return
+
+    def sample(self, size=None):
+        n_samples, pars = super().sample(size, scale=self.scale)
+        vals = self.rng.exponential(size=n_samples, scale=pars['scale']) # Use full pars array here, before _select
+        vals = self._select(vals, size)
+        vals /= self.pars['rate']
+        return vals
+
+
+class rate(Distribution):
+    """
+    Exponentially distributed, accounts for dt.
+    Assumes the rate is constant over each dt interval.
+    """
+    def __init__(self, rate, **kwargs):
+        super().__init__(**kwargs)
+        self.rate = rate
+        self.dt = None
+        return
+
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.dt = sim.dt
+        return
+
+    def sample(self, size=None):
+        n_samples, pars = super().sample(size, rate=self.rate)
+        prob = 1 - np.exp(-pars['rate'] * self.dt)
+        vals = self.rng.random(size=n_samples)
+        vals = self._select(vals, size)
+        return vals < prob
 
 
 class weibull(Distribution):

@@ -138,9 +138,10 @@ class NCD(Disease):
     """
     def __init__(self, pars=None):
         default_pars = {
-            'risk_prev': 0.3, # Initial prevalence of risk factors
-            'p_affected_given_risk': 0.1, # 10% chance per year of acquiring
-            'p_death_given_risk': 0.05,  # 5% chance per year of death
+            'initial': ss.bernoulli(0.3, rng='NCD initial prevalence'), # Initial prevalence of risk factors
+            #'p_affected_given_risk': 0.1, # 10% chance per year of acquiring
+            'affection_rate': ss.rate(0.1, rng='Acquisition rate amongst those at risk'), # 10% chance per year of acquiring
+            'prognosis': ss.weibull(2, 5, rng='Time in years between first becoming affected and death'),
         }
 
         ss.Module.__init__(self, ss.omerge(default_pars, pars))
@@ -148,14 +149,24 @@ class NCD(Disease):
         self.affected = ss.State('affected', bool, False)
         self.ti_dead  = ss.State('ti_dead', int, ss.INT_NAN)
 
-        self.rng_initial  = ss.RNG(f'initial_{self.name}')
-        self.rng_affected = ss.RNG(f'affected_{self.name}')
-        self.rng_dead     = ss.RNG(f'dead_{self.name}')
+        #self.rng_initial  = ss.RNG(f'initial_{self.name}')
+        #self.d_init_cases  = ss.bernoulli_filter(self.pars['risk_prev'], rng=f'initial_{self.name}')
+        #self.rng_affected  = ss.RNG(f'affected_{self.name}')
+        #self.rng_dead     = ss.RNG(f'dead_{self.name}')
         return
 
     @property
     def not_at_risk(self):
         return ~self.at_risk
+
+    def initialize(self, sim):
+        super().initialize(sim)
+        print('DJK TODO MODULE INIT OF DISTRIBS')
+        self.pars['initial'].initialize(sim)
+        self.pars['affection_rate'].initialize(sim)
+        self.pars['prognosis'].initialize(sim)
+        #self.d_dead = ss.bernoulli_filter(sim.dt*self.pars['p_death_given_risk'], rng=f'dead_{self.name}').initialize(sim)
+        return
 
     def set_initial_states(self, sim):
         """
@@ -164,19 +175,22 @@ class NCD(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        initial_cases = self.rng_initial.bernoulli_filter(self.pars['risk_prev'], ss.true(sim.people.alive))
+        initial_cases = self.pars['initial'].filter(ss.true(sim.people.alive))
         self.at_risk[initial_cases] = True
         return initial_cases
 
     def update_pre(self, sim):
-        deaths = self.rng_dead.bernoulli_filter(sim.dt*self.pars['p_death_given_risk'], ss.true(self.affected))
+        #deaths = self.rng_dead.bernoulli_filter(sim.dt*self.pars['p_death_given_risk'], ss.true(self.affected))
+        deaths = ss.true(self.ti_dead == sim.ti)
         sim.people.request_death(deaths)
-        self.ti_dead[deaths] = sim.ti
+        #self.ti_dead[deaths] = sim.ti
         return
 
     def make_new_cases(self, sim):
-        new_cases = self.rng_affected.bernoulli_filter(self.pars['p_affected_given_risk'], ss.true(self.at_risk))
+        new_cases = self.pars['affection_rate'].filter(ss.true(self.at_risk))
+        #new_cases = self.rng_affected.bernoulli_filter(self.pars['p_affected_given_risk'], ss.true(self.at_risk))
         self.affected[new_cases] = True
+        self.ti_dead[new_cases] = sim.ti + sc.randround(self.pars['prognosis'].sample(new_cases) / sim.dt)
         return new_cases
 
     def init_results(self, sim):

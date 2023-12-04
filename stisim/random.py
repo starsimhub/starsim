@@ -381,16 +381,37 @@ class SingleRNG():
         self.ready = False
         return vals
 
-    def random(self, size=1):
-        return np.random.random(size=size)
+    #def random(self, size=1):
+    #    return np.random.random(size=size)
 
-    def poisson(self, *args, **kwargs):
-        return np.random.poisson(*args, **kwargs)
+    #def poisson(self, *args, **kwargs):
+    #    return np.random.poisson(*args, **kwargs)
+
+    def __getattr__(self, attr):
+        # Returns wrapped numpy.random.(attr) if not a property
+        try:
+            return self.__getattribute__(attr)
+        except Exception:
+            try:
+                return getattr(np.random, attr)
+            except Exception as e:
+                if '__getstate__' in str(e):
+                    # Must be from pickle, return a callable function that returns None
+                    return lambda: None
+                elif '__await__' in str(e):
+                    # Must be from async programming?
+                    return None
+                elif '__deepcopy__' in str(e):
+                    # from sc.dcp
+                    return None
+                errormsg = f'"{attr}" is not a member of this class or numpy.random'
+                raise Exception(errormsg)
 
     def bernoulli_filter(self, p, uids):
         if isinstance(p, ss.bernoulli):
             vals = self.sample(p, uids)
             return uids[vals]
 
-        vals = self.sample(ss.uniform(), uids)
+        #vals = self.sample(ss.uniform(), uids)
+        vals = self.random(uids)
         return uids[vals < p]
