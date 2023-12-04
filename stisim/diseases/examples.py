@@ -15,15 +15,15 @@ class SIR(Disease):
     infected/infectious, and recovered. It also includes deaths, and basic
     results.
 
-    Note that this class is not currently compatible with common random numbers.
+    Note that this class is not fully compatible with common random numbers.
     """
 
     def __init__(self, pars=None, *args, **kwargs):
 
         default_pars = {
             'dur_inf': ss.weibull(shape=5, scale=1, rng='Duration of SIR Infection'),
-            'p_death': 0.2,
-            'initial': 3,
+            'initial_prevalence': ss.bernoulli(0.3, rng='SIR initial prevalence'),
+            'death_given_infection': ss.bernoulli(0.2, rng='SIR death given infection'),
             'beta': None,
         }
 
@@ -32,18 +32,9 @@ class SIR(Disease):
         self.susceptible = ss.State('susceptible', bool, True)
         self.infected = ss.State('infected', bool, False)
         self.recovered = ss.State('recovered', bool, False)
-
         self.t_infected = ss.State('t_infected', float, np.nan)
         self.t_recovered = ss.State('t_recovered', float, np.nan)
         self.t_dead = ss.State('t_dead', float, np.nan)
-
-        # Define a random number generator for deciding which agents will die
-        self.rng_dead = ss.RNG(f'dead_{self.name}')
-        return
-
-    def initialize(self, sim):
-        super().initialize(sim)
-        self.pars['dur_inf'].initialize(sim)
         return
 
     def init_results(self, sim):
@@ -88,7 +79,8 @@ class SIR(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        initial_cases = np.random.choice(sim.people.uid, self.pars['initial'], replace=False)
+        alive_uids = ss.true(sim.people.alive)
+        initial_cases = self.pars['initial_prevalence'].filter(alive_uids)
         self.infect(sim, initial_cases)
         return
 
@@ -100,16 +92,16 @@ class SIR(Disease):
 
         # Calculate and schedule future outcomes for recovery/death
         dur_inf = self.pars['dur_inf'].sample(len(uids))
-        dead = np.random.random(len(uids)) < self.pars.p_death
-        self.t_recovered[uids[~dead]] = sim.year + dur_inf[~dead]
-        self.t_dead[uids[dead]] = sim.year + dur_inf[dead]
+        will_die = self.pars['death_given_infection'].sample(uids)
+        self.t_recovered[uids[~will_die]] = sim.year + dur_inf[~will_die]
+        self.t_dead[uids[will_die]] = sim.year + dur_inf[will_die]
 
-        # Update result count of new infections - important to use += because infect() may be called multiple times
-        # per timestep
+        # Update result count of new infections - important to use += because
+        # infect() may be called multiple times per timestep
         self.results['new_infections'][sim.ti] += len(uids)
         return
 
-    def make_new_cases(self, sim): # DJK TODO: Why not use the base class here?
+    def make_new_cases(self, sim): # TODO: Use function from STI
         for k, layer in sim.people.networks.items():
             if k in self.pars['beta']:
                 rel_trans = (self.infected & sim.people.alive).astype(float)
@@ -128,6 +120,7 @@ class SIR(Disease):
         self.results['prevalence'][sim.ti] = self.results.n_infected[sim.ti] / np.count_nonzero(sim.people.alive)
         return
 
+
 class NCD(Disease):
     """
     Example non-communicable disease
@@ -138,9 +131,8 @@ class NCD(Disease):
     """
     def __init__(self, pars=None):
         default_pars = {
-            'initial': ss.bernoulli(0.3, rng='NCD initial prevalence'), # Initial prevalence of risk factors
-            #'p_affected_given_risk': 0.1, # 10% chance per year of acquiring
-            'affection_rate': ss.rate(0.1, rng='Acquisition rate amongst those at risk'), # 10% chance per year of acquiring
+            'initial_prevalence': ss.bernoulli(0.3, rng='NCD initial prevalence'), # Initial prevalence of risk factors
+            'affection_rate': ss.rate(0.1, rng='Acquisition rate applied to those at risk'), # 10% chance per year of acquiring
             'prognosis': ss.weibull(2, 5, rng='Time in years between first becoming affected and death'),
         }
 
@@ -148,25 +140,11 @@ class NCD(Disease):
         self.at_risk  = ss.State('at_risk', bool, False)
         self.affected = ss.State('affected', bool, False)
         self.ti_dead  = ss.State('ti_dead', int, ss.INT_NAN)
-
-        #self.rng_initial  = ss.RNG(f'initial_{self.name}')
-        #self.d_init_cases  = ss.bernoulli_filter(self.pars['risk_prev'], rng=f'initial_{self.name}')
-        #self.rng_affected  = ss.RNG(f'affected_{self.name}')
-        #self.rng_dead     = ss.RNG(f'dead_{self.name}')
         return
 
     @property
     def not_at_risk(self):
         return ~self.at_risk
-
-    def initialize(self, sim):
-        super().initialize(sim)
-        print('DJK TODO MODULE INIT OF DISTRIBS')
-        self.pars['initial'].initialize(sim)
-        self.pars['affection_rate'].initialize(sim)
-        self.pars['prognosis'].initialize(sim)
-        #self.d_dead = ss.bernoulli_filter(sim.dt*self.pars['p_death_given_risk'], rng=f'dead_{self.name}').initialize(sim)
-        return
 
     def set_initial_states(self, sim):
         """
@@ -175,22 +153,22 @@ class NCD(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        initial_cases = self.pars['initial'].filter(ss.true(sim.people.alive))
+        alive_uids = ss.true(sim.people.alive)
+        initial_cases = self.pars['initial_prevalence'].filter(alive_uids)
         self.at_risk[initial_cases] = True
         return initial_cases
 
     def update_pre(self, sim):
-        #deaths = self.rng_dead.bernoulli_filter(sim.dt*self.pars['p_death_given_risk'], ss.true(self.affected))
         deaths = ss.true(self.ti_dead == sim.ti)
         sim.people.request_death(deaths)
-        #self.ti_dead[deaths] = sim.ti
         return
 
     def make_new_cases(self, sim):
-        new_cases = self.pars['affection_rate'].filter(ss.true(self.at_risk))
-        #new_cases = self.rng_affected.bernoulli_filter(self.pars['p_affected_given_risk'], ss.true(self.at_risk))
+        atrisk_uids = ss.true(self.at_risk)
+        new_cases = self.pars['affection_rate'].filter(atrisk_uids)
         self.affected[new_cases] = True
-        self.ti_dead[new_cases] = sim.ti + sc.randround(self.pars['prognosis'].sample(new_cases) / sim.dt)
+        prog_years = self.pars['prognosis'].sample(new_cases)
+        self.ti_dead[new_cases] = sim.ti + sc.randround(prog_years / sim.dt)
         return new_cases
 
     def init_results(self, sim):

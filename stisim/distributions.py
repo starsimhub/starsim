@@ -152,7 +152,6 @@ class Distribution():
         """
         Return the indices where the sample is True
         """
-        #return ss.true(self.filter(size, **kwargs))
         return size[self.sample(size, **kwargs)]
 
     def _select(self, vals, size):

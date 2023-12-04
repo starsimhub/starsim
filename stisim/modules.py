@@ -49,6 +49,10 @@ class Module(sc.prettyobj):
         for state in self.states:
             state.initialize(sim.people)
 
+        # Initialize distributions
+        for distribution in self.distributions:
+            distribution.initialize(sim)
+
         self.initialized = True
         return
 
@@ -79,3 +83,13 @@ class Module(sc.prettyobj):
         :return:
         """
         return [x for x in self.__dict__.values() if isinstance(x, (ss.MultiRNG, ss.SingleRNG))]
+
+    @property
+    def distributions(self):
+        """
+        Return a flat collection of all distributions, including in pars
+
+        :return:
+        """
+        return [x for x in self.__dict__.values() if isinstance(x, (ss.Distribution))] \
+             + [x for x in self.pars.values()     if isinstance(x, (ss.Distribution))]
