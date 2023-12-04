@@ -22,15 +22,32 @@ def rng_container():
 def rngs(request):
     return [ss.RNG('rng0'), ss.RNG('rng1')]
 
-def test_container(rng_container, rngs, n=5):
-    """ Simple sample """
+@pytest.fixture
+def dists(request):
+    return [ss.uniform(rng='rng0'), ss.uniform(rng='rng1')]
+
+def test_rng(rng_container, rngs, n=5):
+    """ Simple sample from rng """
     sc.heading('test_container: Testing RNGContainer object')
 
     rng0, rng1 = rngs
     rng0.initialize(rng_container, slots=n)
 
+    draws = rng0.random(n)
+    print(f'Created seed and sampled: {draws}')
+
+    assert len(draws) == n
+    return draws
+
+def test_dists(rng_container, dists, n=5):
+    """ Simple sample from distribution """
+    sc.heading('test_container: Testing RNGContainer object')
+
+    d0 = dists[0]
+    d0.rng.initialize(rng_container, slots=n)
+
     uids = np.arange(0,n,2) # every other to make it interesting
-    draws = rng0.random(uids)
+    draws = d0.sample(uids)
     print(f'Created seed and sampled: {draws}')
 
     assert len(draws) == len(uids)
@@ -54,19 +71,19 @@ def test_seed(rng_container, rngs, n=5):
     return rng0, rng1
 
 
-def test_reset(rng_container, rngs, n=5):
+def test_reset(rng_container, dists, n=5):
     """ Sample, reset, sample """
     sc.heading('test_reset: Testing sample, reset, sample')
 
-    rng0 = rngs[0]
-    rng0.initialize(rng_container, slots=n)
+    d0 = dists[0]
+    d0.rng.initialize(rng_container, slots=n)
 
     uids = np.arange(0,n,2) # every other to make it interesting
-    s_before = rng0.random(uids)
+    s_before = d0.sample(uids)
 
     rng_container.reset() # Return to step 0
 
-    s_after = rng0.random(uids)
+    s_after = d0.sample(uids)
 
     print(f'Initial sample', s_before)
     print('Reset')
@@ -79,20 +96,20 @@ def test_reset(rng_container, rngs, n=5):
     return s_before, s_after
 
 
-def test_step(rng_container, rngs, n=5):
+def test_step(rng_container, dists, n=5):
     """ Sample, step, sample """
     sc.heading('test_step: Testing sample, step, sample')
 
 
-    rng0 = rngs[0]
-    rng0.initialize(rng_container, slots=n)
+    d0 = dists[0]
+    d0.rng.initialize(rng_container, slots=n)
 
     uids = np.arange(0,n,2) # every other to make it interesting
-    s_before = rng0.random(uids)
+    s_before = d0.sample(uids)
 
     rng_container.step(10) # 10 steps
 
-    s_after = rng0.random(uids)
+    s_after = d0.sample(uids)
 
     print(f'Initial sample', s_before)
     print('Step')
@@ -126,23 +143,23 @@ def test_seedrepeat(rng_container, n=5):
     return rng0, rng1
 
 
-def test_samplingorder(rng_container, rngs, n=5):
+def test_samplingorder(rng_container, dists, n=5):
     """ Ensure sampling from one RNG doesn't affect another """
     sc.heading('test_samplingorder: Testing from multiple random number generators to test if sampling order matters')
 
     uids = np.arange(0,n,2) # every other to make it interesting
 
-    rng0, rng1 = rngs
-    rng0.initialize(rng_container, slots=n)
-    rng1.initialize(rng_container, slots=n)
+    d0, d1 = dists
+    d0.rng.initialize(rng_container, slots=n)
+    d1.rng.initialize(rng_container, slots=n)
 
-    s_before = rng0.random(uids)
-    _ = rng1.random(uids)
+    s_before = d0.sample(uids)
+    _ = d1.sample(uids)
 
     rng_container.reset()
 
-    _ = rng1.random(uids)
-    s_after = rng0.random(uids)
+    _ = d1.sample(uids)
+    s_after = d0.sample(uids)
 
     print(f'When sampling rng0 before rng1:', s_before)
     print('Reset')
@@ -175,7 +192,8 @@ if __name__ == '__main__':
     T = sc.tic()
 
     # Run tests
-    test_container()
+    test_rng()
+    test_dists()
     test_seed()
     test_reset()
     test_step()

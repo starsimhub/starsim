@@ -286,6 +286,8 @@ class MultiRNG(np.random.Generator):
         :return: An array of UIDs that 'succeeded'
         """
 
+        raise NotImplementedError
+
         if isinstance(p, ss.bernoulli):
             vals = self.sample(p, uids)
             return uids[vals]
@@ -408,6 +410,8 @@ class SingleRNG():
                 raise Exception(errormsg)
 
     def bernoulli_filter(self, p, uids):
+        raise NotImplementedError
+
         if isinstance(p, ss.bernoulli):
             vals = self.sample(p, uids)
             return uids[vals]
