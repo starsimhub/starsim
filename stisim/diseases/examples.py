@@ -21,8 +21,8 @@ class SIR(Disease):
     def __init__(self, pars=None, *args, **kwargs):
 
         default_pars = {
-            'dur_inf': ss.weibull(shape=5, scale=1, rng='Duration of SIR Infection'),
-            'initial_prevalence': ss.bernoulli(0.3, rng='SIR initial prevalence'),
+            'dur_inf': ss.weibull(shape=5, scale=10, rng='Duration of SIR Infection'),
+            'initial_prevalence': ss.bernoulli(0.1, rng='SIR initial prevalence'),
             'death_given_infection': ss.bernoulli(0.2, rng='SIR death given infection'),
             'beta': None,
         }

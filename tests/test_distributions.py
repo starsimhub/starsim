@@ -175,23 +175,23 @@ if __name__ == '__main__':
     # Start timing
     ###T = sc.tic()
 
-    n=5
+    n = 5
+    nTrials = 3
 
     for multirng in [True, False]:
         ss.options(multirng=multirng)
         sc.heading('Testing with multirng set to', multirng)
 
         times = []
-        for trial in range(1):
+        for trial in range(nTrials):
             T = sc.tic()
 
             # Run tests - some will only pass if multirng is True
-            test_basic()
+            #test_basic()
             test_uniform_scalar(n)
             test_uniform_scalar_str(n)
             test_uniform_callable(n)
             test_uniform_array(n)
-
             test_gamma_scalar(n)
             test_gamma_callable(n)
             test_gamma_array(n)

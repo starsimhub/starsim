@@ -8,8 +8,9 @@ import matplotlib.pyplot as plt
 
 def test_sir():
     ppl = ss.People(10000)
-    ppl.networks = ss.ndict(ss.RandomNetwork(n_contacts=ss.poisson(5, rng='Num Contacts')))
+    ppl.networks = ss.ndict(ss.RandomNetwork(n_contacts=ss.poisson(4, rng='Num Contacts')))
     sir = ss.SIR()
+    sir.pars['beta'] = {'randomnetwork': 0.1}
     sim = ss.Sim(people=ppl, diseases=sir)
     sim.run()
 

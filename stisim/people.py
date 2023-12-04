@@ -196,10 +196,7 @@ class People(BasePeople):
         self.rng_female  = ss.RNG('female')
 
         self.states.append(ss.State('age', float, 0))
-        print('WARNING: MAKING ALL AGENTS FEMALE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-        #############################self.states.append(ss.State('female', bool, ss.bernoulli(0.5), rng=self.rng_female))
         self.states.append(ss.State('female', bool, ss.bernoulli(0.5, rng=self.rng_female)))
-        #############################self.states.append(ss.State('female', bool, True))
         self.states.append(ss.State('debut', float))
         self.states.append(ss.State('alive', bool, True)) # Redundant with ti_dead == ss.INT_NAN
         self.states.append(ss.State('ti_dead', int, ss.INT_NAN))  # Time index for death
@@ -228,7 +225,6 @@ class People(BasePeople):
     def initialize(self, sim):
         """ Initialization """
         super().initialize(sim)
-        #self.age[:] = self.rng_agedist.sample(self.age_data_dist, len(self))
         self.age[:] = self.age_data_dist.sample(len(self))
         return
 
