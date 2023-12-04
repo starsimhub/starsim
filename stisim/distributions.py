@@ -10,7 +10,7 @@ Example usage
 >>> stisim.State('foo', float, fill_value=dist)  # Use distribution as the fill value for a state
 >>> disease.pars['immunity'] = dist  # Store the distribution as a parameter
 >>> disease.pars['immunity'].sample(5)  # Draw some samples from the parameter
->>> stisim.poisson(rate=1).sample(n=10)  # Sample from a temporary distribution
+>>> stisim.poisson(rate=1).sample(10)  # Sample from a temporary distribution
 """
 
 import numpy as np
@@ -90,7 +90,7 @@ class Distribution():
         self.rng = rng
         return
 
-    def __call__(self, size):
+    def __call__(self, size=1):
         return self.sample(size=size)
 
     @property
@@ -108,11 +108,11 @@ class Distribution():
             if size < 0:
                 raise Exception('Input "size" cannot be negative')
             elif size == 0:
-                return np.array([], dtype=int)
+                return np.array([], dtype=int), kwargs
             else:
                 n_samples = size
         elif len(size) == 0:
-            return np.array([], dtype=int)  # int dtype allows use as index, e.g. bernoulli_filter
+            return np.array([], dtype=int), kwargs  # int dtype allows use as index, e.g. bernoulli_filter
         elif size.dtype == bool:
             n_samples = len(size) if options.multirng else size.sum()
         elif size.dtype == int:
@@ -257,7 +257,7 @@ class normal(Distribution):
         n_samples, pars = super().sample(size, mean=self.mean, std=self.std)
         vals = self.rng.normal(size=n_samples)
         vals = self._select(vals, size)
-        return pars['mean'] + self['std'] * vals
+        return pars['mean'] + pars['std'] * vals
 
 
 class poisson(Distribution):

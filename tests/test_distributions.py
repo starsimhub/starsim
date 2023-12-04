@@ -10,6 +10,16 @@ from stisim.random import RNG
 
 
 # %% Define the tests
+def test_basic():
+    dist = ss.normal(1,1) # Make a distribution
+    dist()  # Draw a sample
+    dist(10) # Draw several samples
+    dist.sample(10) # Same as above
+    ss.State('foo', float, fill_value=dist)  # Use distribution as the fill value for a state
+    #disease.pars['immunity'] = dist  # Store the distribution as a parameter
+    #disease.pars['immunity'].sample(5)  # Draw some samples from the parameter
+    ss.poisson(rate=1).sample(10)  # Sample from a temporary distribution
+
 def test_uniform_scalar(n):
     """ Create a uniform distribution """
     sc.heading('test_uniform: Testing uniform with scalar parameters')
@@ -174,7 +184,9 @@ if __name__ == '__main__':
         times = []
         for trial in range(1):
             T = sc.tic()
+
             # Run tests - some will only pass if multirng is True
+            test_basic()
             test_uniform_scalar(n)
             test_uniform_scalar_str(n)
             test_uniform_callable(n)
