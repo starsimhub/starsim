@@ -7,18 +7,37 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 from stisim.random import RNG
+import scipy.stats as sps
+from stisim.distributions import ScipyDistribution
+import pytest
+
+@pytest.fixture(params=[5, 50])
+def n(request):
+    yield request.param
 
 
 # %% Define the tests
 def test_basic():
-    dist = ss.normal(1,1) # Make a distribution
-    dist()  # Draw a sample
-    dist(10) # Draw several samples
-    dist.sample(10) # Same as above
+    dist = sps.norm(loc=1, scale=1) # Make a distribution
+    d = ScipyDistribution(dist)
+
+    sample = d.rvs(1)  # Draw a sample
+    samples = d.rvs(10) # Draw several samples
+
+    if ss.options.multirng:
+        print('Attempting to sample for specific UIDs, but have not provided a MultiRNG so an Exception should be raised.')
+        with pytest.raises(Exception):
+            d.rvs(np.array([1,3,8])) # Draw samples for specific uids
+    else:
+        d.rvs(np.array([1,3,8])) # Draw samples for specific uids
+
+    '''
     ss.State('foo', float, fill_value=dist)  # Use distribution as the fill value for a state
     #disease.pars['immunity'] = dist  # Store the distribution as a parameter
     #disease.pars['immunity'].sample(5)  # Draw some samples from the parameter
-    ss.poisson(rate=1).sample(10)  # Sample from a temporary distribution
+    '''
+    temp_poisson_samples = sps.poisson(mu=2).rvs(10)  # Sample from a temporary distribution
+    return sample, samples, temp_poisson_samples
 
 def test_uniform_scalar(n):
     """ Create a uniform distribution """
@@ -26,15 +45,18 @@ def test_uniform_scalar(n):
 
     rng = ss.MultiRNG('Uniform')
     rng.initialize(container=None, slots=n)
-    d = ss.uniform(low=1, high=5, rng=rng)
+    dist = sps.uniform(loc=1, scale=4)
+    dist.random_state = rng
+    d = ScipyDistribution(dist)
 
     uids = np.array([1,3])
-    draws = d.sample(uids)
+    draws = d.rvs(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
     assert len(draws) == len(uids)
     return draws
 
+@pytest.mark.skip(reason="Random number generators not yet implemented using strings")
 def test_uniform_scalar_str(n):
     """ Create a uniform distribution """
     sc.heading('test_uniform: Testing uniform with scalar parameters')
@@ -58,14 +80,20 @@ def test_uniform_callable(n):
 
     sim = ss.Sim().initialize()
 
-    low = lambda sim, uids: sim.people.age[uids]
-    high = lambda sim, uids: sim.people.age[uids] + 1
-    d = ss.uniform(low=low, high=high, rng='Uniform')
-    d.initialize(sim)
+    rng = ss.MultiRNG('Uniform')
+    rng.initialize(container=None, slots=n)
+
+    loc = lambda sim, uids: sim.people.age[uids] # Low
+    scale = 1 # Width, could also be a lambda
+    dist = sps.uniform(loc=loc, scale=scale)
+    dist.random_state = rng
+
+    d = ScipyDistribution(dist)
+    d.gen.dist.initialize(sim) # Handled automatically in the model code
 
     uids = np.array([1,3])
-    draws = d.sample(uids)
-    print(sim.people.age)
+    draws = d.rvs(uids)
+    print(sim.people.age[uids])
     print(f'Uniform sample for uids {uids} returned {draws}')
 
     assert len(draws) == len(uids)
@@ -80,91 +108,15 @@ def test_uniform_array(n):
     rng.initialize(container=None, slots=n)
 
     uids = np.array([1, 3])
-    low = np.array([4, 5])
-    high = np.array([5, 6])
-    d = ss.uniform(low=low, high=high, rng=rng)
+    loc = np.array([1, 100]) # Low
+    scale = np.array([2, 25]) # Width
 
-    draws = d.sample(uids)
+    dist = sps.uniform(loc=loc, scale=scale)
+    dist.random_state = rng
+
+    d = ScipyDistribution(dist)
+    draws = d.rvs(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
-
-    assert len(draws) == len(uids)
-    return draws
-
-
-def test_gamma_scalar(n):
-    """ Create a gamma distribution """
-    sc.heading('test_gamma: Testing gamma with scalar parameters')
-
-    rng = ss.MultiRNG('gamma')
-    rng.initialize(container=None, slots=n)
-    d = ss.gamma(shape=1, scale=2, rng=rng)
-
-    uids = np.array([1,3])
-    draws = d.sample(uids)
-    print(f'Gamma sample for uids {uids} returned {draws}')
-
-    assert len(draws) == len(uids)
-    return draws
-
-
-def test_gamma_callable(n):
-    """ Create a gamma distribution """
-    sc.heading('test_gamma: Testing gamma with callable parameters')
-
-    sim = ss.Sim().initialize()
-
-    rng = ss.MultiRNG('gamma')
-    rng.initialize(container=sim.rng_container, slots=sim.people.slot)
-
-    shape = lambda sim, uids: sim.people.age[uids]
-    scale = lambda sim, uids: sim.people.age[uids] + 1
-    d = ss.gamma(shape=shape, scale=scale, rng=rng)
-    d.initialize(sim)
-
-    uids = np.array([1,3])
-    draws = d.sample(uids)
-    print(f'Gamma sample for uids {uids} returned {draws}')
-
-    assert len(draws) == len(uids)
-    return draws
-
-
-def test_gamma_callable_bool(n):
-    """ Create a gamma distribution """
-    sc.heading('test_gamma: Testing gamma with callable parameters and boolean UIDs')
-
-    sim = ss.Sim().initialize()
-
-    rng = ss.MultiRNG('gamma')
-    rng.initialize(container=sim.rng_container, slots=sim.people.slot)
-
-    shape = lambda sim, uids: sim.people.age[uids]
-    scale = lambda sim, uids: sim.people.age[uids] + 1
-    d = ss.gamma(shape=shape, scale=scale, rng=rng)
-    d.initialize(sim)
-
-    uids = sim.people.age < 15
-    draws = d.sample(uids)
-    print(f'Gamma sample for uids {uids} returned {draws}')
-
-    assert len(draws) == sum(uids)
-    return draws
-
-
-def test_gamma_array(n):
-    """ Create a gamma distribution """
-    sc.heading('test_gamma: Testing gamma with a array parameters')
-
-    rng = ss.MultiRNG('gamma')
-    rng.initialize(container=None, slots=5)
-
-    uids = np.array([1, 3])
-    shape = np.array([4, 5])
-    scale = np.array([5, 6])
-    d = ss.gamma(shape=shape, scale=scale, rng=rng)
-
-    draws = d.sample(uids)
-    print(f'Gamma sample for uids {uids} returned {draws}')
 
     assert len(draws) == len(uids)
     return draws

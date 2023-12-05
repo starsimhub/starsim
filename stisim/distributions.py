@@ -37,15 +37,78 @@ class ScipyDistribution():
                 return
 
             def rvs(self, *args, **kwargs):
+                """
+                Return a specified number of samples from the distribution
+                """
+
                 size = kwargs['size']
+                # Work out how many samples to draw. If sampling by UID, this depends on the slots assigned to agents.
+                if np.isscalar(size):
+                    if not isinstance(size, (int, np.int64, int_)):
+                        raise Exception('Input "size" must be an integer')
+                    if size < 0:
+                        raise Exception('Input "size" cannot be negative')
+                    elif size == 0:
+                        return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
+                    else:
+                        n_samples = size
+                elif len(size) == 0:
+                    return np.array([], dtype=int)
+                elif size.dtype == bool:
+                    n_samples = len(size) if options.multirng else size.sum()
+                elif size.dtype in [int, np.int64, int_]:
+                    if not options.multirng:
+                        n_samples = len(size)
+                    else:
+                        v = size.__array__() # TODO - check if this works without calling __array__()?
+                        try:
+                            max_slot = self.random_state.slots[v].__array__().max()
+                        except AttributeError as e:
+                            if not isinstance(self.random_state, MultiRNG):
+                                raise Exception('With options.multirng and passing agent UIDs to a distribution, the random_state of the distribution must be a MultiRNG.')
+                            else:
+                                if not self.random_state.initialized:
+                                    raise Exception('The MultiRNG instance must be initialized before use.')
+                            raise e
+
+                        if max_slot == INT_NAN:
+                            raise Exception('Attempted to sample from an INT_NAN slot')
+                        n_samples = max_slot + 1
+                else:
+                    raise Exception("Unrecognized input type")
+
+                # Now handle distribution arguments
                 for pname in [p.name for p in self._param_info()]:
                     if pname in kwargs and callable(kwargs[pname]):
                         kwargs[pname] = kwargs[pname](self.sim, size)
-                kwargs['size'] = len(size)
+
+                    if not np.isscalar(kwargs[pname]) and len(kwargs[pname]) != n_samples:
+                        # Fill in the blank. The number of UIDs provided is
+                        # hopefully consistent with the length of pars
+                        # provided, but we need to expand out the pars to be
+                        # n_samples in length.
+                        if len(kwargs[pname]) not in [len(size), sum(size)]: # Could handle uid and bool separately? len(size) for uid and sum(size) for bool
+                            raise Exception('When providing an array of parameters, the length of the parameters must match the number of agents for the selected size (uids).')
+                        vals_all = np.full(n_samples, fill_value=1) # self.fill_value
+                        vals_all[size] = kwargs[pname]
+                        kwargs[pname] = vals_all
+
+                kwargs['size'] = n_samples
                 vals = super().rvs(*args, **kwargs) # Add random_state here?
                 if isinstance(self, bernoulli_gen):
                     vals = vals.astype(bool)
-                return vals
+
+                # _select:
+                if not options.multirng:
+                    return vals
+
+                if np.isscalar(size):
+                    return vals
+                elif size.dtype == bool:
+                    return vals[size]
+                else:
+                    slots = self.random_state.slots[size].__array__()
+                    return vals[slots]
 
         self.gen = starsim_gen(name=gen.dist.name, seed=gen.random_state)(**gen.kwds)
         return

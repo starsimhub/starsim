@@ -19,11 +19,11 @@ def rng_container():
     return rng_container
 
 @pytest.fixture
-def rngs(request):
+def rngs():
     return [ss.RNG('rng0'), ss.RNG('rng1')]
 
 @pytest.fixture
-def dists(request):
+def dists():
     return [ss.uniform(rng='rng0'), ss.uniform(rng='rng1')]
 
 def test_rng(rng_container, rngs, n=5):
