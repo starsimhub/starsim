@@ -27,11 +27,7 @@ __all__ = [
 
 _default_rng = np.random.default_rng()
 
-import scipy.stats as sps
-from scipy.stats._continuous_distns import weibull_min_gen, norm_gen
-### sps._continuous_distns._distn_gen_names # All "_gen" distributions
-
-class ContinuousDistribution():#sps.rv_continuous):
+class ContinuousDistribution():
     def __init__(self, gen):
         class starsim_gen(type(gen.dist)):
             def initialize(self, sim):
@@ -39,10 +35,6 @@ class ContinuousDistribution():#sps.rv_continuous):
                 return
 
             def rvs(self, *args, **kwargs):
-                print('in rvs')
-                # kwargs = {'c': 5, 'size': 1016, 'random_state': None}
-                # Can do slotting on size, and introduce random_state
-                # But no ability to have parameters vary, right?
                 size = kwargs['size']
                 for pname in [p.name for p in self._param_info()]:
                     if pname in kwargs and callable(kwargs[pname]):
@@ -54,13 +46,8 @@ class ContinuousDistribution():#sps.rv_continuous):
         self.gen = starsim_gen(name=gen.dist.name)(**gen.kwds)
         return
 
-    '''
-    def rvs(self, *args, **kwargs):
-        return self.gen.rvs(*args, **kwargs)
-    '''
-
     def __getattr__(self, attr):
-        # Returns wrapped numpy.random.(attr) if not a property
+        # Returns wrapped generator.(attr) if not a property
         try:
             return self.__getattribute__(attr)
         except Exception:
@@ -79,72 +66,6 @@ class ContinuousDistribution():#sps.rv_continuous):
                 errormsg = f'"{attr}" is not a member of this class or the underlying scipy stats class'
                 raise Exception(errormsg)
 
-
-class starsim_norm_gen(norm_gen):
-    def initialize(self, sim):
-        self.sim = sim
-        return
-
-    def rvs(self, *args, **kwargs):
-        print('in rvs')
-        # kwargs = {'c': 5, 'size': 1016, 'random_state': None}
-        # Can do slotting on size, and introduce random_state
-        # But no ability to have parameters vary, right?
-        size = kwargs['size']
-        for pname in [p.name for p in self._param_info()]:
-            if callable(kwargs[pname]):
-                kwargs[pname] = kwargs[pname](self.sim, size)
-        kwargs['size'] = len(size)
-        vals = super().rvs(*args, **kwargs)
-        return  vals
-
-norm = starsim_norm_gen(name='norm')
-
-
-class weibull_gen(weibull_min_gen):
-    def initialize(self, sim):
-        print('initialize')
-        self.sim = sim
-        return
-
-    def _argcheck(self, *args):
-        print('in _argcheck') # When calling rvs!
-        # args (array(5),) or (array(<function SIR....pe=object),)
-        return super()._argcheck(*args)
-
-    def _parse_args(self, *args, **kwargs):
-        print('in _parse_args')
-        return super()._parse_args(*args, **kwargs)
-
-    def __init__(self, *args, **kwargs):
-        # Called on init, but seeing distribution pars, not user stuff
-        print('in __init__')
-        # kwargs = {'a': 0, 'name': 'weibull'}
-        # kwargs = {'momtype': 1, 'a': 0, 'b': inf, 'xtol': 1e-14, 'badvalue': nan, 'name': 'weibull', 'longname': None, 'shapes': 'c', 'seed': None}
-        return super().__init__(*args, **kwargs)
-
-    def _rvs(self, *args, **kwargs):
-        print('in _rvs')
-        # args (array(5),)
-        # kwargs {'size': (0, 3, 4, 21, 35, 62, 85, 91, 113, ...), 'random_state': MultiRNG(PCG64DXSM) ...x1453BC7C0}
-        kwds = sc.dcp(kwargs)
-        kwds['size'] = len(kwargs['size'])
-        ags = (np.arange(kwds['size']),)
-        return super()._rvs(*ags, **kwds)
-
-    def rvs(self, *args, **kwargs):
-        print('in rvs')
-        # kwargs = {'c': 5, 'size': 1016, 'random_state': None}
-        # Can do slotting on size, and introduce random_state
-        # But no ability to have parameters vary, right?
-        size = kwargs['size']
-        if callable(kwargs['c']):
-            kwargs['c'] = kwargs['c'](self.sim, size)
-        kwargs['size'] = len(size)
-        vals = super().rvs(*args, **kwargs)
-        return  vals
-
-weibull = weibull_gen(a=0, name='weibull')
 
 class Distribution():
 
