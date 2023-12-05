@@ -42,12 +42,12 @@ class ScipyDistribution():
                     if pname in kwargs and callable(kwargs[pname]):
                         kwargs[pname] = kwargs[pname](self.sim, size)
                 kwargs['size'] = len(size)
-                vals = super().rvs(*args, **kwargs)
+                vals = super().rvs(*args, **kwargs) # Add random_state here?
                 if isinstance(self, bernoulli_gen):
                     vals = vals.astype(bool)
                 return vals
 
-        self.gen = starsim_gen(name=gen.dist.name)(**gen.kwds)
+        self.gen = starsim_gen(name=gen.dist.name, seed=gen.random_state)(**gen.kwds)
         return
 
     def __getattr__(self, attr):
@@ -69,6 +69,10 @@ class ScipyDistribution():
                     return None
                 errormsg = f'"{attr}" is not a member of this class or the underlying scipy stats class'
                 raise Exception(errormsg)
+
+    def set_rng(self, rng):
+        self.dist.random_state = rng
+        return
 
     def filter(self, size, **kwargs):
         return size[self.gen.rvs(size, **kwargs)]

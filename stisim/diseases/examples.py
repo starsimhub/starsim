@@ -37,7 +37,7 @@ class SIR(Disease):
         self.t_recovered = ss.State('t_recovered', float, np.nan)
         self.t_dead = ss.State('t_dead', float, np.nan)
 
-        # Connect a MultiRNG to a ScipyDistribution, not sure if this is fully working.
+        # Connect a MultiRNG to a ScipyDistribution
         self.rng_durinf = ss.MultiRNG('Duration of infection')
         self.pars['dur_inf'].random_state = self.rng_durinf
 
@@ -97,7 +97,6 @@ class SIR(Disease):
         self.t_infected[uids] = sim.year
 
         # Calculate and schedule future outcomes for recovery/death
-        ###dur_inf = self.pars['dur_inf'].sample(uids)
         dur_inf = self.pars['dur_inf'].rvs(uids)
         will_die = self.pars['death_given_infection'].rvs(uids)
         self.t_recovered[uids[~will_die]] = sim.year + dur_inf[~will_die]
