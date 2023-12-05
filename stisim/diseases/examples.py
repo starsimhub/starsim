@@ -21,10 +21,7 @@ class SIR(Disease):
 
     def __init__(self, pars=None, *args, **kwargs):
         default_pars = {
-            #'dur_inf': ss.weibull(shape=5, scale=10, rng='Duration of SIR Infection'),
-            ###'dur_inf': sps.weibull_min(c=5, scale=10),
             'dur_inf': sps.weibull_min(c=lambda sim, uids: sim.people.age[uids], scale=10),#, seed='Duration of SIR Infection'),
-            ######'dur_inf': ss.norm(loc=lambda sim, uids: sim.people.age[uids], scale=2),#, scale=10, seed='Duration of SIR Infection'),
             ###'dur_inf': sps.norm(loc=lambda sim, uids: sim.people.age[uids], scale=2),
             'initial_prevalence': sps.bernoulli(p=0.1),#, rng='SIR initial prevalence'),
             'death_given_infection': sps.bernoulli(p=0.2),#, rng='SIR death given infection'),
@@ -40,6 +37,7 @@ class SIR(Disease):
         self.t_recovered = ss.State('t_recovered', float, np.nan)
         self.t_dead = ss.State('t_dead', float, np.nan)
 
+        # Connect a MultiRNG to a ScipyDistribution, not sure if this is fully working.
         self.rng_durinf = ss.MultiRNG('Duration of infection')
         self.pars['dur_inf'].random_state = self.rng_durinf
 
