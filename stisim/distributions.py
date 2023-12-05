@@ -21,15 +21,15 @@ from stisim.random import SingleRNG, MultiRNG, RNG
 from stisim import options, int_
 
 __all__ = [
-    'Distribution', 'bernoulli', 'gamma', 'uniform', 'normal', 'poisson', 'rate', 'ContinuousDistribution',
+    'ScipyDistribution',
+    'Distribution', 'bernoulli', 'gamma', 'uniform', 'normal', 'poisson', 'rate',
 ] #  , 'uniform_int', 'choice', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int', 'neg_binomial', 'beta', 'data_dist', 'delta','weibull', 'norm', 
 
 
 _default_rng = np.random.default_rng()
 
-#import scipy.stats as sps
 from scipy.stats._discrete_distns import bernoulli_gen
-class ContinuousDistribution():
+class ScipyDistribution():
     def __init__(self, gen):
         class starsim_gen(type(gen.dist)):
             def initialize(self, sim):

@@ -58,7 +58,7 @@ class Module(sc.prettyobj):
         import scipy.stats as sps
         for key, value in self.pars.items():
             if isinstance(value, sps._distn_infrastructure.rv_frozen):
-                self.pars[key] = ss.ContinuousDistribution(value)
+                self.pars[key] = ss.ScipyDistribution(value)
                 self.pars[key].gen.dist.initialize(sim)
 
         self.initialized = True
