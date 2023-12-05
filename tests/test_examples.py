@@ -51,5 +51,5 @@ def test_ncd():
 
 if __name__ == '__main__':
     sim1 = test_sir()
-    sim2 = test_ncd()
+    #sim2 = test_ncd()
     plt.show()

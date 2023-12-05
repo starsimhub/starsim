@@ -21,11 +21,130 @@ from stisim.random import SingleRNG, MultiRNG, RNG
 from stisim import options, int_
 
 __all__ = [
-    'Distribution', 'bernoulli', 'gamma', 'uniform', 'normal', 'poisson', 'rate', 'weibull', 
+    'Distribution', 'bernoulli', 'gamma', 'uniform', 'normal', 'poisson', 'rate', 'weibull', 'norm', 'ContinuousDistribution',
 ] #  , 'uniform_int', 'choice', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int', 'neg_binomial', 'beta', 'data_dist', 'delta',
 
 
 _default_rng = np.random.default_rng()
+
+import scipy.stats as sps
+from scipy.stats._continuous_distns import weibull_min_gen, norm_gen
+### sps._continuous_distns._distn_gen_names # All "_gen" distributions
+
+class ContinuousDistribution():#sps.rv_continuous):
+    def __init__(self, gen):
+        class starsim_gen(type(gen.dist)):
+            def initialize(self, sim):
+                self.sim = sim
+                return
+
+            def rvs(self, *args, **kwargs):
+                print('in rvs')
+                # kwargs = {'c': 5, 'size': 1016, 'random_state': None}
+                # Can do slotting on size, and introduce random_state
+                # But no ability to have parameters vary, right?
+                size = kwargs['size']
+                for pname in [p.name for p in self._param_info()]:
+                    if pname in kwargs and callable(kwargs[pname]):
+                        kwargs[pname] = kwargs[pname](self.sim, size)
+                kwargs['size'] = len(size)
+                vals = super().rvs(*args, **kwargs)
+                return  vals
+
+        self.gen = starsim_gen(name=gen.dist.name)(**gen.kwds)
+        return
+
+    '''
+    def rvs(self, *args, **kwargs):
+        return self.gen.rvs(*args, **kwargs)
+    '''
+
+    def __getattr__(self, attr):
+        # Returns wrapped numpy.random.(attr) if not a property
+        try:
+            return self.__getattribute__(attr)
+        except Exception:
+            try:
+                return getattr(self.gen, attr) # .dist?
+            except Exception as e:
+                if '__getstate__' in str(e):
+                    # Must be from pickle, return a callable function that returns None
+                    return lambda: None
+                elif '__await__' in str(e):
+                    # Must be from async programming?
+                    return None
+                elif '__deepcopy__' in str(e):
+                    # from sc.dcp
+                    return None
+                errormsg = f'"{attr}" is not a member of this class or the underlying scipy stats class'
+                raise Exception(errormsg)
+
+
+class starsim_norm_gen(norm_gen):
+    def initialize(self, sim):
+        self.sim = sim
+        return
+
+    def rvs(self, *args, **kwargs):
+        print('in rvs')
+        # kwargs = {'c': 5, 'size': 1016, 'random_state': None}
+        # Can do slotting on size, and introduce random_state
+        # But no ability to have parameters vary, right?
+        size = kwargs['size']
+        for pname in [p.name for p in self._param_info()]:
+            if callable(kwargs[pname]):
+                kwargs[pname] = kwargs[pname](self.sim, size)
+        kwargs['size'] = len(size)
+        vals = super().rvs(*args, **kwargs)
+        return  vals
+
+norm = starsim_norm_gen(name='norm')
+
+
+class weibull_gen(weibull_min_gen):
+    def initialize(self, sim):
+        print('initialize')
+        self.sim = sim
+        return
+
+    def _argcheck(self, *args):
+        print('in _argcheck') # When calling rvs!
+        # args (array(5),) or (array(<function SIR....pe=object),)
+        return super()._argcheck(*args)
+
+    def _parse_args(self, *args, **kwargs):
+        print('in _parse_args')
+        return super()._parse_args(*args, **kwargs)
+
+    def __init__(self, *args, **kwargs):
+        # Called on init, but seeing distribution pars, not user stuff
+        print('in __init__')
+        # kwargs = {'a': 0, 'name': 'weibull'}
+        # kwargs = {'momtype': 1, 'a': 0, 'b': inf, 'xtol': 1e-14, 'badvalue': nan, 'name': 'weibull', 'longname': None, 'shapes': 'c', 'seed': None}
+        return super().__init__(*args, **kwargs)
+
+    def _rvs(self, *args, **kwargs):
+        print('in _rvs')
+        # args (array(5),)
+        # kwargs {'size': (0, 3, 4, 21, 35, 62, 85, 91, 113, ...), 'random_state': MultiRNG(PCG64DXSM) ...x1453BC7C0}
+        kwds = sc.dcp(kwargs)
+        kwds['size'] = len(kwargs['size'])
+        ags = (np.arange(kwds['size']),)
+        return super()._rvs(*ags, **kwds)
+
+    def rvs(self, *args, **kwargs):
+        print('in rvs')
+        # kwargs = {'c': 5, 'size': 1016, 'random_state': None}
+        # Can do slotting on size, and introduce random_state
+        # But no ability to have parameters vary, right?
+        size = kwargs['size']
+        if callable(kwargs['c']):
+            kwargs['c'] = kwargs['c'](self.sim, size)
+        kwargs['size'] = len(size)
+        vals = super().rvs(*args, **kwargs)
+        return  vals
+
+weibull = weibull_gen(a=0, name='weibull')
 
 class Distribution():
 
@@ -313,6 +432,7 @@ class rate(Distribution):
         return vals < prob
 
 
+'''
 class weibull(Distribution):
     """
     Weibull distribution parameterized in terms of:
@@ -332,10 +452,46 @@ class weibull(Distribution):
         vals = self._select(vals, size)
         # If U ~ uniform(0,1), then W ~ scale * (-ln(U))^(1/shape) is Weibull with shape and scale
         return pars['scale'] * (-np.log(vals))**(1/pars['shape'])
+'''
 
 ######################################################
 
 '''
+
+
+class lognormal(Distribution):
+    """
+    Lognormal distributions are traditionally parameterized with reference to
+    the underlying normal distribution (see: https://numpy.org/doc/stable/reference/random/generated/numpy.random.lognormal.html),
+    but this function enables the user to specify the resulting mean and std.
+    """
+
+    def __init__(self, mean, std, **kwargs):
+        super().__init__(**kwargs)
+        self.mean = mean
+        self.std = std
+        self.check()
+
+        self.underlying_mean = np.log(mean ** 2 / np.sqrt(std ** 2 + mean ** 2))  # Computes the mean of the underlying normal distribution
+        self.underlying_std = np.sqrt(np.log(std ** 2 / mean ** 2 + 1))  # Computes sigma for the underlying normal distribution
+        return
+    
+    def check(self):
+        if (sc.isnumber(self.mean) and self.mean > 0) or (sc.checktype(self.mean, 'arraylike') and (self.mean > 0).all()):
+            return True
+        raise Exception('The mean parameter passed to the lognormal distribution must be a positive number or array with all positive values.')
+
+    def sample(self, size=None, **kwargs):
+
+        n_samples, pars = super().sample(size, scale=self.scale)
+        vals = self.rng.lognormal(size=n_samples, scale=pars['scale']) # Use full pars array here, before _select?
+        vals = self._select(vals, size)
+        vals /= self.pars['rate']
+        return vals
+
+        return self.rng.lognormal(size=size, mean=self.underlying_mean, sigma=self.underlying_std, **kwargs)
+
+
 class delta(Distribution):
     """
     Delta function at specified value

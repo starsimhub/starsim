@@ -53,6 +53,14 @@ class Module(sc.prettyobj):
         for distribution in self.distributions:
             distribution.initialize(sim)
 
+        # Initialize scipy distributions
+        print('TEMP')
+        import scipy.stats as sps
+        for key, value in self.pars.items():
+            if isinstance(value, sps._distn_infrastructure.rv_frozen):
+                self.pars[key] = ss.ContinuousDistribution(value)
+                self.pars[key].gen.dist.initialize(sim)
+
         self.initialized = True
         return
 
@@ -91,5 +99,19 @@ class Module(sc.prettyobj):
 
         :return:
         """
-        return [x for x in self.__dict__.values() if isinstance(x, (ss.Distribution))] \
-             + [x for x in self.pars.values()     if isinstance(x, (ss.Distribution))]
+        print('DJK DISTRIB TEMP')
+        import scipy.stats as sps
+        return [x for x in self.__dict__.values() if isinstance(x, ss.Distribution)] \
+             + [x for x in self.pars.values()     if isinstance(x, ss.Distribution)]
+
+    @property
+    def scipy_dbns(self):
+        """
+        Return a flat collection of all scipy distributions, including in pars
+
+        :return:
+        """
+        print('DJK DISTRIB TEMP')
+        import scipy.stats as sps
+        return [x.dist for x in self.__dict__.values() if isinstance(x, sps._distn_infrastructure.rv_frozen)] \
+             + [x.dist for x in self.pars.values()     if isinstance(x, sps._distn_infrastructure.rv_frozen)]

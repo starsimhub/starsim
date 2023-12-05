@@ -6,6 +6,7 @@ import numpy as np
 import stisim as ss
 import sciris as sc
 from .disease import Disease
+import scipy.stats as sps
 
 class SIR(Disease):
     """
@@ -19,9 +20,12 @@ class SIR(Disease):
     """
 
     def __init__(self, pars=None, *args, **kwargs):
-
         default_pars = {
-            'dur_inf': ss.weibull(shape=5, scale=10, rng='Duration of SIR Infection'),
+            #'dur_inf': ss.weibull(shape=5, scale=10, rng='Duration of SIR Infection'),
+            ###'dur_inf': sps.weibull_min(c=5, scale=10),
+            'dur_inf': sps.weibull_min(c=lambda sim, uids: sim.people.age[uids], scale=10),#, seed='Duration of SIR Infection'),
+            ######'dur_inf': ss.norm(loc=lambda sim, uids: sim.people.age[uids], scale=2),#, scale=10, seed='Duration of SIR Infection'),
+            ###'dur_inf': sps.norm(loc=lambda sim, uids: sim.people.age[uids], scale=2),
             'initial_prevalence': ss.bernoulli(0.1, rng='SIR initial prevalence'),
             'death_given_infection': ss.bernoulli(0.2, rng='SIR death given infection'),
             'beta': None,
@@ -35,6 +39,10 @@ class SIR(Disease):
         self.t_infected = ss.State('t_infected', float, np.nan)
         self.t_recovered = ss.State('t_recovered', float, np.nan)
         self.t_dead = ss.State('t_dead', float, np.nan)
+
+        self.rng_durinf = ss.MultiRNG('Duration of infection')
+        self.pars['dur_inf'].random_state = self.rng_durinf
+
         return
 
     def init_results(self, sim):
@@ -91,7 +99,8 @@ class SIR(Disease):
         self.t_infected[uids] = sim.year
 
         # Calculate and schedule future outcomes for recovery/death
-        dur_inf = self.pars['dur_inf'].sample(len(uids))
+        ###dur_inf = self.pars['dur_inf'].sample(uids)
+        dur_inf = self.pars['dur_inf'].rvs(uids)
         will_die = self.pars['death_given_infection'].sample(uids)
         self.t_recovered[uids[~will_die]] = sim.year + dur_inf[~will_die]
         self.t_dead[uids[will_die]] = sim.year + dur_inf[will_die]
