@@ -14,9 +14,19 @@ class DemographicModule(ss.Module):
     # A demographic module typically handles births/deaths/migration and takes
     # place at the start of the timestep, before networks are updated and before
     # any disease modules are executed
-    pass
-    # TODO - add common demographic-related functionality here
 
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.init_results(sim)
+        return
+
+    def init_results(self, sim):
+        pass
+
+    def update(self, sim):
+        # Note that for demographic modules, any result updates should be
+        # carried out inside this function
+        pass
 
 class births(DemographicModule):
     def __init__(self, pars=None):
@@ -50,10 +60,6 @@ class births(DemographicModule):
         self.pars.birth_rates = birth_rates
         return
 
-    def initialize(self, sim):
-        super().initialize(sim)
-        self.init_results(sim)
-        return
 
     def init_results(self, sim):
         self.results += ss.Result(name='new', shape=sim.npts, dtype=int)
@@ -88,6 +94,7 @@ class births(DemographicModule):
         self.results['new'][sim.ti] = n_new
 
     def finalize(self, sim):
+        super().finalize(sim)
         self.results['cumulative'] = np.cumsum(self.results['new'])
         self.results['cbr'] = self.results['new'] / sim.results['pop_size']
 
@@ -160,11 +167,6 @@ class background_deaths(DemographicModule):
 
         self.pars.death_rates = df
 
-        return
-
-    def initialize(self, sim):
-        super().initialize(sim)
-        self.init_results(sim)
         return
 
     def init_results(self, sim):
@@ -296,7 +298,6 @@ class Pregnancy(DemographicModule):
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.init_results(sim)
         return
 
     def init_results(self, sim):
