@@ -21,12 +21,14 @@ from stisim.random import SingleRNG, MultiRNG, RNG
 from stisim import options, int_
 
 __all__ = [
-    'Distribution', 'bernoulli', 'gamma', 'uniform', 'normal', 'poisson', 'rate', 'weibull', 'norm', 'ContinuousDistribution',
-] #  , 'uniform_int', 'choice', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int', 'neg_binomial', 'beta', 'data_dist', 'delta',
+    'Distribution', 'bernoulli', 'gamma', 'uniform', 'normal', 'poisson', 'rate', 'ContinuousDistribution',
+] #  , 'uniform_int', 'choice', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int', 'neg_binomial', 'beta', 'data_dist', 'delta','weibull', 'norm', 
 
 
 _default_rng = np.random.default_rng()
 
+#import scipy.stats as sps
+from scipy.stats._discrete_distns import bernoulli_gen
 class ContinuousDistribution():
     def __init__(self, gen):
         class starsim_gen(type(gen.dist)):
@@ -41,7 +43,9 @@ class ContinuousDistribution():
                         kwargs[pname] = kwargs[pname](self.sim, size)
                 kwargs['size'] = len(size)
                 vals = super().rvs(*args, **kwargs)
-                return  vals
+                if isinstance(self, bernoulli_gen):
+                    vals = vals.astype(bool)
+                return vals
 
         self.gen = starsim_gen(name=gen.dist.name)(**gen.kwds)
         return
@@ -65,6 +69,9 @@ class ContinuousDistribution():
                     return None
                 errormsg = f'"{attr}" is not a member of this class or the underlying scipy stats class'
                 raise Exception(errormsg)
+
+    def filter(self, size, **kwargs):
+        return size[self.gen.rvs(size, **kwargs)]
 
 
 class Distribution():

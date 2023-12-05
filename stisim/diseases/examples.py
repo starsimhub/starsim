@@ -26,8 +26,8 @@ class SIR(Disease):
             'dur_inf': sps.weibull_min(c=lambda sim, uids: sim.people.age[uids], scale=10),#, seed='Duration of SIR Infection'),
             ######'dur_inf': ss.norm(loc=lambda sim, uids: sim.people.age[uids], scale=2),#, scale=10, seed='Duration of SIR Infection'),
             ###'dur_inf': sps.norm(loc=lambda sim, uids: sim.people.age[uids], scale=2),
-            'initial_prevalence': ss.bernoulli(0.1, rng='SIR initial prevalence'),
-            'death_given_infection': ss.bernoulli(0.2, rng='SIR death given infection'),
+            'initial_prevalence': sps.bernoulli(p=0.1),#, rng='SIR initial prevalence'),
+            'death_given_infection': sps.bernoulli(p=0.2),#, rng='SIR death given infection'),
             'beta': None,
         }
 
@@ -101,7 +101,7 @@ class SIR(Disease):
         # Calculate and schedule future outcomes for recovery/death
         ###dur_inf = self.pars['dur_inf'].sample(uids)
         dur_inf = self.pars['dur_inf'].rvs(uids)
-        will_die = self.pars['death_given_infection'].sample(uids)
+        will_die = self.pars['death_given_infection'].rvs(uids)
         self.t_recovered[uids[~will_die]] = sim.year + dur_inf[~will_die]
         self.t_dead[uids[will_die]] = sim.year + dur_inf[will_die]
 
