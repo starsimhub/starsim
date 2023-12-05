@@ -27,7 +27,7 @@ def test_sir():
     plt.title('SIR')
     return
 
-
+#@pytest.mark.skip(reason="Haven't converted yet")
 def test_ncd():
     ppl = ss.People(10000)
     ppl.networks = None
@@ -51,5 +51,5 @@ def test_ncd():
 
 if __name__ == '__main__':
     sim1 = test_sir()
-    #sim2 = test_ncd()
+    sim2 = test_ncd()
     plt.show()

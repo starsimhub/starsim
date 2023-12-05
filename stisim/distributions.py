@@ -82,7 +82,7 @@ class ScipyDistribution():
                     if pname in kwargs and callable(kwargs[pname]):
                         kwargs[pname] = kwargs[pname](self.sim, size)
 
-                    if not np.isscalar(kwargs[pname]) and len(kwargs[pname]) != n_samples:
+                    if (pname in kwargs) and (not np.isscalar(kwargs[pname])) and (len(kwargs[pname]) != n_samples):
                         # Fill in the blank. The number of UIDs provided is
                         # hopefully consistent with the length of pars
                         # provided, but we need to expand out the pars to be
