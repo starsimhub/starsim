@@ -15,14 +15,9 @@ simple_birth = {'birth_rates': 20}
 simple_death = {'death_rates': 0.015}
 simple_fertility = {'fertility_rates': 25}
 
-<<<<<<< HEAD
-realistic_birth = {'birth_rates': pd.read_csv('../test_data/nigeria_births.csv')}
-realistic_death = {'death_rates': pd.read_csv('../test_data/nigeria_deaths.csv')}
-realistic_fertility = {'fertility_rates': pd.read_csv('../test_data/nigeria_asfr.csv')}
-=======
 realistic_birth = {'birth_rates': pd.read_csv(ss.root/'tests/test_data/nigeria_births.csv')}
 realistic_death = {'death_rates': pd.read_csv(ss.root/'tests/test_data/nigeria_deaths.csv')}
->>>>>>> network-connectors
+realistic_fertility = {'fertility_rates': pd.read_csv(ss.root/'tests/test_data/nigeria_asfr.csv')}
 
 series_death = {'death_rates': pd.Series(
             index=[0, 10, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95],
@@ -32,12 +27,9 @@ series_death = {'death_rates': pd.Series(
 # births = ss.births(realistic_birth)
 pregnancy = ss.Pregnancy(realistic_fertility)
 deaths = ss.background_deaths(series_death)
+births = ss.births(realistic_birth)
 gon = ss.Gonorrhea({'p_death': 0.5, 'initial': 1000})
-<<<<<<< HEAD
-sim = ss.Sim(people=ppl, demographics=None, modules=gon, networks=ss.simple_sexual())
-=======
-sim = ss.Sim(people=ppl, demographics=[births, deaths], diseases=gon, networks=ss.simple_sexual(), n_years=100)
->>>>>>> network-connectors
+sim = ss.Sim(people=ppl, demographics=[pregnancy, deaths], diseases=gon, networks=ss.mf(), n_years=100)
 sim.initialize()
 sim.run()
 
