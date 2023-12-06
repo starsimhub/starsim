@@ -45,19 +45,25 @@ class Module(sc.prettyobj):
             if not rng.initialized:
                 rng.initialize(sim.rng_container, sim.people.slot)
 
-        # Connect the states to the sim
-        for state in self.states:
-            state.initialize(sim.people)
-
-        # Initialize distributions - TODO: this can go away eventually...
-        for distribution in self.distributions:
-            distribution.initialize(sim)
-
-        # Initialize scipy distributions
+        # Initialize distributions in pars
+        print('TODO: Also init in __dict__')
         for key, value in self.pars.items():
             if isinstance(value, rv_frozen):
                 self.pars[key] = ss.ScipyDistribution(value, f'{self.name}_{self.label}_{key}')
                 self.pars[key].initialize(sim)
+            elif isinstance(value, ss.rate):
+                self.pars[key].initialize(sim, f'{self.name}_{self.label}_{key}')
+
+        print('TODO DJK - will users specify sps or ScipyDistribution?')
+        for key, value in self.__dict__.items():
+            if isinstance(value, rv_frozen):
+                setattr(self, key, ss.ScipyDistribution(value, f'{self.name}_{self.label}_{key}'))
+                getattr(self, key).initialize(sim)
+
+        # Connect the states to the sim
+        # Will use random numbers, so do after distribution initialization
+        for state in self.states:
+            state.initialize(sim)
 
         self.initialized = True
         return
@@ -91,11 +97,11 @@ class Module(sc.prettyobj):
         return [x for x in self.__dict__.values() if isinstance(x, (ss.MultiRNG, ss.SingleRNG))]
 
     @property
-    def distributions(self):
+    def scipy_dbns(self):
         """
-        Return a flat collection of all distributions, including in pars
+        Return a flat collection of all ScipyDistributions
 
         :return:
         """
-        return [x for x in self.__dict__.values() if isinstance(x, ss.Distribution)] \
-             + [x for x in self.pars.values()     if isinstance(x, ss.Distribution)]
+        return [x for x in self.__dict__.values() if isinstance(x, ss.ScipyDistribution)] \
+             + [x for x in self.pars.values()     if isinstance(x, ss.ScipyDistribution)]

@@ -24,7 +24,7 @@ class SIR(Disease):
             #'dur_inf': sps.weibull_min(c=lambda sim, uids: sim.people.age[uids], scale=10),#, seed='Duration of SIR Infection'),
             #'dur_inf': sps.norm(loc=lambda sim, uids: sim.people.age[uids], scale=2),
             'dur_inf': sps.lognorm(s=1, loc=10),
-            'initial_prevalence': sps.bernoulli(p=0.1),#, rng='SIR initial prevalence'),
+            'initial_infections': sps.bernoulli(p=0.1),#, rng='SIR initial prevalence'),
             'death_given_infection': sps.bernoulli(p=0.2),#, rng='SIR death given infection'),
             'beta': None,
         }
@@ -83,7 +83,7 @@ class SIR(Disease):
         taken place by the time this method is called.
         """
         alive_uids = ss.true(sim.people.alive)
-        initial_cases = self.pars['initial_prevalence'].filter(alive_uids)
+        initial_cases = self.pars['initial_infections'].filter(alive_uids)
         self.infect(sim, initial_cases)
         return
 
@@ -134,9 +134,9 @@ class NCD(Disease):
     """
     def __init__(self, pars=None):
         default_pars = {
-            'initial_prevalence': ss.bernoulli(0.3, rng='NCD initial prevalence'), # Initial prevalence of risk factors
-            'affection_rate': ss.rate(0.1, rng='Acquisition rate applied to those at risk'), # 10% chance per year of acquiring
-            'prognosis': ss.weibull(2, 5, rng='Time in years between first becoming affected and death'),
+            'initial_infections': sps.bernoulli(p=0.3), # Initial prevalence of risk factors
+            'affection_rate': ss.rate(p=0.1), # Instantaneous rate of acquisition applied to those at risk (units are acquisitions / year)
+            'prognosis': sps.weibull_min(c=2, scale=5), # Time in years between first becoming affected and death
         }
 
         ss.Module.__init__(self, ss.omerge(default_pars, pars))
@@ -157,7 +157,7 @@ class NCD(Disease):
         taken place by the time this method is called.
         """
         alive_uids = ss.true(sim.people.alive)
-        initial_cases = self.pars['initial_prevalence'].filter(alive_uids)
+        initial_cases = self.pars['initial_infections'].filter(alive_uids)
         self.at_risk[initial_cases] = True
         return initial_cases
 
@@ -170,7 +170,7 @@ class NCD(Disease):
         atrisk_uids = ss.true(self.at_risk)
         new_cases = self.pars['affection_rate'].filter(atrisk_uids)
         self.affected[new_cases] = True
-        prog_years = self.pars['prognosis'].sample(new_cases)
+        prog_years = self.pars['prognosis'].rvs(new_cases)
         self.ti_dead[new_cases] = sim.ti + sc.randround(prog_years / sim.dt)
         return new_cases
 

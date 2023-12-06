@@ -14,23 +14,24 @@ Example usage
 """
 
 import numpy as np
-import sciris as sc
-from .utils import get_subclasses
+#import sciris as sc
+#from .utils import get_subclasses
 from stisim.utils import INT_NAN
-from stisim.random import SingleRNG, MultiRNG, RNG
+from stisim.random import MultiRNG #SingleRNG, MultiRNG, RNG
 from stisim import options, int_
 
 __all__ = [
-    'ScipyDistribution',
-    'Distribution', 'bernoulli', 'gamma', 'uniform', 'normal', 'poisson', 'rate',
+    'ScipyDistribution', 'rate',
+    #'Distribution', 'bernoulli', 'gamma', 'uniform', 'normal', 'poisson', 'rate',
 ] #  , 'uniform_int', 'choice', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int', 'neg_binomial', 'beta', 'data_dist', 'delta','weibull', 'norm', 
 
 
 _default_rng = np.random.default_rng() # Generator(PCG64(seed))
 
 from scipy.stats._discrete_distns import bernoulli_gen
+from scipy.stats import bernoulli
 class ScipyDistribution():
-    def __init__(self, gen, rng):
+    def __init__(self, gen, rng=None):
         class starsim_gen(type(gen.dist)):
             def initialize(self, sim):
                 self.sim = sim
@@ -110,21 +111,24 @@ class ScipyDistribution():
                     slots = self.random_state.slots[size].__array__()
                     return vals[slots]
 
-
+        self.rng = self.set_rng(rng, gen)
+        self.gen = starsim_gen(name=gen.dist.name, seed=self.rng)(**gen.kwds)
+        return
+    
+    @staticmethod
+    def set_rng(rng, gen):
         # Handle random generators
-        self.rng = gen.random_state # Default
+        rng = gen.random_state # Default
         if options.multirng and rng and (gen.random_state == np.random.mtrand._rand):
             # MultiRNG, rng not none, and the current "random_state" is the
             # numpy global singleton... so let's override
             if isinstance(rng, str):
-                self.rng = MultiRNG(rng) # Crate a new generator with the user-provided string
+                rng = MultiRNG(rng) # Crate a new generator with the user-provided string
             elif isinstance(rng, np.random.Generator):
-                self.rng = rng
+                rng = rng
             else:
                 raise Exception(f'The rng must be a string or a np.random.Generator instead of {type(rng)}')
-
-        self.gen = starsim_gen(name=gen.dist.name, seed=self.rng)(**gen.kwds)
-        return
+        return rng
 
     def initialize(self, sim):
         self.gen.dist.initialize(sim)
@@ -152,14 +156,37 @@ class ScipyDistribution():
                 errormsg = f'"{attr}" is not a member of this class or the underlying scipy stats class'
                 raise Exception(errormsg)
 
-    def set_rng(self, rng):
-        self.dist.random_state = rng
-        return
-
     def filter(self, size, **kwargs):
         return size[self.gen.rvs(size, **kwargs)]
 
+class rate(ScipyDistribution):
+    """
+    Exponentially distributed, accounts for dt.
+    Assumes the rate is constant over each dt interval.
+    """
+    def __init__(self, p, rng=None):
+        dist = bernoulli(p=p)
+        super().__init__(dist, rng)
+        self.rate = rate
+        self.dt = None
+        return
 
+    def initialize(self, sim, rng):
+        self.dt = sim.dt
+        self.rng = self.set_rng(rng, self.gen)
+        super().initialize(sim)
+        return
+
+    def sample(self, size=None):
+        n_samples, pars = super().sample(size, rate=self.rate)
+        prob = 1 - np.exp(-pars['rate'] * self.dt)
+        vals = self.rng.random(size=n_samples)
+        vals = self._select(vals, size)
+        return vals < prob
+
+
+
+'''
 class Distribution():
 
     def __init__(self, rng=None):
@@ -361,7 +388,6 @@ class bernoulli(Distribution):
         vals = self._select(vals, size)
         return vals < pars['p']
 
-'''
 class bernoulli_filter(Distribution):
     """
     Returns uids of True in a bernoulli draw
@@ -376,7 +402,6 @@ class bernoulli_filter(Distribution):
         vals = self.rng.random(size=n_samples)
         vals = self._select(vals, size)
         return size[vals < pars['p']]
-'''
 
 class normal(Distribution):
     """ Normal distribution """
@@ -422,31 +447,6 @@ class exponential(Distribution):
         return vals
 
 
-class rate(Distribution):
-    """
-    Exponentially distributed, accounts for dt.
-    Assumes the rate is constant over each dt interval.
-    """
-    def __init__(self, rate, **kwargs):
-        super().__init__(**kwargs)
-        self.rate = rate
-        self.dt = None
-        return
-
-    def initialize(self, sim):
-        super().initialize(sim)
-        self.dt = sim.dt
-        return
-
-    def sample(self, size=None):
-        n_samples, pars = super().sample(size, rate=self.rate)
-        prob = 1 - np.exp(-pars['rate'] * self.dt)
-        vals = self.rng.random(size=n_samples)
-        vals = self._select(vals, size)
-        return vals < prob
-
-
-'''
 class weibull(Distribution):
     """
     Weibull distribution parameterized in terms of:
@@ -466,11 +466,9 @@ class weibull(Distribution):
         vals = self._select(vals, size)
         # If U ~ uniform(0,1), then W ~ scale * (-ln(U))^(1/shape) is Weibull with shape and scale
         return pars['scale'] * (-np.log(vals))**(1/pars['shape'])
-'''
 
 ######################################################
 
-'''
 
 
 class lognormal(Distribution):

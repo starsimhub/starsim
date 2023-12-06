@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import stisim as ss
+from scipy.stats import bernoulli, uniform
 
 __all__ = ['BasePeople', 'People']
 
@@ -56,17 +57,18 @@ class BasePeople(sc.prettyobj):
 
         # For People initialization, first initialize slots, then initialize RNGs, then initialize remaining states
         # This is because some states may depend on RNGs being initialized to generate initial values
-        self.slot.initialize(self)
+        self.slot.initialize(sim)
         self.slot[:] = self.uid
 
         # Initialize all RNGs (noting that includes those that are declared in child classes)
         for rng in self.rngs:
+            print('TODO DJK RNG INIT')
             rng.initialize(sim.rng_container, self.slot)
 
         # Initialize remaining states
         for name, state in self.states.items():
             self.add_state(state)  # Register the state internally for dynamic growth
-            state.initialize(self)  # Connect the state to this people instance
+            state.initialize(sim)  # Connect the state to this people instance
             setattr(self, name, state)
 
         self.initialized = True
@@ -193,10 +195,11 @@ class People(BasePeople):
         self.initialized = False
         self.version = ss.__version__  # Store version info
 
-        self.rng_female  = ss.RNG('female')
+        #self.rng_female  = ss.RNG('female')
 
         self.states.append(ss.State('age', float, 0))
-        self.states.append(ss.State('female', bool, ss.bernoulli(0.5, rng=self.rng_female)))
+        ###self.states.append(ss.State('female', bool, ss.bernoulli(0.5, rng=self.rng_female)))
+        self.states.append(ss.State('female', bool, bernoulli(p=0.5)))
         self.states.append(ss.State('debut', float))
         self.states.append(ss.State('alive', bool, True)) # Redundant with ti_dead == ss.INT_NAN
         self.states.append(ss.State('ti_dead', int, ss.INT_NAN))  # Time index for death
@@ -218,14 +221,14 @@ class People(BasePeople):
     def get_age_dist(age_data):
         """ Return an age distribution based on provided data """
         if age_data is None:
-            return ss.uniform(0, 100)
+            return uniform(loc=0, scale=100) # low and width
         if sc.checktype(age_data, pd.DataFrame):
             return ss.data_dist(vals=age_data['value'].values, bins=age_data['age'].values)
 
     def initialize(self, sim):
         """ Initialization """
         super().initialize(sim)
-        self.age[:] = self.age_data_dist.sample(len(self))
+        self.age[:] = self.age_data_dist.rvs(len(self))
         return
 
     def add_module(self, module, force=False):

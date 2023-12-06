@@ -9,7 +9,7 @@ __all__ = ['RandomNetwork']
 
 class RandomNetwork(Network):
 
-    def __init__(self, *, n_contacts: ss.Distribution, dynamic=True, **kwargs):
+    def __init__(self, *, n_contacts: ss.ScipyDistribution, dynamic=True, **kwargs): # DJK TODO
         """
         :param n_contacts: A distribution of contacts e.g., ss.delta(5), ss.neg_binomial(5,2)
         :param dynamic: If True, regenerate contacts each timestep
