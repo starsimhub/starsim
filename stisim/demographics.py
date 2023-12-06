@@ -6,6 +6,7 @@ import numpy as np
 import stisim as ss
 import sciris as sc
 import pandas as pd
+from scipy.stats import randint
 
 __all__ = ['DemographicModule', 'births', 'background_deaths', 'Pregnancy']
 
@@ -251,12 +252,15 @@ class Pregnancy(DemographicModule):
         self.rng_female = ss.RNG(f'female_{self.name}')
         self.rng_conception = ss.RNG('conception')
         self.rng_dead = ss.RNG(f'dead_{self.name}')
-        self.rng_choose_slots = ss.RNG('choose_slots')
+        #self.rng_choose_slots = ss.RNG('choose_slots')
 
+        self.choose_slots = randint()
         return
 
     def initialize(self, sim):
         super().initialize(sim)
+        self.choose_slots.kwds['low'] = sim.pars['n_agents']+1
+        self.choose_slots.kwds['high'] = int(sim.pars['slot_scale']*sim.pars['n_agents'])
         sim.pars['birth_rates'] = None  # This turns off birth rate pars so births only come from this module
         return
 
@@ -323,7 +327,9 @@ class Pregnancy(DemographicModule):
             if n_unborn_agents > 0:
 
                 # Choose slots for the unborn agents
-                new_slots = self.rng_choose_slots.sample(ss.uniform_int(sim.pars['n_agents'],sim.pars['slot_scale']*sim.pars['n_agents']), uids) # DJK TODO
+                print('TODO DJK')
+                #new_slots = self.rng_choose_slots.sample(ss.uniform_int(sim.pars['n_agents'],sim.pars['slot_scale']*sim.pars['n_agents']), uids) # DJK TODO
+                new_slots = self.choose_slots.rvs(uids)
 
                 # Grow the arrays and set properties for the unborn agents
                 new_uids = sim.people.grow(len(new_slots))

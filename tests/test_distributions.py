@@ -139,15 +139,11 @@ if __name__ == '__main__':
             T = sc.tic()
 
             # Run tests - some will only pass if multirng is True
-            #test_basic()
+            test_basic()
             test_uniform_scalar(n)
             test_uniform_scalar_str(n)
             test_uniform_callable(n)
             test_uniform_array(n)
-            test_gamma_scalar(n)
-            test_gamma_callable(n)
-            test_gamma_array(n)
-            test_gamma_callable_bool(n)
 
             times.append(sc.toc(T, doprint=False, output=True))
 

@@ -128,9 +128,7 @@ class BasePeople(sc.prettyobj):
 
         # Trim the UIDs and states
         self.uid._trim(keep_inds)
-        self.slot._trim(keep_inds)
-
-        for state in self._states.values():
+        for state in self._states.values(): # includes self.slot
             state._trim(keep_inds)
 
         # Update the UID map

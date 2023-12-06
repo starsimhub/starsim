@@ -57,7 +57,8 @@ class SIR(Disease):
 
         # Trigger deaths
         deaths = ss.true(self.t_dead <= sim.year)
-        sim.people.request_death(deaths)
+        if len(deaths):
+            sim.people.request_death(deaths)
         return len(deaths)
 
     def update_death(self, sim, uids):
@@ -113,7 +114,7 @@ class SIR(Disease):
                                    [layer.contacts['p2'], layer.contacts['p1'], self.pars['beta'][k]]]:
                     # probability of a->b transmission
                     p_transmit = rel_trans[a] * rel_sus[b] * layer.contacts['beta'] * beta * sim.dt
-                    new_cases = np.random.random(len(a)) < p_transmit
+                    new_cases = np.random.random(len(a)) < p_transmit # DJK TODO?
                     if new_cases.any():
                         self.infect(sim, b[new_cases])
         return
@@ -134,15 +135,17 @@ class NCD(Disease):
     """
     def __init__(self, pars=None):
         default_pars = {
-            'initial_infections': sps.bernoulli(p=0.3), # Initial prevalence of risk factors
-            'affection_rate': ss.rate(p=0.1), # Instantaneous rate of acquisition applied to those at risk (units are acquisitions / year)
+            'initial_risk': sps.bernoulli(p=0.3), # Initial prevalence of risk factors
+            #'affection_rate': ss.rate(p=0.1), # Instantaneous rate of acquisition applied to those at risk (units are acquisitions / year)
+            'dur_risk': sps.expon(scale=10),
             'prognosis': sps.weibull_min(c=2, scale=5), # Time in years between first becoming affected and death
         }
 
         ss.Module.__init__(self, ss.omerge(default_pars, pars))
-        self.at_risk  = ss.State('at_risk', bool, False)
-        self.affected = ss.State('affected', bool, False)
-        self.ti_dead  = ss.State('ti_dead', int, ss.INT_NAN)
+        self.at_risk      = ss.State('at_risk', bool, False)
+        self.affected     = ss.State('affected', bool, False)
+        self.ti_affected  = ss.State('ti_affected', int, ss.INT_NAN)
+        self.ti_dead      = ss.State('ti_dead', int, ss.INT_NAN)
         return
 
     @property
@@ -157,9 +160,11 @@ class NCD(Disease):
         taken place by the time this method is called.
         """
         alive_uids = ss.true(sim.people.alive)
-        initial_cases = self.pars['initial_infections'].filter(alive_uids)
-        self.at_risk[initial_cases] = True
-        return initial_cases
+        initial_risk = self.pars['initial_risk'].filter(alive_uids)
+        self.at_risk[initial_risk] = True
+        self.ti_affected[initial_risk] = sim.ti + sc.randround(self.pars['dur_risk'].rvs(initial_risk) / sim.dt)
+
+        return initial_risk
 
     def update_pre(self, sim):
         deaths = ss.true(self.ti_dead == sim.ti)
@@ -167,8 +172,9 @@ class NCD(Disease):
         return
 
     def make_new_cases(self, sim):
-        atrisk_uids = ss.true(self.at_risk)
-        new_cases = self.pars['affection_rate'].filter(atrisk_uids)
+        #atrisk_uids = ss.true(self.at_risk)
+        #new_cases = self.pars['affection_rate'].filter(atrisk_uids)
+        new_cases = ss.true(self.ti_affected == sim.ti)
         self.affected[new_cases] = True
         prog_years = self.pars['prognosis'].rvs(new_cases)
         self.ti_dead[new_cases] = sim.ti + sc.randround(prog_years / sim.dt)

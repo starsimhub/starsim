@@ -6,10 +6,11 @@ Run simplest tests
 import stisim as ss
 import matplotlib.pyplot as plt
 import scipy.stats as sps
+import numpy as np
 
 def test_sir():
     ppl = ss.People(10000)
-    ppl.networks = ss.ndict(ss.RandomNetwork(n_contacts=ss.poisson(4, rng='Num Contacts')))
+    ppl.networks = ss.ndict(ss.RandomNetwork(n_contacts=sps.poisson(mu=4)))
 
     sir_pars = {
         'dur_inf': sps.norm(loc=10), # Override the default distribution
@@ -62,6 +63,7 @@ def test_ncd():
 
 
 if __name__ == '__main__':
+    ss.options(multirng=False)
     sim1 = test_sir()
     sim2 = test_ncd()
     plt.show()
