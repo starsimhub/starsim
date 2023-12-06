@@ -327,7 +327,7 @@ class SexualNetwork(Network):
         # This property could also be overwritten by a NetworkConnector
         # which could incorporate information about membership in other
         # contact networks
-        return np.setdiff1d(people.uid[people[sex] & self.active(people)], self.members)
+        return np.setdiff1d(ss.true(people[sex] & self.active(people)), self.members) # ss.true instead of people.uid[]?
 
 
 class mf(SexualNetwork, DynamicNetwork):
@@ -401,7 +401,11 @@ class mf(SexualNetwork, DynamicNetwork):
         beta = np.ones_like(p1)
 
         # Figure out durations
-        dur_vals = self.pars['duration_dist'].rvs(len(p1)) # TODO: If no duplicates in p1, better to pass p1 rather than len(p1)
+        if ss.options.multirng and (len(p1) == len(np.unique(p1))):
+            # No duplicates and user has enabled multirng, so use slotting based on p1
+            dur_vals = self.pars['duration_dist'].rvs(p1)
+        else:
+            dur_vals = self.pars['duration_dist'].rvs(len(p1)) # Just use len(p1) to say how many draws are needed
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])

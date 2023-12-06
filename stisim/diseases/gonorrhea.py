@@ -23,7 +23,7 @@ class Gonorrhea(STI):
 
         # Parameters
         self.pars = ss.omerge({
-            'dur_inf': sps.lognorm(s=0.6, scale=10),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
+            'dur_inf_in_days': sps.lognorm(s=0.6, scale=10),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
             'p_symp': sps.bernoulli(p=0.5),  # Share of infections that are symptomatic. Placeholder value
             'p_clear': sps.bernoulli(p=0.2),  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
             'seed_infections': sps.bernoulli(p=0.1),
@@ -82,7 +82,7 @@ class Gonorrhea(STI):
 
         # Set natural clearance
         clear_uids = self.pars.p_clear.filter(uids)
-        dur = sim.ti + self.pars['dur_inf'].rvs(clear_uids)/sim.pars.dt
+        dur = sim.ti + self.pars['dur_inf_in_days'].rvs(clear_uids)/365/sim.pars.dt # Convert from days to years and then adjust for dt
         self.ti_clearance[clear_uids] = dur
 
         return

@@ -5,6 +5,7 @@ Base classes for diseases
 import numpy as np
 import sciris as sc
 import stisim as ss
+import scipy.stats as sps
 
 __all__ = ['Disease', 'STI']
 
@@ -256,9 +257,8 @@ class STI(Disease):
 
         # Slotted draw, need to find a long-term place for this logic
         slots = people.slot[people.uid]
-        p = np.full(np.max(slots)+1, 0)
+        p = np.full(np.max(slots)+1, 0, dtype=p_acq_node.dtype)
         p[slots] = p_acq_node
-        import scipy.stats as sps
         new_cases_bool = sps.bernoulli.rvs(p=p).astype(bool)[slots]
         #new_cases_bool = self.rng_trans.sample(ss.bernoulli(p_acq_node), people.uid)
         new_cases = people.uid[new_cases_bool]

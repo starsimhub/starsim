@@ -72,7 +72,7 @@ def test_microsim():
     # Set beta. The first entry represents transmission risk from infected p1 -> susceptible p2
     # Need to be careful to get the ordering right. The set-up here assumes that in the simple
     # sexual  network, p1 is male and p2 is female. In the maternal network, p1=mothers, p2=babies.
-    hiv.pars['beta'] = {'mf': [0.0008, 0.0004], 'maternal': [0.2, 0]}
+    hiv.pars['beta'] = {'mf': [0.15, 0.10], 'maternal': [0.2, 0]}
 
     sim = ss.Sim(people=ppl, demographics=ss.Pregnancy(), diseases=hiv)
     sim.initialize()
@@ -115,4 +115,5 @@ if __name__ == '__main__':
     sim2 = test_ppl_construction()
 
     sc.toc(T)
+    plt.show()
     print('Done.')
