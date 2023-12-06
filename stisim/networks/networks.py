@@ -316,6 +316,7 @@ class SexualNetwork(Network):
         # This property could also be overwritten by a NetworkConnector
         # which could incorporate information about membership in other
         # contact networks
+        # people[sex] & self.active(people)
         return np.setdiff1d(people.uid[people[sex] & self.active(people)], self.members)
 
 
@@ -397,8 +398,8 @@ class mf(SexualNetwork, DynamicNetwork):
 
     def set_network_states(self, people, upper_age=None):
         """ Set network states including age of entry into network and participation rates """
-        self.set_participation(people, upper_age=upper_age)
         self.set_debut(people, upper_age=upper_age)
+        self.set_participation(people, upper_age=upper_age)
 
     def set_participation(self, people, upper_age=None):
         # Set people who will participate in the network at some point
@@ -407,11 +408,11 @@ class mf(SexualNetwork, DynamicNetwork):
         else: uids = people.uid[(people.age < upper_age)]
 
         for sk in ['f', 'm']:
-            uids = ss.true(people[sk][uids])
+            sex_uids = ss.true(people[sk][uids])
             df = self.pars.part_rates.loc[self.pars.part_rates.sex == sk]
             pr = np.interp(year, df['year'], df['part_rates']) * self.pars.rel_part_rates
-            dist = ss.choice([True, False], probabilities=[pr, 1-pr])(len(uids))
-            self.participant[uids] = dist
+            dist = ss.choice([True, False], probabilities=[pr, 1-pr])(len(sex_uids))
+            self.participant[sex_uids] = dist
 
     def set_debut(self, people, upper_age=None):
         # Set debut age
@@ -419,7 +420,7 @@ class mf(SexualNetwork, DynamicNetwork):
         else: uids = people.uid[(people.age < upper_age)]
 
         for sk in ['f', 'm']:
-            uids = ss.true(people[sk][uids])
+            sex_uids = ss.true(people[sk][uids])
             df = self.pars.debut.loc[self.pars.debut.sex == sk]
             all_years = self.pars.debut.year.values
             year_ind = sc.findnearest(all_years, people.year)
@@ -428,12 +429,14 @@ class mf(SexualNetwork, DynamicNetwork):
             mean = np.interp(people.year, df['year'], df['debut'])
             std = np.interp(people.year, df['year'], df['std'])
             dist = df.loc[df.year == nearest_year].dist.iloc[0]
-            debut_vals = ss.Distribution.create(dist, mean, std)(len(uids)) * self.pars.rel_debut
-            self.debut[uids] = debut_vals
+            debut_vals = ss.Distribution.create(dist, mean, std)(len(sex_uids)) * self.pars.rel_debut
+            self.debut[sex_uids] = debut_vals
+
 
     def add_pairs(self, people, ti=None):
         available_m = self.available(people, 'male')
         available_f = self.available(people, 'female')
+
         if len(available_m) <= len(available_f):
             p1 = available_m
             p2 = np.random.choice(available_f, len(p1), replace=False)
