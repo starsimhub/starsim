@@ -106,6 +106,8 @@ if __name__ == '__main__':
     # Start timing
     T = sc.tic()
 
+    ss.options.multirng = True
+
     # Run tests
     ppl = test_people()
     nw1, nw2, nw3, nw4 = test_networks()

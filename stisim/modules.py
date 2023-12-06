@@ -54,7 +54,6 @@ class Module(sc.prettyobj):
             #elif isinstance(value, ss.rate):
             #    self.pars[key].initialize(sim, f'{self.name}_{self.label}_{key}')
 
-        print('TODO DJK - will users specify sps or ScipyDistribution?')
         for key, value in self.__dict__.items():
             if isinstance(value, rv_frozen):
                 setattr(self, key, ss.ScipyDistribution(value, f'{self.name}_{self.label}_{key}'))

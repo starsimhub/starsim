@@ -6,6 +6,7 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 from .disease import STI
+import scipy.stats as sps
 
 __all__ = ['HIV', 'ART', 'CD4_analyzer']
 
@@ -20,18 +21,23 @@ class HIV(STI):
         self.cd4         = ss.State('cd4', float, 500)
         self.ti_dead     = ss.State('ti_dead', int, ss.INT_NAN) # Time of HIV-cause death
 
-        self.rng_dead = ss.RNG(f'dead_{self.name}')
+        #self.rng_dead = ss.RNG(f'dead_{self.name}')
+
+        self.death_prob_per_dt = sps.bernoulli(p=self.death_prob)
 
         self.pars = ss.omerge({
             'cd4_min': 100,
             'cd4_max': 500,
             'cd4_rate': 5,
-            'init_prev': 0.05,
+            'seed_infections': sps.bernoulli(p=0.05),
             'eff_condoms': 0.7,
             'art_efficacy': 0.96,
         }, self.pars)
 
         return
+
+    def death_prob(self, sim, uids):
+        return 0.05 / (self.pars.cd4_min - self.pars.cd4_max)**2 *  (self.cd4[uids] - self.pars.cd4_max)**2
 
     def update_pre(self, sim):
         """ Update CD4 """
@@ -40,9 +46,8 @@ class HIV(STI):
 
         self.rel_trans[sim.people.alive & self.infected & self.on_art] = 1 - self.pars['art_efficacy']
 
-        hiv_death_prob = 0.05 / (self.pars.cd4_min - self.pars.cd4_max)**2 *  (self.cd4 - self.pars.cd4_max)**2
         can_die = ss.true(sim.people.alive & sim.people.hiv.infected)
-        hiv_deaths = self.rng_dead.bernoulli_filter(hiv_death_prob[can_die], can_die)
+        hiv_deaths = self.death_prob_per_dt.filter(can_die)
         
         sim.people.request_death(hiv_deaths)
         self.ti_dead[hiv_deaths] = sim.ti

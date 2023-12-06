@@ -5,6 +5,7 @@ Define default gonorrhea disease module and related interventions
 import numpy as np
 import stisim as ss
 from .disease import STI
+import scipy.stats as sps
 
 
 __all__ = ['Gonorrhea']
@@ -20,16 +21,12 @@ class Gonorrhea(STI):
         self.ti_clearance = ss.State('ti_clearance', int, ss.INT_NAN)
         self.p_symp = ss.State('p_symp', float, 1)
 
-        self.rng_clear   = ss.RNG(f'clear_{self.name}')
-        self.rng_symp    = ss.RNG(f'symp_{self.name}')
-        self.rng_dur_inf = ss.RNG(f'dur_inf_{self.name}')
-
         # Parameters
         self.pars = ss.omerge({
-            'dur_inf': ss.poisson(10/365),  # Median for those who spontaneously clear: https://sti.bmj.com/content/96/8/556
-            'p_symp': 0.5,  # Share of infections that are symptomatic. Placeholder value
-            'p_clear': 0.2,  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
-            'init_prev': 0.03,
+            'dur_inf': sps.lognorm(s=0.6, scale=10),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
+            'p_symp': sps.bernoulli(p=0.5),  # Share of infections that are symptomatic. Placeholder value
+            'p_clear': sps.bernoulli(p=0.2),  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
+            'seed_infections': sps.bernoulli(p=0.1),
         }, self.pars)
 
         # Additional states dependent on parameter values, e.g. self.p_symp?
@@ -80,12 +77,12 @@ class Gonorrhea(STI):
         self.ti_infected[uids] = sim.ti
 
         # Set infection status
-        symp_uids = self.rng_symp.bernoulli_filter(self.pars.p_symp, uids)
+        symp_uids = self.pars.p_symp.filter(uids)
         self.symptomatic[symp_uids] = True
 
         # Set natural clearance
-        clear_uids = self.rng_clear.bernoulli_filter(self.pars.p_clear, uids)
-        dur = sim.ti + self.rng_dur_inf.sample(self.pars['dur_inf'], clear_uids)/sim.pars.dt
+        clear_uids = self.pars.p_clear.filter(uids)
+        dur = sim.ti + self.pars['dur_inf'].rvs(clear_uids)/sim.pars.dt
         self.ti_clearance[clear_uids] = dur
 
         return

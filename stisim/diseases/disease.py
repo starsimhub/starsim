@@ -177,10 +177,12 @@ class STI(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        if self.pars['init_prev'] <= 0:
+        if self.pars['seed_infections'] is None:
             return
 
-        initial_cases = self.rng_init_cases.bernoulli_filter(self.pars['init_prev'], ss.true(sim.people.alive))
+        #initial_cases = self.rng_init_cases.bernoulli_filter(self.pars['init_prev'], ss.true(sim.people.alive))
+        alive_uids = ss.true(sim.people.alive) # Maybe just sim.people.uid?
+        initial_cases = self.pars['seed_infections'].filter(alive_uids)
 
         self.set_prognoses(sim, initial_cases, from_uids=None)  # TODO: sentinel value to indicate seeds?
         return
@@ -251,7 +253,14 @@ class STI(Disease):
                     node_from_edge[bi, np.arange(len(a))] = 1 - rel_trans[a] * rel_sus[b] * contacts.beta * beta # TODO: Needs DT
                     p_acq_node = 1 - (1-p_acq_node) * node_from_edge.prod(axis=1) # (1-p1)*(1-p2)*...
 
-        new_cases_bool = self.rng_trans.sample(ss.bernoulli(p_acq_node), people.uid)
+
+        # Slotted draw, need to find a long-term place for this logic
+        slots = people.slot[people.uid]
+        p = np.full(np.max(slots)+1, 0)
+        p[slots] = p_acq_node
+        import scipy.stats as sps
+        new_cases_bool = sps.bernoulli.rvs(p=p).astype(bool)[slots]
+        #new_cases_bool = self.rng_trans.sample(ss.bernoulli(p_acq_node), people.uid)
         new_cases = people.uid[new_cases_bool]
         return new_cases
 

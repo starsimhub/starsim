@@ -24,8 +24,8 @@ class SIR(Disease):
             #'dur_inf': sps.weibull_min(c=lambda sim, uids: sim.people.age[uids], scale=10),#, seed='Duration of SIR Infection'),
             #'dur_inf': sps.norm(loc=lambda sim, uids: sim.people.age[uids], scale=2),
             'dur_inf': sps.lognorm(s=1, loc=10),
-            'initial_infections': sps.bernoulli(p=0.1),#, rng='SIR initial prevalence'),
-            'death_given_infection': sps.bernoulli(p=0.2),#, rng='SIR death given infection'),
+            'seed_infections': sps.bernoulli(p=0.1),
+            'death_given_infection': sps.bernoulli(p=0.2),
             'beta': None,
         }
 
@@ -84,7 +84,7 @@ class SIR(Disease):
         taken place by the time this method is called.
         """
         alive_uids = ss.true(sim.people.alive)
-        initial_cases = self.pars['initial_infections'].filter(alive_uids)
+        initial_cases = self.pars['seed_infections'].filter(alive_uids)
         self.infect(sim, initial_cases)
         return
 

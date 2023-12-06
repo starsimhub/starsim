@@ -129,7 +129,7 @@ class ScipyDistribution():
         if isinstance(self.rng, MultiRNG):
             self.rng.initialize(sim.rng_container, sim.people.slot)
         return
-
+    
     def __getattr__(self, attr):
         # Returns wrapped generator.(attr) if not a property
         try:

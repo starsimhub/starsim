@@ -7,8 +7,10 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 import scipy.optimize as spo
-import scipy.spatial as sps
+import scipy.stats as sps
+import scipy.spatial as spsp
 import pandas as pd
+from scipy.stats._distn_infrastructure import rv_frozen
 
 
 # Specify all externally visible functions this file defines
@@ -338,74 +340,16 @@ class mf(SexualNetwork, DynamicNetwork):
         DynamicNetwork.__init__(self)
         SexualNetwork.__init__(self, pars)
 
+        desired_mean = 15
+        desired_std = 15
+        mu = np.log(desired_mean**2 / np.sqrt(desired_mean**2 + desired_std**2))
+        sigma = np.sqrt(np.log(1 + desired_std**2 / desired_mean**2))
         self.pars = ss.omerge({
-            'dur': ss.lognormal(15, 15),  # Can vary by age, year, and individual pair
-            'part_rates': 0.9,  # Participation rates - can vary by sex and year
+            'duration_dist': sps.lognorm(s=sigma, scale=np.exp(mu)), # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+            'participation_dist': sps.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
+            'debut_dist': sps.norm(loc=16, scale=2),  # Age of debut can vary by using callable parameter values
             'rel_part_rates': 1.0,
-            'debut': 16,  # Age of debut can vary by sex, year, and individual
-            'rel_debut': 1.0,
         }, pars)
-
-
-        # Set metadata for select parameters - this tells us which dimensions are allowed to vary
-        self.meta_pars = sc.objdict({
-            'part_rates': {'year': 2000, 'sex': ['m', 'f'], 'part_rates': None},
-            'debut': {'year': 2000, 'sex': ['m', 'f'], 'debut': None, 'std': 0, 'dist': 'lognormal'},
-            'dur': {'year': 2000, 'age': 0, 'dur': [None], 'std': 0, 'dist': 'lognormal'},
-        })
-        self.validate_pars()
-
-        # Define random number generators
-        self.rng_participation_f = ss.RNG('participation_f')
-        self.rng_participation_m = ss.RNG('participation_m')
-        self.rng_debut = ss.RNG(f'debut_{self.name}')
-        self.rng_dur = ss.RNG(f'dur_{self.name}')
-
-        return
-
-    def validate_pars(self):
-        """ Validate parameters and expand assumptions """
-
-        for parname, defaults in self.meta_pars.items():
-            cols = defaults.keys()
-            par = self.pars[parname]
-
-            if sc.checktype(par, pd.DataFrame):
-                if not set(cols).issubset(par.columns):
-                    errormsg = f'Please ensure the columns of the data for parameter {parname} are {cols}.'
-                    raise ValueError(errormsg)
-                df = par
-
-            elif sc.checktype(par, dict):
-                if not set(cols).issubset(par.keys()):
-                    errormsg = f'Please ensure the keys of the data dict for parameters {parname} are {cols}.'
-                    raise ValueError(errormsg)
-                df = pd.DataFrame(par)
-
-            elif sc.checktype(par, ss.Distribution):
-                df = pd.DataFrame(defaults)
-                df[parname] = par.mean
-                df['std'] = par.std
-                df['dist'] = par.name
-
-            elif sc.isnumber(par):
-                dd = {}
-                for col in cols:
-                    dd[col] = defaults[col]
-                    if col == parname:
-                        dd[col] = par
-                df = pd.DataFrame(dd)
-
-            else:
-                errormsg = f'Data type {type(par)} not understood for parameter {parname}.'
-                raise ValueError(errormsg)
-
-            self.pars[parname] = df
-
-        # Check values
-        if (self.pars.part_rates['part_rates'] < 0).any() or (self.pars.part_rates['part_rates'] > 1).any():
-            raise ValueError('Invalid participation rate for network.')
-
         return
 
     def initialize(self, sim):
@@ -417,43 +361,28 @@ class mf(SexualNetwork, DynamicNetwork):
 
     def set_network_states(self, people, upper_age=None):
         """ Set network states including age of entry into network and participation rates """
-        self.set_participation(people, upper_age=upper_age)
-        self.set_debut(people, upper_age=upper_age)
+        self.set_participation(people, upper_age)
+        self.set_debut(people, upper_age)
         return
 
     def set_participation(self, people, upper_age=None):
-        # Set people who will participate in the network at some point
-        year = people.year
         if upper_age is None:
-            eligible_uids = people.uid
+            uids = people.uid
         else:
-            eligible_uids = people.uid[(people.age < upper_age)]
+            uids = people.uid[(people.age < upper_age)]
 
-        for sk, rng in zip(['f', 'm'], (self.rng_participation_f, self.rng_participation_m)):
-            uids = ss.true(people[sk][eligible_uids])
-            df = self.pars.part_rates.loc[self.pars.part_rates.sex == sk]
-            pr = np.interp(year, df['year'], df['part_rates']) * self.pars.rel_part_rates
-            self.participant[uids] = rng.sample(ss.bernoulli(pr), uids)
+        # Set people who will participate in the network at some point
+        self.participant[uids] = self.pars['participation_dist'].rvs(uids)
         return
 
     def set_debut(self, people, upper_age=None):
         # Set debut age
-        if upper_age is None: uids = people.uid
-        else: uids = people.uid[(people.age < upper_age)]
+        if upper_age is None:
+            uids = people.uid
+        else:
+            uids = people.uid[(people.age < upper_age)]
 
-        for sk in ['f', 'm']:
-            uids = ss.true(people[sk][uids])
-            df = self.pars.debut.loc[self.pars.debut.sex == sk]
-            all_years = self.pars.debut.year.values
-            year_ind = sc.findnearest(all_years, people.year)
-            nearest_year = all_years[year_ind]
-
-            mean = np.interp(people.year, df['year'], df['debut'])
-            std = np.interp(people.year, df['year'], df['std'])
-            dist = df.loc[df.year == nearest_year].dist.iloc[0]
-            debut_vals = self.rng_debut.sample(ss.Distribution.create(dist, mean, std),uids) * self.pars.rel_debut
-            self.rng_debut.reset() # Reset the RNG, it's OK to resample because we'll be drawing from different UIDs at the next iteration
-            self.debut[uids] = debut_vals
+        self.debut[uids] = self.pars['debut_dist'].rvs(uids)
         return
 
     def add_pairs(self, people, ti=None):
@@ -472,14 +401,7 @@ class mf(SexualNetwork, DynamicNetwork):
         beta = np.ones_like(p1)
 
         # Figure out durations
-        all_years = self.pars.dur.year.values
-        year_ind = sc.findnearest(all_years, people.year)
-        nearest_year = all_years[year_ind]
-        mean = np.interp(people.year, self.pars.dur['year'], self.pars.dur['dur'])
-        std = np.interp(people.year, self.pars.dur['year'], self.pars.dur['std'])
-
-        dur_dist = self.pars.dur.loc[self.pars.dur.year == nearest_year].dist.iloc[0]
-        dur_vals = ss.Distribution.create(dur_dist, mean, std)(size=len(p1)) # Getting a specified size of random numbers here, so no need to pass rng=self.rng_dur
+        dur_vals = self.pars['duration_dist'].rvs(len(p1)) # TODO: If no duplicates in p1, better to pass p1 rather than len(p1)
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
@@ -507,7 +429,6 @@ class msm(SexualNetwork, DynamicNetwork):
             'part_rates': 0.1,  # Participation rates - can vary by sex and year
             'rel_part_rates': 1.0,
             'debut': ss.lognormal(18, 2),
-            'rel_debut': 1.0,
         }, self.pars)
         self.rng_dur = ss.RNG(f'dur_{self.name}')
         return
@@ -599,7 +520,7 @@ class embedding(mf):
         draws_m, draws_f = draws[:len(available_m)], draws[len(available_m):]
         loc_m = people.age[available_m].values + self.std * draws_m - self.male_shift
         loc_f = people.age[available_f].values + self.std * draws_f
-        dist_mat = sps.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
+        dist_mat = spsp.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
 
         ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
         # loc_f[ind_f[0]] is close to loc_m[ind_m[0]]
@@ -635,7 +556,7 @@ class NetworkConnector(ss.Module):
         super().__init__(pars, requires=networks, *args, **kwargs)
         return
 
-    def set_participation(self, people):
+    def set_participation(self, people, upper_age=None):
         pass
 
     def update(self, people):
@@ -663,6 +584,8 @@ class mf_msm(NetworkConnector):
         return
 
     def set_participation(self, people, upper_age=None):
+        raise NotImplementedError
+
         if upper_age is None:
             uids = people.uid
         else:

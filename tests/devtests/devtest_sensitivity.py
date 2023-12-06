@@ -32,7 +32,6 @@ def run_sim(n, xf, rand_seed, multirng):
             'part_rates': 0.9,  # Participation rates - can vary by sex and year
             'rel_part_rates': 1.0,
             'debut': 16,  # Age of debut can vary by sex, year, and individual
-            'rel_debut': 1.0,
         }} 
     ppl.networks = ss.ndict(ss.embedding(**rel_pars), ss.maternal())
 

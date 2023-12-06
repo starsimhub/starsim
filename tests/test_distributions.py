@@ -10,6 +10,7 @@ from stisim.random import RNG
 import scipy.stats as sps
 from stisim.distributions import ScipyDistribution
 import pytest
+import matplotlib.pyplot as plt
 
 @pytest.fixture(params=[5, 50])
 def n(request):
@@ -29,7 +30,20 @@ def test_basic():
         with pytest.raises(Exception):
             d.rvs(np.array([1,3,8])) # Draw samples for specific uids
     else:
-        d.rvs(np.array([1,3,8])) # Draw samples for specific uids
+        d.rvs(np.array([1,3,8])) # Draw three samples
+
+    mu = 5 # mean (mu) of the underlying normal
+    sigma = 1 # stdev (sigma) of the underlying normal
+    s = sigma 
+    loc = 0
+    scale = np.exp(mu)
+    fig, ax = plt.subplots(1, 1)
+    x = np.linspace(sps.lognorm.ppf(0.01, s=s, loc=loc, scale=scale), sps.lognorm.ppf(0.99, s=s, loc=loc, scale=scale), 100)
+    ax.plot(x, sps.lognorm.pdf(x, s=s, loc=loc, scale=scale), 'r-', lw=5, alpha=0.6, label='lognorm pdf')
+
+    mean, var, skew, kurt = sps.lognorm.stats(s, loc=loc, scale=scale, moments='mvsk')
+    print('mean', mean, 'var', var, 'skew', skew, 'kurt', kurt)
+    print('calc mean', np.exp(mu + sigma**2/2), 'calc var', (np.exp(sigma**2)-1)*np.exp(2*mu+sigma**2)) # Check against math
 
     '''
     ss.State('foo', float, fill_value=dist)  # Use distribution as the fill value for a state
@@ -56,18 +70,17 @@ def test_uniform_scalar(n):
     assert len(draws) == len(uids)
     return draws
 
-@pytest.mark.skip(reason="Random number generators not yet implemented using strings")
 def test_uniform_scalar_str(n):
     """ Create a uniform distribution """
     sc.heading('test_uniform: Testing uniform with scalar parameters')
 
-    #rng = ss.MultiRNG('Uniform')
-    #rng.initialize(container=None, slots=n)
-    d = ss.uniform(low=1, high=5, rng='Uniform')
-    d.rng.initialize(container=None, slots=n) # Only really needed for testing as initializing the distribution will do something similar.
+    dist = sps.uniform(loc=1, scale=4)
+    d = ScipyDistribution(dist, 'Uniform') # String here!
+    if ss.options.multirng:
+        d.rng.initialize(container=None, slots=n) # Only really needed for testing as initializing the distribution will do something similar.
 
     uids = np.array([1,3])
-    draws = d.sample(uids)
+    draws = d.rvs(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
     assert len(draws) == len(uids)
@@ -80,16 +93,12 @@ def test_uniform_callable(n):
 
     sim = ss.Sim().initialize()
 
-    rng = ss.MultiRNG('Uniform')
-    rng.initialize(container=None, slots=n)
-
     loc = lambda sim, uids: sim.people.age[uids] # Low
     scale = 1 # Width, could also be a lambda
     dist = sps.uniform(loc=loc, scale=scale)
-    dist.random_state = rng
 
-    d = ScipyDistribution(dist)
-    d.gen.dist.initialize(sim) # Handled automatically in the model code
+    d = ScipyDistribution(dist, 'Uniform')
+    d.initialize(sim)
 
     uids = np.array([1,3])
     draws = d.rvs(uids)
@@ -149,4 +158,6 @@ if __name__ == '__main__':
 
     print(times)
     ###sc.toc(T)
+
+    plt.show()
     print('Done.')

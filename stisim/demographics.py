@@ -6,7 +6,7 @@ import numpy as np
 import stisim as ss
 import sciris as sc
 import pandas as pd
-from scipy.stats import randint
+import scipy.stats as sps
 
 __all__ = ['DemographicModule', 'births', 'background_deaths', 'Pregnancy']
 
@@ -243,18 +243,17 @@ class Pregnancy(DemographicModule):
         self.pars = ss.omerge({
             'dur_pregnancy': 0.75,  # Make this a distribution?
             'dur_postpartum': 0.5,  # Make this a distribution?
-            'inci': 0.03,  # Replace this with age-specific rates
-            'p_death': ss.bernoulli(0),  # Probability of maternal death. Question, should this be linked to age and/or duration?
-            'p_female': ss.bernoulli(0.5),
+            'pregnancy_prob_per_dt': sps.bernoulli(p=0.03),  # Probabilty of acquiring pregnancy on each time step. Can replace with callable parameters for age-specific rates, etc. NOTE: You will manually need to adjust for the simulation timestep dt!
+            'p_death': sps.bernoulli(p=0),  # Probability of maternal death. Question, should this be linked to age and/or duration?
+            'p_female': sps.bernoulli(p=0.5),
             'init_prev': 0.3,  # Number of women initially pregnant # TODO: Default value
         }, self.pars)
 
-        self.rng_female = ss.RNG(f'female_{self.name}')
+        #self.rng_female = ss.RNG(f'female_{self.name}')
         self.rng_conception = ss.RNG('conception')
         self.rng_dead = ss.RNG(f'dead_{self.name}')
-        #self.rng_choose_slots = ss.RNG('choose_slots')
 
-        self.choose_slots = randint()
+        self.choose_slots = sps.randint(low=0, high=1) # Low and high will be reset upon initialization
         return
 
     def initialize(self, sim):
@@ -317,37 +316,35 @@ class Pregnancy(DemographicModule):
 
         # If incidence of pregnancy is non-zero, make some cases
         # Think about how to deal with age/time-varying fertility
-        if self.pars.inci > 0:
-            denom_conds = ppl.female & ppl.active & self.susceptible
-            inds_to_choose_from = ss.true(denom_conds)
-            uids = self.rng_conception.bernoulli_filter(ss.bernoulli(self.pars.inci), inds_to_choose_from)
+        denom_conds = ppl.female & ppl.active & self.susceptible
+        inds_to_choose_from = ss.true(denom_conds)
+        #uids = self.rng_conception.bernoulli_filter(ss.bernoulli(self.pars.inci), inds_to_choose_from)
+        uids = self.pars['pregnancy_prob_per_dt'].filter(inds_to_choose_from)
 
-            # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
-            n_unborn_agents = len(uids)
-            if n_unborn_agents > 0:
+        # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
+        n_unborn_agents = len(uids)
+        if n_unborn_agents > 0:
 
-                # Choose slots for the unborn agents
-                print('TODO DJK')
-                #new_slots = self.rng_choose_slots.sample(ss.uniform_int(sim.pars['n_agents'],sim.pars['slot_scale']*sim.pars['n_agents']), uids) # DJK TODO
-                new_slots = self.choose_slots.rvs(uids)
+            # Choose slots for the unborn agents
+            new_slots = self.choose_slots.rvs(uids)
 
-                # Grow the arrays and set properties for the unborn agents
-                new_uids = sim.people.grow(len(new_slots))
+            # Grow the arrays and set properties for the unborn agents
+            new_uids = sim.people.grow(len(new_slots))
 
-                sim.people.age[new_uids] = -self.pars.dur_pregnancy
-                sim.people.slot[new_uids] = new_slots # Before sampling female_dist
-                sim.people.female[new_uids] = self.rng_female.sample(self.pars['p_female'], uids)
+            sim.people.age[new_uids] = -self.pars.dur_pregnancy
+            sim.people.slot[new_uids] = new_slots # Before sampling female_dist
+            sim.people.female[new_uids] = self.pars['p_female'].rvs(uids)
 
-                # Add connections to any vertical transmission layers
-                # Placeholder code to be moved / refactored. The maternal network may need to be
-                # handled separately to the sexual networks, TBC how to handle this most elegantly
-                for lkey, layer in sim.people.networks.items():
-                    if layer.vertical:  # What happens if there's more than one vertical layer?
-                        durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
-                        layer.add_pairs(uids, new_uids, dur=durs)
+            # Add connections to any vertical transmission layers
+            # Placeholder code to be moved / refactored. The maternal network may need to be
+            # handled separately to the sexual networks, TBC how to handle this most elegantly
+            for lkey, layer in sim.people.networks.items():
+                if layer.vertical:  # What happens if there's more than one vertical layer?
+                    durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
+                    layer.add_pairs(uids, new_uids, dur=durs)
 
-                # Set prognoses for the pregnancies
-                self.set_prognoses(sim, uids) # Could set from_uids to network partners?
+            # Set prognoses for the pregnancies
+            self.set_prognoses(sim, uids) # Could set from_uids to network partners?
 
         return
 
