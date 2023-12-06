@@ -56,8 +56,8 @@ class Module(sc.prettyobj):
         # Initialize scipy distributions
         for key, value in self.pars.items():
             if isinstance(value, rv_frozen):
-                self.pars[key] = ss.ScipyDistribution(value)
-                self.pars[key].gen.dist.initialize(sim)
+                self.pars[key] = ss.ScipyDistribution(value, f'{self.name}_{self.label}_{key}')
+                self.pars[key].initialize(sim)
 
         self.initialized = True
         return

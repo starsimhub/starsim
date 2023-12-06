@@ -38,10 +38,6 @@ class SIR(Disease):
         self.t_recovered = ss.State('t_recovered', float, np.nan)
         self.t_dead = ss.State('t_dead', float, np.nan)
 
-        # Connect a MultiRNG to a ScipyDistribution
-        self.rng_durinf = ss.MultiRNG('Duration of infection')
-        self.pars['dur_inf'].random_state = self.rng_durinf
-
         return
 
     def init_results(self, sim):

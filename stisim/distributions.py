@@ -26,11 +26,11 @@ __all__ = [
 ] #  , 'uniform_int', 'choice', 'normal_pos', 'normal_int', 'lognormal', 'lognormal_int', 'neg_binomial', 'beta', 'data_dist', 'delta','weibull', 'norm', 
 
 
-_default_rng = np.random.default_rng()
+_default_rng = np.random.default_rng() # Generator(PCG64(seed))
 
 from scipy.stats._discrete_distns import bernoulli_gen
 class ScipyDistribution():
-    def __init__(self, gen):
+    def __init__(self, gen, rng):
         class starsim_gen(type(gen.dist)):
             def initialize(self, sim):
                 self.sim = sim
@@ -110,7 +110,26 @@ class ScipyDistribution():
                     slots = self.random_state.slots[size].__array__()
                     return vals[slots]
 
-        self.gen = starsim_gen(name=gen.dist.name, seed=gen.random_state)(**gen.kwds)
+
+        # Handle random generators
+        self.rng = gen.random_state # Default
+        if options.multirng and rng and (gen.random_state == np.random.mtrand._rand):
+            # MultiRNG, rng not none, and the current "random_state" is the
+            # numpy global singleton... so let's override
+            if isinstance(rng, str):
+                self.rng = MultiRNG(rng) # Crate a new generator with the user-provided string
+            elif isinstance(rng, np.random.Generator):
+                self.rng = rng
+            else:
+                raise Exception(f'The rng must be a string or a np.random.Generator instead of {type(rng)}')
+
+        self.gen = starsim_gen(name=gen.dist.name, seed=self.rng)(**gen.kwds)
+        return
+
+    def initialize(self, sim):
+        self.gen.dist.initialize(sim)
+        if isinstance(self.rng, MultiRNG):
+            self.rng.initialize(sim.rng_container, sim.people.slot)
         return
 
     def __getattr__(self, attr):

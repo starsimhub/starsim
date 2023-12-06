@@ -15,8 +15,12 @@ def test_sir():
         'dur_inf': sps.norm(loc=10), # Override the default distribution
     }
     sir = ss.SIR(sir_pars)
-    #sir.pars['dur_inf'].kwds['loc'] = 5 # You can also change the parameters directly!
-    sir.pars['dur_inf'].kwds['loc'] = lambda sim, uids: sim.people.age[uids]/25 # Or why not put a lambda here for fun
+
+    # You can also change the parameters of the default lognormal distribution directly!
+    #sir.pars['dur_inf'].kwds['loc'] = 5 
+    
+    # Or why not put a lambda here for fun!
+    sir.pars['dur_inf'].kwds['loc'] = lambda sim, uids: sim.people.age[uids]/10
 
     sir.pars['beta'] = {'randomnetwork': 0.1}
     sim = ss.Sim(people=ppl, diseases=sir)
