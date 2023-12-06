@@ -5,11 +5,19 @@ Run simplest tests
 # %% Imports and settings
 import stisim as ss
 import matplotlib.pyplot as plt
+import scipy.stats as sps
 
 def test_sir():
     ppl = ss.People(10000)
     ppl.networks = ss.ndict(ss.RandomNetwork(n_contacts=ss.poisson(4, rng='Num Contacts')))
-    sir = ss.SIR()
+
+    sir_pars = {
+        'dur_inf': sps.norm(loc=10), # Override the default distribution
+    }
+    sir = ss.SIR(sir_pars)
+    #sir.pars['dur_inf'].kwds['loc'] = 5 # You can also change the parameters directly!
+    sir.pars['dur_inf'].kwds['loc'] = lambda sim, uids: sim.people.age[uids]/25 # Or why not put a lambda here for fun
+
     sir.pars['beta'] = {'randomnetwork': 0.1}
     sim = ss.Sim(people=ppl, diseases=sir)
     sim.run()
@@ -51,5 +59,5 @@ def test_ncd():
 
 if __name__ == '__main__':
     sim1 = test_sir()
-    sim2 = test_ncd()
+    #sim2 = test_ncd()
     plt.show()
