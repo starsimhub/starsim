@@ -204,7 +204,7 @@ def set_seed(seed=None):
 
 # %% Probabilities -- mostly not jitted since performance gain is minimal
 
-__all__ += ['binomial_arr', 'binomial_filter', 'n_poisson', 'n_neg_binomial']
+__all__ += ['binomial_arr', 'binomial_filter', 'n_multinomial', 'n_poisson', 'n_neg_binomial']
 
 
 def binomial_arr(prob_arr):
@@ -258,6 +258,24 @@ def binomial_arr(prob_arr):
         outcomes = ss.binomial_arr([0.1, 0.1, 0.2, 0.2, 0.8, 0.8]) # Perform 6 trials with different probabilities
     """
     return np.random.random(prob_arr.shape) < prob_arr
+
+
+def n_multinomial(probs, n): # No speed gain from Numba
+    '''
+    An array of multinomial trials.
+
+    Args:
+        probs (array): probability of each outcome, which usually should sum to 1
+        n (int): number of trials
+
+    Returns:
+        Array of integer outcomes
+
+    **Example**::
+
+        outcomes = hpv.n_multinomial(np.ones(6)/6.0, 50)+1 # Return 50 die-rolls
+    '''
+    return np.searchsorted(np.cumsum(probs), np.random.random(n))
 
 
 def n_poisson(rate, n):

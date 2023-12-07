@@ -69,29 +69,29 @@ class Gonorrhea(STI):
         super(Gonorrhea, self).make_new_cases(sim)
         return
 
-    def set_prognoses(self, sim, uids):
+    def set_prognoses(self, sim, target_uids):
         """
         Natural history of gonorrhea for adult infection
         """
 
         # Set infection status
-        self.susceptible[uids] = False
-        self.infected[uids] = True
-        self.ti_infected[uids] = sim.ti
+        self.susceptible[target_uids] = False
+        self.infected[target_uids] = True
+        self.ti_infected[target_uids] = sim.ti
 
         # Set infection status
-        n_symptomatic = int(self.pars.p_symp * len(uids))
-        symptomatic_uids = np.random.choice(uids, n_symptomatic, replace=False)
+        n_symptomatic = int(self.pars.p_symp * len(target_uids))
+        symptomatic_uids = np.random.choice(target_uids, n_symptomatic, replace=False)
         self.symptomatic[symptomatic_uids] = True
 
         # Set natural clearance
-        n_clear = int(self.pars.p_clear * len(uids))
-        clear_uids = np.random.choice(uids, n_clear, replace=False)
+        n_clear = int(self.pars.p_clear * len(target_uids))
+        clear_uids = np.random.choice(target_uids, n_clear, replace=False)
         dur = sim.ti + np.random.poisson(self.pars['dur_inf']/sim.pars.dt, len(clear_uids))
         self.ti_clearance[clear_uids] = dur
 
         return
 
-    def set_congenital(self, sim, uids):
+    def set_congenital(self, sim, target_uids):
         pass
 

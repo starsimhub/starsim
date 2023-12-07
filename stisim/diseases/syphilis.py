@@ -18,14 +18,19 @@ class Syphilis(STI):
     def __init__(self, pars=None):
         super().__init__(pars)
 
-        # States additional to the default disease states (see base class)
+        # General syphilis states
         self.exposed = ss.State('exposed', bool, False)  # AKA incubating. Free of symptoms, not transmissible
+
+        # Adult syphilis states
         self.primary = ss.State('primary', bool, False)  # Primary chancres
         self.secondary = ss.State('secondary', bool, False)  # Inclusive of those who may still have primary chancres
         self.latent_temp = ss.State('latent_temp', bool, False)  # Relapses to secondary (~1y)
         self.latent_long = ss.State('latent_long', bool, False)  # Can progress to tertiary or remain here
         self.tertiary = ss.State('tertiary', bool, False)  # Includes complications (cardio/neuro/disfigurement)
         self.immune = ss.State('immune', bool, False)  # After effective treatment people may acquire temp immunity
+
+        # Congenital syphilis states
+        self.congenital = ss.State('congenital', bool, False)
 
         # Duration of stages
         self.dur_exposed = ss.State('dur_exposed', float, np.nan)
@@ -44,29 +49,58 @@ class Syphilis(STI):
         self.ti_latent_long = ss.State('ti_latent_long', int, ss.INT_NAN)
         self.ti_tertiary = ss.State('ti_tertiary', int, ss.INT_NAN)
         self.ti_immune = ss.State('ti_immune', int, ss.INT_NAN)
+        self.ti_nnd = ss.State('ti_nnd', int, ss.INT_NAN)
+        self.ti_stillborn = ss.State('ti_stillborn', int, ss.INT_NAN)
+        self.ti_congenital = ss.State('ti_congenital', int, ss.INT_NAN)
 
         # Parameters
-        self.pars = ss.omerge({
-            'dur_exposed': ss.lognormal(1/12, 1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            'dur_primary': ss.lognormal(1.5/12, 1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            'dur_secondary': ss.normal(3.6, 1.5),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            'dur_latent_temp': ss.lognormal(1, 1/6),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            'dur_latent_long': ss.lognormal(20, 8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            'p_latent_temp': 0.25,  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            'p_tertiary': 0.35,  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
-            'init_prev': 0.03,
-        }, self.pars)
+        default_pars = dict(
+            # Adult syphilis natural history
+            dur_exposed=ss.lognormal(1/12, 1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_primary=ss.lognormal(1.5/12, 1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_secondary=ss.normal(3.6, 1.5),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_temp=ss.lognormal(1, 1/6),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_long=ss.lognormal(20, 8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            p_latent_temp=0.25,  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            p_tertiary=0.35,  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
+
+            # Congenital syphilis outcomes - must sum to 1
+            # Source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5973824/
+            # TODO: allow to vary by syphilis stage and pregnancy stage
+            birth_outcomes=sc.objdict(
+                nnd=0.45,  # Neonatal death
+                stillborn=0.1,  # Stillborn
+                congenital=0.45,  # TODO: disaggregate?
+            ),
+
+            # Initial conditions
+            init_prev=0.03,
+        )
+        self.pars = ss.omerge(default_pars, self.pars)
 
         return
 
     @property
-    def infectious(self):
-        """ Infectious """
+    def active(self):
+        """ Active - only active infections can transmit through sexual contact """
         return self.primary | self.secondary
+
+    @property
+    def latent(self):
+        """ Latent """
+        return self.latent_temp | self.latent_temp
+
+    @property
+    def infectious(self):
+        """ Infectious - includes latent infections, which can transmit vertically but not sexually """
+        return self.active | self.latent
 
     def init_results(self, sim):
         """ Initialize results """
         super().init_results(sim)
+        self.results += ss.Result(self.name, 'new_nnds', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'new_stillborns', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'new_congenital', sim.npts, dtype=int)
         return
 
     def update_results(self, sim):
@@ -103,28 +137,50 @@ class Syphilis(STI):
         self.tertiary[tertiary] = True
         self.latent_long[tertiary] = False
 
+        # Congenital syphilis deaths
+        nnd = self.ti_nnd == sim.ti
+        stillborn = self.ti_stillborn == sim.ti
+        sim.people.request_death(nnd)
+        sim.people.request_death(stillborn)
+
+        # Congenital syphilis transmission outcomes
+        congenital = self.ti_congenital == sim.ti
+        self.congenital[congenital] = True
+
         return
 
     def update_results(self, sim):
         super(Syphilis, self).update_results(sim)
+        self.results['new_nnds'][sim.ti] = np.count_nonzero(self.ti_nnd == sim.ti)
+        self.results['new_stillborns'][sim.ti] = np.count_nonzero(self.ti_stillborn == sim.ti)
         return
 
     def make_new_cases(self, sim):
+        # TODO: for now, still using generic transmission method, but could replace here if needed
         super(Syphilis, self).make_new_cases(sim)
         return
 
-    def set_prognoses(self, sim, uids):
-        """
-        Natural history of syphilis for adult infection
-        """
-        n_uids = len(uids)
-
-        # Record exposure
+    def record_exposure(self, sim, uids):
         self.susceptible[uids] = False
         self.exposed[uids] = True
         self.infected[uids] = True
         self.ti_exposed[uids] = sim.ti
         self.ti_infected[uids] = sim.ti
+
+    def set_prognoses(self, sim, target_uids, source_uids=None):
+        """
+        Natural history of syphilis for adult infection
+        """
+
+        # Subset target_uids to only include ones with active infection
+        if source_uids is not None:
+            active_sources = self.active[source_uids].values.nonzero()[-1]
+            uids = target_uids[active_sources]
+        else:
+            uids = target_uids
+
+        n_uids = len(uids)
+        self.record_exposure(sim, uids)
 
         # Set future dates and probabilities
         # Exposed to primary
@@ -166,6 +222,24 @@ class Syphilis(STI):
 
         return
 
-    def set_congenital(self, sim, uids):
-        pass
+    def set_congenital(self, sim, target_uids, source_uids=None):
+        """
+        Natural history of syphilis for congenital infection
+        """
+        n_uids = len(target_uids)
+        self.record_exposure(sim, target_uids)
 
+        # Determine outcomes
+        birth_outcomes = self.pars.birth_outcomes
+        assigned_outcomes = ss.n_multinomial(birth_outcomes.values(), n_uids)
+        time_to_birth = -sim.people.age
+
+        # Schedule events
+        for oi, outcome in enumerate(birth_outcomes.keys()):
+            o_uids = target_uids[assigned_outcomes == oi]
+            ti_outcome = f'ti_{outcome}'
+            vals = getattr(self, ti_outcome)
+            vals[o_uids] = sim.ti + rr(time_to_birth[o_uids].values/sim.dt)
+            setattr(self, ti_outcome, vals)
+
+        return

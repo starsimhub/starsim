@@ -121,7 +121,7 @@ class Disease(ss.Module):
         """
         pass
 
-    def set_prognoses(self, sim, uids):
+    def set_prognoses(self, sim, target_uids, source_uids=None):
         pass
 
     def update_results(self, sim):
@@ -219,14 +219,15 @@ class STI(Disease):
                     p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta
                     new_cases = np.random.random(len(a)) < p_transmit
                     if np.any(new_cases):
-                        self.set_prognoses(sim, b[new_cases])
+                        if layer.vertical:
+                            self.set_congenital(sim, target_uids=b[new_cases], source_uids=a[new_cases])
+                        else:
+                            self.set_prognoses(sim, b[new_cases], source_uids=a[new_cases])
 
-    def set_prognoses(self, sim, uids):
+    def set_prognoses(self, sim, target_uids, source_uids=None):
         pass
 
-    def set_congenital(self, sim, uids):
-        # Need to figure out whether we would have a methods like this here or make it
-        # part of a pregnancy/STI connector
+    def set_congenital(self, sim, target_uids, source_uids=None):
         pass
 
     def update_results(self, sim):
