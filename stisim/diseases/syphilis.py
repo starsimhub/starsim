@@ -64,13 +64,19 @@ class Syphilis(STI):
             p_latent_temp=0.25,  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_tertiary=0.35,  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
 
-            # Congenital syphilis outcomes - must sum to 1
+            # Congenital syphilis outcomes
             # Source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5973824/
-            # TODO: allow to vary by syphilis stage and pregnancy stage
             birth_outcomes=sc.objdict(
-                nnd=0.45,  # Neonatal death
-                stillborn=0.1,  # Stillborn
-                congenital=0.45,  # TODO: disaggregate?
+                active=sc.objdict(
+                    nnd=0.15,  # Neonatal death
+                    stillborn=0.25,  # Stillborn
+                    congenital=0.40,  # Congenital syphilis
+                ),
+                latent=sc.objdict(
+                    nnd=0.10,  # Neonatal death
+                    stillborn=0.125,  # Stillborn
+                    congenital=0.05,  # Congenital syphilis
+                )
             ),
 
             # Initial conditions
@@ -88,7 +94,7 @@ class Syphilis(STI):
     @property
     def latent(self):
         """ Latent """
-        return self.latent_temp | self.latent_temp
+        return self.latent_temp | self.latent_long
 
     @property
     def infectious(self):
@@ -153,6 +159,7 @@ class Syphilis(STI):
         super(Syphilis, self).update_results(sim)
         self.results['new_nnds'][sim.ti] = np.count_nonzero(self.ti_nnd == sim.ti)
         self.results['new_stillborns'][sim.ti] = np.count_nonzero(self.ti_stillborn == sim.ti)
+        self.results['new_congenital'][sim.ti] = np.count_nonzero(self.ti_congenital == sim.ti)
         return
 
     def make_new_cases(self, sim):

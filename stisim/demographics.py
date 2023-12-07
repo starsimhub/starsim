@@ -202,6 +202,7 @@ class background_deaths(DemographicModule):
         m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
         self.death_probs[sim.people.female] = f_arr[age_inds[sim.people.female]]
         self.death_probs[sim.people.male] = m_arr[age_inds[sim.people.male]]
+        self.death_probs[sim.people.age < 0] = 0  # Don't use background death rates for unborn babies
         self.death_probs *= p.rel_death  # Adjust overall death probabilities
 
         # Get indices of people who die of other causes
