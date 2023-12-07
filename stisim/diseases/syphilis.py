@@ -233,20 +233,26 @@ class Syphilis(STI):
         """
         Natural history of syphilis for congenital infection
         """
-        n_uids = len(target_uids)
         self.record_exposure(sim, target_uids)
 
         # Determine outcomes
-        birth_outcomes = self.pars.birth_outcomes
-        assigned_outcomes = ss.n_multinomial(birth_outcomes.values(), n_uids)
-        time_to_birth = -sim.people.age
+        for state in ['active', 'latent']:
+            source_state_inds = getattr(self, state)[source_uids].values.nonzero()[-1]
+            uids = target_uids[source_state_inds]
+            n_uids = len(uids)
 
-        # Schedule events
-        for oi, outcome in enumerate(birth_outcomes.keys()):
-            o_uids = target_uids[assigned_outcomes == oi]
-            ti_outcome = f'ti_{outcome}'
-            vals = getattr(self, ti_outcome)
-            vals[o_uids] = sim.ti + rr(time_to_birth[o_uids].values/sim.dt)
-            setattr(self, ti_outcome, vals)
+            birth_outcomes = self.pars.birth_outcomes[state]
+            probs = np.append(birth_outcomes.values(), 1 - sum(birth_outcomes.values()))
+            assigned_outcomes = ss.n_multinomial(probs, n_uids)
+            time_to_birth = -sim.people.age
+
+            # Schedule events
+            for oi, outcome in enumerate(birth_outcomes.keys()):
+                o_uids = uids[assigned_outcomes == oi]
+                if len(o_uids)>0:
+                    ti_outcome = f'ti_{outcome}'
+                    vals = getattr(self, ti_outcome)
+                    vals[o_uids] = sim.ti + rr(time_to_birth[o_uids].values/sim.dt)
+                    setattr(self, ti_outcome, vals)
 
         return
