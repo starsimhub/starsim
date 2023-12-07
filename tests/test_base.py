@@ -7,6 +7,7 @@ import sciris as sc
 import numpy as np
 import stisim as ss
 import matplotlib.pyplot as plt
+import scipy.stats as sps
 
 
 # %% Define the tests
@@ -45,18 +46,19 @@ def test_networks():
     # expecting a Sim object, not a People object
     nw3 = None
     nw4 = None
-    '''
+    
     # Make people, then make a dynamic sexual layer and update it
-    ppl = ss.People(100)  # BasePeople
-    ppl.initialize()  # This seems to be necessary, although not completely clear why...
+    sim = ss.Sim()    
+    sim.ppl = ss.People(100)  # BasePeople
+    #ppl.initialize()  # This seems to be necessary, although not completely clear why...
+    
     nw3 = ss.hpv_network()
-    nw3.initialize(ppl) #TODO: Initialize is expecting a Sim object, not a People object
+    nw3.initialize(sim) #TODO: Initialize is expecting a Sim object, not a People object
     nw3.update(ppl, ti=1, dt=1)  # Update by providing a timestep & current time index
 
     nw4 = ss.maternal()
-    nw4.initialize(ppl) #TODO: Initialize is expecting a Sim object, not a People object
+    nw4.initialize(sim) #TODO: Initialize is expecting a Sim object, not a People object
     nw4.add_pairs(mother_inds=[1, 2, 3], unborn_inds=[100, 101, 102], dur=[1, 1, 1])
-    '''
 
     return nw1, nw2, nw3, nw4
 
@@ -84,9 +86,19 @@ def test_microsim():
 
     return sim
 
+
 def test_ppl_construction():
 
-    sim_pars = {'networks': [ss.mf()], 'n_agents': 100}
+    def init_debut(self, sim, uids):
+        #loc = 16
+        loc = np.full(len(uids), 16)
+        loc[sim.people.female[uids]] = 21
+        return loc
+
+    mf_pars = {
+        'debut_dist': sps.norm(loc=init_debut, scale=2),  # Age of debut can vary by using callable parameter values
+    }
+    sim_pars = {'networks': [ss.mf(mf_pars)], 'n_agents': 100}
     gon_pars = {'beta': {'mf': [0.08, 0.04]}, 'p_death': 0.2}
     gon = ss.Gonorrhea(pars=gon_pars)
 

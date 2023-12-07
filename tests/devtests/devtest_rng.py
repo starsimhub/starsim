@@ -28,10 +28,7 @@ def run_sim(n, idx, intv_cov, rand_seed, multirng):
 
     ppl = ss.People(n)
 
-    ppl.networks = ss.ndict(
-        ss.embedding(pars={'dur': ss.lognormal(5, 3)}),
-        ss.maternal()
-        )
+    ppl.networks = ss.ndict( ss.embedding(), ss.maternal())
 
     hiv_pars = {
         'beta': {'embedding': [0.2, 0.15], 'maternal': [0.3, 0]},
@@ -41,7 +38,8 @@ def run_sim(n, idx, intv_cov, rand_seed, multirng):
     hiv = ss.HIV(hiv_pars)
 
     pregnancy = ss.Pregnancy()
-    deaths = ss.background_deaths()
+    print('DJK re-enable background deaths')
+    deaths = None # ss.background_deaths()
 
     pars = {
         'start': 1980,

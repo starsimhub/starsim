@@ -27,8 +27,9 @@ from scipy.stats._discrete_distns import bernoulli_gen
 class ScipyDistribution():
     def __init__(self, gen, rng=None):
         class starsim_gen(type(gen.dist)):
-            def initialize(self, sim):
+            def initialize(self, sim, context):
                 self.sim = sim
+                self.context = context
                 return
 
             def rvs(self, *args, **kwargs):
@@ -75,7 +76,7 @@ class ScipyDistribution():
                 # Now handle distribution arguments
                 for pname in [p.name for p in self._param_info()]:
                     if pname in kwargs and callable(kwargs[pname]):
-                        kwargs[pname] = kwargs[pname](self.sim, size)
+                        kwargs[pname] = kwargs[pname](self.context, self.sim, size)
 
                     if (pname in kwargs) and (not np.isscalar(kwargs[pname])) and (len(kwargs[pname]) != n_samples):
                         # Fill in the blank. The number of UIDs provided is
@@ -84,7 +85,7 @@ class ScipyDistribution():
                         # n_samples in length.
                         if len(kwargs[pname]) not in [len(size), sum(size)]: # Could handle uid and bool separately? len(size) for uid and sum(size) for bool
                             raise Exception('When providing an array of parameters, the length of the parameters must match the number of agents for the selected size (uids).')
-                        vals_all = np.full(n_samples, fill_value=1) # self.fill_value
+                        vals_all = np.full(n_samples, fill_value=1, dtype=kwargs[pname].dtype) # self.fill_value
                         vals_all[size] = kwargs[pname]
                         kwargs[pname] = vals_all
 
@@ -124,8 +125,8 @@ class ScipyDistribution():
                 raise Exception(f'The rng must be a string or a np.random.Generator instead of {type(rng)}')
         return ret
 
-    def initialize(self, sim):
-        self.gen.dist.initialize(sim)
+    def initialize(self, sim, context):
+        self.gen.dist.initialize(sim, context)
         if isinstance(self.rng, MultiRNG):
             self.rng.initialize(sim.rng_container, sim.people.slot)
         return

@@ -50,14 +50,14 @@ class Module(sc.prettyobj):
         for key, value in self.pars.items():
             if isinstance(value, rv_frozen):
                 self.pars[key] = ss.ScipyDistribution(value, f'{self.name}_{self.label}_{key}')
-                self.pars[key].initialize(sim)
+                self.pars[key].initialize(sim, self)
             #elif isinstance(value, ss.rate):
             #    self.pars[key].initialize(sim, f'{self.name}_{self.label}_{key}')
 
         for key, value in self.__dict__.items():
             if isinstance(value, rv_frozen):
                 setattr(self, key, ss.ScipyDistribution(value, f'{self.name}_{self.label}_{key}'))
-                getattr(self, key).initialize(sim)
+                getattr(self, key).initialize(sim, self)
 
         # Connect the states to the sim
         # Will use random numbers, so do after distribution initialization

@@ -21,8 +21,8 @@ class SIR(Disease):
 
     def __init__(self, pars=None, *args, **kwargs):
         default_pars = {
-            #'dur_inf': sps.weibull_min(c=lambda sim, uids: sim.people.age[uids], scale=10),#, seed='Duration of SIR Infection'),
-            #'dur_inf': sps.norm(loc=lambda sim, uids: sim.people.age[uids], scale=2),
+            #'dur_inf': sps.weibull_min(c=lambda self, sim, uids: sim.people.age[uids], scale=10),#, seed='Duration of SIR Infection'),
+            #'dur_inf': sps.norm(loc=lambda self, sim, uids: sim.people.age[uids], scale=2),
             'dur_inf': sps.lognorm(s=1, loc=10),
             'seed_infections': sps.bernoulli(p=0.1),
             'death_given_infection': sps.bernoulli(p=0.2),

@@ -11,6 +11,7 @@ import scipy.stats as sps
 import scipy.spatial as spsp
 import pandas as pd
 from scipy.stats._distn_infrastructure import rv_frozen
+import scipy.stats as sps
 
 
 # Specify all externally visible functions this file defines
@@ -534,18 +535,10 @@ class embedding(mf):
         beta = np.ones(n_pairs)
 
         # Figure out durations
-        all_years = self.pars.dur.year.values
-        year_ind = sc.findnearest(all_years, people.year)
-        nearest_year = all_years[year_ind]
-        mean = np.interp(people.year, self.pars.dur['year'], self.pars.dur['dur'])
-        std = np.interp(people.year, self.pars.dur['year'], self.pars.dur['std'])
+        p1 = available_m[ind_m]
+        dur_vals = self.pars['duration_dist'].rvs(p1)
 
-        # TODO: Why let the user chose the distribution, but hard code mean and std???
-        dur_distname = self.pars.dur.loc[self.pars.dur.year == nearest_year].dist.iloc[0]
-        dur_dist = ss.Distribution.create(dur_distname, mean, std)
-        dur_vals = self.rng_dur.sample(dur_dist, available_m[ind_m])
-
-        self.contacts.p1 = np.concatenate([self.contacts.p1, available_m[ind_m]])
+        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, available_f[ind_f]])
         self.contacts.beta = np.concatenate([self.contacts.beta, beta])
         self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])

@@ -388,7 +388,7 @@ class State(FusedArray):
 
         if isinstance(self.fill_value, rv_frozen):
             self.fill_value = ScipyDistribution(self.fill_value, f'{self.__class__.__name__}_{self.label}')
-            self.fill_value.initialize(sim) # needs sim, not people
+            self.fill_value.initialize(sim, self)
 
         people = sim.people
 

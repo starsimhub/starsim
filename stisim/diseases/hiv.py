@@ -36,6 +36,7 @@ class HIV(STI):
 
         return
 
+    @staticmethod
     def death_prob(self, sim, uids):
         return 0.05 / (self.pars.cd4_min - self.pars.cd4_max)**2 *  (self.cd4[uids] - self.pars.cd4_max)**2
 
@@ -92,11 +93,11 @@ class ART(ss.Intervention):
 
         super().__init__(**kwargs)
 
-        self.rng_add_ART = ss.RNG('add_ART')
-
+        self.prob_art_at_infection = sps.bernoulli(p=lambda self, sim, uids: np.interp(sim.year, self.t, self.coverage))
         return
 
     def initialize(self, sim):
+        super().initialize(sim)
         sim.results.hiv += ss.Result(self.name, 'n_art', sim.npts, dtype=int)
         self.initialized = True
         return
@@ -105,13 +106,12 @@ class ART(ss.Intervention):
         if sim.ti < self.t[0]:
             return
 
-        coverage = self.coverage[np.where(self.t <= sim.ti)[0][-1]]
-        ti_delay = 1 # 1 time step delay
+        ti_delay = 1 # 1 time step delay TODO
         recently_infected = ss.true((sim.people.hiv.ti_infected == sim.ti-ti_delay) & sim.people.alive)
 
         n_added = 0
         if len(recently_infected) > 0:
-            inds = self.rng_add_ART.bernoulli_filter(coverage, recently_infected)
+            inds = self.prob_art_at_infection.filter(recently_infected)
             sim.people.hiv.on_art[inds] = True
             sim.people.hiv.ti_art[inds] = sim.ti
             n_added = len(inds)
