@@ -88,7 +88,7 @@ class Syphilis(STI):
     @property
     def latent(self):
         """ Latent """
-        return self.latent_temp | self.latent_temp
+        return self.latent_temp | self.latent_long
 
     @property
     def infectious(self):
@@ -101,11 +101,6 @@ class Syphilis(STI):
         self.results += ss.Result(self.name, 'new_nnds', sim.npts, dtype=int)
         self.results += ss.Result(self.name, 'new_stillborns', sim.npts, dtype=int)
         self.results += ss.Result(self.name, 'new_congenital', sim.npts, dtype=int)
-        return
-
-    def update_results(self, sim):
-        """ Update results """
-        super(Syphilis, self).update_results(sim)
         return
 
     def update_pre(self, sim):

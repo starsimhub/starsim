@@ -1,5 +1,5 @@
 """
-Run syphilis
+Run RSV
 """
 
 # %% Imports and settings
@@ -7,12 +7,12 @@ import stisim as ss
 import pandas as pd
 import matplotlib.pyplot as plt
  
-def test_syph():
+def test_rsv():
 
-    # Make syphilis module
-    syph = ss.Syphilis()
-    syph.pars['beta'] = {'mf': [0.5, 0.35], 'maternal': [0.99, 0]}
-    syph.pars['init_prev'] = 0.005
+    # Make rsv module
+    rsv = ss.RSV()
+    rsv.pars['beta'] = {'randomnetwork': 0.5, 'maternal': 0}
+    rsv.pars['init_prev'] = 0.05
 
     # Make demographic modules
     fertility_rates = {'fertility_rates': pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')}
@@ -22,23 +22,20 @@ def test_syph():
 
     # Make people and networks
     ppl = ss.People(10000)
-    mf = ss.mf(
-        pars=dict(dur=ss.lognormal(2, 1))
-    )
+    RandomNetwork = ss.RandomNetwork(n_contacts=ss.poisson(10))
     maternal = ss.maternal()
-    ppl.networks = ss.ndict(mf, maternal)
-    sim = ss.Sim(dt=1/12, people=ppl, diseases=[syph], demographics=[pregnancy, death])
+    ppl.networks = ss.ndict(RandomNetwork, maternal)
+    sim = ss.Sim(dt=1/12, people=ppl, diseases=[rsv], demographics=[pregnancy, death])
     sim.run()
 
     plt.figure()
-    plt.plot(sim.yearvec, syph.results.new_infections)
-    plt.plot(sim.yearvec, syph.results.new_nnds)
-    plt.title('Syphilis infections')
+    plt.plot(sim.yearvec, rsv.results.n_infected)
+    plt.title('RSV infections')
     plt.show()
 
     return sim
 
 
 if __name__ == '__main__':
-    sim = test_syph()
+    sim = test_rsv()
 
