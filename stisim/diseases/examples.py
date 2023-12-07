@@ -161,6 +161,9 @@ class NCD(Disease):
     def update_pre(self, sim):
         deaths = ss.binomial_filter(sim.dt*self.pars['p_death_given_risk'], ss.true(self.affected))
         sim.people.request_death(deaths)
+        self.log.add_data(deaths, died=True)
+        print(sim.ti)
+        self.results.new_deaths[sim.ti] = len(deaths) # Log deaths attributable to this module
         return
 
     def make_new_cases(self, sim):
@@ -185,5 +188,4 @@ class NCD(Disease):
         super().update_results(sim)
         self.results['n_not_at_risk'][sim.ti] = np.count_nonzero(self.not_at_risk & sim.people.alive)
         self.results['prevalence'][sim.ti] = np.count_nonzero(self.affected & sim.people.alive)/np.count_nonzero(sim.people.alive)
-        self.results['new_deaths'][sim.ti] = np.count_nonzero(self.ti_dead == sim.ti)
         return

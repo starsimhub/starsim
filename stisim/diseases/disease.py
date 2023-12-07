@@ -42,7 +42,7 @@ class InfectionLog(nx.MultiDiGraph):
     # Add entries
     # Add items to the most recent infection for an agent
 
-    def add_data(self, uid, **kwargs):
+    def add_data(self, uids, **kwargs):
         """
         Record extra infection data
 
@@ -52,8 +52,9 @@ class InfectionLog(nx.MultiDiGraph):
         :param uid: The UID of the target node (the agent that was infected)
         :param kwargs: Remaining arguments are stored as edge data
         """
-        source, target, key = max(self.in_edges(uid, keys=True), key=itemgetter(2)) # itemgetter twice as fast as lambda apparently
-        g[source][target][key].update(**kwargs)
+        for uid in sc.promotetoarray(uids):
+            source, target, key = max(self.in_edges(uid, keys=True), key=itemgetter(2,0)) # itemgetter twice as fast as lambda apparently
+            self[source][target][key].update(**kwargs)
 
     def append(self, source, target, t, **kwargs):
         self.add_edge(source, target, key=t, **kwargs)
@@ -83,9 +84,9 @@ class InfectionLog(nx.MultiDiGraph):
         # Use Pandas "Int64" type to allow nullable integers. This allows the 'source' column
         # to have an integer type corresponding to UIDs while simultaneously supporting the use
         # of null values to represent exogenous/seed infections
-        df = df.fillna(pd.NA)
         df['source'] = df['source'].astype("Int64")
         df['target'] = df['target'].astype("Int64")
+        df = df.fillna(pd.NA)
 
         return df
 

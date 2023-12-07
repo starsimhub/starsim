@@ -40,6 +40,8 @@ def test_ncd():
     df = ncd.log.line_list # Check generation of line-list
     assert df.source.isna().all()
 
+    ncd.results.new_deaths
+
     plt.figure()
     plt.stackplot(
         sim.tivec,
