@@ -67,7 +67,7 @@ def test_syph_hiv():
     )
     maternal = ss.maternal()
     ppl.networks = ss.ndict(mf, maternal)
-    sim = ss.Sim(dt=1/12, people=ppl, diseases=[syph, hiv], demographics=[pregnancy, death])
+    sim = ss.Sim(dt=1/12, people=ppl, diseases=[syph, hiv], demographics=[pregnancy, death], connectors=ss.simple_hiv_syph())
     sim.run()
 
     plt.figure()
@@ -76,9 +76,15 @@ def test_syph_hiv():
     plt.title('Syphilis infections')
     plt.show()
 
+    plt.figure()
+    plt.plot(sim.yearvec, hiv.results.new_infections)
+    plt.title('HIV infections')
+    plt.show()
+
     return sim
 
 
 if __name__ == '__main__':
     sim = test_syph()
+    sim1 = test_syph_hiv()
 
