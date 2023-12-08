@@ -156,8 +156,6 @@ class STI(Disease):
         self.infected    = ss.State('infected', bool, False)
         self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
 
-        # Random number generators
-        self.rng_choose_infector = ss.RNG(f'choose_infector_{self.name}')
         return
 
     def validate_pars(self, sim):

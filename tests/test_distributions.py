@@ -45,11 +45,6 @@ def test_basic():
     print('mean', mean, 'var', var, 'skew', skew, 'kurt', kurt)
     print('calc mean', np.exp(mu + sigma**2/2), 'calc var', (np.exp(sigma**2)-1)*np.exp(2*mu+sigma**2)) # Check against math
 
-    '''
-    ss.State('foo', float, fill_value=dist)  # Use distribution as the fill value for a state
-    #disease.pars['immunity'] = dist  # Store the distribution as a parameter
-    #disease.pars['immunity'].sample(5)  # Draw some samples from the parameter
-    '''
     temp_poisson_samples = sps.poisson(mu=2).rvs(10)  # Sample from a temporary distribution
     return sample, samples, temp_poisson_samples
 

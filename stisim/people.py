@@ -62,7 +62,6 @@ class BasePeople(sc.prettyobj):
 
         # Initialize all RNGs (noting that includes those that are declared in child classes)
         for rng in self.rngs:
-            print('TODO DJK RNG INIT')
             rng.initialize(sim.rng_container, self.slot)
 
         # Initialize remaining states
@@ -193,10 +192,7 @@ class People(BasePeople):
         self.initialized = False
         self.version = ss.__version__  # Store version info
 
-        #self.rng_female  = ss.RNG('female')
-
         self.states.append(ss.State('age', float, 0))
-        ###self.states.append(ss.State('female', bool, ss.bernoulli(0.5, rng=self.rng_female)))
         self.states.append(ss.State('female', bool, bernoulli(p=0.5)))
         self.states.append(ss.State('debut', float))
         self.states.append(ss.State('alive', bool, True)) # Redundant with ti_dead == ss.INT_NAN
@@ -210,7 +206,6 @@ class People(BasePeople):
         self.networks = ss.Networks(networks)
 
         # Set initial age distribution - likely move this somewhere else later
-        self.rng_agedist  = ss.RNG('agedist')
         self.age_data_dist = self.get_age_dist(age_data)
 
         return

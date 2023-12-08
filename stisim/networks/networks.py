@@ -627,8 +627,7 @@ class mf_msm(NetworkConnector):
         mf_pr = np.interp(people.year, mf_df['year'], mf_df['part_rates']) * mf.pars.rel_part_rates
         remaining_pr = max(mf_pr*len(uids)-len(bi_uids), 0)/len(mf_excl_set)
 
-        # Don't love the following new syntax
-        #mf_excl_uids = self.rng_excl.bernoulli_filter(remaining_pr, mf_excl_set)  # Males in MF network only
+        # Don't love the following new syntax:
         mf_excl_uids = mf_excl_set[sps.uniform.rvs(size=len(mf_excl_set)) < remaining_pr]
 
         mf.participant[bi_uids] = True

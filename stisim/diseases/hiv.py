@@ -21,8 +21,6 @@ class HIV(STI):
         self.cd4         = ss.State('cd4', float, 500)
         self.ti_dead     = ss.State('ti_dead', int, ss.INT_NAN) # Time of HIV-cause death
 
-        #self.rng_dead = ss.RNG(f'dead_{self.name}')
-
         self.death_prob_per_dt = sps.bernoulli(p=self.death_prob)
 
         self.pars = ss.omerge({
