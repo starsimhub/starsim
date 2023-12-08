@@ -14,6 +14,14 @@ from .disease import Disease
 __all__ = ['RSV']
 
 
+def get_seasonality(self, sim):
+    year = sim.yearvec[sim.ti]
+    days = int((year - int(year)) * 365.25)
+    base_date = pd.to_datetime(f'{int(year)}-01-01')
+    datetime = base_date + pd.DateOffset(days=days)
+    woy = sc.date(datetime).isocalendar()[1]
+    return (1 + self.pars['beta_seasonality'] * np.cos((2 * np.pi * woy / 52) + self.pars['phase_shift']))
+
 
 class RSV(Disease):
 
@@ -97,12 +105,8 @@ class RSV(Disease):
         return
 
     def make_new_cases(self, sim):
-        year = sim.yearvec[sim.ti]
-        days = int((year - int(year)) * 365.25)
-        base_date = pd.to_datetime(f'{int(year)}-01-01')
-        datetime = base_date + pd.DateOffset(days=days)
-        woy = sc.date(datetime).isocalendar()[1]
-        beta_seasonality = (1 + self.pars['beta_seasonality'] * np.cos((2 * np.pi * woy / 52) + self.pars['phase_shift']))
+        beta_seasonality = get_seasonality(self, sim)
+
         for k, layer in sim.people.networks.items():
             if k in self.pars['beta']:
                 age_bins = np.digitize(sim.people.age, bins=self.pars['prognoses']['age_cutoffs']) - 1
