@@ -64,7 +64,7 @@ class Syphilis(STI):
             p_latent_temp=0.25,  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_tertiary=0.35,  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
 
-            # Congenital syphilis outcomes
+            # Congenital syphilis outcomes (must sum to 1)
             # Source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5973824/
             birth_outcomes=sc.objdict(
                 active=sc.objdict(
@@ -235,18 +235,18 @@ class Syphilis(STI):
             # Determine which source infections were derived from this type of infection
             if infection_type == 'active':
                 sources = self.active[source_uids].values.nonzero()[-1]
-                targets = target_uids[sources]
+                uids = target_uids[sources]
 
             elif infection_type == 'latent':
                 sources = self.latent[source_uids].values.nonzero()[-1]
-                targets = target_uids[sources]
-            n_uids = len(targets)
+                uids = target_uids[sources]
+            n_uids = len(uids)
             assigned_outcomes = ss.n_multinomial(birth_outcomes.values(), n_uids)
             time_to_birth = -sim.people.age
 
             # Schedule events
             for oi, outcome in enumerate(birth_outcomes.keys()):
-                o_uids = targets[assigned_outcomes == oi]
+                o_uids = uids[assigned_outcomes == oi]
                 ti_outcome = f'ti_{outcome}'
                 vals = getattr(self, ti_outcome)
                 vals[o_uids] = sim.ti + rr(time_to_birth[o_uids].values/sim.dt)
