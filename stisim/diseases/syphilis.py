@@ -249,10 +249,51 @@ class Syphilis(STI):
             # Schedule events
             for oi, outcome in enumerate(birth_outcomes.keys()):
                 o_uids = uids[assigned_outcomes == oi]
-                if len(o_uids)>0:
+                if len(o_uids) > 0:
                     ti_outcome = f'ti_{outcome}'
                     vals = getattr(self, ti_outcome)
                     vals[o_uids] = sim.ti + rr(time_to_birth[o_uids].values/sim.dt)
                     setattr(self, ti_outcome, vals)
 
         return
+
+
+# %% Syphilis-related interventions
+
+class dx(ss.Intervention):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.requires = Syphilis
+        return
+
+    def initialize(self, sim):
+        sim.syphilis.results += ss.Result(self.name, 'n_dx', sim.npts, dtype=int)
+        return
+
+    def apply(self, sim):
+        if sim.t < self.t[0]:
+            return
+
+        capacity = self.capacity[np.where(self.t <= sim.t)[0][-1]]
+        on_art = sim.people.alive & sim.people.hiv.on_art
+
+        n_change = capacity - np.count_nonzero(on_art)
+        if n_change > 0:
+            # Add more ART
+            eligible = sim.people.alive & sim.people.hiv.infected & ~sim.people.hiv.on_art
+            n_eligible = np.count_nonzero(eligible)
+            if n_eligible:
+                inds = np.random.choice(ss.true(eligible), min(n_eligible, n_change), replace=False)
+                sim.people.hiv.on_art[inds] = True
+        elif n_change < 0:
+            # Take some people off ART
+            eligible = sim.people.alive & sim.people.hiv.infected & sim.people.hiv.on_art
+            inds = np.random.choice(ss.true(eligible), min(n_change), replace=False)
+            sim.people.hiv.on_art[inds] = False
+
+        # Add result
+        sim.results.hiv.n_art = np.count_nonzero(sim.people.alive & sim.people.hiv.on_art)
+
+        return
+

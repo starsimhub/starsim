@@ -21,13 +21,13 @@ def test_syph():
     death = ss.background_deaths(death_rates)
 
     # Make people and networks
-    ppl = ss.People(10000)
+    ppl = ss.People(100000)
     mf = ss.mf(
-        pars=dict(dur=ss.lognormal(2, 1))
+        pars=dict(dur=ss.lognormal(2, 5))
     )
     maternal = ss.maternal()
     ppl.networks = ss.ndict(mf, maternal)
-    sim = ss.Sim(dt=1/12, people=ppl, diseases=[syph], demographics=[pregnancy, death])
+    sim = ss.Sim(dt=1/12, start=1950, n_years=70, people=ppl, diseases=syph, demographics=[pregnancy, death])
     sim.run()
 
     plt.figure()
