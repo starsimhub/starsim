@@ -259,18 +259,6 @@ class Sim(sc.prettyobj):
 
         self.people.networks.initialize(self)
 
-        # for key, network in self.people.networks.networks.items():  # TODO rename
-            # if network.label is not None:
-            #     layer_name = network.label
-            # else:
-            #     layer_name = key
-            #     network.label = layer_name
-            # network.initialize(self)
-
-            # Add network states to the People's dicts
-            # self.people.add_module(network)
-            # self.people.networks[network.name] = network
-
         return
 
     def init_interventions(self):
