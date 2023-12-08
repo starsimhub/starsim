@@ -337,7 +337,7 @@ class mf(SexualNetwork, DynamicNetwork):
     relationship durations.
     """
 
-    def __init__(self, pars=None):
+    def __init__(self, pars=None, key_dict=None):
         desired_mean = 15
         desired_std = 15
         mu = np.log(desired_mean**2 / np.sqrt(desired_mean**2 + desired_std**2))
@@ -349,7 +349,7 @@ class mf(SexualNetwork, DynamicNetwork):
             'rel_part_rates': 1.0,
         }, pars)
 
-        DynamicNetwork.__init__(self)
+        DynamicNetwork.__init__(self, key_dict)
         SexualNetwork.__init__(self, pars)
         return
 
@@ -362,8 +362,8 @@ class mf(SexualNetwork, DynamicNetwork):
 
     def set_network_states(self, people, upper_age=None):
         """ Set network states including age of entry into network and participation rates """
+        self.set_debut(people, upper_age) # Debut before participation!
         self.set_participation(people, upper_age)
-        self.set_debut(people, upper_age)
         return
 
     def set_participation(self, people, upper_age=None):
@@ -639,7 +639,7 @@ class mf_msm(NetworkConnector):
         return
 
 
-class hpv_network(SexualNetwork, DynamicNetwork):
+class hpv_network(mf):
     def __init__(self, pars=None):
 
         key_dict = {
@@ -647,13 +647,10 @@ class hpv_network(SexualNetwork, DynamicNetwork):
             'start': ss.float_,
         }
 
-        DynamicNetwork.__init__(self, key_dict=key_dict)
-        SexualNetwork.__init__(self, pars=pars)
-
         # Define default parameters
-        self.pars = dict()
-        self.pars['cross_layer']   = 0.05  # Proportion of agents who have concurrent cross-layer relationships
-        self.pars['partner_dist']  = sps.poisson(mu=0.01)  # The number of concurrent sexual partners
+        default_pars = dict()
+        default_pars['cross_layer']   = 0.05  # Proportion of agents who have concurrent cross-layer relationships
+        default_pars['partner_dist']  = sps.poisson(mu=0.01)  # The number of concurrent sexual partners
 
         # TODO: Wrap so user can provide mean and dispersion directly - see #168
         mu = 80 # Mean
@@ -661,22 +658,32 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         sigma2 = mu + alpha * mu**2
         n = mu**2 / (sigma2 - mu)
         p = mu / sigma2
-        self.pars['act_dist']      = sps.nbinom(n, p)  # The number of sexual acts per year
+        default_pars['act_dist']      = sps.nbinom(n=n, p=p)  # The number of sexual acts per year
 
-        self.pars['age_act_pars']  = dict(peak=30, retirement=100, debut_ratio=0.5,
+        default_pars['age_act_pars']  = dict(peak=30, retirement=100, debut_ratio=0.5,
                                          retirement_ratio=0.1)  # Parameters describing changes in coital frequency over agent lifespans
-        self.pars['condoms']       = 0.2  # The proportion of acts in which condoms are used
+        default_pars['condoms']       = 0.2  # The proportion of acts in which condoms are used
 
         low = 0
         loc = 1
         scale = 1
         a = (low - loc) / scale
-        self.pars['dur_dist'] = sps.truncnorm(a, loc=loc, scale=scale)  # Duration of partnerships
+        default_pars['duration_dist'] = sps.truncnorm(a=a, b=np.inf, loc=loc, scale=scale)  # Duration of partnerships
 
-        self.pars['participation'] = None  # Incidence of partnership formation by age
-        self.pars['mixing']        = None  # Mixing matrices for storing age differences in partnerships
+        #default_pars['participation'] = None  # Incidence of partnership formation by age
+        default_pars['mixing']        = None  # Mixing matrices for storing age differences in partnerships
 
-        self.update_pars(pars)
+        self.agebins = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75]
+        # Share of females of each age newly having casual relationships
+        self.f_participation = [0, 0, 0.10, 0.7, 0.8, 0.6, 0.6, 0.4, 0.1, 0.05, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001]
+        # Share of males of each age newly having casual relationships
+        self.m_participation = [0, 0, 0.05, 0.7, 0.8, 0.6, 0.6, 0.4, 0.4, 0.3, 0.1, 0.05, 0.01, 0.01, 0.001, 0.001]
+
+        default_pars['participation_dist'] = sps.bernoulli(p=self.participation)
+
+        pars = ss.omerge(default_pars, pars)
+        super().__init__(pars, key_dict)
+ 
         self.get_layer_probs()
         self.validate_pars()
 
@@ -687,7 +694,7 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         return self.add_pairs(sim.people, ti=0)
 
     def validate_pars(self):
-        for par in ['partner_dist', 'act_dist', 'dur_dist']:
+        for par in ['partner_dist', 'act_dist', 'duration_dist', 'participation_dist']:
             if not isinstance(self.pars[par], rv_frozen):
                 raise Exception(f'Network parameter {par} must be an instance of a scipy frozen distribution')
 
@@ -696,6 +703,14 @@ class hpv_network(SexualNetwork, DynamicNetwork):
             for k, v in pars.items():
                 self.pars[k] = v
         return
+
+    @staticmethod
+    def participation(self, sim, uids):
+        p = np.ones_like(uids, dtype=ss.float_)
+        fem = sim.people.female[uids]
+        p[fem] = np.interp(sim.people.age[uids[fem]], self.agebins, self.f_participation)
+        p[~fem] = np.interp(sim.people.age[uids[~fem]], self.agebins, self.m_participation)
+        return p
 
     def get_layer_probs(self):
 
@@ -720,16 +735,7 @@ class hpv_network(SexualNetwork, DynamicNetwork):
             [75, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1],
         ])
 
-        participation = np.array([
-            [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75],
-            [0, 0, 0.10, 0.7, 0.8, 0.6, 0.6, 0.4, 0.1, 0.05, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001],
-            # Share of females of each age newly having casual relationships
-            [0, 0, 0.05, 0.7, 0.8, 0.6, 0.6, 0.4, 0.4, 0.3, 0.1, 0.05, 0.01, 0.01, 0.001, 0.001]],
-            # Share of males of each age newly having casual relationships
-        )
-
         defaults['mixing'] = mixing
-        defaults['participation'] = participation
 
         for pkey, pval in defaults.items():
             if self.pars[pkey] is None:
@@ -737,12 +743,11 @@ class hpv_network(SexualNetwork, DynamicNetwork):
 
         return
 
-    def add_pairs(self, people, ti=0):
-
-        female = people.female
-        active = people.active
-        f_active = female & active
-        m_active = ~female & active
+    def set_participation(self, people, upper_age=None):
+        if upper_age is None:
+            uids = people.uid
+        else:
+            uids = people.uid[(people.age < upper_age)]
 
         # Compute number of partners
         f_partnered_inds, f_partnered_counts = np.unique(self.contacts.p1, return_counts=True)
@@ -752,36 +757,21 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         current_partners[m_partnered_inds] = m_partnered_counts
         partners = self.pars.partner_dist.rvs(len(people)) + 1
         underpartnered = current_partners < partners  # Indices of underpartnered people
-        f_eligible = f_active & underpartnered
-        m_eligible = m_active & underpartnered
 
-        # Bin the agents by age
-        bins = self.pars['participation'][0, :]  # Extract age bins
+        # Set people who will participate in the network at some point
+        can_participate = ss.true(people.active * underpartnered)
+        self.participant[uids] = self.pars.participation_dist.rvs(can_participate)
+        return
 
-        # Try randomly select females for pairing
-        f_eligible_inds = ss.true(f_eligible)  # Inds of all eligible females
-        age_bins_f = np.digitize(people.age[f_eligible_inds], bins=bins) - 1  # Age bins of selected females
-        bin_range_f = np.unique(age_bins_f)  # Range of bins
-        f = []  # Initialize the female partners
-        for ab in bin_range_f:  # Loop over age bins
-            these_f_contacts = self.rngs.f_contacts.bernoulli_filter(self.pars['participation'][1][ab], f_eligible_inds[ age_bins_f == ab])  # Select females according to their participation rate in this layer
-            f.append(these_f_contacts)
-        f = np.concatenate(f)
-
-        # Select males according to their participation rate in this layer
-        m_eligible_inds = ss.true(m_eligible)
-        age_bins_m = np.digitize(people.age[m_eligible_inds], bins=bins) - 1
-        bin_range_m = np.unique(age_bins_m)  # Range of bins
-        m = []  # Initialize the male partners
-        for ab in bin_range_m:
-            these_m_contacts = self.rngs.m_contacts.bernoulli_filter(self.pars['participation'][2][ab], m_eligible_inds[age_bins_m == ab])  # Select males according to their participation rate in this layer
-            m.append(these_m_contacts)
-        m = np.concatenate(m)
+    def add_pairs(self, people, ti=0):
+        participating = ss.true(self.participant) # Will be the same people each time, with participation decided once per person
+        f = participating[people.female[participating]]
+        m = participating[~people.female[participating]]
 
         # Create preference matrix between eligible females and males that combines age and geo mixing
         age_bins_f = np.digitize(people.age[f],
-                                 bins=bins) - 1  # Age bins of females that are entering new relationships
-        age_bins_m = np.digitize(people.age[m], bins=bins) - 1  # Age bins of active and participating males
+                                 bins=self.agebins) - 1  # Age bins of females that are entering new relationships
+        age_bins_m = np.digitize(people.age[m], bins=self.agebins) - 1  # Age bins of active and participating males
         age_f, age_m = np.meshgrid(age_bins_f, age_bins_m)
         pair_probs = self.pars['mixing'][age_m, age_f + 1]
 
@@ -810,7 +800,7 @@ class hpv_network(SexualNetwork, DynamicNetwork):
         p1 = f
         p2 = selected_males
         n_partnerships = len(p1)
-        dur = self.pars.dur_dist.rvs(n_partnerships)
+        dur = self.pars.duration_dist.rvs(n_partnerships)
         acts = self.pars.act_dist.rvs(n_partnerships)
         age_p1 = people.age[p1]
         age_p2 = people.age[p2]

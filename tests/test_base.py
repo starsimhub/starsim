@@ -42,22 +42,15 @@ def test_networks():
     nw1 = ss.Network(p1=p1, p2=p2, beta=beta, label='rand')
     nw2 = ss.Network(dict(p1=p1, p2=p2, beta=beta), label='rand')  # Alternate method
 
-    #TODO: The following two tests do not work because network initialization
-    # expecting a Sim object, not a People object
-    nw3 = None
-    nw4 = None
-    
-    # Make people, then make a dynamic sexual layer and update it
-    sim = ss.Sim()    
-    sim.ppl = ss.People(100)  # BasePeople
-    #ppl.initialize()  # This seems to be necessary, although not completely clear why...
+    sim = ss.Sim()
+    sim.initialize()
     
     nw3 = ss.hpv_network()
-    nw3.initialize(sim) #TODO: Initialize is expecting a Sim object, not a People object
-    nw3.update(ppl, ti=1, dt=1)  # Update by providing a timestep & current time index
+    nw3.initialize(sim)
+    sim.people.networks.update(sim.people)  # Update by providing a timestep & current time index
 
     nw4 = ss.maternal()
-    nw4.initialize(sim) #TODO: Initialize is expecting a Sim object, not a People object
+    nw4.initialize(sim)
     nw4.add_pairs(mother_inds=[1, 2, 3], unborn_inds=[100, 101, 102], dur=[1, 1, 1])
 
     return nw1, nw2, nw3, nw4
