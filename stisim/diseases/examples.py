@@ -114,7 +114,7 @@ class SIR(Disease):
                                    [layer.contacts['p2'], layer.contacts['p1'], self.pars['beta'][k]]]:
                     # probability of a->b transmission
                     p_transmit = rel_trans[a] * rel_sus[b] * layer.contacts['beta'] * beta * sim.dt
-                    new_cases = np.random.random(len(a)) < p_transmit # DJK TODO?
+                    new_cases = np.random.random(len(a)) < p_transmit # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
                     if new_cases.any():
                         self.infect(sim, b[new_cases])
         return

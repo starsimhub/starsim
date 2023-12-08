@@ -10,9 +10,11 @@ __all__ = ['RandomNetwork']
 
 class RandomNetwork(Network):
 
-    def __init__(self, *, n_contacts : int | rv_frozen, dynamic=True, **kwargs): # DJK TODO
+    def __init__(self, *, n_contacts : int | rv_frozen, dynamic=True, **kwargs):
         """
-        :param n_contacts: A distribution of contacts e.g., ss.delta(5), ss.neg_binomial(5,2)
+        :param n_contacts: A SciPy distribution from which the number of
+        contacts are sampled e.g., sps.nbinom(n=5, p=2). Note distribution
+        parameter values can be callable for greater functionality.
         :param dynamic: If True, regenerate contacts each timestep
         """
         super().__init__(**kwargs)
@@ -50,8 +52,6 @@ class RandomNetwork(Network):
             of random contacts.
 
         Returns: Two arrays, for source and target
-
-
         """
 
         total_number_of_half_edges = np.sum(number_of_contacts)
