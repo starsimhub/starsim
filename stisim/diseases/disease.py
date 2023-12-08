@@ -84,9 +84,9 @@ class InfectionLog(nx.MultiDiGraph):
         # Use Pandas "Int64" type to allow nullable integers. This allows the 'source' column
         # to have an integer type corresponding to UIDs while simultaneously supporting the use
         # of null values to represent exogenous/seed infections
+        df = df.fillna(pd.NA)
         df['source'] = df['source'].astype("Int64")
         df['target'] = df['target'].astype("Int64")
-        df = df.fillna(pd.NA)
 
         return df
 

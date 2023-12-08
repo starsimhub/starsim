@@ -162,7 +162,6 @@ class NCD(Disease):
         deaths = ss.binomial_filter(sim.dt*self.pars['p_death_given_risk'], ss.true(self.affected))
         sim.people.request_death(deaths)
         self.log.add_data(deaths, died=True)
-        print(sim.ti)
         self.results.new_deaths[sim.ti] = len(deaths) # Log deaths attributable to this module
         return
 
