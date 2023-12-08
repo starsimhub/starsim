@@ -49,12 +49,12 @@ class simple_hiv_ng(Connector):
         return
 
 class simple_hiv_syph(Connector):
-    """ Simple connector whereby rel_trans of HIV doubles if individual has primary syphilis"""
+    """ Simple connector whereby rel_sus of HIV doubles if individual has primary syphilis"""
 
     def __init__(self, pars=None):
         super().__init__(pars=pars)
         self.pars = ss.omerge({
-            'rel_trans_hiv': 2.67,
+            'rel_sus_hiv': 2.67,
 
         }, self.pars)  # Could add pars here
         self.diseases = ['hiv', 'syphilis']
@@ -71,6 +71,6 @@ class simple_hiv_syph(Connector):
     def update(self, sim):
         """ Specify how syphilis increases HIV rel_trans """
 
-        sim.people.hiv.rel_trans[sim.people.syphilis.primary] = self.pars.rel_trans_hiv
+        sim.people.hiv.rel_sus[sim.people.syphilis.primary] = self.pars.rel_sus_hiv
 
         return
