@@ -38,8 +38,7 @@ def run_sim(n, idx, intv_cov, rand_seed, multirng):
     hiv = ss.HIV(hiv_pars)
 
     pregnancy = ss.Pregnancy()
-    print('DJK re-enable background deaths')
-    deaths = None # ss.background_deaths()
+    deaths = ss.background_deaths()
 
     pars = {
         'start': 1980,

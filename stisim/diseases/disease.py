@@ -157,8 +157,6 @@ class STI(Disease):
         self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
 
         # Random number generators
-        self.rng_init_cases      = ss.RNG(f'initial_cases_{self.name}')
-        self.rng_trans           = ss.RNG(f'trans_{self.name}')
         self.rng_choose_infector = ss.RNG(f'choose_infector_{self.name}')
         return
 
@@ -181,7 +179,6 @@ class STI(Disease):
         if self.pars['seed_infections'] is None:
             return
 
-        #initial_cases = self.rng_init_cases.bernoulli_filter(self.pars['init_prev'], ss.true(sim.people.alive))
         alive_uids = ss.true(sim.people.alive) # Maybe just sim.people.uid?
         initial_cases = self.pars['seed_infections'].filter(alive_uids)
 
@@ -257,10 +254,10 @@ class STI(Disease):
 
         # Slotted draw, need to find a long-term place for this logic
         slots = people.slot[people.uid]
-        p = np.full(np.max(slots)+1, 0, dtype=p_acq_node.dtype)
-        p[slots] = p_acq_node
-        new_cases_bool = sps.bernoulli.rvs(p=p).astype(bool)[slots]
-        #new_cases_bool = self.rng_trans.sample(ss.bernoulli(p_acq_node), people.uid)
+        #p = np.full(np.max(slots)+1, 0, dtype=p_acq_node.dtype)
+        #p[slots] = p_acq_node
+        #new_cases_bool = sps.bernoulli.rvs(p=p).astype(bool)[slots]
+        new_cases_bool = sps.uniform.rvs(size=np.max(slots)+1)[slots] < p_acq_node
         new_cases = people.uid[new_cases_bool]
         return new_cases
 
@@ -269,7 +266,11 @@ class STI(Disease):
         Given the uids of new cases, determine which agents are the source of each case
         '''
         sources = np.zeros_like(new_cases)
-        r = self.rng_choose_infector.random(new_cases) # Random number slotted to each new case
+
+        # Slotted draw, need to find a long-term place for this logic
+        slots = people.slot[new_cases]
+        r = sps.uniform.rvs(size=np.max(slots)+1)[slots]
+
         for i, uid in enumerate(new_cases):
             p_acqs = []
             possible_sources = []

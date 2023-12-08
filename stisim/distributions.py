@@ -1,16 +1,7 @@
 """ 
-stisim distributions
-
-Example usage
-
->>> dist = stisim.normal(1,1) # Make a distribution
->>> dist()  # Draw a sample
->>> dist(10) # Draw several samples
->>> dist.sample(10) # Same as above
->>> stisim.State('foo', float, fill_value=dist)  # Use distribution as the fill value for a state
->>> disease.pars['immunity'] = dist  # Store the distribution as a parameter
->>> disease.pars['immunity'].sample(5)  # Draw some samples from the parameter
->>> stisim.poisson(rate=1).sample(10)  # Sample from a temporary distribution
+Distribution support extending scipy with two key functionalities:
+1. Callable parameters
+2. Ability to use MultiRNG for common random number support
 """
 
 import numpy as np
@@ -18,10 +9,9 @@ from stisim.utils import INT_NAN
 from stisim.random import MultiRNG
 from stisim import options, int_
 
-__all__ = ['ScipyDistribution'] #'rate', 
+__all__ = ['ScipyDistribution']
 
 from scipy.stats._discrete_distns import bernoulli_gen
-#from scipy.stats import bernoulli
 
 
 class ScipyDistribution():
@@ -38,6 +28,7 @@ class ScipyDistribution():
                 """
 
                 size = kwargs['size']
+                slots = None
                 # Work out how many samples to draw. If sampling by UID, this depends on the slots assigned to agents.
                 if np.isscalar(size):
                     if not isinstance(size, (int, np.int64, int_)):
@@ -58,7 +49,8 @@ class ScipyDistribution():
                     else:
                         v = size.__array__() # TODO - check if this works without calling __array__()?
                         try:
-                            max_slot = self.random_state.slots[v].__array__().max()
+                            slots = self.random_state.slots[v].__array__()
+                            max_slot = slots.max()
                         except AttributeError as e:
                             if not isinstance(self.random_state, MultiRNG):
                                 raise Exception('With options.multirng and passing agent UIDs to a distribution, the random_state of the distribution must be a MultiRNG.')
@@ -85,9 +77,13 @@ class ScipyDistribution():
                         # n_samples in length.
                         if len(kwargs[pname]) not in [len(size), sum(size)]: # Could handle uid and bool separately? len(size) for uid and sum(size) for bool
                             raise Exception('When providing an array of parameters, the length of the parameters must match the number of agents for the selected size (uids).')
-                        vals_all = np.full(n_samples, fill_value=1, dtype=kwargs[pname].dtype) # self.fill_value
-                        vals_all[size] = kwargs[pname]
-                        kwargs[pname] = vals_all
+                        pars_slots = np.full(n_samples, fill_value=1, dtype=kwargs[pname].dtype) # self.fill_value
+                        if slots is not None:
+                            # TODO: This line causes SIGNIFICANT issues if slots are not unique as parameters get re-used for the wrong agent!
+                            pars_slots[slots] = kwargs[pname]
+                        else:
+                            pars_slots[size] = kwargs[pname]
+                        kwargs[pname] = pars_slots
 
                 kwargs['size'] = n_samples
                 vals = super().rvs(*args, **kwargs) # Add random_state here?
@@ -103,8 +99,7 @@ class ScipyDistribution():
                 elif size.dtype == bool:
                     return vals[size]
                 else:
-                    slots = self.random_state.slots[size].__array__()
-                    return vals[slots]
+                    return vals[slots] # slots defined above
 
         self.rng = self.set_rng(rng, gen)
         self.gen = starsim_gen(name=gen.dist.name, seed=self.rng)(**gen.kwds)
@@ -155,6 +150,7 @@ class ScipyDistribution():
         return size[self.gen.rvs(size, **kwargs)]
 
 '''
+from scipy.stats import bernoulli
 class rate(ScipyDistribution):
     """
     Exponentially distributed, accounts for dt.

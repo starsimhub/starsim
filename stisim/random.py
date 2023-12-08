@@ -7,7 +7,7 @@ __all__ = ['RNGContainer', 'MultiRNG', 'SingleRNG', 'RNG']
 
 class RNGContainer:
     """
-    Class for managing a collection random number generators (MultiRNG or SingleRNG instances)
+    Class for managing a collection MultiRNG random number generators
     """
 
     def __init__(self):
@@ -54,14 +54,6 @@ class RNGContainer:
         return
 
 
-class NotResetException(Exception):
-    "Raised when an object is called twice in one timestep."
-    def __init__(self, rng_name):
-        msg = f'The random number generator with name {rng_name} has already been sampled on this timestep!'
-        super().__init__(msg)
-        return
-
-
 class NotInitializedException(Exception):
     "Raised when a random number generator or a RNGContainer object is called when not initialized."
     def __init__(self, obj_name=None):
@@ -94,7 +86,7 @@ def RNG(*args, **kwargs):
     Class to choose a random number generator class.
     
     Returns:
-    SingleRNG or MultiRNG: Instance of a random number generator
+    Numpy RandomState singleton or a MultiRNG: Instance of a random number generator
     """
     if ss.options.multirng:
         rng = MultiRNG(*args, **kwargs)
@@ -219,203 +211,50 @@ class MultiRNG(np.random.Generator):
         self.bit_generator.state = self.bit_generator.jumped(jumps=ti).state
         return
 
-    def sample(self, distribution, size=None, **kwargs):
-        """
-        Sample from a ss.Distribution
 
-        :param size: can be
-            - Integer (returns fixed number of samples)
-            - Boolean array (returns samples for True values)
-            - Array of UIDs (returns samples for each UID using slots)    <---- If sampling per-agent, this is likely the desired option
-        :return:
-        """
-
-        raise NotImplementedError
-
-        if not self.ready:
-            raise NotResetException(self.name)
-
-        # Work out how many samples to draw. If sampling by UID, this depends on the number of slots
-        if np.isscalar(size):
-            if size < 0:
-                raise Exception('Input "size" cannot be negative')
-            elif size == 0:
-                return np.array([], dtype=int)
-            else:
-                n_samples = size
-        elif len(size) == 0:
-            return np.array([], dtype=int)  # int dtype allows use as index, e.g. bernoulli_filter
-        elif size.dtype == bool:
-            n_samples = len(size)
-        elif size.dtype == int:
-            v = size.__array__() # TODO - check if this works without calling __array__()?
-            max_slot = self.slots[v].__array__().max()
-            if max_slot == ss.INT_NAN:
-                raise Exception('Attempted to sample from an INT_NAN slot')
-            n_samples = max_slot + 1
-        else:
-            raise Exception("Unrecognized input type")
-
-        if isinstance(distribution, ss.choice):
-            raise Exception('The "choice" function is not MultiRNG-safe.')
-
-        ######vals = distribution._sample(n_samples, rng=self, **kwargs)
-        vals = distribution._sample(n_samples, **kwargs)
-        self.ready = False
-
-        if np.isscalar(size):
-            return vals
-        elif size.dtype == bool:
-            return vals[size]
-        else:
-            slots = self.slots[size].__array__()
-            return vals[slots]
-
-    #def random(self, size=1):
-    #    return self.sample(ss.uniform(), size=size)
-
-    def bernoulli_filter(self, p, uids):
-        """
-        Bernoulli filtering of UIDs in an RNG-safe way
-
-        :param p: Probability of success. Supported types are
-            - A float in the range [0,1]
-            - An array the same length as UIDs
-            - A distribution instance, where the probability of success is given by the mean of the distribution
-        :param uids: Array of UIDs for the agents to filter
-        :return: An array of UIDs that 'succeeded'
-        """
-
-        raise NotImplementedError
-
-        if isinstance(p, ss.bernoulli):
-            vals = self.sample(p, uids)
-            return uids[vals]
-
-        #vals = self.sample(ss.uniform(), uids)
-        vals = self.random(size=uids) # Draw RNG-safe samples
-        return uids[vals < p]
-
-
-class SingleRNG():
+class SingleRNG(np.random.Generator):
     """
-    Class to imitate the behavior of a centralized random number generator
+    Dummy class that mirrors MultiRNG but provides the numpy singleton rng instead
     """
-
+    
     def __init__(self, name, seed_offset=None, **kwargs):
         """
         Create a random number generator
 
-        seed_offset will be automatically assigned (sequentially in first-come order) if None
+        seed_offset will be automatically assigned (based on hashing the name) if None
         
         name: a name for this random number generator, like "coin_flip"
         """
+
         self.name = name
+        self.kwargs = kwargs
+
+        if seed_offset is None:
+            # Obtain the seed offset by hashing the class name. Don't use python's hash because it is randomized.
+            self.seed_offset = int(hashlib.sha256(self.name.encode('utf-8')).hexdigest(), 16) % 10**8
+        else:
+            # Use user-provided seed_offset (unlikely)
+            self.seed_offset = seed_offset
+
         self.initialized = False
-        self.seed_offset = 0 # For compatibility with MultiRNG
-        self.seed = None
-        self.ready = False
         return
 
     def initialize(self, container, slots=None):
-        """
-        Slots are not used by the SingleRNG, but here for compatibility with the MultiRNG
-        """
         if self.initialized:
             return
 
         if container is not None:
-            container.add(self, check_repeats=False) # Seed is returned, but not used here as we're using the global np.random generator which has been seeded elsewhere
+            container.add(self) # base_seed + seed_offset
+
+        if 'bit_generator' not in self.kwargs:
+            self.kwargs['bit_generator'] = np.random.mtrand._rand._bit_generator
+        super().__init__(**self.kwargs)
 
         self.initialized = True
-        self.reset()
         return
 
     def reset(self):
-        self.ready = True
-
+        pass
 
     def step(self, ti):
-        self.reset()
-
-
-    def sample(self, distribution, size, **kwargs):
-        """
-        Sample from a ss.Distribution
-
-        :return:
-        """
-
-        """
-        Decorator for SingleRNG
-        """
-        raise NotImplementedError
-
-        if not self.ready:
-            raise NotResetException(self.name)
-        self.ready = False
-
-        # Check for zero length size
-        if np.isscalar(size):
-            # size-based
-            if not isinstance(size, int):
-                raise Exception('Input "size" must be an integer')
-
-            if size < 0:
-                raise Exception('Input "size" cannot be negative')
-
-            if size == 0:
-                return np.array([], dtype=int)  # int dtype allows use as index, e.g. bernoulli_filter
-
-        else:
-            # UID-based (size should be an array)
-            uids = size
-
-            if len(uids) == 0:
-                return np.array([], dtype=int)  # int dtype allows use as index, e.g. bernoulli_filter
-
-            if uids.dtype == bool:
-                size = uids.sum()
-            else:
-                size = len(uids)
-
-        vals = distribution._sample(size, rng=None)
-        self.ready = False
-        return vals
-
-    #def random(self, size=1):
-    #    return np.random.random(size=size)
-
-    #def poisson(self, *args, **kwargs):
-    #    return np.random.poisson(*args, **kwargs)
-
-    def __getattr__(self, attr):
-        # Returns wrapped numpy.random.(attr) if not a property
-        try:
-            return self.__getattribute__(attr)
-        except Exception:
-            try:
-                return getattr(np.random, attr)
-            except Exception as e:
-                if '__getstate__' in str(e):
-                    # Must be from pickle, return a callable function that returns None
-                    return lambda: None
-                elif '__await__' in str(e):
-                    # Must be from async programming?
-                    return None
-                elif '__deepcopy__' in str(e):
-                    # from sc.dcp
-                    return None
-                errormsg = f'"{attr}" is not a member of this class or numpy.random'
-                raise Exception(errormsg)
-
-    def bernoulli_filter(self, p, uids):
-        raise NotImplementedError
-
-        if isinstance(p, ss.bernoulli):
-            vals = self.sample(p, uids)
-            return uids[vals]
-
-        #vals = self.sample(ss.uniform(), uids)
-        vals = self.random(uids)
-        return uids[vals < p]
+        pass

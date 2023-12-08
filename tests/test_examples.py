@@ -21,7 +21,7 @@ def test_sir():
     #sir.pars['dur_inf'].kwds['loc'] = 5 
     
     # Or why not put a lambda here for fun!
-    sir.pars['dur_inf'].kwds['loc'] = lambda sim, uids: sim.people.age[uids]/10
+    sir.pars['dur_inf'].kwds['loc'] = lambda self, sim, uids: sim.people.age[uids]/10
 
     sir.pars['beta'] = {'randomnetwork': 0.1}
     sim = ss.Sim(people=ppl, diseases=sir)
