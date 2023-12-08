@@ -11,7 +11,7 @@ def test_rsv():
 
     # Make rsv module
     rsv = ss.RSV()
-    rsv.pars['beta'] = {'randomnetwork': 0.5, 'maternal': 0}
+    rsv.pars['beta'] = {'household': .35, 'school': .25, 'community': .05, 'maternal': 0}
     rsv.pars['init_prev'] = 0.05
 
     # Make demographic modules
@@ -22,10 +22,15 @@ def test_rsv():
 
     # Make people and networks
     ppl = ss.People(10000)
-    RandomNetwork = ss.RandomNetwork(n_contacts=ss.poisson(10))
+    RandomNetwork_household = ss.RandomNetwork(n_contacts=ss.poisson(5), dynamic=False)
+    RandomNetwork_school = ss.RandomNetwork(n_contacts=ss.poisson(30), dynamic=False)
+    RandomNetwork_community = ss.RandomNetwork(n_contacts=ss.poisson(100))
     maternal = ss.maternal()
-    ppl.networks = ss.ndict(RandomNetwork, maternal)
-    sim = ss.Sim(dt=1/12, people=ppl, diseases=[rsv], demographics=[pregnancy, death])
+    ppl.networks = ss.ndict(household=RandomNetwork_household,
+                            school=RandomNetwork_school,
+                            community=RandomNetwork_community,
+                            maternal=maternal)
+    sim = ss.Sim(dt=1/52, n_years=2, people=ppl, diseases=[rsv], demographics=[pregnancy, death])
     sim.run()
 
     plt.figure()

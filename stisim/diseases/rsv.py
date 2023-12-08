@@ -4,6 +4,7 @@ Define default rsv disease module
 
 import numpy as np
 import sciris as sc
+import pandas as pd
 from sciris import randround as rr
 
 import stisim as ss
@@ -55,12 +56,21 @@ class RSV(Disease):
         # Parameters
         default_pars = dict(
             # RSV natural history
-            dur_exposed=ss.lognormal(.05/12, 1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_symptomatic=ss.lognormal(1.5/12, 1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-
-            p_symptom=0.2,
-            p_critical=0.2,
-            p_severe=0.2,
+            dur_exposed=ss.lognormal(3, 1),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_symptomatic=ss.lognormal(10, 1),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            prognoses=dict(
+                age_cutoffs=np.array([0, 1, 5, 15, 55]),  # Age cutoffs (lower limits)
+                sus_ORs=np.array([2.50, 1.50, 1.00, 1.00, 1.50]),  # Odds ratios for relative susceptibility
+                trans_ORs=np.array([1.00, 1.00, 1.00, 1.00, 1.00]),  # Odds ratios for relative transmissibility
+                symp_probs=np.array([1, 0.84, 0.49, 0.1, 0.15]),  # Overall probability of developing symptoms
+                severe_probs=np.array([0.050, 0.00050, 0.00050, 0.00050, 0.0050]),
+                # Overall probability of developing severe symptoms
+                crit_probs=np.array([0.0003, 0.00003, 0.00003, 0.00003, 0.00003]),
+                # Overall probability of developing critical symptoms
+                death_probs=np.array([0.00003, 0.00003, 0.00003, 0.00003, 0.00003]),  # Overall probability of dying
+            ),
+            beta_seasonality = 0.65,
+            phase_shift = 5,
 
             # Initial conditions
             init_prev=0.03,
@@ -68,11 +78,6 @@ class RSV(Disease):
         self.pars = ss.omerge(default_pars, self.pars)
 
         return
-
-    @property
-    def infectious(self):
-        """ Infectious """
-        return self.symptomatic
 
     def init_results(self, sim):
         """ Initialize results """
@@ -92,14 +97,23 @@ class RSV(Disease):
         return
 
     def make_new_cases(self, sim):
+        year = sim.yearvec[sim.ti]
+        days = int((year - int(year)) * 365.25)
+        base_date = pd.to_datetime(f'{int(year)}-01-01')
+        datetime = base_date + pd.DateOffset(days=days)
+        woy = sc.date(datetime).isocalendar()[1]
+        beta_seasonality = (1 + self.pars['beta_seasonality'] * np.cos((2 * np.pi * woy / 52) + self.pars['phase_shift']))
         for k, layer in sim.people.networks.items():
             if k in self.pars['beta']:
-                rel_trans = (self.infected & sim.people.alive).astype(float)
-                rel_sus = (self.susceptible & sim.people.alive).astype(float)
+                age_bins = np.digitize(sim.people.age, bins=self.pars['prognoses']['age_cutoffs']) - 1
+                trans_OR = self.pars['prognoses']['trans_ORs'][age_bins]
+                sus_OR = self.pars['prognoses']['sus_ORs'][age_bins]
+                rel_trans = (self.symptomatic & sim.people.alive).astype(float) * trans_OR
+                rel_sus = (self.susceptible & sim.people.alive).astype(float) * sus_OR
                 for a, b, beta in [[layer.contacts['p1'], layer.contacts['p2'], self.pars['beta'][k]],
                                    [layer.contacts['p2'], layer.contacts['p1'], self.pars['beta'][k]]]:
                     # probability of a->b transmission
-                    p_transmit = rel_trans[a] * rel_sus[b] * layer.contacts['beta'] * beta * sim.dt
+                    p_transmit = rel_trans[a] * rel_sus[b] * layer.contacts['beta'] * beta * beta_seasonality * sim.dt
                     new_cases = np.random.random(len(a)) < p_transmit
                     if new_cases.any():
                         self.set_prognoses(sim, b[new_cases], source_uids=a[new_cases])
@@ -128,6 +142,7 @@ class RSV(Disease):
         # Recovered
         recovered = self.ti_recovered == sim.ti
         self.recovered[recovered] = True
+        self.susceptible[recovered] = True
         self.exposed[recovered] = False
         self.infected[recovered] = False
         self.symptomatic[recovered] = False
@@ -148,7 +163,7 @@ class RSV(Disease):
 
         # Subset target_uids to only include ones who are infectious
         if source_uids is not None:
-            infectious_sources = self.infectious[source_uids].values.nonzero()[-1]
+            infectious_sources = self.symptomatic[source_uids].values.nonzero()[-1]
             uids = target_uids[infectious_sources]
         else:
             uids = target_uids
@@ -157,23 +172,21 @@ class RSV(Disease):
         self.record_exposure(sim, uids)
 
         # Set future dates and probabilities
-
         # Determine which infections will become symptomatic
-        symptomatic_uids = ss.binomial_filter(self.pars.p_symptom, uids)
+        age_bins = np.digitize(sim.people.age[uids], bins=self.pars['prognoses']['age_cutoffs']) - 1  # Age bins of individuals
+        symp_probs = self.pars['prognoses']['symp_probs'][age_bins]
+        symptomatic_uids = uids[ss.binomial_arr(symp_probs)]
         never_symptomatic_uids = np.setdiff1d(uids, symptomatic_uids)
-        severe_uids = ss.binomial_filter(self.pars.p_severe, symptomatic_uids)
-        never_severe_uids = np.setdiff1d(symptomatic_uids, severe_uids)
-        critical_uids = ss.binomial_filter(self.pars.p_critical, severe_uids)
 
         # Exposed to symptomatic
-        dur_exposed = self.pars.dur_exposed(n_uids)
+        dur_exposed = self.pars.dur_exposed(n_uids)/365 # duration in years
         self.dur_exposed[uids] = dur_exposed
         self.ti_recovered[never_symptomatic_uids] = sim.ti + rr(dur_exposed/sim.dt) # TODO: Need to subset dur_exposed
         self.ti_symptomatic[symptomatic_uids] = sim.ti + rr(dur_exposed/sim.dt)
         self.dur_infection[uids] = dur_exposed
 
-        dur_symptomatic = self.pars.dur_symptomatic(len(symptomatic_uids))
-        self.ti_recovered[never_severe_uids] = sim.ti + rr(dur_symptomatic/sim.dt)
+        dur_symptomatic = self.pars.dur_symptomatic(len(symptomatic_uids))/365 # duration in years
+        self.ti_recovered[symptomatic_uids] = sim.ti + rr(dur_symptomatic/sim.dt)
         self.dur_infection[symptomatic_uids] += dur_symptomatic
 
 
