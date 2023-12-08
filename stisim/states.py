@@ -336,7 +336,7 @@ class DynamicView(NDArrayOperatorsMixin):
 
 class State(FusedArray):
 
-    def __init__(self, name, dtype, fill_value=None, rng=None, label=None):
+    def __init__(self, name, dtype, fill_value=None, label=None):
         """
 
         :param name: A string name for the state
@@ -345,21 +345,12 @@ class State(FusedArray):
             - A scalar with the same dtype (or castable to the same dtype) as the State
             - A callable, with a single argument for the number of values to produce
             - An ss.ScipyDistribution instance
-        :param rng: Optionally provide an RNG stream to use with a ss.ScipyDistribution fill value. This allows RNG-safe stochastic default values
         :param label:
         """
 
         super().__init__(values=None, uid=None, uid_map=None)  # Call the FusedArray constructor
 
-        ''' # TODO DJK
-        if isinstance(fill_value, ScipyDistribution) and rng is None:
-            warn("fill_value is a distribution but no RNG was provided, sampling will not be RNG-safe")
-        elif rng is not None and not isinstance(fill_value, ScipyDistribution):
-            warn("fill_value is not a ss.ScipyDistribution instance, the provided RNG stream will not be used")
-        '''
-
         self.fill_value = fill_value
-        self.rng = rng  # If fill_value is a distribution, this is the RNG stream to use when sampling default values # DJK TODO
 
         self._data = DynamicView(dtype=dtype)
         self.name = name
