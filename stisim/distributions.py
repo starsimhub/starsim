@@ -138,6 +138,9 @@ class ScipyDistribution():
                 if '__getstate__' in str(e):
                     # Must be from pickle, return a callable function that returns None
                     return lambda: None
+                elif '__setstate__' in str(e):
+                    # Must be from pickle, return None
+                    return None
                 elif '__await__' in str(e):
                     # Must be from async programming?
                     return None
