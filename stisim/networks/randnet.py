@@ -5,12 +5,13 @@ import numpy as np
 import numba as nb
 from .networks import Network
 from scipy.stats._distn_infrastructure import rv_frozen
+from typing import Union
 
 __all__ = ['RandomNetwork']
 
 class RandomNetwork(Network):
 
-    def __init__(self, *, n_contacts : int | rv_frozen, dynamic=True, **kwargs):
+    def __init__(self, *, n_contacts : Union[int, rv_frozen], dynamic=True, **kwargs):
         """
         :param n_contacts: A SciPy distribution from which the number of
         contacts are sampled e.g., sps.nbinom(n=5, p=2). Note distribution
