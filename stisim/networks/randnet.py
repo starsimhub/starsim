@@ -26,7 +26,7 @@ class RandomNetwork(Network):
     def initialize(self, sim):
         super().initialize(sim)
         if isinstance(self.n_contacts, ss.ScipyDistribution):
-            self.n_contacts.initialize(sim)
+            self.n_contacts.initialize(sim, self)
         self.update(sim.people, force=True)
 
     @staticmethod
