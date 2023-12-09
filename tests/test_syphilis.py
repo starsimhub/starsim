@@ -85,6 +85,6 @@ def test_syph_hiv():
 
 
 if __name__ == '__main__':
-    sim = test_syph()
+    # sim = test_syph()
     sim1 = test_syph_hiv()
 

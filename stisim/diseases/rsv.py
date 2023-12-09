@@ -16,8 +16,12 @@ __all__ = ['RSV']
 
 class RSV(Disease):
 
-    def __init__(self, pars=None):
-        super().__init__(pars)
+    def __init__(self, pars=None, **kwargs):
+        super().__init__(pars, **kwargs)
+
+        self.rel_sus = ss.State('rel_sus', float, 1)
+        self.rel_sev = ss.State('rel_sev', float, 1)
+        self.rel_trans = ss.State('rel_trans', float, 1)
 
         # RSV states
         self.susceptible = ss.State('susceptible', bool, True)
@@ -43,7 +47,7 @@ class RSV(Disease):
         self.ti_dead = ss.State('ti_dead', int, ss.INT_NAN)
 
         # Immunity state
-        self.nab = ss.State('nab', float, np.nan)
+        self.peak_nab = ss.State('nab', float, np.nan)
 
         # Parameters
         default_pars = dict(
@@ -115,8 +119,8 @@ class RSV(Disease):
                 age_bins = np.digitize(sim.people.age, bins=self.pars['prognoses']['age_cutoffs']) - 1
                 trans_OR = self.pars['prognoses']['trans_ORs'][age_bins]
                 sus_OR = self.pars['prognoses']['sus_ORs'][age_bins]
-                rel_trans = (self.infectious & sim.people.alive).astype(float) * trans_OR
-                rel_sus = (self.susceptible & sim.people.alive).astype(float) * sus_OR
+                rel_trans = (self.infectious & sim.people.alive).astype(float) * trans_OR * self.rel_trans
+                rel_sus = (self.susceptible & sim.people.alive).astype(float) * sus_OR * self.rel_sus
                 for a, b, beta in [[layer.contacts['p1'], layer.contacts['p2'], self.pars['beta'][k]],
                                    [layer.contacts['p2'], layer.contacts['p1'], self.pars['beta'][k]]]:
                     # probability of a->b transmission

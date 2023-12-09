@@ -6,10 +6,11 @@ import stisim as ss
 
 
 class Connector(ss.Module):
-    def __init__(self, pars=None, diseases=None, *args, **kwargs):
+    def __init__(self, pars=None, diseases=None, name=None, *args, **kwargs):
         self.pars = ss.omerge(pars)
         self.results = ss.ndict()
         self.diseases = ss.ndict(diseases)
+        self.name = name if name else self.__class__.__name__.lower() # Default name is the class name
         return
 
 
