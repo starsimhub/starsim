@@ -16,6 +16,7 @@ from scipy.stats._discrete_distns import bernoulli_gen
 
 class ScipyDistribution():
     def __init__(self, gen, rng=None):
+        self.gen = None
         class starsim_gen(type(gen.dist)):
             def initialize(self, sim, context):
                 self.sim = sim
