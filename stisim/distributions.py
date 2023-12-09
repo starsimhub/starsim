@@ -6,7 +6,7 @@ Distribution support extending scipy with two key functionalities:
 
 import numpy as np
 from stisim.utils import INT_NAN
-from stisim.random import MultiRNG
+from stisim.random import SingleRNG, MultiRNG
 from stisim import options, int_
 
 __all__ = ['ScipyDistribution']
@@ -122,7 +122,7 @@ class ScipyDistribution():
 
     def initialize(self, sim, context):
         self.gen.dist.initialize(sim, context)
-        if isinstance(self.rng, MultiRNG):
+        if isinstance(self.rng, (SingleRNG, MultiRNG)):
             self.rng.initialize(sim.rng_container, sim.people.slot)
         return
     
