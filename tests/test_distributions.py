@@ -88,12 +88,12 @@ def test_uniform_callable(n):
 
     sim = ss.Sim().initialize()
 
-    loc = lambda sim, uids: sim.people.age[uids] # Low
+    loc = lambda self, sim, uids: sim.people.age[uids] # Low
     scale = 1 # Width, could also be a lambda
     dist = sps.uniform(loc=loc, scale=scale)
 
     d = ScipyDistribution(dist, 'Uniform')
-    d.initialize(sim)
+    d.initialize(sim, context=None)
 
     uids = np.array([1,3])
     draws = d.rvs(uids)

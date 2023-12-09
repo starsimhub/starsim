@@ -121,6 +121,7 @@ class ScipyDistribution():
         return ret
 
     def initialize(self, sim, context):
+        # Passing sim and context here allow callables to receive "self" and sim pointers
         self.gen.dist.initialize(sim, context)
         if isinstance(self.rng, (SingleRNG, MultiRNG)):
             self.rng.initialize(sim.rng_container, sim.people.slot)
