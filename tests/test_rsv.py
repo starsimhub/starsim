@@ -6,6 +6,7 @@ Run RSV
 import stisim as ss
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 from stisim import connectors as cn
 
 
@@ -39,6 +40,24 @@ class rsv(cn.Connector):
         sim.people.rsv_a.rel_sus[~sim.people.rsv_b.infected] = 1
 
         return
+
+
+class rsv_maternal_vaccine(ss.Intervention):
+    def __init__(self, prob=0.5, efficacy=0.9, duration=0.5, **kwargs):
+        super().__init__(**kwargs)
+        self.prob=prob
+        self.efficacy=efficacy
+        self.duration=duration
+        self.diseases = ['rsv_a', 'rsv_b']
+        return
+
+    def apply(self, sim):
+        maternal_uids = sim.people.networks['maternal'].contacts['p1']
+        vaccinate_bools = ss.binomial_arr(np.full(len(maternal_uids), fill_value=self.prob))
+        mat_to_vaccinate = maternal_uids[vaccinate_bools]
+        inf_to_vaccinate = sim.people.networks['maternal'].contacts['p2'][vaccinate_bools]
+        pass
+
  
 def test_rsv():
 
@@ -70,7 +89,8 @@ def test_rsv():
                             maternal=maternal)
     diseases = ss.ndict(rsv_a=rsv_a, rsv_b=rsv_b)
     rsv_connector=rsv(name='rsv_connector')
-    sim = ss.Sim(dt=1/52, n_years=5, people=ppl, diseases=diseases, demographics=[pregnancy, death],
+    pars = {'interventions':[rsv_maternal_vaccine()]}
+    sim = ss.Sim(dt=1/52, n_years=5, people=ppl, pars=pars, diseases=diseases, demographics=[pregnancy, death],
                  connectors=rsv_connector)
     sim.run()
 
