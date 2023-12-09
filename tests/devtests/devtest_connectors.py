@@ -11,7 +11,7 @@ ng.pars['beta'] = {'simple_sexual': [0.05, 0.025]}
 ng.pars['init_prev'] = 0.025
 
 ppl1 = ss.People(10000)
-ppl1.networks = ss.ndict(ss.simple_sexual())
+ppl1.networks = ss.ndict(ss.mf())
 sim_nohiv = ss.Sim(people=ppl1, diseases=ng)
 sim_nohiv.run()
 
@@ -22,7 +22,7 @@ ng = ss.Gonorrhea()
 ng.pars['beta'] = {'simple_sexual': [0.05, 0.025]}
 ng.pars['init_prev'] = 0.025
 ppl2 = ss.People(10000)
-ppl2.networks = ss.ndict(ss.simple_sexual())
+ppl2.networks = ss.ndict(ss.mf())
 sim_hiv = ss.Sim(people=ppl2, diseases=[hiv, ng], connectors=ss.simple_hiv_ng())
 sim_hiv.run()
 
