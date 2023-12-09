@@ -11,8 +11,8 @@ def test_rsv():
 
     # Make rsv module
     rsv = ss.RSV()
-    rsv.pars['beta'] = {'household': .35, 'school': .25, 'community': .05, 'maternal': 0}
-    rsv.pars['init_prev'] = 0.05
+    rsv.pars['beta'] = {'household': .85, 'school': .85, 'community': .25, 'maternal': 0}
+    rsv.pars['init_prev'] = 0.1
 
     # Make demographic modules
     fertility_rates = {'fertility_rates': pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')}
@@ -30,7 +30,7 @@ def test_rsv():
                             school=RandomNetwork_school,
                             community=RandomNetwork_community,
                             maternal=maternal)
-    sim = ss.Sim(dt=1/52, n_years=2, people=ppl, diseases=[rsv], demographics=[pregnancy, death])
+    sim = ss.Sim(dt=1/52, n_years=5, people=ppl, diseases=[rsv], demographics=[pregnancy, death])
     sim.run()
 
     plt.figure()
