@@ -55,11 +55,13 @@ class rsv_maternal_vaccine(ss.Intervention):
 
     def initialize(self, sim):
         super().initialize(sim)
+        self.results += ss.Result(None, 'n_vaccinated', sim.npts, ss.int_)
         for disease in self.diseases:
             state = ss.State('vaccinated', bool, False)
             state.initialize(sim.people)
             sim.people[disease].vaccinated = state
             sim.people.states[f'{disease}.vaccinated'] = state
+
 
     def apply(self, sim):
         maternal_uids = sim.people.networks['maternal'].contacts['p1']
@@ -67,6 +69,8 @@ class rsv_maternal_vaccine(ss.Intervention):
         vaccinate_bools = ss.binomial_arr(np.full(len(maternal_uids), fill_value=self.prob)) * unvaccinated_mat_bools
         mat_to_vaccinate = maternal_uids[vaccinate_bools]
         inf_protected = ss.binomial_filter(self.efficacy_inf, sim.people.networks['maternal'].contacts['p2'][vaccinate_bools])
+
+        self.results.n_vaccinated[sim.ti] = len(mat_to_vaccinate)
 
         dur_immune = self.duration(len(inf_protected))/365
         for disease in self.diseases:
@@ -115,6 +119,11 @@ def test_rsv():
     plt.plot(sim.yearvec, rsv_b.results.n_infected, label='Group B')
     plt.title('RSV infections')
     plt.legend()
+    plt.show()
+
+    plt.figure()
+    plt.plot(sim.yearvec, sim.interventions['rsv_maternal_vaccine'].results['n_vaccinated'])
+    plt.title('RSV maternal vaccine doses per year')
     plt.show()
 
     return sim
