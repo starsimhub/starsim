@@ -46,6 +46,7 @@ def run_sim(n, idx, intv_cov, rand_seed, multirng):
         'rand_seed': rand_seed,
         'verbose': 0,
         'remove_dead': True,
+        'slot_scale': 10 # Increase slot scale to reduce repeated slots
     }
 
     if intv_cov > 0:

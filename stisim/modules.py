@@ -46,7 +46,6 @@ class Module(sc.prettyobj):
                 rng.initialize(sim.rng_container, sim.people.slot)
 
         # Initialize distributions in pars
-        print('TODO: Also init in __dict__')
         for key, value in self.pars.items():
             if isinstance(value, rv_frozen):
                 self.pars[key] = ss.ScipyDistribution(value, f'{self.name}_{self.label}_{key}')

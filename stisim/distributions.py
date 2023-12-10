@@ -30,6 +30,8 @@ class ScipyDistribution():
 
                 size = kwargs['size']
                 slots = None
+                repeat_slot_flag = False
+                self.repeat_slot_handling = {}
                 # Work out how many samples to draw. If sampling by UID, this depends on the slots assigned to agents.
                 if np.isscalar(size):
                     if not isinstance(size, (int, np.int64, int_)):
@@ -71,7 +73,8 @@ class ScipyDistribution():
                     if pname in kwargs and callable(kwargs[pname]):
                         kwargs[pname] = kwargs[pname](self.context, self.sim, size)
 
-                    if (pname in kwargs) and (not np.isscalar(kwargs[pname])) and (len(kwargs[pname]) != n_samples):
+                    # Now do slotting if MultiRNG
+                    if options.multirng and (pname in kwargs) and (not np.isscalar(kwargs[pname])) and (len(kwargs[pname]) != n_samples):
                         # Fill in the blank. The number of UIDs provided is
                         # hopefully consistent with the length of pars
                         # provided, but we need to expand out the pars to be
@@ -80,19 +83,57 @@ class ScipyDistribution():
                             raise Exception('When providing an array of parameters, the length of the parameters must match the number of agents for the selected size (uids).')
                         pars_slots = np.full(n_samples, fill_value=1, dtype=kwargs[pname].dtype) # self.fill_value
                         if slots is not None:
-                            # TODO: This line causes SIGNIFICANT issues if slots are not unique as parameters get re-used for the wrong agent!
-                            pars_slots[slots] = kwargs[pname]
+                            if len(slots) != len(np.unique(slots)):
+                                # Tricky - repeated slots!
+                                if not repeat_slot_flag:
+                                    repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots, return_index=True, return_inverse=True, return_counts=True)
+                                self.repeat_slot_handling[pname] = kwargs[pname].__array__().copy() # Save full pars for handling later
+                                pars_slots[repeat_slot_u] = self.repeat_slot_handling[pname][repeat_slot_ind] # Take first instance of each
+                                repeat_slot_flag = True
+                            else:
+                                pars_slots[slots] = kwargs[pname]
                         else:
                             pars_slots[size] = kwargs[pname]
                         kwargs[pname] = pars_slots
 
                 kwargs['size'] = n_samples
-                vals = super().rvs(*args, **kwargs) # Add random_state here?
+                vals = super().rvs(*args, **kwargs)
+                if repeat_slot_flag:
+                    # Handle repeated slots
+                    if self.sim.ti == 0:
+                        raise Exception('Repeat slots on ti=0?!')
+
+                    repeat_slot_vals = np.full(len(slots), np.nan)
+                    repeat_slot_vals[repeat_slot_ind] = vals[repeat_slot_u] # Store results
+                    todo_inds = np.where(np.isnan(repeat_slot_vals))[0]
+
+                    if options.verbose > 1 and cnt.max() > 2:
+                        print(f'MultiRNG slots are repeated up to {cnt.max()} times.')
+
+                    #repeat_degree = repeat_slot_cnt.max()
+                    while len(todo_inds):
+                        repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots[todo_inds], return_index=True, return_inverse=True, return_counts=True)
+                        cur_inds = todo_inds[repeat_slot_ind] # Absolute positions being filled this pass
+                        self.random_state.step(self.sim.ti+1) # Reset RNG
+                        for pname in [p.name for p in self._param_info()]:
+                            if pname in self.repeat_slot_handling:
+                                kwargs_pname = self.repeat_slot_handling[pname][cur_inds]
+                                pars_slots = np.full(n_samples, fill_value=1, dtype=kwargs_pname.dtype) # self.fill_value
+                                pars_slots[repeat_slot_u] = kwargs_pname # Take first instance of each
+                                kwargs[pname] = pars_slots
+
+                        vals = super().rvs(*args, **kwargs) # Draw again for slot repeat
+                        #assert np.allclose(slots[cur_inds], repeat_slot_u) # TEMP: Check alignment
+                        repeat_slot_vals[cur_inds] = vals[repeat_slot_u]
+                        todo_inds = np.where(np.isnan(repeat_slot_vals))[0]
+
+                    vals = repeat_slot_vals
+                
                 if isinstance(self, bernoulli_gen):
                     vals = vals.astype(bool)
 
                 # _select:
-                if not options.multirng:
+                if not options.multirng or repeat_slot_flag:
                     return vals
 
                 if np.isscalar(size):
@@ -101,11 +142,13 @@ class ScipyDistribution():
                     return vals[size]
                 else:
                     return vals[slots] # slots defined above
+            
+
 
         self.rng = self.set_rng(rng, gen)
         self.gen = starsim_gen(name=gen.dist.name, seed=self.rng)(**gen.kwds)
         return
-    
+
     @staticmethod
     def set_rng(rng, gen):
         # Handle random generators
@@ -130,24 +173,18 @@ class ScipyDistribution():
     
     def __getattr__(self, attr):
         # Returns wrapped generator.(attr) if not a property
+        if attr == '__getstate__':
+            # Must be from pickle, return a callable function that returns None
+            return lambda: None
+        elif attr in ['__setstate__', '__await__', '__deepcopy__']:
+            # Must be from pickle, async programming, copy
+            return None
         try:
             return self.__getattribute__(attr)
         except Exception:
             try:
                 return getattr(self.gen, attr) # .dist?
             except Exception as e:
-                if '__getstate__' in str(e):
-                    # Must be from pickle, return a callable function that returns None
-                    return lambda: None
-                elif '__setstate__' in str(e):
-                    # Must be from pickle, return None
-                    return None
-                elif '__await__' in str(e):
-                    # Must be from async programming?
-                    return None
-                elif '__deepcopy__' in str(e):
-                    # from sc.dcp
-                    return None
                 errormsg = f'"{attr}" is not a member of this class or the underlying scipy stats class'
                 raise Exception(errormsg)
 
