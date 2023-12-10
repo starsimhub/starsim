@@ -195,7 +195,7 @@ class RSV(Disease):
         # Set future dates and probabilities
         # Determine which infections will become symptomatic
         age_bins = np.digitize(sim.people.age[uids], bins=self.pars['prognoses']['age_cutoffs']) - 1  # Age bins of individuals
-        symp_probs = self.pars['prognoses']['symp_probs'][age_bins]
+        symp_probs = self.pars['prognoses']['symp_probs'][age_bins] * self.rel_sev[uids]
         symptomatic_uids = uids[ss.binomial_arr(symp_probs)]
         never_symptomatic_uids = np.setdiff1d(uids, symptomatic_uids)
 

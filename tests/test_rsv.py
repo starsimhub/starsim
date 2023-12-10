@@ -50,7 +50,6 @@ class rsv_maternal_vaccine(ss.Intervention):
         self.efficacy_sev = efficacy_sev
         self.duration=duration
         self.diseases = ['rsv_a', 'rsv_b']
-        self.n_doses = []
         return
 
     def initialize(self, sim):
@@ -68,15 +67,18 @@ class rsv_maternal_vaccine(ss.Intervention):
         unvaccinated_mat_bools = ~sim.people.rsv_a.vaccinated[maternal_uids]
         vaccinate_bools = ss.binomial_arr(np.full(len(maternal_uids), fill_value=self.prob)) * unvaccinated_mat_bools
         mat_to_vaccinate = maternal_uids[vaccinate_bools]
-        inf_protected = ss.binomial_filter(self.efficacy_inf, sim.people.networks['maternal'].contacts['p2'][vaccinate_bools])
-
+        inf_uids = sim.people.networks['maternal'].contacts['p2'][vaccinate_bools]
+        inf_protected = ss.binomial_filter(self.efficacy_inf, inf_uids)
         self.results.n_vaccinated[sim.ti] = len(mat_to_vaccinate)
 
-        dur_immune = self.duration(len(inf_protected))/365
+        dur_immune_inf = self.duration(len(inf_protected))/365
+
         for disease in self.diseases:
             sim.people[disease].vaccinated[mat_to_vaccinate] = True
-            sim.people[disease].dur_immune[inf_protected] = dur_immune
+            sim.people[disease].dur_immune[inf_protected] = dur_immune_inf
             sim.people[disease].immune[inf_protected] = True
+            sim.people[disease].rel_sev[inf_uids] = self.efficacy_sev
+
 
  
 def test_rsv():
