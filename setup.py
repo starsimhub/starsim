@@ -44,5 +44,6 @@ setup(
         'matplotlib',
         'seaborn',
         'numba',
+        'networkx',
     ],
 )
