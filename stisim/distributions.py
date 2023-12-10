@@ -8,6 +8,7 @@ import numpy as np
 from stisim.utils import INT_NAN
 from stisim.random import SingleRNG, MultiRNG
 from stisim import options, int_
+from copy import deepcopy
 
 __all__ = ['ScipyDistribution']
 
@@ -170,13 +171,29 @@ class ScipyDistribution():
         if isinstance(self.rng, (SingleRNG, MultiRNG)):
             self.rng.initialize(sim.rng_container, sim.people.slot)
         return
+
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.__dict__.update(self.__dict__)
+        return result
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, deepcopy(v, memo))
+        return result
     
     def __getattr__(self, attr):
         # Returns wrapped generator.(attr) if not a property
         if attr == '__getstate__':
             # Must be from pickle, return a callable function that returns None
             return lambda: None
-        elif attr in ['__setstate__', '__await__', '__deepcopy__']:
+        #elif attr == '__deepcopy__':
+        #    return self
+        elif attr in ['__setstate__', '__await__']:
             # Must be from pickle, async programming, copy
             return None
         try:
