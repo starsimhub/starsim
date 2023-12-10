@@ -31,11 +31,13 @@ class RSV(Disease):
         self.severe = ss.State('severe', bool, False)
         self.critical = ss.State('critical', bool, False)
         self.recovered = ss.State('recovered', bool, False)
+        self.immune = ss.State('immune', bool, False)
 
         # Duration of stages
         self.dur_exposed = ss.State('dur_exposed', float, np.nan)
         self.dur_symptomatic = ss.State('dur_symptomatic', float, np.nan)
         self.dur_infection = ss.State('dur_infection', float, np.nan)  # Sum of all the stages
+        self.dur_immune = ss.State('dur_immune', float, np.nan)
 
         # Timestep of state changes
         self.ti_exposed = ss.State('ti_exposed', int, ss.INT_NAN)
@@ -44,6 +46,7 @@ class RSV(Disease):
         self.ti_severe = ss.State('ti_severe', int, ss.INT_NAN)
         self.ti_critical = ss.State('ti_critical', int, ss.INT_NAN)
         self.ti_recovered = ss.State('ti_recovered', int, ss.INT_NAN)
+        self.ti_susceptible = ss.State('ti_susceptible', int, ss.INT_NAN)
         self.ti_dead = ss.State('ti_dead', int, ss.INT_NAN)
 
         # Immunity state
@@ -55,6 +58,7 @@ class RSV(Disease):
             dur_exposed=ss.lognormal(3, 2),  # SOURCE
             dur_symptomatic=ss.lognormal(10, 5),  # SOURCE
             dur_severe=ss.lognormal(20, 5),  # SOURCE
+            dur_immune=ss.lognormal(180, 10),
             prognoses=dict(
                 age_cutoffs=np.array([0, 1, 5, 15, 55]),  # Age cutoffs (lower limits)
                 sus_ORs=np.array([2.50, 1.50, 1.00, 1.00, 1.50]),  # Odds ratios for relative susceptibility
@@ -150,14 +154,20 @@ class RSV(Disease):
         critical = self.ti_critical == sim.ti
         self.critical[critical] = True
 
-        # Recovered
+        # Recovered/immune
         recovered = self.ti_recovered == sim.ti
         self.recovered[recovered] = True
-        self.susceptible[recovered] = True
+        self.immune[recovered] = True
         self.exposed[recovered] = False
         self.infected[recovered] = False
         self.symptomatic[recovered] = False
         self.severe[recovered] = False
+
+        # Susceptible
+        susceptible = self.ti_susceptible == sim.ti
+        self.immune[susceptible] = False
+        self.susceptible[susceptible] = True
+
         return
 
     def record_exposure(self, sim, uids):
@@ -210,6 +220,9 @@ class RSV(Disease):
         self.ti_recovered[severe_uids] += rr(dur_severe / sim.dt)
         self.dur_infection[severe_uids] += dur_severe
 
+        dur_immune = self.pars.dur_immune(len(uids))/365
+        self.dur_immune[uids] = dur_immune
+        self.ti_susceptible[uids] = self.ti_recovered[uids] + rr(dur_immune/sim.dt)
         return
 
     def set_immunity(self, sim):
