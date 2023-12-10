@@ -126,6 +126,40 @@ def test_uniform_array(n):
     return draws
 
 
+def test_repeat_slot():
+    """ Test behavior of repeated slots """
+    sc.heading('test_repeat_slot: Test behavior of repeated slots')
+
+    rng = ss.MultiRNG('Uniform')
+    slots = np.array([4,2,3,2,2,3])
+    n = len(slots)
+    rng.initialize(container=None, slots=slots)
+
+    uids = np.arange(n)
+    loc = np.arange(n) # Low
+    scale = 1 # Width
+
+    dist = sps.uniform(loc=loc, scale=scale)
+    dist.random_state = rng
+
+    d = ScipyDistribution(dist)
+    draws = d.rvs(uids)
+    print(f'Uniform sample for uids {uids} returned {draws}')
+
+    assert len(draws) == len(uids)
+
+    unique_slots = np.unique(slots)
+    for s in unique_slots:
+        inds = np.where(slots==s)[0]
+        frac, integ = np.modf(draws[inds])
+        assert np.allclose(integ, loc[inds]) # Integral part should match the loc
+        if ss.options.multirng:
+            # Same random numbers, so should be same fractional part
+            assert np.allclose(frac, frac[0])
+    return draws
+
+
+
 # %% Run as a script
 if __name__ == '__main__':
     # Start timing

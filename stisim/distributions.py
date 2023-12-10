@@ -19,6 +19,11 @@ class ScipyDistribution():
     def __init__(self, gen, rng=None):
         self.gen = None
         class starsim_gen(type(gen.dist)):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.sim = None
+                return
+
             def initialize(self, sim, context):
                 self.sim = sim
                 self.context = context
@@ -101,9 +106,6 @@ class ScipyDistribution():
                 vals = super().rvs(*args, **kwargs)
                 if repeat_slot_flag:
                     # Handle repeated slots
-                    if not self.sim.initialized:
-                        raise Exception('Repeat slots before sim is fully initialized?')
-
                     repeat_slot_vals = np.full(len(slots), np.nan)
                     repeat_slot_vals[repeat_slot_ind] = vals[repeat_slot_u] # Store results
                     todo_inds = np.where(np.isnan(repeat_slot_vals))[0]
@@ -115,7 +117,16 @@ class ScipyDistribution():
                     while len(todo_inds):
                         repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots[todo_inds], return_index=True, return_inverse=True, return_counts=True)
                         cur_inds = todo_inds[repeat_slot_ind] # Absolute positions being filled this pass
-                        self.random_state.step(self.sim.ti+1) # Reset RNG
+
+                        # Reset RNG, note that ti=0 on initialization and ti+1
+                        # there after, including ti=0. Assuming that repeat
+                        # slots are not encountered during sim initialization.
+                        if self.sim is not None:
+                            self.random_state.step(self.sim.ti+1) 
+                        else:
+                            # Likely from a test? Just reset the random state.
+                            self.random_state.reset()
+
                         for pname in [p.name for p in self._param_info()]:
                             if pname in self.repeat_slot_handling:
                                 kwargs_pname = self.repeat_slot_handling[pname][cur_inds]
