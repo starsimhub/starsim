@@ -100,8 +100,8 @@ class ScipyDistribution():
                 vals = super().rvs(*args, **kwargs)
                 if repeat_slot_flag:
                     # Handle repeated slots
-                    if self.sim.ti == 0:
-                        raise Exception('Repeat slots on ti=0?!')
+                    if not self.sim.initialized:
+                        raise Exception('Repeat slots before sim is fully initialized?')
 
                     repeat_slot_vals = np.full(len(slots), np.nan)
                     repeat_slot_vals[repeat_slot_ind] = vals[repeat_slot_u] # Store results
