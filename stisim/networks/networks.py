@@ -439,13 +439,13 @@ class msm(SexualNetwork, DynamicNetwork):
         desired_std = 3
         mu = np.log(desired_mean**2 / np.sqrt(desired_mean**2 + desired_std**2))
         sigma = np.sqrt(np.log(1 + desired_std**2 / desired_mean**2))
-        default_pars['duration_dist'] = sps.lognorm(s=sigma, scale=np.exp(mu)), # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+        default_pars['duration_dist'] = sps.lognorm(s=sigma, scale=np.exp(mu)) # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
 
         desired_mean = 18
         desired_std = 2
         mu = np.log(desired_mean**2 / np.sqrt(desired_mean**2 + desired_std**2))
         sigma = np.sqrt(np.log(1 + desired_std**2 / desired_mean**2))
-        default_pars['debut_dist'] = sps.lognormal(s=sigma, scale=np.exp(mu)),
+        default_pars['debut_dist'] = sps.lognorm(s=sigma, scale=np.exp(mu))
 
         pars = ss.omerge(default_pars, pars)
         DynamicNetwork.__init__(self)
@@ -470,7 +470,7 @@ class msm(SexualNetwork, DynamicNetwork):
         # Participation
         self.participant[people.female] = False
         pr = self.pars.part_rates
-        dist = ss.choice([True, False], probabilities=[pr, 1-pr])(len(uids))
+        dist = sps.bernoulli.rvs(p=pr, size=len(uids))
         self.participant[uids] = dist
 
         # Debut
@@ -590,7 +590,7 @@ class mf_msm(NetworkConnector):
         }, pars)
         super().__init__(networks=networks, pars=pars)
 
-        self.bi_dist = sps.binom(p=self.pars.prop_pi)
+        self.bi_dist = sps.bernoulli(p=self.pars.prop_bi)
         return
 
     def initialize(self, sim):
@@ -614,7 +614,7 @@ class mf_msm(NetworkConnector):
         # Male participation rate uses info about cross-network participation.
         # First, we determine who's participating in the MSM network
         pr = msm.pars.part_rates
-        dist = ss.choice([True, False], probabilities=[pr, 1-pr])(len(uids))
+        dist = sps.bernoulli.rvs(p=pr, size=len(uids))
         msm.participant[uids] = dist
 
         # Now we take the MSM participants and determine which are also in the MF network
