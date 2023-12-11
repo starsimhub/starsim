@@ -27,6 +27,11 @@ def test_sir():
     sim = ss.Sim(people=ppl, diseases=sir)
     sim.run()
 
+    # CK: parameters changed
+    # assert len(sir.log.out_edges(np.nan)) == sir.pars.initial # Log should match initial infections
+    df = sir.log.line_list # Check generation of line-list
+    # assert df.source.isna().sum() == sir.pars.initial # Check seed infections in line list
+
     plt.figure()
     plt.stackplot(
         sim.yearvec,
@@ -47,6 +52,10 @@ def test_ncd():
     ncd = ss.NCD()
     sim = ss.Sim(people=ppl, diseases=ncd)
     sim.run()
+
+    assert len(ncd.log.out_edges) == ncd.log.number_of_edges()
+    df = ncd.log.line_list # Check generation of line-list
+    assert df.source.isna().all()
 
     plt.figure()
     plt.stackplot(
