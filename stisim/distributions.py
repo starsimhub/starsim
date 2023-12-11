@@ -43,7 +43,7 @@ class Distribution():
     def name(self):
         return self.__class__.__name__
 
-    def sample(cls, n=1, **kwargs):
+    def sample(self, n=1, **kwargs):
         """
         Return a specified number of samples from the distribution
         """
@@ -65,6 +65,16 @@ class Distribution():
         else:
             raise KeyError(f'Distribution "{name}" did not match any known distributions')
 
+class delta(Distribution):
+    """
+    Delta function at specified value
+    """
+
+    def __init__(self, value):
+        self.value = value
+
+    def sample(self, n=1):
+        return np.full(n, fill_value=self.value)
 
 class data_dist(Distribution):
     """ Sample from data """

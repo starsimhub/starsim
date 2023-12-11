@@ -6,7 +6,7 @@ Define core Sim classes
 import numpy as np
 import sciris as sc
 import stisim as ss
-
+import itertools
 
 __all__ = ['Sim', 'AlreadyRunError']
 
@@ -52,6 +52,18 @@ class Sim(sc.prettyobj):
     @property
     def year(self):
         return self.yearvec[self.ti]
+
+    @property
+    def modules(self):
+        # Return iterator over all Module instances (stored in standard places) in the Sim
+        return itertools.chain(
+            self.demographics.values(),
+            self.people.networks.values(),
+            self.diseases.values(),
+            self.connectors.values(),
+            self.interventions.values(),
+            self.analyzers.values(),
+        )
 
     def initialize(self, popdict=None, reset=False, **kwargs):
         """
@@ -351,7 +363,9 @@ class Sim(sc.prettyobj):
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
-        self.people.resolve_deaths()
+        uids = self.people.resolve_deaths()
+        for disease in self.diseases.values():
+            disease.update_death(self, uids)
 
         # Update results
         self.people.update_results(self)
@@ -433,7 +447,9 @@ class Sim(sc.prettyobj):
             # otherwise the scale factor will be applied multiple times
             raise AlreadyRunError('Simulation has already been finalized')
 
-        # Final settings
+        for module in self.modules:
+            module.finalize(self)
+
         self.results_ready = True  # Set this first so self.summary() knows to print the results
         self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
         return

@@ -1,15 +1,16 @@
 """
-Defne gonorrhea
+Define default gonorrhea disease module and related interventions
 """
 
 import numpy as np
 import stisim as ss
+from .disease import STI
 
 
 __all__ = ['Gonorrhea']
 
 
-class Gonorrhea(ss.Disease):
+class Gonorrhea(STI):
 
     def __init__(self, pars=None):
         super().__init__(pars)
@@ -37,7 +38,7 @@ class Gonorrhea(ss.Disease):
         Initialize results
         """
         super().init_results(sim)
-        self.results += ss.Result(self.name, 'n_sympotmatic', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'n_symptomatic', sim.npts, dtype=int)
         self.results += ss.Result(self.name, 'new_clearances', sim.npts, dtype=int)
         return
 
@@ -68,10 +69,11 @@ class Gonorrhea(ss.Disease):
         super(Gonorrhea, self).make_new_cases(sim)
         return
 
-    def set_prognoses(self, sim, uids):
+    def set_prognoses(self, sim, uids, from_uids=None):
         """
         Natural history of gonorrhea for adult infection
         """
+        super().set_prognoses(sim, uids, from_uids)
 
         # Set infection status
         self.susceptible[uids] = False
