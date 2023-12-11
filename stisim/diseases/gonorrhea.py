@@ -70,6 +70,7 @@ class Gonorrhea(STI):
         """
         Natural history of gonorrhea for adult infection
         """
+        super().set_prognoses(sim, uids, from_uids)
 
         # Set infection status
         self.susceptible[uids] = False

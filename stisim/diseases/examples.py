@@ -85,10 +85,12 @@ class SIR(Disease):
         """
         alive_uids = ss.true(sim.people.alive)
         initial_cases = self.pars['seed_infections'].filter(alive_uids)
-        self.infect(sim, initial_cases)
+        self.infect(sim, initial_cases, None)
         return
 
-    def infect(self, sim, uids):
+    def infect(self, sim, uids, from_uids):
+        super().set_prognoses(sim, uids, from_uids)
+
         # Carry out state changes associated with infection
         self.susceptible[uids] = False
         self.infected[uids] = True
@@ -116,7 +118,7 @@ class SIR(Disease):
                     p_transmit = rel_trans[a] * rel_sus[b] * layer.contacts['beta'] * beta * sim.dt
                     new_cases = np.random.random(len(a)) < p_transmit # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
                     if new_cases.any():
-                        self.infect(sim, b[new_cases])
+                        self.infect(sim, b[new_cases], a[new_cases])
         return
 
     def update_results(self, sim):
@@ -169,6 +171,8 @@ class NCD(Disease):
     def update_pre(self, sim):
         deaths = ss.true(self.ti_dead == sim.ti)
         sim.people.request_death(deaths)
+        self.log.add_data(deaths, died=True)
+        self.results.new_deaths[sim.ti] = len(deaths) # Log deaths attributable to this module
         return
 
     def make_new_cases(self, sim):
