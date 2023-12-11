@@ -64,12 +64,6 @@ class BasePeople(sc.prettyobj):
         for rng in self.rngs:
             rng.initialize(sim.rng_container, self.slot)
 
-        # Initialize remaining states
-        for name, state in self.states.items():
-            self.add_state(state)  # Register the state internally for dynamic growth
-            state.initialize(sim)  # Connect the state to this people instance
-            setattr(self, name, state)
-
         self.initialized = True
         return
 
@@ -204,7 +198,8 @@ class People(BasePeople):
         ]
         states.extend(sc.promotetolist(extra_states))
 
-        self.states = ss.ndict(states)
+        self.states = ss.ndict()
+        self._initialize_states(states)
         self.networks = ss.Networks(networks)
 
         # Set initial age distribution - likely move this somewhere else later
@@ -219,6 +214,15 @@ class People(BasePeople):
             return uniform(loc=0, scale=100) # low and width
         if sc.checktype(age_data, pd.DataFrame):
             return ss.data_dist(vals=age_data['value'].values, bins=age_data['age'].values)
+
+    def _initialize_states(self, states):
+        for state in states:
+            self.add_state(state)  # Register the state internally for dynamic growth
+            self.states.append(state)  # Expose these states with their original names
+            state.initialize(self)  # Connect the state to this people instance
+            setattr(self, state.name, state)
+        return
+
 
     def initialize(self, sim):
         """ Initialization """
