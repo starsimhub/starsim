@@ -51,7 +51,7 @@ class FusedArray(NDArrayOperatorsMixin):
         """
         Extract values from a collection of UIDs
 
-        This function is used to retreive values based on UID. As indexing a FusedArray returns a new FusedArray,
+        This function is used to retrieve values based on UID. As indexing a FusedArray returns a new FusedArray,
         this method also populates the new UID map for use in the subsequently created FusedArray, avoiding the
         need to re-compute it separately.
 
