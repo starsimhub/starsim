@@ -143,7 +143,7 @@ class NCD(Disease):
             'prognosis': sps.weibull_min(c=2, scale=5), # Time in years between first becoming affected and death
         }
 
-        ss.Module.__init__(self, ss.omerge(default_pars, pars))
+        super().__init__(self, ss.omerge(default_pars, pars))
         self.at_risk      = ss.State('at_risk', bool, False)
         self.affected     = ss.State('affected', bool, False)
         self.ti_affected  = ss.State('ti_affected', int, ss.INT_NAN)
@@ -182,6 +182,7 @@ class NCD(Disease):
         self.affected[new_cases] = True
         prog_years = self.pars['prognosis'].rvs(new_cases)
         self.ti_dead[new_cases] = sim.ti + sc.randround(prog_years / sim.dt)
+        super().set_prognoses(sim, new_cases)
         return new_cases
 
     def init_results(self, sim):

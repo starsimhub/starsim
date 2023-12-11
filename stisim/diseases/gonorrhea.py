@@ -62,6 +62,10 @@ class Gonorrhea(STI):
 
         return
     
+    def update_results(self, sim):
+        super(Gonorrhea, self).update_results(sim)
+        return
+
     def make_new_cases(self, sim):
         super(Gonorrhea, self).make_new_cases(sim)
         return
