@@ -58,7 +58,7 @@ class RSV(Disease):
             dur_exposed=ss.lognormal(3, 2),  # SOURCE
             dur_symptomatic=ss.lognormal(10, 5),  # SOURCE
             dur_severe=ss.lognormal(20, 5),  # SOURCE
-            dur_immune=ss.lognormal(180, 10),
+            dur_immune=ss.lognormal(60, 10),
             prognoses=dict(
                 age_cutoffs=np.array([0, 1, 5, 15, 55]),  # Age cutoffs (lower limits)
                 sus_ORs=np.array([2.50, 1.50, 1.00, 1.00, 1.50]),  # Odds ratios for relative susceptibility
@@ -141,19 +141,57 @@ class RSV(Disease):
     def update_pre(self, sim):
         """ Updates prior to interventions """
 
+        self.check_symptomatic(sim)
+        self.check_severe(sim)
+        self.check_critical(sim)
+        self.check_recovered(sim)
+        self.check_susceptible(sim)
+
+        return
+
+    def check_symptomatic(self, sim):
         # Symptomatic
         symptomatic = self.ti_symptomatic == sim.ti
         self.symptomatic[symptomatic] = True
         self.exposed[symptomatic] = False
 
+        # Determine which symptomatic cases will become severe
+        symptomatic_uids = ss.true(symptomatic)
+        age_bins = np.digitize(sim.people.age[symptomatic],bins=self.pars['prognoses']['age_cutoffs']) - 1  # Age bins of individuals
+        sev_probs = self.pars['prognoses']['severe_probs'][age_bins] * self.rel_sev[symptomatic_uids]
+        dur_symptomatic = self.pars.dur_symptomatic(len(symptomatic_uids))/365 # duration in years
+        severe_bools = ss.binomial_arr(sev_probs)
+        severe_uids = symptomatic_uids[severe_bools]
+        self.ti_severe[severe_uids] = sim.ti + rr(dur_symptomatic[severe_bools] / sim.dt)
+
+        never_severe_uids = symptomatic_uids[~severe_bools]
+        self.ti_recovered[never_severe_uids] = sim.ti + rr(dur_symptomatic[~severe_bools]/sim.dt)
+
+    def check_severe(self, sim):
         # Severe
         severe = self.ti_severe == sim.ti
         self.severe[severe] = True
 
+        # Determine which severe cases will become critical
+        age_bins = np.digitize(sim.people.age[severe], bins=self.pars['prognoses']['age_cutoffs']) - 1  # Age bins of individuals
+        crit_probs = self.pars['prognoses']['critical_probs'][age_bins]
+        severe_uids = ss.true(severe)
+        dur_severe = self.pars.dur_symptomatic(len(severe_uids)) / 365  # duration in years
+        crit_bools = ss.binomial_arr(crit_probs)
+        crit_uids = severe_uids[crit_bools]
+        never_crit_uids = severe_uids[~crit_bools]
+
+        self.ti_critical[crit_uids] = sim.ti + rr(dur_severe[crit_bools] / sim.dt)
+        self.ti_recovered[never_crit_uids] = sim.ti + rr(dur_severe[~crit_bools] / sim.dt)
+
+
+    def check_critical(self, sim):
         # Critical
         critical = self.ti_critical == sim.ti
         self.critical[critical] = True
 
+
+    def check_recovered(self, sim):
         # Recovered/immune
         recovered = self.ti_recovered == sim.ti
         self.recovered[recovered] = True
@@ -163,12 +201,18 @@ class RSV(Disease):
         self.symptomatic[recovered] = False
         self.severe[recovered] = False
 
+        recovered_uids = ss.true(recovered)
+
+        dur_immune = self.pars.dur_immune(len(recovered_uids)) / 365
+        self.dur_immune[recovered_uids] = dur_immune
+        self.ti_susceptible[recovered_uids] = sim.ti + rr(dur_immune / sim.dt)
+
+
+    def check_susceptible(self, sim):
         # Susceptible
         susceptible = self.ti_susceptible == sim.ti
         self.immune[susceptible] = False
         self.susceptible[susceptible] = True
-
-        return
 
     def record_exposure(self, sim, uids):
         self.susceptible[uids] = False
@@ -192,7 +236,6 @@ class RSV(Disease):
         n_uids = len(uids)
         self.record_exposure(sim, uids)
 
-        # Set future dates and probabilities
         # Determine which infections will become symptomatic
         age_bins = np.digitize(sim.people.age[uids], bins=self.pars['prognoses']['age_cutoffs']) - 1  # Age bins of individuals
         symp_probs = self.pars['prognoses']['symp_probs'][age_bins] * self.rel_sev[uids]
@@ -202,27 +245,14 @@ class RSV(Disease):
         # Exposed to symptomatic
         dur_exposed = self.pars.dur_exposed(n_uids)/365 # duration in years
         self.dur_exposed[uids] = dur_exposed
-        self.ti_recovered[never_symptomatic_uids] = sim.ti + rr(dur_exposed/sim.dt) # TODO: Need to subset dur_exposed
         self.ti_symptomatic[symptomatic_uids] = sim.ti + rr(dur_exposed/sim.dt)
-        self.dur_infection[uids] = dur_exposed
 
-        # Determine which symptomatic cases will become severe
-        age_bins = np.digitize(sim.people.age[symptomatic_uids],bins=self.pars['prognoses']['age_cutoffs']) - 1  # Age bins of individuals
-        sev_probs = self.pars['prognoses']['severe_probs'][age_bins]
-        severe_uids = symptomatic_uids[ss.binomial_arr(sev_probs)]
+        # Never symptomatic, set day recover and dur_immunity
+        dur_immune = self.pars.dur_immune(len(never_symptomatic_uids)) / 365
+        self.ti_recovered[never_symptomatic_uids] = sim.ti + rr(dur_exposed / sim.dt)
+        self.dur_immune[never_symptomatic_uids] = dur_immune
+        self.ti_susceptible[never_symptomatic_uids] = self.ti_recovered[never_symptomatic_uids] + rr(dur_immune / sim.dt)
 
-        dur_symptomatic = self.pars.dur_symptomatic(len(symptomatic_uids))/365 # duration in years
-        dur_severe = self.pars.dur_severe(len(severe_uids)) / 365  # duration in years
-
-        self.ti_recovered[symptomatic_uids] = sim.ti + rr(dur_symptomatic/sim.dt)
-        self.dur_infection[symptomatic_uids] += dur_symptomatic
-
-        self.ti_recovered[severe_uids] += rr(dur_severe / sim.dt)
-        self.dur_infection[severe_uids] += dur_severe
-
-        dur_immune = self.pars.dur_immune(len(uids))/365
-        self.dur_immune[uids] = dur_immune
-        self.ti_susceptible[uids] = self.ti_recovered[uids] + rr(dur_immune/sim.dt)
         return
 
     def set_immunity(self, sim):
