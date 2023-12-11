@@ -128,6 +128,7 @@ class Syphilis(STI):
         self.secondary[secondary] = True
         self.primary[secondary] = False
         self.latent_temp[secondary] = False  # Could transition from latent or from primary
+        self.set_secondary_prognoses(sim, ss.true(secondary))
 
         # Latent
         latent_temp = self.ti_latent_temp == sim.ti
@@ -201,6 +202,11 @@ class Syphilis(STI):
         self.ti_secondary[uids] = self.ti_primary[uids] + rr(dur_primary/sim.dt)
         self.dur_infection[uids] += dur_primary
 
+        return
+
+    def set_secondary_prognoses(self, sim, uids):
+        """ Set prognoses for people who have just progressed to secondary infection """
+
         # Secondary to latent_temp or latent_long
         latent_temp_uids = ss.binomial_filter(self.pars.p_latent_temp, uids)
         n_latent_temp = len(latent_temp_uids)
@@ -213,18 +219,6 @@ class Syphilis(STI):
         dur_secondary_long = self.pars.dur_secondary(n_latent_long)
         self.ti_latent_long[latent_long_uids] = self.ti_secondary[latent_long_uids] + rr(dur_secondary_long/sim.dt)
         self.dur_infection[latent_long_uids] += dur_secondary_long
-
-        # Latent_temp back to secondary
-        dur_latent_temp = self.pars.dur_latent_temp(n_latent_temp)
-        self.ti_secondary[latent_temp_uids] = self.ti_latent_temp[latent_temp_uids] + rr(dur_latent_temp/sim.dt)
-        self.dur_infection[latent_temp_uids] += dur_latent_temp
-
-        # Latent_long to tertiary
-        tertiary_uids = ss.binomial_filter(self.pars.p_tertiary, latent_long_uids)
-        n_tertiary = len(tertiary_uids)
-        dur_latent_long = self.pars.dur_latent_long(n_tertiary)
-        self.ti_tertiary[tertiary_uids] = self.ti_latent_long[tertiary_uids] + rr(dur_latent_long/sim.dt)
-        self.dur_infection[tertiary_uids] += dur_latent_long
 
         return
 
