@@ -9,7 +9,7 @@ import stisim as ss
 import pandas as pd
 
 # Specify all externally visible functions this file defines
-__all__ = ['Networks', 'Network', 'NetworkConnector', 'SexualNetwork', 'mf', 'msm', 'mf_msm', 'hpv_network', 'maternal']
+__all__ = ['Networks', 'Network', 'NetworkConnector', 'DynamicNetwork', 'SexualNetwork', 'mf', 'msm', 'mf_msm', 'hpv_network', 'maternal', 'static']
 
 
 class Network(ss.Module):
@@ -840,3 +840,56 @@ class maternal(Network):
         self.contacts.beta = np.concatenate([self.contacts.beta, beta])
         self.contacts.dur = np.concatenate([self.contacts.dur, dur])
         return
+
+class static(Network):
+    """
+    A network class of static partnerships converted from a networkx graph. There's no formation of new partnerships
+    and initialized partnerships only end when one of the partners dies. The networkx graph can be created outside STIsim
+    if population size is known. Or the graph can be created by passing a networkx generator function to STIsim.
+
+    **Examples**::
+
+    # Generate a networkx graph and pass to STIsim
+    import networkx as nx
+    import stisim as ss
+    g = nx.scale_free_graph(n=10000)
+    ss.static(graph=g)
+
+    # Pass a networkx graph generator to STIsim
+    ss.static(graph=nx.erdos_renyi_graph, p=0.0001)
+
+    """
+    def __init__(self, graph, **kwargs):
+        self.graph = graph
+        self.kwargs = kwargs
+        super().__init__()
+        return
+
+    def initialize(self, sim):
+        popsize = sim.pars['n_agents']
+        if callable(self.graph):
+            self.graph = self.graph(n = popsize, **self.kwargs)
+        self.validate_pop(popsize)
+        super().initialize(sim)
+        self.get_contacts()
+        return
+
+    def validate_pop(self, popsize):
+        n_nodes =  self.graph.number_of_nodes()
+        if n_nodes > popsize:
+            errormsg = f'Please ensure the number of nodes in graph {n_nodes} is smaller than population size {popsize}.'
+            raise ValueError(errormsg)
+
+    def get_contacts(self):
+        p1s = []
+        p2s = []
+        for edge in self.graph.edges():
+            p1, p2 = edge
+            p1s.append(p1)
+            p2s.append(p2)
+        self.contacts.p1 = np.concatenate([self.contacts.p1, p1s])
+        self.contacts.p2 = np.concatenate([self.contacts.p2, p2s])
+        self.contacts.beta = np.concatenate([self.contacts.beta, np.ones_like(p1s)])
+        return
+
+
