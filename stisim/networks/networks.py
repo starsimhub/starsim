@@ -404,7 +404,7 @@ class mf(SexualNetwork, DynamicNetwork):
         beta = np.ones_like(p1)
 
         # Figure out durations
-        print('DJK TODO')
+        # print('DJK TODO')
         if ss.options.multirng and (len(p1) == len(np.unique(p1))):
             # No duplicates and user has enabled multirng, so use slotting based on p1
             dur_vals = self.pars.duration_dist.rvs(p1)
@@ -487,7 +487,7 @@ class msm(SexualNetwork, DynamicNetwork):
         p2 = available_m[n_pairs:n_pairs*2]
 
         # Figure out durations
-        print('DJK TODO')
+        # print('DJK TODO')
         if ss.options.multirng and (len(p1) == len(np.unique(p1))):
             # No duplicates and user has enabled multirng, so use slotting based on p1
             dur = self.pars['duration_dist'].rvs(p1)
