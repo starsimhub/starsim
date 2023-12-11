@@ -7,6 +7,7 @@ import sciris as sc
 import numpy as np
 import stisim as ss
 import matplotlib.pyplot as plt
+import scipy.stats as sps
 
 
 # %% Define the tests
@@ -41,22 +42,16 @@ def test_networks():
     nw1 = ss.Network(p1=p1, p2=p2, beta=beta, label='rand')
     nw2 = ss.Network(dict(p1=p1, p2=p2, beta=beta), label='rand')  # Alternate method
 
-    #TODO: The following two tests do not work because network initialization
-    # expecting a Sim object, not a People object
-    nw3 = None
-    nw4 = None
-    '''
-    # Make people, then make a dynamic sexual layer and update it
-    ppl = ss.People(100)  # BasePeople
-    ppl.initialize()  # This seems to be necessary, although not completely clear why...
+    sim = ss.Sim()
+    sim.initialize()
+    
     nw3 = ss.hpv_network()
-    nw3.initialize(ppl) #TODO: Initialize is expecting a Sim object, not a People object
-    nw3.update(ppl, ti=1, dt=1)  # Update by providing a timestep & current time index
+    nw3.initialize(sim)
+    sim.people.networks.update(sim.people)  # Update by providing a timestep & current time index
 
     nw4 = ss.maternal()
-    nw4.initialize(ppl) #TODO: Initialize is expecting a Sim object, not a People object
+    nw4.initialize(sim)
     nw4.add_pairs(mother_inds=[1, 2, 3], unborn_inds=[100, 101, 102], dur=[1, 1, 1])
-    '''
 
     return nw1, nw2, nw3, nw4
 
@@ -72,7 +67,7 @@ def test_microsim():
     # Set beta. The first entry represents transmission risk from infected p1 -> susceptible p2
     # Need to be careful to get the ordering right. The set-up here assumes that in the simple
     # sexual  network, p1 is male and p2 is female. In the maternal network, p1=mothers, p2=babies.
-    hiv.pars['beta'] = {'mf': [0.0008, 0.0004], 'maternal': [0.2, 0]}
+    hiv.pars['beta'] = {'mf': [0.15, 0.10], 'maternal': [0.2, 0]}
 
     sim = ss.Sim(people=ppl, demographics=ss.Pregnancy(), diseases=hiv)
     sim.initialize()
@@ -84,9 +79,19 @@ def test_microsim():
 
     return sim
 
+
 def test_ppl_construction():
 
-    sim_pars = {'networks': [ss.mf()], 'n_agents': 100}
+    def init_debut(self, sim, uids):
+        #loc = 16
+        loc = np.full(len(uids), 16)
+        loc[sim.people.female[uids]] = 21
+        return loc
+
+    mf_pars = {
+        'debut_dist': sps.norm(loc=init_debut, scale=2),  # Age of debut can vary by using callable parameter values
+    }
+    sim_pars = {'networks': [ss.mf(mf_pars)], 'n_agents': 100}
     gon_pars = {'beta': {'mf': [0.08, 0.04]}, 'p_death': 0.2}
     gon = ss.Gonorrhea(pars=gon_pars)
 
@@ -106,6 +111,8 @@ if __name__ == '__main__':
     # Start timing
     T = sc.tic()
 
+    ss.options.multirng = True
+
     # Run tests
     ppl = test_people()
     nw1, nw2, nw3, nw4 = test_networks()
@@ -113,4 +120,5 @@ if __name__ == '__main__':
     sim2 = test_ppl_construction()
 
     sc.toc(T)
+    plt.show()
     print('Done.')

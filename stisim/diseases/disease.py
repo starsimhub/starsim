@@ -5,8 +5,92 @@ Base classes for diseases
 import numpy as np
 import sciris as sc
 import stisim as ss
+import scipy.stats as sps
+import networkx as nx
+from operator import itemgetter
+import pandas as pd
 
-__all__ = ['Disease', 'STI']
+__all__ = ['InfectionLog', 'Disease', 'STI']
+
+class InfectionLog(nx.MultiDiGraph):
+    """
+    Record infections
+
+    The infection log records transmission events and optionally other data
+    associated with each transmission. Basic functionality is to track
+    transmission with
+
+    >>> Disease.log.append(source, target, t)
+
+    Seed infections can be recorded with a source of `None`, although all infections
+    should have a target and a time. Other data can be captured in the log, either at
+    the time of creation, or later on. For example
+
+    >>> Disease.log.append(source, target, t, network='msm')
+
+    could be used by a module to track the network in which transmission took place.
+    Modules can optionally add per-infection outcomes later as well, for example
+
+    >>> Disease.log.add_data(source, t_dead=2024.25)
+
+    This would be equivalent to having specified the data at the original time the log
+    entry was created - however, it is more useful for tracking events that may or may
+    not occur after the infection and could be modified by interventions (e.g., tracking
+    diagnosis, treatment, notification etc.)
+
+    A table of outcomes can be returned using `InfectionLog.line_list()`
+    """
+    # Add entries
+    # Add items to the most recent infection for an agent
+
+    def add_data(self, uids, **kwargs):
+        """
+        Record extra infection data
+
+        This method can be used to add data to an existing transmission event.
+        The most recent transmission event will be used
+
+        :param uid: The UID of the target node (the agent that was infected)
+        :param kwargs: Remaining arguments are stored as edge data
+        """
+        for uid in sc.promotetoarray(uids):
+            source, target, key = max(self.in_edges(uid, keys=True), key=itemgetter(2,0)) # itemgetter twice as fast as lambda apparently
+            self[source][target][key].update(**kwargs)
+
+    def append(self, source, target, t, **kwargs):
+        self.add_edge(source, target, key=t, **kwargs)
+
+    @property
+    def line_list(self):
+        """
+        Return a tabular representation of the log
+
+        This function returns a dataframe containing columns for all quantities
+        recorded in the log. Note that the log will contain `NaN` for quantities
+        that are defined for some edges and not others (and which are missing for
+        a particular entry)
+        """
+        if len(self) == 0:
+            return pd.DataFrame(columns=['t','source','target'])
+
+        entries = []
+        for source, target, t, data in self.edges(keys=True, data=True):
+            d = data.copy()
+            d.update(source=source, target=target, t=t)
+            entries.append(d)
+        df = pd.DataFrame.from_records(entries)
+        df = df.sort_values(['t','source','target'])
+        df = df.reset_index(drop=True)
+
+        # Use Pandas "Int64" type to allow nullable integers. This allows the 'source' column
+        # to have an integer type corresponding to UIDs while simultaneously supporting the use
+        # of null values to represent exogenous/seed infections
+        df = df.fillna(pd.NA)
+        df['source'] = df['source'].astype("Int64")
+        df['target'] = df['target'].astype("Int64")
+
+        return df
+
 
 class Disease(ss.Module):
     """ Base module class for diseases """
@@ -14,6 +98,7 @@ class Disease(ss.Module):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.results = ss.ndict(type=ss.Result)
+        self.log = InfectionLog()
 
     @property
     def _boolean_states(self):
@@ -118,11 +203,38 @@ class Disease(ss.Module):
         could be through transmission (parametrized in different ways, which may or
         may not use the contact networks) or it may be based on risk factors/seeding,
         as may be the case for non-communicable diseases.
+
+        It is expected that this method will internally call Disease.set_prognoses()
+        at some point.
+
         """
         pass
 
-    def set_prognoses(self, sim, uids):
-        pass
+
+    def set_prognoses(self, sim, uids, from_uids=None):
+        """
+        Set prognoses upon infection/acquisition
+
+        This function assigns state values upon infection or acquisition of
+        the disease. It would normally be called somewhere towards the end of
+        `Disease.make_new_cases()`. Infections will automatically be added to
+        the log as part of this operation.
+
+        The from_uids are relevant for infectious diseases, but would be left
+        as `None` for NCDs.
+
+        :param sim:
+        :param uids: UIDs for agents to assign disease progoses to
+        :param from_uids: Optionally specify the infecting agent
+        :return:
+        """
+        if from_uids is None:
+            for target in uids:
+                self.log.append(np.nan, target, sim.year)
+        else:
+            for target, source in zip(uids, from_uids):
+                self.log.append(source, target, sim.year)
+
 
     def update_results(self, sim):
         """
@@ -155,10 +267,6 @@ class STI(Disease):
         self.infected    = ss.State('infected', bool, False)
         self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
 
-        # Random number generators
-        self.rng_init_cases      = ss.RNG(f'initial_cases_{self.name}')
-        self.rng_trans           = ss.RNG(f'trans_{self.name}')
-        self.rng_choose_infector = ss.RNG(f'choose_infector_{self.name}')
         return
 
     def validate_pars(self, sim):
@@ -177,9 +285,12 @@ class STI(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        if self.pars['init_prev'] <= 0:
+        if self.pars['seed_infections'] is None:
             return
-        initial_cases = self.rng_init_cases.bernoulli_filter(ss.bernoulli(self.pars['init_prev']), uids=ss.true(sim.people.alive))
+
+        alive_uids = ss.true(sim.people.alive) # Maybe just sim.people.uid?
+        initial_cases = self.pars['seed_infections'].filter(alive_uids)
+
         self.set_prognoses(sim, initial_cases, from_uids=None)  # TODO: sentinel value to indicate seeds?
         return
 
@@ -215,8 +326,8 @@ class STI(Disease):
                     if beta == 0:
                         continue
                     # probability of a->b transmission
-                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta  # TODO: Needs DT
-                    new_cases_bool = np.random.random(len(a)) < p_transmit
+                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta # TODO: Needs DT
+                    new_cases_bool = np.random.random(len(a)) < p_transmit # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
                     new_cases.append(b[new_cases_bool])
                     sources.append(a[new_cases_bool])
         return np.concatenate(new_cases), np.concatenate(sources)
@@ -227,7 +338,6 @@ class STI(Disease):
         probability of each _node_ acquiring a case rather than checking if each
         _edge_ transmits.
         '''
-
         n = len(people.uid) # TODO: possibly could be shortened to just the people who are alive
         p_acq_node = np.zeros(n)
 
@@ -239,17 +349,24 @@ class STI(Disease):
 
                 a_to_b = [contacts.p1, contacts.p2, self.pars.beta[lkey][0]]
                 b_to_a = [contacts.p2, contacts.p1, self.pars.beta[lkey][1]]
-                for a, b, beta in [a_to_b, b_to_a]:  # Transmission from a --> b
+                for a, b, beta in [a_to_b, b_to_a]: # Transmission from a --> b
                     if beta == 0:
                         continue
-
+                    
                     # Accumulate acquisition probability for each person (node)
                     node_from_edge = np.ones((n, len(a)))
-                    bi = people._uid_map[b]  # Indices of b (rather than uid)
-                    node_from_edge[bi, np.arange(len(a))] = 1 - rel_trans[a] * rel_sus[b] * contacts.beta * beta  # TODO: Needs DT
-                    p_acq_node = 1 - (1 - p_acq_node) * node_from_edge.prod(axis=1)  # (1-p1)*(1-p2)*...
+                    bi = people._uid_map[b] # Indices of b (rather than uid)
+                    node_from_edge[bi, np.arange(len(a))] = 1 - rel_trans[a] * rel_sus[b] * contacts.beta * beta # TODO: Needs DT
+                    p_acq_node = 1 - (1-p_acq_node) * node_from_edge.prod(axis=1) # (1-p1)*(1-p2)*...
 
-        new_cases = self.rng_trans.bernoulli_filter(p_acq_node, people.uid)
+
+        # Slotted draw, need to find a long-term place for this logic
+        slots = people.slot[people.uid]
+        #p = np.full(np.max(slots)+1, 0, dtype=p_acq_node.dtype)
+        #p[slots] = p_acq_node
+        #new_cases_bool = sps.bernoulli.rvs(p=p).astype(bool)[slots]
+        new_cases_bool = sps.uniform.rvs(size=np.max(slots)+1)[slots] < p_acq_node
+        new_cases = people.uid[new_cases_bool]
         return new_cases
 
     def _determine_case_source_multirng(self, people, new_cases):
@@ -257,7 +374,11 @@ class STI(Disease):
         Given the uids of new cases, determine which agents are the source of each case
         '''
         sources = np.zeros_like(new_cases)
-        r = self.rng_choose_infector.random(new_cases) # Random number slotted to each new case
+
+        # Slotted draw, need to find a long-term place for this logic
+        slots = people.slot[new_cases]
+        r = sps.uniform.rvs(size=np.max(slots)+1)[slots]
+
         for i, uid in enumerate(new_cases):
             p_acqs = []
             possible_sources = []
@@ -267,12 +388,11 @@ class STI(Disease):
                     contacts = layer.contacts
                     a_to_b = [contacts.p1, contacts.p2, self.pars.beta[lkey][0]]
                     b_to_a = [contacts.p2, contacts.p1, self.pars.beta[lkey][1]]
-
                     for a, b, beta in [a_to_b, b_to_a]: # Transmission from a --> b
                         if beta == 0:
                             continue
                     
-                        inds = np.where(b==uid)[0]
+                        inds = np.where(b == uid)[0]
                         if len(inds) == 0:
                             continue
                         neighbors = a[inds]
@@ -283,14 +403,12 @@ class STI(Disease):
 
                         # Compute acquisition probabilities from neighbors --> uid
                         # TODO: Could remove zeros
-
                         p_acqs.append((rel_trans * rel_sus * beta_combined).__array__()) # Needs DT
                         possible_sources.append(neighbors.__array__())
 
             # Concatenate across layers and directions (p1->p2 vs p2->p1)
             p_acqs = np.concatenate(p_acqs)
             possible_sources = np.concatenate(possible_sources)
-
 
             if len(possible_sources) == 1: # Easy if only one possible source
                 sources[i] = possible_sources[0]
@@ -315,8 +433,8 @@ class STI(Disease):
 
         if len(new_cases):
             self.set_prognoses(sim, new_cases, sources)
-
-        return len(new_cases)  # number of new cases made
+        
+        return len(new_cases) # number of new cases made
 
     def set_prognoses(self, sim, uids, from_uids):
         pass

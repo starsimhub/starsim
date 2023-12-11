@@ -7,6 +7,8 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 from stisim.random import NotInitializedException, SeedRepeatException, RepeatNameException
+from stisim.random import SingleRNG, MultiRNG
+import scipy.stats as sps
 import pytest
 
 
@@ -19,18 +21,43 @@ def rng_container():
     return rng_container
 
 @pytest.fixture
-def rngs(request):
+def rngs():
     return [ss.RNG('rng0'), ss.RNG('rng1')]
 
-def test_container(rng_container, rngs, n=5):
-    """ Simple sample """
+@pytest.fixture
+def dists():
+    names = ['rng1', 'rng2']
+    dists = []
+    for rng_name in names:
+        d = ss.ScipyDistribution(sps.uniform(), rng=rng_name)
+        dists.append(d)
+    return dists
+
+
+def test_rng(rng_container, rngs, n=5):
+    """ Simple sample from rng """
     sc.heading('test_container: Testing RNGContainer object')
 
-    rng0, rng1 = rngs
+    rng0 = rngs[0]
     rng0.initialize(rng_container, slots=n)
 
+    draws = rng0.random(n)
+    print(f'Created seed and sampled: {draws}')
+
+    assert len(draws) == n
+    return draws
+
+
+def test_dists(rng_container, dists, n=5):
+    """ Simple sample from distribution """
+    sc.heading('test_container: Testing RNGContainer object')
+
+    d0 = dists[0]
+    if isinstance(d0.rng, (SingleRNG, MultiRNG)):
+        d0.rng.initialize(rng_container, slots=n)
+
     uids = np.arange(0,n,2) # every other to make it interesting
-    draws = rng0.random(uids)
+    draws = d0.rvs(uids)
     print(f'Created seed and sampled: {draws}')
 
     assert len(draws) == len(uids)
@@ -39,6 +66,9 @@ def test_container(rng_container, rngs, n=5):
 
 def test_seed(rng_container, rngs, n=5):
     """ Test assignment of seeds """
+    if not ss.options.multirng:
+        pytest.skip('Seed assignment is only for multirng.')
+
     sc.heading('test_seed: Testing assignment of seeds')
 
     rng0, rng1 = rngs
@@ -47,26 +77,22 @@ def test_seed(rng_container, rngs, n=5):
 
     print(f'Random generators rng0 and rng1 were assigned seeds {rng0.seed} and {rng1.seed}, respectively')
 
-    if ss.options.multirng:
-        assert rng1.seed != rng0.seed
-    else:
-        assert rng1.seed == rng0.seed
+    assert rng1.seed != rng0.seed
     return rng0, rng1
 
 
-def test_reset(rng_container, rngs, n=5):
+def test_reset(rng_container, dists, n=5):
     """ Sample, reset, sample """
     sc.heading('test_reset: Testing sample, reset, sample')
 
-    rng0 = rngs[0]
-    rng0.initialize(rng_container, slots=n)
+    d0 = dists[0]
+    if ss.options.multirng:
+        d0.rng.initialize(rng_container, slots=n)
 
     uids = np.arange(0,n,2) # every other to make it interesting
-    s_before = rng0.random(uids)
-
+    s_before = d0.rvs(uids)
     rng_container.reset() # Return to step 0
-
-    s_after = rng0.random(uids)
+    s_after = d0.rvs(uids)
 
     print(f'Initial sample', s_before)
     print('Reset')
@@ -79,20 +105,18 @@ def test_reset(rng_container, rngs, n=5):
     return s_before, s_after
 
 
-def test_step(rng_container, rngs, n=5):
+def test_step(rng_container, dists, n=5):
     """ Sample, step, sample """
     sc.heading('test_step: Testing sample, step, sample')
 
-
-    rng0 = rngs[0]
-    rng0.initialize(rng_container, slots=n)
+    d0 = dists[0]
+    if ss.options.multirng:
+        d0.rng.initialize(rng_container, slots=n)
 
     uids = np.arange(0,n,2) # every other to make it interesting
-    s_before = rng0.random(uids)
-
+    s_before = d0.rvs(uids)
     rng_container.step(10) # 10 steps
-
-    s_after = rng0.random(uids)
+    s_after = d0.rvs(uids)
 
     print(f'Initial sample', s_before)
     print('Step')
@@ -126,23 +150,24 @@ def test_seedrepeat(rng_container, n=5):
     return rng0, rng1
 
 
-def test_samplingorder(rng_container, rngs, n=5):
+def test_samplingorder(rng_container, dists, n=5):
     """ Ensure sampling from one RNG doesn't affect another """
     sc.heading('test_samplingorder: Testing from multiple random number generators to test if sampling order matters')
 
     uids = np.arange(0,n,2) # every other to make it interesting
 
-    rng0, rng1 = rngs
-    rng0.initialize(rng_container, slots=n)
-    rng1.initialize(rng_container, slots=n)
+    d0, d1 = dists
+    if ss.options.multirng:
+        d0.rng.initialize(rng_container, slots=n)
+        d1.rng.initialize(rng_container, slots=n)
 
-    s_before = rng0.random(uids)
-    _ = rng1.random(uids)
+    s_before = d0.rvs(uids)
+    _ = d1.rvs(uids)
 
     rng_container.reset()
 
-    _ = rng1.random(uids)
-    s_after = rng0.random(uids)
+    _ = d1.rvs(uids)
+    s_after = d0.rvs(uids)
 
     print(f'When sampling rng0 before rng1:', s_before)
     print('Reset')
@@ -167,22 +192,3 @@ def test_repeatname(rng_container, n=5):
     with pytest.raises(RepeatNameException):
         rng1.initialize(rng_container, slots=n)
     return rng0, rng1
-
-
-# %% Run as a script
-if __name__ == '__main__':
-    # Start timing
-    T = sc.tic()
-
-    # Run tests
-    test_container()
-    test_seed()
-    test_reset()
-    test_step()
-    test_initialize()
-    test_seedrepeat()
-    test_samplingorder()
-    test_repeatname()
-
-    sc.toc(T)
-    print('Done.')

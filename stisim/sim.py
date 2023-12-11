@@ -7,9 +7,15 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 import itertools
+import numba as nb
 
 __all__ = ['Sim', 'AlreadyRunError']
 
+@nb.njit
+def set_numba_seed(value):
+    # Needed to ensure reproducibility when using random calls in numba, e.g. RandomNetwork
+    # Note, these random numbers are not currently common-random-number safe
+    np.random.seed(value)
 
 class Sim(sc.prettyobj):
 
@@ -78,6 +84,7 @@ class Sim(sc.prettyobj):
         self.validate_dt()
         self.init_time_vecs()  # Initialize time vecs
         ss.set_seed(self.pars['rand_seed'])  # Reset the random seed before the population is created
+        set_numba_seed(self.pars['rand_seed'])
 
         # Initialize the core sim components
         self.rng_container.initialize(self.pars['rand_seed'] + 2) # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rng_container

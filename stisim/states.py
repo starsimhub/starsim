@@ -3,9 +3,10 @@ import numpy as np
 import sciris as sc
 import numba as nb
 from stisim.utils import INT_NAN
-from stisim.distributions import Distribution
+from stisim.distributions import ScipyDistribution
 from stisim.utils import warn
 from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
+from scipy.stats._distn_infrastructure import rv_frozen
 
 __all__ = ['State', 'DynamicView']
 
@@ -50,7 +51,7 @@ class FusedArray(NDArrayOperatorsMixin):
         """
         Extract values from a collection of UIDs
 
-        This function is used to retreive values based on UID. As indexing a FusedArray returns a new FusedArray,
+        This function is used to retrieve values based on UID. As indexing a FusedArray returns a new FusedArray,
         this method also populates the new UID map for use in the subsequently created FusedArray, avoiding the
         need to re-compute it separately.
 
@@ -335,7 +336,7 @@ class DynamicView(NDArrayOperatorsMixin):
 
 class State(FusedArray):
 
-    def __init__(self, name, dtype, fill_value=None, rng=None, label=None):
+    def __init__(self, name, dtype, fill_value=None, label=None):
         """
 
         :param name: A string name for the state
@@ -343,20 +344,13 @@ class State(FusedArray):
         :param fill_value: Specify default value for new agents. This can be
             - A scalar with the same dtype (or castable to the same dtype) as the State
             - A callable, with a single argument for the number of values to produce
-            - An ss.Distribution instance
-        :param rng: Optionally provide an RNG stream to use with a ss.Distribution fill value. This allows RNG-safe stochastic default values
+            - An ss.ScipyDistribution instance
         :param label:
         """
 
         super().__init__(values=None, uid=None, uid_map=None)  # Call the FusedArray constructor
 
-        if isinstance(fill_value, Distribution) and rng is None:
-            warn("fill_value is a distribution but no RNG was provided, sampling will not be RNG-safe")
-        elif rng is not None and not isinstance(fill_value, Distribution):
-            warn("fill_value is not a ss.Distribution instance, the provided RNG stream will not be used")
-
         self.fill_value = fill_value
-        self.rng = rng  # If fill_value is a distribution, this is the RNG stream to use when sampling default values
 
         self._data = DynamicView(dtype=dtype)
         self.name = name
@@ -371,17 +365,23 @@ class State(FusedArray):
             return FusedArray.__repr__(self)
 
     def _new_vals(self, uids):
-        if isinstance(self.fill_value, Distribution):
-            new_vals = self.rng.sample(self.fill_value, uids)
+        if isinstance(self.fill_value, ScipyDistribution):
+            new_vals = self.fill_value.rvs(uids)
         elif callable(self.fill_value):
             new_vals = self.fill_value(len(uids))
         else:
             new_vals = self.fill_value
         return new_vals
 
-    def initialize(self, people):
+    def initialize(self, sim):
         if self._initialized:
             return
+
+        if isinstance(self.fill_value, rv_frozen):
+            self.fill_value = ScipyDistribution(self.fill_value, f'{self.__class__.__name__}_{self.label}')
+            self.fill_value.initialize(sim, self)
+
+        people = sim.people
 
         people.add_state(self)
         self._uid_map = people._uid_map
@@ -390,7 +390,7 @@ class State(FusedArray):
         self._data[:len(self.uid)] = self._new_vals(self.uid)
         self.values = self._data._view
         self._initialized = True
-
+        return
 
     def grow(self, uids):
         """

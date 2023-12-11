@@ -4,22 +4,30 @@ import stisim as ss
 import numpy as np
 import numba as nb
 from .networks import Network
+from scipy.stats._distn_infrastructure import rv_frozen
+from typing import Union
 
 __all__ = ['RandomNetwork']
 
 class RandomNetwork(Network):
 
-    def __init__(self, *, n_contacts: ss.Distribution, dynamic=True, **kwargs):
+    def __init__(self, *, n_contacts : Union[int, rv_frozen], dynamic=True, **kwargs):
         """
-        :param n_contacts: A distribution of contacts e.g., ss.delta(5), ss.neg_binomial(5,2)
+        :param n_contacts: A SciPy distribution from which the number of
+        contacts are sampled e.g., sps.nbinom(n=5, p=2). Note distribution
+        parameter values can be callable for greater functionality.
         :param dynamic: If True, regenerate contacts each timestep
         """
         super().__init__(**kwargs)
-        self.n_contacts = n_contacts
+        if isinstance(n_contacts, rv_frozen):
+            self.n_contacts = ss.ScipyDistribution(n_contacts, f'{self.__class__.__name__}_{self.name}_{self.label}')
+
         self.dynamic = dynamic
 
     def initialize(self, sim):
         super().initialize(sim)
+        if isinstance(self.n_contacts, ss.ScipyDistribution):
+            self.n_contacts.initialize(sim, self)
         self.update(sim.people, force=True)
 
     @staticmethod
@@ -45,8 +53,6 @@ class RandomNetwork(Network):
             of random contacts.
 
         Returns: Two arrays, for source and target
-
-
         """
 
         total_number_of_half_edges = np.sum(number_of_contacts)
@@ -71,7 +77,11 @@ class RandomNetwork(Network):
         if not self.dynamic and not force:
             return
 
-        number_of_contacts = self.n_contacts.sample(len(people))
+        if isinstance(self.n_contacts, ss.ScipyDistribution):
+            number_of_contacts = self.n_contacts.rvs(people.alive) # or people.uid?
+        else:
+            number_of_contacts = np.full(len(people), self.n_contacts)
+
         number_of_contacts = np.round(number_of_contacts / 2).astype(ss.int_)  # One-way contacts
         self.contacts.p1, self.contacts.p2 = self.get_contacts(people.uid.__array__(), number_of_contacts)
         self.contacts.beta = np.ones(len(self.contacts.p1), dtype=ss.float_)
