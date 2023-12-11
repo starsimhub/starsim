@@ -240,7 +240,7 @@ class Pregnancy(DemographicModule):
             'dur_pregnancy': 0.75,  # Make this a distribution?
             'dur_postpartum': 0.5,  # Make this a distribution?
             'fertility_rates': 0,
-            'data_cols': {'year': 'Time', 'age': 'AgeGrp', 'value': 'ASFR'},
+            'data_cols': {'year': 'Time', 'age': 'AgeGrp', 'value': 'Births'},
             'units_per_100': 1e-3,  # assumes fertility rates are per 1000. If using percentages, switch this to 1
             'p_death': 0,  # Probability of maternal death. Question, should this be linked to age and/or duration?
         }, self.pars)

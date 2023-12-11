@@ -12,6 +12,10 @@ __all__ = ['Intervention']
 
 class Intervention(ss.Module):
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        return
+
     def __call__(self, *args, **kwargs):
         return self.apply(*args, **kwargs)
 
@@ -29,7 +33,6 @@ class RoutineDelivery(Intervention):
     """
 
     def __init__(self, years=None, start_year=None, end_year=None, prob=None, annual_prob=True, *args, **kwargs):
-        super().__init__(*args, **kwargs)
         self.years = years
         self.start_year = start_year
         self.end_year = end_year
@@ -46,8 +49,8 @@ class RoutineDelivery(Intervention):
 
         # If start_year and end_year are not provided, figure them out from the provided years or the sim
         if self.years is None:
-            if self.start_year is None: self.start_year = sim['start']
-            if self.end_year is None:   self.end_year = sim['end']
+            if self.start_year is None: self.start_year = sim.pars['start']
+            if self.end_year is None:   self.end_year = sim.pars['end']
         else:
             self.start_year = self.years[0]
             self.end_year = self.years[-1]
@@ -89,7 +92,6 @@ class CampaignDelivery(Intervention):
     """
 
     def __init__(self, years, interpolate=None, prob=None, annual_prob=True, *args, **kwargs):
-        super().__init__(*args, **kwargs)
         self.years = sc.promotetoarray(years)
         self.interpolate = True if interpolate is None else interpolate
         self.prob = sc.promotetoarray(prob)
@@ -124,21 +126,6 @@ __all__ += ['BaseTest', 'BaseScreening', 'routine_screening', 'campaign_screenin
             'campaign_triage']
 
 
-def select_people(inds, prob=None):
-    '''
-    Return an array of indices of people to who accept a service being offered
-
-    Args:
-        inds: array of indices of people offered a service (e.g. screening, triage, treatment)
-        prob: acceptance probability
-
-    Returns: Array of indices of people who accept
-    '''
-    accept_probs = np.full_like(inds, fill_value=prob, dtype=float)
-    accept_inds = ss.true(ss.binomial_arr(accept_probs))
-    return inds[accept_inds]
-
-
 class BaseTest(Intervention):
     """
     Base class for screening and triage.
@@ -147,7 +134,6 @@ class BaseTest(Intervention):
          product        (Product)       : the diagnostic to use
          prob           (float/arr)     : annual probability of eligible people receiving the diagnostic
          eligibility    (inds/callable) : indices OR callable that returns inds
-         label          (str)           : the name of screening strategy
          kwargs         (dict)          : passed to Intervention()
     """
 
@@ -156,20 +142,28 @@ class BaseTest(Intervention):
         self.prob = sc.promotetoarray(prob)
         self.eligibility = eligibility
         self._parse_product(product)
+        self.screened = ss.State('screened', bool, False)
+        self.screens = ss.State('screens', int, 0)
+        self.ti_screened = ss.State('ti_screened', int, ss.INT_NAN)
 
     def _parse_product(self, product):
-        '''
+        """
         Parse the product input
-        '''
+        """
         if isinstance(product, Product):  # No need to do anything
             self.product = product
+        elif isinstance(product, str):
+            self.product = self._parse_product_str(product)
         else:
             errormsg = f'Cannot understand {product} - please provide it as a Product.'
             raise ValueError(errormsg)
         return
 
+    def _parse_product_str(self, product):
+        raise NotImplementedError
+
     def initialize(self, sim):
-        Intervention.initialize(self)
+        Intervention.initialize(self, sim)
         self.outcomes = {k: np.array([], dtype=int) for k in self.product.hierarchy}
         return
 
@@ -177,16 +171,13 @@ class BaseTest(Intervention):
         """
         Deliver the diagnostics by finding who's eligible, finding who accepts, and applying the product.
         """
-        ti = sc.findinds(self.timepoints, sim.t)[0]
+        ti = sc.findinds(self.timepoints, sim.ti)[0]
         prob = self.prob[ti]  # Get the proportion of people who will be tested this timestep
-        eligible_inds = self.check_eligibility(sim)  # Check eligibility
-        accept_inds = select_people(eligible_inds, prob=prob)  # Find people who accept
-        if len(accept_inds):
-            idx = int(sim.t / sim.resfreq)
-            self.n_products_used[idx] += sim.people.scale_flows(accept_inds)
-            self.outcomes = self.product.administer(sim,
-                                                    accept_inds)  # Actually administer the diagnostic, filtering people into outcome categories
-        return accept_inds
+        is_eligible = self.check_eligibility(sim)  # Check eligibility
+        accept_uids = ss.binomial_filter(prob, ss.true(is_eligible))
+        if len(accept_uids):
+            self.outcomes = self.product.administer(sim, accept_uids)  # Actually administer the diagnostic
+        return accept_uids
 
     def check_eligibility(self, sim):
         raise NotImplementedError
@@ -215,9 +206,9 @@ class BaseScreening(BaseTest):
         accept_inds = np.array([])
         if sim.ti in self.timepoints:
             accept_inds = self.deliver(sim)
-            module.screened[accept_inds] = True
-            module.screens[accept_inds] += 1
-            module.ti_screened[accept_inds] = sim.t
+            self.screened[accept_inds] = True
+            self.screens[accept_inds] += 1
+            self.ti_screened[accept_inds] = sim.ti
         return accept_inds
 
 
@@ -326,7 +317,143 @@ class campaign_triage(BaseTriage, CampaignDelivery):
         BaseTriage.initialize(self, sim)
 
 
+#%% Treatment interventions
+__all__ += ['BaseTreatment', 'treat_num']
+
+
+class BaseTreatment(Intervention):
+    """
+    Base treatment class.
+
+    Args:
+         product        (str/Product)   : the treatment product to use
+         prob           (float/arr)     : probability of treatment aong those eligible
+         eligibility    (inds/callable) : indices OR callable that returns inds
+         kwargs         (dict)          : passed to Intervention()
+    """
+    def __init__(self, product=None, prob=None, eligibility=None, **kwargs):
+        Intervention.__init__(self, **kwargs)
+        self.prob = sc.promotetoarray(prob)
+        self.eligibility = eligibility
+        self._parse_product(product)
+
+    def _parse_product(self, product):
+        """
+        Parse the product input
+        """
+        if isinstance(product, Product):  # No need to do anything
+            self.product = product
+        elif isinstance(product, str):  # Try to find it in the list of defaults
+            self.product = self._parse_product_str(product)
+        else:
+            errormsg = f'Cannot understand {product} - please provide it as a Product.'
+            raise ValueError(errormsg)
+        return
+
+    def _parse_product_str(self, product):
+        raise NotImplementedError
+
+    def initialize(self, sim):
+        Intervention.initialize(self, sim)
+        self.outcomes = {k: np.array([], dtype=int) for k in ['unsuccessful', 'successful']} # Store outcomes on each timestep
+
+    def check_eligibility(self, sim):
+        """
+        Check people's eligibility for treatment
+        """
+        raise NotImplementedError
+
+    def get_accept_inds(self, sim):
+        """
+        Get indices of people who will acccept treatment; these people are then added to a queue or scheduled for receiving treatment
+        """
+        accept_uids = np.array([], dtype=int)
+        eligible_uids = self.check_eligibility(sim)  # Apply eligiblity
+        if len(eligible_uids):
+            import traceback;
+            traceback.print_exc();
+            import pdb;
+            pdb.set_trace()
+
+            accept_uids = ss.binomial_filter(self.prob[0], eligible_uids)
+        return accept_uids
+
+    def get_candidates(self, sim):
+        """
+        Get candidates for treatment on this timestep. Implemented by derived classes.
+        """
+        raise NotImplementedError
+
+    def apply(self, sim):
+        """
+        Perform treatment by getting candidates, checking their eligibility, and then treating them.
+        """
+        # Get indices of who will get treated
+        treat_candidates = self.get_candidates(sim)  # NB, this needs to be implemented by derived classes
+        still_eligible = self.check_eligibility(sim)
+
+        if len(treat_candidates)>0:
+            import traceback;
+            traceback.print_exc();
+            import pdb;
+            pdb.set_trace()
+
+        treat_uids = treat_candidates[still_eligible]
+        if len(treat_uids):
+
+            self.outcomes = self.product.administer(sim, treat_uids)
+
+        return treat_uids
+
+
+class treat_num(BaseTreatment):
+    """
+    Treat a fixed number of people each timestep.
+
+    Args:
+         max_capacity (int): maximum number who can be treated each timestep
+    """
+    def __init__(self, max_capacity=None, **kwargs):
+        BaseTreatment.__init__(self, **kwargs)
+        self.queue = []
+        self.max_capacity = max_capacity
+        return
+
+    def add_to_queue(self, sim):
+        """
+        Add people who are willing to accept treatment to the queue
+        """
+        accept_inds = self.get_accept_inds(sim)
+        if len(accept_inds): self.queue += accept_inds.tolist()
+
+    def get_candidates(self, sim):
+        """
+        Get the indices of people who are candidates for treatment
+        """
+        treat_candidates = np.array([], dtype=int)
+        if len(self.queue):
+            if self.max_capacity is None or (self.max_capacity > len(self.queue)):
+                treat_candidates = self.queue[:]
+            else:
+                treat_candidates = self.queue[:self.max_capacity]
+        return sc.promotetoarray(treat_candidates)
+
+    def apply(self, sim):
+        """
+        Apply treatment. On each timestep, this method will add eligible people who are willing to accept treatment to a
+        queue, and then will treat as many people in the queue as there is capacity for.
+        """
+        self.add_to_queue(sim)
+        treat_inds = BaseTreatment.apply(self, sim) # Apply method from BaseTreatment class
+        self.queue = [e for e in self.queue if e not in treat_inds] # Recreate the queue, removing people who were treated
+        return treat_inds
+
+
+
 # %% Products
+__all__ += ['Product', 'dx', 'tx']
+
+
 class Product(sc.prettyobj):
     """ Generic product implementation """
 
@@ -344,6 +471,7 @@ class dx(Product):
         super().__init__(*args, **kwargs)
         self.df = df
         self.states = df.state.unique()
+        self.diseases = df.disease.unique()
 
         if hierarchy is None:
             self.hierarchy = df.result.unique()  # Drawn from the order in which the outcomes are specified
@@ -354,7 +482,7 @@ class dx(Product):
     def default_value(self):
         return len(self.hierarchy) - 1
 
-    def administer(self, sim, inds, return_format='dict'):
+    def administer(self, sim, uids, return_format='dict'):
         """
         Administer a testing product.
         Returns:
@@ -363,23 +491,75 @@ class dx(Product):
         """
 
         # Pre-fill with the default value, which is set to be the last value in the hierarchy
-        results = np.full_like(inds, fill_value=self.default_value, dtype=int)
+        results = pd.DataFrame({'uids': uids, 'result': self.default_value})
         people = sim.people
 
-        for state in self.states:
-            theseinds = ss.true(people[state][:, inds].any(axis=0))
+        for disease in self.diseases:
+            for state in self.states:
+                import traceback;
+                traceback.print_exc();
+                import pdb;
+                pdb.set_trace()
 
-            # Filter the dataframe to extract test results for people in this state
-            df_filter = (self.df.state == state)  # filter by state
-            thisdf = self.df[df_filter]  # apply filter to get the results for this state & genotype
-            probs = [thisdf[thisdf.result == result].probability.values[0] for result in self.hierarchy]
-            # Sort people into one of the possible result states and then update their overall results
-            this_result = ss.n_multinomial(probs, len(theseinds))
-            results[theseinds] = np.minimum(this_result, results[theseinds])
+                these_uids = ss.true(people[disease][state][uids])
 
+                # Filter the dataframe to extract test results for people in this state
+                df_filter = (self.df.state == state) & (self.df.disease == disease)
+                thisdf = self.df[df_filter]  # apply filter to get the results for this state & genotype
+                probs = [thisdf[thisdf.result == result].probability.values[0] for result in self.hierarchy]
+
+                # Sort people into one of the possible result states and then update their overall results
+                this_result = ss.n_multinomial(probs, len(theseuids))
+                results[results.uids.isin(theseuids)].result = np.minimum(this_result, results[results.uids.isin(theseuids)].result )
+
+            if return_format == 'dict':
+                output = {self.hierarchy[i]: results[results.result == i].uids.values for i in range(len(self.hierarchy))}
+            elif return_format == 'array':
+                output = results
+
+        return output
+
+
+class tx(Product):
+    """
+    Treatment products change fundamental properties about People, including their prognoses and infectiousness.
+    """
+    def __init__(self, df, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.df = df
+
+    def administer(self, sim, uids, return_format='dict'):
+        """
+        Loop over treatment states to determine those who are successfully treated and clear infection
+        """
+
+        tx_successful = []  # Initialize list of successfully treated individuals
+        people = sim.people
+
+        for disease in self.diseases:
+            for state in self.states:
+
+                these_uids = ss.true(people[disease][state][uids])
+
+                if len(these_uids):
+
+                    df_filter = (self.df.state == state) & (self.df.disease == disease)  # Filter by state
+                    thisdf = self.df[df_filter]  # apply filter to get the results for this state & genotype
+
+                    # Determine whether treatment is successful
+                    efficacy = thisdf.efficacy.values[0]
+                    post_state = thisdf.post_state.values[0]
+                    eff_treat_inds = ss.binomial_filter(efficacy, these_uids)
+                    if len(eff_treat_inds):
+                        tx_successful += list(eff_treat_inds)
+                        people[disease][state][eff_treat_inds] = False  # People who get treated effectively
+                        people[disease][post_state][eff_treat_inds] = True
+
+        tx_successful = np.array(list(set(tx_successful)))
+        tx_unsuccessful = np.setdiff1d(uids, tx_successful)
         if return_format == 'dict':
-            output = {self.hierarchy[i]: inds[results == i] for i in range(len(self.hierarchy))}
+            output = {'successful': tx_successful, 'unsuccessful': tx_unsuccessful}
         elif return_format == 'array':
-            output = results
+            output = tx_successful
 
         return output

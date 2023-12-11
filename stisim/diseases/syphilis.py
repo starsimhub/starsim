@@ -4,6 +4,7 @@ Define default syphilis disease module
 
 import numpy as np
 import sciris as sc
+import pandas as pd
 from sciris import randround as rr
 
 import stisim as ss
@@ -55,11 +56,11 @@ class Syphilis(STI):
 
         # Parameters
         default_pars = dict(
-            # Adult syphilis natural history
+            # Adult syphilis natural history, all specified in years
             dur_exposed=ss.lognormal(1/12, 1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_primary=ss.lognormal(1.5/12, 1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_secondary=ss.normal(3.6, 1.5),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_temp=ss.lognormal(1, 1/6),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_secondary=ss.normal(3.6/12, 1.5/12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_temp=ss.lognormal(1, 6/12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_latent_long=ss.lognormal(20, 8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_latent_temp=0.25,  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_tertiary=0.35,  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
@@ -152,6 +153,7 @@ class Syphilis(STI):
         # Congenital syphilis transmission outcomes
         congenital = self.ti_congenital == sim.ti
         self.congenital[congenital] = True
+        self.susceptible[congenital] = False
 
         return
 
@@ -167,13 +169,6 @@ class Syphilis(STI):
         super(Syphilis, self).make_new_cases(sim)
         return
 
-    def record_exposure(self, sim, uids):
-        self.susceptible[uids] = False
-        self.exposed[uids] = True
-        self.infected[uids] = True
-        self.ti_exposed[uids] = sim.ti
-        self.ti_infected[uids] = sim.ti
-
     def set_prognoses(self, sim, target_uids, source_uids=None):
         """
         Natural history of syphilis for adult infection
@@ -187,7 +182,11 @@ class Syphilis(STI):
             uids = target_uids
 
         n_uids = len(uids)
-        self.record_exposure(sim, uids)
+        self.susceptible[uids] = False
+        self.exposed[uids] = True
+        self.infected[uids] = True
+        self.ti_exposed[uids] = sim.ti
+        self.ti_infected[uids] = sim.ti
 
         # Set future dates and probabilities
         # Exposed to primary
@@ -233,7 +232,6 @@ class Syphilis(STI):
         """
         Natural history of syphilis for congenital infection
         """
-        self.record_exposure(sim, target_uids)
 
         # Determine outcomes
         for state in ['active', 'latent']:
@@ -241,6 +239,7 @@ class Syphilis(STI):
             uids = target_uids[source_state_inds]
             n_uids = len(uids)
 
+            # Birth outcomes must be modified to add probability of susceptible birth
             birth_outcomes = self.pars.birth_outcomes[state]
             probs = np.append(birth_outcomes.values(), 1 - sum(birth_outcomes.values()))
             assigned_outcomes = ss.n_multinomial(probs, n_uids)
@@ -259,41 +258,103 @@ class Syphilis(STI):
 
 
 # %% Syphilis-related interventions
+datafiles = sc.objdict()
+for key in ['dx', 'tx', 'vx']:
+    datafiles[key] = f'stisim/products/syph_{key}.csv'
 
-class dx(ss.Intervention):
+__all__ += ['syph_dx', 'syph_tx', 'syph_screening', 'syph_treatment']
+
+
+def syph_dx(prod_name=None):
+    """
+    Create default diagnostic products
+    """
+    dfdx = pd.read_csv(datafiles.dx)
+    dxprods = dict(
+        rpr=ss.dx(dfdx[dfdx.name == 'rpr'], hierarchy=['positive', 'inadequate', 'negative']),
+        rst=ss.dx(dfdx[dfdx.name == 'rst'], hierarchy=['positive', 'inadequate', 'negative']),
+    )
+    if prod_name is not None: return dxprods[prod_name]
+    else: return dxprods
+
+
+def syph_tx(prod_name=None):
+    """
+    Create default treatment products
+    """
+    dftx = pd.read_csv(datafiles.tx) # Read in dataframe with parameters
+    txprods = dict()
+    for name in dftx.name.unique():
+        txprods[name] = ss.tx(dftx[dftx.name == name])
+    if prod_name is not None: return txprods[prod_name]
+    else: return txprods
+
+
+class syph_screening(ss.routine_screening):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.requires = Syphilis
+        # self.requires = Syphilis
         return
+
+    def _parse_product_str(self, product):
+        try:
+            product = syph_dx(prod_name=product)
+        except:
+            errormsg = f'Could not find product {product} in the standard list.'
+            raise ValueError(errormsg)
+        return product
+
+    def check_eligibility(self, sim):
+        """
+        Return an array of indices of agents eligible for screening at time t, i.e. sexually active
+        females in age range, plus any additional user-defined eligibility
+        """
+        if self.eligibility is not None:
+            is_eligible = self.eligibility(sim)
+        else:
+            is_eligible = sim.people.alive  # Probably not required
+        return is_eligible
 
     def initialize(self, sim):
-        sim.syphilis.results += ss.Result(self.name, 'n_dx', sim.npts, dtype=int)
+        super().initialize(sim)
+        self.results = ss.Result('syphilis', 'n_dx', sim.npts, dtype=int)
         return
 
-    def apply(self, sim):
-        if sim.t < self.t[0]:
-            return
 
-        capacity = self.capacity[np.where(self.t <= sim.t)[0][-1]]
-        on_art = sim.people.alive & sim.people.hiv.on_art
+class syph_treatment(ss.treat_num):
 
-        n_change = capacity - np.count_nonzero(on_art)
-        if n_change > 0:
-            # Add more ART
-            eligible = sim.people.alive & sim.people.hiv.infected & ~sim.people.hiv.on_art
-            n_eligible = np.count_nonzero(eligible)
-            if n_eligible:
-                inds = np.random.choice(ss.true(eligible), min(n_eligible, n_change), replace=False)
-                sim.people.hiv.on_art[inds] = True
-        elif n_change < 0:
-            # Take some people off ART
-            eligible = sim.people.alive & sim.people.hiv.infected & sim.people.hiv.on_art
-            inds = np.random.choice(ss.true(eligible), min(n_change), replace=False)
-            sim.people.hiv.on_art[inds] = False
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # self.requires = Syphilis
+        return
 
-        # Add result
-        sim.results.hiv.n_art = np.count_nonzero(sim.people.alive & sim.people.hiv.on_art)
+    def _parse_product_str(self, product):
+        try:
+            product = syph_tx(prod_name=product)
+        except:
+            errormsg = f'Could not find product {product} in the standard list.'
+            raise ValueError(errormsg)
+        return product
 
+    def check_eligibility(self, sim):
+        """
+        Return an array of indices of agents eligible for screening at time t
+        """
+        if self.eligibility is not None:
+            is_eligible = self.eligibility(sim)
+            if sim.year==2020:
+                import traceback;
+                traceback.print_exc();
+                import pdb;
+                pdb.set_trace()
+
+        else:
+            is_eligible = sim.people.alive  # Probably not required
+        return is_eligible
+
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.results = ss.Result('syphilis', 'n_tx', sim.npts, dtype=int)
         return
 

@@ -471,6 +471,90 @@ class Sim(sc.prettyobj):
         else:
             return shrunken
 
+    def _get_ia(self, which, label=None, partial=False, as_list=False, as_inds=False, die=True, first=False):
+        """ Helper method for get_interventions() and get_analyzers(); see get_interventions() docstring """
+
+        # Handle inputs
+        if which not in ['interventions', 'analyzers']: # pragma: no cover
+            errormsg = f'This method is only defined for interventions and analyzers, not "{which}"'
+            raise ValueError(errormsg)
+
+        ia_ndict = self.analyzers if which == 'analyzers' else self.interventions # List of interventions or analyzers
+        n_ia = len(ia_ndict)  # Number of interventions/analyzers
+
+        position = 0 if first else -1 # Choose either the first or last element
+        if label is None:  # Get all interventions if no label is supplied, e.g. sim.get_interventions()
+            label = np.arange(n_ia)
+        if isinstance(label, np.ndarray):  # Allow arrays to be provided
+            label = label.tolist()
+        labels = sc.promotetolist(label)
+
+        # Calculate the matches
+        matches = []
+        match_inds = []
+
+        for label in labels:
+            if sc.isnumber(label):
+                matches.append(ia_ndict[label])
+                label = n_ia + label if label < 0 else label  # Convert to a positive number
+                match_inds.append(label)
+            elif sc.isstring(label) or isinstance(label, type):
+                for ind, ia_key, ia_obj in ia_ndict.enumitems():
+                    if sc.isstring(label) and ia_obj.label == label or (partial and (label in str(ia_obj.label))):
+                        matches.append(ia_obj)
+                        match_inds.append(ind)
+                    elif isinstance(label, type) and isinstance(ia_obj, label):
+                        matches.append(ia_obj)
+                        match_inds.append(ind)
+            else: # pragma: no cover
+                errormsg = f'Could not interpret label type "{type(label)}": should be str, int, list, or {which} class'
+                raise TypeError(errormsg)
+
+        # Parse the output options
+        if as_inds:
+            output = match_inds
+        elif as_list: # Used by get_interventions()
+            output = matches
+        else:
+            if len(matches) == 0: # pragma: no cover
+                if die:
+                    errormsg = f'No {which} matching "{label}" were found'
+                    raise ValueError(errormsg)
+                else:
+                    output = None
+            else:
+                output = matches[position] # Return either the first or last match (usually), used by get_intervention()
+
+        return output
+
+    def get_interventions(self, label=None, partial=False, as_inds=False):
+        """
+        Find the matching intervention(s) by label, index, or type. If None, return
+        all interventions. If the label provided is "summary", then print a summary
+        of the interventions (index, label, type).
+
+        Args:
+            label (str, int, Intervention, list): the label, index, or type of intervention to get; if a list, iterate over one of those types
+            partial (bool): if true, return partial matches (e.g. 'beta' will match all beta interventions)
+            as_inds (bool): if true, return matching indices instead of the actual interventions
+        """
+        return self._get_ia('interventions', label=label, partial=partial, as_inds=as_inds, as_list=True)
+
+
+    def get_intervention(self, label=None, partial=False, first=False, die=True):
+        """
+        Find the matching intervention(s) by label, index, or type.
+        If more than one intervention matches, return the last by default.
+        If no label is provided, return the last intervention in the list.
+
+        Args:
+            label (str, int, Intervention, list): the label, index, or type of intervention to get; if a list, iterate over one of those types
+            partial (bool): if true, return partial matches
+            first (bool): if true, return first matching intervention (otherwise, return last)
+            die (bool): whether to raise an exception if no intervention is found
+        """
+        return self._get_ia('interventions', label=label, partial=partial, first=first, die=die, as_inds=False, as_list=False)
+
     def save(self, filename=None, keep_people=None, skip_attrs=None, **kwargs):
         """
         Save to disk as a gzipped pickle.
