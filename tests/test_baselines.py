@@ -174,6 +174,7 @@ def test_benchmark(do_save=do_save, repeats=1, verbose=True):
             'parameters': {
                 'n_agents': sim.pars['n_agents'],
                 'n_years':  sim.pars['n_years'],
+                'dt':       sim.pars['dt'],
                 },
             'cpu_performance': ratio,
             }
@@ -206,8 +207,8 @@ if __name__ == '__main__':
     sc.options.set(interactive=do_plot)
     T = sc.tic()
 
-    # json = test_benchmark(do_save=do_save, repeats=5) # Run this first so benchmarking is available even if results are different
-    # new  = test_baseline()
+    json = test_benchmark(do_save=do_save, repeats=5) # Run this first so benchmarking is available even if results are different
+    new  = test_baseline()
     sim = make_sim(do_plot=do_plot)
 
     print('\n'*2)
