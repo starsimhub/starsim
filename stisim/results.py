@@ -38,4 +38,3 @@ class Result(np.ndarray):
     
     def to_df(self):
         return sc.dataframe({self.name:self})
-
