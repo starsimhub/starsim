@@ -64,7 +64,7 @@ class RSV(Disease):
                 age_cutoffs=np.array([0, 1, 5, 15, 55]),  # Age cutoffs (lower limits)
                 sus_ORs=np.array([2.50, 1.50, 1.00, 1.00, 1.50]),  # Odds ratios for relative susceptibility
                 trans_ORs=np.array([1.00, 1.00, 1.00, 1.00, 1.00]),  # Odds ratios for relative transmissibility
-                symp_probs=np.array([1, 0.84, 0.49, 0.1, 0.15]),  # Overall probability of developing symptoms
+                symp_probs=np.array([1, 0.84, 0.5, 0.2, 0.15]),  # Overall probability of developing symptoms
                 severe_probs=np.array([0.050, 0.00050, 0.00050, 0.00050, 0.0050]), # Overall probability of developing severe symptoms
                 crit_probs=np.array([0.0003, 0.00003, 0.00003, 0.00003, 0.00003]), # Overall probability of developing critical symptoms
                 death_probs=np.array([0.00003, 0.00003, 0.00003, 0.00003, 0.00003]),  # Overall probability of dying
@@ -85,7 +85,8 @@ class RSV(Disease):
 
     @property
     def infectious(self):
-        return self.symptomatic | self.severe
+        # return self.infected
+        return self.symptomatic | self.severe | self.critical
 
     @property
     def rel_sus(self):

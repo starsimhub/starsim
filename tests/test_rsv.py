@@ -146,12 +146,12 @@ def test_rsv():
 
     # Make rsv module
     rsv_a = ss.RSV(name='rsv_a')
-    rsv_a.pars['beta'] = {'household': 2.5, 'school': .85, 'community': .25, 'maternal': 0}
-    rsv_a.pars['init_prev'] = 0.5
+    rsv_a.pars['beta'] = {'household': .85, 'school': .85, 'community': .25, 'maternal': 0}
+    rsv_a.pars['init_prev'] = 0.05
 
     rsv_b = ss.RSV(name='rsv_b')
-    rsv_b.pars['beta'] = {'household': 2.5, 'school': .85, 'community': .25, 'maternal': 0}
-    rsv_b.pars['init_prev'] = 0.5
+    rsv_b.pars['beta'] = {'household': .85, 'school': .85, 'community': .25, 'maternal': 0}
+    rsv_b.pars['init_prev'] = 0.05
 
 
     # Make demographic modules
