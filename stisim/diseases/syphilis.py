@@ -234,8 +234,16 @@ class Syphilis(STI):
     def set_latent_long_prognoses(self, sim, uids):
         # Primary to secondary
         dur_latent_long = self.pars.dur_latent_long(len(uids))
-        self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_temp/sim.dt)
-        self.dur_infection[uids] += dur_latent_temp
+        self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_long/sim.dt)
+        self.dur_infection[uids] += dur_latent_long
+
+        # Latent_long to tertiary
+        tertiary_uids = ss.binomial_filter(self.pars.p_tertiary, uids)
+        n_tertiary = len(tertiary_uids)
+        dur_latent_long = self.pars.dur_latent_long(n_tertiary)
+        self.ti_tertiary[tertiary_uids] = self.ti_latent_long[tertiary_uids] + rr(dur_latent_long/sim.dt)
+        self.dur_infection[tertiary_uids] += dur_latent_long
+
         return
 
     def set_congenital(self, sim, target_uids, source_uids=None):

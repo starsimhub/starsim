@@ -496,11 +496,6 @@ class dx(Product):
 
         for disease in self.diseases:
             for state in self.states:
-                import traceback;
-                traceback.print_exc();
-                import pdb;
-                pdb.set_trace()
-
                 these_uids = ss.true(people[disease][state][uids])
 
                 # Filter the dataframe to extract test results for people in this state
@@ -509,8 +504,8 @@ class dx(Product):
                 probs = [thisdf[thisdf.result == result].probability.values[0] for result in self.hierarchy]
 
                 # Sort people into one of the possible result states and then update their overall results
-                this_result = ss.n_multinomial(probs, len(theseuids))
-                results[results.uids.isin(theseuids)].result = np.minimum(this_result, results[results.uids.isin(theseuids)].result )
+                this_result = ss.n_multinomial(probs, len(these_uids))
+                results[results.uids.isin(these_uids)].result = np.minimum(this_result, results[results.uids.isin(these_uids)].result )
 
             if return_format == 'dict':
                 output = {self.hierarchy[i]: results[results.result == i].uids.values for i in range(len(self.hierarchy))}
