@@ -388,6 +388,7 @@ class State(FusedArray):
             else:
                 sim_still_needed = True
 
+        people.add_state(self, die=False) # CK: should not be needed
         self._uid_map = people._uid_map
         self.uid = people.uid
         self._data.grow(len(self.uid))
