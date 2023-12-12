@@ -8,7 +8,7 @@ import sciris as sc
 import stisim as ss
 import itertools
 
-__all__ = ['Sim', 'AlreadyRunError']
+__all__ = ['Sim', 'AlreadyRunError', 'diff_sims']
 
 
 class Sim(sc.prettyobj):
@@ -449,10 +449,20 @@ class Sim(sc.prettyobj):
 
         for module in self.modules:
             module.finalize(self)
-
+            
+        self.summarize()
         self.results_ready = True  # Set this first so self.summary() knows to print the results
         self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
         return
+    
+    def summarize(self):
+        summary = sc.objdict()
+        flat = sc.flattendict(self.results, sep='_')
+        for k,v in flat.items():
+            summary[k] = np.array(v).mean() # To fix later
+        self.summary = summary
+        return summary
+        
 
     def shrink(self, skip_attrs=None, in_place=True):
         """
@@ -537,6 +547,107 @@ class Sim(sc.prettyobj):
             raise TypeError(errormsg)
         return sim
 
+    def export_pars(self, filename=None, indent=2, *args, **kwargs):
+        '''
+        Return parameters for JSON export -- see also to_json().
+
+        This method is required so that interventions can specify
+        their JSON-friendly representation.
+
+        Args:
+            filename (str): filename to save to; if None, do not save
+            indent (int): indent (int): if writing to file, how many indents to use per nested level
+            args (list): passed to savejson()
+            kwargs (dict): passed to savejson()
+
+        Returns:
+            pardict (dict): a dictionary containing all the parameter values
+        '''
+        pardict = {}
+        for key in self.pars.keys():
+            if key == 'interventions':
+                pardict[key] = [intervention.to_json() for intervention in self.pars[key]]
+            elif key == 'start_day':
+                pardict[key] = str(self.pars[key])
+            else:
+                pardict[key] = self.pars[key]
+        if filename is not None:
+            sc.savejson(filename=filename, obj=pardict, indent=indent, *args, **kwargs)
+        return pardict
+
+    def to_json(self, filename=None, keys=None, tostring=False, indent=2, verbose=False, *args, **kwargs):
+        '''
+        Export results and parameters as JSON.
+
+        Args:
+            filename (str): if None, return string; else, write to file
+            keys (str or list): attributes to write to json (default: results, parameters, and summary)
+            tostring (bool): if not writing to file, whether to write to string (alternative is sanitized dictionary)
+            indent (int): if writing to file, how many indents to use per nested level
+            verbose (bool): detail to print
+            args (list): passed to savejson()
+            kwargs (dict): passed to savejson()
+
+        Returns:
+            A unicode string containing a JSON representation of the results,
+            or writes the JSON file to disk
+
+        **Examples**::
+
+            json = sim.to_json()
+            sim.to_json('results.json')
+            sim.to_json('summary.json', keys='summary')
+        '''
+
+        # Handle keys
+        if keys is None:
+            keys = ['results', 'pars', 'summary', 'short_summary']
+        keys = sc.promotetolist(keys)
+
+        # Convert to JSON-compatible format
+        d = {}
+        for key in keys:
+            if key == 'results':
+                if self.results_ready:
+                    resdict = self.export_results(for_json=True)
+                    d['results'] = resdict
+                else:
+                    d['results'] = 'Results not available (Sim has not yet been run)'
+            elif key in ['pars', 'parameters']:
+                pardict = self.export_pars()
+                d['parameters'] = pardict
+            elif key == 'summary':
+                if self.results_ready:
+                    d['summary'] = dict(sc.dcp(self.summary))
+                else:
+                    d['summary'] = 'Summary not available (Sim has not yet been run)'
+            elif key == 'short_summary':
+                if self.results_ready:
+                    d['short_summary'] = dict(sc.dcp(self.short_summary))
+                else:
+                    d['short_summary'] = 'Full summary not available (Sim has not yet been run)'
+            else: # pragma: no cover
+                try:
+                    d[key] = sc.sanitizejson(getattr(self, key))
+                except Exception as E:
+                    errormsg = f'Could not convert "{key}" to JSON: {str(E)}; continuing...'
+                    print(errormsg)
+
+        if filename is None:
+            output = sc.jsonify(d, tostring=tostring, indent=indent, verbose=verbose, *args, **kwargs)
+        else:
+            output = sc.savejson(filename=filename, obj=d, indent=indent, *args, **kwargs)
+
+        return output
+    
+    def plot(self):
+        flat = sc.flattendict(self.results, sep=': ')
+        fig, axs = sc.getrowscols(len(flat), make=True)
+        for ax,(k,v) in zip(axs.flatten(), flat.items()):
+            ax.plot(v)
+            ax.set_title(k)
+        return fig
+            
 
 class AlreadyRunError(RuntimeError):
     """
@@ -546,3 +657,126 @@ class AlreadyRunError(RuntimeError):
     :py:func:`Sim.run` and not taking any timesteps, would be an inadvertent error.
     """
     pass
+
+
+def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=False, die=False):
+    '''
+    Compute the difference of the summaries of two simulations, and print any
+    values which differ.
+
+    Args:
+        sim1 (sim/dict): either a simulation object or the sim.summary dictionary
+        sim2 (sim/dict): ditto
+        skip_key_diffs (bool): whether to skip keys that don't match between sims
+        skip (list): a list of values to skip
+        full (bool): whether to use the full summary (else, brief)
+        output (bool): whether to return the output as a string (otherwise print)
+        die (bool): whether to raise an exception if the sims don't match
+        require_run (bool): require that the simulations have been run
+
+    **Example**::
+
+        s1 = hpv.Sim(rand_seed=1).run()
+        s2 = hpv.Sim(rand_seed=2).run()
+        hpv.diff_sims(s1, s2)
+    '''
+
+    if isinstance(sim1, Sim):
+        sim1 = sim1.summarize()
+    if isinstance(sim2, Sim):
+        sim2 = sim2.summarize()
+    for sim in [sim1, sim2]:
+        if not isinstance(sim, dict): # pragma: no cover
+            errormsg = f'Cannot compare object of type {type(sim)}, must be a sim or a sim.summary dict'
+            raise TypeError(errormsg)
+
+    # Compare keys
+    keymatchmsg = ''
+    sim1_keys = set(sim1.keys())
+    sim2_keys = set(sim2.keys())
+    if sim1_keys != sim2_keys and not skip_key_diffs: # pragma: no cover
+        keymatchmsg = "Keys don't match!\n"
+        missing = list(sim1_keys - sim2_keys)
+        extra   = list(sim2_keys - sim1_keys)
+        if missing:
+            keymatchmsg += f'  Missing sim1 keys: {missing}\ns'
+        if extra:
+            keymatchmsg += f'  Extra sim2 keys: {extra}\n'
+
+    # Compare values
+    valmatchmsg = ''
+    mismatches = {}
+    skip = sc.tolist(skip)
+    for key in sim2.keys(): # To ensure order
+        if key in sim1_keys and key not in skip: # If a key is missing, don't count it as a mismatch
+            sim1_val = sim1[key] if key in sim1 else 'not present'
+            sim2_val = sim2[key] if key in sim2 else 'not present'
+            if not np.isclose(sim1_val, sim2_val, equal_nan=True):
+                mismatches[key] = {'sim1': sim1_val, 'sim2': sim2_val}
+
+    if len(mismatches):
+        valmatchmsg = '\nThe following values differ between the two simulations:\n'
+        df = sc.dataframe.from_dict(mismatches).transpose()
+        diff   = []
+        ratio  = []
+        change = []
+        small_change = 1e-3 # Define a small change, e.g. a rounding error
+        for mdict in mismatches.values():
+            old = mdict['sim1']
+            new = mdict['sim2']
+            numeric = sc.isnumber(sim1_val) and sc.isnumber(sim2_val)
+            if numeric and old>0:
+                this_diff  = new - old
+                this_ratio = new/old
+                abs_ratio  = max(this_ratio, 1.0/this_ratio)
+
+                # Set the character to use
+                if abs_ratio<small_change:
+                    change_char = '≈'
+                elif new > old:
+                    change_char = '↑'
+                elif new < old:
+                    change_char = '↓'
+                else:
+                    errormsg = f'Could not determine relationship between sim1={old} and sim2={new}'
+                    raise ValueError(errormsg)
+
+                # Set how many repeats it should have
+                repeats = 1
+                if abs_ratio >= 1.1:
+                    repeats = 2
+                if abs_ratio >= 2:
+                    repeats = 3
+                if abs_ratio >= 10:
+                    repeats = 4
+
+                this_change = change_char*repeats
+            else: # pragma: no cover
+                this_diff   = np.nan
+                this_ratio  = np.nan
+                this_change = 'N/A'
+
+            diff.append(this_diff)
+            ratio.append(this_ratio)
+            change.append(this_change)
+
+        df['diff'] = diff
+        df['ratio'] = ratio
+        for col in ['sim1', 'sim2', 'diff', 'ratio']:
+            df[col] = df[col].round(decimals=3)
+        df['change'] = change
+        valmatchmsg += str(df)
+
+    # Raise an error if mismatches were found
+    mismatchmsg = keymatchmsg + valmatchmsg
+    if mismatchmsg: # pragma: no cover
+        if die:
+            raise ValueError(mismatchmsg)
+        elif output:
+            return mismatchmsg
+        else:
+            print(mismatchmsg)
+    else:
+        if not output:
+            print('Sims match')
+    return
