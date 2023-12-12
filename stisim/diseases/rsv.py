@@ -19,7 +19,8 @@ class RSV(Disease):
     def __init__(self, pars=None, **kwargs):
         super().__init__(pars, **kwargs)
 
-        self.rel_sus = ss.State('rel_sus', float, 1)
+        self.rel_sus_imm = ss.State('rel_sus_imm', float, 1)
+        self.rel_sus_vx = ss.State('rel_sus_vx', float, 1)
         self.rel_sev = ss.State('rel_sev', float, 1)
         self.rel_trans = ss.State('rel_trans', float, 1)
 
@@ -85,6 +86,10 @@ class RSV(Disease):
     @property
     def infectious(self):
         return self.symptomatic | self.severe
+
+    @property
+    def rel_sus(self):
+        return self.rel_sus_imm * self.rel_sus_vx
 
     def initialize(self, sim):
         super().initialize(sim)
@@ -174,7 +179,7 @@ class RSV(Disease):
 
         # Determine which severe cases will become critical
         age_bins = np.digitize(sim.people.age[severe], bins=self.pars['prognoses']['age_cutoffs']) - 1  # Age bins of individuals
-        crit_probs = self.pars['prognoses']['critical_probs'][age_bins]
+        crit_probs = self.pars['prognoses']['crit_probs'][age_bins]
         severe_uids = ss.true(severe)
         dur_severe = self.pars.dur_symptomatic(len(severe_uids)) / 365  # duration in years
         crit_bools = ss.binomial_arr(crit_probs)
