@@ -18,14 +18,23 @@ class Result(np.ndarray):
         return arr
     
     def __repr__(self):
-        if hasattr(self, 'module') and hasattr(self, 'name'):
-            modulestr = f'{self.module}.' if self.module else ''
-            cls_name = self.__class__.__name__
-            arrstr = super().__repr__().removeprefix(cls_name)
-            out = f'{cls_name}({modulestr}{self.name}):\narray{arrstr}'
-            return out
+        modulestr = f'{self.module}.' if self.module else ''
+        cls_name = self.__class__.__name__
+        arrstr = super().__repr__().removeprefix(cls_name)
+        out = f'{cls_name}({modulestr}{self.name}):\narray{arrstr}'
+        return out
+
+    def __array_finalize__(self, obj):
+        if obj is None: return
+        self.name = getattr(obj, 'name', None)
+        self.module = getattr(obj, 'module', None)
+        return
+
+    def __array_wrap__(self, obj, **kwargs):
+        if obj.shape == ():
+            return obj[()]
         else:
-            return np.ndarray.__repr__(self)
+            return super().__array_wrap__(obj, **kwargs)
     
     def to_df(self):
         return sc.dataframe({self.name:self})
