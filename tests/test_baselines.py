@@ -155,7 +155,7 @@ def test_benchmark(do_save=do_save, repeats=1, verbose=True):
         t_inits.append(t_init)
         t_runs.append(t_run)
         
-        print(t_people, t_init, t_run)
+        # print(t_people, t_init, t_run)
 
     # Test CPU performance after the run
     r2 = normalize_performance()
@@ -206,9 +206,9 @@ if __name__ == '__main__':
     sc.options.set(interactive=do_plot)
     T = sc.tic()
 
-    json = test_benchmark(do_save=do_save, repeats=5) # Run this first so benchmarking is available even if results are different
-    new  = test_baseline()
-    # make_sim(do_plot=do_plot)
+    # json = test_benchmark(do_save=do_save, repeats=5) # Run this first so benchmarking is available even if results are different
+    # new  = test_baseline()
+    sim = make_sim(do_plot=do_plot)
 
     print('\n'*2)
     sc.toc(T)

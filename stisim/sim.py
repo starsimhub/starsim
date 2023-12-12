@@ -449,10 +449,20 @@ class Sim(sc.prettyobj):
 
         for module in self.modules:
             module.finalize(self)
-
+            
+        self.summarize()
         self.results_ready = True  # Set this first so self.summary() knows to print the results
         self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
         return
+    
+    def summarize(self):
+        summary = sc.objdict()
+        flat = sc.flattendict(self.results)
+        for k,v in flat.items():
+            summary[k] = v.mean()
+        self.summary = summary
+        return summary
+        
 
     def shrink(self, skip_attrs=None, in_place=True):
         """
@@ -537,6 +547,107 @@ class Sim(sc.prettyobj):
             raise TypeError(errormsg)
         return sim
 
+    def export_pars(self, filename=None, indent=2, *args, **kwargs):
+        '''
+        Return parameters for JSON export -- see also to_json().
+
+        This method is required so that interventions can specify
+        their JSON-friendly representation.
+
+        Args:
+            filename (str): filename to save to; if None, do not save
+            indent (int): indent (int): if writing to file, how many indents to use per nested level
+            args (list): passed to savejson()
+            kwargs (dict): passed to savejson()
+
+        Returns:
+            pardict (dict): a dictionary containing all the parameter values
+        '''
+        pardict = {}
+        for key in self.pars.keys():
+            if key == 'interventions':
+                pardict[key] = [intervention.to_json() for intervention in self.pars[key]]
+            elif key == 'start_day':
+                pardict[key] = str(self.pars[key])
+            else:
+                pardict[key] = self.pars[key]
+        if filename is not None:
+            sc.savejson(filename=filename, obj=pardict, indent=indent, *args, **kwargs)
+        return pardict
+
+    def to_json(self, filename=None, keys=None, tostring=False, indent=2, verbose=False, *args, **kwargs):
+        '''
+        Export results and parameters as JSON.
+
+        Args:
+            filename (str): if None, return string; else, write to file
+            keys (str or list): attributes to write to json (default: results, parameters, and summary)
+            tostring (bool): if not writing to file, whether to write to string (alternative is sanitized dictionary)
+            indent (int): if writing to file, how many indents to use per nested level
+            verbose (bool): detail to print
+            args (list): passed to savejson()
+            kwargs (dict): passed to savejson()
+
+        Returns:
+            A unicode string containing a JSON representation of the results,
+            or writes the JSON file to disk
+
+        **Examples**::
+
+            json = sim.to_json()
+            sim.to_json('results.json')
+            sim.to_json('summary.json', keys='summary')
+        '''
+
+        # Handle keys
+        if keys is None:
+            keys = ['results', 'pars', 'summary', 'short_summary']
+        keys = sc.promotetolist(keys)
+
+        # Convert to JSON-compatible format
+        d = {}
+        for key in keys:
+            if key == 'results':
+                if self.results_ready:
+                    resdict = self.export_results(for_json=True)
+                    d['results'] = resdict
+                else:
+                    d['results'] = 'Results not available (Sim has not yet been run)'
+            elif key in ['pars', 'parameters']:
+                pardict = self.export_pars()
+                d['parameters'] = pardict
+            elif key == 'summary':
+                if self.results_ready:
+                    d['summary'] = dict(sc.dcp(self.summary))
+                else:
+                    d['summary'] = 'Summary not available (Sim has not yet been run)'
+            elif key == 'short_summary':
+                if self.results_ready:
+                    d['short_summary'] = dict(sc.dcp(self.short_summary))
+                else:
+                    d['short_summary'] = 'Full summary not available (Sim has not yet been run)'
+            else: # pragma: no cover
+                try:
+                    d[key] = sc.sanitizejson(getattr(self, key))
+                except Exception as E:
+                    errormsg = f'Could not convert "{key}" to JSON: {str(E)}; continuing...'
+                    print(errormsg)
+
+        if filename is None:
+            output = sc.jsonify(d, tostring=tostring, indent=indent, verbose=verbose, *args, **kwargs)
+        else:
+            output = sc.savejson(filename=filename, obj=d, indent=indent, *args, **kwargs)
+
+        return output
+    
+    def plot(self):
+        flat = sc.flattendict(self.results, sep=': ')
+        fig, axs = sc.getrowscols(len(flat), make=True)
+        for ax,(k,v) in zip(axs.flatten(), flat.items()):
+            ax.plot(v)
+            ax.set_title(k)
+        return fig
+            
 
 class AlreadyRunError(RuntimeError):
     """
