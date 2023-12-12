@@ -177,7 +177,7 @@ class People(BasePeople):
         # Handle states
         states = [
             ss.State('age', float, np.nan), # NaN until conceived
-            ss.State('female', bool, bernoulli(0.5)),
+            ss.State('female', bool, bernoulli(p=0.5)),
             ss.State('debut', float),
             ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
             ss.State('alive', bool, True),  # Time index for death
@@ -221,7 +221,6 @@ class People(BasePeople):
             rng.initialize(sim.rng_container, self.slot)
             
         # Define age (CK: why is age handled differently than sex?)
-        print('GUGUGUUUUGUGUG')
         self._initialize_states(sim=sim) # Now initialize with the sim
         self.age[:] = self.age_data_dist.rvs(len(self))
         
