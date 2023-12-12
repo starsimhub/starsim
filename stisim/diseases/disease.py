@@ -154,7 +154,7 @@ class Disease(ss.Module):
         Result for 'n_susceptible'
         """
         for state in self._boolean_states:
-            self.results += ss.Result(self.name, f'n_{state.name}', sim.npts, dtype=int)
+            self.results += ss.Result(self.name, f'n_{state.name}', sim.npts, dtype=int, scale=True)
         return
 
     def finalize_results(self, sim):

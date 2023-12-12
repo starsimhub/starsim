@@ -33,6 +33,7 @@ def make_syph_sim():
 
     sim_kwargs = dict(
         dt=1/12,
+        total_pop=93963392,
         start=1990,
         n_years=40,
         people=ppl,

@@ -29,6 +29,7 @@ class Result(np.ndarray):
         if obj is None: return
         self.name = getattr(obj, 'name', None)
         self.module = getattr(obj, 'module', None)
+        self.scale = getattr(obj, 'scale', None)
         return
 
     def __array_wrap__(self, obj, **kwargs):
