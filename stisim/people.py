@@ -52,21 +52,6 @@ class BasePeople(sc.prettyobj):
     def rngs(self):
         return [x for x in self.__dict__.values() if isinstance(x, (ss.MultiRNG, ss.SingleRNG))]
 
-    def initialize(self, sim):
-        """ Initialization """
-
-        # For People initialization, first initialize slots, then initialize RNGs, then initialize remaining states
-        # This is because some states may depend on RNGs being initialized to generate initial values
-        self.slot.initialize(sim)
-        self.slot[:] = self.uid
-
-        # Initialize all RNGs (noting that includes those that are declared in child classes)
-        for rng in self.rngs:
-            rng.initialize(sim.rng_container, self.slot)
-
-        self.initialized = True
-        return
-
     def __len__(self):
         """ Length of people """
         return len(self.uid)
@@ -186,13 +171,10 @@ class People(BasePeople):
         self.initialized = False
         self.version = ss.__version__  # Store version info
 
-        self.rng_female  = ss.RNG('female')
         states = [
-            ss.State('slot', int, ss.INT_NAN), # MUST BE FIRST
             ss.State('age', float, np.nan), # NaN until conceived
-            ss.State('female', bool, ss.bernoulli(0.5, rng=self.rng_female)),
+            ss.State('female', bool, bernoulli(0.5)),
             ss.State('debut', float),
-            ss.State('alive', bool, True), # Redundant with ti_dead == ss.INT_NAN
             ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
             ss.State('scale', float, 1.0),
         ]
@@ -223,11 +205,22 @@ class People(BasePeople):
             setattr(self, state.name, state)
         return
 
-
     def initialize(self, sim):
         """ Initialization """
-        super().initialize(sim)
+    
+        # For People initialization, first initialize slots, then initialize RNGs, then initialize remaining states
+        # This is because some states may depend on RNGs being initialized to generate initial values
+        self.slot.initialize(sim)
+        self.slot[:] = self.uid
+    
+        # Initialize all RNGs (noting that includes those that are declared in child classes)
+        for rng in self.rngs:
+            rng.initialize(sim.rng_container, self.slot)
+            
+        # Define age (CK: why is age handled differently than sex?)
         self.age[:] = self.age_data_dist.rvs(len(self))
+        
+        self.initialized = True
         return
 
     def add_module(self, module, force=False):
