@@ -80,7 +80,7 @@ class births(DemographicModule):
         p = self.pars
         br_year = p.birth_rates[p.data_cols['year']]
         br_val = p.birth_rates[p.data_cols['cbr']]
-        this_birth_rate = np.interp(sim.year, br_year, br_val) * p.units_per_100 * p.rel_birth * sim.pars.dt_demog
+        this_birth_rate = np.interp(sim.year, br_year, br_val) * p.units_per_100 * p.rel_birth * sim.dt
         n_new = int(np.floor(np.count_nonzero(sim.people.alive) * this_birth_rate))
         return n_new
 
@@ -240,7 +240,7 @@ class Pregnancy(DemographicModule):
             'dur_pregnancy': 0.75,  # Make this a distribution?
             'dur_postpartum': 0.5,  # Make this a distribution?
             'fertility_rates': 0,
-            'data_cols': {'year': 'Time', 'age': 'AgeGrp', 'value': 'Births'},
+            'data_cols': {'year': 'Time', 'age': 'AgeGrp', 'value': 'ASFR'},
             'units_per_100': 1e-3,  # assumes fertility rates are per 1000. If using percentages, switch this to 1
             'p_death': 0,  # Probability of maternal death. Question, should this be linked to age and/or duration?
         }, self.pars)
@@ -361,10 +361,11 @@ class Pregnancy(DemographicModule):
 
         df = p.fertility_rates.loc[p.fertility_rates[year_label] == nearest_year]
         age_bins = df[age_label].unique()
+        age_bins = np.append(age_bins, 50)  # Add 50, and specify no births after 50
         age_inds = np.digitize(sim.people.age, age_bins) - 1
 
-        conception_eligible = sim.people.female & (age_inds >= 0)
-        conception_probs = df[val_label].values * p.units_per_100 * sim.pars.dt_demog
+        conception_eligible = sim.people.female & (age_inds >= 0) & (age_inds < max(age_inds))
+        conception_probs = df[val_label].values * p.units_per_100 * sim.dt
         self.conception_probs[conception_eligible] = conception_probs[age_inds[conception_eligible]]
         conceive_uids = ss.true(ss.binomial_arr(self.conception_probs))
 
