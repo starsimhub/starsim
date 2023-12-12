@@ -369,6 +369,7 @@ class Pregnancy(DemographicModule):
         self.conception_probs[conception_eligible] = conception_probs[age_inds[conception_eligible]]
         conceive_uids = ss.true(ss.binomial_arr(self.conception_probs))
 
+
         # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
         n_unborn_agents = len(conceive_uids)
         if n_unborn_agents > 0:

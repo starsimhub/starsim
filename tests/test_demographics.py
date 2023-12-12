@@ -21,7 +21,7 @@ def test_nigeria():
     death = ss.background_deaths(death_rates)
 
     # Make people
-    ppl = ss.People(10000)
+    ppl = ss.People(10000, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
 
     sim = ss.Sim(
         dt=1/12,
