@@ -46,6 +46,11 @@ class Module(sc.prettyobj):
         return
 
     def finalize(self, sim):
+        # Scale results
+        for reskey, res in self.results.items():
+            if isinstance(res, ss.Result) and res.scale:
+                self.results[reskey] = self.results[reskey]*sim.pars.pop_scale
+
         self.finalized = True
         return
 

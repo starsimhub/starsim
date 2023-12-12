@@ -19,16 +19,16 @@ class Syphilis(STI):
     def __init__(self, pars=None):
         super().__init__(pars)
 
-        # General syphilis states
-        self.exposed = ss.State('exposed', bool, False)  # AKA incubating. Free of symptoms, not transmissible
-
         # Adult syphilis states
+        self.adult_states = ['exposed', 'primary', 'secondary', 'latent_temp', 'latent_long', 'tertiary', 'immune']
+        self.exposed = ss.State('exposed', bool, False)  # AKA incubating. Free of symptoms, not transmissible
         self.primary = ss.State('primary', bool, False)  # Primary chancres
         self.secondary = ss.State('secondary', bool, False)  # Inclusive of those who may still have primary chancres
         self.latent_temp = ss.State('latent_temp', bool, False)  # Relapses to secondary (~1y)
         self.latent_long = ss.State('latent_long', bool, False)  # Can progress to tertiary or remain here
         self.tertiary = ss.State('tertiary', bool, False)  # Includes complications (cardio/neuro/disfigurement)
         self.immune = ss.State('immune', bool, False)  # After effective treatment people may acquire temp immunity
+        self.disease_state = ss.State('disease_state', str, 'susceptible')  # After effective treatment people may acquire temp immunity
 
         # Congenital syphilis states
         self.congenital = ss.State('congenital', bool, False)
@@ -134,11 +134,13 @@ class Syphilis(STI):
         latent_temp = self.ti_latent_temp == sim.ti
         self.latent_temp[latent_temp] = True
         self.secondary[latent_temp] = False
+        self.set_latent_temp_prognoses(sim, ss.true(latent_temp))
 
         # Latent long
         latent_long = self.ti_latent_long == sim.ti
         self.latent_long[latent_long] = True
         self.secondary[latent_long] = False
+        self.set_latent_long_prognoses(sim, ss.true(latent_temp))
 
         # Tertiary
         tertiary = self.ti_tertiary == sim.ti
@@ -172,7 +174,7 @@ class Syphilis(STI):
 
     def set_prognoses(self, sim, target_uids, source_uids=None):
         """
-        Natural history of syphilis for adult infection
+        Set initial prognoses for adults newly infected with syphilis
         """
 
         # Subset target_uids to only include ones with active infection
@@ -198,7 +200,6 @@ class Syphilis(STI):
 
         # Primary to secondary
         dur_primary = self.pars.dur_primary(n_uids)
-        self.dur_primary[uids] = dur_primary
         self.ti_secondary[uids] = self.ti_primary[uids] + rr(dur_primary/sim.dt)
         self.dur_infection[uids] += dur_primary
 
@@ -216,10 +217,25 @@ class Syphilis(STI):
         dur_secondary_temp = self.pars.dur_secondary(n_latent_temp)
         self.ti_latent_temp[latent_temp_uids] = self.ti_secondary[latent_temp_uids] + rr(dur_secondary_temp/sim.dt)
         self.dur_infection[latent_temp_uids] += dur_secondary_temp
+
         dur_secondary_long = self.pars.dur_secondary(n_latent_long)
         self.ti_latent_long[latent_long_uids] = self.ti_secondary[latent_long_uids] + rr(dur_secondary_long/sim.dt)
         self.dur_infection[latent_long_uids] += dur_secondary_long
 
+        return
+
+    def set_latent_temp_prognoses(self, sim, uids):
+        # Primary to secondary
+        dur_latent_temp = self.pars.dur_latent_temp(len(uids))
+        self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_temp/sim.dt)
+        self.dur_infection[uids] += dur_latent_temp
+        return
+
+    def set_latent_long_prognoses(self, sim, uids):
+        # Primary to secondary
+        dur_latent_long = self.pars.dur_latent_long(len(uids))
+        self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_temp/sim.dt)
+        self.dur_infection[uids] += dur_latent_temp
         return
 
     def set_congenital(self, sim, target_uids, source_uids=None):

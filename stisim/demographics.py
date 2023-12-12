@@ -170,9 +170,9 @@ class background_deaths(DemographicModule):
         return
 
     def init_results(self, sim):
-        self.results += ss.Result(name='new', shape=sim.npts, dtype=int)
-        self.results += ss.Result(name='cumulative', shape=sim.npts, dtype=int)
-        self.results += ss.Result(name='mortality_rate', shape=sim.npts, dtype=int)
+        self.results += ss.Result(name='new', shape=sim.npts, dtype=int, scale=True)
+        self.results += ss.Result(name='cumulative', shape=sim.npts, dtype=int, scale=True)
+        self.results += ss.Result(name='mortality_rate', shape=sim.npts, dtype=int, scale=False)
         return
 
     def update(self, sim):
@@ -307,8 +307,8 @@ class Pregnancy(DemographicModule):
         Still unclear whether this logic should live in the pregnancy module, the
         individual disease modules, the connectors, or the sim.
         """
-        self.results += ss.Result(name='pregnancies', shape=sim.npts, dtype=int)
-        self.results += ss.Result(name='births', shape=sim.npts, dtype=int)
+        self.results += ss.Result(name='pregnancies', shape=sim.npts, dtype=int, scale=True)
+        self.results += ss.Result(name='births', shape=sim.npts, dtype=int, scale=True)
         return
 
     def update(self, sim):

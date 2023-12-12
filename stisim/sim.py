@@ -434,8 +434,15 @@ class Sim(sc.prettyobj):
         for module in self.modules:
             module.finalize(self)
 
-        self.results_ready = True  # Set this first so self.summary() knows to print the results
+        # Scale the results
+        for reskey, res in self.results.items():
+            if isinstance(res, ss.Result) and res.scale:
+                self.results[reskey] = self.results[reskey]*self.pars.pop_scale
+
+        self.results_ready = True
+
         self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
+
         return
 
     def shrink(self, skip_attrs=None, in_place=True):
