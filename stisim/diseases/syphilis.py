@@ -4,6 +4,7 @@ Define default syphilis disease module
 
 import numpy as np
 import sciris as sc
+import pandas as pd
 from sciris import randround as rr
 
 import stisim as ss
@@ -18,16 +19,16 @@ class Syphilis(STI):
     def __init__(self, pars=None):
         super().__init__(pars)
 
-        # General syphilis states
-        self.exposed = ss.State('exposed', bool, False)  # AKA incubating. Free of symptoms, not transmissible
-
         # Adult syphilis states
+        self.adult_states = ['exposed', 'primary', 'secondary', 'latent_temp', 'latent_long', 'tertiary', 'immune']
+        self.exposed = ss.State('exposed', bool, False)  # AKA incubating. Free of symptoms, not transmissible
         self.primary = ss.State('primary', bool, False)  # Primary chancres
         self.secondary = ss.State('secondary', bool, False)  # Inclusive of those who may still have primary chancres
         self.latent_temp = ss.State('latent_temp', bool, False)  # Relapses to secondary (~1y)
         self.latent_long = ss.State('latent_long', bool, False)  # Can progress to tertiary or remain here
         self.tertiary = ss.State('tertiary', bool, False)  # Includes complications (cardio/neuro/disfigurement)
         self.immune = ss.State('immune', bool, False)  # After effective treatment people may acquire temp immunity
+        self.disease_state = ss.State('disease_state', str, 'susceptible')  # After effective treatment people may acquire temp immunity
 
         # Congenital syphilis states
         self.congenital = ss.State('congenital', bool, False)
@@ -55,16 +56,16 @@ class Syphilis(STI):
 
         # Parameters
         default_pars = dict(
-            # Adult syphilis natural history
+            # Adult syphilis natural history, all specified in years
             dur_exposed=ss.lognormal(1/12, 1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_primary=ss.lognormal(1.5/12, 1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_secondary=ss.normal(3.6, 1.5),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_temp=ss.lognormal(1, 1/6),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_secondary=ss.normal(3.6/12, 1.5/12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_temp=ss.lognormal(1, 6/12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_latent_long=ss.lognormal(20, 8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_latent_temp=0.25,  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_tertiary=0.35,  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
 
-            # Congenital syphilis outcomes (must sum to 1)
+            # Congenital syphilis outcomes
             # Source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5973824/
             birth_outcomes=sc.objdict(
                 active=sc.objdict(
@@ -109,6 +110,11 @@ class Syphilis(STI):
         self.results += ss.Result(self.name, 'new_congenital', sim.npts, dtype=int)
         return
 
+    def update_results(self, sim):
+        """ Update results """
+        super(Syphilis, self).update_results(sim)
+        return
+
     def update_pre(self, sim):
         """ Updates prior to interventions """
 
@@ -122,16 +128,19 @@ class Syphilis(STI):
         self.secondary[secondary] = True
         self.primary[secondary] = False
         self.latent_temp[secondary] = False  # Could transition from latent or from primary
+        self.set_secondary_prognoses(sim, ss.true(secondary))
 
         # Latent
         latent_temp = self.ti_latent_temp == sim.ti
         self.latent_temp[latent_temp] = True
         self.secondary[latent_temp] = False
+        self.set_latent_temp_prognoses(sim, ss.true(latent_temp))
 
         # Latent long
         latent_long = self.ti_latent_long == sim.ti
         self.latent_long[latent_long] = True
         self.secondary[latent_long] = False
+        self.set_latent_long_prognoses(sim, ss.true(latent_temp))
 
         # Tertiary
         tertiary = self.ti_tertiary == sim.ti
@@ -147,6 +156,7 @@ class Syphilis(STI):
         # Congenital syphilis transmission outcomes
         congenital = self.ti_congenital == sim.ti
         self.congenital[congenital] = True
+        self.susceptible[congenital] = False
 
         return
 
@@ -162,16 +172,9 @@ class Syphilis(STI):
         super(Syphilis, self).make_new_cases(sim)
         return
 
-    def record_exposure(self, sim, uids):
-        self.susceptible[uids] = False
-        self.exposed[uids] = True
-        self.infected[uids] = True
-        self.ti_exposed[uids] = sim.ti
-        self.ti_infected[uids] = sim.ti
-
     def set_prognoses(self, sim, target_uids, source_uids=None):
         """
-        Natural history of syphilis for adult infection
+        Set initial prognoses for adults newly infected with syphilis
         """
 
         # Subset target_uids to only include ones with active infection
@@ -182,7 +185,11 @@ class Syphilis(STI):
             uids = target_uids
 
         n_uids = len(uids)
-        self.record_exposure(sim, uids)
+        self.susceptible[uids] = False
+        self.exposed[uids] = True
+        self.infected[uids] = True
+        self.ti_exposed[uids] = sim.ti
+        self.ti_infected[uids] = sim.ti
 
         # Set future dates and probabilities
         # Exposed to primary
@@ -193,9 +200,13 @@ class Syphilis(STI):
 
         # Primary to secondary
         dur_primary = self.pars.dur_primary(n_uids)
-        self.dur_primary[uids] = dur_primary
         self.ti_secondary[uids] = self.ti_primary[uids] + rr(dur_primary/sim.dt)
         self.dur_infection[uids] += dur_primary
+
+        return
+
+    def set_secondary_prognoses(self, sim, uids):
+        """ Set prognoses for people who have just progressed to secondary infection """
 
         # Secondary to latent_temp or latent_long
         latent_temp_uids = ss.binomial_filter(self.pars.p_latent_temp, uids)
@@ -206,17 +217,28 @@ class Syphilis(STI):
         dur_secondary_temp = self.pars.dur_secondary(n_latent_temp)
         self.ti_latent_temp[latent_temp_uids] = self.ti_secondary[latent_temp_uids] + rr(dur_secondary_temp/sim.dt)
         self.dur_infection[latent_temp_uids] += dur_secondary_temp
+
         dur_secondary_long = self.pars.dur_secondary(n_latent_long)
         self.ti_latent_long[latent_long_uids] = self.ti_secondary[latent_long_uids] + rr(dur_secondary_long/sim.dt)
         self.dur_infection[latent_long_uids] += dur_secondary_long
 
-        # Latent_temp back to secondary
-        dur_latent_temp = self.pars.dur_latent_temp(n_latent_temp)
-        self.ti_secondary[latent_temp_uids] = self.ti_latent_temp[latent_temp_uids] + rr(dur_latent_temp/sim.dt)
-        self.dur_infection[latent_temp_uids] += dur_latent_temp
+        return
+
+    def set_latent_temp_prognoses(self, sim, uids):
+        # Primary to secondary
+        dur_latent_temp = self.pars.dur_latent_temp(len(uids))
+        self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_temp/sim.dt)
+        self.dur_infection[uids] += dur_latent_temp
+        return
+
+    def set_latent_long_prognoses(self, sim, uids):
+        # Primary to secondary
+        dur_latent_long = self.pars.dur_latent_long(len(uids))
+        self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_long/sim.dt)
+        self.dur_infection[uids] += dur_latent_long
 
         # Latent_long to tertiary
-        tertiary_uids = ss.binomial_filter(self.pars.p_tertiary, latent_long_uids)
+        tertiary_uids = ss.binomial_filter(self.pars.p_tertiary, uids)
         n_tertiary = len(tertiary_uids)
         dur_latent_long = self.pars.dur_latent_long(n_tertiary)
         self.ti_tertiary[tertiary_uids] = self.ti_latent_long[tertiary_uids] + rr(dur_latent_long/sim.dt)
@@ -229,27 +251,122 @@ class Syphilis(STI):
         Natural history of syphilis for congenital infection
         """
 
-        self.record_exposure(sim, target_uids)
-
-        for infection_type, birth_outcomes in self.pars.birth_outcomes.items():
-            # Determine which source infections were derived from this type of infection
-            if infection_type == 'active':
-                sources = self.active[source_uids].values.nonzero()[-1]
-                uids = target_uids[sources]
-
-            elif infection_type == 'latent':
-                sources = self.latent[source_uids].values.nonzero()[-1]
-                uids = target_uids[sources]
+        # Determine outcomes
+        for state in ['active', 'latent']:
+            source_state_inds = getattr(self, state)[source_uids].values.nonzero()[-1]
+            uids = target_uids[source_state_inds]
             n_uids = len(uids)
-            assigned_outcomes = ss.n_multinomial(birth_outcomes.values(), n_uids)
+
+            # Birth outcomes must be modified to add probability of susceptible birth
+            birth_outcomes = self.pars.birth_outcomes[state]
+            probs = np.append(birth_outcomes.values(), 1 - sum(birth_outcomes.values()))
+            assigned_outcomes = ss.n_multinomial(probs, n_uids)
             time_to_birth = -sim.people.age
 
             # Schedule events
             for oi, outcome in enumerate(birth_outcomes.keys()):
                 o_uids = uids[assigned_outcomes == oi]
-                ti_outcome = f'ti_{outcome}'
-                vals = getattr(self, ti_outcome)
-                vals[o_uids] = sim.ti + rr(time_to_birth[o_uids].values/sim.dt)
-                setattr(self, ti_outcome, vals)
+                if len(o_uids) > 0:
+                    ti_outcome = f'ti_{outcome}'
+                    vals = getattr(self, ti_outcome)
+                    vals[o_uids] = sim.ti + rr(time_to_birth[o_uids].values/sim.dt)
+                    setattr(self, ti_outcome, vals)
 
         return
+
+
+# %% Syphilis-related interventions
+datafiles = sc.objdict()
+for key in ['dx', 'tx', 'vx']:
+    datafiles[key] = f'stisim/products/syph_{key}.csv'
+
+__all__ += ['syph_dx', 'syph_tx', 'syph_screening', 'syph_treatment']
+
+
+def syph_dx(prod_name=None):
+    """
+    Create default diagnostic products
+    """
+    dfdx = pd.read_csv(datafiles.dx)
+    dxprods = dict(
+        rpr=ss.dx(dfdx[dfdx.name == 'rpr'], hierarchy=['positive', 'inadequate', 'negative']),
+        rst=ss.dx(dfdx[dfdx.name == 'rst'], hierarchy=['positive', 'inadequate', 'negative']),
+    )
+    if prod_name is not None: return dxprods[prod_name]
+    else: return dxprods
+
+
+def syph_tx(prod_name=None):
+    """
+    Create default treatment products
+    """
+    dftx = pd.read_csv(datafiles.tx) # Read in dataframe with parameters
+    txprods = dict()
+    for name in dftx.name.unique():
+        txprods[name] = ss.tx(dftx[dftx.name == name])
+    if prod_name is not None: return txprods[prod_name]
+    else: return txprods
+
+
+class syph_screening(ss.routine_screening):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # self.requires = Syphilis
+        return
+
+    def _parse_product_str(self, product):
+        try:
+            product = syph_dx(prod_name=product)
+        except:
+            errormsg = f'Could not find product {product} in the standard list.'
+            raise ValueError(errormsg)
+        return product
+
+    def check_eligibility(self, sim):
+        """
+        Return an array of indices of agents eligible for screening at time t, i.e. sexually active
+        females in age range, plus any additional user-defined eligibility
+        """
+        if self.eligibility is not None:
+            is_eligible = self.eligibility(sim)
+        else:
+            is_eligible = sim.people.alive  # Probably not required
+        return is_eligible
+
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.results += ss.Result('syphilis', 'n_dx', sim.npts, dtype=int)
+        return
+
+
+class syph_treatment(ss.treat_num):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # self.requires = Syphilis
+        return
+
+    def _parse_product_str(self, product):
+        try:
+            product = syph_tx(prod_name=product)
+        except:
+            errormsg = f'Could not find product {product} in the standard list.'
+            raise ValueError(errormsg)
+        return product
+
+    def check_eligibility(self, sim):
+        """
+        Return an array of indices of agents eligible for screening at time t
+        """
+        if self.eligibility is not None:
+            is_eligible = self.eligibility(sim)
+        else:
+            is_eligible = sim.people.alive  # Probably not required
+        return is_eligible
+
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.results += ss.Result('syphilis', 'n_tx', sim.npts, dtype=int)
+        return
+

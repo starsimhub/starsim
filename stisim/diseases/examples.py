@@ -81,10 +81,12 @@ class SIR(Disease):
         taken place by the time this method is called.
         """
         initial_cases = np.random.choice(sim.people.uid, self.pars['initial'], replace=False)
-        self.infect(sim, initial_cases)
+        self.infect(sim, initial_cases, None)
         return
 
-    def infect(self, sim, uids):
+    def infect(self, sim, uids, from_uids):
+        super().set_prognoses(sim, uids, from_uids)
+
         # Carry out state changes associated with infection
         self.susceptible[uids] = False
         self.infected[uids] = True
@@ -112,7 +114,7 @@ class SIR(Disease):
                     p_transmit = rel_trans[a] * rel_sus[b] * layer.contacts['beta'] * beta * sim.dt
                     new_cases = np.random.random(len(a)) < p_transmit
                     if new_cases.any():
-                        self.infect(sim, b[new_cases])
+                        self.infect(sim, b[new_cases], a[new_cases])
         return
 
     def update_results(self, sim):
@@ -135,7 +137,7 @@ class NCD(Disease):
     }
 
     def __init__(self, pars=None):
-        ss.Module.__init__(self, ss.omerge(self.default_pars, pars))
+        super().__init__(ss.omerge(self.default_pars, pars))
         self.at_risk = ss.State('at_risk', bool, False)
         self.affected = ss.State('affected', bool, False)
         self.ti_dead = ss.State('ti_dead', float, np.nan)
@@ -159,11 +161,16 @@ class NCD(Disease):
     def update_pre(self, sim):
         deaths = ss.binomial_filter(sim.dt*self.pars['p_death_given_risk'], ss.true(self.affected))
         sim.people.request_death(deaths)
+        self.log.add_data(deaths, died=True)
+        self.results.new_deaths[sim.ti] = len(deaths) # Log deaths attributable to this module
         return
 
     def make_new_cases(self, sim):
         new_cases = ss.binomial_filter(self.pars['p_affected_given_risk'], ss.true(self.at_risk))
         self.affected[new_cases] = True
+
+        super().set_prognoses(sim, new_cases)
+
         return new_cases
 
     def init_results(self, sim):
@@ -180,5 +187,4 @@ class NCD(Disease):
         super().update_results(sim)
         self.results['n_not_at_risk'][sim.ti] = np.count_nonzero(self.not_at_risk & sim.people.alive)
         self.results['prevalence'][sim.ti] = np.count_nonzero(self.affected & sim.people.alive)/np.count_nonzero(sim.people.alive)
-        self.results['new_deaths'][sim.ti] = np.count_nonzero(self.ti_dead == sim.ti)
         return

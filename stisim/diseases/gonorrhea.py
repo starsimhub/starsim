@@ -69,10 +69,11 @@ class Gonorrhea(STI):
         super(Gonorrhea, self).make_new_cases(sim)
         return
 
-    def set_prognoses(self, sim, target_uids):
+    def set_prognoses(self, sim, target_uids, source_uids=None):
         """
         Natural history of gonorrhea for adult infection
         """
+        super().set_prognoses(sim, target_uids, source_uids)
 
         # Set infection status
         self.susceptible[target_uids] = False

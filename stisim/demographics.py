@@ -80,7 +80,7 @@ class births(DemographicModule):
         p = self.pars
         br_year = p.birth_rates[p.data_cols['year']]
         br_val = p.birth_rates[p.data_cols['cbr']]
-        this_birth_rate = np.interp(sim.year, br_year, br_val) * p.units_per_100 * p.rel_birth * sim.pars.dt_demog
+        this_birth_rate = np.interp(sim.year, br_year, br_val) * p.units_per_100 * p.rel_birth * sim.dt
         n_new = int(np.floor(np.count_nonzero(sim.people.alive) * this_birth_rate))
         return n_new
 
@@ -170,9 +170,9 @@ class background_deaths(DemographicModule):
         return
 
     def init_results(self, sim):
-        self.results += ss.Result(name='new', shape=sim.npts, dtype=int)
-        self.results += ss.Result(name='cumulative', shape=sim.npts, dtype=int)
-        self.results += ss.Result(name='mortality_rate', shape=sim.npts, dtype=int)
+        self.results += ss.Result(name='new', shape=sim.npts, dtype=int, scale=True)
+        self.results += ss.Result(name='cumulative', shape=sim.npts, dtype=int, scale=True)
+        self.results += ss.Result(name='mortality_rate', shape=sim.npts, dtype=int, scale=False)
         return
 
     def update(self, sim):
@@ -203,7 +203,7 @@ class background_deaths(DemographicModule):
         self.death_probs[sim.people.female] = f_arr[age_inds[sim.people.female]]
         self.death_probs[sim.people.male] = m_arr[age_inds[sim.people.male]]
         self.death_probs[sim.people.age < 0] = 0  # Don't use background death rates for unborn babies
-        self.death_probs *= p.rel_death  # Adjust overall death probabilities
+        self.death_probs *= p.rel_death * sim.dt  # Adjust overall death probabilities by rel rates and dt
 
         # Get indices of people who die of other causes
         death_uids = ss.true(ss.binomial_arr(self.death_probs))
@@ -307,8 +307,8 @@ class Pregnancy(DemographicModule):
         Still unclear whether this logic should live in the pregnancy module, the
         individual disease modules, the connectors, or the sim.
         """
-        self.results += ss.Result(name='pregnancies', shape=sim.npts, dtype=int)
-        self.results += ss.Result(name='births', shape=sim.npts, dtype=int)
+        self.results += ss.Result(name='pregnancies', shape=sim.npts, dtype=int, scale=True)
+        self.results += ss.Result(name='births', shape=sim.npts, dtype=int, scale=True)
         return
 
     def update(self, sim):
@@ -361,10 +361,11 @@ class Pregnancy(DemographicModule):
 
         df = p.fertility_rates.loc[p.fertility_rates[year_label] == nearest_year]
         age_bins = df[age_label].unique()
+        age_bins = np.append(age_bins, 50)  # Add 50, and specify no births after 50
         age_inds = np.digitize(sim.people.age, age_bins) - 1
 
-        conception_eligible = sim.people.female & (age_inds >= 0)
-        conception_probs = df[val_label].values * p.units_per_100 * sim.pars.dt_demog
+        conception_eligible = sim.people.female & (age_inds >= 0) & (age_inds < max(age_inds))
+        conception_probs = df[val_label].values * p.units_per_100 * sim.dt
         self.conception_probs[conception_eligible] = conception_probs[age_inds[conception_eligible]]
         conceive_uids = ss.true(ss.binomial_arr(self.conception_probs))
 
