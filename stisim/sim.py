@@ -434,6 +434,12 @@ class Sim(sc.prettyobj):
         for module in self.modules:
             module.finalize(self)
 
+    # if reskey=='new_infections':
+        import traceback;
+        traceback.print_exc();
+        import pdb;
+        pdb.set_trace()
+
         # Scale the results
         for reskey, res in self.results.items():
             if isinstance(res, ss.Result) and res.scale:

@@ -161,8 +161,11 @@ class Disease(ss.Module):
         """
         Finalize results
         """
-        # TODO - will probably need to account for rescaling outputs for the default results here
-        pass
+        # Scale results
+        for reskey, res in self.results.items():
+            if isinstance(res, ss.Result) and res.scale:
+                self.results[reskey] = self.results[reskey]*sim.pars.pop_scale
+        return
 
     def update_pre(self, sim):
         """
@@ -303,8 +306,8 @@ class STI(Disease):
         Initialize results
         """
         super().init_results(sim)
-        self.results += ss.Result(self.name, 'prevalence', sim.npts, dtype=float, scale=False)
-        self.results += ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True)
+        self.results += ss.Result(module=self.name, name='prevalence', shape=sim.npts, dtype=float, scale=False)
+        self.results += ss.Result(module=self.name, name='new_infections', shape=sim.npts, dtype=int, scale=True)
         return
 
     def update_pre(self, sim):
