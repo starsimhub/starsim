@@ -336,7 +336,7 @@ class syph_screening(ss.routine_screening):
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.results = ss.Result('syphilis', 'n_dx', sim.npts, dtype=int)
+        self.results += ss.Result('syphilis', 'n_dx', sim.npts, dtype=int)
         return
 
 
@@ -361,18 +361,12 @@ class syph_treatment(ss.treat_num):
         """
         if self.eligibility is not None:
             is_eligible = self.eligibility(sim)
-            if sim.year==2020:
-                import traceback;
-                traceback.print_exc();
-                import pdb;
-                pdb.set_trace()
-
         else:
             is_eligible = sim.people.alive  # Probably not required
         return is_eligible
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.results = ss.Result('syphilis', 'n_tx', sim.npts, dtype=int)
+        self.results += ss.Result('syphilis', 'n_tx', sim.npts, dtype=int)
         return
 
