@@ -51,7 +51,7 @@ class FusedArray(NDArrayOperatorsMixin):
         """
         Extract values from a collection of UIDs
 
-        This function is used to retreive values based on UID. As indexing a FusedArray returns a new FusedArray,
+        This function is used to retrieve values based on UID. As indexing a FusedArray returns a new FusedArray,
         this method also populates the new UID map for use in the subsequently created FusedArray, avoiding the
         need to re-compute it separately.
 
@@ -373,23 +373,29 @@ class State(FusedArray):
             new_vals = self.fill_value
         return new_vals
 
-    def initialize(self, sim):
+    def initialize(self, sim=None, people=None):
         if self._initialized:
             return
-
+    
+        if sim is not None and people is None:
+            people = sim.people
+        
+        sim_still_needed = False
         if isinstance(self.fill_value, rv_frozen):
-            self.fill_value = ScipyDistribution(self.fill_value, f'{self.__class__.__name__}_{self.label}')
-            self.fill_value.initialize(sim, self)
+            if sim is not None:
+                self.fill_value = ScipyDistribution(self.fill_value, f'{self.__class__.__name__}_{self.label}')
+                self.fill_value.initialize(sim, self)
+            else:
+                sim_still_needed = True
 
-        people = sim.people
-
-        people.add_state(self)
-        self._uid_map = people._uid_map
-        self.uid = people.uid
-        self._data.grow(len(self.uid))
-        self._data[:len(self.uid)] = self._new_vals(self.uid)
-        self.values = self._data._view
-        self._initialized = True
+        people.add_state(self, die=False) # CK: should not be needed
+        if not sim_still_needed:
+            self._uid_map = people._uid_map
+            self.uid = people.uid
+            self._data.grow(len(self.uid))
+            self._data[:len(self.uid)] = self._new_vals(self.uid)
+            self.values = self._data._view
+            self._initialized = True
         return
 
     def grow(self, uids):
