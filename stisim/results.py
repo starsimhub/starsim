@@ -11,11 +11,7 @@ __all__ = ['Result']
 
 class Result(np.ndarray):
     
-<<<<<<< HEAD
     def __new__(cls, module=None, name=None, shape=None, dtype=None, scale=None):
-=======
-    def __new__(cls, module=None, name=None, shape=None, dtype=None, **kwargs):
->>>>>>> add-baseline-tests
         arr = np.zeros(shape=shape, dtype=dtype).view(cls)
         arr.name = name
         arr.module = module
