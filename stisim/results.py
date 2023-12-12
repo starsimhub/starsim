@@ -4,7 +4,6 @@ Result structures.
 
 import numpy as np
 import sciris as sc
-import stisim as ss
 
 
 __all__ = ['Result']
@@ -12,7 +11,11 @@ __all__ = ['Result']
 
 class Result(np.ndarray):
     
+<<<<<<< HEAD
     def __new__(cls, module=None, name=None, shape=None, dtype=None, scale=None):
+=======
+    def __new__(cls, module=None, name=None, shape=None, dtype=None, **kwargs):
+>>>>>>> add-baseline-tests
         arr = np.zeros(shape=shape, dtype=dtype).view(cls)
         arr.name = name
         arr.module = module
@@ -25,7 +28,18 @@ class Result(np.ndarray):
         arrstr = super().__repr__().removeprefix(cls_name)
         out = f'{cls_name}({modulestr}{self.name}):\narray{arrstr}'
         return out
+
+    def __array_finalize__(self, obj):
+        if obj is None: return
+        self.name = getattr(obj, 'name', None)
+        self.module = getattr(obj, 'module', None)
+        return
+
+    def __array_wrap__(self, obj, **kwargs):
+        if obj.shape == ():
+            return obj[()]
+        else:
+            return super().__array_wrap__(obj, **kwargs)
     
     def to_df(self):
         return sc.dataframe({self.name:self})
-
