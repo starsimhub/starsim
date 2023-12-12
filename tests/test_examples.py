@@ -15,7 +15,7 @@ def test_sir():
     sim.run()
 
     assert len(sir.log.out_edges(np.nan)) == sir.pars.initial # Log should match initial infections
-    df = sir.log.line_list # Check generation of line-list
+    df = sir.log.line_list  # Check generation of line-list
     assert df.source.isna().sum() == sir.pars.initial # Check seed infections in line list
 
     plt.figure()
