@@ -373,23 +373,31 @@ class State(FusedArray):
             new_vals = self.fill_value
         return new_vals
 
-    def initialize(self, sim):
+    def initialize(self, sim=None, people=None):
         if self._initialized:
             return
-
+    
+        if sim is not None and people is None:
+            people = sim.people
+        
+        sim_still_needed = False
         if isinstance(self.fill_value, rv_frozen):
-            self.fill_value = ScipyDistribution(self.fill_value, f'{self.__class__.__name__}_{self.label}')
-            self.fill_value.initialize(sim, self)
+            if sim is not None:
+                print('OK SUPPLIED')
+                self.fill_value = ScipyDistribution(self.fill_value, f'{self.__class__.__name__}_{self.label}')
+                self.fill_value.initialize(sim, self)
+            else:
+                print('DOIFUDFIUD')
+                sim_still_needed = True
 
-        people = sim.people
-
-        people.add_state(self)
         self._uid_map = people._uid_map
         self.uid = people.uid
         self._data.grow(len(self.uid))
         self._data[:len(self.uid)] = self._new_vals(self.uid)
         self.values = self._data._view
-        self._initialized = True
+        self._initialized = True if not sim_still_needed else False
+        if self.label == 'female':
+            print(f'hi i am {sc.prepr(self)}')
         return
 
     def grow(self, uids):

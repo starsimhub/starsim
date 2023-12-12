@@ -56,9 +56,14 @@ class BasePeople(sc.prettyobj):
         """ Length of people """
         return len(self.uid)
 
-    def add_state(self, state):
+    def add_state(self, state, die=True):
         if id(state) not in self._states:
             self._states[id(state)] = state
+            self.states.append(state)  # Expose these states with their original names
+            setattr(self, state.name, state)
+        elif die:
+            errormsg = f'Cannot add state {state} since already added'
+            raise ValueError(errormsg)
         return
 
     def grow(self, n, new_slots=None):
@@ -161,8 +166,6 @@ class People(BasePeople):
         ppl = ss.People(2000)
     """
 
-    # %% Basic methods
-
     def __init__(self, n, age_data=None, extra_states=None, networks=None, rand_seed=0):
         """ Initialize """
 
@@ -171,17 +174,20 @@ class People(BasePeople):
         self.initialized = False
         self.version = ss.__version__  # Store version info
 
+        # Handle states
         states = [
             ss.State('age', float, np.nan), # NaN until conceived
             ss.State('female', bool, bernoulli(0.5)),
             ss.State('debut', float),
             ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
+            ss.State('alive', bool, True),  # Time index for death
             ss.State('scale', float, 1.0),
         ]
         states.extend(sc.promotetolist(extra_states))
-
-        self.states = ss.ndict()
-        self._initialize_states(states)
+        for state in states:
+            self.add_state(state)
+        self._initialize_states(sim=None) # No sim yet, but initialize what we can
+        
         self.networks = ss.Networks(networks)
 
         # Set initial age distribution - likely move this somewhere else later
@@ -197,12 +203,9 @@ class People(BasePeople):
         if sc.checktype(age_data, pd.DataFrame):
             return ss.data_dist(vals=age_data['value'].values, bins=age_data['age'].values)
 
-    def _initialize_states(self, states):
-        for state in states:
-            self.add_state(state)  # Register the state internally for dynamic growth
-            self.states.append(state)  # Expose these states with their original names
-            state.initialize(self)  # Connect the state to this people instance
-            setattr(self, state.name, state)
+    def _initialize_states(self, sim=None):
+        for state in self.states.values():
+            state.initialize(sim=sim, people=self)  # Connect the state to this people instance
         return
 
     def initialize(self, sim):
@@ -218,6 +221,8 @@ class People(BasePeople):
             rng.initialize(sim.rng_container, self.slot)
             
         # Define age (CK: why is age handled differently than sex?)
+        print('GUGUGUUUUGUGUG')
+        self._initialize_states(sim=sim) # Now initialize with the sim
         self.age[:] = self.age_data_dist.rvs(len(self))
         
         self.initialized = True
