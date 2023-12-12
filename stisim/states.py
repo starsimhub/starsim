@@ -389,12 +389,13 @@ class State(FusedArray):
                 sim_still_needed = True
 
         people.add_state(self, die=False) # CK: should not be needed
-        self._uid_map = people._uid_map
-        self.uid = people.uid
-        self._data.grow(len(self.uid))
-        self._data[:len(self.uid)] = self._new_vals(self.uid)
-        self.values = self._data._view
-        self._initialized = True if not sim_still_needed else False
+        if not sim_still_needed:
+            self._uid_map = people._uid_map
+            self.uid = people.uid
+            self._data.grow(len(self.uid))
+            self._data[:len(self.uid)] = self._new_vals(self.uid)
+            self.values = self._data._view
+            self._initialized = True
         return
 
     def grow(self, uids):
