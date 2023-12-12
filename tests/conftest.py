@@ -4,7 +4,7 @@ import stisim as ss
 import pytest
 
 # Run all tests with both single and multi RNG streams
-@pytest.fixture(params=['single','multi'], autouse=True)
+@pytest.fixture(params=['single','multi'], autouse=False)
 def set_rng_type(request):
     original_rng_type = ss.options.multirng
     if request.param == 'single':
