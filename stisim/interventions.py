@@ -370,11 +370,6 @@ class BaseTreatment(Intervention):
         accept_uids = np.array([], dtype=int)
         eligible_uids = self.check_eligibility(sim)  # Apply eligiblity
         if len(eligible_uids):
-            import traceback;
-            traceback.print_exc();
-            import pdb;
-            pdb.set_trace()
-
             accept_uids = ss.binomial_filter(self.prob[0], eligible_uids)
         return accept_uids
 
@@ -391,18 +386,9 @@ class BaseTreatment(Intervention):
         # Get indices of who will get treated
         treat_candidates = self.get_candidates(sim)  # NB, this needs to be implemented by derived classes
         still_eligible = self.check_eligibility(sim)
-
-        if len(treat_candidates)>0:
-            import traceback;
-            traceback.print_exc();
-            import pdb;
-            pdb.set_trace()
-
         treat_uids = treat_candidates[still_eligible]
         if len(treat_uids):
-
             self.outcomes = self.product.administer(sim, treat_uids)
-
         return treat_uids
 
 
