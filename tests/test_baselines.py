@@ -14,8 +14,17 @@ benchmark_filename = sc.thisdir(__file__, 'benchmark.json')
 parameters_filename = sc.thisdir(ss.__file__, 'regression', f'pars_v{ss.__version__}.json')
 sc.options.set(interactive=False) # Assume not running interactively
 
+# Define the parameters
+pars = sc.objdict(
+    start         = 2000,       # Starting year
+    n_years       = 20,         # Number of years to simulate
+    dt            = 0.2,        # Timestep
+    verbose       = 0,          # Don't print details of the run
+    rand_seed     = 2,          # Set a non-default seed
+)
 
 def make_people():
+    ss.set_seed(pars.rand_seed)
     n_agents = int(10e3)
     networks = [ss.mf(), ss.maternal()]
     ppl = ss.People(n_agents, networks=networks)
@@ -31,15 +40,6 @@ def make_sim(ppl=None, do_plot=False, **kwargs):
     
     if ppl is None:
         ppl = make_people()
-    
-    # Define the parameters
-    pars = sc.odict(
-        start         = 2000,       # Starting year
-        n_years       = 20,         # Number of years to simulate
-        dt            = 0.2,        # Timestep
-        verbose       = 0,          # Don't print details of the run
-        rand_seed     = 2,          # Set a non-default seed
-    )
     
     # Make the sim
     hiv = ss.HIV()
