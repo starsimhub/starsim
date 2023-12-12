@@ -11,7 +11,7 @@ __all__ = ['Result']
 
 class Result(np.ndarray):
     
-    def __new__(cls, module=None, name=None, shape=None, dtype=None, **kwargs):
+    def __new__(cls, module=None, name=None, shape=None, dtype=None):
         arr = np.zeros(shape=shape, dtype=dtype).view(cls)
         arr.name = name
         arr.module = module

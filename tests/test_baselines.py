@@ -76,6 +76,7 @@ def save_baseline():
 
     return
 
+
 def test_baseline():
     ''' Compare the current default sim against the saved baseline '''
     
