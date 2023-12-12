@@ -135,5 +135,5 @@ def test_syph_intvs():
 
 if __name__ == '__main__':
 
-    sim0 = test_syph()
+    # sim0 = test_syph()
     sim1 = test_syph_intvs()

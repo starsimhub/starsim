@@ -278,7 +278,7 @@ class Syphilis(STI):
 # %% Syphilis-related interventions
 datafiles = sc.objdict()
 for key in ['dx', 'tx', 'vx']:
-    datafiles[key] = f'stisim/products/syph_{key}.csv'
+    datafiles[key] = sc.thispath() / f'../products/syph_{key}.csv'
 
 __all__ += ['syph_dx', 'syph_tx', 'syph_screening', 'syph_treatment']
 
