@@ -203,7 +203,7 @@ class background_deaths(DemographicModule):
         self.death_probs[sim.people.female] = f_arr[age_inds[sim.people.female]]
         self.death_probs[sim.people.male] = m_arr[age_inds[sim.people.male]]
         self.death_probs[sim.people.age < 0] = 0  # Don't use background death rates for unborn babies
-        self.death_probs *= p.rel_death  # Adjust overall death probabilities
+        self.death_probs *= p.rel_death * sim.dt  # Adjust overall death probabilities by rel rates and dt
 
         # Get indices of people who die of other causes
         death_uids = ss.true(ss.binomial_arr(self.death_probs))

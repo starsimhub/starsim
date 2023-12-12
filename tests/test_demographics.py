@@ -29,7 +29,10 @@ def test_nigeria():
         start=1990,
         n_years=40,
         people=ppl,
-        demographics=[pregnancy, death],
+        demographics=[
+            pregnancy,
+            death
+        ],
     )
 
     sim.run()
@@ -38,10 +41,22 @@ def test_nigeria():
     data = nigeria_popsize[(nigeria_popsize.year >= 1990) & (nigeria_popsize.year <= 2030)]
 
     # Check
-    plt.figure()
-    plt.plot(sim.yearvec, sim.results.n_alive)
-    plt.scatter(data.year, data.n_alive)
-    plt.title('Population')
+    fig, ax = plt.subplots(2, 2)
+    ax = ax.ravel()
+    ax[0].plot(sim.yearvec, sim.results.n_alive)
+    ax[0].scatter(data.year, data.n_alive)
+    ax[0].set_title('Population')
+
+    ax[1].plot(sim.yearvec, sim.results.new_deaths)
+    ax[1].set_title('Deaths')
+
+    ax[2].plot(sim.yearvec, sim.results.pregnancy.pregnancies, label='Pregnancies')
+    ax[2].plot(sim.yearvec, sim.results.pregnancy.births, label='Births')
+    ax[2].set_title('Pregnancies and births')
+    ax[2].legend()
+
+    fig.tight_layout
+
     plt.show()
 
     return sim
