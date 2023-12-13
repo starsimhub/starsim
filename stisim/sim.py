@@ -7,6 +7,8 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 import itertools
+import pandas as pd
+
 
 __all__ = ['Sim', 'AlreadyRunError', 'diff_sims']
 
@@ -496,6 +498,33 @@ class Sim(sc.prettyobj):
             return
         else:
             return shrunken
+
+    def export_df(self):
+        """
+        Export results as a Pandas dataframe
+
+        :return:
+
+        """
+
+        if not self.results_ready:  # pragma: no cover
+            errormsg = 'Please run the sim before exporting the results'
+            raise RuntimeError(errormsg)
+
+        def flatten_results(d, prefix=''):
+            flat = {}
+            for key, val in d.items():
+                if isinstance(val, dict):
+                    flat.update(flatten_results(val, prefix=prefix+key+'.'))
+                else:
+                    flat[prefix+key] = val
+            return flat
+
+        resdict = flatten_results(self.results)
+        resdict['t'] = self.yearvec
+
+        df = pd.DataFrame.from_dict(resdict).set_index('t')
+        return df
 
     def save(self, filename=None, keep_people=None, skip_attrs=None, **kwargs):
         """
