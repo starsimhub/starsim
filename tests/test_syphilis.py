@@ -136,6 +136,15 @@ def test_syph_intvs():
     sim_intv = ss.Sim(interventions=[syph_screening, bpg], **sim_kwargs)
     sim_intv.run()
 
+    # Check plots
+    burnin = 10
+    pi = int(burnin/sim_base.dt)
+    plt.figure()
+    plt.plot(sim_base.yearvec[pi:], sim_base.results.syphilis.n_infected[pi:], label='Baseline')
+    plt.plot(sim_base.yearvec[pi:], sim_intv.results.syphilis.n_infected[pi:], label='S&T')
+    plt.title('Syphilis infections')
+    plt.show()
+
     return sim_base, sim_intv
 
 
