@@ -56,10 +56,10 @@ class RSV(Disease):
         # Parameters
         default_pars = dict(
             # RSV natural history
-            dur_exposed=ss.lognormal(5, 2),  # SOURCE
-            dur_symptomatic=ss.lognormal(20, 5),  # SOURCE
+            dur_exposed=ss.lognormal(5, 2),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4072624/
+            dur_symptomatic=ss.lognormal(12, 20),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4072624/
             dur_severe=ss.lognormal(20, 5),  # SOURCE
-            dur_immune=ss.lognormal(60, 10),
+            dur_immune=ss.lognormal(100, 10),
             prognoses=dict(
                 age_cutoffs=np.array([0, 1, 5, 15, 55]),  # Age cutoffs (lower limits)
                 sus_ORs=np.array([2.50, 1.50, 0.25, 0.50, 1.00]),  # Odds ratios for relative susceptibility
@@ -69,7 +69,7 @@ class RSV(Disease):
                 crit_probs=np.array([0.0003, 0.00003, 0.00003, 0.00003, 0.00003]), # Overall probability of developing critical symptoms
                 death_probs=np.array([0.00003, 0.00003, 0.00003, 0.00003, 0.00003]),  # Overall probability of dying
             ),
-            beta_seasonality=0.65,
+            beta_seasonality=1,
             phase_shift=5,
 
             # Initial conditions
@@ -100,12 +100,15 @@ class RSV(Disease):
         super().init_results(sim)
         return
 
-    def get_seasonality(self, sim):
+    def get_woy(self, sim):
         year = sim.yearvec[sim.ti]
         days = int((year - int(year)) * 365.25)
         base_date = pd.to_datetime(f'{int(year)}-01-01')
         datetime = base_date + pd.DateOffset(days=days)
-        woy = sc.date(datetime).isocalendar()[1]
+        return sc.date(datetime).isocalendar()[1]
+
+    def get_seasonality(self, sim):
+        woy = self.get_woy(sim)
         return (1 + self.pars['beta_seasonality'] * np.cos((2 * np.pi * woy / 52) + self.pars['phase_shift']))
 
     def set_initial_states(self, sim):
@@ -115,8 +118,10 @@ class RSV(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        n_init_cases = int(self.pars['init_prev'] * len(sim.people))
-        initial_cases = np.random.choice(sim.people.uid, n_init_cases, replace=False)
+
+        eligible_uids = ss.true(sim.people.age < 5)
+        n_init_cases = int(self.pars['init_prev'] * len(eligible_uids))
+        initial_cases = np.random.choice(eligible_uids, n_init_cases, replace=False)
         self.set_prognoses(sim, initial_cases)
         return
 

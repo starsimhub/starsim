@@ -68,6 +68,35 @@ class HouseholdNetwork(rn.RandomNetwork):
         return
 
 
+class SchoolNetwork(rn.RandomNetwork):
+
+    def __init__(self, *, n_contacts: ss.Distribution, dynamic=True, age_range=[3,12], **kwargs):
+        """
+        :param n_contacts: A distribution of contacts e.g., ss.delta(5), ss.neg_binomial(5,2)
+        :param dynamic: If True, regenerate contacts each timestep
+        """
+        super().__init__(n_contacts=n_contacts, dynamic=dynamic, **kwargs)
+        self.age_range=age_range
+
+
+    def update(self, people: ss.People, force: bool = True) -> None:
+        """
+        Regenerate contacts
+
+        Args:
+            force: If True, ignore the `self.dynamic` flag. This is required for initialization.
+
+        """
+
+        if not self.dynamic and not force:
+            return
+
+        people_in_age = ss.true((people.age >= self.age_range[0]) & (people.age <= self.age_range[1]))
+        number_of_contacts = self.n_contacts.sample(len(people_in_age))
+        number_of_contacts = np.round(number_of_contacts / 2).astype(ss.int_)  # One-way contacts
+        self.contacts.p1, self.contacts.p2 = self.get_contacts(people_in_age.__array__(), number_of_contacts)
+        self.contacts.beta = np.ones(len(self.contacts.p1), dtype=ss.float_)
+
 
 class rsv(cn.Connector):
     """ Simple connector whereby you cannot be infected with RSV A and B simultaneously"""
@@ -147,11 +176,11 @@ def test_rsv():
     # Make rsv module
     rsv_a = ss.RSV(name='rsv_a')
     rsv_a.pars['beta'] = {'household': .25, 'school': .15, 'community': .05, 'maternal': 0}
-    rsv_a.pars['init_prev'] = 0.05
+    rsv_a.pars['init_prev'] = 0.1
 
     rsv_b = ss.RSV(name='rsv_b')
     rsv_b.pars['beta'] = {'household': .25, 'school': .15, 'community': .05, 'maternal': 0}
-    rsv_b.pars['init_prev'] = 0.05
+    rsv_b.pars['init_prev'] = 0.1
 
 
     # Make demographic modules
@@ -164,17 +193,16 @@ def test_rsv():
     # Make people and networks
     ppl = ss.People(10000, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
     RandomNetwork_household = HouseholdNetwork(n_contacts=ss.poisson(5), dynamic=False)
-    RandomNetwork_school = ss.RandomNetwork(n_contacts=ss.poisson(20))
-    RandomNetwork_community = ss.RandomNetwork(n_contacts=ss.poisson(10))
+    RandomNetwork_school = SchoolNetwork(n_contacts=ss.poisson(20), dynamic=False)
     maternal = ss.maternal()
     ppl.networks = ss.ndict(household=RandomNetwork_household,
                             school=RandomNetwork_school,
-                            community=RandomNetwork_community,
+                            # community=RandomNetwork_community,
                             maternal=maternal)
     diseases = ss.ndict(rsv_a=rsv_a, rsv_b=rsv_b)
     rsv_connector=rsv(name='rsv_connector')
     pars = {'interventions':[rsv_maternal_vaccine(start_year=2000)]}
-    sim = ss.Sim(dt=1/52, n_years=5, people=ppl,
+    sim = ss.Sim(dt=1/52, n_years=3, people=ppl,
                  # pars=pars,
                  diseases=diseases, demographics=[pregnancy, death],
                  connectors=rsv_connector
