@@ -161,10 +161,7 @@ class Disease(ss.Module):
         """
         Finalize results
         """
-        # Scale results
-        for reskey, res in self.results.items():
-            if isinstance(res, ss.Result) and res.scale:
-                self.results[reskey] = self.results[reskey]*sim.pars.pop_scale
+        super().finalize_results(sim)
         return
 
     def update_pre(self, sim):

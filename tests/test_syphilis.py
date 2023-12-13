@@ -24,7 +24,7 @@ def make_syph_sim():
     death = ss.background_deaths(death_rates)
 
     # Make people and networks
-    ppl = ss.People(10000, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
+    ppl = ss.People(5000, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
     mf = ss.mf(
         pars=dict(dur=ss.lognormal(1, 5))
     )
@@ -109,8 +109,6 @@ def test_syph():
 
 def test_syph_intvs():
 
-    sim_kwargs = make_syph_sim()
-
     # Interventions
     # screen_eligible = lambda sim: sim.demographics.pregnancy.pregnant
     screen_eligible = lambda sim: sim.people.networks.mf.active(sim.people)
@@ -130,14 +128,19 @@ def test_syph_intvs():
         label='bpg'
     )
 
-    sim = ss.Sim(interventions=[syph_screening, bpg], **sim_kwargs)
-    sim.run()
+    sim_kwargs = make_syph_sim()
+    sim_base = ss.Sim(**sim_kwargs)
+    sim_base.run()
 
-    return sim
+    sim_kwargs = make_syph_sim()
+    sim_intv = ss.Sim(interventions=[syph_screening, bpg], **sim_kwargs)
+    sim_intv.run()
+
+    return sim_base, sim_intv
 
 
 
 if __name__ == '__main__':
 
-    sim0 = test_syph()
-    # sim1 = test_syph_intvs()
+    # sim0 = test_syph()
+    sim_base, sim_intv = test_syph_intvs()

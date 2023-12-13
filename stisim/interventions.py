@@ -22,6 +22,10 @@ class Intervention(ss.Module):
     def apply(self, sim, *args, **kwargs):
         raise NotImplementedError
 
+    def finalize(self, sim):
+        super().finalize(sim)
+        self.finalize_results(sim)
+
 
 # %% Template classes for routine and campaign delivery
 __all__ += ['RoutineDelivery', 'CampaignDelivery']
@@ -203,13 +207,16 @@ class BaseScreening(BaseTest):
         """
         Perform screening by finding who's eligible, finding who accepts, and applying the product.
         """
-        accept_inds = np.array([])
+        accept_uids = np.array([])
         if sim.ti in self.timepoints:
-            accept_inds = self.deliver(sim)
-            self.screened[accept_inds] = True
-            self.screens[accept_inds] += 1
-            self.ti_screened[accept_inds] = sim.ti
-        return accept_inds
+            accept_uids = self.deliver(sim)
+            self.screened[accept_uids] = True
+            self.screens[accept_uids] += 1
+            self.ti_screened[accept_uids] = sim.ti
+            self.results['n_screened'][sim.ti] = len(accept_uids)
+            self.results['n_dx'][sim.ti] = len(self.outcomes['positive'])
+
+        return accept_uids
 
 
 class BaseTriage(BaseTest):
@@ -386,7 +393,7 @@ class BaseTreatment(Intervention):
         # Get indices of who will get treated
         treat_candidates = self.get_candidates(sim)  # NB, this needs to be implemented by derived classes
         still_eligible = self.check_eligibility(sim)
-        treat_uids = treat_candidates[still_eligible]
+        treat_uids = np.intersect1d(treat_candidates, still_eligible)
         if len(treat_uids):
             self.outcomes = self.product.administer(sim, treat_uids)
         return treat_uids
@@ -477,7 +484,7 @@ class dx(Product):
         """
 
         # Pre-fill with the default value, which is set to be the last value in the hierarchy
-        results = pd.DataFrame({'uids': uids, 'result': self.default_value})
+        results = sc.dataframe({'uids': uids, 'result': self.default_value})
         people = sim.people
 
         for disease in self.diseases:
@@ -491,7 +498,8 @@ class dx(Product):
 
                 # Sort people into one of the possible result states and then update their overall results
                 this_result = ss.n_multinomial(probs, len(these_uids))
-                results[results.uids.isin(these_uids)].result = np.minimum(this_result, results[results.uids.isin(these_uids)].result )
+                row_inds = results.uids.isin(these_uids)
+                results.loc[row_inds, 'result'] = np.minimum(this_result, results.loc[row_inds, 'result'])
 
             if return_format == 'dict':
                 output = {self.hierarchy[i]: results[results.result == i].uids.values for i in range(len(self.hierarchy))}
@@ -508,6 +516,8 @@ class tx(Product):
     def __init__(self, df, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.df = df
+        self.diseases = df.disease.unique()
+        self.states = df.state.unique()
 
     def administer(self, sim, uids, return_format='dict'):
         """

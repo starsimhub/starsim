@@ -277,6 +277,13 @@ class Sim(sc.prettyobj):
                 errormsg = f'Intervention {intervention} does not seem to be a valid intervention: must be a function or Intervention subclass'
                 raise TypeError(errormsg)
 
+            # Add the intervention parameters and results into the Sim's dicts
+            self.pars[intervention.name] = intervention.pars
+            self.results[intervention.name] = intervention.results
+
+            # Add intervention states to the People's dicts
+            self.people.add_module(intervention)
+
         return
 
     def init_analyzers(self):
