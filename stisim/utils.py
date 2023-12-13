@@ -188,17 +188,31 @@ __all__ += ['set_seed']
 
 
 def set_seed(seed=None):
-    """
-    Reset the random seed. This function also resets Python's built-in random
+    '''
+    Reset the random seed -- complicated because of Numba, which requires special
+    syntax to reset the seed. This function also resets Python's built-in random
     number generated.
 
     Args:
         seed (int): the random seed
-    """
+    '''
+
+    @nb.njit
+    def set_seed_numba(seed):
+        return np.random.seed(seed)
+
+    def set_seed_regular(seed):
+        return np.random.seed(seed)
+
     # Dies if a float is given
     if seed is not None:
         seed = int(seed)
-    np.random.seed(seed)  # If None, reinitializes it
+
+    set_seed_regular(seed) # If None, reinitializes it
+    if seed is None: # Numba can't accept a None seed, so use our just-reinitialized Numpy stream to generate one
+        seed = np.random.randint(1e9)
+    set_seed_numba(seed)
+
     return
 
 
