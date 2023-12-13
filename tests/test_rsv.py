@@ -146,11 +146,11 @@ def test_rsv():
 
     # Make rsv module
     rsv_a = ss.RSV(name='rsv_a')
-    rsv_a.pars['beta'] = {'household': .85, 'school': .85, 'community': .25, 'maternal': 0}
+    rsv_a.pars['beta'] = {'household': .25, 'school': .15, 'community': .05, 'maternal': 0}
     rsv_a.pars['init_prev'] = 0.05
 
     rsv_b = ss.RSV(name='rsv_b')
-    rsv_b.pars['beta'] = {'household': .85, 'school': .85, 'community': .25, 'maternal': 0}
+    rsv_b.pars['beta'] = {'household': .25, 'school': .15, 'community': .05, 'maternal': 0}
     rsv_b.pars['init_prev'] = 0.05
 
 
@@ -164,8 +164,8 @@ def test_rsv():
     # Make people and networks
     ppl = ss.People(10000, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
     RandomNetwork_household = HouseholdNetwork(n_contacts=ss.poisson(5), dynamic=False)
-    RandomNetwork_school = ss.RandomNetwork(n_contacts=ss.poisson(30))
-    RandomNetwork_community = ss.RandomNetwork(n_contacts=ss.poisson(100))
+    RandomNetwork_school = ss.RandomNetwork(n_contacts=ss.poisson(20))
+    RandomNetwork_community = ss.RandomNetwork(n_contacts=ss.poisson(10))
     maternal = ss.maternal()
     ppl.networks = ss.ndict(household=RandomNetwork_household,
                             school=RandomNetwork_school,
@@ -177,7 +177,7 @@ def test_rsv():
     sim = ss.Sim(dt=1/52, n_years=5, people=ppl,
                  # pars=pars,
                  diseases=diseases, demographics=[pregnancy, death],
-                 # connectors=rsv_connector
+                 connectors=rsv_connector
                  )
     sim.run()
 
@@ -189,21 +189,21 @@ def test_rsv():
     plt.show()
 
     # Check
-    fig, ax = plt.subplots(2, 2)
-    ax = ax.ravel()
-    ax[0].plot(sim.yearvec, sim.results.n_alive)
-    ax[0].set_title('Population')
-
-    ax[1].plot(sim.yearvec, sim.results.new_deaths)
-    ax[1].set_title('Deaths')
-
-    ax[2].plot(sim.yearvec, sim.results.pregnancy.pregnancies, label='Pregnancies')
-    ax[2].plot(sim.yearvec, sim.results.pregnancy.births, label='Births')
-    ax[2].set_title('Pregnancies and births')
-    ax[2].legend()
-
-    fig.tight_layout()
-    fig.show()
+    # fig, ax = plt.subplots(2, 2)
+    # ax = ax.ravel()
+    # ax[0].plot(sim.yearvec, sim.results.n_alive)
+    # ax[0].set_title('Population')
+    #
+    # ax[1].plot(sim.yearvec, sim.results.new_deaths)
+    # ax[1].set_title('Deaths')
+    #
+    # ax[2].plot(sim.yearvec, sim.results.pregnancy.pregnancies, label='Pregnancies')
+    # ax[2].plot(sim.yearvec, sim.results.pregnancy.births, label='Births')
+    # ax[2].set_title('Pregnancies and births')
+    # ax[2].legend()
+    #
+    # fig.tight_layout()
+    # fig.show()
 
 
 

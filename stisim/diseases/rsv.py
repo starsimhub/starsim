@@ -56,13 +56,13 @@ class RSV(Disease):
         # Parameters
         default_pars = dict(
             # RSV natural history
-            dur_exposed=ss.lognormal(3, 2),  # SOURCE
-            dur_symptomatic=ss.lognormal(10, 5),  # SOURCE
+            dur_exposed=ss.lognormal(5, 2),  # SOURCE
+            dur_symptomatic=ss.lognormal(20, 5),  # SOURCE
             dur_severe=ss.lognormal(20, 5),  # SOURCE
             dur_immune=ss.lognormal(60, 10),
             prognoses=dict(
                 age_cutoffs=np.array([0, 1, 5, 15, 55]),  # Age cutoffs (lower limits)
-                sus_ORs=np.array([2.50, 1.50, 1.00, 1.00, 1.50]),  # Odds ratios for relative susceptibility
+                sus_ORs=np.array([2.50, 1.50, 0.25, 0.50, 1.00]),  # Odds ratios for relative susceptibility
                 trans_ORs=np.array([1.00, 1.00, 1.00, 1.00, 1.00]),  # Odds ratios for relative transmissibility
                 symp_probs=np.array([1, 0.84, 0.5, 0.2, 0.15]),  # Overall probability of developing symptoms
                 severe_probs=np.array([0.050, 0.00050, 0.00050, 0.00050, 0.0050]), # Overall probability of developing severe symptoms
@@ -85,8 +85,7 @@ class RSV(Disease):
 
     @property
     def infectious(self):
-        # return self.infected
-        return self.symptomatic | self.severe | self.critical
+        return self.symptomatic
 
     @property
     def rel_sus(self):
@@ -129,12 +128,12 @@ class RSV(Disease):
                 age_bins = np.digitize(sim.people.age, bins=self.pars['prognoses']['age_cutoffs']) - 1
                 trans_OR = self.pars['prognoses']['trans_ORs'][age_bins]
                 sus_OR = self.pars['prognoses']['sus_ORs'][age_bins]
-                rel_trans = (self.symptomatic & sim.people.alive).astype(float) * trans_OR * self.rel_trans
+                rel_trans = (self.infectious & sim.people.alive).astype(float) * trans_OR * self.rel_trans
                 rel_sus = (self.susceptible & sim.people.alive).astype(float) * sus_OR * self.rel_sus
                 for a, b, beta in [[layer.contacts['p1'], layer.contacts['p2'], self.pars['beta'][k]],
                                    [layer.contacts['p2'], layer.contacts['p1'], self.pars['beta'][k]]]:
                     # probability of a->b transmission
-                    p_transmit = rel_trans[a] * rel_sus[b] * layer.contacts['beta'] * beta * beta_seasonality * sim.dt
+                    p_transmit = rel_trans[a] * rel_sus[b] * layer.contacts['beta'] * beta * beta_seasonality #* sim.dt
                     new_cases = np.random.random(len(a)) < p_transmit
                     if new_cases.any():
                         self.set_prognoses(sim, b[new_cases], source_uids=a[new_cases])
@@ -175,7 +174,7 @@ class RSV(Disease):
 
     def check_severe(self, sim):
         # Severe
-        severe = ~self.severe & (self.ti_severe <= sim.ti)
+        severe = ~self.severe & ~self.critical & (self.ti_severe <= sim.ti)
         self.severe[severe] = True
 
         # Determine which severe cases will become critical
@@ -193,7 +192,7 @@ class RSV(Disease):
 
     def check_critical(self, sim):
         # Critical
-        critical = ~self.critical & (self.ti_critical <= sim.ti)
+        critical = self.severe & (self.ti_critical <= sim.ti)
         self.critical[critical] = True
 
 
