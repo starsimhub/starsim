@@ -376,10 +376,10 @@ class State(FusedArray):
     def initialize(self, sim=None, people=None):
         if self._initialized:
             return
-    
+
         if sim is not None and people is None:
             people = sim.people
-        
+
         sim_still_needed = False
         if isinstance(self.fill_value, rv_frozen):
             if sim is not None:
@@ -411,9 +411,10 @@ class State(FusedArray):
         self._data.grow(n)
         self.values = self._data._view
         self._data[-n:] = self._new_vals(uids)
+        return
 
     def _trim(self, inds):
         # Trim arrays to remove agents - should only be called via `People.remove()`
         self._data._trim(inds)
         self.values = self._data._view
-
+        return

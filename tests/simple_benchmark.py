@@ -7,7 +7,7 @@ do_plot = False
 with sc.timer():
     ppl = sti.People(int(1e3))
     ppl.networks = sti.ndict(sti.simple_sexual(), sti.maternal())
-    
+
     hiv = sti.HIV()
     hiv.pars['beta'] = {'simple_sexual': [0.0008, 0.0004], 'maternal': [0.2, 0]}
     

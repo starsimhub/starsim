@@ -461,7 +461,7 @@ class Sim(sc.prettyobj):
 
         for module in self.modules:
             module.finalize(self)
-            
+
         self.summarize()
         self.results_ready = True  # Set this first so self.summary() knows to print the results
         self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim

@@ -2,7 +2,6 @@
 Experimenting with a sexual orentation class
 """
 
-import sciris
 import stisim as ss
 import numpy as np
 
@@ -100,6 +99,3 @@ print(f'p2: {p2.pop_order}\n')
 # Pairs:
 # [p1, p2], [p3, p4]
 # [p1, p4], [na, na]
-
-
-
