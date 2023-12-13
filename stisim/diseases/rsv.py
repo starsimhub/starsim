@@ -74,8 +74,8 @@ class RSV(Disease):
 
             # Initial conditions
             init_prev=0.03,
-            imm_init=1,
-            imm_decay=dict(form='growth_decay', growth_time=14, decay_rate=0.01),
+            # imm_init=1,
+            # imm_decay=dict(form='growth_decay', growth_time=14, decay_rate=0.01),
             # immunity=None
 
         )
@@ -94,7 +94,7 @@ class RSV(Disease):
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.set_immunity(sim)
+        # self.set_immunity(sim)
         return
     def init_results(self, sim):
         """ Initialize results """
@@ -129,7 +129,7 @@ class RSV(Disease):
                 age_bins = np.digitize(sim.people.age, bins=self.pars['prognoses']['age_cutoffs']) - 1
                 trans_OR = self.pars['prognoses']['trans_ORs'][age_bins]
                 sus_OR = self.pars['prognoses']['sus_ORs'][age_bins]
-                rel_trans = (self.infectious & sim.people.alive).astype(float) * trans_OR * self.rel_trans
+                rel_trans = (self.symptomatic & sim.people.alive).astype(float) * trans_OR * self.rel_trans
                 rel_sus = (self.susceptible & sim.people.alive).astype(float) * sus_OR * self.rel_sus
                 for a, b, beta in [[layer.contacts['p1'], layer.contacts['p2'], self.pars['beta'][k]],
                                    [layer.contacts['p2'], layer.contacts['p1'], self.pars['beta'][k]]]:
@@ -157,7 +157,7 @@ class RSV(Disease):
 
     def check_symptomatic(self, sim):
         # Symptomatic
-        symptomatic = self.ti_symptomatic == sim.ti
+        symptomatic = self.exposed & (self.ti_symptomatic <= sim.ti)
         self.symptomatic[symptomatic] = True
         self.exposed[symptomatic] = False
 
@@ -175,7 +175,7 @@ class RSV(Disease):
 
     def check_severe(self, sim):
         # Severe
-        severe = self.ti_severe == sim.ti
+        severe = ~self.severe & (self.ti_severe <= sim.ti)
         self.severe[severe] = True
 
         # Determine which severe cases will become critical
@@ -193,19 +193,25 @@ class RSV(Disease):
 
     def check_critical(self, sim):
         # Critical
-        critical = self.ti_critical == sim.ti
+        critical = ~self.critical & (self.ti_critical <= sim.ti)
         self.critical[critical] = True
 
 
     def check_recovered(self, sim):
         # Recovered/immune
-        recovered = self.ti_recovered == sim.ti
+        recovered = self.infected & (self.ti_recovered <= sim.ti)
         self.recovered[recovered] = True
         self.immune[recovered] = True
         self.exposed[recovered] = False
         self.infected[recovered] = False
         self.symptomatic[recovered] = False
         self.severe[recovered] = False
+        self.critical[recovered] = False
+
+        self.ti_symptomatic[recovered] = ss.INT_NAN
+        self.ti_severe[recovered] = ss.INT_NAN
+        self.ti_critical[recovered] = ss.INT_NAN
+        self.ti_recovered[recovered] = ss.INT_NAN
 
         recovered_uids = ss.true(recovered)
 
@@ -216,7 +222,7 @@ class RSV(Disease):
 
     def check_susceptible(self, sim):
         # Susceptible
-        susceptible = self.ti_susceptible == sim.ti
+        susceptible = self.immune & (self.ti_susceptible <= sim.ti)
         self.immune[susceptible] = False
         self.susceptible[susceptible] = True
 
@@ -234,7 +240,7 @@ class RSV(Disease):
 
         # Subset target_uids to only include ones who are infectious
         if source_uids is not None:
-            infectious_sources = self.infectious[source_uids].values.nonzero()[-1]
+            infectious_sources = self.symptomatic[source_uids].values.nonzero()[-1]
             uids = target_uids[infectious_sources]
         else:
             uids = target_uids
@@ -251,13 +257,10 @@ class RSV(Disease):
         # Exposed to symptomatic
         dur_exposed = self.pars.dur_exposed(n_uids)/365 # duration in years
         self.dur_exposed[uids] = dur_exposed
-        self.ti_symptomatic[symptomatic_uids] = sim.ti + rr(dur_exposed/sim.dt)
+        self.ti_symptomatic[symptomatic_uids] = sim.ti + rr(self.dur_exposed[symptomatic_uids].values/sim.dt)
 
-        # Never symptomatic, set day recover and dur_immunity
-        dur_immune = self.pars.dur_immune(len(never_symptomatic_uids)) / 365
-        self.ti_recovered[never_symptomatic_uids] = sim.ti + rr(dur_exposed / sim.dt)
-        self.dur_immune[never_symptomatic_uids] = dur_immune
-        self.ti_susceptible[never_symptomatic_uids] = self.ti_recovered[never_symptomatic_uids] + rr(dur_immune / sim.dt)
+        # Never symptomatic, set day recover
+        self.ti_recovered[never_symptomatic_uids] = sim.ti + rr(self.dur_exposed[never_symptomatic_uids].values / sim.dt)
 
         return
 

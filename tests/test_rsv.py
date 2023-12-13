@@ -156,13 +156,13 @@ def test_rsv():
 
     # Make demographic modules
     fertility_rates = {'fertility_rates': pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')}
-    death_rates = {'death_rates': pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv'),
-                   'rel_death':0.1}
+    death_rates = {'death_rates': pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')}
+
     pregnancy = ss.Pregnancy(fertility_rates)
     death = ss.background_deaths(death_rates)
 
     # Make people and networks
-    ppl = ss.People(10000)
+    ppl = ss.People(10000, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
     RandomNetwork_household = HouseholdNetwork(n_contacts=ss.poisson(5), dynamic=False)
     RandomNetwork_school = ss.RandomNetwork(n_contacts=ss.poisson(30))
     RandomNetwork_community = ss.RandomNetwork(n_contacts=ss.poisson(100))
@@ -187,6 +187,24 @@ def test_rsv():
     plt.title('RSV infections')
     plt.legend()
     plt.show()
+
+    # Check
+    fig, ax = plt.subplots(2, 2)
+    ax = ax.ravel()
+    ax[0].plot(sim.yearvec, sim.results.n_alive)
+    ax[0].set_title('Population')
+
+    ax[1].plot(sim.yearvec, sim.results.new_deaths)
+    ax[1].set_title('Deaths')
+
+    ax[2].plot(sim.yearvec, sim.results.pregnancy.pregnancies, label='Pregnancies')
+    ax[2].plot(sim.yearvec, sim.results.pregnancy.births, label='Births')
+    ax[2].set_title('Pregnancies and births')
+    ax[2].legend()
+
+    fig.tight_layout()
+    fig.show()
+
 
 
     return sim
