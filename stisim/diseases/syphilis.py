@@ -278,7 +278,7 @@ class Syphilis(STI):
 # %% Syphilis-related interventions
 datafiles = sc.objdict()
 for key in ['dx', 'tx', 'vx']:
-    datafiles[key] = f'stisim/products/syph_{key}.csv'
+    datafiles[key] = sc.thispath() / f'../products/syph_{key}.csv'
 
 __all__ += ['syph_dx', 'syph_tx', 'syph_screening', 'syph_treatment']
 
@@ -312,7 +312,7 @@ class syph_screening(ss.routine_screening):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # self.requires = Syphilis
+        # self.requires = Syphilis  # not currently working
         return
 
     def _parse_product_str(self, product):
@@ -336,7 +336,8 @@ class syph_screening(ss.routine_screening):
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.results += ss.Result('syphilis', 'n_dx', sim.npts, dtype=int)
+        self.results += ss.Result('syphilis', 'n_screened', sim.npts, dtype=int, scale=True)
+        self.results += ss.Result('syphilis', 'n_dx', sim.npts, dtype=int, scale=True)
         return
 
 
