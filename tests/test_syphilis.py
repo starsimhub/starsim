@@ -24,6 +24,7 @@ def make_syph_sim():
     death = ss.background_deaths(death_rates)
 
     # Make people and networks
+    ss.set_seed(1)
     ppl = ss.People(5000, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
     mf = ss.mf(
         pars=dict(dur=ss.lognormal(1, 5))
@@ -128,21 +129,24 @@ def test_syph_intvs():
         label='bpg'
     )
 
-    sim_kwargs = make_syph_sim()
-    sim_base = ss.Sim(**sim_kwargs)
+    sim_kwargs0 = make_syph_sim()
+    sim_base = ss.Sim(**sim_kwargs0)
     sim_base.run()
 
-    sim_kwargs = make_syph_sim()
-    sim_intv = ss.Sim(interventions=[syph_screening, bpg], **sim_kwargs)
+    sim_kwargs1 = make_syph_sim()
+    sim_intv = ss.Sim(interventions=[syph_screening, bpg], **sim_kwargs1)
     sim_intv.run()
 
     # Check plots
     burnin = 10
     pi = int(burnin/sim_base.dt)
     plt.figure()
-    plt.plot(sim_base.yearvec[pi:], sim_base.results.syphilis.n_infected[pi:], label='Baseline')
-    plt.plot(sim_base.yearvec[pi:], sim_intv.results.syphilis.n_infected[pi:], label='S&T')
-    plt.title('Syphilis infections')
+    plt.plot(sim_base.yearvec[pi:], sim_base.results.syphilis.prevalence[pi:], label='Baseline')
+    plt.plot(sim_base.yearvec[pi:], sim_intv.results.syphilis.prevalence[pi:], label='S&T')
+    plt.ylim([0, 0.25])
+    plt.axvline(x=2020, color='k', ls='--')
+    plt.title('Syphilis prevalence')
+    plt.legend()
     plt.show()
 
     return sim_base, sim_intv
@@ -151,5 +155,5 @@ def test_syph_intvs():
 
 if __name__ == '__main__':
 
-    # sim0 = test_syph()
+    sim0 = test_syph()
     sim_base, sim_intv = test_syph_intvs()
