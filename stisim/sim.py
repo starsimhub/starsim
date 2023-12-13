@@ -471,7 +471,7 @@ class Sim(sc.prettyobj):
         summary = sc.objdict()
         flat = sc.flattendict(self.results, sep='_')
         for k,v in flat.items():
-            summary[k] = v.mean() # To fix later
+            summary[k] = v.mean()
         self.summary = summary
         return summary
         
