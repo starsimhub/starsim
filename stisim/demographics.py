@@ -243,7 +243,7 @@ class Pregnancy(DemographicModule):
             'fertility_rates': 0,
             'data_cols': {'year': 'Time', 'age': 'AgeGrp', 'value': 'ASFR'},
             'units_per_100': 1e-3,  # assumes fertility rates are per 1000. If using percentages, switch this to 1
-            'p_death': 0,  # Probability of maternal death. Question, should this be linked to age and/or duration?
+            'p_death': sps.bernoulli(p=0),  # Probability of maternal death. Question, should this be linked to age and/or duration?
         }, self.pars)
 
         # Validate fertility rate inputs

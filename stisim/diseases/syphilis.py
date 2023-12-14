@@ -6,6 +6,7 @@ import numpy as np
 import sciris as sc
 import pandas as pd
 from sciris import randround as rr
+import scipy.stats as sps
 
 import stisim as ss
 from .disease import STI
@@ -57,11 +58,11 @@ class Syphilis(STI):
         # Parameters
         default_pars = dict(
             # Adult syphilis natural history, all specified in years
-            dur_exposed=ss.lognormal(1/12, 1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_primary=ss.lognormal(1.5/12, 1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_secondary=ss.normal(3.6/12, 1.5/12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_temp=ss.lognormal(1, 6/12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_long=ss.lognormal(20, 8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_exposed=sps.lognorm(s=1/12, scale=1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_primary=sps.lognorm(s=1.5/12, scale=1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_secondary=sps.norm(loc=3.6/12, scale=1.5/12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_temp=sps.lognorm(s=1, scale=6/12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_long=sps.lognorm(s=20, scale=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_latent_temp=0.25,  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_tertiary=0.35,  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
 
@@ -81,7 +82,7 @@ class Syphilis(STI):
             ),
 
             # Initial conditions
-            init_prev=0.03,
+            seed_infections=sps.bernoulli(p=0.03),
         )
         self.pars = ss.omerge(default_pars, self.pars)
 
@@ -179,6 +180,10 @@ class Syphilis(STI):
 
         # Subset target_uids to only include ones with active infection
         if source_uids is not None:
+            # import traceback;
+            # traceback.print_exc();
+            # import pdb;
+            # pdb.set_trace()
             active_sources = self.active[source_uids].values.nonzero()[-1]
             uids = target_uids[active_sources]
         else:
@@ -193,13 +198,13 @@ class Syphilis(STI):
 
         # Set future dates and probabilities
         # Exposed to primary
-        dur_exposed = self.pars.dur_exposed(n_uids)
+        dur_exposed = self.pars.dur_exposed.rvs(uids)
         self.dur_exposed[uids] = dur_exposed
         self.ti_primary[uids] = sim.ti + rr(dur_exposed/sim.dt)
         self.dur_infection[uids] = dur_exposed
 
         # Primary to secondary
-        dur_primary = self.pars.dur_primary(n_uids)
+        dur_primary = self.pars.dur_primary.rvs(uids)
         self.ti_secondary[uids] = self.ti_primary[uids] + rr(dur_primary/sim.dt)
         self.dur_infection[uids] += dur_primary
 
@@ -210,15 +215,14 @@ class Syphilis(STI):
 
         # Secondary to latent_temp or latent_long
         latent_temp_uids = ss.binomial_filter(self.pars.p_latent_temp, uids)
-        n_latent_temp = len(latent_temp_uids)
         latent_long_uids = np.setdiff1d(uids, latent_temp_uids)
         n_latent_long = len(latent_long_uids)
 
-        dur_secondary_temp = self.pars.dur_secondary(n_latent_temp)
+        dur_secondary_temp = self.pars.dur_secondary.rvs(latent_temp_uids)
         self.ti_latent_temp[latent_temp_uids] = self.ti_secondary[latent_temp_uids] + rr(dur_secondary_temp/sim.dt)
         self.dur_infection[latent_temp_uids] += dur_secondary_temp
 
-        dur_secondary_long = self.pars.dur_secondary(n_latent_long)
+        dur_secondary_long = self.pars.dur_secondary.rvs(latent_long_uids)
         self.ti_latent_long[latent_long_uids] = self.ti_secondary[latent_long_uids] + rr(dur_secondary_long/sim.dt)
         self.dur_infection[latent_long_uids] += dur_secondary_long
 
@@ -226,21 +230,21 @@ class Syphilis(STI):
 
     def set_latent_temp_prognoses(self, sim, uids):
         # Primary to secondary
-        dur_latent_temp = self.pars.dur_latent_temp(len(uids))
+        dur_latent_temp = self.pars.dur_latent_temp.rvs(uids)
         self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_temp/sim.dt)
         self.dur_infection[uids] += dur_latent_temp
         return
 
     def set_latent_long_prognoses(self, sim, uids):
         # Primary to secondary
-        dur_latent_long = self.pars.dur_latent_long(len(uids))
+        dur_latent_long = self.pars.dur_latent_long.rvs(uids)
         self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_long/sim.dt)
         self.dur_infection[uids] += dur_latent_long
 
         # Latent_long to tertiary
         tertiary_uids = ss.binomial_filter(self.pars.p_tertiary, uids)
         n_tertiary = len(tertiary_uids)
-        dur_latent_long = self.pars.dur_latent_long(n_tertiary)
+        dur_latent_long = self.pars.dur_latent_long.rvs(tertiary_uids)
         self.ti_tertiary[tertiary_uids] = self.ti_latent_long[tertiary_uids] + rr(dur_latent_long/sim.dt)
         self.dur_infection[tertiary_uids] += dur_latent_long
 

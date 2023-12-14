@@ -7,6 +7,7 @@ import numpy as np
 import stisim as ss
 import pandas as pd
 import matplotlib.pyplot as plt
+import scipy.stats as sps
 
 
 def make_syph_sim():
@@ -25,9 +26,9 @@ def make_syph_sim():
 
     # Make people and networks
     ss.set_seed(1)
-    ppl = ss.People(5000, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
+    ppl = ss.People(5000)  #, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
     mf = ss.mf(
-        pars=dict(dur=ss.lognormal(1, 5))
+        pars=dict(dur=sps.lognorm(s=1, scale=5))
     )
     maternal = ss.maternal()
     ppl.networks = ss.ndict(mf, maternal)
@@ -65,7 +66,7 @@ def test_syph():
             """
             sppl = sim.people.syphilis
 
-            # Infection states: people must be exactly one of susceptible/infectious/inactive
+            # Infection states: people must be exactly one of these
             s1 = (sppl.susceptible | sppl.exposed | sppl.primary | sppl.secondary | sppl.latent_temp | sppl.latent_long | sppl.tertiary | sppl.congenital).all()
             if not s1:
                 raise ValueError('States should be collectively exhaustive but are not.')
@@ -156,4 +157,4 @@ def test_syph_intvs():
 if __name__ == '__main__':
 
     sim0 = test_syph()
-    sim_base, sim_intv = test_syph_intvs()
+    # sim_base, sim_intv = test_syph_intvs()

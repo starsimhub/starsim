@@ -366,30 +366,16 @@ class mf(SexualNetwork, DynamicNetwork):
         self.set_participation(people, upper_age=upper_age)
 
     def set_participation(self, people, upper_age=None):
-        if upper_age is None:
-            uids = people.uid
-        else:
-            uids = people.uid[(people.age < upper_age)]
-
         # Set people who will participate in the network at some point
         year = people.year
         if upper_age is None: uids = people.uid
         else: uids = people.uid[(people.age < upper_age)]
-
-        for sk in ['f', 'm']:
-            sex_uids = ss.true(people[sk][uids])
-            df = self.pars.part_rates.loc[self.pars.part_rates.sex == sk]
-            pr = np.interp(year, df['year'], df['part_rates']) * self.pars.rel_part_rates
-            dist = ss.choice([True, False], probabilities=[pr, 1-pr])(len(sex_uids))
-            self.participant[sex_uids] = dist
+        self.participant[uids] = self.pars.participation_dist.rvs(uids)
 
     def set_debut(self, people, upper_age=None):
         # Set debut age
-        if upper_age is None:
-            uids = people.uid
-        else:
-            uids = people.uid[(people.age < upper_age)]
-
+        if upper_age is None: uids = people.uid
+        else: uids = people.uid[(people.age < upper_age)]
         self.debut[uids] = self.pars.debut_dist.rvs(uids)
         uids_to_update = uids[np.isnan(people.debut[uids])]
         people.debut[uids_to_update] = self.debut[uids_to_update]

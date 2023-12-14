@@ -300,7 +300,7 @@ class STI(Disease):
         alive_uids = ss.true(sim.people.alive) # Maybe just sim.people.uid?
         initial_cases = self.pars['seed_infections'].filter(alive_uids)
 
-        self.set_prognoses(sim, initial_cases, from_uids=None)  # TODO: sentinel value to indicate seeds?
+        self.set_prognoses(sim, initial_cases)  # TODO: sentinel value to indicate seeds?
         return
 
     def init_results(self, sim):
@@ -335,17 +335,11 @@ class STI(Disease):
                     if beta == 0:
                         continue
                     # probability of a->b transmission
-                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta # TODO: Needs DT
-                    new_cases_bool = np.random.random(len(a)) < p_transmit # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
+                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta  # TODO: Needs DT
+                    new_cases_bool = np.random.random(len(a)) < p_transmit  # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
                     new_cases.append(b[new_cases_bool])
                     sources.append(a[new_cases_bool])
-                    
-                    if len(new_cases):
-                        if layer.vertical:
-                            self.set_congenital(sim, target_uids=b[new_cases], source_uids=a[new_cases])
-                        else:
-                            self.set_prognoses(sim, new_cases, sources)
-                            
+
         return np.concatenate(new_cases), np.concatenate(sources)
 
     def _choose_new_cases_multirng(self, people):
@@ -447,13 +441,13 @@ class STI(Disease):
                 # Now determine whom infected each case
                 sources = self._determine_case_source_multirng(sim.people, new_cases)
             
-            if len(new_cases):
                 if any([layer.vertical for layer in sim.people.networks.values()]):
-                    raise NotImplementedError('Layers have not been defined for multi-RNG')
+                    # raise NotImplementedError('Layers have not been defined for multi-RNG')
+                    self.set_congenital(sim, new_cases, sources)
                 else:
                     self.set_prognoses(sim, new_cases, sources)
-        
-        return len(new_cases) # number of new cases made
+
+        return len(new_cases)  # Number of new cases made
 
     def set_prognoses(self, sim, target_uids, source_uids=None):
         pass

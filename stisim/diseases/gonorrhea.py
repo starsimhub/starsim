@@ -82,15 +82,15 @@ class Gonorrhea(STI):
         self.ti_infected[target_uids] = sim.ti
 
         # Set infection status
-        symp_uids = self.pars.p_symp.filter(uids)
+        symp_uids = self.pars.p_symp.filter(target_uids)
         self.symptomatic[symp_uids] = True
 
         # Set natural clearance
-        clear_uids = self.pars.p_clear.filter(uids)
+        clear_uids = self.pars.p_clear.filter(target_uids)
         dur = sim.ti + self.pars['dur_inf_in_days'].rvs(clear_uids)/365/sim.pars.dt # Convert from days to years and then adjust for dt
         self.ti_clearance[clear_uids] = dur
 
         return
 
-    def set_congenital(self, sim, target_uids):
+    def set_congenital(self, sim, target_uids, source_uids=None):
         pass
