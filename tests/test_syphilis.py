@@ -28,10 +28,10 @@ def make_syph_sim():
     ss.set_seed(1)
     ppl = ss.People(5000)  #, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
     mf = ss.mf(
-        pars=dict(dur=ss.lognorm(mean=1, stdev=5))
+        pars=dict(duration_dist=ss.lognorm(mean=1, stdev=5))
     )
-    maternal = ss.maternal()
-    ppl.networks = ss.ndict(mf, maternal)
+    # maternal = ss.maternal()
+    ppl.networks = ss.ndict(mf)  #, maternal)
 
     sim_kwargs = dict(
         dt=1/12,
@@ -84,7 +84,7 @@ def test_syph():
     sim.run()
 
     # Check plots
-    burnin = 10
+    burnin = 0
     pi = int(burnin/sim.dt)
     plt.figure()
     plt.plot(sim.yearvec[pi:], sim.results.syphilis.new_infections[pi:])

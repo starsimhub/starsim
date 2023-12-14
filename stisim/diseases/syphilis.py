@@ -58,7 +58,7 @@ class Syphilis(STI):
         # Parameters
         default_pars = dict(
             # Adult syphilis natural history, all specified in years
-            dur_exposed=ss.lognorm(mean=1/2, stdev=1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_exposed=ss.lognorm(mean=1/12, stdev=1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_primary=ss.lognorm(mean=1.5/12, stdev=1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_secondary=sps.norm(loc=3.6/12, scale=1.5/12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_latent_temp=ss.lognorm(mean=1, stdev=6/12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
@@ -119,31 +119,36 @@ class Syphilis(STI):
         """ Updates prior to interventions """
 
         # Primary
-        primary = self.ti_primary == sim.ti
+        primary = self.exposed & (self.ti_primary <= sim.ti)
         self.primary[primary] = True
         self.exposed[primary] = False
 
-        # Secondary
-        secondary = self.ti_secondary == sim.ti
-        self.secondary[secondary] = True
-        self.primary[secondary] = False
-        self.latent_temp[secondary] = False  # Could transition from latent or from primary
-        self.set_secondary_prognoses(sim, ss.true(secondary))
+       # Secondary from primary
+        secondary_from_primary = self.primary & (self.ti_secondary <= sim.ti)
+        self.secondary[secondary_from_primary] = True
+        self.primary[secondary_from_primary] = False
+        self.set_secondary_prognoses(sim, ss.true(secondary_from_primary))
+
+        # Secondary reactivation from latent
+        secondary_from_latent = self.latent_temp & (self.ti_secondary <= sim.ti)
+        self.secondary[secondary_from_latent] = True
+        self.latent_temp[secondary_from_latent] = False
+        self.set_secondary_prognoses(sim, ss.true(secondary_from_latent))
 
         # Latent
-        latent_temp = self.ti_latent_temp == sim.ti
+        latent_temp = self.secondary & (self.ti_latent_temp <= sim.ti)
         self.latent_temp[latent_temp] = True
         self.secondary[latent_temp] = False
         self.set_latent_temp_prognoses(sim, ss.true(latent_temp))
 
         # Latent long
-        latent_long = self.ti_latent_long == sim.ti
+        latent_long = self.secondary & (self.ti_latent_long <= sim.ti)
         self.latent_long[latent_long] = True
         self.secondary[latent_long] = False
-        self.set_latent_long_prognoses(sim, ss.true(latent_temp))
+        self.set_latent_long_prognoses(sim, ss.true(latent_long))
 
         # Tertiary
-        tertiary = self.ti_tertiary == sim.ti
+        tertiary = self.latent_long & (self.ti_tertiary <= sim.ti)
         self.tertiary[tertiary] = True
         self.latent_long[tertiary] = False
 

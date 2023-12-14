@@ -431,21 +431,25 @@ class STI(Disease):
 
     def make_new_cases(self, sim):
         """ Add new cases of module, through transmission, incidence, etc. """
+
+        # Call methods to generate the new cases across all layers
         if not ss.options.multirng:
             # Determine new cases for singlerng
             new_cases, sources = self._make_new_cases_singlerng(sim)
         else:
             # Determine new cases for multirng
             new_cases = self._choose_new_cases_multirng(sim.people)
-            if len(new_cases):
-                # Now determine who infected each case
-                sources = self._determine_case_source_multirng(sim.people, new_cases)
-            
-                if any([layer.vertical for layer in sim.people.networks.values()]):
-                    # raise NotImplementedError('Layers have not been defined for multi-RNG')
-                    self.set_congenital(sim, new_cases, sources)
-                else:
-                    self.set_prognoses(sim, new_cases, sources)
+
+        # Call methods to generate the new cases across all layers
+        if len(new_cases):
+            # Now determine who infected each case
+            sources = self._determine_case_source_multirng(sim.people, new_cases)
+
+            if any([layer.vertical for layer in sim.people.networks.values()]):
+                # raise NotImplementedError('Layers have not been defined for multi-RNG')
+                self.set_congenital(sim, new_cases, sources)
+            else:
+                self.set_prognoses(sim, new_cases, sources)
 
         return len(new_cases)  # Number of new cases made
 

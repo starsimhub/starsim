@@ -227,9 +227,9 @@ def lognorm_params(mean, stdev):
     Returns the shape and scale parameters for scipy's parameterization of the
     lognormal distribution which will give the specified mean and stdev
     """
-    mean = np.log(mean ** 2 / np.sqrt(stdev ** 2 + mean ** 2))
     s = np.sqrt(np.log(stdev ** 2 / mean ** 2 + 1))
-    scale = np.exp(mean)
+    mu = np.log(mean ** 2 / np.sqrt(stdev ** 2 + mean ** 2))
+    scale = np.exp(mu)
     return s, scale
 
 

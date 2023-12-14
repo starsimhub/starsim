@@ -398,7 +398,7 @@ class mf(SexualNetwork, DynamicNetwork):
             # No duplicates and user has enabled multirng, so use slotting based on p1
             dur_vals = self.pars.duration_dist.rvs(p1)
         else:
-            dur_vals = self.pars.duration_dist.rvs(len(p1)) # Just use len(p1) to say how many draws are needed
+            dur_vals = self.pars.duration_dist.rvs(len(p1))  # Just use len(p1) to say how many draws are needed
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
