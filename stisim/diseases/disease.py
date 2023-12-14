@@ -339,6 +339,13 @@ class STI(Disease):
                     new_cases_bool = np.random.random(len(a)) < p_transmit # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
                     new_cases.append(b[new_cases_bool])
                     sources.append(a[new_cases_bool])
+                    
+                    if len(new_cases):
+                        if layer.vertical:
+                            self.set_congenital(sim, target_uids=b[new_cases], source_uids=a[new_cases])
+                        else:
+                            self.set_prognoses(sim, new_cases, sources)
+                            
         return np.concatenate(new_cases), np.concatenate(sources)
 
     def _choose_new_cases_multirng(self, people):
@@ -367,8 +374,7 @@ class STI(Disease):
                     bi = people._uid_map[b] # Indices of b (rather than uid)
                     node_from_edge[bi, np.arange(len(a))] = 1 - rel_trans[a] * rel_sus[b] * contacts.beta * beta # TODO: Needs DT
                     p_acq_node = 1 - (1-p_acq_node) * node_from_edge.prod(axis=1) # (1-p1)*(1-p2)*...
-
-
+                    
         # Slotted draw, need to find a long-term place for this logic
         slots = people.slot[people.uid]
         #p = np.full(np.max(slots)+1, 0, dtype=p_acq_node.dtype)
@@ -376,6 +382,7 @@ class STI(Disease):
         #new_cases_bool = sps.bernoulli.rvs(p=p).astype(bool)[slots]
         new_cases_bool = sps.uniform.rvs(size=np.max(slots)+1)[slots] < p_acq_node
         new_cases = people.uid[new_cases_bool]
+        
         return new_cases
 
     def _determine_case_source_multirng(self, people, new_cases):
@@ -439,13 +446,12 @@ class STI(Disease):
             if len(new_cases):
                 # Now determine whom infected each case
                 sources = self._determine_case_source_multirng(sim.people, new_cases)
-
-        if len(new_cases):
-if layer.vertical:
-                            self.set_congenital(sim, target_uids=b[new_cases], source_uids=a[new_cases])
-                        else:
-                            
-            self.set_prognoses(sim, new_cases, sources)
+            
+            if len(new_cases):
+                if any([layer.vertical for layer in sim.people.networks.values()]):
+                    raise NotImplementedError('Layers have not been defined for multi-RNG')
+                else:
+                    self.set_prognoses(sim, new_cases, sources)
         
         return len(new_cases) # number of new cases made
 
