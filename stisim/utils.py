@@ -34,9 +34,9 @@ class ndict(sc.objdict):
 
     **Examples**::
 
-        networks = ss.ndict(ss.simple_sexual(), ss.maternal())
-        networks = ss.ndict([ss.simple_sexual(), ss.maternal()])
-        networks = ss.ndict({'simple_sexual':ss.simple_sexual(), 'maternal':ss.maternal()})
+        networks = ss.ndict(ss.mf(), ss.maternal())
+        networks = ss.ndict([ss.mf(), ss.maternal()])
+        networks = ss.ndict({'mf':ss.mf(), 'maternal':ss.maternal()})
 
     """
 

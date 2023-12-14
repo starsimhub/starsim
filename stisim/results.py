@@ -26,7 +26,8 @@ class Result(np.ndarray):
         return out
 
     def __array_finalize__(self, obj):
-        if obj is None: return
+        if obj is None:
+            return
         self.name = getattr(obj, 'name', None)
         self.module = getattr(obj, 'module', None)
         self.scale = getattr(obj, 'scale', None)

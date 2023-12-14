@@ -6,6 +6,7 @@ import numpy as np
 import stisim as ss
 import sciris as sc
 import pandas as pd
+import scipy.stats as sps
 
 __all__ = ['DemographicModule', 'births', 'background_deaths', 'Pregnancy']
 
@@ -62,15 +63,15 @@ class births(DemographicModule):
 
 
     def init_results(self, sim):
-        self.results += ss.Result(name='new', shape=sim.npts, dtype=int)
-        self.results += ss.Result(name='cumulative', shape=sim.npts, dtype=int)
-        self.results += ss.Result(name='cbr', shape=sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'new', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'cumulative', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'cbr', sim.npts, dtype=int)
         return
 
     def update(self, sim):
-        n_new = self.add_births(sim)
-        self.update_results(n_new, sim)
-        return
+        new_uids = self.add_births(sim)
+        self.update_results(len(new_uids), sim)
+        return new_uids
 
     def get_birth_rate(self, sim):
         """
@@ -87,8 +88,8 @@ class births(DemographicModule):
     def add_births(self, sim):
         # Add n_new births to each state in the sim
         n_new = self.get_birth_rate(sim)
-        sim.people.grow(n_new)
-        return n_new
+        new_uids = sim.people.grow(n_new)
+        return new_uids
 
     def update_results(self, n_new, sim):
         self.results['new'][sim.ti] = n_new
@@ -96,7 +97,7 @@ class births(DemographicModule):
     def finalize(self, sim):
         super().finalize(sim)
         self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['cbr'] = self.results['new'] / sim.results['n_alive']
+        self.results['cbr'] = np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
 
 
 class background_deaths(DemographicModule):
@@ -217,7 +218,7 @@ class background_deaths(DemographicModule):
 
     def finalize(self, sim):
         self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['mortality_rate'] = self.results['new'] / sim.results['n_alive']
+        self.results['mortality_rate'] = np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
 
 
 class Pregnancy(DemographicModule):
@@ -295,10 +296,14 @@ class Pregnancy(DemographicModule):
 
         self.pars.fertility_rates = df
 
+        self.choose_slots = sps.randint(low=0, high=1) # Low and high will be reset upon initialization
+
         return
 
     def initialize(self, sim):
         super().initialize(sim)
+        self.choose_slots.kwds['low'] = sim.pars['n_agents']+1
+        self.choose_slots.kwds['high'] = int(sim.pars['slot_scale']*sim.pars['n_agents'])
         return
 
     def init_results(self, sim):
@@ -405,7 +410,7 @@ class Pregnancy(DemographicModule):
 
         # Outcomes for pregnancies
         dur = np.full(len(uids), sim.ti + self.pars.dur_pregnancy / sim.dt)
-        dead = np.random.random(len(uids)) < self.pars.p_death
+        dead = self.pars.p_death.rvs(uids)
         self.ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
         dur_post_partum = np.full(len(uids), dur + self.pars.dur_postpartum / sim.dt)
         self.ti_postpartum[uids] = dur_post_partum

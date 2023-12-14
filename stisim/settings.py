@@ -56,6 +56,12 @@ class Options(sc.objdict):
         optdesc = sc.objdict()  # Help for the options
         options = sc.objdict()  # The options
 
+        optdesc.multirng = 'Set True to use multiple random number generators\
+            via the MultiRNG class, which is compatible with common random\
+            numbers. The default value is False, which instead uses a single\
+            centralized random number generator.'
+        options.multirng = False
+
         optdesc.verbose = 'Set default level of verbosity (i.e. logging detail): e.g., 0.1 is an update every 10 simulated timesteps.'
         options.verbose = float(os.getenv('STISIM_VERBOSE', 0.1))
 

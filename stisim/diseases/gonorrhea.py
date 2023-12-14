@@ -5,6 +5,7 @@ Define default gonorrhea disease module and related interventions
 import numpy as np
 import stisim as ss
 from .disease import STI
+import scipy.stats as sps
 
 
 __all__ = ['Gonorrhea']
@@ -16,16 +17,16 @@ class Gonorrhea(STI):
         super().__init__(pars)
 
         # States additional to the default disease states (see base class)
-        self.symptomatic = ss.State('symptomatic', float, False)
+        self.symptomatic = ss.State('symptomatic', bool, False)
         self.ti_clearance = ss.State('ti_clearance', int, ss.INT_NAN)
         self.p_symp = ss.State('p_symp', float, 1)
 
         # Parameters
         self.pars = ss.omerge({
-            'dur_inf': 10/365,  # Median for those who spontaneously clear: https://sti.bmj.com/content/96/8/556
-            'p_symp': 0.5,  # Share of infections that are symptomatic. Placeholder value
-            'p_clear': 0.2,  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
-            'init_prev': 0.03,
+            'dur_inf_in_days': sps.lognorm(s=0.6, scale=10),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
+            'p_symp': sps.bernoulli(p=0.5),  # Share of infections that are symptomatic. Placeholder value
+            'p_clear': sps.bernoulli(p=0.2),  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
+            'seed_infections': sps.bernoulli(p=0.1),
         }, self.pars)
 
         # Additional states dependent on parameter values, e.g. self.p_symp?
@@ -44,11 +45,11 @@ class Gonorrhea(STI):
 
     def update_results(self, sim):
         super(Gonorrhea, self).update_results(sim)
-        self.results['n_sympotmatic'][sim.ti] = np.count_nonzero(self.symptomatic)
+        self.results['n_symptomatic'][sim.ti] = np.count_nonzero(self.symptomatic)
         self.results['new_clearances'][sim.ti] = np.count_nonzero(self.ti_clearance == sim.ti)
         return
 
-    def update_states_pre(self, sim):
+    def update_pre(self, sim):
         # What if something in here should depend on another module?
         # I guess we could just check for it e.g., 'if HIV in sim.modules' or
         # 'if 'hiv' in sim.people' or something
@@ -81,18 +82,15 @@ class Gonorrhea(STI):
         self.ti_infected[target_uids] = sim.ti
 
         # Set infection status
-        n_symptomatic = int(self.pars.p_symp * len(target_uids))
-        symptomatic_uids = np.random.choice(target_uids, n_symptomatic, replace=False)
-        self.symptomatic[symptomatic_uids] = True
+        symp_uids = self.pars.p_symp.filter(uids)
+        self.symptomatic[symp_uids] = True
 
         # Set natural clearance
-        n_clear = int(self.pars.p_clear * len(target_uids))
-        clear_uids = np.random.choice(target_uids, n_clear, replace=False)
-        dur = sim.ti + np.random.poisson(self.pars['dur_inf']/sim.pars.dt, len(clear_uids))
+        clear_uids = self.pars.p_clear.filter(uids)
+        dur = sim.ti + self.pars['dur_inf_in_days'].rvs(clear_uids)/365/sim.pars.dt # Convert from days to years and then adjust for dt
         self.ti_clearance[clear_uids] = dur
 
         return
 
     def set_congenital(self, sim, target_uids):
         pass
-
