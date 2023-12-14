@@ -58,11 +58,11 @@ class Syphilis(STI):
         # Parameters
         default_pars = dict(
             # Adult syphilis natural history, all specified in years
-            dur_exposed=sps.lognorm(s=1/12, scale=1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_primary=sps.lognorm(s=1.5/12, scale=1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_exposed=ss.lognorm(mean=1/2, stdev=1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_primary=ss.lognorm(mean=1.5/12, stdev=1/36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_secondary=sps.norm(loc=3.6/12, scale=1.5/12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_temp=sps.lognorm(s=1, scale=6/12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_long=sps.lognorm(s=20, scale=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_temp=ss.lognorm(mean=1, stdev=6/12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_long=ss.lognorm(mean=20, stdev=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_latent_temp=sps.bernoulli(p=0.25),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_tertiary=sps.bernoulli(p=0.35),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
 
@@ -75,8 +75,8 @@ class Syphilis(STI):
             #   3: Live birth without syphilis-related complications
             # TODO: make this much more robust!
             birth_outcomes=sc.objdict(
-                active=sps.rv_discrete(values=([0, 1, 2, 3], [0.150, 0.250, 0.400, 0.200])),
-                latent=sps.rv_discrete(values=([0, 1, 2, 3], [0.100, 0.125, 0.005, 0.725])),
+                active=sps.rv_discrete(values=([0, 1, 2, 3], [0.15, 0.250, 0.40, 0.200])),
+                latent=sps.rv_discrete(values=([0, 1, 2, 3], [0.10, 0.125, 0.05, 0.725])),
             ),
             birth_outcome_keys = ['nnd', 'stillborn', 'congenital'],
 

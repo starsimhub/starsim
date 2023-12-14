@@ -9,6 +9,7 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 import numba as nb
+import scipy.stats as sps
 
 # What functions are externally visible -- note, this gets populated in each section below
 __all__ = []
@@ -16,8 +17,8 @@ __all__ = []
 # System constants
 __all__ += ['INT_NAN']
 
-INT_NAN = np.iinfo(np.int32).max  # Value to use to flag invalid content (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
-
+INT_NAN = np.iinfo(
+    np.int32).max  # Value to use to flag invalid content (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
 
 # %% Helper functions
 __all__ += ['ndict', 'omerge', 'warn', 'unique', 'find_contacts', 'get_subclasses']
@@ -46,11 +47,11 @@ class ndict(sc.objdict):
         self.setattribute('_strict', strict)
         self._initialize(*args, **kwargs)
         return
-    
+
     def append(self, arg, key=None):
         valid = False
         if arg is None:
-            return # Nothing to do
+            return  # Nothing to do
         elif hasattr(arg, self._name):
             key = key or getattr(arg, self._name)
             valid = True
@@ -59,26 +60,26 @@ class ndict(sc.objdict):
                 key = key or arg[self._name]
                 valid = True
             else:
-                for k,v in arg.items():
+                for k, v in arg.items():
                     self.append(v, key=k)
-                valid = None # Skip final processing
+                valid = None  # Skip final processing
         elif not self._strict:
-            key = key or f'item{len(self)+1}'
+            key = key or f'item{len(self) + 1}'
             valid = True
         else:
             valid = False
-        
+
         if valid is True:
             self._check_type(arg)
             self[key] = arg
         elif valid is None:
-            pass # Nothing to do
+            pass  # Nothing to do
         else:
             errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._name}"'
             raise ValueError(errormsg)
-            
+
         return
-        
+
     def _check_type(self, arg):
         """ Check types """
         if self._type is not None:
@@ -86,20 +87,20 @@ class ndict(sc.objdict):
                 errormsg = f'The following item does not have the expected type {self._type}:\n{arg}'
                 raise TypeError(errormsg)
         return
-    
+
     def _initialize(self, *args, **kwargs):
         args = sc.mergelists(*args)
         for arg in args:
             self.append(arg)
-        for key,arg in kwargs.items():
+        for key, arg in kwargs.items():
             self.append(arg, key=key)
         return
-    
+
     def copy(self):
         new = self.__class__.__new__(name=self._name, type=self._type, strict=self._strict)
         new.update(self)
         return new
-    
+
     def __add__(self, dict2):
         """ Allow c = a + b """
         new = self.copy()
@@ -182,6 +183,7 @@ def get_subclasses(cls):
         yield from get_subclasses(subclass)
         yield subclass
 
+
 # %% Seed methods
 
 __all__ += ['set_seed']
@@ -208,12 +210,35 @@ def set_seed(seed=None):
     if seed is not None:
         seed = int(seed)
 
-    set_seed_regular(seed) # If None, reinitializes it
-    if seed is None: # Numba can't accept a None seed, so use our just-reinitialized Numpy stream to generate one
+    set_seed_regular(seed)  # If None, reinitializes it
+    if seed is None:  # Numba can't accept a None seed, so use our just-reinitialized Numpy stream to generate one
         seed = np.random.randint(1e9)
     set_seed_numba(seed)
 
     return
+
+
+# %% Helper functions related to distributions
+__all__ += ['lognorm_params', 'lognorm']
+
+
+def lognorm_params(mean, stdev):
+    """
+    Returns the shape and scale parameters for scipy's parameterization of the
+    lognormal distribution which will give the specified mean and stdev
+    """
+    mean = np.log(mean ** 2 / np.sqrt(stdev ** 2 + mean ** 2))
+    s = np.sqrt(np.log(stdev ** 2 / mean ** 2 + 1))
+    scale = np.exp(mean)
+    return s, scale
+
+
+def lognorm(mean, stdev):
+    """
+    Wrapper for scipy lognorm but using mean and stdev
+    """
+    s, scale = lognorm_params(mean, stdev)
+    return sps.lognorm(s=s, scale=scale)
 
 
 # %% Probabilities -- mostly not jitted since performance gain is minimal
@@ -274,7 +299,7 @@ def binomial_arr(prob_arr):
     return np.random.random(prob_arr.shape) < prob_arr
 
 
-def n_multinomial(probs, n): # No speed gain from Numba
+def n_multinomial(probs, n):  # No speed gain from Numba
     '''
     An array of multinomial trials.
 
@@ -332,6 +357,7 @@ def n_neg_binomial(rate, dispersion, n, step=1):  # Numba not used due to incomp
 
 __all__ += ['true', 'false', 'defined', 'undefined']
 
+
 @nb.njit
 def _true(uids, values):
     """
@@ -345,6 +371,7 @@ def _true(uids, values):
             j += 1
     out = out[0:j]
     return out
+
 
 @nb.njit
 def _false(uids, values):

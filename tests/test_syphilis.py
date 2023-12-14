@@ -14,7 +14,7 @@ def make_syph_sim():
     """ Make a sim with syphilis - used by several subsequent tests """
     syph = ss.Syphilis()
     syph.pars['beta'] = {'mf': [0.95, 0.75], 'maternal': [0.99, 0]}
-    syph.pars['init_prev'] = 0.1
+    syph.pars['seed_infections'] = sps.bernoulli(p=0.1)
 
     # Make demographic modules
     fertility_rates = {'fertility_rates': pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')}
@@ -28,7 +28,7 @@ def make_syph_sim():
     ss.set_seed(1)
     ppl = ss.People(5000)  #, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
     mf = ss.mf(
-        pars=dict(dur=sps.lognorm(s=1, scale=5))
+        pars=dict(dur=ss.lognorm(mean=1, stdev=5))
     )
     maternal = ss.maternal()
     ppl.networks = ss.ndict(mf, maternal)
