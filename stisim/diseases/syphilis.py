@@ -63,23 +63,22 @@ class Syphilis(STI):
             dur_secondary=sps.norm(loc=3.6/12, scale=1.5/12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_latent_temp=sps.lognorm(s=1, scale=6/12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_latent_long=sps.lognorm(s=20, scale=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            p_latent_temp=0.25,  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            p_tertiary=0.35,  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
+            p_latent_temp=sps.bernoulli(p=0.25),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            p_tertiary=sps.bernoulli(p=0.35),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
 
             # Congenital syphilis outcomes
             # Source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5973824/
+            # Birth outcomes coded as:
+            #   0: Neonatal death
+            #   1: Stillborn
+            #   2: Congenital syphilis
+            #   3: Live birth without syphilis-related complications
+            # TODO: make this much more robust!
             birth_outcomes=sc.objdict(
-                active=sc.objdict(
-                    nnd=0.15,  # Neonatal death
-                    stillborn=0.25,  # Stillborn
-                    congenital=0.40,  # Congenital syphilis
-                ),
-                latent=sc.objdict(
-                    nnd=0.10,  # Neonatal death
-                    stillborn=0.125,  # Stillborn
-                    congenital=0.05,  # Congenital syphilis
-                )
+                active=sps.rv_discrete(values=([0, 1, 2, 3], [0.150, 0.250, 0.400, 0.200])),
+                latent=sps.rv_discrete(values=([0, 1, 2, 3], [0.100, 0.125, 0.005, 0.725])),
             ),
+            birth_outcome_keys = ['nnd', 'stillborn', 'congenital'],
 
             # Initial conditions
             seed_infections=sps.bernoulli(p=0.03),
@@ -180,16 +179,11 @@ class Syphilis(STI):
 
         # Subset target_uids to only include ones with active infection
         if source_uids is not None:
-            # import traceback;
-            # traceback.print_exc();
-            # import pdb;
-            # pdb.set_trace()
             active_sources = self.active[source_uids].values.nonzero()[-1]
             uids = target_uids[active_sources]
         else:
             uids = target_uids
 
-        n_uids = len(uids)
         self.susceptible[uids] = False
         self.exposed[uids] = True
         self.infected[uids] = True
@@ -214,9 +208,8 @@ class Syphilis(STI):
         """ Set prognoses for people who have just progressed to secondary infection """
 
         # Secondary to latent_temp or latent_long
-        latent_temp_uids = ss.binomial_filter(self.pars.p_latent_temp, uids)
+        latent_temp_uids = self.pars.p_latent_temp.filter(uids)
         latent_long_uids = np.setdiff1d(uids, latent_temp_uids)
-        n_latent_long = len(latent_long_uids)
 
         dur_secondary_temp = self.pars.dur_secondary.rvs(latent_temp_uids)
         self.ti_latent_temp[latent_temp_uids] = self.ti_secondary[latent_temp_uids] + rr(dur_secondary_temp/sim.dt)
@@ -242,8 +235,7 @@ class Syphilis(STI):
         self.dur_infection[uids] += dur_latent_long
 
         # Latent_long to tertiary
-        tertiary_uids = ss.binomial_filter(self.pars.p_tertiary, uids)
-        n_tertiary = len(tertiary_uids)
+        tertiary_uids = self.pars.p_tertiary.filter(uids)
         dur_latent_long = self.pars.dur_latent_long.rvs(tertiary_uids)
         self.ti_tertiary[tertiary_uids] = self.ti_latent_long[tertiary_uids] + rr(dur_latent_long/sim.dt)
         self.dur_infection[tertiary_uids] += dur_latent_long
@@ -259,16 +251,14 @@ class Syphilis(STI):
         for state in ['active', 'latent']:
             source_state_inds = getattr(self, state)[source_uids].values.nonzero()[-1]
             uids = target_uids[source_state_inds]
-            n_uids = len(uids)
 
             # Birth outcomes must be modified to add probability of susceptible birth
             birth_outcomes = self.pars.birth_outcomes[state]
-            probs = np.append(birth_outcomes.values(), 1 - sum(birth_outcomes.values()))
-            assigned_outcomes = ss.n_multinomial(probs, n_uids)
+            assigned_outcomes = birth_outcomes.rvs(uids)
             time_to_birth = -sim.people.age
 
             # Schedule events
-            for oi, outcome in enumerate(birth_outcomes.keys()):
+            for oi, outcome in enumerate(self.pars.birth_outcome_keys):
                 o_uids = uids[assigned_outcomes == oi]
                 if len(o_uids) > 0:
                     ti_outcome = f'ti_{outcome}'

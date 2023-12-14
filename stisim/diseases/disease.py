@@ -438,7 +438,7 @@ class STI(Disease):
             # Determine new cases for multirng
             new_cases = self._choose_new_cases_multirng(sim.people)
             if len(new_cases):
-                # Now determine whom infected each case
+                # Now determine who infected each case
                 sources = self._determine_case_source_multirng(sim.people, new_cases)
             
                 if any([layer.vertical for layer in sim.people.networks.values()]):
