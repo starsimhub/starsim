@@ -7,9 +7,15 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 import itertools
+import numba as nb
 
 __all__ = ['Sim', 'AlreadyRunError', 'diff_sims']
 
+@nb.njit
+def set_numba_seed(value):
+    # Needed to ensure reproducibility when using random calls in numba, e.g. RandomNetwork
+    # Note, these random numbers are not currently common-random-number safe
+    np.random.seed(value)
 
 class Sim(sc.prettyobj):
 
@@ -43,6 +49,9 @@ class Sim(sc.prettyobj):
         self.interventions = ss.ndict(type=ss.Intervention)
         self.analyzers = ss.ndict(type=ss.Analyzer)
 
+        # Initialize the random number generator container
+        self.rng_container = ss.RNGContainer()
+
         return
 
     @property
@@ -75,8 +84,10 @@ class Sim(sc.prettyobj):
         self.validate_dt()
         self.init_time_vecs()  # Initialize time vecs
         ss.set_seed(self.pars['rand_seed'])  # Reset the random seed before the population is created
+        set_numba_seed(self.pars['rand_seed'])
 
         # Initialize the core sim components
+        self.rng_container.initialize(self.pars['rand_seed'] + 2) # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rng_container
         self.init_people(popdict=popdict, reset=reset, **kwargs)  # Create all the people (the heaviest step)
         self.init_networks()
         self.init_demographics()
@@ -90,7 +101,7 @@ class Sim(sc.prettyobj):
 
         # Reset the random seed to the default run seed, so that if the simulation is run with
         # reset_seed=False right after initialization, it will still produce the same output
-        ss.set_seed(self.pars['rand_seed'] + 1)
+        ss.set_seed(self.pars['rand_seed'] + 1) # Hopefully not used now that we can use multiple random number generators
 
         # Final steps
         self.initialized = True
@@ -121,17 +132,15 @@ class Sim(sc.prettyobj):
         Some parameters can take multiple types; this makes them consistent.
         """
         # Handle n_agents
-        if self.pars['n_agents'] is not None:
+        if self.people is not None:
+            self.pars['n_agents'] = len(self.people)
+        #elif self.popdict is not None: # STIsim does not currenlty support self.popdict
+            #self.pars['n_agents'] = len(self.popdict)
+        elif self.pars['n_agents'] is not None:
             self.pars['n_agents'] = int(self.pars['n_agents'])
         else:
-            if self.people is not None:
-                self.pars['n_agents'] = len(self.people)
-            else:
-                if self.popdict is not None:
-                    self.pars['n_agents'] = len(self.popdict)
-                else:
-                    errormsg = 'Must supply n_agents, a people object, or a popdict'
-                    raise ValueError(errormsg)
+            errormsg = 'Must supply n_agents, a people object, or a popdict'
+            raise ValueError(errormsg)
 
         # Handle end and n_years
         if self.pars['end']:
@@ -183,27 +192,24 @@ class Sim(sc.prettyobj):
             verbose = self.pars['verbose']
         if verbose > 0:
             resetstr = ''
-            if self.people:
-                resetstr = ' (resetting people)' if reset else ' (warning: not resetting sim.people)'
+            if self.people and reset:
+                resetstr = ' (resetting people)'
             print(f'Initializing sim{resetstr} with {self.pars["n_agents"]:0n} agents')
 
         # If people have not been supplied, make them
-        if self.people is None:
+        if self.people is None or reset:
             self.people = ss.People(n=self.pars['n_agents'], **kwargs)  # This just assigns UIDs and length
 
         # If a popdict has not been supplied, we can make one from location data
         if popdict is None:
             if self.pars['location'] is not None:
                 # Check where to get total_pop from
-                if self.pars[
-                    'total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
+                if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
                     errormsg = 'You can either define total_pop explicitly or via the location, but not both'
                     raise ValueError(errormsg)
                 total_pop, popdict = ss.make_popdict(n=self.pars['n_agents'], location=self.pars['location'], verbose=self.pars['verbose'])
-
             else:
-                if self.pars[
-                    'total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
+                if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
                     total_pop = self.pars['total_pop']
                 else:
                     if self.pars['pop_scale'] is not None:
@@ -217,7 +223,7 @@ class Sim(sc.prettyobj):
 
         # Any other initialization
         if not self.people.initialized:
-            self.people.initialize()
+            self.people.initialize(self)
 
         # Set time attributes
         self.people.ti = self.ti
@@ -293,6 +299,9 @@ class Sim(sc.prettyobj):
                 errormsg = f'Intervention {intervention} does not seem to be a valid intervention: must be a function or Intervention subclass'
                 raise TypeError(errormsg)
 
+            for rng in intervention.rngs:
+                rng.initialize(self.rng_container, self.people.slot)
+
         return
 
     def init_analyzers(self):
@@ -330,6 +339,9 @@ class Sim(sc.prettyobj):
         # Set the time and if we have reached the end of the simulation, then do nothing
         if self.complete:
             raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
+
+        # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
+        self.rng_container.step(self.ti+1) # +1 offset because ti=0 is used on initialization
 
         # Clean up dead agents, if removing agents is enabled
         if self.pars.remove_dead:
@@ -449,7 +461,7 @@ class Sim(sc.prettyobj):
 
         for module in self.modules:
             module.finalize(self)
-            
+
         self.summarize()
         self.results_ready = True  # Set this first so self.summary() knows to print the results
         self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
@@ -459,7 +471,7 @@ class Sim(sc.prettyobj):
         summary = sc.objdict()
         flat = sc.flattendict(self.results, sep='_')
         for k,v in flat.items():
-            summary[k] = np.array(v).mean() # To fix later
+            summary[k] = v.mean()
         self.summary = summary
         return summary
         

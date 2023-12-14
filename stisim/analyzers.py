@@ -15,4 +15,3 @@ class Analyzer(ss.Module):
 
     def update_results(self, sim):
         raise NotImplementedError
-
