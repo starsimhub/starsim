@@ -176,11 +176,11 @@ def test_rsv():
     # Make rsv module
     rsv_a = ss.RSV(name='rsv_a')
     rsv_a.pars['beta'] = {'household': .25, 'school': .15, 'community': .05, 'maternal': 0}
-    rsv_a.pars['init_prev'] = 0.1
+    rsv_a.pars['init_prev'] = dict(age_range=[0,5], prev=0.1)
 
     rsv_b = ss.RSV(name='rsv_b')
     rsv_b.pars['beta'] = {'household': .25, 'school': .15, 'community': .05, 'maternal': 0}
-    rsv_b.pars['init_prev'] = 0.1
+    rsv_b.pars['init_prev'] = dict(age_range=[0,5], prev=0.1)
 
 
     # Make demographic modules
@@ -201,7 +201,7 @@ def test_rsv():
                             maternal=maternal)
     diseases = ss.ndict(rsv_a=rsv_a, rsv_b=rsv_b)
     rsv_connector=rsv(name='rsv_connector')
-    pars = {'interventions':[rsv_maternal_vaccine(start_year=2000)]}
+    pars = {'interventions':[rsv_maternal_vaccine(start_year=1997, efficacy_inf=1, efficacy_sev=1)]}
     sim = ss.Sim(dt=1/52, n_years=3, people=ppl,
                  # pars=pars,
                  diseases=diseases, demographics=[pregnancy, death],
@@ -210,9 +210,9 @@ def test_rsv():
     sim.run()
 
     plt.figure()
-    plt.plot(sim.yearvec, rsv_a.results.n_infected, label='Group A')
-    plt.plot(sim.yearvec, rsv_b.results.n_infected, label='Group B')
-    plt.title('RSV infections')
+    plt.plot(sim.yearvec, rsv_a.results.n_symptomatic, label='Group A')
+    plt.plot(sim.yearvec, rsv_b.results.n_symptomatic, label='Group B')
+    plt.title('RSV symptomatic infections')
     plt.legend()
     plt.show()
 

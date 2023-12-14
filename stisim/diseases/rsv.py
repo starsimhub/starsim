@@ -59,7 +59,7 @@ class RSV(Disease):
             dur_exposed=ss.lognormal(5, 2),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4072624/
             dur_symptomatic=ss.lognormal(12, 20),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4072624/
             dur_severe=ss.lognormal(20, 5),  # SOURCE
-            dur_immune=ss.lognormal(100, 10),
+            dur_immune=ss.lognormal(110, 10),
             prognoses=dict(
                 age_cutoffs=np.array([0, 1, 5, 15, 55]),  # Age cutoffs (lower limits)
                 sus_ORs=np.array([2.50, 1.50, 0.25, 0.50, 1.00]),  # Odds ratios for relative susceptibility
@@ -73,7 +73,7 @@ class RSV(Disease):
             phase_shift=5,
 
             # Initial conditions
-            init_prev=0.03,
+            init_prev=dict(age_range=[1,5], prev=0.1),
             # imm_init=1,
             # imm_decay=dict(form='growth_decay', growth_time=14, decay_rate=0.01),
             # immunity=None
@@ -119,8 +119,8 @@ class RSV(Disease):
         taken place by the time this method is called.
         """
 
-        eligible_uids = ss.true(sim.people.age < 5)
-        n_init_cases = int(self.pars['init_prev'] * len(eligible_uids))
+        eligible_uids = ss.true((sim.people.age >= self.pars['init_prev']['age_range'][0]) & (sim.people.age <= self.pars['init_prev']['age_range'][1]))
+        n_init_cases = int(self.pars['init_prev']['prev'] * len(eligible_uids))
         initial_cases = np.random.choice(eligible_uids, n_init_cases, replace=False)
         self.set_prognoses(sim, initial_cases)
         return
