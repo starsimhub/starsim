@@ -79,7 +79,7 @@ class HIV(STI):
         return
 
     def set_congenital(self, sim, target_uids, source_uids):
-        return self.set_prognoses(sim, target_uids)  # Pass back?
+        return self.set_prognoses(sim, target_uids, source_uids)
 
 
 # %% HIV-related interventions

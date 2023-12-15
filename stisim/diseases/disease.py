@@ -434,24 +434,26 @@ class STI(Disease):
 
         # Call methods to generate the new cases across all layers
         if not ss.options.multirng:
-            # Determine new cases for singlerng
+            # Determine new cases and sources for singlerng
             new_cases, sources = self._make_new_cases_singlerng(sim)
         else:
             # Determine new cases for multirng
             new_cases = self._choose_new_cases_multirng(sim.people)
 
-        # Call methods to generate the new cases across all layers
-        if len(new_cases):
-            # Now determine who infected each case
-            sources = self._determine_case_source_multirng(sim.people, new_cases)
+            if len(new_cases):
+                # Now determine the source for each new case
+                sources = self._determine_case_source_multirng(sim.people, new_cases)
 
-            if any([layer.vertical for layer in sim.people.networks.values()]):
-                # raise NotImplementedError('Layers have not been defined for multi-RNG')
-                self.set_congenital(sim, new_cases, sources)
-            else:
-                self.set_prognoses(sim, new_cases, sources)
-
+        self._set_cases(sim, new_cases, sources)
         return len(new_cases)  # Number of new cases made
+
+    def _set_cases(self, sim, target_uids, source_uids=None):
+        congenital = sim.people.age[target_uids] <= sim.dt
+        src_c = source_uids[congenital] if source_uids else None
+        src_p = source_uids[~congenital] if source_uids else None
+        self.set_congenital(sim, target_uids[congenital], src_c)
+        self.set_prognoses(sim, target_uids[~congenital], src_p)
+        return
 
     def set_prognoses(self, sim, target_uids, source_uids=None):
         pass
