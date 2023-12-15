@@ -444,7 +444,9 @@ class STI(Disease):
                 # Now determine the source for each new case
                 sources = self._determine_case_source_multirng(sim.people, new_cases)
 
-        self._set_cases(sim, new_cases, sources)
+        if len(new_cases):
+            self._set_cases(sim, new_cases, sources)
+
         return len(new_cases)  # Number of new cases made
 
     def _set_cases(self, sim, target_uids, source_uids=None):
