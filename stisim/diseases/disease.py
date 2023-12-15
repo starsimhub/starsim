@@ -449,8 +449,8 @@ class STI(Disease):
 
     def _set_cases(self, sim, target_uids, source_uids=None):
         congenital = sim.people.age[target_uids] <= sim.dt
-        src_c = source_uids[congenital] if source_uids else None
-        src_p = source_uids[~congenital] if source_uids else None
+        src_c = source_uids[congenital] if source_uids is not None else None
+        src_p = source_uids[~congenital] if source_uids is not None else None
         self.set_congenital(sim, target_uids[congenital], src_c)
         self.set_prognoses(sim, target_uids[~congenital], src_p)
         return
