@@ -30,8 +30,8 @@ def make_syph_sim():
     mf = ss.mf(
         pars=dict(duration_dist=ss.lognorm(mean=0.1, stdev=0.5))
     )
-    # maternal = ss.maternal()
-    ppl.networks = ss.ndict(mf)  #, maternal)
+    maternal = ss.maternal()
+    ppl.networks = ss.ndict(mf, maternal)
 
     sim_kwargs = dict(
         dt=1/12,

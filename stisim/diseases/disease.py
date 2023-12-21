@@ -322,9 +322,9 @@ class STI(Disease):
         pass
 
     def _make_new_cases_singlerng(self, sim):
-        # Not common-random-number-safe, but more efficient for when not using the multirng feature
         new_cases = []
         sources = []
+        # Not common-random-number-safe, but more efficient for when not using the multirng feature
         for k, layer in sim.people.networks.items():
             if k in self.pars['beta']:
                 contacts = layer.contacts
@@ -337,6 +337,13 @@ class STI(Disease):
                     # probability of a->b transmission
                     p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta  # TODO: Needs DT
                     new_cases_bool = np.random.random(len(a)) < p_transmit  # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
+
+                    if np.any(new_cases_bool):
+                        if layer.vertical:
+                            self.set_congenital(sim, target_uids=b[new_cases_bool], source_uids=a[new_cases_bool])
+                        else:
+                            self.set_prognoses(sim, b[new_cases_bool], source_uids=a[new_cases_bool])
+
                     new_cases.append(b[new_cases_bool])
                     sources.append(a[new_cases_bool])
 
@@ -436,20 +443,18 @@ class STI(Disease):
         if not ss.options.multirng:
             # Determine new cases for singlerng
             new_cases, sources = self._make_new_cases_singlerng(sim)
+
         else:
-            # Determine new cases for multirng
-            new_cases = self._choose_new_cases_multirng(sim.people)
+            if any([layer.vertical for layer in sim.people.networks.values()]):
+                raise NotImplementedError('Layers have not been defined for multi-RNG')
+            else:
+                # Determine new cases for multirng
+                new_cases = self._choose_new_cases_multirng(sim.people)
 
         # Call methods to generate the new cases across all layers
         if len(new_cases):
             # Now determine who infected each case
             sources = self._determine_case_source_multirng(sim.people, new_cases)
-
-            if any([layer.vertical for layer in sim.people.networks.values()]):
-                # raise NotImplementedError('Layers have not been defined for multi-RNG')
-                self.set_congenital(sim, new_cases, sources)
-            else:
-                self.set_prognoses(sim, new_cases, sources)
 
         return len(new_cases)  # Number of new cases made
 
