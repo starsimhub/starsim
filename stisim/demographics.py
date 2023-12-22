@@ -369,7 +369,13 @@ class Pregnancy(DemographicModule):
         age_bins = np.append(age_bins, 50)  # Add 50, and specify no births after 50
         age_inds = np.digitize(sim.people.age, age_bins) - 1
 
-        conception_eligible = sim.people.female & (age_inds >= 0) & (age_inds < max(age_inds))
+        try:
+            conception_eligible = sim.people.female & (age_inds >= 0) & (age_inds < max(age_inds))
+        except:
+            import traceback;
+            traceback.print_exc();
+            import pdb;
+            pdb.set_trace()
         conception_probs = df[val_label].values * p.units_per_100 * sim.dt
         self.conception_probs[conception_eligible] = conception_probs[age_inds[conception_eligible]]
         conceive_uids = ss.true(ss.binomial_arr(self.conception_probs))

@@ -26,7 +26,7 @@ def make_syph_sim():
 
     # Make people and networks
     ss.set_seed(1)
-    ppl = ss.People(5000)  #, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
+    ppl = ss.People(5000, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
     mf = ss.mf(
         pars=dict(duration_dist=ss.lognorm(mean=0.1, stdev=0.5))
     )

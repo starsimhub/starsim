@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import stisim as ss
-from scipy.stats import bernoulli, uniform
+import scipy.stats as sps
 
 __all__ = ['BasePeople', 'People']
 
@@ -177,7 +177,7 @@ class People(BasePeople):
         # Handle states
         states = [
             ss.State('age', float, np.nan), # NaN until conceived
-            ss.State('female', bool, bernoulli(p=0.5)),
+            ss.State('female', bool, sps.bernoulli(p=0.5)),
             ss.State('debut', float),
             ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
             ss.State('alive', bool, True),  # Time index for death
@@ -199,9 +199,12 @@ class People(BasePeople):
     def get_age_dist(age_data):
         """ Return an age distribution based on provided data """
         if age_data is None:
-            return uniform(loc=0, scale=100) # low and width
+            return sps.uniform(loc=0, scale=100)  # loc and width
         if sc.checktype(age_data, pd.DataFrame):
-            return ss.data_dist(vals=age_data['value'].values, bins=age_data['age'].values)
+            bb = np.append(age_data['age'].values, age_data['age'].values[-1] + 1)
+            vv = age_data['value'].values
+            hist_dist = sps.rv_histogram((vv, bb), density=False)
+            return hist_dist
 
     def _initialize_states(self, sim=None):
         for state in self.states.values():
@@ -221,8 +224,8 @@ class People(BasePeople):
             rng.initialize(sim.rng_container, self.slot)
             
         # Define age (CK: why is age handled differently than sex?)
-        self._initialize_states(sim=sim) # Now initialize with the sim
-        self.age[:] = self.age_data_dist.rvs(len(self))
+        self._initialize_states(sim=sim)  # Now initialize with the sim
+        self.age[:] = self.age_data_dist.rvs(self.uid)
         
         self.initialized = True
         return

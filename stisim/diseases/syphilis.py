@@ -254,6 +254,7 @@ class Syphilis(STI):
 
         # Determine outcomes
         for state in ['active', 'latent']:
+
             source_state_inds = getattr(self, state)[source_uids].values.nonzero()[-1]
             uids = target_uids[source_state_inds]
 

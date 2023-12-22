@@ -324,6 +324,7 @@ class STI(Disease):
     def _make_new_cases_singlerng(self, sim):
         new_cases = []
         sources = []
+
         # Not common-random-number-safe, but more efficient for when not using the multirng feature
         for k, layer in sim.people.networks.items():
             if k in self.pars['beta']:
@@ -339,15 +340,19 @@ class STI(Disease):
                     new_cases_bool = np.random.random(len(a)) < p_transmit  # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
 
                     if np.any(new_cases_bool):
+                        these_targets = b[new_cases_bool]
+                        these_sources = a[new_cases_bool]
                         if layer.vertical:
-                            self.set_congenital(sim, target_uids=b[new_cases_bool], source_uids=a[new_cases_bool])
+                            self.set_congenital(sim, these_targets, source_uids=these_sources)
                         else:
-                            self.set_prognoses(sim, b[new_cases_bool], source_uids=a[new_cases_bool])
+                            self.set_prognoses(sim, these_targets, source_uids=these_sources)
+                        new_cases.append(list(these_targets))
+                        sources.append(list(these_sources))
 
-                    new_cases.append(b[new_cases_bool])
-                    sources.append(a[new_cases_bool])
-
-        return np.concatenate(new_cases), np.concatenate(sources)
+        if len(new_cases):
+            return np.concatenate(new_cases), np.concatenate(sources)
+        else:
+            return np.array(new_cases), np.array(sources)
 
     def _choose_new_cases_multirng(self, people):
         '''
@@ -445,28 +450,24 @@ class STI(Disease):
             new_cases, sources = self._make_new_cases_singlerng(sim)
 
         else:
-            if any([layer.vertical for layer in sim.people.networks.values()]):
-                raise NotImplementedError('Layers have not been defined for multi-RNG')
-            else:
-                # Determine new cases for multirng
-                new_cases = self._choose_new_cases_multirng(sim.people)
-
+            # Determine new cases for multirng
+            new_cases = self._choose_new_cases_multirng(sim.people)
             if len(new_cases):
-                # Now determine the source for each new case
+                # Now determine the source for each new case and set cases
                 sources = self._determine_case_source_multirng(sim.people, new_cases)
-
-        if len(new_cases):
-            self._set_cases(sim, new_cases, sources)
+                self._set_cases(sim, new_cases, sources)
 
         return len(new_cases)  # Number of new cases made
 
-    def _set_cases(self, sim, target_uids, source_uids=None):
-        congenital = sim.people.age[target_uids] <= sim.dt
-        src_c = source_uids[congenital] if source_uids is not None else None
-        src_p = source_uids[~congenital] if source_uids is not None else None
-        self.set_congenital(sim, target_uids[congenital], src_c)
-        self.set_prognoses(sim, target_uids[~congenital], src_p)
-        return
+    # def _set_cases(self, sim, target_uids, source_uids=None):
+    #     congenital = sim.people.age[target_uids] <= sim.dt
+    #     src_c = source_uids[congenital] if source_uids is not None else None
+    #     src_p = source_uids[~congenital] if source_uids is not None else None
+    #     if len(target_uids[congenital]) > 0:
+    #         self.set_congenital(sim, target_uids[congenital], src_c)
+    #     if len(target_uids[~congenital]) > 0:
+    #         self.set_prognoses(sim, target_uids[~congenital], src_p)
+    #     return
 
     def set_prognoses(self, sim, target_uids, source_uids=None):
         pass
