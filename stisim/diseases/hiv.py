@@ -98,7 +98,7 @@ class ART(ss.Intervention):
 
     def initialize(self, sim):
         super().initialize(sim)
-        sim.results.hiv += ss.Result(self.name, 'n_art', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'n_art', sim.npts, dtype=int)
         self.initialized = True
         return
 
@@ -117,7 +117,7 @@ class ART(ss.Intervention):
             n_added = len(inds)
 
         # Add result
-        sim.results.hiv.n_art = np.count_nonzero(sim.people.alive & sim.people.hiv.on_art)
+        self.results['n_art'][sim.ti] = np.count_nonzero(sim.people.alive & sim.people.hiv.on_art)
 
         return n_added
 
