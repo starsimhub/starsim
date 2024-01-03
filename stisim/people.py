@@ -198,13 +198,15 @@ class People(BasePeople):
     @staticmethod
     def get_age_dist(age_data):
         """ Return an age distribution based on provided data """
-        if age_data is None:
-            return sps.uniform(loc=0, scale=100)  # loc and width
         if sc.checktype(age_data, pd.DataFrame):
             bb = np.append(age_data['age'].values, age_data['age'].values[-1] + 1)
             vv = age_data['value'].values
-            hist_dist = sps.rv_histogram((vv, bb), density=False)
-            return hist_dist
+            dist = sps.rv_histogram((vv, bb), density=False)
+        else:
+            assert age_data is None
+            dist = sps.uniform(loc=0, scale=100)  # loc and width
+
+        return ss.ScipyDistribution(dist, 'Age distribution')
 
     def _initialize_states(self, sim=None):
         for state in self.states.values():
@@ -222,10 +224,12 @@ class People(BasePeople):
         # Initialize all RNGs (noting that includes those that are declared in child classes)
         for rng in self.rngs:
             rng.initialize(sim.rng_container, self.slot)
+
+        self.age_data_dist.initialize(sim, self)
             
         # Define age (CK: why is age handled differently than sex?)
         self._initialize_states(sim=sim)  # Now initialize with the sim
-        self.age[:] = self.age_data_dist.rvs(self.uid)
+        self.age[:] = self.age_data_dist.rvs(size=self.uid)
         
         self.initialized = True
         return

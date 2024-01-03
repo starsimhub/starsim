@@ -99,6 +99,8 @@ class Disease(ss.Module):
         super().__init__(*args, **kwargs)
         self.results = ss.ndict(type=ss.Result)
         self.log = InfectionLog()
+        self.new_cases_RNG = ss.MultiRNG(name=f'New cases of {self.name}')
+        return
 
     @property
     def _boolean_states(self):
@@ -113,6 +115,7 @@ class Disease(ss.Module):
         for state in self.states:
             if state.dtype == bool:
                 yield state
+        return
 
     def initialize(self, sim):
         super().initialize(sim)
@@ -124,6 +127,7 @@ class Disease(ss.Module):
     def finalize(self, sim):
         super().finalize(sim)
         self.finalize_results(sim)
+        return
 
     def validate_pars(self, sim):
         """
@@ -383,10 +387,7 @@ class STI(Disease):
                     
         # Slotted draw, need to find a long-term place for this logic
         slots = people.slot[people.uid]
-        #p = np.full(np.max(slots)+1, 0, dtype=p_acq_node.dtype)
-        #p[slots] = p_acq_node
-        #new_cases_bool = sps.bernoulli.rvs(p=p).astype(bool)[slots]
-        new_cases_bool = sps.uniform.rvs(size=np.max(slots)+1)[slots] < p_acq_node
+        new_cases_bool = sps.uniform.rvs(size=np.max(slots)+1, random_state=self.new_cases_RNG)[slots] < p_acq_node
         new_cases = people.uid[new_cases_bool]
         
         return new_cases
@@ -459,15 +460,13 @@ class STI(Disease):
 
         return len(new_cases)  # Number of new cases made
 
-    # def _set_cases(self, sim, target_uids, source_uids=None):
-    #     congenital = sim.people.age[target_uids] <= sim.dt
-    #     src_c = source_uids[congenital] if source_uids is not None else None
-    #     src_p = source_uids[~congenital] if source_uids is not None else None
-    #     if len(target_uids[congenital]) > 0:
-    #         self.set_congenital(sim, target_uids[congenital], src_c)
-    #     if len(target_uids[~congenital]) > 0:
-    #         self.set_prognoses(sim, target_uids[~congenital], src_p)
-    #     return
+    def _set_cases(self, sim, target_uids, source_uids=None):
+        congenital = sim.people.age[target_uids] <= sim.dt
+        src_c = source_uids[congenital] if source_uids is not None else None
+        src_p = source_uids[~congenital] if source_uids is not None else None
+        self.set_congenital(sim, target_uids[congenital], src_c)
+        self.set_prognoses(sim, target_uids[~congenital], src_p)
+        return
 
     def set_prognoses(self, sim, target_uids, source_uids=None):
         pass

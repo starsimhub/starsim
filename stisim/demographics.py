@@ -113,7 +113,7 @@ class background_deaths(DemographicModule):
         }, self.pars)
 
         # Validate death rate inputs
-        self.set_death_rates(pars['death_rates'])
+        self.set_death_rates(self.pars['death_rates'])
 
         # Set death probs
         self.death_probs = ss.State('death_probs', float, 0)
