@@ -5,7 +5,7 @@ Test the RNG object from random.py
 # %% Imports and settings
 import numpy as np
 import sciris as sc
-import stisim as ss
+import starsim as ss
 from stisim.random import RNG
 import pytest
 

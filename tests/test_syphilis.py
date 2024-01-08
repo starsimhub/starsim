@@ -4,7 +4,7 @@ Run syphilis
 
 # %% Imports and settings
 import numpy as np
-import stisim as ss
+import starsim as ss
 import pandas as pd
 import matplotlib.pyplot as plt
 import scipy.stats as sps

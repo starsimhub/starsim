@@ -5,7 +5,7 @@ Test the RNGContainer object from random.py
 # %% Imports and settings
 import numpy as np
 import sciris as sc
-import stisim as ss
+import starsim as ss
 from stisim.random import NotInitializedException, SeedRepeatException, RepeatNameException
 from stisim.random import SingleRNG, MultiRNG
 import scipy.stats as sps
