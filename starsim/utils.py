@@ -7,7 +7,7 @@ Numerical utilities
 import warnings
 import numpy as np
 import sciris as sc
-import stisim as ss
+import starsim as ss
 import numba as nb
 import scipy.stats as sps
 

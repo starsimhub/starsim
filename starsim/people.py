@@ -6,7 +6,7 @@ Defines the People class and functions associated with making people
 import numpy as np
 import pandas as pd
 import sciris as sc
-import stisim as ss
+import starsim as ss
 import scipy.stats as sps
 
 __all__ = ['BasePeople', 'People']

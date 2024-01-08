@@ -3,7 +3,7 @@ Disease modules
 '''
 
 import sciris as sc
-import stisim as ss
+import starsim as ss
 from scipy.stats._distn_infrastructure import rv_frozen
 
 __all__ = ['Module']

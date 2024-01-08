@@ -5,7 +5,7 @@ Define core Sim classes
 # Imports
 import numpy as np
 import sciris as sc
-import stisim as ss
+import starsim as ss
 import itertools
 import numba as nb
 
