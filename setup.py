@@ -27,7 +27,7 @@ CLASSIFIERS = [
 setup(
     name="starsim",
     version=version,
-    author="Robyn Stuart, Jamie Cohen, Romesh Abeysuriya, Cliff Kerr, Daniel Klein",
+    author="Robyn Stuart, Romesh Abeysuriya, Jamie Cohen, Cliff Kerr, Daniel Klein",
     description="Starsim",
     long_description=long_description,
     long_description_content_type="text/x-rst",
