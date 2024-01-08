@@ -3,7 +3,7 @@ Test births and deaths
 """
 
 # %% Imports and settings
-import stisim as ss
+import starsim as ss
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np

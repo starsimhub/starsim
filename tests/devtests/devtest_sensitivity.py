@@ -4,7 +4,7 @@ A simple beta sweep with multisim on and off using HIV as an example pathogen
 
 # %% Imports and settings
 import os
-import stisim as ss
+import starsim as ss
 import sciris as sc
 import pandas as pd
 import seaborn as sns
