@@ -6,8 +6,8 @@ Test the RNGContainer object from random.py
 import numpy as np
 import sciris as sc
 import starsim as ss
-from stisim.random import NotInitializedException, SeedRepeatException, RepeatNameException
-from stisim.random import SingleRNG, MultiRNG
+from starsim.random import NotInitializedException, SeedRepeatException, RepeatNameException
+from starsim.random import SingleRNG, MultiRNG
 import scipy.stats as sps
 import pytest
 
