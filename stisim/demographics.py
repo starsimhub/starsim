@@ -101,15 +101,34 @@ class births(DemographicModule):
 
 
 class background_deaths(DemographicModule):
-    def __init__(self, pars=None):
+    def __init__(self, pars=None, data=None):
         super().__init__(pars)
 
         self.pars = ss.omerge({
-            #'rel_death': 1,
-            #'units_per_100': 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
-            'death_prob_func': self.death_prob,
+            'rel_death': 1,
+            'death_prob': sps.bernoulli(p=0.02)
         }, self.pars)
-        self.death_prob_dist = sps.bernoulli(p=self.pars['death_prob_func'])
+
+        # Process data. Usual workflow is that a user would provide a datafile
+        # which we then convert to a function stored in the death_prob parameter
+        self.data = data
+        self.process_data()
+
+        return
+
+    def process_data(self):
+        """ Process death data file and translate to a parameter function """
+
+        def make_death_prob_fn(self, sim, uids):
+            death_prob_fn = sim.people.age[uids] / 10
+            return death_prob_fn
+        #
+        # self.pars.death_prob.kwds['p'] = make_death_prob_fn(self, sim, uids)
+        #
+        # import traceback;
+        # traceback.print_exc();
+        # import pdb;
+        # pdb.set_trace()
         return
 
     @staticmethod
@@ -135,7 +154,12 @@ class background_deaths(DemographicModule):
     def apply_deaths(self, sim):
         """ Select people to die """
         alive_uids = ss.true(sim.people.alive)
-        death_uids = self.death_prob_dist.filter(alive_uids)
+
+        # Make any adjustments to the death probability parameter
+        death_prob_fn = sc.dcp(self.pars.death_prob)  # Temp
+        death_prob_fn.kwds['p'] *= (self.pars.rel_death * sim.pars.dt)
+
+        death_uids = death_prob_fn.filter(alive_uids)
         sim.people.request_death(death_uids)
 
         return len(death_uids)
