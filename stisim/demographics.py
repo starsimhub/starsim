@@ -116,21 +116,25 @@ class background_deaths(DemographicModule):
 
         return
 
+    @staticmethod
+    def make_death_prob_fn(df, sim, uids):
+        """ Take in a dataframe, sim, and uids, and return the death rate for each UID """
+        age_bins = df[age_label].unique()
+        age_inds = np.digitize(sim.people.age, age_bins) - 1
+
+
+        ages = sim.people.age[uids]
+
+
+        f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
+        m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
+        self.death_probs[sim.people.female] = f_arr[age_inds[sim.people.female]]
+        self.death_probs[sim.people.male] = m_arr[age_inds[sim.people.male]]
+
+        return death_prob_fn
+
     def process_data(self):
         """ Process death data file and translate to a parameter function """
-
-        def make_death_prob_fn(df, sim, uids):
-            ages = sim.people.age[uids]
-
-            age_bins = df[age_label].unique()
-            age_inds = np.digitize(sim.people.age, age_bins) - 1
-
-            f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
-            m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
-            self.death_probs[sim.people.female] = f_arr[age_inds[sim.people.female]]
-            self.death_probs[sim.people.male] = m_arr[age_inds[sim.people.male]]
-
-            return death_prob_fn
 
 
         available_years = p.death_rates[year_label].unique()
