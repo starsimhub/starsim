@@ -9,6 +9,14 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :depth: 1
 
 
+Version 0.1.1 (2024-01-10)
+--------------------------
+- Allows SciPy distributions to be used as parameters
+- Optionally use multiple random number streams and other tricks to maintain coherence between simulations
+- Adding functionality to convert death rate data to a callable parameter within a SciPy distribution
+- *GitHub info*: PRs `170 <https://github.com/amath-idm/stisim/pull/170>`_ and `202 <https://github.com/amath-idm/stisim/pull/202>`_
+
+
 Version 0.0.8 (2023-10-04)
 --------------------------
 - Enable removing people from simulations following death
