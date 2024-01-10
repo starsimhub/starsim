@@ -27,7 +27,7 @@ def test_death_data():
     sim1.run()
 
     ppl = ss.People(1000)
-    bdm2 = ss.background_deaths(pars={'death_prob': sps.bernoulli(p=0.01)})
+    bdm2 = ss.background_deaths(pars={'death_prob': 0.01})
     sim2 = ss.Sim(people=ppl, demographics=bdm2, label='Constant deaths from bernoulli (0.01)')
     sim2.run()
 

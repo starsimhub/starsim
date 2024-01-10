@@ -118,7 +118,7 @@ class background_deaths(DemographicModule):
         with a bernoulli distribution containing a constant value of function of
         your own design.
         
-        :param data: pandas dataframe containing mortality data
+        :param data: dict, float, or pandas dataframe/series containing mortality data
 
         :param metadata: data about the data contained within the data input.
         "data_cols" is is a dictionary mapping standard keys, like "year" to the
@@ -129,7 +129,7 @@ class background_deaths(DemographicModule):
 
         self.pars = ss.omerge({
             'rel_death': 1,
-            'death_prob': sps.bernoulli(p=0.02) # Default is a fixed probability of 0.02 per dt for all agents
+            'death_prob': 0.02 # Default = a fixed probability of 0.02/year for all agents, overwritten if data provided
         }, self.pars)
 
         # Process metadata
@@ -139,14 +139,16 @@ class background_deaths(DemographicModule):
             'units_per_100': 1e-3  # assumes death rates are per 1000. If using percentages, switch this to 1
         }, metadata)
 
-        # Process data. Usual workflow is that a user would provide a datafile
-        # which we then convert to a function stored in the death_prob parameter
+        # Process data and set death rate function. Usual workflow is that a user
+        # would provide a datafile which we then convert to a function
         if data is not None:
             data = self.standardize_death_data(data)
         self.data = data
         if self.data is not None:
             # Update death_prob to use make_death_prob_fn (a function that returns a probability of death for each requested uid)
-            self.pars.death_prob.kwds['p'] = self.make_death_prob_fn
+            self.pars.death_prob = self.make_death_prob_fn
+
+        self.death_fn = sps.bernoulli(p=self.pars.death_prob)
 
         return
 
@@ -245,7 +247,7 @@ class background_deaths(DemographicModule):
     def apply_deaths(self, sim):
         """ Select people to die """
         alive_uids = ss.true(sim.people.alive)
-        death_uids = self.pars.death_prob.filter(alive_uids)
+        death_uids = self.death_fn.filter(alive_uids)
         sim.people.request_death(death_uids)
         return len(death_uids)
 
