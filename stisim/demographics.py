@@ -38,7 +38,7 @@ class births(DemographicModule):
             'birth_rates': 0,
             'rel_birth': 1,
             'data_cols': {'year': 'Year', 'cbr': 'CBR'},
-            'units_per_100': 1e-3  # assumes birth rates are per 1000. If using percentages, switch this to 1
+            'units': 1e-3  # assumes birth rates are per 1000. If using percentages, switch this to 1
         }, self.pars)
 
         # Validate birth rate inputs

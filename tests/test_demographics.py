@@ -41,7 +41,7 @@ def test_death_data():
     sim3.run()
 
     fig, ax = plt.subplots(2, 1)
-    for sim in [sim1, sim2, sim3,]:
+    for sim in [sim1, sim2, sim3]:
         ax[0].plot(sim.tivec, sim.results.background_deaths.new, label=sim.label)
         ax[1].plot(sim.tivec, sim.results.n_alive)
 
@@ -58,6 +58,33 @@ def test_death_data():
 
 def test_birth_data():
     """ Show that birth data can be added in multiple formats """
+
+    # Parameters
+    realistic_birth = pd.read_csv(ss.root / 'tests/test_data/nigeria_births.csv')
+
+    ppl = ss.People(1000)
+    births = ss.births(pars={'birth_rates':realistic_birth})
+    sim1 = ss.Sim(people=ppl, demographics=births)
+    sim1.run()
+
+    ppl = ss.People(1000)
+    births = ss.births(pars={'birth_rates': 36, 'units': 1/1000})
+    sim2 = ss.Sim(people=ppl, demographics=births)
+    sim2.run()
+
+    fig, ax = plt.subplots(2, 1)
+    for sim in [sim1, sim2,]:
+        ax[0].plot(sim.tivec, sim.results.births.new, label=sim.label)
+        ax[1].plot(sim.tivec, sim.results.n_alive)
+
+    ax[0].set_title('New births')
+    ax[1].set_title('Population size')
+    ax[1].set_xlabel('Time step')
+    ax[0].set_ylabel('Count')
+    ax[1].set_ylabel('Count')
+    ax[0].legend()
+    fig.tight_layout()
+    plt.show()
 
     return
 
