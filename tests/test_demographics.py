@@ -3,7 +3,6 @@ Test demographics
 """
 
 # %% Imports and settings
-import numpy as np
 import stisim as ss
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -24,32 +23,34 @@ def test_death_data():
     # Run through combinations
     ppl = ss.People(1000)
     bdm1 = ss.background_deaths(data=0.02)
-    sim1 = ss.Sim(people=ppl, demographics=bdm1)
+    sim1 = ss.Sim(people=ppl, demographics=bdm1, label='Constant deaths from scalar (0.02)')
     sim1.run()
 
     ppl = ss.People(1000)
-    bdm2 = ss.background_deaths(data=realistic_death)
-    sim2 = ss.Sim(people=ppl, demographics=bdm2)
+    bdm2 = ss.background_deaths(pars={'death_prob': sps.bernoulli(p=0.01)})
+    sim2 = ss.Sim(people=ppl, demographics=bdm2, label='Constant deaths from bernoulli (0.01)')
     sim2.run()
 
     ppl = ss.People(1000)
     bdm3 = ss.background_deaths(data=series_death)
-    sim3 = ss.Sim(people=ppl, demographics=bdm3)
+    sim3 = ss.Sim(people=ppl, demographics=bdm3, label='Series deaths')
     sim3.run()
 
     ppl = ss.People(1000)
-    bdm4 = ss.background_deaths(pars={'death_prob': sps.bernoulli(p=0.02)})
-    sim4 = ss.Sim(people=ppl, demographics=bdm4)
+    bdm4 = ss.background_deaths(data=realistic_death)
+    sim4 = ss.Sim(people=ppl, demographics=bdm4, label='Realistic deaths')
     sim4.run()
 
     fig, ax = plt.subplots(2, 1)
-    labels = ['Constant deaths 1', 'Realistic deaths', 'Series deaths', 'Constant deaths 2']
-    for sn,sim in enumerate([sim1, sim2, sim3, sim4]):
-        ax[0].plot(sim.tivec, sim.results.background_deaths.new, label=labels[sn])
+    for sim in [sim1, sim2, sim3, sim4]:
+        ax[0].plot(sim.tivec, sim.results.background_deaths.new, label=sim.label)
         ax[1].plot(sim.tivec, sim.results.n_alive)
 
-    ax[0].set_title('Births and deaths')
+    ax[0].set_title('New background deaths')
     ax[1].set_title('Population size')
+    ax[1].set_xlabel('Time step')
+    ax[0].set_ylabel('Count')
+    ax[1].set_ylabel('Count')
     ax[0].legend()
     fig.tight_layout()
     plt.show()
@@ -57,8 +58,5 @@ def test_death_data():
     return
 
 
-
 if __name__ == '__main__':
-
     test_death_data()
-
