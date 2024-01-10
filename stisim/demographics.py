@@ -118,8 +118,8 @@ class background_deaths(DemographicModule):
 
         # Process data. Usual workflow is that a user would provide a datafile
         # which we then convert to a function stored in the death_prob parameter
-        if self.data is not None:
-            data = self.standardize_death_data()
+        if data is not None:
+            data = self.standardize_death_data(data)
         self.data = data
         if self.data is not None:
             self.process_data()
@@ -191,6 +191,10 @@ class background_deaths(DemographicModule):
         elif sc.checktype(data, dict):
             if not set(self.metadata.data_cols.values()).issubset(data.keys()):
                 errormsg = 'Please ensure the keys of the death rate data dict match the values in pars.data_cols.'
+                import traceback;
+                traceback.print_exc();
+                import pdb;
+                pdb.set_trace()
                 raise ValueError(errormsg)
             df = pd.DataFrame(data)
 

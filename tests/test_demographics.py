@@ -7,78 +7,58 @@ import numpy as np
 import stisim as ss
 import pandas as pd
 import matplotlib.pyplot as plt
+import scipy.stats as sps
 
 
-def test_nigeria():
-    """ Make a sim with Nigeria demographic data """
+def test_death_data():
+    """ Show that death data can be added in multiple formats """
 
-    # Read in demographic data
-    fertility_data = pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')
-    death_data = pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')
-
-    # # Or why not put a lambda here for fun!
-    # sir.pars['dur_inf'].kwds['loc'] = lambda self, sim, uids: sim.people.age[uids]/10
-
-    # pregnancy = ss.Pregnancy(fertility_rates)
-    # death_rates = dict(
-    #     death_rates=pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv'),
-    # )
-    death = ss.background_deaths(death_rates)
-
-    # Make people
-    ppl = ss.People(10000, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
-
-    sim = ss.Sim(
-        dt=1/12,
-        total_pop=93963392,
-        start=1990,
-        n_years=40,
-        people=ppl,
-        demographics=[
-            pregnancy,
-            death
-        ],
+    # Death rate input types
+    realistic_death = pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')
+    series_death = pd.Series(
+        index=[0, 10, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95],
+        data=[0.0046355, 0.000776, 0.0014232, 0.0016693, 0.0021449, 0.0028822, 0.0039143, 0.0053676, 0.0082756, 0.01,
+              0.02, 0.03, 0.04, 0.06, 0.11, 0.15, 0.21, 0.30],
     )
 
-    sim.run()
+    # Run through combinations
+    ppl = ss.People(1000)
+    bdm1 = ss.background_deaths(data=0.02)
+    sim1 = ss.Sim(people=ppl, demographics=bdm1)
+    sim1.run()
 
-    nigeria_popsize = pd.read_csv(ss.root / 'tests/test_data/nigeria_popsize.csv')
-    data = nigeria_popsize[(nigeria_popsize.year >= 1990) & (nigeria_popsize.year <= 2030)]
+    ppl = ss.People(1000)
+    bdm2 = ss.background_deaths(data=realistic_death)
+    sim2 = ss.Sim(people=ppl, demographics=bdm2)
+    sim2.run()
 
-    # Check
-    fig, ax = plt.subplots(2, 2)
-    ax = ax.ravel()
-    ax[0].plot(sim.yearvec, sim.results.n_alive)
-    ax[0].scatter(data.year, data.n_alive)
-    ax[0].set_title('Population')
+    ppl = ss.People(1000)
+    bdm3 = ss.background_deaths(data=series_death)
+    sim3 = ss.Sim(people=ppl, demographics=bdm3)
+    sim3.run()
 
-    ax[1].plot(sim.yearvec, sim.results.new_deaths)
-    ax[1].set_title('Deaths')
+    ppl = ss.People(1000)
+    bdm4 = ss.background_deaths(pars={'death_prob': sps.bernoulli(p=0.02)})
+    sim4 = ss.Sim(people=ppl, demographics=bdm4)
+    sim4.run()
 
-    ax[2].plot(sim.yearvec, sim.results.pregnancy.pregnancies, label='Pregnancies')
-    ax[2].plot(sim.yearvec, sim.results.pregnancy.births, label='Births')
-    ax[2].set_title('Pregnancies and births')
-    ax[2].legend()
+    fig, ax = plt.subplots(2, 1)
+    labels = ['Constant deaths 1', 'Realistic deaths', 'Series deaths', 'Constant deaths 2']
+    for sn,sim in enumerate([sim1, sim2, sim3, sim4]):
+        ax[0].plot(sim.tivec, sim.results.background_deaths.new, label=labels[sn])
+        ax[1].plot(sim.tivec, sim.results.n_alive)
 
-    fig.tight_layout
-
+    ax[0].set_title('Births and deaths')
+    ax[1].set_title('Population size')
+    ax[0].legend()
+    fig.tight_layout()
     plt.show()
 
-    return sim
+    return
+
 
 
 if __name__ == '__main__':
-    # fertility_data = pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')
 
-    # Here we read in death data, then transform it to a function that we can pass in
-    # as a parameter to the background_death module
-    death_data = pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')
-
-    # Try just a regular death rate
-    deaths = ss.background_deaths(data=death_data)
-    ppl = ss.People(10000)
-    sim = ss.Sim(people=ppl, demographics=deaths)
-    sim.run()
-
-    # sim = test_nigeria()
+    test_death_data()
 
