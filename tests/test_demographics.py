@@ -56,6 +56,11 @@ def test_death_data():
 
     return
 
+def test_birth_data():
+    """ Show that birth data can be added in multiple formats """
+
+    return
 
 if __name__ == '__main__':
-    test_death_data()
+    # test_death_data()
+    test_birth_data()
