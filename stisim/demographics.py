@@ -174,11 +174,8 @@ class background_deaths(DemographicModule):
     def apply_deaths(self, sim):
         """ Select people to die """
         alive_uids = ss.true(sim.people.alive)
-
-        # Make any adjustments to the death probability parameter
         death_uids = self.pars.death_prob.filter(alive_uids)
         sim.people.request_death(death_uids)
-
         return len(death_uids)
 
     def update_results(self, n_deaths, sim):
