@@ -191,11 +191,6 @@ class background_deaths(DemographicModule):
         elif sc.checktype(data, dict):
             if not set(self.metadata.data_cols.values()).issubset(data.keys()):
                 errormsg = 'Please ensure the keys of the death rate data dict match the values in pars.data_cols.'
-                import traceback;
-                traceback.print_exc();
-                import pdb;
-                pdb.set_trace()
-                raise ValueError(errormsg)
             df = pd.DataFrame(data)
 
         elif sc.isnumber(data):
