@@ -37,30 +37,31 @@ class births(DemographicModule):
         self.pars = ss.omerge({
             'birth_rates': 0,
             'rel_birth': 1,
-            'data_cols': {'year': 'Year', 'cbr': 'CBR'},
             'units': 1e-3  # assumes birth rates are per 1000. If using percentages, switch this to 1
         }, self.pars)
 
-        # Validate birth rate inputs
-        self.set_birth_rates(pars['birth_rates'])
+        # Process metadata. Defaults here are the labels used by UN data
+        self.metadata = ss.omerge({
+            'data_cols': {'year': 'Year', 'cbr': 'CBR'},
+        }, metadata)
 
-    def set_birth_rates(self, birth_rates):
-        """ Determine format that birth rates have been provided and standardize/validate """
-        if sc.checktype(birth_rates, pd.DataFrame):
-            if not set(self.pars.data_cols.values()).issubset(birth_rates.columns):
-                errormsg = 'Please ensure the columns of the birth rate data match the values in pars.data_cols.'
-                raise ValueError(errormsg)
-        if sc.checktype(birth_rates, dict):
-            if not set(self.pars.data_cols.values()).issubset(birth_rates.keys()):
-                errormsg = 'Please ensure the keys of the birth rate data dict match the values in pars.data_cols.'
-                raise ValueError(errormsg)
-            birth_rates = pd.DataFrame(birth_rates)
-        if sc.isnumber(birth_rates):
-            birth_rates = pd.DataFrame({self.pars.data_cols['year']: [2000], self.pars.data_cols['cbr']: [birth_rates]})
+        # Process data, which may be provided as a number, dict, dataframe, or series
+        # If it's a number it's left as-is; otherwise it's converted to a dataframe
+        self.pars.birth_rate = self.standardize_birth_data()
 
-        self.pars.birth_rates = birth_rates
-        return
+        # Create death_prob_fn, a function which returns a probability of death for each requested uid
+        self.birth_prob_fn = self.make_birth_prob_fn
+        self.birth_dist = sps.bernoulli(p=self.birth_prob_fn)
 
+    @staticmethod
+    def make_birth_prob_fn(module, sim, uids):
+        """ Take in the module, sim, and uids, and return the probability of death for each UID on this timestep """
+        return result
+
+    def standardize_birth_data(self, birth_rates):
+        """ Standardize/validate birth rates - handled in an external file due to shared functionality """
+        birth_rate = ss.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
+        return birth_rate
 
     def init_results(self, sim):
         self.results += ss.Result(self.name, 'new', sim.npts, dtype=int)

@@ -310,6 +310,7 @@ def undefined(arr):
 
 __all__ += ['standardize_data']
 
+
 def standardize_data(data=None, metadata=None):
 
     if isinstance(data, pd.DataFrame):
@@ -341,6 +342,7 @@ def standardize_data(data=None, metadata=None):
     elif isinstance(data, dict):
         if not set(metadata.data_cols.values()).issubset(data.keys()):
             errormsg = 'Please ensure the keys of the data dict match the values in metadata.data_cols.'
+            raise ValueError(errormsg)
         df = pd.DataFrame(data)
 
     elif sc.isnumber(data):
