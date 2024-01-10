@@ -124,89 +124,41 @@ class background_deaths(DemographicModule):
         return
 
     @staticmethod
-    def make_death_prob_fn(pars, data, metadata, sim, uids):
+    def make_death_prob_fn(module, sim, uids):
         """ Take in a dataframe, sim, and uids, and return the death rate for each UID """
 
-        year_label = metadata.data_cols['year']
-        age_label = metadata.data_cols['age']
-        sex_label = metadata.data_cols['sex']
-        val_label = metadata.data_cols['value']
-        sex_keys = metadata.sex_keys
+        year_label = module.metadata.data_cols['year']
+        age_label = module.metadata.data_cols['age']
+        sex_label = module.metadata.data_cols['sex']
+        val_label = module.metadata.data_cols['value']
+        sex_keys = module.metadata.sex_keys
 
-        available_years = data[year_label].unique()
+        available_years = module.data[year_label].unique()
         year_ind = sc.findnearest(available_years, sim.year)
         nearest_year = available_years[year_ind]
 
-        df = data.loc[data[year_label] == nearest_year]
+        df = module.data.loc[module.data[year_label] == nearest_year]
         age_bins = df[age_label].unique()
         age_inds = np.digitize(sim.people.age, age_bins) - 1
 
         f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
         m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
 
-        return sim.people.age[uids]
-        self.death_probs[sim.people.female] = f_arr[age_inds[sim.people.female]]
-        self.death_probs[sim.people.male] = m_arr[age_inds[sim.people.male]]
-        self.death_probs[sim.people.age < 0] = 0  # Don't use background death rates for unborn babies
-        self.death_probs *= p.rel_death * sim.dt  # Adjust overall death probabilities by rel rates and dt
+        # Initialize
+        death_prob_df = pd.Series(index=sim.people.uid)
+        death_prob_df[uids[sim.people.female]] = f_arr[age_inds[sim.people.female]]
+        death_prob_df[uids[sim.people.male]] = m_arr[age_inds[sim.people.male]]
+        death_prob_df[uids[sim.people.age < 0]] = 0  # Don't use background death rates for unborn babies
 
+        # Scale
+        result = death_prob_df[uids].values * (module.pars.rel_death * sim.pars.dt)
 
-
-
-
-        age_bins = df[age_label].unique()
-        age_inds = np.digitize(sim.people.age, age_bins) - 1
-
-        ages = sim.people.age[uids]
-
-
-
-
-
-        f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
-        m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
-        self.death_probs[sim.people.female] = f_arr[age_inds[sim.people.female]]
-        self.death_probs[sim.people.male] = m_arr[age_inds[sim.people.male]]
-
-        return death_prob_fn
+        return result
 
     def process_data(self):
         """ Process death data file and translate to a parameter function """
-
-
-        available_years = p.death_rates[year_label].unique()
-        year_ind = sc.findnearest(available_years, sim.year)
-        nearest_year = available_years[year_ind]
-
-        df = p.death_rates.loc[p.death_rates[year_label] == nearest_year]
-        age_bins = df[age_label].unique()
-        age_inds = np.digitize(sim.people.age, age_bins) - 1
-
-        f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
-        m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
-        self.death_probs[sim.people.female] = f_arr[age_inds[sim.people.female]]
-        self.death_probs[sim.people.male] = m_arr[age_inds[sim.people.male]]
-        self.death_probs[sim.people.age < 0] = 0  # Don't use background death rates for unborn babies
-        self.death_probs *= p.rel_death * sim.dt  # Adjust overall death probabilities by rel rates and dt
-
-
-        #
-        # self.pars.death_prob.kwds['p'] = make_death_prob_fn(self, sim, uids)
-        #
-        # import traceback;
-        # traceback.print_exc();
-        # import pdb;
-        # pdb.set_trace()
+        self.pars.death_prob.kwds['p'] = self.make_death_prob_fn
         return
-
-    @staticmethod
-    def death_prob(self, sim, uids):
-        #p = self.pars
-        #year = p.death_rates[p.data_cols['year']]
-        #val = p.death_rates[p.data_cols['cbr']]
-        #this_death_rate = np.interp(sim.year, year, val) * p.units_per_100 * p.rel_death * sim.pars.dt_demog
-        #n_new = int(np.floor(np.count_nonzero(sim.people.alive) * this_death_rate))
-        return 0.01
 
     def init_results(self, sim):
         self.results += ss.Result(self.name, 'new', sim.npts, dtype=int)
@@ -224,10 +176,7 @@ class background_deaths(DemographicModule):
         alive_uids = ss.true(sim.people.alive)
 
         # Make any adjustments to the death probability parameter
-        death_prob_fn = sc.dcp(self.pars.death_prob)  # Temp
-        death_prob_fn.kwds['p'] *= (self.pars.rel_death * sim.pars.dt)
-
-        death_uids = death_prob_fn.filter(alive_uids)
+        death_uids = self.pars.death_prob.filter(alive_uids)
         sim.people.request_death(death_uids)
 
         return len(death_uids)
