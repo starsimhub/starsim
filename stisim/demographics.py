@@ -102,18 +102,41 @@ class births(DemographicModule):
 
 class background_deaths(DemographicModule):
     def __init__(self, pars=None, data=None, metadata=None):
+        """
+        Configure disease-independent "background" deaths.
+
+        The probability of death for each agent on each timestep is determined
+        by the `death_prob` parameter. The default value of this parameter is
+        sps.bernoulli(p=0.02), indicating that all agents will face a fixed
+        probability of death ON EACH TIMESTEP.
+
+        However, this function is designed to override this default behavior
+        through specification of `data` and `metadata`, which enable the
+        mortality rate to vary by year, sex, and age.
+
+        Alternatively, it is possible to override the `death_prob` parameter
+        with a bernoulli distribution containing a constant value of function of
+        your own design.
+        
+        :param data: pandas dataframe containing mortality data
+
+        :param metadata: data about the data contained within the data input.
+        "data_cols" is is a dictionary mapping standard keys, like "year" to the
+        corresponding column name in data. Similar for "sex_keys". Finally,
+        "units_per_100" provides a scale factor.
+        """
         super().__init__(pars)
 
         self.pars = ss.omerge({
             'rel_death': 1,
-            'death_prob': sps.bernoulli(p=0.02)
+            'death_prob': sps.bernoulli(p=0.02) # Default is a fixed probability of 0.02 per dt for all agents
         }, self.pars)
 
         # Process metadata
         self.metadata = ss.omerge({
             'data_cols': {'year': 'Time', 'sex': 'Sex', 'age': 'AgeGrpStart', 'value': 'mx'},
             'sex_keys': {'f': 'Female', 'm': 'Male'},
-            'units_per_100': 1e-3  # assumes birth rates are per 1000. If using percentages, switch this to 1
+            'units_per_100': 1e-3  # assumes death rates are per 1000. If using percentages, switch this to 1
         }, metadata)
 
         # Process data. Usual workflow is that a user would provide a datafile
@@ -122,7 +145,8 @@ class background_deaths(DemographicModule):
             data = self.standardize_death_data(data)
         self.data = data
         if self.data is not None:
-            self.process_data()
+            # Update death_prob to use make_death_prob_fn (a function that returns a probability of death for each requested uid)
+            self.pars.death_prob.kwds['p'] = self.make_death_prob_fn
 
         return
 
@@ -206,11 +230,6 @@ class background_deaths(DemographicModule):
             raise ValueError(errormsg)
 
         return df
-
-    def process_data(self):
-        """ Process death data file and translate to a parameter function """
-        self.pars.death_prob.kwds['p'] = self.make_death_prob_fn
-        return
 
     def init_results(self, sim):
         self.results += ss.Result(self.name, 'new', sim.npts, dtype=int)
