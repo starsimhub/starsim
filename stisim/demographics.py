@@ -101,7 +101,7 @@ class births(DemographicModule):
 
 
 class background_deaths(DemographicModule):
-    def __init__(self, pars=None, data=None, metadata=None):
+    def __init__(self, pars=None, metadata=None):
         """
         Configure disease-independent "background" deaths.
 
@@ -110,20 +110,23 @@ class background_deaths(DemographicModule):
         sps.bernoulli(p=0.02), indicating that all agents will face a fixed
         probability of death ON EACH TIMESTEP.
 
-        However, this function is designed to override this default behavior
-        through specification of `data` and `metadata`, which enable the
-        mortality rate to vary by year, sex, and age.
+        However, this function can be made more realistic by using a dataframe
+        for the death_prob parameter, to allow it to vary by year, sex, and age.
+        The separate 'metadata' argument can be used to configure the details of
+        the input datafile.
 
         Alternatively, it is possible to override the `death_prob` parameter
         with a bernoulli distribution containing a constant value of function of
         your own design.
         
-        :param data: dict, float, or pandas dataframe/series containing mortality data
+        :param pars: dict with arguments including:
+            rel_death: constant used to scale all death rates
+            death_prob: float, dict, or pandas dataframe/series containing mortality data
+            units: units for death rates (see in-line comment on par dict below)
 
         :param metadata: data about the data contained within the data input.
-        "data_cols" is is a dictionary mapping standard keys, like "year" to the
-        corresponding column name in data. Similar for "sex_keys". Finally,
-        "units_per_100" provides a scale factor.
+            "data_cols" is is a dictionary mapping standard keys, like "year" to the
+            corresponding column name in data. Similar for "sex_keys". Finally,
         """
         super().__init__(pars)
 
