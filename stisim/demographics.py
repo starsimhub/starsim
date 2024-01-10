@@ -139,11 +139,10 @@ class background_deaths(DemographicModule):
             'sex_keys': {'f': 'Female', 'm': 'Male'},
         }, metadata)
 
-        # Process data and set death rate function. Usual workflow is that a user
-        # would provide a datafile which we then convert to a function
-        if data is not None:
-            data = self.standardize_death_data(data)
-        self.data = data
+        # Process data, which may be provided as a number, dict, dataframe, or series
+        # If it's a number it's left as-is; otherwise it's converted to a dataframe
+        self.pars.death_prob = self.standardize_death_prob()
+
         # Create death_prob_fn, a function which returns a probability of death for each requested uid
         self.death_prob_fn = self.make_death_prob_fn
 
@@ -155,18 +154,21 @@ class background_deaths(DemographicModule):
     def make_death_prob_fn(module, sim, uids):
         """ Take in the module, sim, and uids, and return the death rate for each UID """
 
-        if module.data is not None:
+        if sc.isnumber(module.pars.death_prob):
+            result = module.pars.death_prob * module.pars.units * module.pars.rel_death * sim.pars.dt
+
+        else:
             year_label = module.metadata.data_cols['year']
             age_label = module.metadata.data_cols['age']
             sex_label = module.metadata.data_cols['sex']
             val_label = module.metadata.data_cols['value']
             sex_keys = module.metadata.sex_keys
 
-            available_years = module.data[year_label].unique()
+            available_years = module.pars.death_prob[year_label].unique()
             year_ind = sc.findnearest(available_years, sim.year)
             nearest_year = available_years[year_ind]
 
-            df = module.data.loc[module.data[year_label] == nearest_year]
+            df = module.pars.death_prob.loc[module.pars.death_prob[year_label] == nearest_year]
             age_bins = df[age_label].unique()
             age_inds = np.digitize(sim.people.age, age_bins) - 1
 
@@ -182,13 +184,13 @@ class background_deaths(DemographicModule):
             # Scale
             result = death_prob_df[uids].values * (module.pars.units * module.pars.rel_death * sim.pars.dt)
 
-        else:
-            result = module.pars.death_prob * module.pars.units * module.pars.rel_death * sim.pars.dt
-
         return result
 
-    def standardize_death_data(self, data):
+    def standardize_death_prob(self):
         """Standardize/validate death rates"""
+
+        # Shorthand for death data
+        data = self.pars.death_prob
 
         if isinstance(data, pd.DataFrame):
             if not set(self.metadata.data_cols.values()).issubset(data.columns):
@@ -223,12 +225,13 @@ class background_deaths(DemographicModule):
             df = pd.DataFrame(data)
 
         elif sc.isnumber(data):
-            df = pd.DataFrame({
-                self.metadata.data_cols['year']: [2000, 2000],
-                self.metadata.data_cols['age']: [0, 0],
-                self.metadata.data_cols['sex']: self.metadata.sex_keys.values(),
-                self.metadata.data_cols['value']: [data, data],
-            })
+            # df = pd.DataFrame({
+            #     self.metadata.data_cols['year']: [2000, 2000],
+            #     self.metadata.data_cols['age']: [0, 0],
+            #     self.metadata.data_cols['sex']: self.metadata.sex_keys.values(),
+            #     self.metadata.data_cols['value']: [data, data],
+            # })
+            df = data  # Just return it as-is
 
         else:
             errormsg = f'Death rate data type {type(data)} not understood.'
