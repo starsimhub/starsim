@@ -124,12 +124,43 @@ class background_deaths(DemographicModule):
         return
 
     @staticmethod
-    def make_death_prob_fn(df, metadata, sim, uids):
+    def make_death_prob_fn(pars, data, metadata, sim, uids):
         """ Take in a dataframe, sim, and uids, and return the death rate for each UID """
+
+        year_label = metadata.data_cols['year']
+        age_label = metadata.data_cols['age']
+        sex_label = metadata.data_cols['sex']
+        val_label = metadata.data_cols['value']
+        sex_keys = metadata.sex_keys
+
+        available_years = data[year_label].unique()
+        year_ind = sc.findnearest(available_years, sim.year)
+        nearest_year = available_years[year_ind]
+
+        df = data.loc[data[year_label] == nearest_year]
+        age_bins = df[age_label].unique()
+        age_inds = np.digitize(sim.people.age, age_bins) - 1
+
+        f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
+        m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
+
+        return sim.people.age[uids]
+        self.death_probs[sim.people.female] = f_arr[age_inds[sim.people.female]]
+        self.death_probs[sim.people.male] = m_arr[age_inds[sim.people.male]]
+        self.death_probs[sim.people.age < 0] = 0  # Don't use background death rates for unborn babies
+        self.death_probs *= p.rel_death * sim.dt  # Adjust overall death probabilities by rel rates and dt
+
+
+
+
+
         age_bins = df[age_label].unique()
         age_inds = np.digitize(sim.people.age, age_bins) - 1
 
         ages = sim.people.age[uids]
+
+
+
 
 
         f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
