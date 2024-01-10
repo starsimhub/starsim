@@ -106,22 +106,22 @@ class background_deaths(DemographicModule):
         Configure disease-independent "background" deaths.
 
         The probability of death for each agent on each timestep is determined
-        by the `death_prob` parameter. The default value of this parameter is
-        sps.bernoulli(p=0.02), indicating that all agents will face a fixed
-        probability of death ON EACH TIMESTEP.
+        by the `death_rate` parameter and the time step. The default value of
+        this parameter is 0.02, indicating that all agents will
+        face a 2% chance of death per year.
 
         However, this function can be made more realistic by using a dataframe
-        for the death_prob parameter, to allow it to vary by year, sex, and age.
-        The separate 'metadata' argument can be used to configure the details of
-        the input datafile.
+        for the `death_rate` parameter, to allow it to vary by year, sex, and
+        age.  The separate 'metadata' argument can be used to configure the
+        details of the input datafile.
 
-        Alternatively, it is possible to override the `death_prob` parameter
+        Alternatively, it is possible to override the `death_rate` parameter
         with a bernoulli distribution containing a constant value of function of
         your own design.
         
         :param pars: dict with arguments including:
             rel_death: constant used to scale all death rates
-            death_prob: float, dict, or pandas dataframe/series containing mortality data
+            death_rate: float, dict, or pandas dataframe/series containing mortality data
             units: units for death rates (see in-line comment on par dict below)
 
         :param metadata: data about the data contained within the data input.
@@ -132,7 +132,7 @@ class background_deaths(DemographicModule):
 
         self.pars = ss.omerge({
             'rel_death': 1,
-            'death_prob': 0.02,  # Default = a fixed probability of 0.02/year, overwritten if data provided
+            'death_rate': 0.02,  # Default = a fixed rate of 2%/year, overwritten if data provided
             'units': 1,  # units for death rates. If using percentages, leave as 1. If using a CMR (e.g. 12 deaths per 1000), change to 1/1000
         }, self.pars)
 
@@ -144,21 +144,20 @@ class background_deaths(DemographicModule):
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
-        self.pars.death_prob = self.standardize_death_prob()
+        self.pars.death_rate = self.standardize_death_data()
 
         # Create death_prob_fn, a function which returns a probability of death for each requested uid
         self.death_prob_fn = self.make_death_prob_fn
-
         self.death_dist = sps.bernoulli(p=self.death_prob_fn)
 
         return
 
     @staticmethod
     def make_death_prob_fn(module, sim, uids):
-        """ Take in the module, sim, and uids, and return the death rate for each UID """
+        """ Take in the module, sim, and uids, and return the probability of death for each UID on this timestep """
 
-        if sc.isnumber(module.pars.death_prob):
-            result = module.pars.death_prob * module.pars.units * module.pars.rel_death * sim.pars.dt
+        if sc.isnumber(module.pars.death_rate):
+            death_rate = module.pars.death_rate
 
         else:
             year_label = module.metadata.data_cols['year']
@@ -167,11 +166,11 @@ class background_deaths(DemographicModule):
             val_label = module.metadata.data_cols['value']
             sex_keys = module.metadata.sex_keys
 
-            available_years = module.pars.death_prob[year_label].unique()
+            available_years = module.pars.death_rate[year_label].unique()
             year_ind = sc.findnearest(available_years, sim.year)
             nearest_year = available_years[year_ind]
 
-            df = module.pars.death_prob.loc[module.pars.death_prob[year_label] == nearest_year]
+            df = module.pars.death_rate.loc[module.pars.death_rate[year_label] == nearest_year]
             age_bins = df[age_label].unique()
             age_inds = np.digitize(sim.people.age, age_bins) - 1
 
@@ -179,20 +178,22 @@ class background_deaths(DemographicModule):
             m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
 
             # Initialize
-            death_prob_df = pd.Series(index=sim.people.uid)
-            death_prob_df[uids[sim.people.female]] = f_arr[age_inds[sim.people.female]]
-            death_prob_df[uids[sim.people.male]] = m_arr[age_inds[sim.people.male]]
-            death_prob_df[uids[sim.people.age < 0]] = 0  # Don't use background death rates for unborn babies
+            death_rate_df = pd.Series(index=sim.people.uid)
+            death_rate_df[uids[sim.people.female]] = f_arr[age_inds[sim.people.female]]
+            death_rate_df[uids[sim.people.male]] = m_arr[age_inds[sim.people.male]]
+            death_rate_df[uids[sim.people.age < 0]] = 0  # Don't use background death rates for unborn babies
 
-            # Scale
-            result = death_prob_df[uids].values * (module.pars.units * module.pars.rel_death * sim.pars.dt)
+            death_rate = death_rate_df[uids].values
 
-        return result
+        # Scale from rate to probability. Consider an exponential here.
+        death_prob = death_rate * (module.pars.units * module.pars.rel_death * sim.pars.dt)
 
-    def standardize_death_prob(self):
-        """ Standardize/validate death rates - handled in an external file due to shared functionality """
-        death_prob = ss.standardize_data(data=self.pars.death_prob, metadata=self.metadata)
         return death_prob
+
+    def standardize_death_data(self):
+        """ Standardize/validate death rates - handled in an external file due to shared functionality """
+        death_rate = ss.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
+        return death_rate
 
     def init_results(self, sim):
         self.results += ss.Result(self.name, 'new', sim.npts, dtype=int)

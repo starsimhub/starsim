@@ -330,10 +330,9 @@ def standardize_data(data=None, metadata=None):
                 metadata.data_cols['year']: data.index.values,
                 metadata.data_cols['age']: 0,
                 metadata.data_cols['value']: data.values,
-
             })
         else:
-            errormsg = 'Could not understand index of data series: should be age or year.'
+            errormsg = 'Could not understand index of data series: should be age (all values less than 120) or year (all values greater than 1900).'
             raise ValueError(errormsg)
 
         df = pd.concat([df, df])
