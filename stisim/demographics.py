@@ -112,16 +112,43 @@ class background_deaths(DemographicModule):
         # Process data. Usual workflow is that a user would provide a datafile
         # which we then convert to a function stored in the death_prob parameter
         self.data = data
-        self.process_data()
+        if self.data is not None: self.process_data()
 
         return
 
     def process_data(self):
         """ Process death data file and translate to a parameter function """
 
-        def make_death_prob_fn(self, sim, uids):
-            death_prob_fn = sim.people.age[uids] / 10
+        def make_death_prob_fn(df, sim, uids):
+            ages = sim.people.age[uids]
+
+            age_bins = df[age_label].unique()
+            age_inds = np.digitize(sim.people.age, age_bins) - 1
+
+            f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
+            m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
+            self.death_probs[sim.people.female] = f_arr[age_inds[sim.people.female]]
+            self.death_probs[sim.people.male] = m_arr[age_inds[sim.people.male]]
+
             return death_prob_fn
+
+
+        available_years = p.death_rates[year_label].unique()
+        year_ind = sc.findnearest(available_years, sim.year)
+        nearest_year = available_years[year_ind]
+
+        df = p.death_rates.loc[p.death_rates[year_label] == nearest_year]
+        age_bins = df[age_label].unique()
+        age_inds = np.digitize(sim.people.age, age_bins) - 1
+
+        f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
+        m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
+        self.death_probs[sim.people.female] = f_arr[age_inds[sim.people.female]]
+        self.death_probs[sim.people.male] = m_arr[age_inds[sim.people.male]]
+        self.death_probs[sim.people.age < 0] = 0  # Don't use background death rates for unborn babies
+        self.death_probs *= p.rel_death * sim.dt  # Adjust overall death probabilities by rel rates and dt
+
+
         #
         # self.pars.death_prob.kwds['p'] = make_death_prob_fn(self, sim, uids)
         #
