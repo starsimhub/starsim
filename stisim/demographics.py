@@ -190,57 +190,9 @@ class background_deaths(DemographicModule):
         return result
 
     def standardize_death_prob(self):
-        """Standardize/validate death rates"""
-
-        # Shorthand for death data
-        data = self.pars.death_prob
-
-        if isinstance(data, pd.DataFrame):
-            if not set(self.metadata.data_cols.values()).issubset(data.columns):
-                errormsg = 'Please ensure the columns of the death rate data match the values in pars.data_cols.'
-                raise ValueError(errormsg)
-            df = data
-
-        elif isinstance(data, pd.Series):
-            if (data.index < 120).all():  # Assume index is age bins
-                df = pd.DataFrame({
-                    self.metadata.data_cols['year']: 2000,
-                    self.metadata.data_cols['age']: data.index.values,
-                    self.metadata.data_cols['value']: data.values,
-                })
-            elif (data.index > 1900).all():  # Assume index year
-                df = pd.DataFrame({
-                    self.metadata.data_cols['year']: data.index.values,
-                    self.metadata.data_cols['age']: 0,
-                    self.metadata.data_cols['value']: data.values,
-
-                })
-            else:
-                errormsg = 'Could not understand index of death rate series: should be age or year.'
-                raise ValueError(errormsg)
-
-            df = pd.concat([df, df])
-            df[self.metadata.data_cols['sex']] = np.repeat(list(self.metadata.sex_keys.values()), len(data))
-
-        elif isinstance(data, dict):
-            if not set(self.metadata.data_cols.values()).issubset(data.keys()):
-                errormsg = 'Please ensure the keys of the death rate data dict match the values in pars.data_cols.'
-            df = pd.DataFrame(data)
-
-        elif sc.isnumber(data):
-            # df = pd.DataFrame({
-            #     self.metadata.data_cols['year']: [2000, 2000],
-            #     self.metadata.data_cols['age']: [0, 0],
-            #     self.metadata.data_cols['sex']: self.metadata.sex_keys.values(),
-            #     self.metadata.data_cols['value']: [data, data],
-            # })
-            df = data  # Just return it as-is
-
-        else:
-            errormsg = f'Death rate data type {type(data)} not understood.'
-            raise ValueError(errormsg)
-
-        return df
+        """ Standardize/validate death rates - handled in an external file due to shared functionality """
+        death_prob = ss.standardize_data(data=self.pars.death_prob, metadata=self.metadata)
+        return death_prob
 
     def init_results(self, sim):
         self.results += ss.Result(self.name, 'new', sim.npts, dtype=int)
