@@ -128,7 +128,7 @@ class background_deaths(DemographicModule):
 
     @staticmethod
     def make_death_prob_fn(module, sim, uids):
-        """ Take in a dataframe, sim, and uids, and return the death rate for each UID """
+        """ Take in the module, sim, and uids, and return the death rate for each UID """
 
         year_label = module.metadata.data_cols['year']
         age_label = module.metadata.data_cols['age']
