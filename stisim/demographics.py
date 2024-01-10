@@ -101,13 +101,20 @@ class births(DemographicModule):
 
 
 class background_deaths(DemographicModule):
-    def __init__(self, pars=None, data=None):
+    def __init__(self, pars=None, data=None, metadata=None):
         super().__init__(pars)
 
         self.pars = ss.omerge({
             'rel_death': 1,
             'death_prob': sps.bernoulli(p=0.02)
         }, self.pars)
+
+        # Process metadata
+        self.metadata = ss.omerge({
+            'data_cols': {'year': 'Time', 'sex': 'Sex', 'age': 'AgeGrpStart', 'value': 'mx'},
+            'sex_keys': {'f': 'Female', 'm': 'Male'},
+            'units_per_100': 1e-3  # assumes birth rates are per 1000. If using percentages, switch this to 1
+        }, metadata)
 
         # Process data. Usual workflow is that a user would provide a datafile
         # which we then convert to a function stored in the death_prob parameter
@@ -117,11 +124,10 @@ class background_deaths(DemographicModule):
         return
 
     @staticmethod
-    def make_death_prob_fn(df, sim, uids):
+    def make_death_prob_fn(df, metadata, sim, uids):
         """ Take in a dataframe, sim, and uids, and return the death rate for each UID """
         age_bins = df[age_label].unique()
         age_inds = np.digitize(sim.people.age, age_bins) - 1
-
 
         ages = sim.people.age[uids]
 
