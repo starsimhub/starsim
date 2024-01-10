@@ -9,6 +9,7 @@ import numpy as np
 import sciris as sc
 import stisim as ss
 import numba as nb
+import pandas as pd
 
 # What functions are externally visible -- note, this gets populated in each section below
 __all__ = []
@@ -303,3 +304,50 @@ def undefined(arr):
         inds = ss.defined(np.array([1,np.nan,0,np.nan,1,0,1]))
     """
     return np.isnan(arr).nonzero()[-1]
+
+
+# %% Data cleaning and processing
+
+__all__ += ['standardize_data']
+
+def standardize_data(data=None, metadata=None):
+
+    if isinstance(data, pd.DataFrame):
+        if not set(metadata.data_cols.values()).issubset(data.columns):
+            errormsg = 'Please ensure the columns of the data match the values in metadata.data_cols.'
+            raise ValueError(errormsg)
+        df = data
+
+    elif isinstance(data, pd.Series):
+        if (data.index < 120).all():  # Assume index is age bins
+            df = pd.DataFrame({
+                metadata.data_cols['year']: 2000,
+                metadata.data_cols['age']: data.index.values,
+                metadata.data_cols['value']: data.values,
+            })
+        elif (data.index > 1900).all():  # Assume index year
+            df = pd.DataFrame({
+                metadata.data_cols['year']: data.index.values,
+                metadata.data_cols['age']: 0,
+                metadata.data_cols['value']: data.values,
+            })
+        else:
+            errormsg = 'Could not understand index of data series: should be age (all values less than 120) or year (all values greater than 1900).'
+            raise ValueError(errormsg)
+
+        df = pd.concat([df, df])
+        df[metadata.data_cols['sex']] = np.repeat(list(metadata.sex_keys.values()), len(data))
+
+    elif isinstance(data, dict):
+        if not set(metadata.data_cols.values()).issubset(data.keys()):
+            errormsg = 'Please ensure the keys of the data dict match the values in metadata.data_cols.'
+        df = pd.DataFrame(data)
+
+    elif sc.isnumber(data):
+        df = data  # Just return it as-is
+
+    else:
+        errormsg = f'Data type {type(data)} not understood.'
+        raise ValueError(errormsg)
+
+    return df
