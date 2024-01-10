@@ -118,8 +118,11 @@ class background_deaths(DemographicModule):
 
         # Process data. Usual workflow is that a user would provide a datafile
         # which we then convert to a function stored in the death_prob parameter
+        if self.data is not None:
+            data = self.standardize_death_data()
         self.data = data
-        if self.data is not None: self.process_data()
+        if self.data is not None:
+            self.process_data()
 
         return
 
@@ -154,6 +157,56 @@ class background_deaths(DemographicModule):
         result = death_prob_df[uids].values * (module.pars.rel_death * sim.pars.dt)
 
         return result
+
+    def standardize_death_data(self, data):
+        """Standardize/validate death rates"""
+
+        if sc.checktype(data, pd.DataFrame):
+            if not set(self.metadata.data_cols.values()).issubset(data.columns):
+                errormsg = 'Please ensure the columns of the death rate data match the values in pars.data_cols.'
+                raise ValueError(errormsg)
+            df = data
+
+        elif sc.checktype(data, pd.Series):
+            if (data.index < 120).all():  # Assume index is age bins
+                df = pd.DataFrame({
+                    self.metadata.data_cols['year']: 2000,
+                    self.metadata.data_cols['age']: data.index.values,
+                    self.metadata.data_cols['value']: data.values,
+                })
+            elif (data.index > 1900).all():  # Assume index year
+                df = pd.DataFrame({
+                    self.metadata.data_cols['year']: data.index.values,
+                    self.metadata.data_cols['age']: 0,
+                    self.metadata.data_cols['value']: data.values,
+
+                })
+            else:
+                errormsg = 'Could not understand index of death rate series: should be age or year.'
+                raise ValueError(errormsg)
+
+            df = pd.concat([df, df])
+            df[self.metadata.data_cols['sex']] = np.repeat(list(self.metadata.sex_keys.values()), len(data))
+
+        elif sc.checktype(data, dict):
+            if not set(self.metadata.data_cols.values()).issubset(data.keys()):
+                errormsg = 'Please ensure the keys of the death rate data dict match the values in pars.data_cols.'
+                raise ValueError(errormsg)
+            df = pd.DataFrame(data)
+
+        elif sc.isnumber(data):
+            df = pd.DataFrame({
+                self.metadata.data_cols['year']: [2000, 2000],
+                self.metadata.data_cols['age']: [0, 0],
+                self.metadata.data_cols['sex']: self.metadata.sex_keys.values(),
+                self.metadata.data_cols['value']: [data, data],
+            })
+
+        else:
+            errormsg = f'Death rate data type {type(data)} not understood.'
+            raise ValueError(errormsg)
+
+        return df
 
     def process_data(self):
         """ Process death data file and translate to a parameter function """
