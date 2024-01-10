@@ -129,14 +129,14 @@ class background_deaths(DemographicModule):
 
         self.pars = ss.omerge({
             'rel_death': 1,
-            'death_prob': 0.02 # Default = a fixed probability of 0.02/year for all agents, overwritten if data provided
+            'death_prob': 0.02,  # Default = a fixed probability of 0.02/year, overwritten if data provided
+            'units': 1,  # units for death rates. If using percentages, leave as 1. If using a CMR (e.g. 12 deaths per 1000), change to 1/1000
         }, self.pars)
 
-        # Process metadata
+        # Process metadata. Defaults here are the labels used by UN data
         self.metadata = ss.omerge({
             'data_cols': {'year': 'Time', 'sex': 'Sex', 'age': 'AgeGrpStart', 'value': 'mx'},
             'sex_keys': {'f': 'Female', 'm': 'Male'},
-            'units_per_100': 1e-3  # assumes death rates are per 1000. If using percentages, switch this to 1
         }, metadata)
 
         # Process data and set death rate function. Usual workflow is that a user
@@ -144,11 +144,10 @@ class background_deaths(DemographicModule):
         if data is not None:
             data = self.standardize_death_data(data)
         self.data = data
-        if self.data is not None:
-            # Update death_prob to use make_death_prob_fn (a function that returns a probability of death for each requested uid)
-            self.pars.death_prob = self.make_death_prob_fn
+        # Create death_prob_fn, a function which returns a probability of death for each requested uid
+        self.death_prob_fn = self.make_death_prob_fn
 
-        self.death_fn = sps.bernoulli(p=self.pars.death_prob)
+        self.death_dist = sps.bernoulli(p=self.death_prob_fn)
 
         return
 
@@ -156,44 +155,48 @@ class background_deaths(DemographicModule):
     def make_death_prob_fn(module, sim, uids):
         """ Take in the module, sim, and uids, and return the death rate for each UID """
 
-        year_label = module.metadata.data_cols['year']
-        age_label = module.metadata.data_cols['age']
-        sex_label = module.metadata.data_cols['sex']
-        val_label = module.metadata.data_cols['value']
-        sex_keys = module.metadata.sex_keys
+        if module.data is not None:
+            year_label = module.metadata.data_cols['year']
+            age_label = module.metadata.data_cols['age']
+            sex_label = module.metadata.data_cols['sex']
+            val_label = module.metadata.data_cols['value']
+            sex_keys = module.metadata.sex_keys
 
-        available_years = module.data[year_label].unique()
-        year_ind = sc.findnearest(available_years, sim.year)
-        nearest_year = available_years[year_ind]
+            available_years = module.data[year_label].unique()
+            year_ind = sc.findnearest(available_years, sim.year)
+            nearest_year = available_years[year_ind]
 
-        df = module.data.loc[module.data[year_label] == nearest_year]
-        age_bins = df[age_label].unique()
-        age_inds = np.digitize(sim.people.age, age_bins) - 1
+            df = module.data.loc[module.data[year_label] == nearest_year]
+            age_bins = df[age_label].unique()
+            age_inds = np.digitize(sim.people.age, age_bins) - 1
 
-        f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
-        m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
+            f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
+            m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
 
-        # Initialize
-        death_prob_df = pd.Series(index=sim.people.uid)
-        death_prob_df[uids[sim.people.female]] = f_arr[age_inds[sim.people.female]]
-        death_prob_df[uids[sim.people.male]] = m_arr[age_inds[sim.people.male]]
-        death_prob_df[uids[sim.people.age < 0]] = 0  # Don't use background death rates for unborn babies
+            # Initialize
+            death_prob_df = pd.Series(index=sim.people.uid)
+            death_prob_df[uids[sim.people.female]] = f_arr[age_inds[sim.people.female]]
+            death_prob_df[uids[sim.people.male]] = m_arr[age_inds[sim.people.male]]
+            death_prob_df[uids[sim.people.age < 0]] = 0  # Don't use background death rates for unborn babies
 
-        # Scale
-        result = death_prob_df[uids].values * (module.pars.rel_death * sim.pars.dt)
+            # Scale
+            result = death_prob_df[uids].values * (module.pars.units * module.pars.rel_death * sim.pars.dt)
+
+        else:
+            result = module.pars.death_prob * module.pars.units * module.pars.rel_death * sim.pars.dt
 
         return result
 
     def standardize_death_data(self, data):
         """Standardize/validate death rates"""
 
-        if sc.checktype(data, pd.DataFrame):
+        if isinstance(data, pd.DataFrame):
             if not set(self.metadata.data_cols.values()).issubset(data.columns):
                 errormsg = 'Please ensure the columns of the death rate data match the values in pars.data_cols.'
                 raise ValueError(errormsg)
             df = data
 
-        elif sc.checktype(data, pd.Series):
+        elif isinstance(data, pd.Series):
             if (data.index < 120).all():  # Assume index is age bins
                 df = pd.DataFrame({
                     self.metadata.data_cols['year']: 2000,
@@ -214,7 +217,7 @@ class background_deaths(DemographicModule):
             df = pd.concat([df, df])
             df[self.metadata.data_cols['sex']] = np.repeat(list(self.metadata.sex_keys.values()), len(data))
 
-        elif sc.checktype(data, dict):
+        elif isinstance(data, dict):
             if not set(self.metadata.data_cols.values()).issubset(data.keys()):
                 errormsg = 'Please ensure the keys of the death rate data dict match the values in pars.data_cols.'
             df = pd.DataFrame(data)
@@ -247,7 +250,7 @@ class background_deaths(DemographicModule):
     def apply_deaths(self, sim):
         """ Select people to die """
         alive_uids = ss.true(sim.people.alive)
-        death_uids = self.death_fn.filter(alive_uids)
+        death_uids = self.death_dist.filter(alive_uids)
         sim.people.request_death(death_uids)
         return len(death_uids)
 
