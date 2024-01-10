@@ -27,7 +27,11 @@ def test_death_data():
     sim1.run()
 
     ppl = ss.People(1000)
-    bdm2 = ss.background_deaths(pars={'death_prob': series_death})
+    death_prob = ss.standardize_data(data=series_death, metadata=ss.omerge({
+            'data_cols': {'year': 'Time', 'sex': 'Sex', 'age': 'AgeGrpStart', 'value': 'mx'},
+            'sex_keys': {'f': 'Female', 'm': 'Male'},
+        }))
+    bdm2 = ss.background_deaths(pars={'death_prob': death_prob})
     sim2 = ss.Sim(people=ppl, demographics=bdm2, label='Series deaths')
     sim2.run()
 
