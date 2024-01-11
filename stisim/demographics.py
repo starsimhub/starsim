@@ -343,14 +343,14 @@ class Pregnancy(DemographicModule):
         """
 
         # Check for new deliveries
-        deliveries = self.pregnant & (self.ti_delivery <= sim.ti)
+        deliveries = self.pregnant & (self.ti_delivery == sim.ti)
         self.pregnant[deliveries] = False
         self.postpartum[deliveries] = True
         self.susceptible[deliveries] = False
         self.ti_delivery[deliveries] = sim.ti
 
         # Check for new women emerging from post-partum
-        postpartum = ~self.pregnant & (self.ti_postpartum <= sim.ti)
+        postpartum = ~self.pregnant & (self.ti_postpartum == sim.ti)
         self.postpartum[postpartum] = False
         self.susceptible[postpartum] = True
         self.ti_postpartum[postpartum] = sim.ti

@@ -7,7 +7,7 @@ import stisim as ss
 import pandas as pd
 import matplotlib.pyplot as plt
 import scipy.stats as sps
-
+import numpy as np
 
 def test_fixed_death_rate():
     """ Simple fixed death rate for all agents """
@@ -75,7 +75,7 @@ def test_birth_data():
     fig.tight_layout()
     plt.show()
 
-    return
+    return  sim1, sim2
 
 def test_fertility_data():
     """ Testing fertility data can be added in multiple formats """
@@ -90,6 +90,8 @@ def test_fertility_data():
     ax[0].plot(sim.yearvec, sim.results.pregnancy.births, label='Births')
     ax[1].plot(sim.yearvec, sim.results.n_alive, label='Population')
 
+    assert np.array_equal(sim.results.pregnancy.pregnancies, sim.results.pregnancy.births)
+
     ax[0].set_title('Pregnancies and births')
     ax[1].set_title('Population size')
     ax[1].set_xlabel('Year')
@@ -99,30 +101,33 @@ def test_fertility_data():
     fig.tight_layout()
     plt.show()
 
-    return
+    return sim
 
 if __name__ == '__main__':
 
-    test_fertility_data()
-    # test_birth_data()
-    #
-    # # Deaths
-    # do_plot=True
-    # sim1 = test_fixed_death_rate()
-    # sim2 = test_series_death_rate()
-    # sim3 = test_file_death_rate()
-    # if do_plot:
-    #     fig, ax = plt.subplots(2, 1)
-    #     for sim in [sim1, sim2, sim3]:
-    #         ax[0].plot(sim.tivec, sim.results.background_deaths.new, label=sim.label)
-    #         ax[1].plot(sim.tivec, sim.results.n_alive)
-    #
-    #     ax[0].set_title('New background deaths')
-    #     ax[1].set_title('Population size')
-    #     ax[1].set_xlabel('Time step')
-    #     ax[0].set_ylabel('Count')
-    #     ax[1].set_ylabel('Count')
-    #     ax[0].legend()
-    #     fig.tight_layout()
-    #     plt.show()
+    # Test fertility
+    sim_fert = test_fertility_data()
+
+    # Test births
+    sim_birth1, sim_birth2 = test_birth_data()
+
+    # Deaths
+    do_plot=True
+    sim_death1 = test_fixed_death_rate()
+    sim_death2 = test_series_death_rate()
+    sim_death3 = test_file_death_rate()
+    if do_plot:
+        fig, ax = plt.subplots(2, 1)
+        for sim in [sim_death1, sim_death2, sim_death3]:
+            ax[0].plot(sim.tivec, sim.results.background_deaths.new, label=sim.label)
+            ax[1].plot(sim.tivec, sim.results.n_alive)
+
+        ax[0].set_title('New background deaths')
+        ax[1].set_title('Population size')
+        ax[1].set_xlabel('Time step')
+        ax[0].set_ylabel('Count')
+        ax[1].set_ylabel('Count')
+        ax[0].legend()
+        fig.tight_layout()
+        plt.show()
 
