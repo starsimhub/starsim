@@ -53,12 +53,12 @@ def test_birth_data():
 
     ppl = ss.People(1000)
     births = ss.births(pars={'birth_rate':realistic_birth})
-    sim1 = ss.Sim(people=ppl, demographics=births)
+    sim1 = ss.Sim(people=ppl, demographics=births, label='UN birth rates read from a CSV file')
     sim1.run()
 
     ppl = ss.People(1000)
     births = ss.births(pars={'birth_rate': 36, 'units': 1/1000})
-    sim2 = ss.Sim(people=ppl, demographics=births)
+    sim2 = ss.Sim(people=ppl, demographics=births, label='Overall crude birth rate')
     sim2.run()
 
     fig, ax = plt.subplots(2, 1)
@@ -79,25 +79,27 @@ def test_birth_data():
 
 
 if __name__ == '__main__':
+
+    test_fertility_data()
+    # test_birth_data()
+    #
+    # # Deaths
+    # do_plot=True
     # sim1 = test_fixed_death_rate()
     # sim2 = test_series_death_rate()
     # sim3 = test_file_death_rate()
-
-    test_birth_data()
-
-
-    if do_plot:
-        fig, ax = plt.subplots(2, 1)
-        for sim in [sim1, sim2, sim3]:
-            ax[0].plot(sim.tivec, sim.results.background_deaths.new, label=sim.label)
-            ax[1].plot(sim.tivec, sim.results.n_alive)
-
-        ax[0].set_title('New background deaths')
-        ax[1].set_title('Population size')
-        ax[1].set_xlabel('Time step')
-        ax[0].set_ylabel('Count')
-        ax[1].set_ylabel('Count')
-        ax[0].legend()
-        fig.tight_layout()
-        plt.show()
+    # if do_plot:
+    #     fig, ax = plt.subplots(2, 1)
+    #     for sim in [sim1, sim2, sim3]:
+    #         ax[0].plot(sim.tivec, sim.results.background_deaths.new, label=sim.label)
+    #         ax[1].plot(sim.tivec, sim.results.n_alive)
+    #
+    #     ax[0].set_title('New background deaths')
+    #     ax[1].set_title('Population size')
+    #     ax[1].set_xlabel('Time step')
+    #     ax[0].set_ylabel('Count')
+    #     ax[1].set_ylabel('Count')
+    #     ax[0].legend()
+    #     fig.tight_layout()
+    #     plt.show()
 
