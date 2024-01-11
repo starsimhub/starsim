@@ -290,13 +290,25 @@ class Pregnancy(DemographicModule):
 
             # Eligibility for conception
             age_bins = df[age_label].unique()
-            age_inds = np.digitize(sim.people.age[uids], age_bins) - 1
+            age_inds = np.digitize(sim.people.age[uids], age_bins) + min(age_bins)
+
+            import traceback;
+            traceback.print_exc();
+            import pdb;
+            pdb.set_trace()
 
             # Make array of fertility rates - TODO, check indexing works
-            fertility_rate = conception_arr[age_inds]
+            fertility_rate = pd.Series(index=uids)
+            fertility_rate[uids] = conception_arr[age_inds]
             fertility_rate[sim.people.male[uids]] = 0
             fertility_rate[(sim.people.age < 0)[uids]] = 0
             fertility_rate[(sim.people.age > max(age_inds))[uids]] = 0
+
+            if sim.ti==5:
+                import traceback;
+                traceback.print_exc();
+                import pdb;
+                pdb.set_trace()
 
         # Scale from rate to probability. Consider an exponential here.
         fertility_prob = fertility_rate * (module.pars.units * module.pars.rel_fertility * sim.pars.dt)
