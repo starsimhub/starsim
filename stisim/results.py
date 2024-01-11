@@ -11,10 +11,11 @@ __all__ = ['Result']
 
 class Result(np.ndarray):
     
-    def __new__(cls, module=None, name=None, shape=None, dtype=None):
+    def __new__(cls, module=None, name=None, shape=None, dtype=None, scale=None):
         arr = np.zeros(shape=shape, dtype=dtype).view(cls)
         arr.name = name
         arr.module = module
+        arr.scale = scale
         return arr
     
     def __repr__(self):
@@ -29,6 +30,7 @@ class Result(np.ndarray):
             return
         self.name = getattr(obj, 'name', None)
         self.module = getattr(obj, 'module', None)
+        self.scale = getattr(obj, 'scale', None)
         return
 
     def __array_wrap__(self, obj, **kwargs):

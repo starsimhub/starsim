@@ -70,6 +70,14 @@ class Module(sc.prettyobj):
         self.finalized = True
         return
 
+    def finalize_results(self, sim):
+        """
+        Finalize results
+        """
+        # Scale results
+        for reskey, res in self.results.items():
+            if isinstance(res, ss.Result) and res.scale:
+                self.results[reskey] = self.results[reskey]*sim.pars.pop_scale
     @property
     def states(self):
         """
