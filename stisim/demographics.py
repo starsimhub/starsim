@@ -52,6 +52,7 @@ class births(DemographicModule):
 
     def initialize(self, sim):
         """ Initialize with sim information """
+        super().initialize(sim)
         if isinstance(self.pars.birth_rate, pd.DataFrame):
             br_year = self.pars.birth_rate[self.metadata.data_cols['year']]
             br_val = self.pars.birth_rate[self.metadata.data_cols['cbr']]
