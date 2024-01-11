@@ -191,12 +191,11 @@ class People(BasePeople):
         self.networks = ss.Networks(networks)
 
         # Set initial age distribution - likely move this somewhere else later
-        self.age_data_dist = self.get_age_dist(age_data)
+        self.age_data_dist = self.get_age_dist()
 
         return
 
-    @staticmethod
-    def get_age_dist(age_data):
+    def get_age_dist(self):
         """ Return an age distribution based on provided data """
         age_draws = self.age_dist_gen.rvs(size=np.max(self.slot) + 1)
         if self.age_data is None:
