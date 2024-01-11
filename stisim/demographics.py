@@ -258,9 +258,13 @@ class Pregnancy(DemographicModule):
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.pars.fertility_rate = self.standardize_fertility_data()
 
-        # Create death_prob_fn, a function which returns a probability of death for each requested uid
+        # Create fertility_prob_fn, a function which returns a probability of death for each requested uid
         self.fertility_prob_fn = self.make_fertility_prob_fn
         self.fertility_dist = sps.bernoulli(p=self.fertility_prob_fn)
+
+        # Add other sampling functions
+        self.sex_dist = sps.bernoulli(p=self.pars.sex_ratio)
+        self.death_dist = sps.bernoulli(p=self.pars.maternal_death_rate)
 
         return
 
@@ -289,7 +293,10 @@ class Pregnancy(DemographicModule):
             age_inds = np.digitize(sim.people.age, age_bins) - 1
 
             # Make array of fertility rates - TODO, check indexing works
-            fertility_rate = conception_arr[age_inds[uids]]
+            try:
+                fertility_rate = conception_arr[age_inds[uids]]
+            except:
+                
             fertility_rate[sim.people.male[uids]] = 0
             fertility_rate[(sim.people.age < 0)[uids]] = 0
             fertility_rate[(sim.people.age > max(age_inds))[uids]] = 0
@@ -379,14 +386,7 @@ class Pregnancy(DemographicModule):
 
             sim.people.age[new_uids] = -self.pars.dur_pregnancy
             sim.people.slot[new_uids] = new_slots # Before sampling female_dist
-            sex_dist = sps.bernoulli(p=self.pars.sex_ratio)  # Move to top?
-            try:
-                sim.people.female[new_uids] = sex_dist.rvs(uids)
-            except:
-                import traceback;
-                traceback.print_exc();
-                import pdb;
-                pdb.set_trace()
+            sim.people.female[new_uids] = self.sex_dist.rvs(uids)
 
             # Add connections to any vertical transmission layers
             # Placeholder code to be moved / refactored. The maternal network may need to be
@@ -416,8 +416,7 @@ class Pregnancy(DemographicModule):
 
         # Outcomes for pregnancies
         dur = np.full(len(uids), sim.ti + self.pars.dur_pregnancy / sim.dt)
-        death_dist = sps.bernoulli(p=self.pars.maternal_death_rate)  # Move to top?
-        dead = death_dist.rvs(uids)
+        dead = self.death_dist.rvs(uids)
         self.ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
         dur_post_partum = np.full(len(uids), dur + self.pars.dur_postpartum / sim.dt)
         self.ti_postpartum[uids] = dur_post_partum
