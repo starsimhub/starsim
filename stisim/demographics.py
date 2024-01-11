@@ -290,13 +290,10 @@ class Pregnancy(DemographicModule):
 
             # Eligibility for conception
             age_bins = df[age_label].unique()
-            age_inds = np.digitize(sim.people.age, age_bins) - 1
+            age_inds = np.digitize(sim.people.age[uids], age_bins) - 1
 
             # Make array of fertility rates - TODO, check indexing works
-            try:
-                fertility_rate = conception_arr[age_inds[uids]]
-            except:
-                
+            fertility_rate = conception_arr[age_inds]
             fertility_rate[sim.people.male[uids]] = 0
             fertility_rate[(sim.people.age < 0)[uids]] = 0
             fertility_rate[(sim.people.age > max(age_inds))[uids]] = 0
