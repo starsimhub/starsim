@@ -76,62 +76,118 @@ def test_fertility_data():
 
     return sim
 
+
+def test_nigeria():
+    """ Make a sim with Nigeria demographic data """
+
+    # # Make demographic modules
+    # fertility_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')
+    # pregnancy = ss.Pregnancy(pars={'fertility_rate': fertility_rates})
+    # death_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')
+    # death = ss.background_deaths(pars={'death_rate': death_rates})
+    #
+    # Make people
+    ppl = ss.People(10000, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
+
+    return ppl
+
+    # sim = ss.Sim(
+    #     dt=1/12,
+    #     total_pop=93963392,
+    #     start=1990,
+    #     n_years=40,
+    #     people=ppl,
+    #     demographics=[
+    #         pregnancy,
+    #         death
+    #     ],
+    # )
+    #
+    # sim.run()
+    #
+    # nigeria_popsize = pd.read_csv(ss.root / 'tests/test_data/nigeria_popsize.csv')
+    # data = nigeria_popsize[(nigeria_popsize.year >= 1990) & (nigeria_popsize.year <= 2030)]
+    #
+    # # Check
+    # fig, ax = plt.subplots(2, 2)
+    # ax = ax.ravel()
+    # ax[0].plot(sim.yearvec, sim.results.n_alive)
+    # ax[0].scatter(data.year, data.n_alive)
+    # ax[0].set_title('Population')
+    #
+    # ax[1].plot(sim.yearvec, sim.results.new_deaths)
+    # ax[1].set_title('Deaths')
+    #
+    # ax[2].plot(sim.yearvec, sim.results.pregnancy.pregnancies, label='Pregnancies')
+    # ax[2].plot(sim.yearvec, sim.results.pregnancy.births, label='Births')
+    # ax[2].set_title('Pregnancies and births')
+    # ax[2].legend()
+    #
+    # fig.tight_layout
+    #
+    # plt.show()
+    #
+    # return sim
+
+
 if __name__ == '__main__':
 
-    # Deaths
-    sim_death1 = test_fixed_death_rate()
-    sim_death2 = test_series_death_rate()
-    sim_death3 = test_file_death_rate()
+    ppl = test_nigeria()
 
-    # Test births
-    sim_birth1 = test_file_birth_data()
-    sim_birth2 = test_crude_birth_data()
-
-    # Test fertility
-    sim_fert = test_fertility_data()
-
-
-    if do_plot:
-        # Plot deaths
-        fig, ax = plt.subplots(2, 1)
-        for sim in [sim_death1, sim_death2, sim_death3]:
-            ax[0].plot(sim.tivec, sim.results.background_deaths.new, label=sim.label)
-            ax[1].plot(sim.tivec, sim.results.n_alive)
-
-        ax[0].set_title('New background deaths')
-        ax[1].set_title('Population size')
-        ax[1].set_xlabel('Time step')
-        ax[0].set_ylabel('Count')
-        ax[1].set_ylabel('Count')
-        ax[0].legend()
-        fig.tight_layout()
-
-        # Plot births
-        fig, ax = plt.subplots(2, 1)
-        for sim in [sim_birth1, sim_birth2,]:
-            ax[0].plot(sim.tivec, sim.results.births.new, label=sim.label)
-            ax[1].plot(sim.tivec, sim.results.n_alive)
-
-        ax[0].set_title('New births')
-        ax[1].set_title('Population size')
-        ax[1].set_xlabel('Time step')
-        ax[0].set_ylabel('Count')
-        ax[1].set_ylabel('Count')
-        ax[0].legend()
-        fig.tight_layout()
-
-        # Plot fert
-        sim = sim_fert
-        fig, ax = plt.subplots(2, 1)
-        ax[0].plot(sim.yearvec, sim.results.pregnancy.pregnancies, label='Pregnancies')
-        ax[0].plot(sim.yearvec, sim.results.pregnancy.births, ':', label='Births')
-        ax[1].plot(sim.yearvec, sim.results.n_alive, label='Population')
-        ax[0].set_title('Pregnancies and births')
-        ax[1].set_title('Population size')
-        ax[1].set_xlabel('Year')
-        ax[0].set_ylabel('Count')
-        ax[1].set_ylabel('Count')
-        ax[0].legend()
-        fig.tight_layout()
-
-        plt.show()
+    # # Deaths
+    # sim_death1 = test_fixed_death_rate()
+    # sim_death2 = test_series_death_rate()
+    # sim_death3 = test_file_death_rate()
+    #
+    # # Test births
+    # sim_birth1 = test_file_birth_data()
+    # sim_birth2 = test_crude_birth_data()
+    #
+    # # Test fertility
+    # sim_fert = test_fertility_data()
+    #
+    #
+    # if do_plot:
+    #     # Plot deaths
+    #     fig, ax = plt.subplots(2, 1)
+    #     for sim in [sim_death1, sim_death2, sim_death3]:
+    #         ax[0].plot(sim.tivec, sim.results.background_deaths.new, label=sim.label)
+    #         ax[1].plot(sim.tivec, sim.results.n_alive)
+    #
+    #     ax[0].set_title('New background deaths')
+    #     ax[1].set_title('Population size')
+    #     ax[1].set_xlabel('Time step')
+    #     ax[0].set_ylabel('Count')
+    #     ax[1].set_ylabel('Count')
+    #     ax[0].legend()
+    #     fig.tight_layout()
+    #
+    #     # Plot births
+    #     fig, ax = plt.subplots(2, 1)
+    #     for sim in [sim_birth1, sim_birth2,]:
+    #         ax[0].plot(sim.tivec, sim.results.births.new, label=sim.label)
+    #         ax[1].plot(sim.tivec, sim.results.n_alive)
+    #
+    #     ax[0].set_title('New births')
+    #     ax[1].set_title('Population size')
+    #     ax[1].set_xlabel('Time step')
+    #     ax[0].set_ylabel('Count')
+    #     ax[1].set_ylabel('Count')
+    #     ax[0].legend()
+    #     fig.tight_layout()
+    #
+    #     # Plot fert
+    #     sim = sim_fert
+    #     fig, ax = plt.subplots(2, 1)
+    #     ax[0].plot(sim.yearvec, sim.results.pregnancy.pregnancies, label='Pregnancies')
+    #     ax[0].plot(sim.yearvec, sim.results.pregnancy.births, ':', label='Births')
+    #     ax[1].plot(sim.yearvec, sim.results.n_alive, label='Population')
+    #     ax[0].set_title('Pregnancies and births')
+    #     ax[1].set_title('Population size')
+    #     ax[1].set_xlabel('Year')
+    #     ax[0].set_ylabel('Count')
+    #     ax[1].set_ylabel('Count')
+    #     ax[0].legend()
+    #     fig.tight_layout()
+    #
+    #     plt.show()
