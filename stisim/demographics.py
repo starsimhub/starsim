@@ -266,7 +266,38 @@ class Pregnancy(DemographicModule):
     @staticmethod
     def make_fertility_prob_fn(module, sim, uids):
         """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
-        return
+
+        if sc.isnumber(module.pars.fertility_rate):
+            fertility_rate = module.pars.fertility_rate
+
+        else:
+            # Abbreviate key variables
+            year_label = module.metadata.data_cols['year']
+            age_label = module.metadata.data_cols['age']
+            val_label = module.metadata.data_cols['value']
+
+            available_years = module.pars.fertility_rate[year_label].unique()
+            year_ind = sc.findnearest(available_years, sim.year)
+            nearest_year = available_years[year_ind]
+
+            df = module.pars.fertility_rate.loc[module.pars.fertility_rate[year_label] == nearest_year]
+            conception_arr = df[val_label].values
+
+            # Eligibility for conception
+            age_bins = df[age_label].unique()
+            age_bins = np.append(age_bins, 50)  # Add 50, and specify no births after 50
+            age_inds = np.digitize(sim.people.age, age_bins) - 1
+            conception_eligible = sim.people.female & (age_inds >= 0) & (age_inds < max(age_inds))
+
+            # Make series of fertility rates
+            fertility_rate_df = pd.Series(index=sim.people.uid)
+            fertility_rate_df[uids[conception_eligible]] = conception_arr[age_inds[conception_eligible]]
+            fertility_rate = fertility_rate_df[uids].values
+
+        # Scale from rate to probability. Consider an exponential here.
+        fertility_prob = fertility_rate * (module.pars.units * module.pars.rel_fertility * sim.pars.dt)
+
+        return fertility_prob
 
     def standardize_fertility_data(self):
         """ Standardize/validate fertility rates - handled in an external file due to shared functionality """
