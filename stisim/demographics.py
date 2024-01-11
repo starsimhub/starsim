@@ -271,7 +271,7 @@ class Pregnancy(DemographicModule):
     def standardize_fertility_data(self):
         """ Standardize/validate fertility rates - handled in an external file due to shared functionality """
         fertility_rate = ss.standardize_data(data=self.pars.fertility_rate, metadata=self.metadata)
-        return death_rate
+        return fertility_rate
 
     def initialize(self, sim):
         super().initialize(sim)
