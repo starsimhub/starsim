@@ -240,11 +240,6 @@ class Pregnancy(DemographicModule):
             'maternal_death_rate': 0.15,
             'sex_ratio': 0.5,       # Ratio of babies born female
             'units': 1e-3,          # Assumes fertility rates are per 1000. If using percentages, switch this to 1
-
-            # 'pregnancy_prob_per_dt': sps.bernoulli(p=0.3),  # Probabilty of acquiring pregnancy on each time step. Can replace with callable parameters for age-specific rates, etc. NOTE: You will manually need to adjust for the simulation timestep dt!
-            # 'p_death': sps.bernoulli(p=0.15),  # Probability of maternal death.
-            # 'p_female': sps.bernoulli(p=0.5),
-            # 'init_prev': 0.3,  # Number of women initially pregnant # TODO: Default value
         }, self.pars)
 
         # Process metadata. Defaults here are the labels used by UN data
