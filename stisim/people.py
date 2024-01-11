@@ -198,28 +198,17 @@ class People(BasePeople):
     @staticmethod
     def get_age_dist(age_data):
         """ Return an age distribution based on provided data """
-        if age_data is None:
-            dist = sps.uniform(loc=0, scale=100)  # loc and width
-            return ss.ScipyDistribution(dist, 'Age distribution')
-
-        if sc.checktype(age_data, pd.DataFrame):
-            bb = np.append(age_data['age'].values, age_data['age'].values[-1] + 1)
-            vv = age_data['value'].values
-            # dist = sps.rv_histogram((vv, bb), density=False)
-            return ss.ScipyHistogram((vv, bb), density=False, rng='Age distribution')
-
-        # age_draws = self.age_dist_gen.rvs(size=np.max(self.slot) + 1)
-        # if self.age_data is None:
-        #     return age_draws * 100
-        # if sc.checktype(self.age_data, pd.DataFrame):
-        #     bins = self.age_data['age'].values
-        #     vals = self.age_data['value'].values
-        #     bin_midpoints = bins[:-1] + np.diff(bins) / 2
-        #     cdf = np.cumsum(vals)
-        #     cdf = cdf / cdf[-1]
-        #     value_bins = np.searchsorted(cdf, age_draws)
-        #     return bin_midpoints[value_bins]
-
+        age_draws = self.age_dist_gen.rvs(size=np.max(self.slot) + 1)
+        if self.age_data is None:
+            return age_draws * 100
+        if sc.checktype(self.age_data, pd.DataFrame):
+            bins = self.age_data['age'].values
+            vals = self.age_data['value'].values
+            bin_midpoints = bins[:-1] + np.diff(bins) / 2
+            cdf = np.cumsum(vals)
+            cdf = cdf / cdf[-1]
+            value_bins = np.searchsorted(cdf, age_draws)
+            return bin_midpoints[value_bins]
 
     def _initialize_states(self, sim=None):
         for state in self.states.values():
