@@ -9,6 +9,12 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :depth: 1
 
 
+Version 0.1.1 (2024-01-11)
+--------------------------
+- Functionality for converting birth & fertility data to a callable parameter within SciPy distributions
+- *GitHub info*: PR `203 <https://github.com/amath-idm/stisim/pull/203>`_
+
+
 Version 0.1.1 (2024-01-10)
 --------------------------
 - Allows SciPy distributions to be used as parameters
