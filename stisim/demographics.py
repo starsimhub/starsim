@@ -253,7 +253,25 @@ class Pregnancy(DemographicModule):
 
         self.choose_slots = sps.randint(low=0, high=1) # Low and high will be reset upon initialization
 
+        # Process data, which may be provided as a number, dict, dataframe, or series
+        # If it's a number it's left as-is; otherwise it's converted to a dataframe
+        self.pars.fertility_rate = self.standardize_fertility_data()
+
+        # Create death_prob_fn, a function which returns a probability of death for each requested uid
+        self.fertility_prob_fn = self.make_fertility_prob_fn
+        self.fertility_dist = sps.bernoulli(p=self.fertility_prob_fn)
+
         return
+
+    @staticmethod
+    def make_fertility_prob_fn(module, sim, uids):
+        """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
+        return
+
+    def standardize_fertility_data(self):
+        """ Standardize/validate fertility rates - handled in an external file due to shared functionality """
+        fertility_rate = ss.standardize_data(data=self.pars.fertility_rate, metadata=self.metadata)
+        return death_rate
 
     def initialize(self, sim):
         super().initialize(sim)
