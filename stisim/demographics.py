@@ -331,8 +331,8 @@ class Pregnancy(DemographicModule):
         """
         Perform all updates
         """
-        self.update_states(sim)
         self.make_pregnancies(sim)
+        self.update_states(sim)
         self.update_results(sim)
         return
 
@@ -342,7 +342,7 @@ class Pregnancy(DemographicModule):
         """
 
         # Check for new deliveries
-        deliveries = self.pregnant & (self.ti_delivery == sim.ti)
+        deliveries = self.pregnant & (self.ti_delivery <= sim.ti)
         self.pregnant[deliveries] = False
         self.postpartum[deliveries] = True
         self.susceptible[deliveries] = False
