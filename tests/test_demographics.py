@@ -81,16 +81,18 @@ def test_fertility_data():
     """ Testing fertility data can be added in multiple formats """
     fertility_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')
     pregnancy = ss.Pregnancy(pars={'fertility_rate':fertility_rates})
+    ppl = ss.People(1000)
     sim = ss.Sim(people=ppl, demographics=pregnancy, label='UN fertility rates read from a CSV file')
     sim.run()
 
     fig, ax = plt.subplots(2, 1)
-    ax[0].plot(sim.tivec, sim.results.pregnancy.births, label=sim.label)
-    ax[1].plot(sim.tivec, sim.results.n_alive)
+    ax[0].plot(sim.yearvec, sim.results.pregnancy.pregnancies, label='Pregnancies')
+    ax[0].plot(sim.yearvec, sim.results.pregnancy.births, label='Births')
+    ax[1].plot(sim.yearvec, sim.results.n_alive, label='Population')
 
-    ax[0].set_title('New births')
+    ax[0].set_title('Pregnancies and births')
     ax[1].set_title('Population size')
-    ax[1].set_xlabel('Time step')
+    ax[1].set_xlabel('Year')
     ax[0].set_ylabel('Count')
     ax[1].set_ylabel('Count')
     ax[0].legend()

@@ -219,7 +219,7 @@ class background_deaths(DemographicModule):
 
 class Pregnancy(DemographicModule):
 
-    def __init__(self, pars=None):
+    def __init__(self, pars=None, metadata=None):
         super().__init__(pars)
 
         # Other, e.g. postpartum, on contraception...
@@ -236,6 +236,7 @@ class Pregnancy(DemographicModule):
             'dur_pregnancy': 0.75,  # Make this a distribution?
             'dur_postpartum': 0.5,  # Make this a distribution?
             'fertility_rate': 0,    # Usually this will be provided in CSV format
+            'rel_fertility': 1,
             'maternal_death_rate': 0.15,
             'sex_ratio': 0.5,       # Ratio of babies born female
             'units': 1e-3,          # Assumes fertility rates are per 1000. If using percentages, switch this to 1
@@ -285,14 +286,13 @@ class Pregnancy(DemographicModule):
 
             # Eligibility for conception
             age_bins = df[age_label].unique()
-            age_bins = np.append(age_bins, 50)  # Add 50, and specify no births after 50
             age_inds = np.digitize(sim.people.age, age_bins) - 1
-            conception_eligible = sim.people.female & (age_inds >= 0) & (age_inds < max(age_inds))
 
-            # Make series of fertility rates
-            fertility_rate_df = pd.Series(index=sim.people.uid)
-            fertility_rate_df[uids[conception_eligible]] = conception_arr[age_inds[conception_eligible]]
-            fertility_rate = fertility_rate_df[uids].values
+            # Make array of fertility rates - TODO, check indexing works
+            fertility_rate = conception_arr[age_inds[uids]]
+            fertility_rate[sim.people.male[uids]] = 0
+            fertility_rate[(sim.people.age < 0)[uids]] = 0
+            fertility_rate[(sim.people.age > max(age_inds))[uids]] = 0
 
         # Scale from rate to probability. Consider an exponential here.
         fertility_prob = fertility_rate * (module.pars.units * module.pars.rel_fertility * sim.pars.dt)
@@ -363,9 +363,9 @@ class Pregnancy(DemographicModule):
 
         # If incidence of pregnancy is non-zero, make some cases
         # Think about how to deal with age/time-varying fertility
-        denom_conds = ppl.female & ppl.active & self.susceptible
+        denom_conds = ppl.female & self.susceptible #& ppl.active
         inds_to_choose_from = ss.true(denom_conds)
-        uids = self.pars['pregnancy_prob_per_dt'].filter(inds_to_choose_from)
+        uids = self.fertility_dist.filter(inds_to_choose_from)
 
         # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
         n_unborn_agents = len(uids)
@@ -379,7 +379,14 @@ class Pregnancy(DemographicModule):
 
             sim.people.age[new_uids] = -self.pars.dur_pregnancy
             sim.people.slot[new_uids] = new_slots # Before sampling female_dist
-            sim.people.female[new_uids] = self.pars['p_female'].rvs(uids)
+            sex_dist = sps.bernoulli(p=self.pars.sex_ratio)  # Move to top?
+            try:
+                sim.people.female[new_uids] = sex_dist.rvs(uids)
+            except:
+                import traceback;
+                traceback.print_exc();
+                import pdb;
+                pdb.set_trace()
 
             # Add connections to any vertical transmission layers
             # Placeholder code to be moved / refactored. The maternal network may need to be
@@ -409,7 +416,8 @@ class Pregnancy(DemographicModule):
 
         # Outcomes for pregnancies
         dur = np.full(len(uids), sim.ti + self.pars.dur_pregnancy / sim.dt)
-        dead = self.pars.p_death.rvs(uids)
+        death_dist = sps.bernoulli(p=self.pars.maternal_death_rate)  # Move to top?
+        dead = death_dist.rvs(uids)
         self.ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
         dur_post_partum = np.full(len(uids), dur + self.pars.dur_postpartum / sim.dt)
         self.ti_postpartum[uids] = dur_post_partum
