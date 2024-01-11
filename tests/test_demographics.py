@@ -52,12 +52,12 @@ def test_birth_data():
     realistic_birth = pd.read_csv(ss.root / 'tests/test_data/nigeria_births.csv')
 
     ppl = ss.People(1000)
-    births = ss.births(pars={'birth_rates':realistic_birth})
+    births = ss.births(pars={'birth_rate':realistic_birth})
     sim1 = ss.Sim(people=ppl, demographics=births)
     sim1.run()
 
     ppl = ss.People(1000)
-    births = ss.births(pars={'birth_rates': 36, 'units': 1/1000})
+    births = ss.births(pars={'birth_rate': 36, 'units': 1/1000})
     sim2 = ss.Sim(people=ppl, demographics=births)
     sim2.run()
 

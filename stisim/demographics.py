@@ -30,12 +30,12 @@ class DemographicModule(ss.Module):
         pass
 
 class births(DemographicModule):
-    def __init__(self, pars=None):
+    def __init__(self, pars=None, metadata=None):
         super().__init__(pars)
 
         # Set defaults
         self.pars = ss.omerge({
-            'birth_rates': 0,
+            'birth_rate': 0,
             'rel_birth': 1,
             'units': 1e-3  # assumes birth rates are per 1000. If using percentages, switch this to 1
         }, self.pars)
@@ -49,16 +49,7 @@ class births(DemographicModule):
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.pars.birth_rate = self.standardize_birth_data()
 
-        # Create death_prob_fn, a function which returns a probability of death for each requested uid
-        self.birth_prob_fn = self.make_birth_prob_fn
-        self.birth_dist = sps.bernoulli(p=self.birth_prob_fn)
-
-    @staticmethod
-    def make_birth_prob_fn(module, sim, uids):
-        """ Take in the module, sim, and uids, and return the probability of death for each UID on this timestep """
-        return result
-
-    def standardize_birth_data(self, birth_rates):
+    def standardize_birth_data(self):
         """ Standardize/validate birth rates - handled in an external file due to shared functionality """
         birth_rate = ss.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
         return birth_rate
@@ -77,13 +68,17 @@ class births(DemographicModule):
     def get_birth_rate(self, sim):
         """
         Extract the right birth rates to use and translate it into a number of people to add.
-        Eventually this might also process time series data.
         """
         p = self.pars
-        br_year = p.birth_rates[p.data_cols['year']]
-        br_val = p.birth_rates[p.data_cols['cbr']]
-        this_birth_rate = np.interp(sim.year, br_year, br_val) * p.units_per_100 * p.rel_birth * sim.pars.dt_demog
-        n_new = int(np.floor(np.count_nonzero(sim.people.alive) * this_birth_rate))
+        if sc.isnumber(p.birth_rate):
+            this_birth_rate = p.birth_rate
+        elif isinstance(p.birth_rate, pd.DataFrame):
+            br_year = p.birth_rate[self.metadata.data_cols['year']]
+            br_val = p.birth_rate[self.metadata.data_cols['cbr']]
+            this_birth_rate = np.interp(sim.year, br_year, br_val)
+
+        scaled_birth_prob = this_birth_rate * p.units * p.rel_birth * sim.pars.dt
+        n_new = int(np.floor(np.count_nonzero(sim.people.alive) * scaled_birth_prob))
         return n_new
 
     def add_births(self, sim):
