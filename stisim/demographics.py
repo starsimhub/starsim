@@ -50,6 +50,14 @@ class births(DemographicModule):
         self.pars.birth_rate = self.standardize_birth_data()
         return
 
+    def initialize(self, sim):
+        """ Initialize with sim information """
+        if isinstance(self.pars.birth_rate, pd.DataFrame):
+            br_year = self.pars.birth_rate[self.metadata.data_cols['year']]
+            br_val = self.pars.birth_rate[self.metadata.data_cols['cbr']]
+            all_birth_rates = np.interp(sim.yearvec, br_year, br_val)
+            self.pars.birth_rate = all_birth_rates
+
     def standardize_birth_data(self):
         """ Standardize/validate birth rates - handled in an external file due to shared functionality """
         birth_rate = ss.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
@@ -73,10 +81,8 @@ class births(DemographicModule):
         p = self.pars
         if sc.isnumber(p.birth_rate):
             this_birth_rate = p.birth_rate
-        elif isinstance(p.birth_rate, pd.DataFrame):
-            br_year = p.birth_rate[self.metadata.data_cols['year']]
-            br_val = p.birth_rate[self.metadata.data_cols['cbr']]
-            this_birth_rate = np.interp(sim.year, br_year, br_val)
+        elif sc.checktype(p.birth_rate, 'arraylike'):
+            this_birth_rate = p.birth_rate[sim.ti]
 
         scaled_birth_prob = this_birth_rate * p.units * p.rel_birth * sim.pars.dt
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)

@@ -78,11 +78,11 @@ def test_fertility_data():
 
 if __name__ == '__main__':
 
-    # Deaths
-    sim_death1 = test_fixed_death_rate()
-    sim_death2 = test_series_death_rate()
-    sim_death3 = test_file_death_rate()
-
+    # # Deaths
+    # sim_death1 = test_fixed_death_rate()
+    # sim_death2 = test_series_death_rate()
+    # sim_death3 = test_file_death_rate()
+    #
     # Test births
     sim_birth1 = test_file_birth_data()
     sim_birth2 = test_crude_birth_data()
