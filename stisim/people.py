@@ -191,8 +191,8 @@ class People(BasePeople):
         self.networks = ss.Networks(networks)
 
         # Set initial age distribution - likely move this somewhere else later
+        self.age_data = age_data
         self.age_dist_gen = sps.uniform()  # Store a uniform distribution for generating ages
-        self.age_data_dist = self.get_age_dist()
 
         return
 
@@ -230,7 +230,9 @@ class People(BasePeople):
         # Define age (CK: why is age handled differently than sex?)
         self._initialize_states(sim=sim) # Now initialize with the sim
         self.age[:] = self.age_data_dist.rvs(len(self))
-        
+        # self.age_dist_gen = sps.uniform()  # Store a uniform distribution for generating ages
+        # self.age_data_dist = self.get_age_dist()
+
         self.initialized = True
         return
 
