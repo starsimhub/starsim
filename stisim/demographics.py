@@ -366,7 +366,7 @@ class Pregnancy(DemographicModule):
 
         # If incidence of pregnancy is non-zero, make some cases
         # Think about how to deal with age/time-varying fertility
-        denom_conds = ppl.female & self.susceptible #& ppl.active
+        denom_conds = ppl.female & self.susceptible 
         inds_to_choose_from = ss.true(denom_conds)
         uids = self.fertility_dist.filter(inds_to_choose_from)
 
