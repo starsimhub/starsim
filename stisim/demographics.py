@@ -235,20 +235,23 @@ class Pregnancy(DemographicModule):
         self.pars = ss.omerge({
             'dur_pregnancy': 0.75,  # Make this a distribution?
             'dur_postpartum': 0.5,  # Make this a distribution?
-            'pregnancy_prob_per_dt': sps.bernoulli(p=0.3),  # Probabilty of acquiring pregnancy on each time step. Can replace with callable parameters for age-specific rates, etc. NOTE: You will manually need to adjust for the simulation timestep dt!
-            'p_death': sps.bernoulli(p=0.15),  # Probability of maternal death.
-            'p_female': sps.bernoulli(p=0.5),
-            'init_prev': 0.3,  # Number of women initially pregnant # TODO: Default value
+            'fertility_rate': 0,    # Usually this will be provided in CSV format
+            'maternal_death_rate': 0.15,
+            'sex_ratio': 0.5,       # Ratio of babies born female
+            # 'pregnancy_prob_per_dt': sps.bernoulli(p=0.3),  # Probabilty of acquiring pregnancy on each time step. Can replace with callable parameters for age-specific rates, etc. NOTE: You will manually need to adjust for the simulation timestep dt!
+            # 'p_death': sps.bernoulli(p=0.15),  # Probability of maternal death.
+            # 'p_female': sps.bernoulli(p=0.5),
+            # 'init_prev': 0.3,  # Number of women initially pregnant # TODO: Default value
         }, self.pars)
 
         self.choose_slots = sps.randint(low=0, high=1) # Low and high will be reset upon initialization
+
         return
 
     def initialize(self, sim):
         super().initialize(sim)
         self.choose_slots.kwds['low'] = sim.pars['n_agents']+1
         self.choose_slots.kwds['high'] = int(sim.pars['slot_scale']*sim.pars['n_agents'])
-        sim.pars['birth_rates'] = None  # This turns off birth rate pars so births only come from this module
         return
 
     def init_results(self, sim):

@@ -79,6 +79,9 @@ def test_birth_data():
 
 def test_fertility_data():
     """ Testing fertility data can be added in multiple formats """
+    fertility_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')
+    pregnancy = ss.Pregnancy(pars={'fertility_rate':fertility_rates})
+
     return
 
 if __name__ == '__main__':
