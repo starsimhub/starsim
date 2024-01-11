@@ -77,6 +77,9 @@ def test_birth_data():
 
     return
 
+def test_fertility_data():
+    """ Testing fertility data can be added in multiple formats """
+    return
 
 if __name__ == '__main__':
 
