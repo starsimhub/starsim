@@ -48,6 +48,7 @@ class births(DemographicModule):
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.pars.birth_rate = self.standardize_birth_data()
+        return
 
     def standardize_birth_data(self):
         """ Standardize/validate birth rates - handled in an external file due to shared functionality """
@@ -78,6 +79,7 @@ class births(DemographicModule):
             this_birth_rate = np.interp(sim.year, br_year, br_val)
 
         scaled_birth_prob = this_birth_rate * p.units * p.rel_birth * sim.pars.dt
+        scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
         n_new = int(np.floor(np.count_nonzero(sim.people.alive) * scaled_birth_prob))
         return n_new
 
@@ -168,21 +170,22 @@ class background_deaths(DemographicModule):
 
             df = module.pars.death_rate.loc[module.pars.death_rate[year_label] == nearest_year]
             age_bins = df[age_label].unique()
-            age_inds = np.digitize(sim.people.age, age_bins) - 1
+            age_inds = np.digitize(sim.people.age[uids], age_bins) - 1
 
             f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
             m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
 
             # Initialize
-            death_rate_df = pd.Series(index=sim.people.uid)
-            death_rate_df[uids[sim.people.female]] = f_arr[age_inds[sim.people.female]]
-            death_rate_df[uids[sim.people.male]] = m_arr[age_inds[sim.people.male]]
-            death_rate_df[uids[sim.people.age < 0]] = 0  # Don't use background death rates for unborn babies
+            death_rate_df = pd.Series(index=uids)
+            death_rate_df[uids[sim.people.female[uids]]] = f_arr[age_inds[sim.people.female[uids]]]
+            death_rate_df[uids[sim.people.male[uids]]] = m_arr[age_inds[sim.people.male[uids]]]
+            death_rate_df[uids[sim.people.age[uids] < 0]] = 0  # Don't use background death rates for unborn babies
 
-            death_rate = death_rate_df[uids].values
+            death_rate = death_rate_df.values
 
         # Scale from rate to probability. Consider an exponential here.
         death_prob = death_rate * (module.pars.units * module.pars.rel_death * sim.pars.dt)
+        death_prob = np.clip(death_prob, a_min=0, a_max=1)
 
         return death_prob
 
@@ -299,6 +302,7 @@ class Pregnancy(DemographicModule):
 
         # Scale from rate to probability. Consider an exponential here.
         fertility_prob = fertility_rate * (module.pars.units * module.pars.rel_fertility * sim.pars.dt)
+        fertility_prob = np.clip(fertility_prob, a_min=0, a_max=1)
 
         return fertility_prob
 
