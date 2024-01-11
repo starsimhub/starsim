@@ -66,7 +66,7 @@ class births(DemographicModule):
         self.update_results(len(new_uids), sim)
         return new_uids
 
-    def get_birth_rate(self, sim):
+    def get_births(self, sim):
         """
         Extract the right birth rates to use and translate it into a number of people to add.
         """
@@ -85,7 +85,7 @@ class births(DemographicModule):
 
     def add_births(self, sim):
         # Add n_new births to each state in the sim
-        n_new = self.get_birth_rate(sim)
+        n_new = self.get_births(sim)
         new_uids = sim.people.grow(n_new)
         return new_uids
 
