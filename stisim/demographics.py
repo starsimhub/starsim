@@ -247,9 +247,9 @@ class Pregnancy(DemographicModule):
             'dur_postpartum': 0.5,  # Make this a distribution?
             'fertility_rate': 0,    # Usually this will be provided in CSV format
             'rel_fertility': 1,
-            'maternal_death_rate': 0.15,
+            'maternal_death_rate': 0,
             'sex_ratio': 0.5,       # Ratio of babies born female
-            'units': 1e-3,          # Assumes fertility rates are per 1000. If using percentages, switch this to 1
+            'units': 1,             # ???
         }, self.pars)
 
         # Process metadata. Defaults here are the labels used by UN data

@@ -85,15 +85,19 @@ def test_nigeria():
     pregnancy = ss.Pregnancy(pars={'fertility_rate': fertility_rates})
     death_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')
     death = ss.background_deaths(pars={'death_rate': death_rates})
+    age_data = pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv')
 
     # Make people
-    ppl = ss.People(10000, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
+    n_agents = 10_000
+    nga_pop_1995 = 106819805
+    ppl = ss.People(n_agents, age_data=age_data)
+    dt = 1/12
 
     sim = ss.Sim(
-        dt=1/12,
-        total_pop=93963392,
-        start=1990,
-        n_years=40,
+        dt=dt,
+        total_pop=nga_pop_1995,
+        start=1995,
+        n_years=35,
         people=ppl,
         demographics=[
             pregnancy,
@@ -101,10 +105,21 @@ def test_nigeria():
         ],
     )
 
+    sim.initialize()
+
+    # Plot histograms of the age distributions - simulated vs data
+    bins = np.arange(0, 101, 1)
+    init_scale = nga_pop_1995/(n_agents*10)  # Why 10??
+    counts, bins = np.histogram(sim.people.age, bins)
+    plt.bar(bins[:-1], counts*init_scale, alpha=0.5, label='Simulated')
+    plt.bar(bins, age_data.value.values*100, alpha=0.5, color='r', label='Data')
+    plt.legend(loc='upper right')
+    plt.show()
+
     sim.run()
 
     nigeria_popsize = pd.read_csv(ss.root / 'tests/test_data/nigeria_popsize.csv')
-    data = nigeria_popsize[(nigeria_popsize.year >= 1990) & (nigeria_popsize.year <= 2030)]
+    data = nigeria_popsize[(nigeria_popsize.year >= 1995) & (nigeria_popsize.year <= 2030)]
 
     # Check
     fig, ax = plt.subplots(2, 2)
@@ -113,11 +128,11 @@ def test_nigeria():
     ax[0].scatter(data.year, data.n_alive)
     ax[0].set_title('Population')
 
-    ax[1].plot(sim.yearvec, sim.results.new_deaths)
+    ax[1].plot(sim.yearvec, sim.results.new_deaths/dt)
     ax[1].set_title('Deaths')
 
-    ax[2].plot(sim.yearvec, sim.results.pregnancy.pregnancies, label='Pregnancies')
-    ax[2].plot(sim.yearvec, sim.results.pregnancy.births, label='Births')
+    ax[2].plot(sim.yearvec, sim.results.pregnancy.pregnancies/dt, label='Pregnancies')
+    ax[2].plot(sim.yearvec, sim.results.pregnancy.births/dt, label='Births')
     ax[2].set_title('Pregnancies and births')
     ax[2].legend()
 
