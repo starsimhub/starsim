@@ -67,6 +67,7 @@ class Module(sc.prettyobj):
         return
 
     def finalize(self, sim):
+        self.finalize_results(sim)
         self.finalized = True
         return
 
