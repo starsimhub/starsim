@@ -312,31 +312,34 @@ class STI(Disease):
         """
         pass
 
-    def _make_new_cases_singlerng(self, sim):
+    def _make_new_cases_singlerng(self, people):
         # Not common-random-number-safe, but more efficient for when not using the multirng feature
         new_cases = []
         sources = []
-        for k, layer in sim.people.networks.items():
+        for k, layer in people.networks.items():
             if k in self.pars['beta']:
                 contacts = layer.contacts
-                rel_trans = (self.infected & sim.people.alive) * self.rel_trans
-                rel_sus = (self.susceptible & sim.people.alive) * self.rel_sus
+                rel_trans = (self.infected & people.alive) * self.rel_trans
+                rel_sus = (self.susceptible & people.alive) * self.rel_sus
                 for a, b, beta in [[contacts.p1, contacts.p2, self.pars.beta[k][0]],
                                    [contacts.p2, contacts.p1, self.pars.beta[k][1]]]:
                     if beta == 0:
                         continue
                     # probability of a->b transmission
-                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta # TODO: Needs DT
+                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt
                     new_cases_bool = np.random.random(len(a)) < p_transmit # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
                     new_cases.append(b[new_cases_bool])
                     sources.append(a[new_cases_bool])
         return np.concatenate(new_cases), np.concatenate(sources)
 
-    def _choose_new_cases_multirng(self, people):
+    def _make_new_cases_multirng(self, people):
         '''
         Common-random-number-safe transmission code works by computing the
         probability of each _node_ acquiring a case rather than checking if each
         _edge_ transmits.
+
+        Subsequent step uses a roulette wheel with slotted RNG to determine
+        infection source.
         '''
         n = len(people.uid) # TODO: possibly could be shortened to just the people who are alive
         p_acq_node = np.zeros(n)
@@ -345,7 +348,6 @@ class STI(Disease):
         for lkey, layer in people.networks.items():
             if lkey in self.pars['beta']:
                 contacts = layer.contacts
-                contacts_df = pd.DataFrame(contacts) # Need to make a copy anyway
                 rel_trans = self.rel_trans * (self.infected & people.alive)
                 rel_sus = self.rel_sus * (self.susceptible & people.alive)
 
@@ -356,14 +358,14 @@ class STI(Disease):
                         continue
 
                     a, b = contacts[lbl_src], contacts[lbl_tgt]
-                    df = pd.DataFrame({'p1': contacts['p1'], 'p2': contacts['p2']})
+                    df = pd.DataFrame({'p1': a, 'p2': b})
                     df['p'] = (rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt).values
                     df = df.loc[df['p']>0]
                     dfs.append(df)
 
         df = pd.concat(dfs)
         if len(df) == 0:
-            return []
+            return [], []
 
         p_acq_node = df.groupby('p2').apply(lambda x: 1-np.prod(1-x['p']))
         uids = p_acq_node.index.values
@@ -372,69 +374,30 @@ class STI(Disease):
         slots = people.slot[uids]
         new_cases_bool = sps.uniform.rvs(size=np.max(slots)+1)[slots] < p_acq_node.values
         new_cases = uids[new_cases_bool]
-        return new_cases
 
-    def _determine_case_source_multirng(self, people, new_cases):
-        '''
-        Given the uids of new cases, determine which agents are the source of each case
-        '''
-        sources = np.zeros_like(new_cases)
-
-        # Slotted draw, need to find a long-term place for this logic
-        slots = people.slot[new_cases]
-        r = sps.uniform.rvs(size=np.max(slots)+1)[slots]
-
-        for i, uid in enumerate(new_cases):
-            p_acqs = []
-            possible_sources = []
-
-            for lkey, layer in people.networks.items():
-                if lkey in self.pars['beta']:
-                    contacts = layer.contacts
-                    a_to_b = [contacts.p1, contacts.p2, self.pars.beta[lkey][0]]
-                    b_to_a = [contacts.p2, contacts.p1, self.pars.beta[lkey][1]]
-                    for a, b, beta in [a_to_b, b_to_a]: # Transmission from a --> b
-                        if beta == 0:
-                            continue
-                    
-                        inds = np.where(b == uid)[0]
-                        if len(inds) == 0:
-                            continue
-                        neighbors = a[inds]
-
-                        rel_trans = self.rel_trans[neighbors] * (self.infected[neighbors] & people.alive[neighbors])
-                        rel_sus = self.rel_sus[uid] * (self.susceptible[uid] & people.alive[uid])
-                        beta_combined = contacts.beta[inds] * beta
-
-                        # Compute acquisition probabilities from neighbors --> uid
-                        # TODO: Could remove zeros
-                        p_acqs.append((rel_trans * rel_sus * beta_combined).__array__()) # Needs DT
-                        possible_sources.append(neighbors.__array__())
-
-            # Concatenate across layers and directions (p1->p2 vs p2->p1)
-            p_acqs = np.concatenate(p_acqs)
-            possible_sources = np.concatenate(possible_sources)
-
-            if len(possible_sources) == 1: # Easy if only one possible source
-                sources[i] = possible_sources[0]
+        # Now choose infection source for new cases
+        def choose_source(df):
+            if len(df) == 1: # Easy if only one possible source
+                src_idx = 0
             else:
                 # Roulette selection using slotted draw r associated with this new case
-                cumsum = p_acqs / p_acqs.sum()
-                source_idx = np.argmax(cumsum >= r[i])
-                sources[i] = possible_sources[source_idx]
-        return sources
+                cumsum = df['p'] / df['p'].sum()
+                src_idx = np.argmax(cumsum >= df['r'])
+            return df['p1'].iloc[src_idx]
+
+        df['r'] = sps.uniform.rvs(size=np.max(slots)+1)[slots]
+        sources = df.set_index('p2').loc[new_cases].groupby('p2').apply(choose_source)
+
+        return new_cases, sources[new_cases].values
 
     def make_new_cases(self, sim):
         """ Add new cases of module, through transmission, incidence, etc. """
         if not ss.options.multirng:
             # Determine new cases for singlerng
-            new_cases, sources = self._make_new_cases_singlerng(sim)
+            new_cases, sources = self._make_new_cases_singlerng(sim.people)
         else:
             # Determine new cases for multirng
-            new_cases = self._choose_new_cases_multirng(sim.people)
-            if len(new_cases):
-                # Now determine whom infected each case
-                sources = self._determine_case_source_multirng(sim.people, new_cases)
+            new_cases, sources = self._make_new_cases_multirng(sim.people)
 
         if len(new_cases):
             self.set_prognoses(sim, new_cases, sources)
