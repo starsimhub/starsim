@@ -254,7 +254,7 @@ class Pregnancy(DemographicModule):
 
         # Process metadata. Defaults here are the labels used by UN data
         self.metadata = ss.omerge({
-            'data_cols': {'year': 'Time', 'age': 'AgeGrp', 'value': 'Births'},
+            'data_cols': {'year': 'Time', 'age': 'AgeGrp', 'value': 'ASFR'},
         }, metadata)
 
         self.choose_slots = sps.randint(low=0, high=1) # Low and high will be reset upon initialization
@@ -291,7 +291,7 @@ class Pregnancy(DemographicModule):
             nearest_year = available_years[year_ind]
 
             df = module.pars.fertility_rate.loc[module.pars.fertility_rate[year_label] == nearest_year]
-            df_arr = df[val_label].values  # Pull out datafram values
+            df_arr = df[val_label].values  # Pull out dataframe values
             df_arr = np.append(df_arr, 0)  # Add zeros for those outside data range
 
             # # Number of births over a given period classified by age group of mother
