@@ -8,6 +8,11 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :local:
    :depth: 1
 
+Version 0.1.3 (2024-01-12)
+--------------------------
+- Improving performance of MultiRNG
+- Now factoring the timestep, dt, into transmission calculations
+- *GitHub info*: PRs `204 <https://github.com/amath-idm/stisim/pull/204>`_
 
 Version 0.1.1 (2024-01-10)
 --------------------------
