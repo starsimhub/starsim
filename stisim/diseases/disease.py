@@ -341,32 +341,37 @@ class STI(Disease):
         n = len(people.uid) # TODO: possibly could be shortened to just the people who are alive
         p_acq_node = np.zeros(n)
 
+        dfs = []
         for lkey, layer in people.networks.items():
             if lkey in self.pars['beta']:
                 contacts = layer.contacts
+                contacts_df = pd.DataFrame(contacts) # Need to make a copy anyway
                 rel_trans = self.rel_trans * (self.infected & people.alive)
                 rel_sus = self.rel_sus * (self.susceptible & people.alive)
 
-                a_to_b = [contacts.p1, contacts.p2, self.pars.beta[lkey][0]]
-                b_to_a = [contacts.p2, contacts.p1, self.pars.beta[lkey][1]]
-                for a, b, beta in [a_to_b, b_to_a]: # Transmission from a --> b
+                a_to_b = ['p1', 'p2', self.pars.beta[lkey][0]]
+                b_to_a = ['p2', 'p1', self.pars.beta[lkey][1]]
+                for lbl_src, lbl_tgt, beta in [a_to_b, b_to_a]: # Transmission from a --> b
                     if beta == 0:
                         continue
-                    
-                    # Accumulate acquisition probability for each person (node)
-                    node_from_edge = np.ones((n, len(a)))
-                    bi = people._uid_map[b] # Indices of b (rather than uid)
-                    node_from_edge[bi, np.arange(len(a))] = 1 - rel_trans[a] * rel_sus[b] * contacts.beta * beta # TODO: Needs DT
-                    p_acq_node = 1 - (1-p_acq_node) * node_from_edge.prod(axis=1) # (1-p1)*(1-p2)*...
 
+                    a, b = contacts[lbl_src], contacts[lbl_tgt]
+                    df = pd.DataFrame({'p1': contacts['p1'], 'p2': contacts['p2']})
+                    df['p'] = (rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt).values
+                    df = df.loc[df['p']>0]
+                    dfs.append(df)
+
+        df = pd.concat(dfs)
+        if len(df) == 0:
+            return []
+
+        p_acq_node = df.groupby('p2').apply(lambda x: 1-np.prod(1-x['p']))
+        uids = p_acq_node.index.values
 
         # Slotted draw, need to find a long-term place for this logic
-        slots = people.slot[people.uid]
-        #p = np.full(np.max(slots)+1, 0, dtype=p_acq_node.dtype)
-        #p[slots] = p_acq_node
-        #new_cases_bool = sps.bernoulli.rvs(p=p).astype(bool)[slots]
-        new_cases_bool = sps.uniform.rvs(size=np.max(slots)+1)[slots] < p_acq_node
-        new_cases = people.uid[new_cases_bool]
+        slots = people.slot[uids]
+        new_cases_bool = sps.uniform.rvs(size=np.max(slots)+1)[slots] < p_acq_node.values
+        new_cases = uids[new_cases_bool]
         return new_cases
 
     def _determine_case_source_multirng(self, people, new_cases):
