@@ -304,7 +304,7 @@ class Pregnancy(DemographicModule):
             age_bins = df[age_label].unique()
             age_bins = np.append(age_bins, 50)
             age_inds = np.digitize(sim.people.age[uids], age_bins) - 1
-            age_inds[age_inds>=max(age_inds)] = -1  # This ensures women outside the data range will get a value of 0
+            age_inds[age_inds>max(age_inds)] = -1  # This ensures women outside the data range will get a value of 0
 
             # Make array of fertility rates - TODO, check indexing works
             fertility_rate = pd.Series(index=uids)
@@ -383,7 +383,7 @@ class Pregnancy(DemographicModule):
 
         # If incidence of pregnancy is non-zero, make some cases
         # Think about how to deal with age/time-varying fertility
-        denom_conds = ppl.female & self.susceptible
+        denom_conds = ppl.female & self.susceptible & ppl.alive
         inds_to_choose_from = ss.true(denom_conds)
         uids = self.fertility_dist.filter(inds_to_choose_from)
 
