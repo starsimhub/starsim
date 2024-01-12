@@ -249,12 +249,12 @@ class Pregnancy(DemographicModule):
             'rel_fertility': 1,
             'maternal_death_rate': 0,
             'sex_ratio': 0.5,       # Ratio of babies born female
-            'units': 1,             # ???
+            'units': 1e-3,             # ???
         }, self.pars)
 
         # Process metadata. Defaults here are the labels used by UN data
         self.metadata = ss.omerge({
-            'data_cols': {'year': 'Time', 'age': 'AgeGrp', 'value': 'ASFR'},
+            'data_cols': {'year': 'Time', 'age': 'AgeGrp', 'value': 'Births'},
         }, metadata)
 
         self.choose_slots = sps.randint(low=0, high=1) # Low and high will be reset upon initialization
@@ -291,8 +291,14 @@ class Pregnancy(DemographicModule):
             nearest_year = available_years[year_ind]
 
             df = module.pars.fertility_rate.loc[module.pars.fertility_rate[year_label] == nearest_year]
-            conception_arr = df[val_label].values
-            conception_arr = np.append(conception_arr, 0)  # Add zeros for those outside data range
+            df_arr = df[val_label].values  # Pull out datafram values
+            df_arr = np.append(df_arr, 0)  # Add zeros for those outside data range
+
+            # # Number of births over a given period classified by age group of mother
+            # # We turn that into a probability of each woman of a given age conceiving
+            # # First, we need to calculate how many women there are of each age
+            # counts, bins1 = np.histogram(sim.people.age[(sim.people.female)], np.append(age_bins, 100))  # Append 100
+            # scaled_counts = counts * sim.pars['pop_scale']
 
             # Process age data
             age_bins = df[age_label].unique()
@@ -302,7 +308,7 @@ class Pregnancy(DemographicModule):
 
             # Make array of fertility rates - TODO, check indexing works
             fertility_rate = pd.Series(index=uids)
-            fertility_rate[uids] = conception_arr[age_inds]
+            fertility_rate[uids] = df_arr[age_inds]
             fertility_rate[uids[sim.people.male[uids]]] = 0
             fertility_rate[uids[(sim.people.age < 0)[uids]]] = 0
             fertility_rate[uids[(sim.people.age > max(age_inds))[uids]]] = 0
