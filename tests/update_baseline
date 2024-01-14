@@ -8,6 +8,3 @@ import test_baselines as tb
 
 tb.save_baseline()
 tb.test_benchmark(do_save=True, repeats=5)
-
-
-
