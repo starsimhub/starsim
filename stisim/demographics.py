@@ -306,12 +306,17 @@ class Pregnancy(DemographicModule):
             age_inds = np.digitize(sim.people.age[uids], age_bins) - 1
             age_inds[age_inds>=max(age_inds)] = -1  # This ensures women outside the data range will get a value of 0
 
-            # Make array of fertility rates - TODO, check indexing works
+            # Make array of fertility rates
             fertility_rate = pd.Series(index=uids)
             fertility_rate[uids] = df_arr[age_inds]
-            fertility_rate[uids[sim.people.male[uids]]] = 0
-            fertility_rate[uids[(sim.people.age < 0)[uids]]] = 0
-            fertility_rate[uids[(sim.people.age > max(age_inds))[uids]]] = 0
+            # fertility_rate[uids[sim.people.male[uids]]] = 0
+            # fertility_rate[uids[(sim.people.age < 0)[uids]]] = 0
+
+            # if sim.ti==1:
+            #     import traceback;
+            #     traceback.print_exc();
+            #     import pdb;
+            #     pdb.set_trace()
 
         # Scale from rate to probability. Consider an exponential here.
         fertility_prob = fertility_rate * (module.pars.units * module.pars.rel_fertility * sim.pars.dt)
@@ -378,14 +383,17 @@ class Pregnancy(DemographicModule):
         Select people to make pregnancy using incidence data
         This should use ASFR data from https://population.un.org/wpp/Download/Standard/Fertility/
         """
-        # Abbreviate key variables
+        # Abbreviate
         ppl = sim.people
 
-        # If incidence of pregnancy is non-zero, make some cases
-        # Think about how to deal with age/time-varying fertility
         denom_conds = ppl.female & self.susceptible & ppl.alive
         inds_to_choose_from = ss.true(denom_conds)
         uids = self.fertility_dist.filter(inds_to_choose_from)
+        #
+        # import traceback;
+        # traceback.print_exc();
+        # import pdb;
+        # pdb.set_trace()
 
         # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
         n_unborn_agents = len(uids)

@@ -82,7 +82,7 @@ def test_nigeria():
 
     # Make demographic modules
     fertility_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')
-    pregnancy = ss.Pregnancy(pars={'fertility_rate': fertility_rates})
+    pregnancy = ss.Pregnancy(pars={'fertility_rate': fertility_rates, 'rel_fertility':1 })  #4/3
     death_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')
     death = ss.background_deaths(pars={'death_rate': death_rates})
     age_data = pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv')
