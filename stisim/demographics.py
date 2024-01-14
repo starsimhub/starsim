@@ -294,12 +294,6 @@ class Pregnancy(DemographicModule):
             df_arr = df[val_label].values  # Pull out dataframe values
             df_arr = np.append(df_arr, 0)  # Add zeros for those outside data range
 
-            # # Number of births over a given period classified by age group of mother
-            # # We turn that into a probability of each woman of a given age conceiving
-            # # First, we need to calculate how many women there are of each age
-            # counts, bins1 = np.histogram(sim.people.age[(sim.people.female)], np.append(age_bins, 100))  # Append 100
-            # scaled_counts = counts * sim.pars['pop_scale']
-
             # Process age data
             age_bins = df[age_label].unique()
             age_bins = np.append(age_bins, 50)
@@ -309,14 +303,6 @@ class Pregnancy(DemographicModule):
             # Make array of fertility rates
             fertility_rate = pd.Series(index=uids)
             fertility_rate[uids] = df_arr[age_inds]
-            # fertility_rate[uids[sim.people.male[uids]]] = 0
-            # fertility_rate[uids[(sim.people.age < 0)[uids]]] = 0
-
-            # if sim.ti==1:
-            #     import traceback;
-            #     traceback.print_exc();
-            #     import pdb;
-            #     pdb.set_trace()
 
         # Scale from rate to probability. Consider an exponential here.
         fertility_prob = fertility_rate * (module.pars.units * module.pars.rel_fertility * sim.pars.dt)
@@ -367,7 +353,7 @@ class Pregnancy(DemographicModule):
         self.ti_delivery[deliveries] = sim.ti
 
         # Check for new women emerging from post-partum
-        postpartum = ~self.pregnant & (self.ti_postpartum == sim.ti)
+        postpartum = ~self.pregnant & (self.ti_postpartum <= sim.ti)
         self.postpartum[postpartum] = False
         self.susceptible[postpartum] = True
         self.ti_postpartum[postpartum] = sim.ti
@@ -381,7 +367,6 @@ class Pregnancy(DemographicModule):
     def make_pregnancies(self, sim):
         """
         Select people to make pregnancy using incidence data
-        This should use ASFR data from https://population.un.org/wpp/Download/Standard/Fertility/
         """
         # Abbreviate
         ppl = sim.people
@@ -389,11 +374,6 @@ class Pregnancy(DemographicModule):
         denom_conds = ppl.female & self.susceptible & ppl.alive
         inds_to_choose_from = ss.true(denom_conds)
         uids = self.fertility_dist.filter(inds_to_choose_from)
-        #
-        # import traceback;
-        # traceback.print_exc();
-        # import pdb;
-        # pdb.set_trace()
 
         # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
         n_unborn_agents = len(uids)
