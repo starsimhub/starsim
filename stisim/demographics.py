@@ -329,6 +329,7 @@ class Pregnancy(DemographicModule):
         """
         self.results += ss.Result(self.name, 'pregnancies', sim.npts, dtype=int, scale=True)
         self.results += ss.Result(self.name, 'births', sim.npts, dtype=int, scale=True)
+        self.results += ss.Result(self.name, 'cbr', sim.npts, dtype=int, scale=False)
         return
 
     def update(self, sim):
@@ -429,4 +430,5 @@ class Pregnancy(DemographicModule):
     def update_results(self, sim):
         self.results['pregnancies'][sim.ti] = np.count_nonzero(self.ti_pregnant == sim.ti)
         self.results['births'][sim.ti] = np.count_nonzero(self.ti_delivery == sim.ti)
+        self.results['cbr'] = np.divide(self.results['births'], sim.results['n_alive'], where=sim.results['n_alive']>0)
         return

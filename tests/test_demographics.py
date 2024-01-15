@@ -121,6 +121,9 @@ def test_nigeria():
     nigeria_popsize = pd.read_csv(ss.root / 'tests/test_data/nigeria_popsize.csv')
     data = nigeria_popsize[(nigeria_popsize.year >= 1995) & (nigeria_popsize.year <= 2030)]
 
+    nigeria_cbr = pd.read_csv(ss.root / 'tests/test_data/nigeria_births.csv')
+    cbr_data = nigeria_cbr[(nigeria_cbr.Year >= 1995) & (nigeria_cbr.Year <= 2030)]
+
     # Check
     fig, ax = plt.subplots(2, 2)
     ax = ax.ravel()
@@ -135,6 +138,11 @@ def test_nigeria():
     ax[2].plot(sim.yearvec, sim.results.pregnancy.births/dt, label='Births')
     ax[2].set_title('Pregnancies and births')
     ax[2].legend()
+
+    ax[3].plot(sim.yearvec, sim.results.pregnancy.cbr, label='Simulated CBR')
+    ax[3].scatter(cbr_data.Year, cbr_data.CBR, label='Data CBR')
+    ax[3].set_title('CBR')
+    ax[3].legend()
 
     fig.tight_layout
 
