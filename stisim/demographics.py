@@ -94,6 +94,7 @@ class births(DemographicModule):
         # Add n_new births to each state in the sim
         n_new = self.get_births(sim)
         new_uids = sim.people.grow(n_new)
+        sim.people.age[new_uids] = 0
         return new_uids
 
     def update_results(self, n_new, sim):
@@ -102,7 +103,7 @@ class births(DemographicModule):
     def finalize(self, sim):
         super().finalize(sim)
         self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['cbr'] = np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
+        self.results['cbr'] = 1000*np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
 
 
 class background_deaths(DemographicModule):
@@ -223,8 +224,9 @@ class background_deaths(DemographicModule):
         self.results['new'][sim.ti] = n_deaths
 
     def finalize(self, sim):
+        super().finalize(sim)
         self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['cmr'] = np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
+        self.results['cmr'] = 1000*np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
 
 
 class Pregnancy(DemographicModule):
@@ -385,7 +387,6 @@ class Pregnancy(DemographicModule):
 
             # Grow the arrays and set properties for the unborn agents
             new_uids = sim.people.grow(len(new_slots))
-
             sim.people.age[new_uids] = -self.pars.dur_pregnancy
             sim.people.slot[new_uids] = new_slots # Before sampling female_dist
             sim.people.female[new_uids] = self.sex_dist.rvs(new_uids)
@@ -430,5 +431,8 @@ class Pregnancy(DemographicModule):
     def update_results(self, sim):
         self.results['pregnancies'][sim.ti] = np.count_nonzero(self.ti_pregnant == sim.ti)
         self.results['births'][sim.ti] = np.count_nonzero(self.ti_delivery == sim.ti)
-        self.results['cbr'] = np.divide(self.results['births'], sim.results['n_alive'], where=sim.results['n_alive']>0)
         return
+
+    def finalize(self, sim):
+        super().finalize(sim)
+        self.results['cbr'] = 1000* np.divide(self.results['births'], sim.results['n_alive'], where=sim.results['n_alive']>0)

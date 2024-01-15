@@ -91,7 +91,7 @@ def test_nigeria():
     n_agents = 10_000
     nga_pop_1995 = 106819805
     ppl = ss.People(n_agents, age_data=age_data)
-    dt = 1/12
+    dt = 1 #/12
 
     sim = ss.Sim(
         dt=dt,
@@ -109,10 +109,10 @@ def test_nigeria():
 
     # Plot histograms of the age distributions - simulated vs data
     bins = np.arange(0, 101, 1)
-    init_scale = nga_pop_1995/(n_agents*10)  # Why 10??
+    init_scale = nga_pop_1995/ n_agents
     counts, bins = np.histogram(sim.people.age, bins)
     plt.bar(bins[:-1], counts*init_scale, alpha=0.5, label='Simulated')
-    plt.bar(bins, age_data.value.values*100, alpha=0.5, color='r', label='Data')
+    plt.bar(bins, age_data.value.values*1000, alpha=0.5, color='r', label='Data')
     plt.legend(loc='upper right')
     plt.show()
 
@@ -124,19 +124,25 @@ def test_nigeria():
     nigeria_cbr = pd.read_csv(ss.root / 'tests/test_data/nigeria_births.csv')
     cbr_data = nigeria_cbr[(nigeria_cbr.Year >= 1995) & (nigeria_cbr.Year <= 2030)]
 
+    nigeria_cmr = pd.read_csv(ss.root / 'tests/test_data/nigeria_cmr.csv')
+    cmr_data = nigeria_cmr[(nigeria_cmr.Year >= 1995) & (nigeria_cbr.Year <= 2030)]
+
     # Check
     fig, ax = plt.subplots(2, 2)
     ax = ax.ravel()
-    ax[0].plot(sim.yearvec, sim.results.n_alive)
-    ax[0].scatter(data.year, data.n_alive)
+
+    ax[0].scatter(data.year, data.n_alive, alpha=0.5)
+    ax[0].plot(sim.yearvec, sim.results.n_alive, color='k')
     ax[0].set_title('Population')
 
-    ax[1].plot(sim.yearvec, sim.results.new_deaths/dt)
-    ax[1].set_title('Deaths')
+    ax[1].plot(sim.yearvec, sim.results.pregnancy.pregnancies/dt, label='Pregnancies')
+    ax[1].plot(sim.yearvec, sim.results.pregnancy.births/dt, label='Births')
+    ax[1].set_title('Pregnancies and births')
+    ax[1].legend()
 
-    ax[2].plot(sim.yearvec, sim.results.pregnancy.pregnancies/dt, label='Pregnancies')
-    ax[2].plot(sim.yearvec, sim.results.pregnancy.births/dt, label='Births')
-    ax[2].set_title('Pregnancies and births')
+    ax[2].plot(sim.yearvec, sim.results.background_deaths.cmr, label='Simulated CMR')
+    ax[2].scatter(cbr_data.Year, cmr_data.CMR, label='Data CMR')
+    ax[2].set_title('CMR')
     ax[2].legend()
 
     ax[3].plot(sim.yearvec, sim.results.pregnancy.cbr, label='Simulated CBR')
@@ -151,9 +157,76 @@ def test_nigeria():
     return sim
 
 
+def test_nigeria_births():
+    """ Make a Nigeria sim with births and deaths """
+
+    # Make demographic modules
+    birth_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_births.csv')
+    births = ss.births(pars={'birth_rate':birth_rates})
+    death_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')
+    death = ss.background_deaths(pars={'death_rate': death_rates})
+    age_data = pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv')
+
+    # Make people
+    n_agents = 10_000
+    nga_pop_1995 = 106819805
+    ppl = ss.People(n_agents, age_data=age_data)
+    dt = 1
+
+    sim = ss.Sim(
+        dt=dt,
+        total_pop=nga_pop_1995,
+        start=1995,
+        n_years=35,
+        people=ppl,
+        demographics=[
+            births,
+            death
+        ],
+    )
+
+    sim.run()
+
+    nigeria_popsize = pd.read_csv(ss.root / 'tests/test_data/nigeria_popsize.csv')
+    data = nigeria_popsize[(nigeria_popsize.year >= 1995) & (nigeria_popsize.year <= 2030)]
+
+    nigeria_cbr = pd.read_csv(ss.root / 'tests/test_data/nigeria_births.csv')
+    cbr_data = nigeria_cbr[(nigeria_cbr.Year >= 1995) & (nigeria_cbr.Year <= 2030)]
+
+    nigeria_cmr = pd.read_csv(ss.root / 'tests/test_data/nigeria_cmr.csv')
+    cmr_data = nigeria_cmr[(nigeria_cmr.Year >= 1995) & (nigeria_cbr.Year <= 2030)]
+
+    # Check
+    fig, ax = plt.subplots(2, 2)
+    ax = ax.ravel()
+    ax[0].scatter(data.year, data.n_alive, alpha=0.5)
+    ax[0].plot(sim.yearvec, sim.results.n_alive, color='k')
+    ax[0].set_title('Population')
+
+    ax[1].plot(sim.yearvec, sim.results.new_deaths/dt)
+    ax[1].set_title('Deaths')
+
+    ax[2].plot(sim.yearvec, sim.results.background_deaths.cmr, label='Simulated CMR')
+    ax[2].scatter(cmr_data.Year, cmr_data.CMR, label='Data CMR')
+    ax[2].set_title('CMR')
+    ax[2].legend()
+
+    ax[3].plot(sim.yearvec, sim.results.births.cbr, label='Simulated CBR')
+    ax[3].scatter(cbr_data.Year, cbr_data.CBR, label='Data CBR')
+    ax[3].set_title('CBR')
+    ax[3].legend()
+
+    fig.tight_layout
+
+    plt.show()
+
+    return sim
+
+
 if __name__ == '__main__':
 
     sim = test_nigeria()
+    # sim = test_nigeria_births()
 
     # # Deaths
     # sim_death1 = test_fixed_death_rate()

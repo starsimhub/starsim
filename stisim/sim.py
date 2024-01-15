@@ -457,13 +457,13 @@ class Sim(sc.prettyobj):
             # otherwise the scale factor will be applied multiple times
             raise AlreadyRunError('Simulation has already been finalized')
 
-        for module in self.modules:
-            module.finalize(self)
-
         # Scale the results
         for reskey, res in self.results.items():
             if isinstance(res, ss.Result) and res.scale:
                 self.results[reskey] = self.results[reskey]*self.pars.pop_scale
+
+        for module in self.modules:
+            module.finalize(self)
 
         self.summarize()
         self.results_ready = True  # Set this first so self.summary() knows to print the results
