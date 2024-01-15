@@ -289,7 +289,7 @@ class Pregnancy(DemographicModule):
             val_label = module.metadata.data_cols['value']
 
             available_years = module.pars.fertility_rate[year_label].unique()
-            year_ind = sc.findnearest(available_years, sim.year)
+            year_ind = sc.findnearest(available_years, sim.year-module.pars.dur_pregnancy)
             nearest_year = available_years[year_ind]
 
             df = module.pars.fertility_rate.loc[module.pars.fertility_rate[year_label] == nearest_year]
