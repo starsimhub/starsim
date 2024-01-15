@@ -388,7 +388,7 @@ class Pregnancy(DemographicModule):
 
             sim.people.age[new_uids] = -self.pars.dur_pregnancy
             sim.people.slot[new_uids] = new_slots # Before sampling female_dist
-            sim.people.female[new_uids] = self.sex_dist.rvs(uids)
+            sim.people.female[new_uids] = self.sex_dist.rvs(new_uids)
 
             # Add connections to any vertical transmission layers
             # Placeholder code to be moved / refactored. The maternal network may need to be
