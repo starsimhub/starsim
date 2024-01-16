@@ -107,8 +107,6 @@ def test_syph():
     plt.show()
 
     return sim
-
-
 def test_syph_intvs():
 
     # Interventions
@@ -153,8 +151,7 @@ def test_syph_intvs():
     return sim_base, sim_intv
 
 
-
 if __name__ == '__main__':
 
     sim = test_syph()
-    # sim_base, sim_intv = test_syph_intvs()
+    sim_base, sim_intv = test_syph_intvs()
