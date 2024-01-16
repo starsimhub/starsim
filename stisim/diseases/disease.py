@@ -126,7 +126,6 @@ class Disease(ss.Module):
 
     def finalize(self, sim):
         super().finalize(sim)
-        self.finalize_results(sim)
         return
 
     def validate_pars(self, sim):
@@ -160,13 +159,6 @@ class Disease(ss.Module):
         """
         for state in self._boolean_states:
             self.results += ss.Result(self.name, f'n_{state.name}', sim.npts, dtype=int, scale=True)
-        return
-
-    def finalize_results(self, sim):
-        """
-        Finalize results
-        """
-        super().finalize_results(sim)
         return
 
     def update_pre(self, sim):
@@ -301,9 +293,8 @@ class STI(Disease):
         if self.pars['seed_infections'] is None:
             return
 
-        alive_uids = ss.true(sim.people.alive) # Maybe just sim.people.uid?
+        alive_uids = ss.true(sim.people.alive)  # Maybe just sim.people.uid?
         initial_cases = self.pars['seed_infections'].filter(alive_uids)
-
         self.set_prognoses(sim, initial_cases)  # TODO: sentinel value to indicate seeds?
         return
 
@@ -332,14 +323,14 @@ class STI(Disease):
         for k, layer in people.networks.items():
             if k in self.pars['beta']:
                 contacts = layer.contacts
-                rel_trans = (self.infected & people.alive) * self.rel_trans
+                rel_trans = (self.infectious & people.alive) * self.rel_trans
                 rel_sus = (self.susceptible & people.alive) * self.rel_sus
                 for a, b, beta in [[contacts.p1, contacts.p2, self.pars.beta[k][0]],
                                    [contacts.p2, contacts.p1, self.pars.beta[k][1]]]:
                     if beta == 0:
                         continue
                     # probability of a->b transmission
-                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt
+                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta #* people.dt  # Remove - beta should be per dt
                     new_cases_bool = np.random.random(len(a)) < p_transmit  # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
                     new_cases.append(b[new_cases_bool])
                     sources.append(a[new_cases_bool])
@@ -350,47 +341,46 @@ class STI(Disease):
         Common-random-number-safe transmission code works by computing the
         probability of each _node_ acquiring a case rather than checking if each
         _edge_ transmits.
-
         Subsequent step uses a roulette wheel with slotted RNG to determine
         infection source.
         '''
-        n = len(people.uid) # TODO: possibly could be shortened to just the people who are alive
+        n = len(people.uid)  # TODO: possibly could be shortened to just the people who are alive
         p_acq_node = np.zeros(n)
 
         dfs = []
         for lkey, layer in people.networks.items():
             if lkey in self.pars['beta']:
                 contacts = layer.contacts
-                rel_trans = self.rel_trans * (self.infected & people.alive)
+                rel_trans = self.rel_trans * (self.infectious & people.alive)
                 rel_sus = self.rel_sus * (self.susceptible & people.alive)
 
                 a_to_b = ['p1', 'p2', self.pars.beta[lkey][0]]
                 b_to_a = ['p2', 'p1', self.pars.beta[lkey][1]]
-                for lbl_src, lbl_tgt, beta in [a_to_b, b_to_a]: # Transmission from a --> b
+                for lbl_src, lbl_tgt, beta in [a_to_b, b_to_a]:  # Transmission from a --> b
                     if beta == 0:
                         continue
 
                     a, b = contacts[lbl_src], contacts[lbl_tgt]
                     df = pd.DataFrame({'p1': a, 'p2': b})
-                    df['p'] = (rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt).values
-                    df = df.loc[df['p']>0]
+                    df['p'] = (rel_trans[a] * rel_sus[b] * contacts.beta * beta).values
+                    df = df.loc[df['p'] > 0]
                     dfs.append(df)
 
         df = pd.concat(dfs)
         if len(df) == 0:
             return [], []
 
-        p_acq_node = df.groupby('p2').apply(lambda x: 1-np.prod(1-x['p']))
+        p_acq_node = df.groupby('p2').apply(lambda x: 1 - np.prod(1 - x['p']))
         uids = p_acq_node.index.values
 
         # Slotted draw, need to find a long-term place for this logic
         slots = people.slot[uids]
-        new_cases_bool = sps.uniform.rvs(size=np.max(slots)+1)[slots] < p_acq_node.values
+        new_cases_bool = sps.uniform.rvs(size=np.max(slots) + 1)[slots] < p_acq_node.values
         new_cases = uids[new_cases_bool]
 
         # Now choose infection source for new cases
         def choose_source(df):
-            if len(df) == 1: # Easy if only one possible source
+            if len(df) == 1:  # Easy if only one possible source
                 src_idx = 0
             else:
                 # Roulette selection using slotted draw r associated with this new case
@@ -398,15 +388,13 @@ class STI(Disease):
                 src_idx = np.argmax(cumsum >= df['r'])
             return df['p1'].iloc[src_idx]
 
-        df['r'] = sps.uniform.rvs(size=np.max(slots)+1)[slots]
+        df['r'] = sps.uniform.rvs(size=np.max(slots) + 1)[slots]
         sources = df.set_index('p2').loc[new_cases].groupby('p2').apply(choose_source)
 
         return new_cases, sources[new_cases].values
 
     def make_new_cases(self, sim):
         """ Add new cases of module, through transmission, incidence, etc. """
-
-        # Call methods to generate the new cases across all layers
         if not ss.options.multirng:
             # Determine new cases for singlerng
             new_cases, sources = self._make_new_cases_singlerng(sim.people)
@@ -414,13 +402,15 @@ class STI(Disease):
             # Determine new cases for multirng
             new_cases, sources = self._make_new_cases_multirng(sim.people)
 
-        return len(new_cases)  # Number of new cases made
+        if len(new_cases):
+            self._set_cases(sim, new_cases, sources)
 
     def _set_cases(self, sim, target_uids, source_uids=None):
         congenital = sim.people.age[target_uids] <= sim.dt
-        src_c = source_uids[congenital] if source_uids is not None else None
+        if len(ss.true(congenital))>0:
+            src_c = source_uids[congenital] if source_uids is not None else None
+            self.set_congenital(sim, target_uids[congenital], src_c)
         src_p = source_uids[~congenital] if source_uids is not None else None
-        self.set_congenital(sim, target_uids[congenital], src_c)
         self.set_prognoses(sim, target_uids[~congenital], src_p)
         return
 

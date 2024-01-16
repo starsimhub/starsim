@@ -17,8 +17,8 @@ def make_syph_sim():
     syph.pars['seed_infections'] = sps.bernoulli(p=0.1)
 
     # Make demographic modules
-    fertility_rates = {'fertility_rates': pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')}
-    pregnancy = ss.Pregnancy(fertility_rates)
+    fertility_rates = {'fertility_rate': pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')}
+    pregnancy = ss.Pregnancy(pars=fertility_rates)
     death_rates = dict(
         death_rates=pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv'),
     )
@@ -84,7 +84,7 @@ def test_syph():
     sim.run()
 
     # Check plots
-    burnin = 0
+    burnin = 10
     pi = int(burnin/sim.dt)
     plt.figure()
     plt.plot(sim.yearvec[pi:], sim.results.syphilis.new_infections[pi:])
@@ -156,5 +156,5 @@ def test_syph_intvs():
 
 if __name__ == '__main__':
 
-    sim0 = test_syph()
+    sim = test_syph()
     # sim_base, sim_intv = test_syph_intvs()

@@ -124,4 +124,4 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, 
 
 if __name__ == '__main__':
     # Test Nigeria demographic consistency
-    sim = test_nigeria(dt=1/12, which='pregnancy', n_years=35, plot_init=True, do_plot=do_plot)
+    sim = test_nigeria(dt=1, which='pregnancy', n_years=15, plot_init=True, do_plot=do_plot)
