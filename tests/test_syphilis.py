@@ -109,51 +109,6 @@ def test_syph():
     return sim
 
 
-def test_syph_intvs():
-
-    # Interventions
-    # screen_eligible = lambda sim: sim.demographics.pregnancy.pregnant
-    screen_eligible = lambda sim: sim.people.networks.mf.active(sim.people)
-    syph_screening = ss.syph_screening(
-        product='rpr',
-        prob=0.99,
-        eligibility=screen_eligible,
-        start_year=2020,
-        label='syph_screening',
-    )
-
-    treat_eligible = lambda sim: sim.get_intervention('syph_screening').outcomes['positive']
-    bpg = ss.syph_treatment(
-        prob=0.9,
-        product='bpg',
-        eligibility=treat_eligible,
-        label='bpg'
-    )
-
-    sim_kwargs0 = make_syph_sim()
-    sim_base = ss.Sim(**sim_kwargs0)
-    sim_base.run()
-
-    sim_kwargs1 = make_syph_sim()
-    sim_intv = ss.Sim(interventions=[syph_screening, bpg], **sim_kwargs1)
-    sim_intv.run()
-
-    # Check plots
-    burnin = 10
-    pi = int(burnin/sim_base.dt)
-    plt.figure()
-    plt.plot(sim_base.yearvec[pi:], sim_base.results.syphilis.prevalence[pi:], label='Baseline')
-    plt.plot(sim_base.yearvec[pi:], sim_intv.results.syphilis.prevalence[pi:], label='S&T')
-    plt.ylim([0, 0.25])
-    plt.axvline(x=2020, color='k', ls='--')
-    plt.title('Syphilis prevalence')
-    plt.legend()
-    plt.show()
-
-    return sim_base, sim_intv
-
-
-
 if __name__ == '__main__':
 
     sim = test_syph()
