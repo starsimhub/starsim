@@ -103,7 +103,7 @@ class births(DemographicModule):
     def finalize(self, sim):
         super().finalize(sim)
         self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['cbr'] = 1000*np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
+        self.results['cbr'] = 1/self.pars.units*np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
 
 
 class background_deaths(DemographicModule):
@@ -226,7 +226,7 @@ class background_deaths(DemographicModule):
     def finalize(self, sim):
         super().finalize(sim)
         self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['cmr'] = 1000*np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
+        self.results['cmr'] = 1/self.pars.units*np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
 
 
 class Pregnancy(DemographicModule):
@@ -300,11 +300,23 @@ class Pregnancy(DemographicModule):
             age_bins = df[age_label].unique()
             age_bins = np.append(age_bins, 50)
             age_inds = np.digitize(sim.people.age[uids], age_bins) - 1
-            age_inds[age_inds>=max(age_inds)] = -1  # This ensures women outside the data range will get a value of 0
+            age_inds[age_inds >= max(age_inds)] = -1  # This ensures women outside the data range will get a value of 0
+
+            # Adjust rates: rates are based on the entire population, but we need to remove
+            # anyone already pregnant and then inflate the rates for the remainder
+            pregnant_uids = ss.true(module.pregnant[uids])  # Find agents who are already pregnant
+            pregnant_age_counts, _ = np.histogram(sim.people.age[pregnant_uids], age_bins)  # Count them by age
+            age_counts, _ = np.histogram(sim.people.age[uids], age_bins)  # Count overall number per age bin
+            new_denom = age_counts - pregnant_age_counts  # New denominator for rates
+            num_to_make = df_arr[:-1]*age_counts  # Number that we need to make pregnant
+            new_percent = sc.dcp(df_arr)  # Initialize array with new rates
+            inds_to_rescale = new_denom > 0  # Rescale any non-zero age bins
+            new_percent[:-1][inds_to_rescale] = num_to_make[inds_to_rescale] / new_denom[inds_to_rescale]  # New rates
 
             # Make array of fertility rates
             fertility_rate = pd.Series(index=uids)
-            fertility_rate[uids] = df_arr[age_inds]
+            fertility_rate[uids] = new_percent[age_inds]
+            fertility_rate[pregnant_uids] = 0
 
         # Scale from rate to probability. Consider an exponential here.
         fertility_prob = fertility_rate * (module.pars.units * module.pars.rel_fertility * sim.pars.dt)
@@ -338,8 +350,8 @@ class Pregnancy(DemographicModule):
         """
         Perform all updates
         """
-        self.make_pregnancies(sim)
         self.update_states(sim)
+        self.make_pregnancies(sim)
         self.update_results(sim)
         return
 
@@ -353,13 +365,11 @@ class Pregnancy(DemographicModule):
         self.pregnant[deliveries] = False
         self.postpartum[deliveries] = True
         self.susceptible[deliveries] = False
-        self.ti_delivery[deliveries] = sim.ti
 
         # Check for new women emerging from post-partum
         postpartum = ~self.pregnant & (self.ti_postpartum <= sim.ti)
         self.postpartum[postpartum] = False
         self.susceptible[postpartum] = True
-        self.ti_postpartum[postpartum] = sim.ti
 
         # Maternal deaths
         maternal_deaths = ss.true(self.ti_dead <= sim.ti)
@@ -374,7 +384,9 @@ class Pregnancy(DemographicModule):
         # Abbreviate
         ppl = sim.people
 
-        denom_conds = ppl.female & self.susceptible & ppl.alive
+        # People eligible to become pregnant. We don't remove pregnant people here, these
+        # are instead handled in the fertility_dist logic as the rates need to be adjusted
+        denom_conds = ppl.female & ppl.alive
         inds_to_choose_from = ss.true(denom_conds)
         uids = self.fertility_dist.filter(inds_to_choose_from)
 
@@ -388,7 +400,7 @@ class Pregnancy(DemographicModule):
             # Grow the arrays and set properties for the unborn agents
             new_uids = sim.people.grow(len(new_slots))
             sim.people.age[new_uids] = -self.pars.dur_pregnancy
-            sim.people.slot[new_uids] = new_slots # Before sampling female_dist
+            sim.people.slot[new_uids] = new_slots  # Before sampling female_dist
             sim.people.female[new_uids] = self.sex_dist.rvs(new_uids)
 
             # Add connections to any vertical transmission layers
@@ -400,7 +412,7 @@ class Pregnancy(DemographicModule):
                     layer.add_pairs(uids, new_uids, dur=durs)
 
             # Set prognoses for the pregnancies
-            self.set_prognoses(sim, uids) # Could set from_uids to network partners?
+            self.set_prognoses(sim, uids)  # Could set from_uids to network partners?
 
         return
 
@@ -435,4 +447,4 @@ class Pregnancy(DemographicModule):
 
     def finalize(self, sim):
         super().finalize(sim)
-        self.results['cbr'] = 1000* np.divide(self.results['births'], sim.results['n_alive'], where=sim.results['n_alive']>0)
+        self.results['cbr'] = 1/self.pars.units * np.divide(self.results['births'], sim.results['n_alive'], where=sim.results['n_alive']>0)
