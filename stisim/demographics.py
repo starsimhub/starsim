@@ -101,74 +101,99 @@ class births(DemographicModule):
 
 
 class background_deaths(DemographicModule):
-    def __init__(self, pars=None):
+    def __init__(self, pars=None, metadata=None):
+        """
+        Configure disease-independent "background" deaths.
+
+        The probability of death for each agent on each timestep is determined
+        by the `death_rate` parameter and the time step. The default value of
+        this parameter is 0.02, indicating that all agents will
+        face a 2% chance of death per year.
+
+        However, this function can be made more realistic by using a dataframe
+        for the `death_rate` parameter, to allow it to vary by year, sex, and
+        age.  The separate 'metadata' argument can be used to configure the
+        details of the input datafile.
+
+        Alternatively, it is possible to override the `death_rate` parameter
+        with a bernoulli distribution containing a constant value of function of
+        your own design.
+        
+        :param pars: dict with arguments including:
+            rel_death: constant used to scale all death rates
+            death_rate: float, dict, or pandas dataframe/series containing mortality data
+            units: units for death rates (see in-line comment on par dict below)
+
+        :param metadata: data about the data contained within the data input.
+            "data_cols" is is a dictionary mapping standard keys, like "year" to the
+            corresponding column name in data. Similar for "sex_keys". Finally,
+        """
         super().__init__(pars)
 
         self.pars = ss.omerge({
-            'death_rates': 0,
             'rel_death': 1,
-            'data_cols': {'year': 'Time', 'sex': 'Sex', 'age': 'AgeGrpStart', 'value': 'mx'},
-            'sex_keys': {'f': 'Female', 'm': 'Male'},
-            'units_per_100': 1e-3  # assumes birth rates are per 1000. If using percentages, switch this to 1
+            'death_rate': 0.02,  # Default = a fixed rate of 2%/year, overwritten if data provided
+            'units': 1,  # units for death rates. If using percentages, leave as 1. If using a CMR (e.g. 12 deaths per 1000), change to 1/1000
         }, self.pars)
 
-        # Validate death rate inputs
-        self.set_death_rates(self.pars['death_rates'])
+        # Process metadata. Defaults here are the labels used by UN data
+        self.metadata = ss.omerge({
+            'data_cols': {'year': 'Time', 'sex': 'Sex', 'age': 'AgeGrpStart', 'value': 'mx'},
+            'sex_keys': {'f': 'Female', 'm': 'Male'},
+        }, metadata)
 
-        # Set death probs
-        self.death_probs = ss.State('death_probs', float, 0)
+        # Process data, which may be provided as a number, dict, dataframe, or series
+        # If it's a number it's left as-is; otherwise it's converted to a dataframe
+        self.pars.death_rate = self.standardize_death_data()
 
-    def set_death_rates(self, death_rates):
-        """Standardize/validate death rates"""
-
-        if sc.checktype(death_rates, pd.DataFrame):
-            if not set(self.pars.data_cols.values()).issubset(death_rates.columns):
-                errormsg = 'Please ensure the columns of the death rate data match the values in pars.data_cols.'
-                raise ValueError(errormsg)
-            df = death_rates
-
-        elif sc.checktype(death_rates, pd.Series):
-            if (death_rates.index < 120).all():  # Assume index is age bins
-                df = pd.DataFrame({
-                    self.pars.data_cols['year']: 2000,
-                    self.pars.data_cols['age']: death_rates.index.values,
-                    self.pars.data_cols['value']: death_rates.values,
-                })
-            elif (death_rates.index > 1900).all():  # Assume index year
-                df = pd.DataFrame({
-                    self.pars.data_cols['year']: death_rates.index.values,
-                    self.pars.data_cols['age']: 0,
-                    self.pars.data_cols['value']: death_rates.values,
-
-                })
-            else:
-                errormsg = 'Could not understand index of death rate series: should be age or year.'
-                raise ValueError(errormsg)
-
-            df = pd.concat([df, df])
-            df[self.pars.data_cols['sex']] = np.repeat(list(self.pars.sex_keys.values()), len(death_rates))
-
-        elif sc.checktype(death_rates, dict):
-            if not set(self.pars.data_cols.values()).issubset(death_rates.keys()):
-                errormsg = 'Please ensure the keys of the death rate data dict match the values in pars.data_cols.'
-                raise ValueError(errormsg)
-            df = pd.DataFrame(death_rates)
-
-        elif sc.isnumber(death_rates):
-            df = pd.DataFrame({
-                self.pars.data_cols['year']: [2000, 2000],
-                self.pars.data_cols['age']: [0, 0],
-                self.pars.data_cols['sex']: self.pars.sex_keys.values(),
-                self.pars.data_cols['value']: [death_rates, death_rates],
-            })
-
-        else:
-            errormsg = f'Death rate data type {type(death_rates)} not understood.'
-            raise ValueError(errormsg)
-
-        self.pars.death_rates = df
+        # Create death_prob_fn, a function which returns a probability of death for each requested uid
+        self.death_prob_fn = self.make_death_prob_fn
+        self.death_dist = sps.bernoulli(p=self.death_prob_fn)
 
         return
+
+    @staticmethod
+    def make_death_prob_fn(module, sim, uids):
+        """ Take in the module, sim, and uids, and return the probability of death for each UID on this timestep """
+
+        if sc.isnumber(module.pars.death_rate):
+            death_rate = module.pars.death_rate
+
+        else:
+            year_label = module.metadata.data_cols['year']
+            age_label = module.metadata.data_cols['age']
+            sex_label = module.metadata.data_cols['sex']
+            val_label = module.metadata.data_cols['value']
+            sex_keys = module.metadata.sex_keys
+
+            available_years = module.pars.death_rate[year_label].unique()
+            year_ind = sc.findnearest(available_years, sim.year)
+            nearest_year = available_years[year_ind]
+
+            df = module.pars.death_rate.loc[module.pars.death_rate[year_label] == nearest_year]
+            age_bins = df[age_label].unique()
+            age_inds = np.digitize(sim.people.age, age_bins) - 1
+
+            f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
+            m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
+
+            # Initialize
+            death_rate_df = pd.Series(index=sim.people.uid)
+            death_rate_df[uids[sim.people.female]] = f_arr[age_inds[sim.people.female]]
+            death_rate_df[uids[sim.people.male]] = m_arr[age_inds[sim.people.male]]
+            death_rate_df[uids[sim.people.age < 0]] = 0  # Don't use background death rates for unborn babies
+
+            death_rate = death_rate_df[uids].values
+
+        # Scale from rate to probability. Consider an exponential here.
+        death_prob = death_rate * (module.pars.units * module.pars.rel_death * sim.pars.dt)
+
+        return death_prob
+
+    def standardize_death_data(self):
+        """ Standardize/validate death rates - handled in an external file due to shared functionality """
+        death_rate = ss.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
+        return death_rate
 
     def init_results(self, sim):
         self.results += ss.Result(name='new', shape=sim.npts, dtype=int, scale=True)
@@ -183,34 +208,9 @@ class background_deaths(DemographicModule):
 
     def apply_deaths(self, sim):
         """ Select people to die """
-
-        p = self.pars
-        year_label = p.data_cols['year']
-        age_label = p.data_cols['age']
-        sex_label = p.data_cols['sex']
-        val_label = p.data_cols['value']
-        sex_keys = p.sex_keys
-
-        available_years = p.death_rates[year_label].unique()
-        year_ind = sc.findnearest(available_years, sim.year)
-        nearest_year = available_years[year_ind]
-
-        df = p.death_rates.loc[p.death_rates[year_label] == nearest_year]
-        age_bins = df[age_label].unique()
-        age_inds = np.digitize(sim.people.age, age_bins) - 1
-
-        f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
-        m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
-        self.death_probs[sim.people.female] = f_arr[age_inds[sim.people.female]]
-        self.death_probs[sim.people.male] = m_arr[age_inds[sim.people.male]]
-        self.death_probs[sim.people.age < 0] = 0  # Don't use background death rates for unborn babies
-        self.death_probs *= p.rel_death * sim.dt  # Adjust overall death probabilities by rel rates and dt
-
-        # Get indices of people who die of other causes
-        death_uids = ss.true(ss.binomial_arr(self.death_probs))
-        death_uids = ss.true(sim.people.alive[death_uids])
+        alive_uids = ss.true(sim.people.alive)
+        death_uids = self.death_dist.filter(alive_uids)
         sim.people.request_death(death_uids)
-
         return len(death_uids)
 
     def update_results(self, n_deaths, sim):
