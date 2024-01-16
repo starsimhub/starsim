@@ -8,6 +8,12 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :local:
    :depth: 1
 
+Version 0.1.3 (2024-01-20)
+--------------------------
+- Adds a syphilis module
+- *GitHub info*: PR `206 <https://github.com/amath-idm/stisim/pull/206>`_
+
+
 Version 0.1.2 (2024-01-15)
 --------------------------
 - Functionality for converting birth & fertility data to callable parameters within SciPy distributions
