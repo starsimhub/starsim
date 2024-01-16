@@ -443,8 +443,6 @@ def undefined(arr):
         inds = ss.defined(np.array([1,np.nan,0,np.nan,1,0,1]))
     """
     return np.isnan(arr).nonzero()[-1]
-<<<<<<< HEAD
-=======
 
 
 # %% Data cleaning and processing
@@ -495,4 +493,3 @@ def standardize_data(data=None, metadata=None):
         raise ValueError(errormsg)
 
     return df
->>>>>>> main

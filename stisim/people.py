@@ -191,8 +191,7 @@ class People(BasePeople):
         self.networks = ss.Networks(networks)
 
         # Set initial age distribution - likely move this somewhere else later
-        self.age_data = age_data
-        self.age_dist_gen = sps.uniform()  # Store a uniform distribution for generating ages
+        self.age_data_dist = self.get_age_dist(age_data)
 
         return
 
@@ -206,7 +205,6 @@ class People(BasePeople):
         if sc.checktype(age_data, pd.DataFrame):
             bb = np.append(age_data['age'].values, age_data['age'].values[-1] + 1)
             vv = age_data['value'].values
-            #dist = sps.rv_histogram((vv, bb), density=False)
             return ss.ScipyHistogram((vv, bb), density=False, rng='Age distribution')
 
     def _initialize_states(self, sim=None):
