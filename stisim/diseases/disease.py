@@ -346,7 +346,7 @@ class STI(Disease):
         '''
         n = len(people.uid)  # TODO: possibly could be shortened to just the people who are alive
         p_acq_node = np.zeros(n)
-
+    
         dfs = []
         for lkey, layer in people.networks.items():
             if lkey in self.pars['beta']:
