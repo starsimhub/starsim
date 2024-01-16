@@ -30,42 +30,44 @@ class DemographicModule(ss.Module):
         pass
 
 class births(DemographicModule):
-    def __init__(self, pars=None):
+    def __init__(self, pars=None, metadata=None):
         super().__init__(pars)
 
         # Set defaults
         self.pars = ss.omerge({
-            'birth_rates': 0,
+            'birth_rate': 0,
             'rel_birth': 1,
-            'data_cols': {'year': 'Year', 'cbr': 'CBR'},
-            'units_per_100': 1e-3  # assumes birth rates are per 1000. If using percentages, switch this to 1
+            'units': 1e-3  # assumes birth rates are per 1000. If using percentages, switch this to 1
         }, self.pars)
 
-        # Validate birth rate inputs
-        self.set_birth_rates(pars['birth_rates'])
+        # Process metadata. Defaults here are the labels used by UN data
+        self.metadata = ss.omerge({
+            'data_cols': {'year': 'Year', 'cbr': 'CBR'},
+        }, metadata)
 
-    def set_birth_rates(self, birth_rates):
-        """ Determine format that birth rates have been provided and standardize/validate """
-        if sc.checktype(birth_rates, pd.DataFrame):
-            if not set(self.pars.data_cols.values()).issubset(birth_rates.columns):
-                errormsg = 'Please ensure the columns of the birth rate data match the values in pars.data_cols.'
-                raise ValueError(errormsg)
-        if sc.checktype(birth_rates, dict):
-            if not set(self.pars.data_cols.values()).issubset(birth_rates.keys()):
-                errormsg = 'Please ensure the keys of the birth rate data dict match the values in pars.data_cols.'
-                raise ValueError(errormsg)
-            birth_rates = pd.DataFrame(birth_rates)
-        if sc.isnumber(birth_rates):
-            birth_rates = pd.DataFrame({self.pars.data_cols['year']: [2000], self.pars.data_cols['cbr']: [birth_rates]})
-
-        self.pars.birth_rates = birth_rates
+        # Process data, which may be provided as a number, dict, dataframe, or series
+        # If it's a number it's left as-is; otherwise it's converted to a dataframe
+        self.pars.birth_rate = self.standardize_birth_data()
         return
 
+    def initialize(self, sim):
+        """ Initialize with sim information """
+        super().initialize(sim)
+        if isinstance(self.pars.birth_rate, pd.DataFrame):
+            br_year = self.pars.birth_rate[self.metadata.data_cols['year']]
+            br_val = self.pars.birth_rate[self.metadata.data_cols['cbr']]
+            all_birth_rates = np.interp(sim.yearvec, br_year, br_val)
+            self.pars.birth_rate = all_birth_rates
+
+    def standardize_birth_data(self):
+        """ Standardize/validate birth rates - handled in an external file due to shared functionality """
+        birth_rate = ss.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
+        return birth_rate
 
     def init_results(self, sim):
-        self.results += ss.Result(self.name, 'new', sim.npts, dtype=int)
-        self.results += ss.Result(self.name, 'cumulative', sim.npts, dtype=int)
-        self.results += ss.Result(self.name, 'cbr', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'new', sim.npts, dtype=int, scale=True)
+        self.results += ss.Result(self.name, 'cumulative', sim.npts, dtype=int, scale=True)
+        self.results += ss.Result(self.name, 'cbr', sim.npts, dtype=int, scale=False)
         return
 
     def update(self, sim):
@@ -73,22 +75,26 @@ class births(DemographicModule):
         self.update_results(len(new_uids), sim)
         return new_uids
 
-    def get_birth_rate(self, sim):
+    def get_births(self, sim):
         """
         Extract the right birth rates to use and translate it into a number of people to add.
-        Eventually this might also process time series data.
         """
         p = self.pars
-        br_year = p.birth_rates[p.data_cols['year']]
-        br_val = p.birth_rates[p.data_cols['cbr']]
-        this_birth_rate = np.interp(sim.year, br_year, br_val) * p.units_per_100 * p.rel_birth * sim.dt
-        n_new = int(np.floor(np.count_nonzero(sim.people.alive) * this_birth_rate))
+        if sc.isnumber(p.birth_rate):
+            this_birth_rate = p.birth_rate
+        elif sc.checktype(p.birth_rate, 'arraylike'):
+            this_birth_rate = p.birth_rate[sim.ti]
+
+        scaled_birth_prob = this_birth_rate * p.units * p.rel_birth * sim.pars.dt
+        scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
+        n_new = int(np.floor(np.count_nonzero(sim.people.alive) * scaled_birth_prob))
         return n_new
 
     def add_births(self, sim):
         # Add n_new births to each state in the sim
-        n_new = self.get_birth_rate(sim)
+        n_new = self.get_births(sim)
         new_uids = sim.people.grow(n_new)
+        sim.people.age[new_uids] = 0
         return new_uids
 
     def update_results(self, n_new, sim):
@@ -97,7 +103,7 @@ class births(DemographicModule):
     def finalize(self, sim):
         super().finalize(sim)
         self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['cbr'] = np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
+        self.results['cbr'] = 1/self.pars.units*np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
 
 
 class background_deaths(DemographicModule):
@@ -172,21 +178,22 @@ class background_deaths(DemographicModule):
 
             df = module.pars.death_rate.loc[module.pars.death_rate[year_label] == nearest_year]
             age_bins = df[age_label].unique()
-            age_inds = np.digitize(sim.people.age, age_bins) - 1
+            age_inds = np.digitize(sim.people.age[uids], age_bins) - 1
 
             f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
             m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
 
             # Initialize
-            death_rate_df = pd.Series(index=sim.people.uid)
-            death_rate_df[uids[sim.people.female]] = f_arr[age_inds[sim.people.female]]
-            death_rate_df[uids[sim.people.male]] = m_arr[age_inds[sim.people.male]]
-            death_rate_df[uids[sim.people.age < 0]] = 0  # Don't use background death rates for unborn babies
+            death_rate_df = pd.Series(index=uids)
+            death_rate_df[uids[sim.people.female[uids]]] = f_arr[age_inds[sim.people.female[uids]]]
+            death_rate_df[uids[sim.people.male[uids]]] = m_arr[age_inds[sim.people.male[uids]]]
+            death_rate_df[uids[sim.people.age[uids] < 0]] = 0  # Don't use background death rates for unborn babies
 
-            death_rate = death_rate_df[uids].values
+            death_rate = death_rate_df.values
 
         # Scale from rate to probability. Consider an exponential here.
         death_prob = death_rate * (module.pars.units * module.pars.rel_death * sim.pars.dt)
+        death_prob = np.clip(death_prob, a_min=0, a_max=1)
 
         return death_prob
 
@@ -196,9 +203,9 @@ class background_deaths(DemographicModule):
         return death_rate
 
     def init_results(self, sim):
-        self.results += ss.Result(name='new', shape=sim.npts, dtype=int, scale=True)
-        self.results += ss.Result(name='cumulative', shape=sim.npts, dtype=int, scale=True)
-        self.results += ss.Result(name='mortality_rate', shape=sim.npts, dtype=int, scale=False)
+        self.results += ss.Result(self.name, 'new', sim.npts, dtype=int, scale=True)
+        self.results += ss.Result(self.name, 'cumulative', sim.npts, dtype=int, scale=True)
+        self.results += ss.Result(self.name, 'cmr', sim.npts, dtype=int, scale=False)
         return
 
     def update(self, sim):
@@ -217,13 +224,14 @@ class background_deaths(DemographicModule):
         self.results['new'][sim.ti] = n_deaths
 
     def finalize(self, sim):
+        super().finalize(sim)
         self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['mortality_rate'] = np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
+        self.results['cmr'] = 1/self.pars.units*np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
 
 
 class Pregnancy(DemographicModule):
 
-    def __init__(self, pars=None):
+    def __init__(self, pars=None, metadata=None):
         super().__init__(pars)
 
         # Other, e.g. postpartum, on contraception...
@@ -240,65 +248,87 @@ class Pregnancy(DemographicModule):
         self.pars = ss.omerge({
             'dur_pregnancy': 0.75,  # Make this a distribution?
             'dur_postpartum': 0.5,  # Make this a distribution?
-            'fertility_rates': 0,
-            'data_cols': {'year': 'Time', 'age': 'AgeGrp', 'value': 'ASFR'},
-            'units_per_100': 1e-3,  # assumes fertility rates are per 1000. If using percentages, switch this to 1
-            'p_death': sps.bernoulli(p=0),  # Probability of maternal death. Question, should this be linked to age and/or duration?
+            'fertility_rate': 0,    # Usually this will be provided in CSV format
+            'rel_fertility': 1,
+            'maternal_death_rate': 0,
+            'sex_ratio': 0.5,       # Ratio of babies born female
+            'units': 1e-3,             # ???
         }, self.pars)
 
-        # Validate fertility rate inputs
-        self.set_fertility_rates(self.pars['fertility_rates'])
-
-        return
-
-    def set_fertility_rates(self, fertility_rates):
-        """ Validate fertility rates """
-        if sc.checktype(fertility_rates, pd.DataFrame):
-            if not set(self.pars.data_cols.values()).issubset(fertility_rates.columns):
-                errormsg = 'Please ensure the columns of the fertility rate data match the values in pars.data_cols.'
-                raise ValueError(errormsg)
-            df = fertility_rates
-
-        elif sc.checktype(fertility_rates, pd.Series):
-            if (fertility_rates.index < 120).all():  # Assume index is age bins
-                df = pd.DataFrame({
-                    self.pars.data_cols['year']: 2000,
-                    self.pars.data_cols['age']: fertility_rates.index.values,
-                    self.pars.data_cols['value']: fertility_rates.values,
-                })
-            elif (fertility_rates.index > 1900).all():  # Assume index year
-                df = pd.DataFrame({
-                    self.pars.data_cols['year']: fertility_rates.index.values,
-                    self.pars.data_cols['age']: 0,
-                    self.pars.data_cols['value']: fertility_rates.values,
-
-                })
-            else:
-                errormsg = 'Could not understand index of fertility rate series: should be age or year.'
-                raise ValueError(errormsg)
-
-        elif sc.checktype(fertility_rates, dict):
-            if not set(self.pars.data_cols.values()).issubset(fertility_rates.keys()):
-                errormsg = 'Please ensure the keys of the fertility rate data dict match the values in pars.data_cols.'
-                raise ValueError(errormsg)
-            df = pd.DataFrame(fertility_rates)
-
-        elif sc.isnumber(fertility_rates):
-            df = pd.DataFrame({
-                self.pars.data_cols['year']: [2000],
-                self.pars.data_cols['age']: [15],
-                self.pars.data_cols['value']: fertility_rates,
-            })
-
-        else:
-            errormsg = f'Fertility rate data type {type(fertility_rates)} not understood.'
-            raise ValueError(errormsg)
-
-        self.pars.fertility_rates = df
+        # Process metadata. Defaults here are the labels used by UN data
+        self.metadata = ss.omerge({
+            'data_cols': {'year': 'Time', 'age': 'AgeGrp', 'value': 'ASFR'},
+        }, metadata)
 
         self.choose_slots = sps.randint(low=0, high=1) # Low and high will be reset upon initialization
 
+        # Process data, which may be provided as a number, dict, dataframe, or series
+        # If it's a number it's left as-is; otherwise it's converted to a dataframe
+        self.pars.fertility_rate = self.standardize_fertility_data()
+
+        # Create fertility_prob_fn, a function which returns a probability of death for each requested uid
+        self.fertility_prob_fn = self.make_fertility_prob_fn
+        self.fertility_dist = sps.bernoulli(p=self.fertility_prob_fn)
+
+        # Add other sampling functions
+        self.sex_dist = sps.bernoulli(p=self.pars.sex_ratio)
+        self.death_dist = sps.bernoulli(p=self.pars.maternal_death_rate)
+
         return
+
+    @staticmethod
+    def make_fertility_prob_fn(module, sim, uids):
+        """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
+
+        if sc.isnumber(module.pars.fertility_rate):
+            fertility_rate = module.pars.fertility_rate
+
+        else:
+            # Abbreviate key variables
+            year_label = module.metadata.data_cols['year']
+            age_label = module.metadata.data_cols['age']
+            val_label = module.metadata.data_cols['value']
+
+            available_years = module.pars.fertility_rate[year_label].unique()
+            year_ind = sc.findnearest(available_years, sim.year-module.pars.dur_pregnancy)
+            nearest_year = available_years[year_ind]
+
+            df = module.pars.fertility_rate.loc[module.pars.fertility_rate[year_label] == nearest_year]
+            df_arr = df[val_label].values  # Pull out dataframe values
+            df_arr = np.append(df_arr, 0)  # Add zeros for those outside data range
+
+            # Process age data
+            age_bins = df[age_label].unique()
+            age_bins = np.append(age_bins, 50)
+            age_inds = np.digitize(sim.people.age[uids], age_bins) - 1
+            age_inds[age_inds >= max(age_inds)] = -1  # This ensures women outside the data range will get a value of 0
+
+            # Adjust rates: rates are based on the entire population, but we need to remove
+            # anyone already pregnant and then inflate the rates for the remainder
+            pregnant_uids = ss.true(module.pregnant[uids])  # Find agents who are already pregnant
+            pregnant_age_counts, _ = np.histogram(sim.people.age[pregnant_uids], age_bins)  # Count them by age
+            age_counts, _ = np.histogram(sim.people.age[uids], age_bins)  # Count overall number per age bin
+            new_denom = age_counts - pregnant_age_counts  # New denominator for rates
+            num_to_make = df_arr[:-1]*age_counts  # Number that we need to make pregnant
+            new_percent = sc.dcp(df_arr)  # Initialize array with new rates
+            inds_to_rescale = new_denom > 0  # Rescale any non-zero age bins
+            new_percent[:-1][inds_to_rescale] = num_to_make[inds_to_rescale] / new_denom[inds_to_rescale]  # New rates
+
+            # Make array of fertility rates
+            fertility_rate = pd.Series(index=uids)
+            fertility_rate[uids] = new_percent[age_inds]
+            fertility_rate[pregnant_uids] = 0
+
+        # Scale from rate to probability. Consider an exponential here.
+        fertility_prob = fertility_rate * (module.pars.units * module.pars.rel_fertility * sim.pars.dt)
+        fertility_prob = np.clip(fertility_prob, a_min=0, a_max=1)
+
+        return fertility_prob
+
+    def standardize_fertility_data(self):
+        """ Standardize/validate fertility rates - handled in an external file due to shared functionality """
+        fertility_rate = ss.standardize_data(data=self.pars.fertility_rate, metadata=self.metadata)
+        return fertility_rate
 
     def initialize(self, sim):
         super().initialize(sim)
@@ -312,8 +342,9 @@ class Pregnancy(DemographicModule):
         Still unclear whether this logic should live in the pregnancy module, the
         individual disease modules, the connectors, or the sim.
         """
-        self.results += ss.Result(name='pregnancies', shape=sim.npts, dtype=int, scale=True)
-        self.results += ss.Result(name='births', shape=sim.npts, dtype=int, scale=True)
+        self.results += ss.Result(self.name, 'pregnancies', sim.npts, dtype=int, scale=True)
+        self.results += ss.Result(self.name, 'births', sim.npts, dtype=int, scale=True)
+        self.results += ss.Result(self.name, 'cbr', sim.npts, dtype=int, scale=False)
         return
 
     def update(self, sim):
@@ -335,13 +366,11 @@ class Pregnancy(DemographicModule):
         self.pregnant[deliveries] = False
         self.postpartum[deliveries] = True
         self.susceptible[deliveries] = False
-        self.ti_delivery[deliveries] = sim.ti
 
         # Check for new women emerging from post-partum
         postpartum = ~self.pregnant & (self.ti_postpartum <= sim.ti)
         self.postpartum[postpartum] = False
         self.susceptible[postpartum] = True
-        self.ti_postpartum[postpartum] = sim.ti
 
         # Maternal deaths
         maternal_deaths = ss.true(self.ti_dead <= sim.ti)
@@ -351,42 +380,29 @@ class Pregnancy(DemographicModule):
 
     def make_pregnancies(self, sim):
         """
-        Select people to make pregnancy using fertility rates
+        Select people to make pregnancy using incidence data
         """
+        # Abbreviate
+        ppl = sim.people
 
-        # Abbreviate key variables
-        p = self.pars
-        year_label = p.data_cols['year']
-        age_label = p.data_cols['age']
-        val_label = p.data_cols['value']
-
-        available_years = p.fertility_rates[year_label].unique()
-        year_ind = sc.findnearest(available_years, sim.year)
-        nearest_year = available_years[year_ind]
-
-        df = p.fertility_rates.loc[p.fertility_rates[year_label] == nearest_year]
-        age_bins = df[age_label].unique()
-        age_bins = np.append(age_bins, 50)  # Add 50, and specify no births after 50
-        age_inds = np.digitize(sim.people.age, age_bins) - 1
-
-        try:
-            conception_eligible = sim.people.female & (age_inds >= 0) & (age_inds < max(age_inds))
-        except:
-            import traceback;
-            traceback.print_exc();
-            import pdb;
-            pdb.set_trace()
-        conception_probs = df[val_label].values * p.units_per_100 * sim.dt
-        self.conception_probs[conception_eligible] = conception_probs[age_inds[conception_eligible]]
-        conceive_uids = ss.true(ss.binomial_arr(self.conception_probs))
-
+        # People eligible to become pregnant. We don't remove pregnant people here, these
+        # are instead handled in the fertility_dist logic as the rates need to be adjusted
+        denom_conds = ppl.female & ppl.alive
+        inds_to_choose_from = ss.true(denom_conds)
+        conceive_uids = self.fertility_dist.filter(inds_to_choose_from)
 
         # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
         n_unborn_agents = len(conceive_uids)
         if n_unborn_agents > 0:
+
+            # Choose slots for the unborn agents
+            new_slots = self.choose_slots.rvs(conceive_uids)
+
             # Grow the arrays and set properties for the unborn agents
-            new_uids = sim.people.grow(n_unborn_agents)
+            new_uids = sim.people.grow(len(new_slots))
             sim.people.age[new_uids] = -self.pars.dur_pregnancy
+            sim.people.slot[new_uids] = new_slots  # Before sampling female_dist
+            sim.people.female[new_uids] = self.sex_dist.rvs(new_uids)
 
             # Add connections to any vertical transmission layers
             # Placeholder code to be moved / refactored. The maternal network may need to be
@@ -416,7 +432,7 @@ class Pregnancy(DemographicModule):
 
         # Outcomes for pregnancies
         dur = np.full(len(uids), sim.ti + self.pars.dur_pregnancy / sim.dt)
-        dead = self.pars.p_death.rvs(uids)
+        dead = self.death_dist.rvs(uids)
         self.ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
         dur_post_partum = np.full(len(uids), dur + self.pars.dur_postpartum / sim.dt)
         self.ti_postpartum[uids] = dur_post_partum
@@ -429,3 +445,7 @@ class Pregnancy(DemographicModule):
         self.results['pregnancies'][sim.ti] = np.count_nonzero(self.ti_pregnant == sim.ti)
         self.results['births'][sim.ti] = np.count_nonzero(self.ti_delivery == sim.ti)
         return
+
+    def finalize(self, sim):
+        super().finalize(sim)
+        self.results['cbr'] = 1/self.pars.units * np.divide(self.results['births'], sim.results['n_alive'], where=sim.results['n_alive']>0)

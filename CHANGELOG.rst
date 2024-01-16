@@ -8,11 +8,19 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :local:
    :depth: 1
 
+Version 0.1.2 (2024-01-15)
+--------------------------
+- Functionality for converting birth & fertility data to callable parameters within SciPy distributions
+- Read in age distributions for people initializations 
+- *GitHub info*: PR `205 <https://github.com/amath-idm/stisim/pull/205>`_
+
+
 Version 0.1.1 (2024-01-12)
 --------------------------
 - Improving performance of MultiRNG
 - Now factoring the timestep, ``dt``, into transmission calculations
 - *GitHub info*: PRs `204 <https://github.com/amath-idm/stisim/pull/204>`_
+
 
 Version 0.1.0 (2023-12-10)
 --------------------------

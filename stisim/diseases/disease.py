@@ -312,8 +312,8 @@ class STI(Disease):
         Initialize results
         """
         super().init_results(sim)
-        self.results += ss.Result(module=self.name, name='prevalence', shape=sim.npts, dtype=float, scale=False)
-        self.results += ss.Result(module=self.name, name='new_infections', shape=sim.npts, dtype=int, scale=True)
+        self.results += ss.Result(self.name, 'prevalence', sim.npts, dtype=float, scale=False)
+        self.results += ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True)
         return
 
     def update_pre(self, sim):

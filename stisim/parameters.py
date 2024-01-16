@@ -33,10 +33,6 @@ class Parameters(sc.objdict):
         # Demographic parameters: NOT CURRENTLY FUNCTIONAL
         # TBC whether these parameters live here or in separate demographic modules
         self.location    = None  # What demographics to use
-        self.birth_rates = None  # Birth rates
-        self.death_rates = None  # Death rates
-        self.rel_birth   = 1.0  # Birth rate scale factor
-        self.rel_death   = 1.0  # Death rate scale factor
 
         # Simulation parameters
         self.start           = 1995.         # Start of the simulation
