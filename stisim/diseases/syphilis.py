@@ -65,16 +65,21 @@ class Syphilis(STI):
             p_tertiary=sps.bernoulli(p=0.35),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
 
             # Congenital syphilis outcomes
-            # Source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5973824/
             # Birth outcomes coded as:
             #   0: Neonatal death
             #   1: Stillborn
             #   2: Congenital syphilis
             #   3: Live birth without syphilis-related complications
-            # TODO: make this much more robust!
+            # TODO: make this much more robust, and use the probabilities that include deaths, i.e.
+            # (source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5973824/)
+            #     birth_outcomes=sc.objdict(
+            #         active=sps.rv_discrete(values=([0, 1, 2, 3], [0.15, 0.250, 0.40, 0.200])),
+            #         latent=sps.rv_discrete(values=([0, 1, 2, 3], [0.10, 0.125, 0.05, 0.725])),
+            #     )
+            # For the moment, not useing these as we will need to readjust fertility rates.
             birth_outcomes=sc.objdict(
-                active=sps.rv_discrete(values=([0, 1, 2, 3], [0.15, 0.250, 0.40, 0.200])),
-                latent=sps.rv_discrete(values=([0, 1, 2, 3], [0.10, 0.125, 0.05, 0.725])),
+                active=sps.rv_discrete(values=([0, 1, 2, 3], [0.0, 0.0, 0.800, 0.200])),
+                latent=sps.rv_discrete(values=([0, 1, 2, 3], [0.0, 0.0, 0.275, 0.725])),
             ),
             birth_outcome_keys=['nnd', 'stillborn', 'congenital'],
 
