@@ -340,7 +340,7 @@ class STI(Disease):
                         continue
                     # probability of a->b transmission
                     p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt
-                    new_cases_bool = np.random.random(len(a)) < p_transmit # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
+                    new_cases_bool = np.random.random(len(a)) < p_transmit  # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
                     new_cases.append(b[new_cases_bool])
                     sources.append(a[new_cases_bool])
         return np.concatenate(new_cases), np.concatenate(sources)
