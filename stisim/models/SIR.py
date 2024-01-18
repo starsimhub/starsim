@@ -8,7 +8,7 @@ import sciris as sc
 # from stisim.diseases.super.disease import Disease
 import stisim.utils.ndict as ssu
 import stisim.diseases.super.disease as sp
-import stisim.core.results as ssr 
+import stisim.results as ssr 
 import stisim.states.states as sst
 import stisim.utils.ndict as ssu
 

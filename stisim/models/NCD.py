@@ -5,7 +5,7 @@ Define example disease modules
 import numpy as np
 import stisim.utils.ndict as ssu
 import stisim.diseases.super.disease as sd
-import stisim.core.results as ssr 
+import stisim.results as ssr 
 import sciris as sc
 # from stisim.diseases.super.disease import Disease
 import stisim.states.states as sst

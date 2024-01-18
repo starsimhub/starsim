@@ -16,9 +16,9 @@ from stisim.states.states import State
 from stisim.utils.ndict import *
 from stisim.utils.actions import *
 from stisim.version import *
-from stisim.core.random import *
-from stisim.core.distributions import *
-from stisim.core.results import Result
+from stisim.random import *
+from stisim.distributions import *
+from stisim.results import Result
 
 __all__ = ['BasePeople', 'People']
 

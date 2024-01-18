@@ -2,7 +2,7 @@
 Define interventions
 """
 
-from stisim.core.modules import Module
+from stisim.modules import Module
 
 
 __all__ = ['Intervention']

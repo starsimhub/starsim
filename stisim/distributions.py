@@ -6,7 +6,7 @@ Distribution support extending scipy with two key functionalities:
 
 import numpy as np
 from stisim.utils.ndict import INT_NAN
-from stisim.core.random import SingleRNG, MultiRNG
+from stisim.random import SingleRNG, MultiRNG
 from stisim.settings import *
 from copy import deepcopy
 

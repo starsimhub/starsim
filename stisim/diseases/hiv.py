@@ -7,8 +7,8 @@ import sciris as sc
 import stisim as ss
 from .super.sti import STI
 import scipy.stats as sps
-from stisim.core.interventions import Intervention
-from stisim.core.analyzers import Analyzer
+from stisim.interventions import Intervention
+from stisim.analyzers import Analyzer
 
 __all__ = ['HIV', 'ART', 'CD4_analyzer']
 

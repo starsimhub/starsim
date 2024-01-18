@@ -8,9 +8,9 @@ from scipy.stats._distn_infrastructure import rv_frozen
 from stisim.utils.ndict import *
 from stisim.utils.actions import *
 from stisim.settings import *
-from .distributions import * 
-from .results import *
-from .random import *
+from stisim.distributions import * 
+from stisim.results import *
+from stisim.random import *
 from stisim.states.states import State
 __all__ = ['Module']
 

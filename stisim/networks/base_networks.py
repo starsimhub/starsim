@@ -7,7 +7,7 @@ import numpy as np
 import sciris as sc
 from stisim.utils.ndict import *
 from stisim.utils.actions import *
-from stisim.core.modules import *
+from stisim.modules import *
 from stisim.settings import *
 from stisim.states.states import *
 

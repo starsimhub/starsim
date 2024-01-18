@@ -6,9 +6,9 @@ Test Distributions from distributions.py
 import numpy as np
 import sciris as sc
 import stisim as ss
-from stisim.core.random import RNG
+from stisim.random import RNG
 import scipy.stats as sps
-from stisim.core.distributions import ScipyDistribution
+from stisim.distributions import ScipyDistribution
 import pytest
 import matplotlib.pyplot as plt
 

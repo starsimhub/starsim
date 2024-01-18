@@ -3,7 +3,7 @@ import numpy as np
 import sciris as sc
 import numba as nb
 from stisim.utils.ndict import INT_NAN
-from stisim.core.distributions import ScipyDistribution
+from stisim.distributions import ScipyDistribution
 from stisim.utils.ndict import *
 from stisim.utils.actions import *
 from stisim.states.fussedarray import FusedArray

@@ -3,7 +3,7 @@ Define analyzers
 """
 
 #from .modules import Module
-from . import Module
+from stisim.modules import Module
 
 __all__ = ['Analyzer']
 

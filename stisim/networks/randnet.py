@@ -3,14 +3,14 @@
 import stisim as ss
 import numpy as np
 import numba as nb
-import stisim.core.people as ssp
+import stisim.people as ssp
 # from .base_networks import Network
 from scipy.stats._distn_infrastructure import rv_frozen
 from typing import Union
 from stisim.utils.ndict import *
 from stisim.utils.actions import *
 from stisim.settings import *
-from stisim.core.distributions import *
+from stisim.distributions import *
 from stisim.networks.base_networks import Network
 
 __all__ = ['RandomNetwork']

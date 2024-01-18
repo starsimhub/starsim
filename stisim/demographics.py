@@ -8,7 +8,7 @@ import sciris as sc
 import pandas as pd
 import scipy.stats as sps
 
-from . import Module
+from stisim.modules import *
 __all__ = ['DemographicModule', 'births', 'background_deaths', 'Pregnancy']
 
 

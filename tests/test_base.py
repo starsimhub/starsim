@@ -6,7 +6,7 @@ Test objects from base.py
 import sciris as sc
 import numpy as np
 import stisim as ss
-import stisim.core.people as scp
+import stisim.people as scp
 import stisim.states.states as sst
 import stisim.diseases.hiv as ssd  
 import matplotlib.pyplot as plt

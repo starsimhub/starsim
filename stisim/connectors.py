@@ -2,7 +2,7 @@
 Define connections between disease modules
 '''
 
-from stisim.core.modules import * # Import all modules
+from stisim.modules import * # Import all modules
 from stisim.diseases import * # Import all diseases
 
 class Connector(Module):

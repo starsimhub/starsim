@@ -3,7 +3,7 @@ import numpy as np
 import sciris as sc
 import numba as nb
 from stisim.utils.ndict import INT_NAN
-from stisim.core.distributions import ScipyDistribution
+from stisim.distributions import ScipyDistribution
 from stisim.utils.ndict import warn
 from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
 from scipy.stats._distn_infrastructure import rv_frozen

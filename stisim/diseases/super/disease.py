@@ -5,7 +5,7 @@ Base classes for diseases
 import numpy as np
 from stisim.utils.logger import InfectionLog
 from stisim.utils.ndict import ndict as ssu
-from stisim.core.modules import Module
+from stisim.modules import Module
 import stisim as ss
 
 class Disease(Module):

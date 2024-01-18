@@ -9,10 +9,10 @@ import stisim as ss
 from stisim.networks.networks import *
 from stisim.utils.actions import *
 from stisim import *
-from stisim.core.demographics import *
-from stisim.core.people import *
+from stisim.demographics import *
+from stisim.people import *
 from stisim.diseases.hiv import *
-from stisim.core.sim import *
+from stisim.sim import *
 
 
 
