@@ -274,3 +274,103 @@ class Syphilis(STI):
 
         return
 
+
+# %% Syphilis-related interventions
+datafiles = sc.objdict()
+for key in ['dx', 'tx', 'vx']:
+    datafiles[key] = sc.thispath() / f'../products/syph_{key}.csv'
+
+__all__ += ['syph_dx', 'syph_tx', 'syph_screening', 'syph_treatment']
+
+
+def syph_dx(prod_name=None):
+    """
+    Create default diagnostic products
+    """
+    dfdx = pd.read_csv(datafiles.dx)
+    dxprods = dict(
+        rpr=ss.dx(dfdx[dfdx.name == 'rpr'], hierarchy=['positive', 'inadequate', 'negative']),
+        rst=ss.dx(dfdx[dfdx.name == 'rst'], hierarchy=['positive', 'inadequate', 'negative']),
+    )
+    if prod_name is not None:
+        return dxprods[prod_name]
+    else:
+        return dxprods
+
+
+def syph_tx(prod_name=None):
+    """
+    Create default treatment products
+    """
+    dftx = pd.read_csv(datafiles.tx)  # Read in dataframe with parameters
+    txprods = dict()
+    for name in dftx.name.unique():
+        txprods[name] = ss.tx(dftx[dftx.name == name])
+    if prod_name is not None:
+        return txprods[prod_name]
+    else:
+        return txprods
+
+
+class syph_screening(ss.routine_screening):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # self.requires = Syphilis  # not currently working
+        return
+
+    def _parse_product_str(self, product):
+        try:
+            product = syph_dx(prod_name=product)
+        except:
+            errormsg = f'Could not find product {product} in the standard list.'
+            raise ValueError(errormsg)
+        return product
+
+    def check_eligibility(self, sim):
+        """
+        Return an array of indices of agents eligible for screening at time t, i.e. sexually active
+        females in age range, plus any additional user-defined eligibility
+        """
+        if self.eligibility is not None:
+            is_eligible = self.eligibility(sim)
+        else:
+            is_eligible = sim.people.alive  # Probably not required
+        return is_eligible
+
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.results += ss.Result('syphilis', 'n_screened', sim.npts, dtype=int, scale=True)
+        self.results += ss.Result('syphilis', 'n_dx', sim.npts, dtype=int, scale=True)
+        return
+
+
+class syph_treatment(ss.treat_num):
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # self.requires = Syphilis
+        return
+
+    def _parse_product_str(self, product):
+        try:
+            product = syph_tx(prod_name=product)
+        except:
+            errormsg = f'Could not find product {product} in the standard list.'
+            raise ValueError(errormsg)
+        return product
+
+    def check_eligibility(self, sim):
+        """
+        Return an array of indices of agents eligible for screening at time t
+        """
+        if self.eligibility is not None:
+            is_eligible = self.eligibility(sim)
+        else:
+            is_eligible = sim.people.alive  # Probably not required
+        return is_eligible
+
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.results += ss.Result('syphilis', 'n_tx', sim.npts, dtype=int, scale=True)
+        return

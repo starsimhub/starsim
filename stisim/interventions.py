@@ -5,7 +5,8 @@ Define interventions
 import stisim as ss
 import sciris as sc
 import numpy as np
-import pandas as pd
+import scipy.stats as sps
+from scipy.stats._distn_infrastructure import rv_frozen
 
 __all__ = ['Intervention']
 
@@ -41,6 +42,7 @@ class RoutineDelivery(Intervention):
         self.end_year = end_year
         self.prob = sc.promotetoarray(prob)
         self.annual_prob = annual_prob  # Determines whether the probability is annual or per timestep
+        self.coverage_dist = sps.bernoulli(p=0)  # Placeholder - initialize delivery
         return
 
     def initialize(self, sim):
@@ -177,7 +179,8 @@ class BaseTest(Intervention):
         ti = sc.findinds(self.timepoints, sim.ti)[0]
         prob = self.prob[ti]  # Get the proportion of people who will be tested this timestep
         is_eligible = self.check_eligibility(sim)  # Check eligibility
-        accept_uids = ss.binomial_filter(prob, ss.true(is_eligible))
+        self.coverage_dist.kwds['p'] = prob
+        accept_uids = self.coverage_dist.filter(ss.true(is_eligible))
         if len(accept_uids):
             self.outcomes = self.product.administer(sim, accept_uids)  # Actually administer the diagnostic
         return accept_uids
@@ -342,6 +345,7 @@ class BaseTreatment(Intervention):
         self.prob = sc.promotetoarray(prob)
         self.eligibility = eligibility
         self._parse_product(product)
+        self.coverage_dist = sps.bernoulli(p=0)  # Placeholder
 
     def _parse_product(self, product):
         """
@@ -376,7 +380,8 @@ class BaseTreatment(Intervention):
         accept_uids = np.array([], dtype=int)
         eligible_uids = self.check_eligibility(sim)  # Apply eligiblity
         if len(eligible_uids):
-            accept_uids = ss.binomial_filter(self.prob[0], eligible_uids)
+            self.coverage_dist.kwds['p'] = self.prob[0]
+            accept_uids = self.coverage_dist.filter(eligible_uids)
         return accept_uids
 
     def get_candidates(self, sim):
@@ -446,7 +451,7 @@ class treat_num(BaseTreatment):
 __all__ += ['Product', 'dx', 'tx']
 
 
-class Product(sc.prettyobj):
+class Product(ss.Module):
     """ Generic product implementation """
 
     def administer(self, people, inds):
@@ -462,13 +467,17 @@ class dx(Product):
     def __init__(self, df, hierarchy=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.df = df
-        self.states = df.state.unique()
+        self.health_states = df.state.unique()
         self.diseases = df.disease.unique()
 
         if hierarchy is None:
             self.hierarchy = df.result.unique()  # Drawn from the order in which the outcomes are specified
         else:
             self.hierarchy = hierarchy
+
+        # Create placehold for multinomial sampling
+        n_results = len(self.hierarchy)
+        self.result_dist = sps.rv_discrete(values=(np.arange(n_results), 1/n_results*np.ones(n_results)))
 
     @property
     def default_value(self):
@@ -487,16 +496,17 @@ class dx(Product):
         people = sim.people
 
         for disease in self.diseases:
-            for state in self.states:
+            for state in self.health_states:
                 these_uids = ss.true(people[disease][state][uids])
 
                 # Filter the dataframe to extract test results for people in this state
                 df_filter = (self.df.state == state) & (self.df.disease == disease)
                 thisdf = self.df[df_filter]  # apply filter to get the results for this state & genotype
                 probs = [thisdf[thisdf.result == result].probability.values[0] for result in self.hierarchy]
+                self.result_dist.pk = probs # Overwrite distribution probabilities
 
                 # Sort people into one of the possible result states and then update their overall results
-                this_result = ss.n_multinomial(probs, len(these_uids))
+                this_result = self.result_dist.rvs(these_uids)-these_uids
                 row_inds = results.uids.isin(these_uids)
                 results.loc[row_inds, 'result'] = np.minimum(this_result, results.loc[row_inds, 'result'])
 
@@ -516,7 +526,10 @@ class tx(Product):
         super().__init__(*args, **kwargs)
         self.df = df
         self.diseases = df.disease.unique()
-        self.states = df.state.unique()
+        self.health_states = df.state.unique()
+        self.efficacy_dist = sps.bernoulli(p=0)
+        # TEMP
+        self.efficacy_dist = ss.ScipyDistribution(self.efficacy_dist, f'{self.name}_{self.label}_efficacy_dist')
 
     def administer(self, sim, uids, return_format='dict'):
         """
@@ -527,7 +540,7 @@ class tx(Product):
         people = sim.people
 
         for disease in self.diseases:
-            for state in self.states:
+            for state in self.health_states:
 
                 these_uids = ss.true(people[disease][state][uids])
 
@@ -537,9 +550,9 @@ class tx(Product):
                     thisdf = self.df[df_filter]  # apply filter to get the results for this state & genotype
 
                     # Determine whether treatment is successful
-                    efficacy = thisdf.efficacy.values[0]
+                    self.efficacy_dist.kwds['p'] = thisdf.efficacy.values[0]
                     post_state = thisdf.post_state.values[0]
-                    eff_treat_inds = ss.binomial_filter(efficacy, these_uids)
+                    eff_treat_inds = self.efficacy_dist.filter(these_uids)
                     if len(eff_treat_inds):
                         tx_successful += list(eff_treat_inds)
                         people[disease][state][eff_treat_inds] = False  # People who get treated effectively

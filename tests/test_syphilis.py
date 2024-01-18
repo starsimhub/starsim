@@ -8,9 +8,9 @@ import stisim as ss
 import pandas as pd
 import matplotlib.pyplot as plt
 import scipy.stats as sps
+import sciris as sc
 
-
-def make_syph_sim():
+def make_syph_sim(dt=1/12):
     """ Make a sim with syphilis - used by several subsequent tests """
     syph = ss.Syphilis()
     syph.pars['beta'] = {'mf': [0.95, 0.75], 'maternal': [0.99, 0]}
@@ -32,7 +32,7 @@ def make_syph_sim():
     ppl.networks = ss.ndict(mf, maternal)
 
     sim_kwargs = dict(
-        dt=1/12,
+        dt=dt,
         total_pop=93963392,
         start=1990,
         n_years=40,
@@ -44,9 +44,9 @@ def make_syph_sim():
     return sim_kwargs
 
 
-def test_syph():
+def test_syph(dt=1/12):
 
-    sim_kwargs = make_syph_sim()
+    sim_kwargs = make_syph_sim(dt=dt)
 
     class check_states(ss.Analyzer):
 
@@ -102,7 +102,7 @@ def test_syph():
     return sim
 
 
-def test_syph_intvs():
+def test_syph_intvs(dt=1/12, do_plot=False):
 
     # Interventions
     # screen_eligible = lambda sim: sim.demographics.pregnancy.pregnant
@@ -123,30 +123,47 @@ def test_syph_intvs():
         label='bpg'
     )
 
-    sim_kwargs0 = make_syph_sim()
-    sim_base = ss.Sim(**sim_kwargs0)
-    sim_base.run()
-
-    sim_kwargs1 = make_syph_sim()
+    sim_kwargs1 = make_syph_sim(dt=dt)
     sim_intv = ss.Sim(interventions=[syph_screening, bpg], **sim_kwargs1)
     sim_intv.run()
 
     # Check plots
-    burnin = 10
-    pi = int(burnin/sim_base.dt)
-    plt.figure()
-    plt.plot(sim_base.yearvec[pi:], sim_base.results.syphilis.prevalence[pi:], label='Baseline')
-    plt.plot(sim_base.yearvec[pi:], sim_intv.results.syphilis.prevalence[pi:], label='S&T')
-    plt.ylim([0, 0.25])
-    plt.axvline(x=2020, color='k', ls='--')
-    plt.title('Syphilis prevalence')
-    plt.legend()
-    plt.show()
+    if do_plot:
+        # Run baseline
+        sim_kwargs0 = make_syph_sim()
+        sim_base = ss.Sim(**sim_kwargs0)
+        sim_base.run()
 
-    return sim_base, sim_intv
+        burnin = 10
+        pi = int(burnin/sim_base.dt)
+        plt.figure()
+        plt.plot(sim_base.yearvec[pi:], sim_base.results.syphilis.prevalence[pi:], label='Baseline')
+        plt.plot(sim_base.yearvec[pi:], sim_intv.results.syphilis.prevalence[pi:], label='S&T')
+        plt.ylim([0, 0.25])
+        plt.axvline(x=2020, color='k', ls='--')
+        plt.title('Syphilis prevalence')
+        plt.legend()
+        plt.show()
+
+        return sim_base, sim_intv
+
+    else:
+        return sim_intv
 
 
 if __name__ == '__main__':
 
     # sim = test_syph()
-    sim_base, sim_intv = test_syph_intvs()
+
+    # Test intervention handling
+    # raw_coverage = pd.read_csv(ss.root/'tests/test_data/coverage.csv')
+    # raw_coverage = pd.Series(
+    #     index=np.arange(2020, 2031),
+    #     data=np.linspace(0, 1, 11),
+    # )
+    # raw_coverage = {'year': 2000, 'coverage': 0.2}
+    # metadata = {'data_cols': {'year': 'year', 'value': 'coverage'}}
+    # coverage = ss.standardize_data(data=raw_coverage, metadata=metadata)
+
+    sim = test_syph_intvs(dt=1, do_plot=False)
+    # sim_base, sim_intv = test_syph_intvs(dt=1, do_plot=True)
