@@ -25,7 +25,6 @@ class Intervention(ss.Module):
 
     def finalize(self, sim):
         super().finalize(sim)
-        self.finalize_results(sim)
 
 # %% Template classes for routine and campaign delivery
 __all__ += ['RoutineDelivery', 'CampaignDelivery']
@@ -555,8 +554,8 @@ class tx(Product):
                     eff_treat_inds = self.efficacy_dist.filter(these_uids)
                     if len(eff_treat_inds):
                         tx_successful += list(eff_treat_inds)
-                        people[disease][state][eff_treat_inds] = False  # People who get treated effectively
-                        people[disease][post_state][eff_treat_inds] = True
+                        sim.people[disease][state][eff_treat_inds] = False  # People who get treated effectively
+                        sim.people[disease][post_state][eff_treat_inds] = True
 
         tx_successful = np.array(list(set(tx_successful)))
         tx_unsuccessful = np.setdiff1d(uids, tx_successful)

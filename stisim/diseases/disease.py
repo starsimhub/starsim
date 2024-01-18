@@ -206,7 +206,6 @@ class Disease(ss.Module):
         """
         pass
 
-
     def set_prognoses(self, sim, target_uids, source_uids=None):
         """
         Set prognoses upon infection/acquisition
@@ -231,7 +230,6 @@ class Disease(ss.Module):
             for target, source in zip(target_uids, source_uids):
                 self.log.append(source, target, sim.year)
 
-
     def update_results(self, sim):
         """
         Update results
@@ -243,7 +241,6 @@ class Disease(ss.Module):
         for state in self._boolean_states:
             self.results[f'n_{state.name}'][sim.ti] = np.count_nonzero(state & sim.people.alive)
         return
-
 
 
 class STI(Disease):
