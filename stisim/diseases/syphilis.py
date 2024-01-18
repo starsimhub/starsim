@@ -83,9 +83,6 @@ class Syphilis(STI):
         )
         self.pars = ss.omerge(default_pars, self.pars)
 
-        # Extra conception probability
-        self.conception_dist = sps.bernoulli(p=0)
-
         return
 
     @property
