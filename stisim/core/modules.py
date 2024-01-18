@@ -3,20 +3,26 @@ Disease modules
 '''
 
 import sciris as sc
-import stisim as ss
+# import stisim as ss
 from scipy.stats._distn_infrastructure import rv_frozen
-
+from stisim.utils.ndict import *
+from stisim.utils.actions import *
+from stisim.settings import *
+from .distributions import * 
+from .results import *
+from .random import *
+from stisim.states.states import State
 __all__ = ['Module']
 
 
 class Module(sc.prettyobj):
 
     def __init__(self, pars=None, name=None, label=None, requires=None, *args, **kwargs):
-        self.pars = ss.omerge(pars)
+        self.pars = omerge(pars)
         self.name = name if name else self.__class__.__name__.lower() # Default name is the class name
         self.label = label if label else ''
         self.requires = sc.mergelists(requires)
-        self.results = ss.ndict(type=ss.Result)
+        self.results = ndict(type=Result)
         self.initialized = False
         self.finalized = False
 
@@ -48,14 +54,14 @@ class Module(sc.prettyobj):
         # Initialize distributions in pars
         for key, value in self.pars.items():
             if isinstance(value, rv_frozen):
-                self.pars[key] = ss.ScipyDistribution(value, f'{self.name}_{self.label}_{key}')
+                self.pars[key] = ScipyDistribution(value, f'{self.name}_{self.label}_{key}')
                 self.pars[key].initialize(sim, self)
-            #elif isinstance(value, ss.rate):
+            #elif isinstance(value, rate):
             #    self.pars[key].initialize(sim, f'{self.name}_{self.label}_{key}')
 
         for key, value in self.__dict__.items():
             if isinstance(value, rv_frozen):
-                setattr(self, key, ss.ScipyDistribution(value, f'{self.name}_{self.label}_{key}'))
+                setattr(self, key, ScipyDistribution(value, f'{self.name}_{self.label}_{key}'))
                 getattr(self, key).initialize(sim, self)
 
         # Connect the states to the sim
@@ -83,7 +89,7 @@ class Module(sc.prettyobj):
 
         :return:
         """
-        return [x for x in self.__dict__.values() if isinstance(x, ss.State)]
+        return [x for x in self.__dict__.values() if isinstance(x, State)]
 
     @property
     def rngs(self):
@@ -92,7 +98,7 @@ class Module(sc.prettyobj):
 
         :return:
         """
-        return [x for x in self.__dict__.values() if isinstance(x, (ss.MultiRNG, ss.SingleRNG))]
+        return [x for x in self.__dict__.values() if isinstance(x, (MultiRNG, SingleRNG))]
 
     @property
     def scipy_dbns(self):
@@ -101,5 +107,5 @@ class Module(sc.prettyobj):
 
         :return:
         """
-        return [x for x in self.__dict__.values() if isinstance(x, ss.ScipyDistribution)] \
-             + [x for x in self.pars.values()     if isinstance(x, ss.ScipyDistribution)]
+        return [x for x in self.__dict__.values() if isinstance(x, ScipyDistribution)] \
+             + [x for x in self.pars.values()     if isinstance(x, ScipyDistribution)]

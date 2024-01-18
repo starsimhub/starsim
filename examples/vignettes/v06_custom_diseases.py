@@ -51,7 +51,7 @@ class CustomDisease(ss.Module):
         # Define disease states or stages of disease progression, and state trackers
         self.states = ss.omerge(ss.named_dict(
             ss.CustomState('susceptible', bool, True, next_state='infected'),
-             self.states)   # Recovered, before becoming susceptible again
+             self.states) )  # Recovered, before becoming susceptible again
 
         # Initialise additional states to track events
         self.init_event_tracker(['infected'])

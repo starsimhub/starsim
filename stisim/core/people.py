@@ -8,6 +8,17 @@ import pandas as pd
 import sciris as sc
 import stisim as ss
 from scipy.stats import bernoulli, uniform
+from stisim.utils.ndict import *
+from stisim.utils.actions import *
+from stisim.settings import *
+from stisim.states.dinamicview import DynamicView
+from stisim.states.states import State
+from stisim.utils.ndict import *
+from stisim.utils.actions import *
+from stisim.version import *
+from stisim.core.random import *
+from stisim.core.distributions import *
+from stisim.core.results import Result
 
 __all__ = ['BasePeople', 'People']
 
@@ -22,8 +33,8 @@ class BasePeople(sc.prettyobj):
     def __init__(self, n):
 
         self.initialized = False
-        self._uid_map = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs ever created
-        self.uid = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs currently in use
+        self._uid_map = DynamicView(int, fill_value=INT_NAN)  # This variable tracks all UIDs ever created
+        self.uid = DynamicView(int, fill_value=INT_NAN)  # This variable tracks all UIDs currently in use
 
         self._uid_map.grow(n)
         self._uid_map[:] = np.arange(0, n)
@@ -33,13 +44,13 @@ class BasePeople(sc.prettyobj):
         # A slot is a special state managed internally by BasePeople
         # This is because it needs to be updated separately from any other states, as other states
         # might have fill_values that depend on the slot
-        self.slot = ss.State('slot', int, ss.INT_NAN)
+        self.slot = State('slot', int, INT_NAN)
 
         self.ti = None  # Track simulation time index
         self.dt = np.nan  # Track simulation time step
 
         # User-facing collection of states
-        self.states = ss.ndict(type=ss.State)
+        self.states = ndict(type=State)
 
         # We also internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
         # e.g., across modules, but we will never change the size of a State multiple times in the same iteration over
@@ -50,7 +61,7 @@ class BasePeople(sc.prettyobj):
 
     @property
     def rngs(self):
-        return [x for x in self.__dict__.values() if isinstance(x, (ss.MultiRNG, ss.SingleRNG))]
+        return [x for x in self.__dict__.values() if isinstance(x, (MultiRNG, SingleRNG))]
 
     def __len__(self):
         """ Length of people """
@@ -75,7 +86,7 @@ class BasePeople(sc.prettyobj):
         """
 
         if n == 0:
-            return np.array([], dtype=ss.int_)
+            return np.array([], dtype=int_)
 
         start_uid = len(self._uid_map)
         start_idx = len(self.uid)
@@ -115,7 +126,7 @@ class BasePeople(sc.prettyobj):
             state._trim(keep_inds)
 
         # Update the UID map
-        self._uid_map[:] = ss.INT_NAN  # Clear out all previously used UIDs
+        self._uid_map[:] = INT_NAN  # Clear out all previously used UIDs
         self._uid_map[keep_uids] = np.arange(0, len(keep_uids))  # Assign the array indices for all of the current UIDs
 
         # Remove the UIDs from the network too
@@ -153,7 +164,7 @@ class People(BasePeople):
     initialized.
 
     Note that this class handles the mechanics of updating the actual people, while
-    ``ss.BasePeople`` takes care of housekeeping (saving, loading, exporting, etc.).
+    ``BasePeople`` takes care of housekeeping (saving, loading, exporting, etc.).
     Please see the BasePeople class for additional methods.
 
     Args:
@@ -163,7 +174,7 @@ class People(BasePeople):
         kwargs (dict): the actual data, e.g. from a popdict, being specified
 
     **Examples**::
-        ppl = ss.People(2000)
+        ppl = People(2000)
     """
 
     def __init__(self, n, age_data=None, extra_states=None, networks=None, rand_seed=0):
@@ -172,16 +183,16 @@ class People(BasePeople):
         super().__init__(n)
 
         self.initialized = False
-        self.version = ss.__version__  # Store version info
+        self.version = __version__  # Store version info
 
         # Handle states
         states = [
-            ss.State('age', float, np.nan), # NaN until conceived
-            ss.State('female', bool, bernoulli(p=0.5)),
-            ss.State('debut', float),
-            ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
-            ss.State('alive', bool, True),  # Time index for death
-            ss.State('scale', float, 1.0),
+            State('age', float, np.nan), # NaN until conceived
+            State('female', bool, bernoulli(p=0.5)),
+            State('debut', float),
+            State('ti_dead', int, INT_NAN),  # Time index for death
+            State('alive', bool, True),  # Time index for death
+            State('scale', float, 1.0),
         ]
         states.extend(sc.promotetolist(extra_states))
         for state in states:
@@ -201,7 +212,7 @@ class People(BasePeople):
         if age_data is None:
             return uniform(loc=0, scale=100) # low and width
         if sc.checktype(age_data, pd.DataFrame):
-            return ss.data_dist(vals=age_data['value'].values, bins=age_data['age'].values)
+            return ss.data_dist(vals=age_data['value'].values, bins=age_data['age'].values) #### TODO: check why this was failing
 
     def _initialize_states(self, sim=None):
         for state in self.states.values():
@@ -265,7 +276,7 @@ class People(BasePeople):
         """
         Remove dead agents
         """
-        uids_to_remove = ss.true(self.dead)
+        uids_to_remove = true(self.dead)
         if len(uids_to_remove):
             self.remove(uids_to_remove)
         return
@@ -286,7 +297,7 @@ class People(BasePeople):
 
         :return:
         """
-        death_uids = ss.true(self.ti_dead <= self.ti)
+        death_uids = true(self.ti_dead <= self.ti)
         self.alive[death_uids] = False
         return death_uids
 
@@ -322,8 +333,8 @@ class People(BasePeople):
         return self.male
 
     def init_results(self, sim):
-        sim.results += ss.Result(None, 'n_alive', sim.npts, ss.int_)
-        sim.results += ss.Result(None, 'new_deaths', sim.npts, ss.int_)
+        sim.results += Result(None, 'n_alive', sim.npts, int_)
+        sim.results += Result(None, 'new_deaths', sim.npts, int_)
         return
 
     def update_results(self, sim):
@@ -360,6 +371,6 @@ class People(BasePeople):
         # Only update the time of death for agents that are currently alive. This way modules cannot
         # modify the time of death for agents that have already died. Noting that if remove_people is
         # enabled then often such agents would not be present in the simulation anyway
-        uids = ss.true(self.alive[uids])
+        uids = true(self.alive[uids])
         self.ti_dead[uids] = self.ti
         return

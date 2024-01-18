@@ -45,5 +45,6 @@ setup(
         'seaborn',
         'numba',
         'networkx',
+        'torch',
     ],
 )

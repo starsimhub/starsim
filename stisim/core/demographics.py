@@ -8,10 +8,11 @@ import sciris as sc
 import pandas as pd
 import scipy.stats as sps
 
+from . import Module
 __all__ = ['DemographicModule', 'births', 'background_deaths', 'Pregnancy']
 
 
-class DemographicModule(ss.Module):
+class DemographicModule(Module):
     # A demographic module typically handles births/deaths/migration and takes
     # place at the start of the timestep, before networks are updated and before
     # any disease modules are executed
@@ -28,6 +29,7 @@ class DemographicModule(ss.Module):
         # Note that for demographic modules, any result updates should be
         # carried out inside this function
         pass
+
 
 class births(DemographicModule):
     def __init__(self, pars=None):

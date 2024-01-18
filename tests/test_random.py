@@ -6,7 +6,7 @@ Test the RNG object from random.py
 import numpy as np
 import sciris as sc
 import stisim as ss
-from stisim.random import RNG
+from stisim.core.random import RNG
 import pytest
 
 @pytest.fixture

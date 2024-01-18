@@ -20,102 +20,12 @@ INT_NAN = np.iinfo(np.int32).max  # Value to use to flag invalid content (i.e., 
 
 
 # %% Helper functions
-__all__ += ['ndict', 'omerge', 'warn', 'unique', 'find_contacts', 'get_subclasses']
-
-
-class ndict(sc.objdict):
-    """
-    A dictionary-like class that provides additional functionalities for handling named items.
-
-    Args:
-        name (str): The items' attribute to use as keys.
-        type (type): The expected type of items.
-        strict (bool): If True, only items with the specified attribute will be accepted.
-
-    **Examples**::
-
-        networks = ss.ndict(ss.mf(), ss.maternal())
-        networks = ss.ndict([ss.mf(), ss.maternal()])
-        networks = ss.ndict({'mf':ss.mf(), 'maternal':ss.maternal()})
-
-    """
-
-    def __init__(self, *args, name='name', type=None, strict=True, **kwargs):
-        self.setattribute('_name', name)  # Since otherwise treated as keys
-        self.setattribute('_type', type)
-        self.setattribute('_strict', strict)
-        self._initialize(*args, **kwargs)
-        return
-    
-    def append(self, arg, key=None):
-        valid = False
-        if arg is None:
-            return # Nothing to do
-        elif hasattr(arg, self._name):
-            key = key or getattr(arg, self._name)
-            valid = True
-        elif isinstance(arg, dict):
-            if self._name in arg:
-                key = key or arg[self._name]
-                valid = True
-            else:
-                for k,v in arg.items():
-                    self.append(v, key=k)
-                valid = None # Skip final processing
-        elif not self._strict:
-            key = key or f'item{len(self)+1}'
-            valid = True
-        else:
-            valid = False
-        
-        if valid is True:
-            self._check_type(arg)
-            self[key] = arg
-        elif valid is None:
-            pass # Nothing to do
-        else:
-            errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._name}"'
-            raise ValueError(errormsg)
-            
-        return
-        
-    def _check_type(self, arg):
-        """ Check types """
-        if self._type is not None:
-            if not isinstance(arg, self._type):
-                errormsg = f'The following item does not have the expected type {self._type}:\n{arg}'
-                raise TypeError(errormsg)
-        return
-    
-    def _initialize(self, *args, **kwargs):
-        args = sc.mergelists(*args)
-        for arg in args:
-            self.append(arg)
-        for key,arg in kwargs.items():
-            self.append(arg, key=key)
-        return
-    
-    def copy(self):
-        new = self.__class__.__new__(name=self._name, type=self._type, strict=self._strict)
-        new.update(self)
-        return new
-    
-    def __add__(self, dict2):
-        """ Allow c = a + b """
-        new = self.copy()
-        new.append(dict2)
-        return new
-
-    def __iadd__(self, dict2):
-        """ Allow a += b """
-        self.append(dict2)
-        return self
+__all__ += ['omerge', 'warn', 'unique', 'find_contacts', 'get_subclasses']
 
 
 def omerge(*args, **kwargs):
     """ Merge things into an objdict """
     return sc.objdict(sc.mergedicts(*args, **kwargs))
-
 
 def warn(msg, category=None, verbose=None, die=None):
     """ Helper function to handle warnings -- not for the user """
@@ -146,7 +56,6 @@ def warn(msg, category=None, verbose=None, die=None):
 
     return
 
-
 def unique(arr):
     """
     Find the unique elements and counts in an array.
@@ -157,7 +66,6 @@ def unique(arr):
     unique = np.flatnonzero(counts)
     counts = counts[unique]
     return unique, counts
-
 
 def find_contacts(p1, p2, inds):  # pragma: no cover
     """
@@ -175,7 +83,6 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
         if p2[i] in inds:
             pairing_partners.add(p1[i])
     return pairing_partners
-
 
 def get_subclasses(cls):
     for subclass in cls.__subclasses__():

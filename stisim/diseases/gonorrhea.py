@@ -4,7 +4,7 @@ Define default gonorrhea disease module and related interventions
 
 import numpy as np
 import stisim as ss
-from .disease import STI
+from stisim.diseases.super.sti import STI
 import scipy.stats as sps
 
 

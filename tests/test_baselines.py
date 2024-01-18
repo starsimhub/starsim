@@ -6,12 +6,21 @@ the baseline results.
 import numpy as np
 import sciris as sc
 import stisim as ss
+from stisim.networks.networks import *
+from stisim.utils.actions import *
+from stisim import *
+from stisim.core.demographics import *
+from stisim.core.people import *
+from stisim.diseases.hiv import *
+from stisim.core.sim import *
+
+
 
 do_plot = 1
 do_save = 0
 baseline_filename  = sc.thisdir(__file__, 'baseline.json')
 benchmark_filename = sc.thisdir(__file__, 'benchmark.json')
-parameters_filename = sc.thisdir(ss.__file__, 'regression', f'pars_v{ss.__version__}.json')
+parameters_filename = sc.thisdir(__file__, 'regression', f'pars_v{ss.__version__}.json')
 sc.options.set(interactive=False) # Assume not running interactively
 
 # Define the parameters
@@ -24,10 +33,10 @@ pars = sc.objdict(
 )
 
 def make_people():
-    ss.set_seed(pars.rand_seed)
+    set_seed(pars.rand_seed)
     n_agents = int(10e3)
-    networks = [ss.mf(), ss.maternal()]
-    ppl = ss.People(n_agents, networks=networks)
+    networks = [mf(), maternal()]
+    ppl = People(n_agents, networks=networks)
     return ppl
 
 
@@ -42,9 +51,9 @@ def make_sim(ppl=None, do_plot=False, **kwargs):
         ppl = make_people()
     
     # Make the sim
-    hiv = ss.HIV()
+    hiv = HIV()
     hiv.pars['beta'] = {'mf': [0.15, 0.10], 'maternal': [0.2, 0]}
-    sim = ss.Sim(pars=pars, people=ppl, demographics=ss.Pregnancy(), diseases=hiv)
+    sim = Sim(pars=pars, people=ppl, demographics=Pregnancy(), diseases=hiv)
 
     # Optionally plot
     if do_plot:
@@ -80,7 +89,7 @@ def test_baseline():
     ''' Compare the current default sim against the saved baseline '''
     
     # Do not run with multi-RNG
-    if ss.options.multirng:
+    if options.multirng:
         return
 
     # Load existing baseline
@@ -92,7 +101,7 @@ def test_baseline():
     new.run()
 
     # Compute the comparison
-    ss.diff_sims(old, new, full=True, die=True)
+    diff_sims(old, new, full=True, die=True)
 
     return new
 
@@ -101,7 +110,7 @@ def test_benchmark(do_save=do_save, repeats=1, verbose=True):
     ''' Compare benchmark performance '''
     
     # Do not run with multi-RNG
-    if ss.options.multirng:
+    if options.multirng:
         return
 
     if verbose: print('Running benchmark...')

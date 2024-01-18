@@ -17,22 +17,22 @@ TO RESOLVE:
 """
 
 import stisim as ss
+import matplotlib.pyplot as plt
+# ##################
+# # @RomeshA
+# ##################
+# sim = ss.Sim(modules=ss.HPV())
+# sim.run()
+# sim.plot()  # Do something sensible based on which modules are present
+# plt.plot(sim.t, sim.results.hpv['new_infections'])
+# sim.save_csv()
 
-##################
-# @RomeshA
-##################
-sim = ss.Sim(modules=ss.HPV())
-sim.run()
-sim.plot()  # Do something sensible based on which modules are present
-plt.plot(sim.t, sim.results.hpv['new_infections'])
-sim.save_csv()
 
-
-##################
-# @cliffckerr
-##################
-# CK.3.1 Plots for a single module
-ss.Sim(modules='hpv').run().plot()
+# ##################
+# # @cliffckerr
+# ##################
+# # CK.3.1 Plots for a single module
+# ss.Sim(modules='hpv').run().plot()
 
 # CK.3.2 Plot for multiple modules
 sim = ss.Sim(modules=['hiv', 'gonorrhea'])

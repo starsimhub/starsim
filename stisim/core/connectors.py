@@ -2,10 +2,10 @@
 Define connections between disease modules
 '''
 
-import stisim as ss
+from stisim.core.modules import * # Import all modules
+from stisim.diseases import * # Import all diseases
 
-
-class Connector(ss.Module):
+class Connector(Module):
     def __init__(self, pars=None, diseases=None, *args, **kwargs):
         super().__init__(pars=pars, requires=diseases, *args, **kwargs)
         return
@@ -17,7 +17,7 @@ class simple_hiv_ng(Connector):
     """ Simple connector whereby rel_sus to NG doubles if CD4 count is <200"""
 
     def __init__(self, pars=None):
-        super().__init__(pars=pars, label='HIV-Gonorrhea', diseases=[ss.HIV, ss.Gonorrhea])
+        super().__init__(pars=pars, label='HIV-Gonorrhea', diseases=[HIV, Gonorrhea])
         self.pars = ss.omerge({
             'rel_trans_hiv': 2,
             'rel_trans_aids': 5,

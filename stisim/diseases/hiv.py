@@ -5,8 +5,10 @@ Define default HIV disease module and related interventions
 import numpy as np
 import sciris as sc
 import stisim as ss
-from .disease import STI
+from .super.sti import STI
 import scipy.stats as sps
+from stisim.core.interventions import Intervention
+from stisim.core.analyzers import Analyzer
 
 __all__ = ['HIV', 'ART', 'CD4_analyzer']
 
@@ -84,7 +86,7 @@ class HIV(STI):
 
 # %% HIV-related interventions
 
-class ART(ss.Intervention):
+class ART(Intervention):
 
     def __init__(self, t: np.array, coverage: np.array, **kwargs):
         self.requires = HIV
@@ -124,7 +126,7 @@ class ART(ss.Intervention):
 
 #%% Analyzers
 
-class CD4_analyzer(ss.Analyzer):
+class CD4_analyzer(Analyzer):
 
     def __init__(self):
         self.requires = HIV

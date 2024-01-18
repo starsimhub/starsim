@@ -3,9 +3,15 @@
 import stisim as ss
 import numpy as np
 import numba as nb
-from .networks import Network
+import stisim.core.people as ssp
+# from .base_networks import Network
 from scipy.stats._distn_infrastructure import rv_frozen
 from typing import Union
+from stisim.utils.ndict import *
+from stisim.utils.actions import *
+from stisim.settings import *
+from stisim.core.distributions import *
+from stisim.networks.base_networks import Network
 
 __all__ = ['RandomNetwork']
 
@@ -20,13 +26,13 @@ class RandomNetwork(Network):
         """
         super().__init__(**kwargs)
         if isinstance(n_contacts, rv_frozen):
-            self.n_contacts = ss.ScipyDistribution(n_contacts, f'{self.__class__.__name__}_{self.name}_{self.label}')
+            self.n_contacts = ScipyDistribution(n_contacts, f'{self.__class__.__name__}_{self.name}_{self.label}')
 
         self.dynamic = dynamic
 
     def initialize(self, sim):
         super().initialize(sim)
-        if isinstance(self.n_contacts, ss.ScipyDistribution):
+        if isinstance(self.n_contacts, ScipyDistribution):
             self.n_contacts.initialize(sim, self)
         self.update(sim.people, force=True)
 
@@ -57,7 +63,7 @@ class RandomNetwork(Network):
 
         total_number_of_half_edges = np.sum(number_of_contacts)
         count = 0
-        source = np.zeros((total_number_of_half_edges,), dtype=ss.int_)
+        source = np.zeros((total_number_of_half_edges,), dtype=int_)
         for i, person_id in enumerate(inds):
             n_contacts = number_of_contacts[i]
             source[count : count + n_contacts] = person_id
@@ -65,7 +71,7 @@ class RandomNetwork(Network):
         target = np.random.permutation(source)
         return source, target
 
-    def update(self, people: ss.People, force: bool = True) -> None:
+    def update(self, people: ssp.People, force: bool = True) -> None:
         """
         Regenerate contacts
 
@@ -77,11 +83,11 @@ class RandomNetwork(Network):
         if not self.dynamic and not force:
             return
 
-        if isinstance(self.n_contacts, ss.ScipyDistribution):
+        if isinstance(self.n_contacts, ScipyDistribution):
             number_of_contacts = self.n_contacts.rvs(people.alive) # or people.uid?
         else:
             number_of_contacts = np.full(len(people), self.n_contacts)
 
-        number_of_contacts = np.round(number_of_contacts / 2).astype(ss.int_)  # One-way contacts
+        number_of_contacts = np.round(number_of_contacts / 2).astype(int_)  # One-way contacts
         self.contacts.p1, self.contacts.p2 = self.get_contacts(people.uid.__array__(), number_of_contacts)
-        self.contacts.beta = np.ones(len(self.contacts.p1), dtype=ss.float_)
+        self.contacts.beta = np.ones(len(self.contacts.p1), dtype=float_)

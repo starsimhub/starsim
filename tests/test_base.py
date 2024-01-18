@@ -6,6 +6,9 @@ Test objects from base.py
 import sciris as sc
 import numpy as np
 import stisim as ss
+import stisim.core.people as scp
+import stisim.states.states as sst
+import stisim.diseases.hiv as ssd  
 import matplotlib.pyplot as plt
 import scipy.stats as sps
 
@@ -16,17 +19,17 @@ def test_people():
     sc.heading('Testing people object')
 
     # Base people contains only the states defined in base.base_states
-    ppl = ss.People(100)  # BasePeople
+    ppl = scp.People(100)  # BasePeople
     del ppl
 
     # Possible to initialize people with extra states, e.g. a geolocation
     extra_states = [
-        ss.State('geolocation', int, lambda n: np.random.choice([1,2,3],n)),
+        sst.State('geolocation', int, lambda n: np.random.choice([1,2,3],n)),
     ]
-    ppl = ss.People(100, extra_states=extra_states)
+    ppl = scp.People(100, extra_states=extra_states)
 
     # Possible to add a module to people outside a sim (not typical workflow)
-    ppl.add_module(ss.HIV())
+    ppl.add_module(ssd.HIV())
 
     return ppl
 
