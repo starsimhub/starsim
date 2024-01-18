@@ -72,10 +72,6 @@ class Syphilis(STI):
             #   2: Congenital syphilis
             #   3: Live birth without syphilis-related complications
             # Source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5973824/)
-            #         birth_outcomes=sc.objdict(
-            #             active=sps.rv_discrete(values=([0, 1, 2, 3, 4], [0.125, 0.125, 0.20, 0.35, 0.200])),
-            #             latent=sps.rv_discrete(values=([0, 1, 2, 3, 4], [0.050, 0.075, 0.10, 0.05, 0.725])),
-            #         )
             birth_outcomes=sc.objdict(
                 active=sps.rv_discrete(values=([0, 1, 2, 3, 4], [0.125, 0.125, 0.20, 0.35, 0.200])),
                 latent=sps.rv_discrete(values=([0, 1, 2, 3, 4], [0.050, 0.075, 0.10, 0.05, 0.725])),
@@ -256,9 +252,6 @@ class Syphilis(STI):
         """
         Natural history of syphilis for congenital infection
         """
-
-        # Contact network - TODO, generalize this
-        mat_net = sim.people.networks.maternal.contacts
 
         # Determine outcomes
         for state in ['active', 'latent']:

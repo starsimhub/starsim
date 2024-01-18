@@ -8,7 +8,7 @@ import stisim as ss
 import pandas as pd
 import matplotlib.pyplot as plt
 import scipy.stats as sps
-import sciris as sc
+
 
 def make_syph_sim(birth_outcomes=None):
     """ Make a sim with syphilis - used by several subsequent tests """
