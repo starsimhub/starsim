@@ -19,9 +19,7 @@ def make_syph_sim():
     # Make demographic modules
     fertility_rates = {'fertility_rate': pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')}
     pregnancy = ss.Pregnancy(pars=fertility_rates)
-    death_rates = dict(
-        death_rates=pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv'),
-    )
+    death_rates = {'death_rate': pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')}
     death = ss.background_deaths(death_rates)
 
     # Make people and networks
@@ -86,27 +84,24 @@ def test_syph():
     # Check plots
     burnin = 10
     pi = int(burnin/sim.dt)
-    plt.figure()
-    plt.plot(sim.yearvec[pi:], sim.results.syphilis.new_infections[pi:])
-    plt.title('Syphilis infections')
-    plt.show()
 
     plt.figure()
-    n_alive = sim.results.n_alive[pi:]
     plt.stackplot(
         sim.yearvec[pi:],
-        sim.results.syphilis.n_susceptible[pi:]/n_alive,
-        sim.results.syphilis.n_congenital[pi:]/n_alive,
-        sim.results.syphilis.n_exposed[pi:]/n_alive,
-        sim.results.syphilis.n_primary[pi:]/n_alive,
-        sim.results.syphilis.n_secondary[pi:]/n_alive,
-        (sim.results.syphilis.n_latent_temp[pi:]+sim.results.syphilis.n_latent_long[pi:])/n_alive,
-        sim.results.syphilis.n_tertiary[pi:]/n_alive,
+        sim.results.syphilis.n_susceptible[pi:],
+        sim.results.syphilis.n_congenital[pi:],
+        sim.results.syphilis.n_exposed[pi:],
+        sim.results.syphilis.n_primary[pi:],
+        sim.results.syphilis.n_secondary[pi:],
+        (sim.results.syphilis.n_latent_temp[pi:]+sim.results.syphilis.n_latent_long[pi:]),
+        sim.results.syphilis.n_tertiary[pi:],
     )
     plt.legend(['Susceptible', 'Congenital', 'Exposed', 'Primary', 'Secondary', 'Latent', 'Tertiary'], loc='lower right')
     plt.show()
 
     return sim
+
+
 def test_syph_intvs():
 
     # Interventions

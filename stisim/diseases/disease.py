@@ -330,7 +330,7 @@ class STI(Disease):
                     if beta == 0:
                         continue
                     # probability of a->b transmission
-                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta #* people.dt  # Remove - beta should be per dt
+                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt  # Remove - beta should be per dt
                     new_cases_bool = np.random.random(len(a)) < p_transmit  # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
                     new_cases.append(b[new_cases_bool])
                     sources.append(a[new_cases_bool])
@@ -346,7 +346,7 @@ class STI(Disease):
         '''
         n = len(people.uid)  # TODO: possibly could be shortened to just the people who are alive
         p_acq_node = np.zeros(n)
-    
+
         dfs = []
         for lkey, layer in people.networks.items():
             if lkey in self.pars['beta']:
@@ -362,7 +362,7 @@ class STI(Disease):
 
                     a, b = contacts[lbl_src], contacts[lbl_tgt]
                     df = pd.DataFrame({'p1': a, 'p2': b})
-                    df['p'] = (rel_trans[a] * rel_sus[b] * contacts.beta * beta).values
+                    df['p'] = (rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt).values
                     df = df.loc[df['p'] > 0]
                     dfs.append(df)
 
