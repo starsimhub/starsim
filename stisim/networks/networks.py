@@ -350,7 +350,6 @@ class mf(SexualNetwork, DynamicNetwork):
 
     def initialize(self, sim):
         super().initialize(sim)
-        
         self.set_network_states(sim.people)
         self.add_pairs(sim.people, ti=0)
         return

@@ -502,7 +502,7 @@ class dx(Product):
                 df_filter = (self.df.state == state) & (self.df.disease == disease)
                 thisdf = self.df[df_filter]  # apply filter to get the results for this state & genotype
                 probs = [thisdf[thisdf.result == result].probability.values[0] for result in self.hierarchy]
-                self.result_dist.pk = probs # Overwrite distribution probabilities
+                self.result_dist.pk = probs  # Overwrite distribution probabilities
 
                 # Sort people into one of the possible result states and then update their overall results
                 this_result = self.result_dist.rvs(these_uids)-these_uids

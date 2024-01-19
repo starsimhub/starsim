@@ -26,10 +26,10 @@ def make_syph_sim(dt=1/12):
     ss.set_seed(1)
     ppl = ss.People(5000, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
     mf = ss.mf(
-        pars=dict(duration_dist=ss.lognorm(mean=0.1, stdev=0.5))
+        pars=dict(duration_dist=ss.lognorm(mean=1/24, stdev=0.5))
     )
-    maternal = ss.maternal()
-    ppl.networks = ss.ndict(mf, maternal)
+    # maternal = ss.maternal()
+    ppl.networks = ss.ndict(mf)  #, maternal)
 
     sim_kwargs = dict(
         dt=dt,
@@ -89,11 +89,11 @@ def test_syph(dt=1/12):
     burnin = 10
     pi = int(burnin/sim.dt)
 
-    fig, ax = plt.subplots(2, 1)
+    fig, ax = plt.subplots(2, 2)
     ax = ax.ravel()
     ax[0].stackplot(
         sim.yearvec[pi:],
-        sim.results.syphilis.n_susceptible[pi:],
+        # sim.results.syphilis.n_susceptible[pi:],
         sim.results.syphilis.n_congenital[pi:],
         sim.results.syphilis.n_exposed[pi:],
         sim.results.syphilis.n_primary[pi:],
@@ -101,11 +101,16 @@ def test_syph(dt=1/12):
         (sim.results.syphilis.n_latent_temp[pi:]+sim.results.syphilis.n_latent_long[pi:]),
         sim.results.syphilis.n_tertiary[pi:],
     )
-    ax[0].legend(['Susceptible', 'Congenital', 'Exposed', 'Primary', 'Secondary', 'Latent', 'Tertiary'], loc='lower right')
+    ax[0].legend(['Congenital', 'Exposed', 'Primary', 'Secondary', 'Latent', 'Tertiary'], loc='lower right')
 
     ax[1].plot(sim.yearvec[pi:], sim.results.syphilis.prevalence[pi:])
-    ax[1].set_ylim([0, 0.25])
     ax[1].set_title('Syphilis prevalence')
+
+    ax[2].plot(sim.yearvec[pi:], sim.results.syphilis.new_infections[pi:])
+    ax[2].set_title('New infections')
+
+    ax[3].plot(sim.yearvec[pi:], sim.results.n_alive[pi:])
+    ax[3].set_title('Population')
 
     fig.tight_layout()
     plt.show()
@@ -164,17 +169,7 @@ def test_syph_intvs(dt=1/12, do_plot=False):
 
 if __name__ == '__main__':
 
-    # sim = test_syph(dt=1)
-
-    # Test intervention handling
-    # raw_coverage = pd.read_csv(ss.root/'tests/test_data/coverage.csv')
-    # raw_coverage = pd.Series(
-    #     index=np.arange(2020, 2031),
-    #     data=np.linspace(0, 1, 11),
-    # )
-    # raw_coverage = {'year': 2000, 'coverage': 0.2}
-    # metadata = {'data_cols': {'year': 'year', 'value': 'coverage'}}
-    # coverage = ss.standardize_data(data=raw_coverage, metadata=metadata)
-
+    sim = test_syph(dt=1/12)
     # sim = test_syph_intvs(dt=1, do_plot=False)
-    sim_base, sim_intv = test_syph_intvs(dt=1/12, do_plot=True)
+    # sim_base, sim_intv = test_syph_intvs(dt=1/12, do_plot=True)
+

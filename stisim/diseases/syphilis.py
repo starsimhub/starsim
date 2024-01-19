@@ -123,27 +123,31 @@ class Syphilis(STI):
 
         # Secondary from primary
         secondary_from_primary = self.primary & (self.ti_secondary <= sim.ti)
-        self.secondary[secondary_from_primary] = True
-        self.primary[secondary_from_primary] = False
-        self.set_secondary_prognoses(sim, ss.true(secondary_from_primary))
+        if len(ss.true(secondary_from_primary)) > 0:
+            self.secondary[secondary_from_primary] = True
+            self.primary[secondary_from_primary] = False
+            self.set_secondary_prognoses(sim, ss.true(secondary_from_primary))
 
         # Secondary reactivation from latent
         secondary_from_latent = self.latent_temp & (self.ti_secondary <= sim.ti)
-        self.secondary[secondary_from_latent] = True
-        self.latent_temp[secondary_from_latent] = False
-        self.set_secondary_prognoses(sim, ss.true(secondary_from_latent))
+        if len(ss.true(secondary_from_latent)) > 0:
+            self.secondary[secondary_from_latent] = True
+            self.latent_temp[secondary_from_latent] = False
+            self.set_secondary_prognoses(sim, ss.true(secondary_from_latent))
 
         # Latent
         latent_temp = self.secondary & (self.ti_latent_temp <= sim.ti)
-        self.latent_temp[latent_temp] = True
-        self.secondary[latent_temp] = False
-        self.set_latent_temp_prognoses(sim, ss.true(latent_temp))
+        if len(ss.true(latent_temp)) > 0:
+            self.latent_temp[latent_temp] = True
+            self.secondary[latent_temp] = False
+            self.set_latent_temp_prognoses(sim, ss.true(latent_temp))
 
         # Latent long
         latent_long = self.secondary & (self.ti_latent_long <= sim.ti)
-        self.latent_long[latent_long] = True
-        self.secondary[latent_long] = False
-        self.set_latent_long_prognoses(sim, ss.true(latent_long))
+        if len(ss.true(latent_long)) > 0:
+            self.latent_long[latent_long] = True
+            self.secondary[latent_long] = False
+            self.set_latent_long_prognoses(sim, ss.true(latent_long))
 
         # Tertiary
         tertiary = self.latent_long & (self.ti_tertiary <= sim.ti)
