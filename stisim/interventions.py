@@ -492,11 +492,10 @@ class dx(Product):
 
         # Pre-fill with the default value, which is set to be the last value in the hierarchy
         results = sc.dataframe({'uids': uids, 'result': self.default_value})
-        people = sim.people
 
         for disease in self.diseases:
             for state in self.health_states:
-                these_uids = ss.true(people[disease][state][uids])
+                these_uids = ss.true(sim[disease][state][uids])
 
                 # Filter the dataframe to extract test results for people in this state
                 df_filter = (self.df.state == state) & (self.df.disease == disease)
@@ -536,12 +535,11 @@ class tx(Product):
         """
 
         tx_successful = []  # Initialize list of successfully treated individuals
-        people = sim.people
 
         for disease in self.diseases:
             for state in self.health_states:
 
-                these_uids = ss.true(people[disease][state][uids])
+                these_uids = ss.true(sim[disease][state][uids])
 
                 if len(these_uids):
 
@@ -554,8 +552,8 @@ class tx(Product):
                     eff_treat_inds = self.efficacy_dist.filter(these_uids)
                     if len(eff_treat_inds):
                         tx_successful += list(eff_treat_inds)
-                        sim.people[disease][state][eff_treat_inds] = False  # People who get treated effectively
-                        sim.people[disease][post_state][eff_treat_inds] = True
+                        sim[disease][state][eff_treat_inds] = False  # People who get treated effectively
+                        sim[disease][post_state][eff_treat_inds] = True
 
         tx_successful = np.array(list(set(tx_successful)))
         tx_unsuccessful = np.setdiff1d(uids, tx_successful)

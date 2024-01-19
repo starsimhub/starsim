@@ -59,7 +59,7 @@ class check_states(ss.Analyzer):
         """
         Checks states that should be mutually exlusive and collectively exhaustive
         """
-        sppl = sim.people.syphilis
+        sppl = sim.diseases.syphilis
 
         # Infection states: people must be exactly one of these
         s1a = (sppl.susceptible | sppl.exposed | sppl.primary | sppl.secondary | sppl.latent_temp | sppl.latent_long | sppl.tertiary | sppl.congenital).all()
@@ -74,7 +74,7 @@ class check_states(ss.Analyzer):
         if not s3:
             raise ValueError('States S and I should be mutually exclusive but are not.')
 
-        checkall = np.array([s1, s2, s3])
+        checkall = np.array([s1a, s1b, s2a, s2b, s3])
         if not checkall.all():
             self.okay = False
 
@@ -171,7 +171,7 @@ def test_syph_intvs(dt=1/12, do_plot=False):
 
 if __name__ == '__main__':
 
-    # sim = test_syph(dt=1/12)
-    sim = test_syph_intvs(dt=1, do_plot=False)
+    sim = test_syph(dt=1/12)
+    # sim = test_syph_intvs(dt=1, do_plot=False)
     # sim_base, sim_intv = test_syph_intvs(dt=1/12, do_plot=True)
 
