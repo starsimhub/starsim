@@ -22,12 +22,13 @@ def run_test(remove_dead=True, do_plot=False, rand_seed=0, verbose=False):
     ppl = ss.People(50000)
 
     # Parameters
-    realistic_birth = {'birth_rates': pd.read_csv(ss.root/'tests/test_data/nigeria_births.csv')}
+    realistic_birth = {'birth_rate': pd.read_csv(ss.root/'tests/test_data/nigeria_births.csv')}
 
-    series_death = {'death_rates': pd.Series(
-        index=[0, 10, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95],
-        data=[0.0046355, 0.000776, 0.0014232, 0.0016693, 0.0021449, 0.0028822, 0.0039143, 0.0053676, 0.0082756, 0.01, 0.02, 0.03, 0.04, 0.06, 0.11, 0.15, 0.21, 0.30],
-    ),
+    series_death = {
+        'death_rate': pd.Series(
+            index=[0, 10, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95],
+            data=[0.0046355, 0.000776, 0.0014232, 0.0016693, 0.0021449, 0.0028822, 0.0039143, 0.0053676, 0.0082756, 0.01, 0.02, 0.03, 0.04, 0.06, 0.11, 0.15, 0.21, 0.30],
+        ),
         'rel_death': 7
     }
 
