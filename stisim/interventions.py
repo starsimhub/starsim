@@ -495,7 +495,8 @@ class dx(Product):
 
         for disease in self.diseases:
             for state in self.health_states:
-                these_uids = ss.true(sim[disease][state][uids])
+                this_state = getattr(sim.diseases[disease], state)
+                these_uids = ss.true(this_state[uids])
 
                 # Filter the dataframe to extract test results for people in this state
                 df_filter = (self.df.state == state) & (self.df.disease == disease)
@@ -536,24 +537,31 @@ class tx(Product):
 
         tx_successful = []  # Initialize list of successfully treated individuals
 
-        for disease in self.diseases:
+        for disease_name in self.diseases:
+
+            disease = sim.diseases[disease_name]
+
             for state in self.health_states:
 
-                these_uids = ss.true(sim[disease][state][uids])
+                pre_tx_state = getattr(disease, state)
+                these_uids = ss.true(pre_tx_state[uids])
 
                 if len(these_uids):
 
-                    df_filter = (self.df.state == state) & (self.df.disease == disease)  # Filter by state
+                    df_filter = (self.df.state == state) & (self.df.disease == disease_name)  # Filter by state
                     thisdf = self.df[df_filter]  # apply filter to get the results for this state & genotype
 
                     # Determine whether treatment is successful
                     self.efficacy_dist.kwds['p'] = thisdf.efficacy.values[0]
-                    post_state = thisdf.post_state.values[0]
                     eff_treat_inds = self.efficacy_dist.filter(these_uids)
+
+                    post_tx_state_name = thisdf.post_state.values[0]
+                    post_tx_state = getattr(disease, post_tx_state_name)
+
                     if len(eff_treat_inds):
                         tx_successful += list(eff_treat_inds)
-                        sim[disease][state][eff_treat_inds] = False  # People who get treated effectively
-                        sim[disease][post_state][eff_treat_inds] = True
+                        pre_tx_state[eff_treat_inds] = False  # People who get treated effectively
+                        post_tx_state[eff_treat_inds] = True
 
         tx_successful = np.array(list(set(tx_successful)))
         tx_unsuccessful = np.setdiff1d(uids, tx_successful)
