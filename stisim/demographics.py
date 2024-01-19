@@ -356,7 +356,7 @@ class Pregnancy(DemographicModule):
         self.ti_delivery[deliveries] = sim.ti
 
         # Check for new women emerging from post-partum
-        postpartum = ~self.pregnant & (self.ti_postpartum == sim.ti)
+        postpartum = ~self.pregnant & (self.ti_postpartum <= sim.ti)
         self.postpartum[postpartum] = False
         self.susceptible[postpartum] = True
         self.ti_postpartum[postpartum] = sim.ti
