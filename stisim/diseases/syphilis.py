@@ -20,7 +20,6 @@ class Syphilis(STI):
         super().__init__(pars)
 
         # Adult syphilis states
-        self.adult_states = ['exposed', 'primary', 'secondary', 'latent_temp', 'latent_long', 'tertiary', 'immune']
         self.exposed = ss.State('exposed', bool, False)  # AKA incubating. Free of symptoms, not transmissible
         self.primary = ss.State('primary', bool, False)  # Primary chancres
         self.secondary = ss.State('secondary', bool, False)  # Inclusive of those who may still have primary chancres
@@ -28,18 +27,10 @@ class Syphilis(STI):
         self.latent_long = ss.State('latent_long', bool, False)  # Can progress to tertiary or remain here
         self.tertiary = ss.State('tertiary', bool, False)  # Includes complications (cardio/neuro/disfigurement)
         self.immune = ss.State('immune', bool, False)  # After effective treatment people may acquire temp immunity
+        self.ever_exposed = ss.State('ever_exposed', bool, False)  # Anyone ever exposed - stays true after treatment
 
         # Congenital syphilis states
         self.congenital = ss.State('congenital', bool, False)
-
-        # Duration of stages
-        self.dur_exposed = ss.State('dur_exposed', float, np.nan)
-        self.dur_primary = ss.State('dur_primary', float, np.nan)
-        self.dur_secondary = ss.State('dur_secondary', float, np.nan)
-        self.dur_latent_temp = ss.State('dur_latent_temp', float, np.nan)
-        self.dur_latent_long = ss.State('dur_latent_long', float, np.nan)
-        self.dur_tertiary = ss.State('dur_tertiary', float, np.nan)
-        self.dur_infection = ss.State('dur_infection', float, np.nan)  # Sum of all the stages
 
         # Timestep of state changes
         self.ti_exposed = ss.State('ti_exposed', int, ss.INT_NAN)
@@ -86,6 +77,16 @@ class Syphilis(STI):
         return
 
     @property
+    def naive(self):
+        """ Never exposed """
+        return ~self.ever_exposed
+
+    @property
+    def sus_not_naive(self):
+        """ Susceptible but with syphilis antibodies, which persist after treatment """
+        return self.susceptible & self.ever_exposed
+
+    @property
     def active(self):
         """ Active - only active infections can transmit through sexual contact """
         return self.primary | self.secondary
@@ -106,11 +107,6 @@ class Syphilis(STI):
         self.results += ss.Result(self.name, 'new_nnds', sim.npts, dtype=int, scale=True)
         self.results += ss.Result(self.name, 'new_stillborns', sim.npts, dtype=int, scale=True)
         self.results += ss.Result(self.name, 'new_congenital', sim.npts, dtype=int, scale=True)
-        return
-
-    def update_results(self, sim):
-        """ Update results """
-        super(Syphilis, self).update_results(sim)
         return
 
     def update_pre(self, sim):
@@ -192,6 +188,7 @@ class Syphilis(STI):
             uids = target_uids
 
         self.susceptible[uids] = False
+        self.ever_exposed[uids] = True
         self.exposed[uids] = True
         self.infected[uids] = True
         self.ti_exposed[uids] = sim.ti
@@ -200,14 +197,11 @@ class Syphilis(STI):
         # Set future dates and probabilities
         # Exposed to primary
         dur_exposed = self.pars.dur_exposed.rvs(uids)
-        self.dur_exposed[uids] = dur_exposed
         self.ti_primary[uids] = sim.ti + rr(dur_exposed / sim.dt)
-        self.dur_infection[uids] = dur_exposed
 
         # Primary to secondary
         dur_primary = self.pars.dur_primary.rvs(uids)
         self.ti_secondary[uids] = self.ti_primary[uids] + rr(dur_primary / sim.dt)
-        self.dur_infection[uids] += dur_primary
 
         return
 
@@ -220,11 +214,9 @@ class Syphilis(STI):
 
         dur_secondary_temp = self.pars.dur_secondary.rvs(latent_temp_uids)
         self.ti_latent_temp[latent_temp_uids] = self.ti_secondary[latent_temp_uids] + rr(dur_secondary_temp / sim.dt)
-        self.dur_infection[latent_temp_uids] += dur_secondary_temp
 
         dur_secondary_long = self.pars.dur_secondary.rvs(latent_long_uids)
         self.ti_latent_long[latent_long_uids] = self.ti_secondary[latent_long_uids] + rr(dur_secondary_long / sim.dt)
-        self.dur_infection[latent_long_uids] += dur_secondary_long
 
         return
 
@@ -232,20 +224,17 @@ class Syphilis(STI):
         # Primary to secondary
         dur_latent_temp = self.pars.dur_latent_temp.rvs(uids)
         self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_temp / sim.dt)
-        self.dur_infection[uids] += dur_latent_temp
         return
 
     def set_latent_long_prognoses(self, sim, uids):
         # Primary to secondary
         dur_latent_long = self.pars.dur_latent_long.rvs(uids)
         self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_long / sim.dt)
-        self.dur_infection[uids] += dur_latent_long
 
         # Latent_long to tertiary
         tertiary_uids = self.pars.p_tertiary.filter(uids)
         dur_latent_long = self.pars.dur_latent_long.rvs(tertiary_uids)
         self.ti_tertiary[tertiary_uids] = self.ti_latent_long[tertiary_uids] + rr(dur_latent_long / sim.dt)
-        self.dur_infection[tertiary_uids] += dur_latent_long
 
         return
 

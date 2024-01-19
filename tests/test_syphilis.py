@@ -62,11 +62,13 @@ class check_states(ss.Analyzer):
         sppl = sim.people.syphilis
 
         # Infection states: people must be exactly one of these
-        s1 = (sppl.susceptible | sppl.exposed | sppl.primary | sppl.secondary | sppl.latent_temp | sppl.latent_long | sppl.tertiary | sppl.congenital).all()
-        if not s1:
+        s1a = (sppl.susceptible | sppl.exposed | sppl.primary | sppl.secondary | sppl.latent_temp | sppl.latent_long | sppl.tertiary | sppl.congenital).all()
+        s1b = (sppl.naive | sppl.sus_not_naive | sppl.exposed | sppl.primary | sppl.secondary | sppl.latent_temp | sppl.latent_long | sppl.tertiary | sppl.congenital).all()
+        if not (s1a & s1b):
             raise ValueError('States should be collectively exhaustive but are not.')
-        s2 = ~(sppl.susceptible & sppl.exposed & sppl.primary & sppl.secondary & sppl.latent_temp & sppl.latent_long & sppl.tertiary & sppl.congenital).any()
-        if not s2:
+        s2a = ~(sppl.susceptible & sppl.exposed & sppl.primary & sppl.secondary & sppl.latent_temp & sppl.latent_long & sppl.tertiary & sppl.congenital).any()
+        s2b = ~(sppl.naive & sppl.sus_not_naive & sppl.exposed & sppl.primary & sppl.secondary & sppl.latent_temp & sppl.latent_long & sppl.tertiary & sppl.congenital).any()
+        if not (s2a & s2b):
             raise ValueError('States should be mutually exclusive but are not.')
         s3 = ~(sppl.susceptible & sppl.infected).any()
         if not s3:
@@ -169,7 +171,7 @@ def test_syph_intvs(dt=1/12, do_plot=False):
 
 if __name__ == '__main__':
 
-    sim = test_syph(dt=1/12)
-    # sim = test_syph_intvs(dt=1, do_plot=False)
+    # sim = test_syph(dt=1/12)
+    sim = test_syph_intvs(dt=1, do_plot=False)
     # sim_base, sim_intv = test_syph_intvs(dt=1/12, do_plot=True)
 
