@@ -352,7 +352,8 @@ class Pregnancy(DemographicModule):
         Perform all updates
         """
         self.update_states(sim)
-        self.make_pregnancies(sim)
+        conceive_uids = self.make_pregnancies(sim)
+        self.make_embryos(sim, conceive_uids)
         self.update_results(sim)
         return
 
@@ -380,7 +381,7 @@ class Pregnancy(DemographicModule):
 
     def make_pregnancies(self, sim):
         """
-        Select people to make pregnancy using incidence data
+        Select people to make pregnant using incidence data
         """
         # Abbreviate
         ppl = sim.people
@@ -391,7 +392,14 @@ class Pregnancy(DemographicModule):
         inds_to_choose_from = ss.true(denom_conds)
         conceive_uids = self.fertility_dist.filter(inds_to_choose_from)
 
-        # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
+        # Set prognoses for the pregnancies
+        if len(conceive_uids) > 0:
+            self.set_prognoses(sim, conceive_uids)
+
+        return conceive_uids
+
+    def make_embryos(self, sim, conceive_uids):
+        """ Add properties for the just-conceived """
         n_unborn_agents = len(conceive_uids)
         if n_unborn_agents > 0:
 
@@ -411,9 +419,6 @@ class Pregnancy(DemographicModule):
                 if layer.vertical:  # What happens if there's more than one vertical layer?
                     durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
                     layer.add_pairs(conceive_uids, new_uids, dur=durs)
-
-            # Set prognoses for the pregnancies
-            self.set_prognoses(sim, conceive_uids)
 
         return
 

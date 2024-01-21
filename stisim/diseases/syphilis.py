@@ -49,6 +49,7 @@ class Syphilis(STI):
         self.ti_latent_long = ss.State('ti_latent_long', int, ss.INT_NAN)
         self.ti_tertiary = ss.State('ti_tertiary', int, ss.INT_NAN)
         self.ti_immune = ss.State('ti_immune', int, ss.INT_NAN)
+        self.ti_miscarriage = ss.State('ti_miscarriage', int, ss.INT_NAN)
         self.ti_nnd = ss.State('ti_nnd', int, ss.INT_NAN)
         self.ti_stillborn = ss.State('ti_stillborn', int, ss.INT_NAN)
         self.ti_congenital = ss.State('ti_congenital', int, ss.INT_NAN)
@@ -70,18 +71,12 @@ class Syphilis(STI):
             #   1: Stillborn
             #   2: Congenital syphilis
             #   3: Live birth without syphilis-related complications
-            # TODO: make this much more robust, and use the probabilities that include deaths, i.e.
-            # (source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5973824/)
-            #     birth_outcomes=sc.objdict(
-            #         active=sps.rv_discrete(values=([0, 1, 2, 3], [0.15, 0.250, 0.40, 0.200])),
-            #         latent=sps.rv_discrete(values=([0, 1, 2, 3], [0.10, 0.125, 0.05, 0.725])),
-            #     )
-            # For the moment, not useing these as we will need to readjust fertility rates.
+            # Source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5973824/)
             birth_outcomes=sc.objdict(
-                active=sps.rv_discrete(values=([0, 1, 2, 3], [0.0, 0.0, 0.800, 0.200])),
-                latent=sps.rv_discrete(values=([0, 1, 2, 3], [0.0, 0.0, 0.275, 0.725])),
+                active=sps.rv_discrete(values=([0, 1, 2, 3, 4], [0.125, 0.125, 0.20, 0.35, 0.200])),
+                latent=sps.rv_discrete(values=([0, 1, 2, 3, 4], [0.050, 0.075, 0.10, 0.05, 0.725])),
             ),
-            birth_outcome_keys=['nnd', 'stillborn', 'congenital'],
+            birth_outcome_keys=['miscarriage', 'nnd', 'stillborn', 'congenital'],
 
             # Initial conditions
             seed_infections=sps.bernoulli(p=0.03),
@@ -261,19 +256,21 @@ class Syphilis(STI):
             source_state_inds = getattr(self, state)[source_uids].values.nonzero()[-1]
             uids = target_uids[source_state_inds]
 
-            # Birth outcomes must be modified to add probability of susceptible birth
-            birth_outcomes = self.pars.birth_outcomes[state]
-            assigned_outcomes = birth_outcomes.rvs(uids)-uids  # WHY??
-            time_to_birth = -sim.people.age
+            if len(uids) > 0:
 
-            # Schedule events
-            for oi, outcome in enumerate(self.pars.birth_outcome_keys):
-                o_uids = uids[assigned_outcomes == oi]
-                if len(o_uids) > 0:
-                    ti_outcome = f'ti_{outcome}'
-                    vals = getattr(self, ti_outcome)
-                    vals[o_uids] = sim.ti + rr(time_to_birth[o_uids].values / sim.dt)
-                    setattr(self, ti_outcome, vals)
+                # Birth outcomes must be modified to add probability of susceptible birth
+                birth_outcomes = self.pars.birth_outcomes[state]
+                assigned_outcomes = birth_outcomes.rvs(uids)-uids  # WHY??
+                time_to_birth = -sim.people.age
+
+                # Schedule events
+                for oi, outcome in enumerate(self.pars.birth_outcome_keys):
+                    o_uids = uids[assigned_outcomes == oi]
+                    if len(o_uids) > 0:
+                        ti_outcome = f'ti_{outcome}'
+                        vals = getattr(self, ti_outcome)
+                        vals[o_uids] = sim.ti + rr(time_to_birth[o_uids].values / sim.dt)
+                        setattr(self, ti_outcome, vals)
 
         return
 
