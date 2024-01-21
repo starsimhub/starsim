@@ -169,7 +169,7 @@ def test_syph_intvs(dt=1/12, do_plot=False):
 
 if __name__ == '__main__':
 
-    sim = test_syph(dt=1/12)
-    # sim = test_syph_intvs(dt=1, do_plot=False)
+    # sim = test_syph(dt=1/12)
+    sim = test_syph_intvs(dt=1, do_plot=False)
     # sim_base, sim_intv = test_syph_intvs(dt=1/12, do_plot=True)
 

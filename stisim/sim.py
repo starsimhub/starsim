@@ -65,12 +65,14 @@ class Sim(sc.prettyobj):
     @property
     def modules(self):
         # Return iterator over all Module instances (stored in standard places) in the Sim
+        products = [intv.product for intv in self.interventions.values()]
         return itertools.chain(
             self.demographics.values(),
             self.people.networks.values(),
             self.diseases.values(),
             self.connectors.values(),
             self.interventions.values(),
+            products,
             self.analyzers.values(),
         )
 
@@ -297,15 +299,19 @@ class Sim(sc.prettyobj):
                 errormsg = f'Intervention {intervention} does not seem to be a valid intervention: must be a function or Intervention subclass'
                 raise TypeError(errormsg)
 
-            for rng in intervention.rngs:
-                rng.initialize(self.rng_container, self.people.slot)
-
             # Add the intervention parameters and results into the Sim's dicts
             self.pars[intervention.name] = intervention.pars
             self.results[intervention.name] = intervention.results
 
             # Add intervention states to the People's dicts
             self.people.add_module(intervention)
+            self.people.add_module(intervention.product)  # TODO add checks
+
+            # Intervention and product RNGs
+            for rng in intervention.rngs:
+                rng.initialize(self.rng_container, self.people.slot)
+            for rng in intervention.product.rngs:
+                rng.initialize(self.rng_container, self.people.slot)
 
         return
 
