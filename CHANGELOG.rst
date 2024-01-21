@@ -8,13 +8,13 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :local:
    :depth: 1
 
-Version 0.1.3 (2024-01-19)
+Version 0.1.3 (2024-01-22)
 --------------------------
 - Read in age distributions for people initializations 
 - *GitHub info*: PR `205 <https://github.com/amath-idm/stisim/pull/205>`_
 
 
-Version 0.1.2 (2024-01-15)
+Version 0.1.2 (2024-01-19)
 --------------------------
 - Functionality for converting birth & fertility data to a callable parameter within SciPy distributions
 - *GitHub info*: PR `203 <https://github.com/amath-idm/stisim/pull/203>`_
