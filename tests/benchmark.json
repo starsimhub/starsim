@@ -1,7 +1,7 @@
 {
   "time": {
     "people": 0.018,
-    "initialize": 0.042,
+    "initialize": 0.043,
     "run": 0.248
   },
   "parameters": {
@@ -9,5 +9,5 @@
     "n_years": 20,
     "dt": 0.2
   },
-  "cpu_performance": 0.30581493979139107
+  "cpu_performance": 0.335492378754622
 }

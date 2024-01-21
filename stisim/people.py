@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import stisim as ss
-from scipy.stats import bernoulli, uniform
+import scipy.stats as sps
 
 __all__ = ['BasePeople', 'People']
 
@@ -177,7 +177,7 @@ class People(BasePeople):
         # Handle states
         states = [
             ss.State('age', float, np.nan), # NaN until conceived
-            ss.State('female', bool, bernoulli(p=0.5)),
+            ss.State('female', bool, sps.bernoulli(p=0.5)),
             ss.State('debut', float),
             ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
             ss.State('alive', bool, True),  # Time index for death
@@ -191,17 +191,24 @@ class People(BasePeople):
         self.networks = ss.Networks(networks)
 
         # Set initial age distribution - likely move this somewhere else later
-        self.age_data_dist = self.get_age_dist(age_data)
+        self.age_data = age_data
+        self.age_dist_gen = sps.uniform()  # Store a uniform distribution for generating ages
 
         return
 
-    @staticmethod
-    def get_age_dist(age_data):
+    def get_age_dist(self):
         """ Return an age distribution based on provided data """
-        if age_data is None:
-            return uniform(loc=0, scale=100) # low and width
-        if sc.checktype(age_data, pd.DataFrame):
-            return ss.data_dist(vals=age_data['value'].values, bins=age_data['age'].values)
+        age_draws = self.age_dist_gen.rvs(size=np.max(self.slot) + 1)
+        if self.age_data is None:
+            return age_draws * 100
+        if sc.checktype(self.age_data, pd.DataFrame):
+            bins = self.age_data['age'].values
+            vals = self.age_data['value'].values
+            bin_midpoints = bins[:-1] + np.diff(bins) / 2
+            cdf = np.cumsum(vals)
+            cdf = cdf / cdf[-1]
+            value_bins = np.searchsorted(cdf, age_draws)
+            return bin_midpoints[value_bins]
 
     def _initialize_states(self, sim=None):
         for state in self.states.values():
@@ -222,8 +229,8 @@ class People(BasePeople):
             
         # Define age (CK: why is age handled differently than sex?)
         self._initialize_states(sim=sim) # Now initialize with the sim
-        self.age[:] = self.age_data_dist.rvs(len(self))
-        
+        self.age[:] = self.get_age_dist()
+
         self.initialized = True
         return
 
@@ -322,8 +329,8 @@ class People(BasePeople):
         return self.male
 
     def init_results(self, sim):
-        sim.results += ss.Result(None, 'n_alive', sim.npts, ss.int_)
-        sim.results += ss.Result(None, 'new_deaths', sim.npts, ss.int_)
+        sim.results += ss.Result(None, 'n_alive', sim.npts, ss.int_, scale=True)
+        sim.results += ss.Result(None, 'new_deaths', sim.npts, ss.int_, scale=True)
         return
 
     def update_results(self, sim):

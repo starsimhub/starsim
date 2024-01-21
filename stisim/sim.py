@@ -88,9 +88,9 @@ class Sim(sc.prettyobj):
 
         # Initialize the core sim components
         self.rng_container.initialize(self.pars['rand_seed'] + 2) # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rng_container
-        self.init_people(popdict=popdict, reset=reset, **kwargs)  # Create all the people (the heaviest step)
-        self.init_networks()
+        self.init_people(reset=reset, **kwargs)  # Create all the people (the heaviest step)
         self.init_demographics()
+        self.init_networks()
         self.init_diseases()
         self.init_connectors()
         self.init_interventions()
@@ -175,13 +175,12 @@ class Sim(sc.prettyobj):
         self.tivec = np.arange(self.npts)
         return
 
-    def init_people(self, popdict=None, reset=False, verbose=None, **kwargs):
+    def init_people(self, reset=False, verbose=None, **kwargs):
         """
         Initialize people within the sim
         Sometimes the people are provided, in which case this just adds a few sim properties to them.
         Other time people are not provided and this method makes them.
         Args:
-            popdict         (any):  pre-generated people of various formats.
             reset           (bool): whether to regenerate the people even if they already exist
             verbose         (int):  detail to print
             kwargs          (dict): passed to ss.make_people()
@@ -201,21 +200,20 @@ class Sim(sc.prettyobj):
             self.people = ss.People(n=self.pars['n_agents'], **kwargs)  # This just assigns UIDs and length
 
         # If a popdict has not been supplied, we can make one from location data
-        if popdict is None:
-            if self.pars['location'] is not None:
-                # Check where to get total_pop from
-                if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
-                    errormsg = 'You can either define total_pop explicitly or via the location, but not both'
-                    raise ValueError(errormsg)
-                total_pop, popdict = ss.make_popdict(n=self.pars['n_agents'], location=self.pars['location'], verbose=self.pars['verbose'])
+        if self.pars['location'] is not None:
+            # Check where to get total_pop from
+            if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
+                errormsg = 'You can either define total_pop explicitly or via the location, but not both'
+                raise ValueError(errormsg)
+
+        else:
+            if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
+                total_pop = self.pars['total_pop']
             else:
-                if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
-                    total_pop = self.pars['total_pop']
+                if self.pars['pop_scale'] is not None:
+                    total_pop = self.pars['pop_scale'] * self.pars['n_agents']
                 else:
-                    if self.pars['pop_scale'] is not None:
-                        total_pop = self.pars['pop_scale'] * self.pars['n_agents']
-                    else:
-                        total_pop = self.pars['n_agents']
+                    total_pop = self.pars['n_agents']
 
         self.pars['total_pop'] = total_pop
         if self.pars['pop_scale'] is None:
@@ -458,6 +456,11 @@ class Sim(sc.prettyobj):
             # Because the results are rescaled in-place, finalizing the sim cannot be run more than once or
             # otherwise the scale factor will be applied multiple times
             raise AlreadyRunError('Simulation has already been finalized')
+
+        # Scale the results
+        for reskey, res in self.results.items():
+            if isinstance(res, ss.Result) and res.scale:
+                self.results[reskey] = self.results[reskey]*self.pars.pop_scale
 
         for module in self.modules:
             module.finalize(self)
