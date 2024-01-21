@@ -251,7 +251,7 @@ class Pregnancy(DemographicModule):
             'rel_fertility': 1,
             'maternal_death_rate': 0,
             'sex_ratio': 0.5,       # Ratio of babies born female
-            'units': 1e-3,             # ???
+            'units': 1e-3,          # Assumes fertility rates are per 1000. If using percentages, switch this to 1
         }, self.pars)
 
         # Process metadata. Defaults here are the labels used by UN data
