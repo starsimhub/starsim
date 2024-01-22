@@ -1,4 +1,4 @@
-name: STIsim CI tests
+name: Starsim CI tests
 on: [pull_request]
 
 jobs:
