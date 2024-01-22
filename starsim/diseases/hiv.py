@@ -4,7 +4,7 @@ Define default HIV disease module and related interventions
 
 import numpy as np
 import sciris as sc
-import stisim as ss
+import starsim as ss
 from .disease import STI
 import scipy.stats as sps
 

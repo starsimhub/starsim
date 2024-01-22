@@ -3,7 +3,7 @@ Define pregnancy, deaths, migration, etc.
 """
 
 import numpy as np
-import stisim as ss
+import starsim as ss
 import sciris as sc
 import pandas as pd
 import scipy.stats as sps

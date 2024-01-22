@@ -1,5 +1,5 @@
 """
-Define options for STIsim.
+Define options for Starsim.
 All options should be set using set() or directly, e.g.::
 
     ss.options(verbose=False)
@@ -16,7 +16,7 @@ __all__ = ['options', 'float_', 'int_']
 # Not public to avoid confusion with ss.options
 class Options(sc.objdict):
     """
-    Set options for STIsim.
+    Set options for Starsim.
 
     Use ``ss.options.set('defaults')`` to reset all values to default, or ``ss.options.set(dpi='default')``
     to reset one parameter to default. See ``ss.options.help(detailed=True)`` for
@@ -48,7 +48,7 @@ class Options(sc.objdict):
     @staticmethod
     def get_orig_options():
         """
-        Set the default options for STIsim -- not to be called by the user, use
+        Set the default options for Starsim -- not to be called by the user, use
         ``ss.options.set('defaults')`` instead.
         """
 
@@ -63,16 +63,16 @@ class Options(sc.objdict):
         options.multirng = False
 
         optdesc.verbose = 'Set default level of verbosity (i.e. logging detail): e.g., 0.1 is an update every 10 simulated timesteps.'
-        options.verbose = float(os.getenv('STISIM_VERBOSE', 0.1))
+        options.verbose = float(os.getenv('STARSIM_VERBOSE', 0.1))
 
         optdesc.warnings = 'How warnings are handled: options are "warn" (default), "print", and "error"'
-        options.warnings = str(os.getenv('STISIM_WARNINGS', 'warn'))
+        options.warnings = str(os.getenv('STARSIM_WARNINGS', 'warn'))
 
         optdesc.sep = 'Set thousands seperator for text output'
-        options.sep = str(os.getenv('STISIM_SEP', ','))
+        options.sep = str(os.getenv('STARSIM_SEP', ','))
 
         optdesc.precision = 'Set arithmetic precision -- 32-bit by default for efficiency'
-        options.precision = int(os.getenv('STISIM_PRECISION', 32))
+        options.precision = int(os.getenv('STARSIM_PRECISION', 32))
 
         return optdesc, options
 
@@ -84,7 +84,7 @@ class Options(sc.objdict):
     def __repr__(self):
         """ Brief representation """
         output = sc.objectid(self)
-        output += 'STIsim options (see also ss.options.disp()):\n'
+        output += 'Starsim options (see also ss.options.disp()):\n'
         output += sc.pp(self.to_dict(), output=True)
         return output
 
@@ -108,7 +108,7 @@ class Options(sc.objdict):
 
     def disp(self):
         """ Detailed representation """
-        output = 'STIsim options (see also ss.options.help()):\n'
+        output = 'Starsim options (see also ss.options.help()):\n'
         keylen = 10  # Maximum key length  -- "interactive"
         for k, v in self.items():
             keystr = sc.colorize(f'  {k:>{keylen}s}: ', fg='cyan', output=True)

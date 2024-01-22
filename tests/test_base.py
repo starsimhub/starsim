@@ -5,7 +5,7 @@ Test objects from base.py
 # %% Imports and settings
 import sciris as sc
 import numpy as np
-import stisim as ss
+import starsim as ss
 import matplotlib.pyplot as plt
 import scipy.stats as sps
 

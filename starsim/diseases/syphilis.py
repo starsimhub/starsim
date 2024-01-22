@@ -8,7 +8,7 @@ import pandas as pd
 from sciris import randround as rr
 import scipy.stats as sps
 
-import stisim as ss
+import starsim as ss
 from .disease import STI
 
 __all__ = ['Syphilis']

@@ -2,7 +2,7 @@
 Define interventions
 """
 
-import stisim as ss
+import starsim as ss
 import sciris as sc
 import numpy as np
 import pandas as pd

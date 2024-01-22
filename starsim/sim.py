@@ -5,7 +5,7 @@ Define core Sim classes
 # Imports
 import numpy as np
 import sciris as sc
-import stisim as ss
+import starsim as ss
 import itertools
 import numba as nb
 
@@ -134,7 +134,7 @@ class Sim(sc.prettyobj):
         # Handle n_agents
         if self.people is not None:
             self.pars['n_agents'] = len(self.people)
-        #elif self.popdict is not None: # STIsim does not currenlty support self.popdict
+        #elif self.popdict is not None: # Starsim does not currenlty support self.popdict
             #self.pars['n_agents'] = len(self.popdict)
         elif self.pars['n_agents'] is not None:
             self.pars['n_agents'] = int(self.pars['n_agents'])
