@@ -285,7 +285,6 @@ class DynamicNetwork(Network):
 
         # Non-alive agents are removed
         active = (self.contacts.dur > 0) & people.alive[self.contacts.p1] & people.alive[self.contacts.p2]
-
         self.contacts.p1 = self.contacts.p1[active]
         self.contacts.p2 = self.contacts.p2[active]
         self.contacts.beta = self.contacts.beta[active]

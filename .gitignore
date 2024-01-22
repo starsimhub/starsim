@@ -1,4 +1,4 @@
-# HPVsim-generated files
+# Starsim-generated files
 *.obj
 files/
 tests/figs/*
@@ -147,4 +147,3 @@ dmypy.json
 
 # Node.js and NPM
 node_modules
-

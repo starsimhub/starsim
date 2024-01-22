@@ -17,11 +17,9 @@ def make_syph_sim():
     syph.pars['seed_infections'] = sps.bernoulli(p=0.1)
 
     # Make demographic modules
-    fertility_rates = {'fertility_rates': pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')}
-    pregnancy = ss.Pregnancy(fertility_rates)
-    death_rates = dict(
-        death_rates=pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv'),
-    )
+    fertility_rates = {'fertility_rate': pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')}
+    pregnancy = ss.Pregnancy(pars=fertility_rates)
+    death_rates = {'death_rate': pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')}
     death = ss.background_deaths(death_rates)
 
     # Make people and networks
@@ -84,24 +82,19 @@ def test_syph():
     sim.run()
 
     # Check plots
-    burnin = 0
+    burnin = 10
     pi = int(burnin/sim.dt)
-    plt.figure()
-    plt.plot(sim.yearvec[pi:], sim.results.syphilis.new_infections[pi:])
-    plt.title('Syphilis infections')
-    plt.show()
 
     plt.figure()
-    n_alive = sim.results.n_alive[pi:]
     plt.stackplot(
         sim.yearvec[pi:],
-        sim.results.syphilis.n_susceptible[pi:]/n_alive,
-        sim.results.syphilis.n_congenital[pi:]/n_alive,
-        sim.results.syphilis.n_exposed[pi:]/n_alive,
-        sim.results.syphilis.n_primary[pi:]/n_alive,
-        sim.results.syphilis.n_secondary[pi:]/n_alive,
-        (sim.results.syphilis.n_latent_temp[pi:]+sim.results.syphilis.n_latent_long[pi:])/n_alive,
-        sim.results.syphilis.n_tertiary[pi:]/n_alive,
+        sim.results.syphilis.n_susceptible[pi:],
+        sim.results.syphilis.n_congenital[pi:],
+        sim.results.syphilis.n_exposed[pi:],
+        sim.results.syphilis.n_primary[pi:],
+        sim.results.syphilis.n_secondary[pi:],
+        (sim.results.syphilis.n_latent_temp[pi:]+sim.results.syphilis.n_latent_long[pi:]),
+        sim.results.syphilis.n_tertiary[pi:],
     )
     plt.legend(['Susceptible', 'Congenital', 'Exposed', 'Primary', 'Secondary', 'Latent', 'Tertiary'], loc='lower right')
     plt.show()
@@ -109,52 +102,6 @@ def test_syph():
     return sim
 
 
-def test_syph_intvs():
-
-    # Interventions
-    # screen_eligible = lambda sim: sim.demographics.pregnancy.pregnant
-    screen_eligible = lambda sim: sim.people.networks.mf.active(sim.people)
-    syph_screening = ss.syph_screening(
-        product='rpr',
-        prob=0.99,
-        eligibility=screen_eligible,
-        start_year=2020,
-        label='syph_screening',
-    )
-
-    treat_eligible = lambda sim: sim.get_intervention('syph_screening').outcomes['positive']
-    bpg = ss.syph_treatment(
-        prob=0.9,
-        product='bpg',
-        eligibility=treat_eligible,
-        label='bpg'
-    )
-
-    sim_kwargs0 = make_syph_sim()
-    sim_base = ss.Sim(**sim_kwargs0)
-    sim_base.run()
-
-    sim_kwargs1 = make_syph_sim()
-    sim_intv = ss.Sim(interventions=[syph_screening, bpg], **sim_kwargs1)
-    sim_intv.run()
-
-    # Check plots
-    burnin = 10
-    pi = int(burnin/sim_base.dt)
-    plt.figure()
-    plt.plot(sim_base.yearvec[pi:], sim_base.results.syphilis.prevalence[pi:], label='Baseline')
-    plt.plot(sim_base.yearvec[pi:], sim_intv.results.syphilis.prevalence[pi:], label='S&T')
-    plt.ylim([0, 0.25])
-    plt.axvline(x=2020, color='k', ls='--')
-    plt.title('Syphilis prevalence')
-    plt.legend()
-    plt.show()
-
-    return sim_base, sim_intv
-
-
-
 if __name__ == '__main__':
 
-    sim0 = test_syph()
-    # sim_base, sim_intv = test_syph_intvs()
+    sim = test_syph()

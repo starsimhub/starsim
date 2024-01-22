@@ -205,7 +205,6 @@ class People(BasePeople):
         if sc.checktype(age_data, pd.DataFrame):
             bb = np.append(age_data['age'].values, age_data['age'].values[-1] + 1)
             vv = age_data['value'].values
-            #dist = sps.rv_histogram((vv, bb), density=False)
             return ss.ScipyHistogram((vv, bb), density=False, rng='Age distribution')
 
     def _initialize_states(self, sim=None):
@@ -230,7 +229,6 @@ class People(BasePeople):
         # Define age (CK: why is age handled differently than sex?)
         self._initialize_states(sim=sim)  # Now initialize with the sim
         self.age[:] = self.age_data_dist.rvs(size=self.uid)
-        
         self.initialized = True
         return
 

@@ -91,7 +91,6 @@ class Sim(sc.prettyobj):
         self.init_people(reset=reset, **kwargs)  # Create all the people (the heaviest step)
         self.init_demographics()
         self.init_networks()
-        self.init_demographics()
         self.init_diseases()
         self.init_connectors()
         self.init_interventions()
@@ -200,7 +199,7 @@ class Sim(sc.prettyobj):
         if self.people is None or reset:
             self.people = ss.People(n=self.pars['n_agents'], **kwargs)  # This just assigns UIDs and length
 
-        # TODO refactor
+        # If a popdict has not been supplied, we can make one from location data
         if self.pars['location'] is not None:
             # Check where to get total_pop from
             if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
@@ -208,7 +207,7 @@ class Sim(sc.prettyobj):
                 raise ValueError(errormsg)
 
         else:
-            if self.pars['total_pop'] is not None:
+            if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
                 total_pop = self.pars['total_pop']
             else:
                 if self.pars['pop_scale'] is not None:
@@ -465,13 +464,13 @@ class Sim(sc.prettyobj):
             # otherwise the scale factor will be applied multiple times
             raise AlreadyRunError('Simulation has already been finalized')
 
-        for module in self.modules:
-            module.finalize(self)
-
         # Scale the results
         for reskey, res in self.results.items():
             if isinstance(res, ss.Result) and res.scale:
                 self.results[reskey] = self.results[reskey]*self.pars.pop_scale
+
+        for module in self.modules:
+            module.finalize(self)
 
         self.summarize()
         self.results_ready = True  # Set this first so self.summary() knows to print the results

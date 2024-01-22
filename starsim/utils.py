@@ -10,6 +10,7 @@ import sciris as sc
 import starsim as ss
 import numba as nb
 import scipy.stats as sps
+import pandas as pd
 
 # What functions are externally visible -- note, this gets populated in each section below
 __all__ = []
@@ -241,118 +242,6 @@ def lognorm(mean, stdev):
     return sps.lognorm(s=s, scale=scale)
 
 
-# %% Probabilities -- mostly not jitted since performance gain is minimal
-
-__all__ += ['binomial_arr', 'binomial_filter', 'n_multinomial', 'n_poisson', 'n_neg_binomial']
-
-
-def binomial_arr(prob_arr):
-    '''
-    Binomial (Bernoulli) trials each with different probabilities.
-
-    Args:
-        prob_arr (array): array of probabilities
-
-    Returns:
-         Boolean array of which trials on the input array succeeded
-
-    **Example**::
-
-        outcomes = ss.binomial_arr([0.1, 0.1, 0.2, 0.2, 0.8, 0.8]) # Perform 6 trials with different probabilities
-    '''
-    return np.random.random(prob_arr.shape) < prob_arr
-
-
-def binomial_filter(prob, arr):
-    """
-    Binomial "filter" -- the same as n_binomial, except return
-    the elements of arr that succeeded.
-
-    Args:
-        prob (float): probability of each trial succeeding
-        arr (array): the array to be filtered
-
-    Returns:
-        Subset of array for which trials succeeded
-
-    **Example**::
-
-        inds = ss.binomial_filter(0.5, np.arange(20)**2) # Which values in the (arbitrary) array passed the coin flip
-    """
-    return arr[(np.random.random(len(arr)) < prob).nonzero()[0]]
-
-
-def binomial_arr(prob_arr):
-    """
-    Binomial (Bernoulli) trials each with different probabilities.
-
-    Args:
-        prob_arr (array): array of probabilities
-
-    Returns:
-         Boolean array of which trials on the input array succeeded
-
-    **Example**::
-
-        outcomes = ss.binomial_arr([0.1, 0.1, 0.2, 0.2, 0.8, 0.8]) # Perform 6 trials with different probabilities
-    """
-    return np.random.random(prob_arr.shape) < prob_arr
-
-
-def n_multinomial(probs, n):  # No speed gain from Numba
-    '''
-    An array of multinomial trials.
-
-    Args:
-        probs (array): probability of each outcome, which usually should sum to 1
-        n (int): number of trials
-
-    Returns:
-        Array of integer outcomes
-
-    **Example**::
-
-        outcomes = hpv.n_multinomial(np.ones(6)/6.0, 50)+1 # Return 50 die-rolls
-    '''
-    return np.searchsorted(np.cumsum(probs), np.random.random(n))
-
-
-def n_poisson(rate, n):
-    """
-    An array of Poisson trials.
-
-    Args:
-        rate (float): the rate of the Poisson process (mean)
-        n (int): number of trials
-
-    **Example**::
-
-        outcomes = ss.n_poisson(100, 20) # 20 Poisson trials with mean 100
-    """
-    return np.random.poisson(rate, n)
-
-
-def n_neg_binomial(rate, dispersion, n, step=1):  # Numba not used due to incompatible implementation
-    """
-    An array of negative binomial trials. See ss.sample() for more explanation.
-
-    Args:
-        rate (float): the rate of the process (mean, same as Poisson)
-        dispersion (float):  dispersion parameter; lower is more dispersion, i.e. 0 = infinite, ∞ = Poisson
-        n (int): number of trials
-        step (float): the step size to use if non-integer outputs are desired
-
-    **Example**::
-
-        outcomes = ss.n_neg_binomial(100, 1, 50) # 50 negative binomial trials with mean 100 and dispersion roughly equal to mean (large-mean limit)
-        outcomes = ss.n_neg_binomial(1, 100, 20) # 20 negative binomial trials with mean 1 and dispersion still roughly equal to mean (approximately Poisson)
-    """
-    nbn_n = dispersion
-    nbn_p = dispersion / (rate / step + dispersion)
-    samples = np.random.negative_binomial(n=nbn_n, p=nbn_p, size=n) * step
-    return samples
-
-
 # %% Simple array operations
 
 __all__ += ['true', 'false', 'defined', 'undefined']
@@ -442,3 +331,53 @@ def undefined(arr):
         inds = ss.defined(np.array([1,np.nan,0,np.nan,1,0,1]))
     """
     return np.isnan(arr).nonzero()[-1]
+
+
+# %% Data cleaning and processing
+
+__all__ += ['standardize_data']
+
+
+def standardize_data(data=None, metadata=None):
+
+    if isinstance(data, pd.DataFrame):
+        if not set(metadata.data_cols.values()).issubset(data.columns):
+            errormsg = 'Please ensure the columns of the data match the values in metadata.data_cols.'
+            raise ValueError(errormsg)
+        df = data
+
+    elif isinstance(data, pd.Series):
+        if (data.index < 120).all():  # Assume index is age bins
+            df = pd.DataFrame({
+                metadata.data_cols['year']: 2000,
+                metadata.data_cols['age']: data.index.values,
+                metadata.data_cols['value']: data.values,
+            })
+        elif (data.index > 1900).all():  # Assume index year
+            df = pd.DataFrame({
+                metadata.data_cols['year']: data.index.values,
+                metadata.data_cols['age']: 0,
+                metadata.data_cols['value']: data.values,
+            })
+        else:
+            errormsg = 'Could not understand index of data series: should be age (all values less than 120) or year (all values greater than 1900).'
+            raise ValueError(errormsg)
+
+        if metadata.data_cols.get('sex'):
+            df = pd.concat([df, df])
+            df[metadata.data_cols['sex']] = np.repeat(list(metadata.sex_keys.values()), len(data))
+
+    elif isinstance(data, dict):
+        if not set(metadata.data_cols.values()).issubset(data.keys()):
+            errormsg = 'Please ensure the keys of the data dict match the values in metadata.data_cols.'
+            raise ValueError(errormsg)
+        df = pd.DataFrame(data)
+
+    elif sc.isnumber(data):
+        df = data  # Just return it as-is
+
+    else:
+        errormsg = f'Data type {type(data)} not understood.'
+        raise ValueError(errormsg)
+
+    return df
