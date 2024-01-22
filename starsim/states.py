@@ -2,9 +2,9 @@ import pandas as pd
 import numpy as np
 import sciris as sc
 import numba as nb
-from stisim.utils import INT_NAN
-from stisim.distributions import ScipyDistribution
-from stisim.utils import warn
+from starsim.utils import INT_NAN
+from starsim.distributions import ScipyDistribution
+from starsim.utils import warn
 from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
 from scipy.stats._distn_infrastructure import rv_frozen
 

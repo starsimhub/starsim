@@ -2,7 +2,7 @@
 Define connections between disease modules
 '''
 
-import stisim as ss
+import starsim as ss
 
 
 class Connector(ss.Module):

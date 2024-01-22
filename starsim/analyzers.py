@@ -2,7 +2,7 @@
 Define analyzers
 """
 
-import stisim as ss
+import starsim as ss
 
 
 __all__ = ['Analyzer']

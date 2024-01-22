@@ -3,7 +3,7 @@ Test distributions
 """
 
 # %% Imports and settings
-import stisim as ss
+import starsim as ss
 import matplotlib.pyplot as plt
 import numpy as np
 

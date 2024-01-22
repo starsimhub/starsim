@@ -1,6 +1,6 @@
 """Random networks"""
 
-import stisim as ss
+import starsim as ss
 import numpy as np
 import numba as nb
 from .networks import Network

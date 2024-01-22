@@ -1,6 +1,6 @@
 import hashlib
 import numpy as np
-import stisim as ss
+import starsim as ss
 
 __all__ = ['RNGContainer', 'MultiRNG', 'SingleRNG', 'RNG']
 
@@ -106,7 +106,7 @@ class MultiRNG(np.random.Generator):
     rng and ultimately ask for randomly distributed random numbers for agents
     with UIDs 1 and 4:
 
-    >>> import stisim as ss
+    >>> import starsim as ss
     >>> import numpy as np
     >>> rng = ss.MultiRNG('Test') # The hashed name determines the seed offset.
     >>> rng.initialize(container=None, slots=5) # In practice, slots will be sim.people.slots. When scalar (for testing), an np.arange will be used.

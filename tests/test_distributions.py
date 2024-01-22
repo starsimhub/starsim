@@ -5,10 +5,10 @@ Test Distributions from distributions.py
 # %% Imports and settings
 import numpy as np
 import sciris as sc
-import stisim as ss
-from stisim.random import RNG
+import starsim as ss
+from starsim.random import RNG
 import scipy.stats as sps
-from stisim.distributions import ScipyDistribution
+from starsim.distributions import ScipyDistribution
 import pytest
 import matplotlib.pyplot as plt
 

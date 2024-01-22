@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 # Get version
 cwd = os.path.abspath(os.path.dirname(__file__))
-versionpath = os.path.join(cwd, 'stisim', 'version.py')
+versionpath = os.path.join(cwd, 'starsim', 'version.py')
 version = runpy.run_path(versionpath)['__version__']
 
 # Get the documentation
@@ -25,13 +25,13 @@ CLASSIFIERS = [
 ]
 
 setup(
-    name="stisim",
+    name="starsim",
     version=version,
-    author="Romesh Abeysuriya, Robyn Stuart, Jamie Cohen, Cliff Kerr, Daniel Klein",
-    description="Sexually Transmitted Infections Simulator (STIsim)",
+    author="Robyn Stuart, Romesh Abeysuriya, Jamie Cohen, Cliff Kerr, Daniel Klein",
+    description="Starsim",
     long_description=long_description,
     long_description_content_type="text/x-rst",
-    keywords=["agent-based model", "simulation"],
+    keywords=["agent-based model", "simulation", "disease", "epidemiology"],
     platforms=["OS Independent"],
     classifiers=CLASSIFIERS,
     packages=find_packages(),

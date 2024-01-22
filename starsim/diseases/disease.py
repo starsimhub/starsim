@@ -4,7 +4,7 @@ Base classes for diseases
 
 import numpy as np
 import sciris as sc
-import stisim as ss
+import starsim as ss
 import scipy.stats as sps
 import networkx as nx
 from operator import itemgetter

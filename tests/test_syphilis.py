@@ -4,7 +4,7 @@ Run syphilis
 
 # %% Imports and settings
 import numpy as np
-import stisim as ss
+import starsim as ss
 import pandas as pd
 import matplotlib.pyplot as plt
 import scipy.stats as sps
@@ -24,7 +24,7 @@ def make_syph_sim(dt=1/12):
 
     # Make people and networks
     ss.set_seed(1)
-    ppl = ss.People(5000, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
+    ppl = ss.People(500, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv')) # CK: temporary small pop size
     mf = ss.mf(
         pars=dict(duration_dist=ss.lognorm(mean=1/24, stdev=0.5))
     )

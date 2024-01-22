@@ -5,9 +5,9 @@ Distribution support extending scipy with two key functionalities:
 """
 
 import numpy as np
-from stisim.utils import INT_NAN
-from stisim.random import SingleRNG, MultiRNG
-from stisim import options, int_
+from starsim.utils import INT_NAN
+from starsim.random import SingleRNG, MultiRNG
+from starsim import options, int_
 from copy import deepcopy
 from scipy.stats._discrete_distns import bernoulli_gen
 from scipy.stats import rv_histogram

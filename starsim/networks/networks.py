@@ -5,7 +5,7 @@ Networks that connect people within a population
 # %% Imports
 import numpy as np
 import sciris as sc
-import stisim as ss
+import starsim as ss
 import scipy.optimize as spo
 import scipy.stats as sps
 import scipy.spatial as spsp
@@ -888,18 +888,18 @@ class maternal(Network):
 class static(Network):
     """
     A network class of static partnerships converted from a networkx graph. There's no formation of new partnerships
-    and initialized partnerships only end when one of the partners dies. The networkx graph can be created outside STIsim
-    if population size is known. Or the graph can be created by passing a networkx generator function to STIsim.
+    and initialized partnerships only end when one of the partners dies. The networkx graph can be created outside Starsim
+    if population size is known. Or the graph can be created by passing a networkx generator function to Starsim.
 
     **Examples**::
 
-    # Generate a networkx graph and pass to STIsim
+    # Generate a networkx graph and pass to Starsim
     import networkx as nx
-    import stisim as ss
+    import starsim as ss
     g = nx.scale_free_graph(n=10000)
     ss.static(graph=g)
 
-    # Pass a networkx graph generator to STIsim
+    # Pass a networkx graph generator to Starsim
     ss.static(graph=nx.erdos_renyi_graph, p=0.0001)
 
     """

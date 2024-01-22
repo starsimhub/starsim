@@ -1,6 +1,6 @@
 import sciris as sc
 import pylab as pl
-import stisim as ss
+import starsim as ss
 
 do_plot = False
 

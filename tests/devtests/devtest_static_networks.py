@@ -3,7 +3,7 @@ Static networks from networkx
 """
 
 # %% Imports and settings
-import stisim as ss
+import starsim as ss
 import matplotlib.pyplot as plt
 import networkx as nx
 

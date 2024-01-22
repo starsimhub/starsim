@@ -2,7 +2,7 @@
 Experimenting with a sexual orentation class
 """
 
-import stisim as ss
+import starsim as ss
 import numpy as np
 
 #########################################################

@@ -5,7 +5,7 @@ the baseline results.
 
 import numpy as np
 import sciris as sc
-import stisim as ss
+import starsim as ss
 
 do_plot = 1
 do_save = 0

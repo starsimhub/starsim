@@ -3,7 +3,7 @@ Define default gonorrhea disease module and related interventions
 """
 
 import numpy as np
-import stisim as ss
+import starsim as ss
 from .disease import STI
 import scipy.stats as sps
 

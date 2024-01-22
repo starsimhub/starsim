@@ -3,7 +3,7 @@ Set parameters
 """
 
 import sciris as sc
-import stisim as ss
+import starsim as ss
 
 
 __all__ = ['Parameters', 'make_pars']
