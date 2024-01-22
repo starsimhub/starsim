@@ -1,5 +1,5 @@
 Starsim
-======
+=======
 
 Starsim is a agent-based model of disease transmission. It can be used for simulating STIs (including co-transmission of HIV, HPV, chlamydia, gonorrhea, and syphilis), respiratory infections (including tuberculosis), and other diseases (such as Ebola).
 
@@ -9,7 +9,7 @@ Starsim is a agent-based model of disease transmission. It can be used for simul
 Installation
 ------------
 
-To install, clone this repository, then run ``pip install -e .`` (don't forget the dot!) in this folder to install ``starsim`` and its dependencies. This will make ``starsim `` available on the Python path.
+To install, clone this repository, then run ``pip install -e .`` (don't forget the dot!) in this folder to install ``starsim`` and its dependencies. This will make ``starsim`` available on the Python path.
 
 
 Usage and documentation

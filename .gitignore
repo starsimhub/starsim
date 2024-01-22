@@ -86,7 +86,8 @@ instance/
 # Sphinx documentation
 docs/_build/
 docs/modules.rst
-docs/hpvsim.*.rst
+docs/starsim.*.rst
+docs/api/_autosummary/
 
 # PyBuilder
 target/
