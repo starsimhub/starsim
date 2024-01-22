@@ -8,6 +8,13 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :local:
    :depth: 1
 
+Version 0.1.5 (2024-01-23)
+--------------------------
+- Adds template interventions and products for diagnostics and treatment
+- Adds syphilis screening & treatment interventions
+- *GitHub info*: PR `210 <https://github.com/amath-idm/stisim/pull/210>`_
+
+
 Version 0.1.4 (2024-01-23)
 --------------------------
 - Adds a syphilis module
