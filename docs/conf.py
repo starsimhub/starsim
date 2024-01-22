@@ -4,7 +4,7 @@
 
 import os
 import sys
-import covasim as cv
+import starsim as cv
 
 # Set environment
 os.environ['SPHINX_BUILD'] = 'True' # This is used so cv.options.set('jupyter') doesn't reset the Matplotlib renderer
@@ -13,8 +13,8 @@ on_rtd = os.environ.get('READTHEDOCS') == 'True'
 
 # -- Project information -----------------------------------------------------
 
-project = 'Covasim'
-copyright = f'2020 - 2023, Bill & Melinda Gates Foundation. All rights reserved.\nThese docs were built for Covasim version {cv.__version__}.\n'
+project = 'Starsim'
+copyright = f'2020 - 2023, Bill & Melinda Gates Foundation. All rights reserved.\nThese docs were built for Starsim version {cv.__version__}.\n'
 author = 'Institute for Disease Modeling'
 
 # The short X.Y version
@@ -55,7 +55,7 @@ templates_path = ["_templates"]
 
 # Syntax highlighting style
 pygments_style = "sphinx"
-modindex_common_prefix = ["covasim."]
+modindex_common_prefix = ["starsim."]
 
 # List of patterns, relative to source directory, to exclude
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**.ipynb_checkpoints"]
@@ -72,10 +72,10 @@ html_theme_options = {
     "navigation_depth": 3,
     "show_prev_next": True,
     "icon_links": [
-        {"name": "Web", "url": "https://covasim.org", "icon": "fas fa-home"},
+        {"name": "Web", "url": "https://starsim.org", "icon": "fas fa-home"},
         {
             "name": "GitHub",
-            "url": "https://github.com/institutefordiseasemodeling/covasim",
+            "url": "https://github.com/institutefordiseasemodeling/starsim",
             "icon": "fab fa-github-square",
         },
     ],
@@ -89,9 +89,9 @@ html_sidebars = {
 html_logo = "images/IDM_white.png"
 html_favicon = "images/favicon.ico"
 html_static_path = ['_static']
-html_baseurl = "https://docs.idmod.org/projects/covasim/en/latest"
+html_baseurl = "https://docs.idmod.org/projects/starsim/en/latest"
 html_context = {
-    'rtd_url': 'https://docs.idmod.org/projects/covasim/en/latest',
+    'rtd_url': 'https://docs.idmod.org/projects/starsim/en/latest',
     "versions_dropdown": {
         "latest": "devel (latest)",
         "stable": "current (stable)",
@@ -108,7 +108,7 @@ html_last_updated_fmt = '%Y-%b-%d'
 html_show_sourcelink = True
 html_show_sphinx = False
 html_copy_source = False
-htmlhelp_basename = 'Covasim'
+htmlhelp_basename = 'Starsim'
 
 # Add customizations
 def setup(app):
@@ -123,7 +123,7 @@ print(f'\n\nBuilding Jupyter notebooks with build option: {nb_ex}\n\n')
 nbsphinx_execute = nb_ex
 
 # OpenSearch options
-html_use_opensearch = 'docs.idmod.org/projects/covasim/en/latest'
+html_use_opensearch = 'docs.idmod.org/projects/starsim/en/latest'
 
 # -- RTD Sphinx search for searching across the entire domain, default child -------------
 if os.environ.get('READTHEDOCS') == 'True':
