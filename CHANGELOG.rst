@@ -8,6 +8,13 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :local:
    :depth: 1
 
+
+Version 0.1.5 (2024-01-23)
+--------------------------
+- Renamed ``stisim`` to ``starsim``.
+- *GitHub info*: PR `200 <https://github.com/amath-idm/stisim/pull/200>`_
+
+
 Version 0.1.4 (2024-01-23)
 --------------------------
 - Adds a syphilis module
@@ -39,18 +46,6 @@ Version 0.1.0 (2023-12-10)
 - Optionally use multiple random number streams and other tricks to maintain coherence between simulations
 - Adding functionality to convert death rate data to a callable parameter within a SciPy distribution
 - *GitHub info*: PRs `170 <https://github.com/amath-idm/stisim/pull/170>`_ and `202 <https://github.com/amath-idm/stisim/pull/202>`_
-
-
-Version 0.1.1 (2024-01-08)
---------------------------
-- Renamed ``stisim`` to ``starsim``.
-- *GitHub info*: PR `200 <https://github.com/amath-idm/stisim/pull/200>`_
-
-
-Version 0.1.0 (2023-12-10)
---------------------------
-- Implemented stream-safe multiple random number generators.
-- *GitHub info*: PR `170 <https://github.com/amath-idm/stisim/pull/170>`_
 
 
 Version 0.0.8 (2023-10-04)
