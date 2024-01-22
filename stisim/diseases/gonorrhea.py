@@ -66,27 +66,27 @@ class Gonorrhea(STI):
         super(Gonorrhea, self).make_new_cases(sim)
         return
 
-    def set_prognoses(self, sim, uids, from_uids=None):
+    def set_prognoses(self, sim, target_uids, source_uids=None):
         """
         Natural history of gonorrhea for adult infection
         """
-        super().set_prognoses(sim, uids, from_uids)
+        super().set_prognoses(sim, target_uids, source_uids)
 
         # Set infection status
-        self.susceptible[uids] = False
-        self.infected[uids] = True
-        self.ti_infected[uids] = sim.ti
+        self.susceptible[target_uids] = False
+        self.infected[target_uids] = True
+        self.ti_infected[target_uids] = sim.ti
 
         # Set infection status
-        symp_uids = self.pars.p_symp.filter(uids)
+        symp_uids = self.pars.p_symp.filter(target_uids)
         self.symptomatic[symp_uids] = True
 
         # Set natural clearance
-        clear_uids = self.pars.p_clear.filter(uids)
+        clear_uids = self.pars.p_clear.filter(target_uids)
         dur = sim.ti + self.pars['dur_inf_in_days'].rvs(clear_uids)/365/sim.pars.dt # Convert from days to years and then adjust for dt
         self.ti_clearance[clear_uids] = dur
 
         return
 
-    def set_congenital(self, sim, uids):
+    def set_congenital(self, sim, target_uids, source_uids=None):
         pass

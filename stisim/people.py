@@ -191,24 +191,21 @@ class People(BasePeople):
         self.networks = ss.Networks(networks)
 
         # Set initial age distribution - likely move this somewhere else later
-        self.age_data = age_data
-        self.age_dist_gen = sps.uniform()  # Store a uniform distribution for generating ages
+        self.age_data_dist = self.get_age_dist(age_data)
 
         return
 
-    def get_age_dist(self):
+    @staticmethod
+    def get_age_dist(age_data):
         """ Return an age distribution based on provided data """
-        age_draws = self.age_dist_gen.rvs(size=np.max(self.slot) + 1)
-        if self.age_data is None:
-            return age_draws * 100
-        if sc.checktype(self.age_data, pd.DataFrame):
-            bins = self.age_data['age'].values
-            vals = self.age_data['value'].values
-            bin_midpoints = bins[:-1] + np.diff(bins) / 2
-            cdf = np.cumsum(vals)
-            cdf = cdf / cdf[-1]
-            value_bins = np.searchsorted(cdf, age_draws)
-            return bin_midpoints[value_bins]
+        if age_data is None:
+            dist = sps.uniform(loc=0, scale=100)  # loc and width
+            return ss.ScipyDistribution(dist, 'Age distribution')
+
+        if sc.checktype(age_data, pd.DataFrame):
+            bb = np.append(age_data['age'].values, age_data['age'].values[-1] + 1)
+            vv = age_data['value'].values
+            return ss.ScipyHistogram((vv, bb), density=False, rng='Age distribution')
 
     def _initialize_states(self, sim=None):
         for state in self.states.values():
@@ -226,11 +223,12 @@ class People(BasePeople):
         # Initialize all RNGs (noting that includes those that are declared in child classes)
         for rng in self.rngs:
             rng.initialize(sim.rng_container, self.slot)
+
+        self.age_data_dist.initialize(sim, self)
             
         # Define age (CK: why is age handled differently than sex?)
-        self._initialize_states(sim=sim) # Now initialize with the sim
-        self.age[:] = self.get_age_dist()
-
+        self._initialize_states(sim=sim)  # Now initialize with the sim
+        self.age[:] = self.age_data_dist.rvs(size=self.uid)
         self.initialized = True
         return
 

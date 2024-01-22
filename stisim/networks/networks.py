@@ -285,7 +285,6 @@ class DynamicNetwork(Network):
 
         # Non-alive agents are removed
         active = (self.contacts.dur > 0) & people.alive[self.contacts.p1] & people.alive[self.contacts.p2]
-
         self.contacts.p1 = self.contacts.p1[active]
         self.contacts.p2 = self.contacts.p2[active]
         self.contacts.beta = self.contacts.beta[active]
@@ -338,12 +337,8 @@ class mf(SexualNetwork, DynamicNetwork):
     """
 
     def __init__(self, pars=None, key_dict=None):
-        desired_mean = 15
-        desired_std = 15
-        mu = np.log(desired_mean**2 / np.sqrt(desired_mean**2 + desired_std**2))
-        sigma = np.sqrt(np.log(1 + desired_std**2 / desired_mean**2))
         pars = ss.omerge({
-            'duration_dist': sps.lognorm(s=sigma, scale=np.exp(mu)), # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+            'duration_dist': ss.lognorm(mean=15, stdev=15), # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             'participation_dist': sps.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             'debut_dist': sps.norm(loc=16, scale=2),  # Age of debut can vary by using callable parameter values
             'rel_part_rates': 1.0,
@@ -362,27 +357,20 @@ class mf(SexualNetwork, DynamicNetwork):
 
     def set_network_states(self, people, upper_age=None):
         """ Set network states including age of entry into network and participation rates """
-        self.set_debut(people, upper_age) # Debut before participation!
-        self.set_participation(people, upper_age)
-        return
+        self.set_debut(people, upper_age=upper_age)
+        self.set_participation(people, upper_age=upper_age)
 
     def set_participation(self, people, upper_age=None):
-        if upper_age is None:
-            uids = people.uid
-        else:
-            uids = people.uid[(people.age < upper_age)]
-
         # Set people who will participate in the network at some point
+        year = people.year
+        if upper_age is None: uids = people.uid
+        else: uids = people.uid[(people.age < upper_age)]
         self.participant[uids] = self.pars.participation_dist.rvs(uids)
-        return
 
     def set_debut(self, people, upper_age=None):
         # Set debut age
-        if upper_age is None:
-            uids = people.uid
-        else:
-            uids = people.uid[(people.age < upper_age)]
-
+        if upper_age is None: uids = people.uid
+        else: uids = people.uid[(people.age < upper_age)]
         self.debut[uids] = self.pars.debut_dist.rvs(uids)
         uids_to_update = uids[np.isnan(people.debut[uids])]
         people.debut[uids_to_update] = self.debut[uids_to_update]
@@ -409,7 +397,7 @@ class mf(SexualNetwork, DynamicNetwork):
             # No duplicates and user has enabled multirng, so use slotting based on p1
             dur_vals = self.pars.duration_dist.rvs(p1)
         else:
-            dur_vals = self.pars.duration_dist.rvs(len(p1)) # Just use len(p1) to say how many draws are needed
+            dur_vals = self.pars.duration_dist.rvs(len(p1))  # Just use len(p1) to say how many draws are needed
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])

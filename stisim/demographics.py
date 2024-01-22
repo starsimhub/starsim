@@ -236,13 +236,14 @@ class Pregnancy(DemographicModule):
 
         # Other, e.g. postpartum, on contraception...
         self.infertile = ss.State('infertile', bool, False)  # Applies to girls and women outside the fertility window
-        self.susceptible = ss.State('susceptible', bool, True)  # Applies to girls and women inside the fertility window - needs renaming
+        self.susceptible = ss.State('fecund', bool, True)  # Applies to girls and women inside the fertility window
         self.pregnant = ss.State('pregnant', bool, False)  # Currently pregnant
         self.postpartum = ss.State('postpartum', bool, False)  # Currently post-partum
         self.ti_pregnant = ss.State('ti_pregnant', int, ss.INT_NAN)  # Time pregnancy begins
         self.ti_delivery = ss.State('ti_delivery', int, ss.INT_NAN)  # Time of delivery
         self.ti_postpartum = ss.State('ti_postpartum', int, ss.INT_NAN)  # Time postpartum ends
         self.ti_dead = ss.State('ti_dead', int, ss.INT_NAN)  # Maternal mortality
+        self.conception_probs = ss.State('conception_probs', float, 0)
 
         self.pars = ss.omerge({
             'dur_pregnancy': 0.75,  # Make this a distribution?
@@ -351,7 +352,8 @@ class Pregnancy(DemographicModule):
         Perform all updates
         """
         self.update_states(sim)
-        self.make_pregnancies(sim)
+        conceive_uids = self.make_pregnancies(sim)
+        self.make_embryos(sim, conceive_uids)
         self.update_results(sim)
         return
 
@@ -379,7 +381,7 @@ class Pregnancy(DemographicModule):
 
     def make_pregnancies(self, sim):
         """
-        Select people to make pregnancy using incidence data
+        Select people to make pregnant using incidence data
         """
         # Abbreviate
         ppl = sim.people
@@ -388,14 +390,21 @@ class Pregnancy(DemographicModule):
         # are instead handled in the fertility_dist logic as the rates need to be adjusted
         denom_conds = ppl.female & ppl.alive
         inds_to_choose_from = ss.true(denom_conds)
-        uids = self.fertility_dist.filter(inds_to_choose_from)
+        conceive_uids = self.fertility_dist.filter(inds_to_choose_from)
 
-        # Add UIDs for the as-yet-unborn agents so that we can track prognoses and transmission patterns
-        n_unborn_agents = len(uids)
+        # Set prognoses for the pregnancies
+        if len(conceive_uids) > 0:
+            self.set_prognoses(sim, conceive_uids)
+
+        return conceive_uids
+
+    def make_embryos(self, sim, conceive_uids):
+        """ Add properties for the just-conceived """
+        n_unborn_agents = len(conceive_uids)
         if n_unborn_agents > 0:
 
             # Choose slots for the unborn agents
-            new_slots = self.choose_slots.rvs(uids)
+            new_slots = self.choose_slots.rvs(conceive_uids)
 
             # Grow the arrays and set properties for the unborn agents
             new_uids = sim.people.grow(len(new_slots))
@@ -409,14 +418,11 @@ class Pregnancy(DemographicModule):
             for lkey, layer in sim.people.networks.items():
                 if layer.vertical:  # What happens if there's more than one vertical layer?
                     durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
-                    layer.add_pairs(uids, new_uids, dur=durs)
-
-            # Set prognoses for the pregnancies
-            self.set_prognoses(sim, uids)  # Could set from_uids to network partners?
+                    layer.add_pairs(conceive_uids, new_uids, dur=durs)
 
         return
 
-    def set_prognoses(self, sim, uids, from_uids=None):
+    def set_prognoses(self, sim, uids):
         """
         Make pregnancies
         Add miscarriage/termination logic here

@@ -70,16 +70,16 @@ class HIV(STI):
         super().make_new_cases(sim)
         return
 
-    def set_prognoses(self, sim, uids, from_uids=None):
-        super().set_prognoses(sim, uids, from_uids)
+    def set_prognoses(self, sim, uids, source_uids=None):
+        super().set_prognoses(sim, uids, source_uids)
 
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = sim.ti
         return
 
-    def set_congenital(self, sim, uids):
-        return self.set_prognoses(sim, uids)  # Pass back?
+    def set_congenital(self, sim, target_uids, source_uids):
+        return self.set_prognoses(sim, target_uids, source_uids)
 
 
 # %% HIV-related interventions

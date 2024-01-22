@@ -23,7 +23,7 @@ class Module(sc.prettyobj):
         return
 
     def check_requires(self, sim):
-        for req in self.requires:
+        for req in sc.tolist(self.requires):
             if req not in [m.__class__ for m in sim.modules]:
                 raise Exception(f'{self.name} (label={self.label}) requires module {req} but the Sim did not contain a module of this type.')
         return
@@ -79,6 +79,8 @@ class Module(sc.prettyobj):
         for reskey, res in self.results.items():
             if isinstance(res, ss.Result) and res.scale:
                 self.results[reskey] = self.results[reskey]*sim.pars.pop_scale
+        return
+
     @property
     def states(self):
         """
