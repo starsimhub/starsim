@@ -28,8 +28,8 @@ def make_syph_sim(dt=1/12):
     mf = ss.mf(
         pars=dict(duration_dist=ss.lognorm(mean=1/24, stdev=0.5))
     )
-    # maternal = ss.maternal()
-    ppl.networks = ss.ndict(mf)  #, maternal)
+    maternal = ss.maternal()
+    ppl.networks = ss.ndict(mf, maternal)
 
     sim_kwargs = dict(
         dt=dt,
@@ -91,7 +91,7 @@ def test_syph(dt=1/12):
     burnin = 10
     pi = int(burnin/sim.dt)
 
-    fig, ax = plt.subplots(2, 2)
+    fig, ax = plt.subplots(3, 1)
     ax = ax.ravel()
     ax[0].stackplot(
         sim.yearvec[pi:],
@@ -108,11 +108,8 @@ def test_syph(dt=1/12):
     ax[1].plot(sim.yearvec[pi:], sim.results.syphilis.prevalence[pi:])
     ax[1].set_title('Syphilis prevalence')
 
-    ax[2].plot(sim.yearvec[pi:], sim.results.syphilis.new_infections[pi:])
-    ax[2].set_title('New infections')
-
-    ax[3].plot(sim.yearvec[pi:], sim.results.n_alive[pi:])
-    ax[3].set_title('Population')
+    ax[2].plot(sim.yearvec[pi:], sim.results.n_alive[pi:])
+    ax[2].set_title('Population')
 
     fig.tight_layout()
     plt.show()
@@ -148,7 +145,7 @@ def test_syph_intvs(dt=1/12, do_plot=False):
     # Check plots
     if do_plot:
         # Run baseline
-        sim_kwargs0 = make_syph_sim()
+        sim_kwargs0 = make_syph_sim(dt=dt)
         sim_base = ss.Sim(**sim_kwargs0)
         sim_base.run()
 
@@ -156,7 +153,7 @@ def test_syph_intvs(dt=1/12, do_plot=False):
         pi = int(burnin/sim_base.dt)
         plt.figure()
         plt.plot(sim_base.yearvec[pi:], sim_base.results.syphilis.prevalence[pi:], label='Baseline')
-        plt.plot(sim_base.yearvec[pi:], sim_intv.results.syphilis.prevalence[pi:], label='S&T')
+        plt.plot(sim_intv.yearvec[pi:], sim_intv.results.syphilis.prevalence[pi:], label='S&T')
         plt.ylim([0, 0.1])
         plt.axvline(x=2020, color='k', ls='--')
         plt.title('Syphilis prevalence')
@@ -171,7 +168,6 @@ def test_syph_intvs(dt=1/12, do_plot=False):
 
 if __name__ == '__main__':
 
-    # sim = test_syph(dt=1/12)
-    # sim = test_syph_intvs(dt=1, do_plot=False)
-    sim_base, sim_intv = test_syph_intvs(dt=1/12, do_plot=True)
+    sim = test_syph(dt=1)
+    sim_base, sim_intv = test_syph_intvs(dt=1/2, do_plot=True)
 
