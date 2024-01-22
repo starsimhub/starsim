@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import sciris as sc
-from stisim.states import State, DynamicView
+from starsim.states import State, DynamicView
 
 INT_NAN = np.iinfo(int).max  # Value to use to flag removed UIDs (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
 

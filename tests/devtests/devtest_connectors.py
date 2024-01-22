@@ -3,7 +3,7 @@ Experiment with connectors
 """
 
 # %% Imports and settings
-import stisim as ss
+import starsim as ss
 import matplotlib.pyplot as plt
 
 ng = ss.Gonorrhea()

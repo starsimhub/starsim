@@ -8,11 +8,18 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :local:
    :depth: 1
 
-Version 0.1.5 (2024-01-23)
+
+Version 0.1.6 (2024-01-23)
 --------------------------
 - Adds template interventions and products for diagnostics and treatment
 - Adds syphilis screening & treatment interventions
 - *GitHub info*: PR `210 <https://github.com/amath-idm/stisim/pull/210>`_
+
+
+Version 0.1.5 (2024-01-23)
+--------------------------
+- Renamed ``stisim`` to ``starsim``.
+- *GitHub info*: PR `200 <https://github.com/amath-idm/stisim/pull/200>`_
 
 
 Version 0.1.4 (2024-01-23)
@@ -75,7 +82,7 @@ Version 0.0.5 (2023-08-29)
 
 Version 0.0.2 (2023-06-29)
 --------------------------
-- Adds in basic *sim functionality
+- Adds in basic Starsim functionality
 - *GitHub info*: PR `17 <https://github.com/amath-idm/stisim/pull/17>`__
 
 

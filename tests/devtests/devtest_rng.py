@@ -4,7 +4,7 @@ Exploring singlerng vs multirng for a model HIV system sweeping coverage of ART.
 
 # %% Imports and settings
 import os
-import stisim as ss
+import starsim as ss
 import sciris as sc
 import pandas as pd
 import seaborn as sns

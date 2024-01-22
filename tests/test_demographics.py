@@ -3,7 +3,7 @@ Test demographic consistency
 """
 
 # %% Imports and settings
-import stisim as ss
+import starsim as ss
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np

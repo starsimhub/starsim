@@ -3,7 +3,7 @@ Network connections proof of concept
 """
 
 # %% Imports and settings
-import stisim as ss
+import starsim as ss
 import matplotlib.pyplot as plt
 
 

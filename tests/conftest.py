@@ -1,6 +1,6 @@
 # Fixtures defined in this file will be used by all tests
 
-import stisim as ss
+import starsim as ss
 import pytest
 
 # Run all tests with both single and multi RNG streams
