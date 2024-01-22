@@ -527,8 +527,8 @@ class tx(Product):
         self.diseases = df.disease.unique()
         self.health_states = df.state.unique()
         self.efficacy_dist = sps.bernoulli(p=0)
-        # TEMP
-        self.efficacy_dist = ss.ScipyDistribution(self.efficacy_dist, f'{self.name}_{self.label}_efficacy_dist')
+        # # TEMP
+        # self.efficacy_dist = ss.ScipyDistribution(self.efficacy_dist, f'{self.name}_{self.label}_efficacy_dist')
 
     def administer(self, sim, uids, return_format='dict'):
         """
