@@ -87,6 +87,7 @@ instance/
 docs/_build/
 docs/modules.rst
 docs/starsim.*.rst
+docs/api/_autosummary/
 
 # PyBuilder
 target/
