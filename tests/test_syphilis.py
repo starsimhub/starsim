@@ -8,9 +8,9 @@ import starsim as ss
 import pandas as pd
 import matplotlib.pyplot as plt
 import scipy.stats as sps
+import sciris as sc
 
-
-def make_syph_sim():
+def make_syph_sim(dt=1/12):
     """ Make a sim with syphilis - used by several subsequent tests """
     syph = ss.Syphilis()
     syph.pars['beta'] = {'mf': [0.95, 0.75], 'maternal': [0.99, 0]}
@@ -26,13 +26,13 @@ def make_syph_sim():
     ss.set_seed(1)
     ppl = ss.People(500, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv')) # CK: temporary small pop size
     mf = ss.mf(
-        pars=dict(duration_dist=ss.lognorm(mean=0.1, stdev=0.5))
+        pars=dict(duration_dist=ss.lognorm(mean=1/24, stdev=0.5))
     )
     maternal = ss.maternal()
     ppl.networks = ss.ndict(mf, maternal)
 
     sim_kwargs = dict(
-        dt=1/2, # CK: temporary long dt
+        dt=dt,
         total_pop=93963392,
         start=1990,
         n_years=40,
@@ -44,40 +44,46 @@ def make_syph_sim():
     return sim_kwargs
 
 
-def test_syph():
+class check_states(ss.Analyzer):
+    """ Analyzer to check consistency of states """
 
-    sim_kwargs = make_syph_sim()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.okay = True
+        return
 
-    class check_states(ss.Analyzer):
+    def update_results(self, sim):
+        return self.apply(sim)
 
-        def __init__(self, *args, **kwargs):
-            super().__init__(*args, **kwargs)
-            self.okay = True
-            return
+    def apply(self, sim):
+        """
+        Checks states that should be mutually exlusive and collectively exhaustive
+        """
+        sppl = sim.diseases.syphilis
 
-        def update_results(self, sim):
-            return self.apply(sim)
+        # Infection states: people must be exactly one of these
+        s1a = (sppl.susceptible | sppl.exposed | sppl.primary | sppl.secondary | sppl.latent_temp | sppl.latent_long | sppl.tertiary | sppl.congenital).all()
+        s1b = (sppl.naive | sppl.sus_not_naive | sppl.exposed | sppl.primary | sppl.secondary | sppl.latent_temp | sppl.latent_long | sppl.tertiary | sppl.congenital).all()
+        if not (s1a & s1b):
+            raise ValueError('States should be collectively exhaustive but are not.')
+        s2a = ~(sppl.susceptible & sppl.exposed & sppl.primary & sppl.secondary & sppl.latent_temp & sppl.latent_long & sppl.tertiary & sppl.congenital).any()
+        s2b = ~(sppl.naive & sppl.sus_not_naive & sppl.exposed & sppl.primary & sppl.secondary & sppl.latent_temp & sppl.latent_long & sppl.tertiary & sppl.congenital).any()
+        if not (s2a & s2b):
+            raise ValueError('States should be mutually exclusive but are not.')
+        s3 = ~(sppl.susceptible & sppl.infected).any()
+        if not s3:
+            raise ValueError('States S and I should be mutually exclusive but are not.')
 
-        def apply(self, sim):
-            """
-            Checks states that should be mutually exlusive and collectively exhaustive
-            """
-            sppl = sim.people.syphilis
+        checkall = np.array([s1a, s1b, s2a, s2b, s3])
+        if not checkall.all():
+            self.okay = False
 
-            # Infection states: people must be exactly one of these
-            s1 = (sppl.susceptible | sppl.exposed | sppl.primary | sppl.secondary | sppl.latent_temp | sppl.latent_long | sppl.tertiary | sppl.congenital).all()
-            if not s1:
-                raise ValueError('States should be collectively exhaustive but are not.')
-            s2 = ~(sppl.susceptible & sppl.exposed & sppl.primary & sppl.secondary & sppl.latent_temp & sppl.latent_long & sppl.tertiary & sppl.congenital).any()
-            if not s2:
-                raise ValueError('States should be mutually exclusive but are not.')
+        return
 
-            checkall = np.array([s1, s2])
-            if not checkall.all():
-                self.okay = False
 
-            return
+def test_syph(dt=1/12):
 
+    sim_kwargs = make_syph_sim(dt=dt)
     sim = ss.Sim(analyzers=[check_states], **sim_kwargs)
     sim.run()
 
@@ -85,10 +91,11 @@ def test_syph():
     burnin = 10
     pi = int(burnin/sim.dt)
 
-    plt.figure()
-    plt.stackplot(
+    fig, ax = plt.subplots(3, 1)
+    ax = ax.ravel()
+    ax[0].stackplot(
         sim.yearvec[pi:],
-        sim.results.syphilis.n_susceptible[pi:],
+        # sim.results.syphilis.n_susceptible[pi:],
         sim.results.syphilis.n_congenital[pi:],
         sim.results.syphilis.n_exposed[pi:],
         sim.results.syphilis.n_primary[pi:],
@@ -96,12 +103,71 @@ def test_syph():
         (sim.results.syphilis.n_latent_temp[pi:]+sim.results.syphilis.n_latent_long[pi:]),
         sim.results.syphilis.n_tertiary[pi:],
     )
-    plt.legend(['Susceptible', 'Congenital', 'Exposed', 'Primary', 'Secondary', 'Latent', 'Tertiary'], loc='lower right')
+    ax[0].legend(['Congenital', 'Exposed', 'Primary', 'Secondary', 'Latent', 'Tertiary'], loc='lower right')
+
+    ax[1].plot(sim.yearvec[pi:], sim.results.syphilis.prevalence[pi:])
+    ax[1].set_title('Syphilis prevalence')
+
+    ax[2].plot(sim.yearvec[pi:], sim.results.n_alive[pi:])
+    ax[2].set_title('Population')
+
+    fig.tight_layout()
     plt.show()
 
     return sim
 
 
+def test_syph_intvs(dt=1/12, do_plot=False):
+
+    # Interventions
+    # screen_eligible = lambda sim: sim.demographics.pregnancy.pregnant
+    screen_eligible = lambda sim: sim.people.networks.mf.active(sim.people)
+    syph_screening = ss.syph_screening(
+        product='rpr',
+        prob=0.99,
+        eligibility=screen_eligible,
+        start_year=2020,
+        label='syph_screening',
+    )
+
+    treat_eligible = lambda sim: sim.get_intervention('syph_screening').outcomes['positive']
+    bpg = ss.syph_treatment(
+        prob=0.9,
+        product='bpg',
+        eligibility=treat_eligible,
+        label='bpg'
+    )
+
+    sim_kwargs1 = make_syph_sim(dt=dt)
+    sim_intv = ss.Sim(analyzers=[check_states], interventions=[syph_screening, bpg], **sim_kwargs1)
+    sim_intv.run()
+
+    # Check plots
+    if do_plot:
+        # Run baseline
+        sim_kwargs0 = make_syph_sim(dt=dt)
+        sim_base = ss.Sim(**sim_kwargs0)
+        sim_base.run()
+
+        burnin = 10
+        pi = int(burnin/sim_base.dt)
+        plt.figure()
+        plt.plot(sim_base.yearvec[pi:], sim_base.results.syphilis.prevalence[pi:], label='Baseline')
+        plt.plot(sim_intv.yearvec[pi:], sim_intv.results.syphilis.prevalence[pi:], label='S&T')
+        plt.ylim([0, 0.1])
+        plt.axvline(x=2020, color='k', ls='--')
+        plt.title('Syphilis prevalence')
+        plt.legend()
+        plt.show()
+
+        return sim_base, sim_intv
+
+    else:
+        return sim_intv
+
+
 if __name__ == '__main__':
 
-    sim = test_syph()
+    sim = test_syph(dt=1)
+    sim_base, sim_intv = test_syph_intvs(dt=1/2, do_plot=True)
+

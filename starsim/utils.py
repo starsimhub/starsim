@@ -338,7 +338,9 @@ def undefined(arr):
 __all__ += ['standardize_data']
 
 
-def standardize_data(data=None, metadata=None):
+def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
+
+    metadata = sc.objdict(metadata)
 
     if isinstance(data, pd.DataFrame):
         if not set(metadata.data_cols.values()).issubset(data.columns):
@@ -347,21 +349,27 @@ def standardize_data(data=None, metadata=None):
         df = data
 
     elif isinstance(data, pd.Series):
-        if (data.index < 120).all():  # Assume index is age bins
-            df = pd.DataFrame({
-                metadata.data_cols['year']: 2000,
-                metadata.data_cols['age']: data.index.values,
-                metadata.data_cols['value']: data.values,
-            })
-        elif (data.index > 1900).all():  # Assume index year
+        if metadata.data_cols.get('age'):
+            if (data.index <= max_age).all():  # Assume index is age bins
+                df = pd.DataFrame({
+                    metadata.data_cols['year']: 2000,
+                    metadata.data_cols['age']: data.index.values,
+                    metadata.data_cols['value']: data.values,
+                })
+            elif (data.index >= min_year).all():  # Assume index year
+                df = pd.DataFrame({
+                    metadata.data_cols['year']: data.index.values,
+                    metadata.data_cols['age']: 0,
+                    metadata.data_cols['value']: data.values,
+                })
+            else:
+                errormsg = 'Could not understand index of data series: should be age (all values less than 120) or year (all values greater than 1900).'
+                raise ValueError(errormsg)
+        else:
             df = pd.DataFrame({
                 metadata.data_cols['year']: data.index.values,
-                metadata.data_cols['age']: 0,
                 metadata.data_cols['value']: data.values,
             })
-        else:
-            errormsg = 'Could not understand index of data series: should be age (all values less than 120) or year (all values greater than 1900).'
-            raise ValueError(errormsg)
 
         if metadata.data_cols.get('sex'):
             df = pd.concat([df, df])
@@ -371,7 +379,10 @@ def standardize_data(data=None, metadata=None):
         if not set(metadata.data_cols.values()).issubset(data.keys()):
             errormsg = 'Please ensure the keys of the data dict match the values in metadata.data_cols.'
             raise ValueError(errormsg)
-        df = pd.DataFrame(data)
+        new_data = dict()
+        for sim_name, col_name in metadata.data_cols.items():
+            new_data[sim_name] = sc.tolist(data[col_name])
+        df = pd.DataFrame(new_data)
 
     elif sc.isnumber(data):
         df = data  # Just return it as-is

@@ -1,0 +1,7 @@
+name,disease,state,efficacy,post_state
+bpg,syphilis,susceptible,0,susceptible
+bpg,syphilis,primary,0.95,susceptible
+bpg,syphilis,secondary,0.95,susceptible
+bpg,syphilis,latent_temp,0.95,susceptible
+bpg,syphilis,latent_long,0.95,susceptible
+bpg,syphilis,tertiary,0.95,susceptible
