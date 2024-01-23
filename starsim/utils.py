@@ -338,7 +338,7 @@ def undefined(arr):
 __all__ += ['standardize_data']
 
 
-def standardize_data(data=None, metadata=None, max_age=120):
+def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
 
     metadata = sc.objdict(metadata)
 
@@ -356,7 +356,7 @@ def standardize_data(data=None, metadata=None, max_age=120):
                     metadata.data_cols['age']: data.index.values,
                     metadata.data_cols['value']: data.values,
                 })
-            elif (data.index > 1900).all():  # Assume index year
+            elif (data.index >= min_year).all():  # Assume index year
                 df = pd.DataFrame({
                     metadata.data_cols['year']: data.index.values,
                     metadata.data_cols['age']: 0,
