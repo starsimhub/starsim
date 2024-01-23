@@ -42,7 +42,7 @@ class Module(sc.prettyobj):
         # Connect the random number generators to the sim. The RNGs for this module should be initialized
         # first as some of the module's State instances may require them to generate initial values
         for rng in self.rngs:
-            if not rng.initialized :
+            if not rng.initialized:
                 rng.initialize(sim.rng_container, sim.people.slot)
 
         # Initialize distributions in pars
