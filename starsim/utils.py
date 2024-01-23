@@ -338,7 +338,7 @@ def undefined(arr):
 __all__ += ['standardize_data']
 
 
-def standardize_data(data=None, metadata=None):
+def standardize_data(data=None, metadata=None, max_age=120):
 
     metadata = sc.objdict(metadata)
 
@@ -350,7 +350,7 @@ def standardize_data(data=None, metadata=None):
 
     elif isinstance(data, pd.Series):
         if metadata.data_cols.get('age'):
-            if (data.index < 120).all():  # Assume index is age bins
+            if (data.index <= max_age).all():  # Assume index is age bins
                 df = pd.DataFrame({
                     metadata.data_cols['year']: 2000,
                     metadata.data_cols['age']: data.index.values,
