@@ -65,7 +65,7 @@ class Sim(sc.prettyobj):
     @property
     def modules(self):
         # Return iterator over all Module instances (stored in standard places) in the Sim
-        products = [intv.product for intv in self.interventions.values()]
+        products = [intv.product for intv in self.interventions.values() if hasattr(intv, 'product') and isinstance(intv.product, ss.Product)]
         return itertools.chain(
             self.demographics.values(),
             self.people.networks.values(),
