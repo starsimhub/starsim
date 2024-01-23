@@ -178,7 +178,6 @@ class People(BasePeople):
         states = [
             ss.State('age', float, np.nan), # NaN until conceived
             ss.State('female', bool, sps.bernoulli(p=0.5)),
-            ss.State('debut', float),
             ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
             ss.State('alive', bool, True),  # Time index for death
             ss.State('scale', float, 1.0),
@@ -300,11 +299,6 @@ class People(BasePeople):
         Update networks
         """
         return self.networks.update(self)
-
-    @property
-    def active(self):
-        """ Indices of everyone sexually active  """
-        return (self.age >= self.debut) & self.alive
 
     @property
     def dead(self):

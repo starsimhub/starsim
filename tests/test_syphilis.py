@@ -26,7 +26,10 @@ def make_syph_sim(dt=1/12):
     ss.set_seed(1)
     ppl = ss.People(500, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv')) # CK: temporary small pop size
     mf = ss.mf(
-        pars=dict(duration_dist=ss.lognorm(mean=1/24, stdev=0.5))
+        pars=dict(
+            duration_dist=ss.lognorm(mean=1/24, stdev=0.5),
+            annual_acts=ss.lognorm(mean=80, stdev=30),
+        )
     )
     maternal = ss.maternal()
     ppl.networks = ss.ndict(mf, maternal)
@@ -91,7 +94,7 @@ def test_syph(dt=1/12):
     burnin = 10
     pi = int(burnin/sim.dt)
 
-    fig, ax = plt.subplots(3, 1)
+    fig, ax = plt.subplots(2, 2)
     ax = ax.ravel()
     ax[0].stackplot(
         sim.yearvec[pi:],
@@ -111,6 +114,9 @@ def test_syph(dt=1/12):
     ax[2].plot(sim.yearvec[pi:], sim.results.n_alive[pi:])
     ax[2].set_title('Population')
 
+    ax[3].plot(sim.yearvec[pi:], sim.results.syphilis.new_infections[pi:])
+    ax[3].set_title('New infections')
+
     fig.tight_layout()
     plt.show()
 
@@ -121,7 +127,7 @@ def test_syph_intvs(dt=1/12, do_plot=False):
 
     # Interventions
     # screen_eligible = lambda sim: sim.demographics.pregnancy.pregnant
-    screen_eligible = lambda sim: sim.people.networks.mf.active(sim.people)
+    screen_eligible = lambda sim: sim.people.networks.embedding.active(sim.people)
     syph_screening = ss.syph_screening(
         product='rpr',
         prob=0.99,
@@ -169,5 +175,5 @@ def test_syph_intvs(dt=1/12, do_plot=False):
 if __name__ == '__main__':
 
     sim = test_syph(dt=1)
-    sim_base, sim_intv = test_syph_intvs(dt=1/2, do_plot=True)
+    # sim_base, sim_intv = test_syph_intvs(dt=1/2, do_plot=True)
 

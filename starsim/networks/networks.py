@@ -341,6 +341,7 @@ class mf(SexualNetwork, DynamicNetwork):
             'duration_dist': ss.lognorm(mean=15, stdev=15), # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             'participation_dist': sps.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             'debut_dist': sps.norm(loc=16, scale=2),  # Age of debut can vary by using callable parameter values
+            'annual_acts': sps.lognorm(mean=80, stdev=20),
             'rel_part_rates': 1.0,
         }, pars)
 
