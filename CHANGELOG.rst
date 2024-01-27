@@ -9,6 +9,12 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :depth: 1
 
 
+Version 0.1.7 (2024-01-27)
+--------------------------
+- Performance enhancement for disease transmission, leading to a 10% decrease in runtime.
+- *GitHub info*: PR `217 <https://github.com/amath-idm/stisim/pull/217>`_
+
+
 Version 0.1.6 (2024-01-23)
 --------------------------
 - Adds template interventions and products for diagnostics and treatment
