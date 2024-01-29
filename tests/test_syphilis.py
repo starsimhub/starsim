@@ -87,7 +87,7 @@ class check_states(ss.Analyzer):
         return
 
 
-def test_syph(dt=11, n_agents=500):
+def test_syph(dt=1, n_agents=500):
 
     sim_kwargs = make_syph_sim(dt=dt, n_agents=n_agents)
     sim = ss.Sim(analyzers=[check_states], **sim_kwargs)
