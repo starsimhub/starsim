@@ -9,7 +9,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import scipy.stats as sps
 
-quick_run = False
+quick_run = True
 
 def make_syph_sim(dt=1, n_agents=500):
     """ Make a sim with syphilis - used by several subsequent tests """
@@ -180,5 +180,5 @@ if __name__ == '__main__':
     n_agents = [20e3, 500][quick_run]
 
     sim = test_syph(dt=dt, n_agents=n_agents)
-    # sim_base, sim_intv = test_syph_intvs(dt=dt, n_agents=n_agents, do_plot=True)
+    sim_base, sim_intv = test_syph_intvs(dt=dt, n_agents=n_agents, do_plot=True)
 
