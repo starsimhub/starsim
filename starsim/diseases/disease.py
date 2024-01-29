@@ -354,7 +354,9 @@ class STI(Disease):
         n = len(people.uid)  # TODO: possibly could be shortened to just the people who are alive
         p_acq_node = np.zeros(n)
 
-        dfs = []
+        avec = []
+        bvec = []
+        pvec = []
         for lkey, layer in people.networks.items():
             if lkey in self.pars['beta']:
                 contacts = layer.contacts
@@ -368,19 +370,18 @@ class STI(Disease):
                         continue
 
                     a, b = contacts[lbl_src], contacts[lbl_tgt]
-                    df = pd.DataFrame({'p1': a, 'p2': b})
+                    nzi = (rel_trans[a]>0) & (rel_sus[b]>0) & (contacts.beta>0)
+                    avec.append(a[nzi])
+                    bvec.append(b[nzi])
 
                     if 'acts' in contacts.keys():
-                        beta_per_dt = 1-(1-beta)**(contacts.acts*people.dt)
-                        p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta_per_dt
+                        beta_per_dt = 1 - (1 - beta) ** (contacts.acts * people.dt)
                     else:
-                        p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt
+                        beta_per_dt = beta * people.dt
+                    new_pvec = rel_trans[a[nzi]].__array__() * rel_sus[b[nzi]].__array__() * contacts.beta[nzi] * beta_per_dt
+                    pvec.append(new_pvec)
 
-                    df['p'] = p_transmit.values
-                    df = df.loc[df['p'] > 0]
-                    dfs.append(df)
-
-        df = pd.concat(dfs)
+        df = pd.DataFrame({'p1': np.concatenate(avec), 'p2': np.concatenate(bvec), 'p': np.concatenate(pvec)})
         if len(df) == 0:
             return [], []
 
