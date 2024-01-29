@@ -285,10 +285,8 @@ class DynamicNetwork(Network):
 
         # Non-alive agents are removed
         active = (self.contacts.dur > 0) & people.alive[self.contacts.p1] & people.alive[self.contacts.p2]
-        self.contacts.p1 = self.contacts.p1[active]
-        self.contacts.p2 = self.contacts.p2[active]
-        self.contacts.beta = self.contacts.beta[active]
-        self.contacts.dur = self.contacts.dur[active]
+        for k in self.meta_keys():
+            self.contacts[k] = self.contacts[k][active]
 
 
 class Networks(ss.ndict):
@@ -314,8 +312,9 @@ class Networks(ss.ndict):
 
 class SexualNetwork(Network):
     """ Base class for all sexual networks """
-    def __init__(self, pars=None):
-        super().__init__(pars)
+    def __init__(self, pars=None, key_dict=None):
+        key_dict = ss.omerge({'acts': ss.int_}, key_dict)
+        super().__init__(pars, key_dict=key_dict)
 
     def active(self, people):
         # Exclude people who are not alive
@@ -338,15 +337,16 @@ class mf(SexualNetwork, DynamicNetwork):
 
     def __init__(self, pars=None, key_dict=None):
         pars = ss.omerge({
-            'duration_dist': ss.lognorm(mean=15, stdev=15), # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+            'duration_dist': ss.lognorm(mean=15, stdev=15),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             'participation_dist': sps.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             'debut_dist': sps.norm(loc=16, scale=2),  # Age of debut can vary by using callable parameter values
-            'annual_acts': sps.lognorm(mean=80, stdev=20),
+            'acts': ss.lognorm(mean=80, stdev=20),
             'rel_part_rates': 1.0,
         }, pars)
 
         DynamicNetwork.__init__(self, key_dict)
-        SexualNetwork.__init__(self, pars)
+        SexualNetwork.__init__(self, pars, key_dict)
+
         return
 
     def initialize(self, sim):
@@ -399,10 +399,15 @@ class mf(SexualNetwork, DynamicNetwork):
         else:
             dur_vals = self.pars.duration_dist.rvs(len(p1))  # Just use len(p1) to say how many draws are needed
 
+        # Figure out acts
+        act_vals = self.pars.acts.rvs(len(p1))  # TODO use slots
+
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
         self.contacts.beta = np.concatenate([self.contacts.beta, beta])
         self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
+        self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
+
         return len(p1)
 
     def update(self, people, dt=None):
