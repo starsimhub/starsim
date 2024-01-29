@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import scipy.stats as sps
 
 quick_run = True
-
+ss.options['multirng']=False
 def make_syph_sim(dt=1, n_agents=500):
     """ Make a sim with syphilis - used by several subsequent tests """
     syph = ss.Syphilis()

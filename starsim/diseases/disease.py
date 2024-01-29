@@ -375,7 +375,7 @@ class STI(Disease):
                     bvec.append(b[nzi])
 
                     if 'acts' in contacts.keys():
-                        beta_per_dt = 1 - (1 - beta) ** (contacts.acts * people.dt)
+                        beta_per_dt = 1 - (1 - beta) ** (contacts.acts[nzi] * people.dt)
                     else:
                         beta_per_dt = beta * people.dt
                     new_pvec = rel_trans[a[nzi]].__array__() * rel_sus[b[nzi]].__array__() * contacts.beta[nzi] * beta_per_dt
