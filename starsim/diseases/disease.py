@@ -369,7 +369,14 @@ class STI(Disease):
 
                     a, b = contacts[lbl_src], contacts[lbl_tgt]
                     df = pd.DataFrame({'p1': a, 'p2': b})
-                    df['p'] = (rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt).values
+
+                    if 'acts' in contacts.keys():
+                        beta_per_dt = 1-(1-beta)**(contacts.acts*people.dt)
+                        p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta_per_dt
+                    else:
+                        p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt
+
+                    df['p'] = p_transmit.values
                     df = df.loc[df['p'] > 0]
                     dfs.append(df)
 
