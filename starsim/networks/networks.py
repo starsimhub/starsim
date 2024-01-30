@@ -742,7 +742,7 @@ class hpv_network(mf):
         underpartnered = current_partners < partners  # Indices of underpartnered people
 
         # Set people who will participate in the network at some point
-        can_participate = ss.true(people.active * underpartnered)
+        can_participate = ss.true(self.active(people) * underpartnered)
         self.participant[uids] = self.pars.participation_dist.rvs(can_participate)
         return
 
