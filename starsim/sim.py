@@ -261,11 +261,11 @@ class Sim(sc.prettyobj):
         # One possible workflow is that users will provide a location and a set of networks but not people.
         # This means networks will be stored in self.pars['networks'] and we'll need to copy them to the people.
         if self.people.networks is None or len(self.people.networks) == 0:
-            if self.pars['networks'] is not None:
+            if self.pars['networks'] is not None and len(self.pars['networks']) > 0:
                 self.people.networks = ss.Networks(self.pars['networks'])
 
         if not isinstance(self.people.networks, ss.Networks):
-            self.people.networks = ss.Networks(networks=self.people.networks)
+            self.people.networks = ss.Networks(self.people.networks)
 
         self.people.networks.initialize(self)
 
@@ -287,7 +287,7 @@ class Sim(sc.prettyobj):
         """ Initialize and validate the interventions """
 
         # Translate the intervention specs into actual interventions
-        for i, intervention in enumerate(self.pars['interventions']):
+        for intervention in sc.promotetolist(self.pars['interventions']):
             if isinstance(intervention, type) and issubclass(intervention, ss.Intervention):
                 intervention = intervention()  # Convert from a class to an instance of a class
             if isinstance(intervention, ss.Intervention):

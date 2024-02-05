@@ -104,9 +104,9 @@ class CampaignDelivery(Intervention):
     def initialize(self, sim):
         # Decide whether to apply the intervention at every timepoint throughout the year, or just once.
         if self.interpolate:
-            self.timepoints = ss.true(np.isin(np.floor(sim.yearvec), np.floor(self.years)))
+            self.timepoints = np.isin(np.floor(sim.yearvec), np.floor(self.years)).nonzero()[-1]
         else:
-            self.timepoints = ss.true(np.isin(sim.yearvec, self.years))
+            self.timepoints = np.isin(sim.yearvec, self.years).nonzero()[-1]
 
         # Get the probability input into a format compatible with timepoints
         if len(self.prob) == len(self.years) and self.interpolate:
@@ -149,6 +149,9 @@ class BaseTest(Intervention):
         self.screens = ss.State('screens', int, 0)
         self.ti_screened = ss.State('ti_screened', int, ss.INT_NAN)
 
+        self.coverage_dist = sps.bernoulli(p=0)  # The 0 value is a placeholder that is updated in `deliver`
+        return
+
     def _parse_product(self, product):
         """
         Parse the product input
@@ -176,9 +179,9 @@ class BaseTest(Intervention):
         """
         ti = sc.findinds(self.timepoints, sim.ti)[0]
         prob = self.prob[ti]  # Get the proportion of people who will be tested this timestep
-        is_eligible = self.check_eligibility(sim)  # Check eligibility
+        is_eligible = self.check_eligibility(sim)  # Check eligibility, expecting True/False for each individual
         self.coverage_dist.kwds['p'] = prob
-        accept_uids = self.coverage_dist.filter(ss.true(is_eligible))
+        accept_uids = ss.true(self.coverage_dist.filter(is_eligible)) # Filter and store UIDs
         if len(accept_uids):
             self.outcomes = self.product.administer(sim, accept_uids)  # Actually administer the diagnostic
         return accept_uids
@@ -230,12 +233,13 @@ class BaseTriage(BaseTest):
         BaseTest.__init__(self, **kwargs)
 
     def check_eligibility(self, sim):
-        return sc.promotetoarray(self.eligibility(sim))
+        return self.eligibility(sim)
 
     def apply(self, sim):
         self.outcomes = {k: np.array([], dtype=int) for k in self.product.hierarchy}
         accept_inds = np.array([])
-        if sim.t in self.timepoints: accept_inds = self.deliver(sim)
+        if sim.ti in self.timepoints:
+            accept_inds = self.deliver(sim)
         return accept_inds
 
 
@@ -344,6 +348,7 @@ class BaseTreatment(Intervention):
         self.eligibility = eligibility
         self._parse_product(product)
         self.coverage_dist = sps.bernoulli(p=0)  # Placeholder
+        return
 
     def _parse_product(self, product):
         """

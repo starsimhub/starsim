@@ -37,7 +37,9 @@ class dx(Product):
 
         # Create placehold for multinomial sampling
         n_results = len(self.hierarchy)
-        self.result_dist = sps.rv_discrete(values=(np.arange(n_results), 1/n_results*np.ones(n_results)))
+        #self.result_dist = sps.rv_discrete(values=(np.arange(n_results), 1/n_results*np.ones(n_results)))
+        self.result_dist = sps.multinomial(n=n_results, p = 1/n_results * np.ones(n_results))
+        return
 
     @property
     def default_value(self):
@@ -54,19 +56,18 @@ class dx(Product):
         # Pre-fill with the default value, which is set to be the last value in the hierarchy
         results = sc.dataframe({'uids': uids, 'result': self.default_value})
 
+        df = self.df.pivot(index=['disease', 'state'], columns='result', values='probability')[self.hierarchy] #self.df.set_index(['disease', 'state', 'result']).unstack('result')['probability']
         for disease in self.diseases:
             for state in self.health_states:
                 this_state = getattr(sim.diseases[disease], state)
                 these_uids = ss.true(this_state[uids])
 
                 # Filter the dataframe to extract test results for people in this state
-                df_filter = (self.df.state == state) & (self.df.disease == disease)
-                thisdf = self.df[df_filter]  # apply filter to get the results for this state & genotype
-                probs = [thisdf[thisdf.result == result].probability.values[0] for result in self.hierarchy]
+                probs = df.loc[(disease, state)].values #df.loc[(disease, state), self.hierarchy].values
                 self.result_dist.pk = probs  # Overwrite distribution probabilities
 
                 # Sort people into one of the possible result states and then update their overall results
-                this_result = self.result_dist.rvs(these_uids)-these_uids
+                this_result = self.result_dist.rvs(size=these_uids)
                 row_inds = results.uids.isin(these_uids)
                 results.loc[row_inds, 'result'] = np.minimum(this_result, results.loc[row_inds, 'result'])
 
