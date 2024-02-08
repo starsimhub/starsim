@@ -784,9 +784,9 @@ class hpv_network(mf):
             selected_males = m[np.array(choices).flatten()]
             f = f[f_paired_bools]
 
-        p1 = f
-        p2 = selected_males
-        n_partnerships = len(p1)
+        p1 = selected_males
+        p2 = f
+        n_partnerships = len(p2)
         dur = self.pars.duration_dist.rvs(n_partnerships)
         acts = self.pars.act_dist.rvs(n_partnerships)
         age_p1 = people.age[p1]
