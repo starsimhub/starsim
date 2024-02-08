@@ -8,12 +8,13 @@ import starsim as ss
 import pandas as pd
 import matplotlib.pyplot as plt
 import scipy.stats as sps
-import sciris as sc
 
-def make_syph_sim(dt=1/12):
+quick_run = True
+ss.options['multirng']=False
+def make_syph_sim(dt=1, n_agents=500):
     """ Make a sim with syphilis - used by several subsequent tests """
     syph = ss.Syphilis()
-    syph.pars['beta'] = {'mf': [0.95, 0.75], 'maternal': [0.99, 0]}
+    syph.pars['beta'] = {'mf': [0.25, 0.15], 'maternal': [0.99, 0]}
     syph.pars['seed_infections'] = sps.bernoulli(p=0.1)
 
     # Make demographic modules
@@ -24,9 +25,14 @@ def make_syph_sim(dt=1/12):
 
     # Make people and networks
     ss.set_seed(1)
-    ppl = ss.People(500, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv')) # CK: temporary small pop size
+    ppl = ss.People(n_agents, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv')) # CK: temporary small pop size
+
+    # Marital
     mf = ss.mf(
-        pars=dict(duration_dist=ss.lognorm(mean=1/24, stdev=0.5))
+        pars=dict(
+            duration_dist=ss.lognorm(mean=1/24, stdev=0.5),
+            acts=ss.lognorm(mean=80, stdev=30),
+        )
     )
     maternal = ss.maternal()
     ppl.networks = ss.ndict(mf, maternal)
@@ -81,17 +87,17 @@ class check_states(ss.Analyzer):
         return
 
 
-def test_syph(dt=1/12):
+def test_syph(dt=1, n_agents=500):
 
-    sim_kwargs = make_syph_sim(dt=dt)
+    sim_kwargs = make_syph_sim(dt=dt, n_agents=n_agents)
     sim = ss.Sim(analyzers=[check_states], **sim_kwargs)
     sim.run()
 
     # Check plots
-    burnin = 10
+    burnin = 0
     pi = int(burnin/sim.dt)
 
-    fig, ax = plt.subplots(3, 1)
+    fig, ax = plt.subplots(2, 2)
     ax = ax.ravel()
     ax[0].stackplot(
         sim.yearvec[pi:],
@@ -111,13 +117,16 @@ def test_syph(dt=1/12):
     ax[2].plot(sim.yearvec[pi:], sim.results.n_alive[pi:])
     ax[2].set_title('Population')
 
+    ax[3].plot(sim.yearvec[pi:], sim.results.syphilis.new_infections[pi:])
+    ax[3].set_title('New infections')
+
     fig.tight_layout()
     plt.show()
 
     return sim
 
 
-def test_syph_intvs(dt=1/12, do_plot=False):
+def test_syph_intvs(dt=1, n_agents=500, do_plot=False):
 
     # Interventions
     # screen_eligible = lambda sim: sim.demographics.pregnancy.pregnant
@@ -138,14 +147,14 @@ def test_syph_intvs(dt=1/12, do_plot=False):
         label='bpg'
     )
 
-    sim_kwargs1 = make_syph_sim(dt=dt)
+    sim_kwargs1 = make_syph_sim(dt=dt, n_agents=n_agents)
     sim_intv = ss.Sim(analyzers=[check_states], interventions=[syph_screening, bpg], **sim_kwargs1)
     sim_intv.run()
 
     # Check plots
     if do_plot:
         # Run baseline
-        sim_kwargs0 = make_syph_sim(dt=dt)
+        sim_kwargs0 = make_syph_sim(dt=dt, n_agents=n_agents)
         sim_base = ss.Sim(**sim_kwargs0)
         sim_base.run()
 
@@ -154,7 +163,6 @@ def test_syph_intvs(dt=1/12, do_plot=False):
         plt.figure()
         plt.plot(sim_base.yearvec[pi:], sim_base.results.syphilis.prevalence[pi:], label='Baseline')
         plt.plot(sim_intv.yearvec[pi:], sim_intv.results.syphilis.prevalence[pi:], label='S&T')
-        plt.ylim([0, 0.1])
         plt.axvline(x=2020, color='k', ls='--')
         plt.title('Syphilis prevalence')
         plt.legend()
@@ -168,6 +176,9 @@ def test_syph_intvs(dt=1/12, do_plot=False):
 
 if __name__ == '__main__':
 
-    sim = test_syph(dt=1)
-    sim_base, sim_intv = test_syph_intvs(dt=1/2, do_plot=True)
+    dt = [1/12, 1][quick_run]
+    n_agents = [20e3, 500][quick_run]
+
+    sim = test_syph(dt=dt, n_agents=n_agents)
+    sim_base, sim_intv = test_syph_intvs(dt=dt, n_agents=n_agents, do_plot=True)
 

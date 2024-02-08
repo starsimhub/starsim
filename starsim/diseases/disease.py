@@ -324,10 +324,20 @@ class STI(Disease):
                 rel_sus = (self.susceptible & people.alive) * self.rel_sus
                 for a, b, beta in [[contacts.p1, contacts.p2, self.pars.beta[k][0]],
                                    [contacts.p2, contacts.p1, self.pars.beta[k][1]]]:
+
+                    # Skip networks with no transmission
                     if beta == 0:
                         continue
-                    # probability of a->b transmission
-                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt  # Remove - beta should be per dt
+
+                    # Calculate probability of a->b transmission. If we have information on the
+                    # number of sexual acts, then beta is assumed to be a per-act transmission
+                    # probability. If not, it's assumed to be annual.
+                    if 'acts' in contacts.keys():
+                        beta_per_dt = 1-(1-beta)**(contacts.acts*people.dt)
+                        p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta_per_dt
+                    else:
+                        p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt
+
                     new_cases_bool = np.random.random(len(a)) < p_transmit  # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
                     new_cases.append(b[new_cases_bool])
                     sources.append(a[new_cases_bool])
@@ -363,7 +373,13 @@ class STI(Disease):
                     nzi = (rel_trans[a]>0) & (rel_sus[b]>0) & (contacts.beta>0)
                     avec.append(a[nzi])
                     bvec.append(b[nzi])
-                    pvec.append(rel_trans[a[nzi]].__array__() * rel_sus[b[nzi]].__array__() * contacts.beta[nzi] * beta * people.dt)
+
+                    if 'acts' in contacts.keys():
+                        beta_per_dt = 1 - (1 - beta) ** (contacts.acts[nzi] * people.dt)
+                    else:
+                        beta_per_dt = beta * people.dt
+                    new_pvec = rel_trans[a[nzi]].__array__() * rel_sus[b[nzi]].__array__() * contacts.beta[nzi] * beta_per_dt
+                    pvec.append(new_pvec)
 
         df = pd.DataFrame({'p1': np.concatenate(avec), 'p2': np.concatenate(bvec), 'p': np.concatenate(pvec)})
         if len(df) == 0:

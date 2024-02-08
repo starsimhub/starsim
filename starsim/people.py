@@ -25,6 +25,8 @@ class BasePeople(sc.prettyobj):
         self._uid_map = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs ever created
         self.uid = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs currently in use
 
+        n = int(n)
+
         self._uid_map.grow(n)
         self._uid_map[:] = np.arange(0, n)
         self.uid.grow(n)
@@ -178,7 +180,6 @@ class People(BasePeople):
         states = [
             ss.State('age', float, np.nan), # NaN until conceived
             ss.State('female', bool, sps.bernoulli(p=0.5)),
-            ss.State('debut', float),
             ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
             ss.State('alive', bool, True),  # Time index for death
             ss.State('scale', float, 1.0),
@@ -300,11 +301,6 @@ class People(BasePeople):
         Update networks
         """
         return self.networks.update(self)
-
-    @property
-    def active(self):
-        """ Indices of everyone sexually active  """
-        return (self.age >= self.debut) & self.alive
 
     @property
     def dead(self):
