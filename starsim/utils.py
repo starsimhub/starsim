@@ -72,6 +72,17 @@ class ndict(sc.objdict):
 
         if valid is True:
             self._check_type(arg)
+            # Check if this key already exists
+            if key in self:
+                i = 1  # 1-based indexing seems appropriate here
+                new_key = f'{key}{i}'
+                # Find what's the next number we need to use for the new key
+                while new_key in self:
+                    i += 1
+                    new_key = f'{key}{i}'
+                warnmsg = f'Warning: duplicated name ({key}). Updated to {new_key}'  # Mssg can be removed
+                warn(warnmsg, die=False)
+                key = new_key
             self[key] = arg
         elif valid is None:
             pass  # Nothing to do
