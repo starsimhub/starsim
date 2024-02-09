@@ -21,6 +21,8 @@ class RandomNetwork(Network):
         super().__init__(**kwargs)
         if isinstance(n_contacts, rv_frozen):
             self.n_contacts = ss.ScipyDistribution(n_contacts, f'{self.__class__.__name__}_{self.name}_{self.label}')
+        else:
+            self.n_contacts = n_contacts
 
         self.dynamic = dynamic
 
