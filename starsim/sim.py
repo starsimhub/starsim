@@ -84,6 +84,7 @@ class Sim(sc.prettyobj):
         self.ti = 0  # The current time index
         self.validate_pars()  # Ensure parameters have valid values
         self.validate_dt()
+        self.validate_ndicts()  # Check for duplicate names in ndict attributes
         self.init_time_vecs()  # Initialize time vecs
         ss.set_seed(self.pars['rand_seed'])  # Reset the random seed before the population is created
         set_numba_seed(self.pars['rand_seed'])
@@ -231,6 +232,17 @@ class Sim(sc.prettyobj):
         self.people.year = self.year
         self.people.init_results(self)
         return self
+
+    def validate_ndicts(self):
+        """ Validate diseases, networks and connectors """
+
+        ndict_lst = [self.diseases, self.connectors, self.connectors]
+        for ndict_attr in ndict_lst:
+            names = [obj.name for _, obj in ndict_attr.items()]
+            if len(ndict_attr) > len(set(names)):
+                for key, obj in ndict_attr.items():
+                    # Update name of object with new keys from ndict
+                    obj._update_name(key)
 
     def init_demographics(self):
         for module in self.demographics.values():
