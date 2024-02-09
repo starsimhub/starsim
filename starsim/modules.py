@@ -81,6 +81,10 @@ class Module(sc.prettyobj):
                 self.results[reskey] = self.results[reskey]*sim.pars.pop_scale
         return
 
+    def _update_name(self, new_name):
+        """ Method to update name of an instance if needed"""
+        self.name = new_name
+
     @property
     def states(self):
         """
