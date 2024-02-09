@@ -11,7 +11,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 Version 0.1.8 (2024-01-30)
 --------------------------
-- Transmission baseed on number of contacts
+- Transmission based on number of contacts
 - *GitHub info*: PR `220 <https://github.com/amath-idm/stisim/pull/220>`_
 
 
