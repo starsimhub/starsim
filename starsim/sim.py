@@ -234,9 +234,9 @@ class Sim(sc.prettyobj):
         return self
 
     def validate_ndicts(self):
-        """ Validate diseases, networks and connectors """
+        """ Validate diseases, demographics and connectors """
 
-        ndict_lst = [self.diseases, self.connectors, self.connectors]
+        ndict_lst = [self.diseases, self.demographics, self.connectors]
         for ndict_attr in ndict_lst:
             names = [obj.name for _, obj in ndict_attr.items()]
             if len(ndict_attr) > len(set(names)):
