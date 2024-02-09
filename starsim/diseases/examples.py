@@ -69,6 +69,7 @@ class SIR(Disease):
         super().update_death(sim, uids)
         self.infected[uids] = False
         self.recovered[uids] = False
+        self.susceptible[uids] = False
         return
 
     def validate_pars(self, sim):
