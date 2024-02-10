@@ -99,7 +99,8 @@ class Disease(ss.Module):
         super().__init__(*args, **kwargs)
         self.results = ss.ndict(type=ss.Result)
         self.log = InfectionLog()
-        self.new_cases_RNG = ss.MultiRNG(name=f'New cases of {self.name}')
+        if ss.options.multirng:
+            self.new_cases_RNG = ss.MultiRNG(name=f'New cases of {self.name}')
         return
 
     @property
@@ -136,6 +137,13 @@ class Disease(ss.Module):
         :raises: Exception if there are any invalid parameters (or if the initialization is otherwise invalid in some way)
         """
         pass
+
+    def _update_name(self, new_name):
+        """ Method to update name of a Disease instance if needed, and names of other objects that were
+        set up using the original's instance name."""
+        self.name = new_name
+        if ss.options.multirng:
+            self.new_cases_RNG.name = f"New cases of {new_name}"
 
     def set_initial_states(self, sim):
         """
