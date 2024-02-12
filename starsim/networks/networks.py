@@ -10,9 +10,7 @@ import starsim as ss
 import scipy.optimize as spo
 import scipy.stats as sps
 import scipy.spatial as spsp
-import pandas as pd
 from scipy.stats._distn_infrastructure import rv_frozen
-import scipy.stats as sps
 
 
 # Specify all externally visible functions this file defines
