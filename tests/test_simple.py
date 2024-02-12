@@ -9,25 +9,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import scipy.stats as sps
 
-def test_s0():
-
-    pars = dict(
-        n_agents = 10_000,
-        networks =ss.mf(
-        pars=dict(
-            duration_dist=ss.lognorm(mean=1/24, stdev=0.5),
-            acts=ss.lognorm(mean=80, stdev=30),
-        )
-    ),
-        diseases = ss.SIR(
-            dur_inf = 10,
-        )
-    )
-
-    sim = ss.Sim(pars)
-    sim.run()
-    sim.plot_states()
-    return  sim
 
 def test_simple():
 
