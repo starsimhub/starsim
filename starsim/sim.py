@@ -19,15 +19,12 @@ def set_numba_seed(value):
 
 class Sim(sc.prettyobj):
 
-    def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, connectors=None, **kwargs):
+    def __init__(self, pars=None, label=None, people=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
         self.people = people  # People object
-        self.demographics  = ss.ndict(demographics, type=ss.DemographicModule)
-        self.diseases      = ss.ndict(diseases, type=ss.Disease)
-        self.connectors    = ss.ndict(connectors, type=ss.Connector)
         self.results       = ss.ndict(type=ss.Result)  # For storing results
         self.summary       = None  # For storing a summary of the results
         self.initialized   = False  # Whether initialization is complete
@@ -45,7 +42,12 @@ class Sim(sc.prettyobj):
         self.pars = ss.make_pars()  # Start with default pars
         self.pars.update_pars(sc.mergedicts(pars, kwargs))  # Update the parameters
 
-        # Initialize other quantities
+        # Placeholders for plug-ins: demographics, diseases, connectors, analyzers, and interventions
+        # Networks are not here because they are stored within people - TODO, does this make sense?
+        # Likewise, products are not here because they are stored within interventions
+        self.demographics  = ss.ndict(type=ss.DemographicModule)
+        self.diseases      = ss.ndict(type=ss.Disease)
+        self.connectors    = ss.ndict(type=ss.Connector)
         self.interventions = ss.ndict(type=ss.Intervention)
         self.analyzers = ss.ndict(type=ss.Analyzer)
 
@@ -91,6 +93,8 @@ class Sim(sc.prettyobj):
         # Initialize the core sim components
         self.rng_container.initialize(self.pars['rand_seed'] + 2) # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rng_container
         self.init_people(reset=reset, **kwargs)  # Create all the people (the heaviest step)
+
+        # Initialize plug-ins
         self.init_demographics()
         self.init_networks()
         self.init_diseases()
@@ -232,14 +236,61 @@ class Sim(sc.prettyobj):
         self.people.init_results(self)
         return self
 
+    def convert_plugins(self, Plugin_Class, plugin_name=None, attr_plugins=None):
+        """
+        Common logic for converting plug-ins to a standard format
+        Used for networks, demographics, diseases, connectors, analyzers, and interventions
+        Args:
+            plugin: class
+        """
+
+        if plugin_name is None: plugin_name = Plugin_Class.__name__.lower()
+
+        # Figure out if it's in the sim pars or provided directly
+        if attr_plugins is None or len(attr_plugins)==0:
+            if self.pars[plugin_name] is not None:
+                plugins = sc.tolist(self.pars[plugin_name])
+        else:
+            plugins = sc.tolist(attr_plugins)
+
+        # Convert
+        known_plugins = [n.__name__.lower() for n in ss.all_subclasses(Plugin_Class)]
+
+        processed_plugins = sc.autolist()
+        for plugin in plugins:
+
+            if not isinstance(plugin, Plugin_Class):
+                if isinstance(plugin, dict):
+                    if plugin.get('name') and plugin['name'] in known_plugins:
+                        # Make an instance of the requested plugin
+                        plugin_pars = {k: v for k, v in plugin.items() if k != 'name'}
+                        plugin = Plugin_Class.create(name=plugin['name'], pars=plugin_pars)
+                    else:
+                        errormsg = (f'Could not convert {plugin} to an instance of class {plugin_name}. Try using lower'
+                                    f'case or specifying it directly rather than as a dictionary.')
+                        raise ValueError(errormsg)
+                else:
+                    errormsg = (
+                        f'{plugin_name.capitalize()} must be provided as either class instances or dictionaries with a '
+                        f'"name" key corresponding to one of these known subclasses: {known_plugins}.')
+                    raise ValueError(errormsg)
+            processed_plugins += plugin
+
+        return processed_plugins
+
     def init_demographics(self):
+        # Get demographics
         for module in self.demographics.values():
             module.initialize(self)
             self.results[module.name] = module.results
 
     def init_diseases(self):
         """ Initialize modules and connectors to be simulated """
-        for disease in self.diseases.values():
+
+        diseases = self.convert_plugins(ss.Disease, plugin_name='diseases')
+
+        for disease in diseases:
+
             disease.initialize(self)
 
             # Add the disease's parameters and results into the Sim's dicts
@@ -248,6 +299,8 @@ class Sim(sc.prettyobj):
 
             # Add disease states to the People's dicts
             self.people.add_module(disease)
+
+        self.diseases = ss.ndict(*diseases)
 
         return
 
@@ -258,28 +311,12 @@ class Sim(sc.prettyobj):
     def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
 
-        # One possible workflow is that users will provide a location and a set of networks but not people.
-        # This means networks will be stored in self.pars['networks'] and we'll need to copy them to the people.
-        if self.people.networks is None or len(self.people.networks) == 0:
-            if self.pars['networks'] is not None:
-                self.people.networks = ss.Networks(self.pars['networks'])
+        processed_networks = self.convert_plugins(ss.Network, plugin_name='networks', attr_plugins=self.people.networks)
 
-        if not isinstance(self.people.networks, ss.Networks):
-            self.people.networks = ss.Networks(networks=self.people.networks)
-
+        # Now store the networks in a Networks object, which also allows for connectors between networks
+        if not isinstance(processed_networks, ss.Networks):
+            self.people.networks = ss.Networks(*processed_networks)
         self.people.networks.initialize(self)
-
-        # for key, network in self.people.networks.networks.items():  # TODO rename
-            # if network.label is not None:
-            #     layer_name = network.label
-            # else:
-            #     layer_name = key
-            #     network.label = layer_name
-            # network.initialize(self)
-
-            # Add network states to the People's dicts
-            # self.people.add_module(network)
-            # self.people.networks[network.name] = network
 
         return
 

@@ -5,14 +5,16 @@ Disease modules
 import sciris as sc
 import starsim as ss
 from scipy.stats._distn_infrastructure import rv_frozen
+from inspect import signature, _empty
 
 __all__ = ['Module']
 
 
 class Module(sc.prettyobj):
 
-    def __init__(self, pars=None, name=None, label=None, requires=None, *args, **kwargs):
+    def __init__(self, pars=None, par_dists=None, name=None, label=None, requires=None, *args, **kwargs):
         self.pars = ss.omerge(pars)
+        self.par_dists = ss.omerge(par_dists)
         self.name = name if name else self.__class__.__name__.lower() # Default name is the class name
         self.label = label if label else ''
         self.requires = sc.mergelists(requires)
@@ -45,13 +47,19 @@ class Module(sc.prettyobj):
             if not rng.initialized:
                 rng.initialize(sim.rng_container, sim.people.slot)
 
+        # First, convert any scalar pars to distributions if required
+        for key in self.par_dists.keys():
+            par = self.pars[key]
+            par_dist = self.par_dists[key]
+            par_dist_arg = [x for x, p in signature(par_dist._parse_args).parameters.items() if p.default == _empty][0]
+            if sc.isnumber(par):
+                self.pars[key] = self.par_dists[key](**{par_dist_arg: par})
+
         # Initialize distributions in pars
         for key, value in self.pars.items():
             if isinstance(value, rv_frozen):
                 self.pars[key] = ss.ScipyDistribution(value, f'{self.name}_{self.label}_{key}')
                 self.pars[key].initialize(sim, self)
-            #elif isinstance(value, ss.rate):
-            #    self.pars[key].initialize(sim, f'{self.name}_{self.label}_{key}')
 
         for key, value in self.__dict__.items():
             if isinstance(value, rv_frozen):
@@ -114,3 +122,16 @@ class Module(sc.prettyobj):
         """
         return [x for x in self.__dict__.values() if isinstance(x, ss.ScipyDistribution)] \
              + [x for x in self.pars.values()     if isinstance(x, ss.ScipyDistribution)]
+
+    @classmethod
+    def create(cls, name, *args, **kwargs):
+        """
+        Create a module instance by name
+        Args:
+            name (str): A string with the name of the module class in lower case, e.g. 'sir'
+        """
+        for subcls in ss.all_subclasses(cls):
+            if subcls.__name__.lower() == name:
+                return subcls(*args, **kwargs)
+        else:
+            raise KeyError(f'Module "{name}" did not match any known Starsim Modules')

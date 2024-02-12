@@ -19,17 +19,21 @@ class SIR(Disease):
     Note that this class is not fully compatible with common random numbers.
     """
 
-    def __init__(self, pars=None, *args, **kwargs):
-        default_pars = {
-            #'dur_inf': sps.weibull_min(c=lambda self, sim, uids: sim.people.age[uids], scale=10),#, seed='Duration of SIR Infection'),
-            #'dur_inf': sps.norm(loc=lambda self, sim, uids: sim.people.age[uids], scale=2),
-            'dur_inf': sps.lognorm(s=1, loc=10),
-            'seed_infections': sps.bernoulli(p=0.1),
-            'death_given_infection': sps.bernoulli(p=0.2),
+    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
+        pars = ss.omerge({
+            'dur_inf': 1,
+            'init_prev': 0.1,
+            'p_death': 0.2,
             'beta': None,
-        }
+        }, pars)
 
-        super().__init__(pars=ss.omerge(default_pars, pars), *args, **kwargs)
+        par_dists = ss.omerge({
+            'dur_inf': sps.lognorm,
+            'init_prev': sps.bernoulli,
+            'p_death': sps.bernoulli,
+        })
+
+        super().__init__(pars=pars, par_dists=par_dists,*args, **kwargs)
 
         self.susceptible = ss.State('susceptible', bool, True)
         self.infected = ss.State('infected', bool, False)
@@ -71,11 +75,6 @@ class SIR(Disease):
         self.recovered[uids] = False
         return
 
-    def validate_pars(self, sim):
-        if self.pars.beta is None:
-            self.pars.beta = sc.objdict({k: 1 for k in sim.people.networks})
-        return
-
     def set_initial_states(self, sim):
         """
         Set initial values for states. This could involve passing in a full set of initial conditions,
@@ -84,7 +83,7 @@ class SIR(Disease):
         taken place by the time this method is called.
         """
         alive_uids = ss.true(sim.people.alive)
-        initial_cases = self.pars['seed_infections'].filter(alive_uids)
+        initial_cases = self.pars['init_prev'].filter(alive_uids)
         self.infect(sim, initial_cases, None)
         return
 
@@ -98,7 +97,7 @@ class SIR(Disease):
 
         # Calculate and schedule future outcomes for recovery/death
         dur_inf = self.pars['dur_inf'].rvs(uids)
-        will_die = self.pars['death_given_infection'].rvs(uids)
+        will_die = self.pars['p_death'].rvs(uids)
         self.t_recovered[uids[~will_die]] = sim.year + dur_inf[~will_die]
         self.t_dead[uids[will_die]] = sim.year + dur_inf[will_die]
 
@@ -110,10 +109,11 @@ class SIR(Disease):
     def make_new_cases(self, sim): # TODO: Use function from STI
         for k, layer in sim.people.networks.items():
             if k in self.pars['beta']:
+                contacts = layer.contacts
                 rel_trans = (self.infected & sim.people.alive).astype(float)
                 rel_sus = (self.susceptible & sim.people.alive).astype(float)
-                for a, b, beta in [[layer.contacts['p1'], layer.contacts['p2'], self.pars['beta'][k]],
-                                   [layer.contacts['p2'], layer.contacts['p1'], self.pars['beta'][k]]]:
+                for a, b, beta in [[contacts.p1, contacts.p2, self.pars.beta[k][0]],
+                                   [contacts.p2, contacts.p1, self.pars.beta[k][1]]]:
                     # probability of a->b transmission
                     p_transmit = rel_trans[a] * rel_sus[b] * layer.contacts['beta'] * beta * sim.dt
                     new_cases = np.random.random(len(a)) < p_transmit # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!

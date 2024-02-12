@@ -135,7 +135,11 @@ class Disease(ss.Module):
         :return: None if parameters are all valid
         :raises: Exception if there are any invalid parameters (or if the initialization is otherwise invalid in some way)
         """
-        pass
+        if 'beta' not in self.pars:
+            self.pars.beta = sc.objdict({k: [1, 1] for k in sim.people.networks})
+        if sc.isnumber(self.pars.beta):
+            orig_beta = self.pars.beta
+            self.pars.beta = sc.objdict({k: [orig_beta, orig_beta] for k in sim.people.networks})
 
     def set_initial_states(self, sim):
         """
@@ -269,16 +273,6 @@ class STI(Disease):
         Transmission comes from infectious people; prevalence estimates may include infected people who don't transmit
         """
         return self.infected
-
-
-    def validate_pars(self, sim):
-        """
-        Perform any parameter validation
-        """
-        super().validate_pars(sim)
-        if 'beta' not in self.pars:
-            self.pars.beta = sc.objdict({k: [1, 1] for k in sim.people.networks})
-        return
 
     def set_initial_states(self, sim):
         """

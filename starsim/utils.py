@@ -22,7 +22,7 @@ INT_NAN = np.iinfo(
     np.int32).max  # Value to use to flag invalid content (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
 
 # %% Helper functions
-__all__ += ['ndict', 'omerge', 'warn', 'unique', 'find_contacts', 'get_subclasses']
+__all__ += ['ndict', 'omerge', 'warn', 'unique', 'find_contacts', 'get_subclasses', 'all_subclasses']
 
 
 class ndict(sc.objdict):
@@ -184,6 +184,10 @@ def get_subclasses(cls):
         yield from get_subclasses(subclass)
         yield subclass
 
+def all_subclasses(cls):
+    """ As above but also returns subsubclases """
+    return set(cls.__subclasses__()).union(
+        [s for c in cls.__subclasses__() for s in all_subclasses(c)])
 
 # %% Seed methods
 

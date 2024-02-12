@@ -4,6 +4,7 @@ Networks that connect people within a population
 
 # %% Imports
 import numpy as np
+import numba as nb
 import sciris as sc
 import starsim as ss
 import scipy.optimize as spo
@@ -15,8 +16,7 @@ import scipy.stats as sps
 
 
 # Specify all externally visible functions this file defines
-__all__ = ['Networks', 'Network', 'NetworkConnector', 'SexualNetwork', 'mf', 'msm', 'mf_msm', 'hpv_network', 'maternal', 'embedding', 'static']
-
+__all__ = ['Network', 'Networks', 'DynamicNetwork', 'SexualNetwork']
 
 class Network(ss.Module):
     """
@@ -61,6 +61,7 @@ class Network(ss.Module):
     def __init__(self, pars=None, key_dict=None, vertical=False, *args, **kwargs):
 
         # Initialize as a module
+        pars = self.validate_pars(pars)
         super().__init__(pars, *args, **kwargs)
 
         # Each relationship is characterized by these default set of keys, plus any user- or network-supplied ones
@@ -87,10 +88,12 @@ class Network(ss.Module):
         self.debut = ss.State('debut', float, fill_value=0)
         return
 
-
     def initialize(self, sim):
         super().initialize(sim)
         return
+
+    def validate_pars(self, pars):
+        return pars
 
     def __len__(self):
         try:
@@ -274,21 +277,6 @@ class Network(ss.Module):
             self.contacts[k] = self.contacts[k][keep]
 
 
-class DynamicNetwork(Network):
-    def __init__(self, pars=None, key_dict=None):
-        key_dict = ss.omerge({'dur': ss.float_}, key_dict)
-        super().__init__(pars, key_dict=key_dict)
-
-    def end_pairs(self, people):
-        dt = people.dt
-        self.contacts.dur = self.contacts.dur - dt
-
-        # Non-alive agents are removed
-        active = (self.contacts.dur > 0) & people.alive[self.contacts.p1] & people.alive[self.contacts.p2]
-        for k in self.meta_keys():
-            self.contacts[k] = self.contacts[k][active]
-
-
 class Networks(ss.ndict):
     def __init__(self, *args, type=Network, connectors=None, **kwargs):
         self.setattribute('_connectors', ss.ndict(connectors))
@@ -310,6 +298,21 @@ class Networks(ss.ndict):
         return
 
 
+class DynamicNetwork(Network):
+    def __init__(self, pars=None, key_dict=None):
+        key_dict = ss.omerge({'dur': ss.float_}, key_dict)
+        super().__init__(pars, key_dict=key_dict)
+
+    def end_pairs(self, people):
+        dt = people.dt
+        self.contacts.dur = self.contacts.dur - dt
+
+        # Non-alive agents are removed
+        active = (self.contacts.dur > 0) & people.alive[self.contacts.p1] & people.alive[self.contacts.p2]
+        for k in self.meta_keys():
+            self.contacts[k] = self.contacts[k][active]
+
+
 class SexualNetwork(Network):
     """ Base class for all sexual networks """
     def __init__(self, pars=None, key_dict=None):
@@ -328,6 +331,9 @@ class SexualNetwork(Network):
         # contact networks
         return np.setdiff1d(ss.true(people[sex] & self.active(people)), self.members) # ss.true instead of people.uid[]?
 
+
+# %% Specific instances of networks
+__all__ += ['mf', 'msm', 'embedding', 'maternal', 'static', 'random', 'hpv_network']
 
 class mf(SexualNetwork, DynamicNetwork):
     """
@@ -422,16 +428,17 @@ class msm(SexualNetwork, DynamicNetwork):
     A network that randomly pairs males
     """
 
-    def __init__(self, pars=None):
+    def __init__(self, pars=None, key_dict=None):
 
         pars = ss.omerge({
+'duration_dist': ss.lognorm(mean=15, stdev=15),
             'participation_dist': sps.bernoulli(p=0.1),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
+'debut_dist': sps.norm(loc=16, scale=2),
+            'acts': ss.lognorm(mean=80, stdev=20),
             'rel_part_rates': 1.0,
-            'duration_dist': ss.lognorm(mean=15, stdev=15),
-            'debut_dist': sps.norm(loc=16, scale=2),
         }, pars)
-        DynamicNetwork.__init__(self)
-        SexualNetwork.__init__(self, pars)
+        DynamicNetwork.__init__(self, key_dict)
+        SexualNetwork.__init__(self, pars, key_dict)
 
         return
 
@@ -476,10 +483,14 @@ class msm(SexualNetwork, DynamicNetwork):
         else:
             dur = self.pars['duration_dist'].rvs(len(p1)) # Just use len(p1) to say how many draws are needed
 
+        # Figure out acts
+        act_vals = self.pars.acts.rvs(len(p1))  # TODO use slots
+
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
         self.contacts.beta = np.concatenate([self.contacts.beta, np.ones_like(p1)])
         self.contacts.dur = np.concatenate([self.contacts.dur, dur])
+        self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
         return len(p1)
 
     def update(self, people, dt=None):
@@ -549,76 +560,175 @@ class embedding(mf):
         return len(beta)
 
 
-class NetworkConnector(ss.Module):
-    """
-    Template for a connector between networks.
-    """
-    def __init__(self, *args, networks=None, pars=None, **kwargs):
-        super().__init__(pars, requires=networks, *args, **kwargs)
+class maternal(Network):
+    def __init__(self, key_dict=None, vertical=True, **kwargs):
+        """
+        Initialized empty and filled with pregnancies throughout the simulation
+        """
+        key_dict = sc.mergedicts({'dur': ss.float_}, key_dict)
+        super().__init__(key_dict=key_dict, vertical=vertical, **kwargs)
         return
 
-    def set_participation(self, people, upper_age=None):
+    def update(self, people, dt=None):
+        if dt is None: dt = people.dt
+        # Set beta to 0 for women who complete post-partum period
+        # Keep connections for now, might want to consider removing
+        self.contacts.dur = self.contacts.dur - dt
+        inactive = self.contacts.dur <= 0
+        self.contacts.beta[inactive] = 0
+        return
+
+    def initialize(self, sim):
+        """ No pairs added upon initialization """
         pass
 
-    def update(self, people):
-        pass
+    def add_pairs(self, mother_inds, unborn_inds, dur):
+        """
+        Add connections between pregnant women and their as-yet-unborn babies
+        """
+        beta = np.ones_like(mother_inds)
+        self.contacts.p1 = np.concatenate([self.contacts.p1, mother_inds])
+        self.contacts.p2 = np.concatenate([self.contacts.p2, unborn_inds])
+        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
+        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
+        return len(mother_inds)
 
 
-class mf_msm(NetworkConnector):
-    """ Combines the MF and MSM networks """
-    def __init__(self, pars=None):
-        networks = [ss.mf, ss.msm]
+class static(Network):
+    """
+    A network class of static partnerships converted from a networkx graph. There's no formation of new partnerships
+    and initialized partnerships only end when one of the partners dies. The networkx graph can be created outside Starsim
+    if population size is known. Or the graph can be created by passing a networkx generator function to Starsim.
+
+    **Examples**::
+
+    # Generate a networkx graph and pass to Starsim
+    import networkx as nx
+    import starsim as ss
+    g = nx.scale_free_graph(n=10000)
+    ss.static(graph=g)
+
+    # Pass a networkx graph generator to Starsim
+    ss.static(graph=nx.erdos_renyi_graph, p=0.0001)
+
+    """
+
+    def __init__(self, graph, **kwargs):
+        self.graph = graph
+        self.kwargs = kwargs
+        super().__init__()
+        return
+
+    def initialize(self, sim):
+        popsize = sim.pars['n_agents']
+        if callable(self.graph):
+            self.graph = self.graph(n=popsize, **self.kwargs)
+        self.validate_pop(popsize)
+        super().initialize(sim)
+        self.get_contacts()
+        return
+
+    def validate_pop(self, popsize):
+        n_nodes = self.graph.number_of_nodes()
+        if n_nodes > popsize:
+            errormsg = f'Please ensure the number of nodes in graph {n_nodes} is smaller than population size {popsize}.'
+            raise ValueError(errormsg)
+
+    def get_contacts(self):
+        p1s = []
+        p2s = []
+        for edge in self.graph.edges():
+            p1, p2 = edge
+            p1s.append(p1)
+            p2s.append(p2)
+        self.contacts.p1 = np.concatenate([self.contacts.p1, p1s])
+        self.contacts.p2 = np.concatenate([self.contacts.p2, p2s])
+        self.contacts.beta = np.concatenate([self.contacts.beta, np.ones_like(p1s)])
+        return
+
+
+class random(DynamicNetwork):
+
+    def __init__(self, pars=None, par_dists=None, key_dict=None):
+        """ Initialize """
         pars = ss.omerge({
-            'prop_bi': 0.5,  # Could vary over time -- but not by age or sex or individual
+            'n_contacts': 15,  # Distribution or int. If int, interpreted as the mean of the dist listed in par_dists
+            'dur': 1,
         }, pars)
-        super().__init__(networks=networks, pars=pars)
 
-        self.bi_dist = sps.bernoulli(p=self.pars.prop_bi)
+        DynamicNetwork.__init__(self, pars, key_dict)
+
         return
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.set_participation(sim.people)
+        self.add_pairs(sim.people)
+
+    @staticmethod
+    @nb.njit
+    def get_contacts(inds, number_of_contacts):
+        """
+        Efficiently generate contacts
+
+        Note that because of the shuffling operation, each person is assigned 2N contacts
+        (i.e. if a person has 5 contacts, they appear 5 times in the 'source' array and 5
+        times in the 'target' array). Therefore, the `number_of_contacts` argument to this
+        function should be HALF of the total contacts a person is expected to have, if both
+        the source and target array outputs are used (e.g. for social contacts)
+
+        adjusted_number_of_contacts = np.round(number_of_contacts / 2).astype(cvd.default_int)
+
+        Whereas for asymmetric contacts (e.g. staff-public interactions) it might not be necessary
+
+        Args:
+            inds: List/array of person indices
+            number_of_contacts: List/array the same length as `inds` with the number of unidirectional
+            contacts to assign to each person. Therefore, a person will have on average TWICE this number
+            of random contacts.
+
+        Returns: Two arrays, for source and target
+        """
+
+        total_number_of_half_edges = np.sum(number_of_contacts)
+        count = 0
+        source = np.zeros((total_number_of_half_edges,), dtype=ss.int_)
+        for i, person_id in enumerate(inds):
+            n_contacts = number_of_contacts[i]
+            source[count: count + n_contacts] = person_id
+            count += n_contacts
+        target = np.random.permutation(source)
+        return source, target
+
+    def update(self, people, dt=None):
+        self.end_pairs(people)
+        self.add_pairs(people)
         return
 
-    def set_participation(self, people, upper_age=None):
-        if upper_age is None:
-            uids = people.uid
+    def add_pairs(self, people):
+        """
+        Generate contacts
+        """
+
+        if isinstance(self.pars.n_contacts, ss.ScipyDistribution):
+            number_of_contacts = self.pars.n_contacts.rvs(people.alive)  # or people.uid?
         else:
-            uids = people.uid[(people.age < upper_age)]
-        uids = ss.true(people.male[uids])
+            number_of_contacts = np.full(len(people), self.pars.n_contacts)
 
-        # Get networks and overwrite default participation
-        mf = people.networks['mf']
-        msm = people.networks['msm']
-        mf.participant[uids] = False
-        msm.participant[uids] = False
+        number_of_contacts = np.round(number_of_contacts / 2).astype(ss.int_)  # One-way contacts
 
-        # Male participation rate uses info about cross-network participation.
-        # First, we determine who's participating in the MSM network
-        pr = msm.pars.part_rates
-        dist = sps.bernoulli.rvs(p=pr, size=len(uids))
-        msm.participant[uids] = dist
+        p1, p2 = self.get_contacts(people.uid.__array__(), number_of_contacts)
+        beta = np.ones(len(p1), dtype=ss.float_)
 
-        # Now we take the MSM participants and determine which are also in the MF network
-        msm_uids = ss.true(msm.participant[uids])  # Males in the MSM network
-        bi_uids = self.bi_dist.filter(msm_uids)  # Males in both MSM and MF networks
-        mf_excl_set = np.setdiff1d(uids, msm_uids)  # Set of males who aren't in the MSM network
+        if isinstance(self.pars.dur, ss.ScipyDistribution):
+            dur = self.pars.dur.rvs(p1)
+        else:
+            dur = np.full(len(p1), self.pars.dur)
 
-        # What remaining share to we need?
-        mf_df = mf.pars.part_rates.loc[mf.pars.part_rates.sex == 'm']  # Male participation in the MF network
-        mf_pr = np.interp(people.year, mf_df['year'], mf_df['part_rates']) * mf.pars.rel_part_rates
-        remaining_pr = max(mf_pr*len(uids)-len(bi_uids), 0)/len(mf_excl_set)
+        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
+        self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
+        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
+        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
 
-        # Don't love the following new syntax:
-        mf_excl_uids = mf_excl_set[sps.uniform.rvs(size=len(mf_excl_set)) < remaining_pr]
-
-        mf.participant[bi_uids] = True
-        mf.participant[mf_excl_uids] = True
-        return
-
-    def update(self, people):
-        self.set_participation(people, upper_age=people.dt)
         return
 
 
@@ -632,20 +742,20 @@ class hpv_network(mf):
 
         # Define default parameters
         default_pars = dict()
-        default_pars['cross_layer']   = 0.05  # Proportion of agents who have concurrent cross-layer relationships
-        default_pars['partner_dist']  = sps.poisson(mu=0.01)  # The number of concurrent sexual partners
+        default_pars['cross_layer'] = 0.05  # Proportion of agents who have concurrent cross-layer relationships
+        default_pars['partner_dist'] = sps.poisson(mu=0.01)  # The number of concurrent sexual partners
 
         # TODO: Wrap so user can provide mean and dispersion directly - see #168
-        mu = 80 # Mean
-        alpha = 40 # Dispersion
-        sigma2 = mu + alpha * mu**2
-        n = mu**2 / (sigma2 - mu)
+        mu = 80  # Mean
+        alpha = 40  # Dispersion
+        sigma2 = mu + alpha * mu ** 2
+        n = mu ** 2 / (sigma2 - mu)
         p = mu / sigma2
-        default_pars['act_dist']      = sps.nbinom(n=n, p=p)  # The number of sexual acts per year
+        default_pars['act_dist'] = sps.nbinom(n=n, p=p)  # The number of sexual acts per year
 
-        default_pars['age_act_pars']  = dict(peak=30, retirement=100, debut_ratio=0.5,
-                                         retirement_ratio=0.1)  # Parameters describing changes in coital frequency over agent lifespans
-        default_pars['condoms']       = 0.2  # The proportion of acts in which condoms are used
+        default_pars['age_act_pars'] = dict(peak=30, retirement=100, debut_ratio=0.5,
+                                            retirement_ratio=0.1)  # Parameters describing changes in coital frequency over agent lifespans
+        default_pars['condoms'] = 0.2  # The proportion of acts in which condoms are used
 
         low = 0
         loc = 1
@@ -653,12 +763,13 @@ class hpv_network(mf):
         a = (low - loc) / scale
         default_pars['duration_dist'] = sps.truncnorm(a=a, b=np.inf, loc=loc, scale=scale)  # Duration of partnerships
 
-        #default_pars['participation'] = None  # Incidence of partnership formation by age
-        default_pars['mixing']        = None  # Mixing matrices for storing age differences in partnerships
+        # default_pars['participation'] = None  # Incidence of partnership formation by age
+        default_pars['mixing'] = None  # Mixing matrices for storing age differences in partnerships
 
         self.agebins = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75]
         # Share of females of each age newly having casual relationships
-        self.f_participation = [0, 0, 0.10, 0.7, 0.8, 0.6, 0.6, 0.4, 0.1, 0.05, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001]
+        self.f_participation = [0, 0, 0.10, 0.7, 0.8, 0.6, 0.6, 0.4, 0.1, 0.05, 0.001, 0.001, 0.001, 0.001, 0.001,
+                                0.001]
         # Share of males of each age newly having casual relationships
         self.m_participation = [0, 0, 0.05, 0.7, 0.8, 0.6, 0.6, 0.4, 0.4, 0.3, 0.1, 0.05, 0.01, 0.01, 0.001, 0.001]
 
@@ -666,7 +777,7 @@ class hpv_network(mf):
 
         pars = ss.omerge(default_pars, pars)
         super().__init__(pars, key_dict)
- 
+
         self.get_layer_probs()
         self.validate_pars()
 
@@ -747,7 +858,8 @@ class hpv_network(mf):
         return
 
     def add_pairs(self, people, ti=0):
-        participating = ss.true(self.participant) # Will be the same people each time, with participation decided once per person
+        participating = ss.true(
+            self.participant)  # Will be the same people each time, with participation decided once per person
         f = participating[people.female[participating]]
         m = participating[~people.female[participating]]
 
@@ -759,7 +871,7 @@ class hpv_network(mf):
         pair_probs = self.pars['mixing'][age_m, age_f + 1]
 
         f_to_remove = pair_probs.max(axis=0) == 0  # list of female inds to remove if no male partners are found for her
-        #f = [i for i, flag in zip(f, f_to_remove) if ~flag]  # remove the inds who don't get paired on this timestep
+        # f = [i for i, flag in zip(f, f_to_remove) if ~flag]  # remove the inds who don't get paired on this timestep
         f = f[~f_to_remove]
         selected_males = []
         if len(f):
@@ -767,12 +879,12 @@ class hpv_network(mf):
             choices = []
             fems = np.arange(len(f))
             f_paired_bools = np.full(len(fems), True, dtype=bool)
-            np.random.shuffle(fems) # TODO: Stream-ify?
+            np.random.shuffle(fems)  # TODO: Stream-ify?
             for fem in fems:
                 m_col = pair_probs[:, fem]
                 if m_col.sum() > 0:
                     m_col_norm = m_col / m_col.sum()
-                    choice = np.random.choice(len(m_col_norm), p=m_col_norm) # TODO: Stream-ify?
+                    choice = np.random.choice(len(m_col_norm), p=m_col_norm)  # TODO: Stream-ify?
                     choices.append(choice)
                     pair_probs[choice, :] = 0  # Once male partner is assigned, remove from eligible pool
                 else:
@@ -848,88 +960,79 @@ class hpv_network(mf):
         return
 
 
-class maternal(Network):
-    def __init__(self, key_dict=None, vertical=True, **kwargs):
-        """
-        Initialized empty and filled with pregnancies throughout the simulation
-        """
-        key_dict = sc.mergedicts({'dur': ss.float_}, key_dict)
-        super().__init__(key_dict=key_dict, vertical=vertical, **kwargs)
+# %% Network connectors
+__all__ += ['NetworkConnector', 'mf_msm']
+
+class NetworkConnector(ss.Module):
+    """
+    Template for a connector between networks.
+    """
+    def __init__(self, *args, networks=None, pars=None, **kwargs):
+        super().__init__(pars, requires=networks, *args, **kwargs)
         return
 
-    def update(self, people, dt=None):
-        if dt is None: dt = people.dt
-        # Set beta to 0 for women who complete post-partum period
-        # Keep connections for now, might want to consider removing
-        self.contacts.dur = self.contacts.dur - dt
-        inactive = self.contacts.dur <= 0
-        self.contacts.beta[inactive] = 0
-        return
-
-    def initialize(self, sim):
-        """ No pairs added upon initialization """
+    def set_participation(self, people, upper_age=None):
         pass
 
-    def add_pairs(self, mother_inds, unborn_inds, dur):
-        """
-        Add connections between pregnant women and their as-yet-unborn babies
-        """
-        beta = np.ones_like(mother_inds)
-        self.contacts.p1 = np.concatenate([self.contacts.p1, mother_inds])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, unborn_inds])
-        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
-        return len(mother_inds)
+    def update(self, people):
+        pass
 
 
-class static(Network):
-    """
-    A network class of static partnerships converted from a networkx graph. There's no formation of new partnerships
-    and initialized partnerships only end when one of the partners dies. The networkx graph can be created outside Starsim
-    if population size is known. Or the graph can be created by passing a networkx generator function to Starsim.
+class mf_msm(NetworkConnector):
+    """ Combines the MF and MSM networks """
+    def __init__(self, pars=None):
+        networks = [ss.mf, ss.msm]
+        pars = ss.omerge({
+            'prop_bi': 0.5,  # Could vary over time -- but not by age or sex or individual
+        }, pars)
+        super().__init__(networks=networks, pars=pars)
 
-    **Examples**::
-
-    # Generate a networkx graph and pass to Starsim
-    import networkx as nx
-    import starsim as ss
-    g = nx.scale_free_graph(n=10000)
-    ss.static(graph=g)
-
-    # Pass a networkx graph generator to Starsim
-    ss.static(graph=nx.erdos_renyi_graph, p=0.0001)
-
-    """
-    def __init__(self, graph, **kwargs):
-        self.graph = graph
-        self.kwargs = kwargs
-        super().__init__()
+        self.bi_dist = sps.bernoulli(p=self.pars.prop_bi)
         return
 
     def initialize(self, sim):
-        popsize = sim.pars['n_agents']
-        if callable(self.graph):
-            self.graph = self.graph(n = popsize, **self.kwargs)
-        self.validate_pop(popsize)
         super().initialize(sim)
-        self.get_contacts()
+        self.set_participation(sim.people)
         return
 
-    def validate_pop(self, popsize):
-        n_nodes =  self.graph.number_of_nodes()
-        if n_nodes > popsize:
-            errormsg = f'Please ensure the number of nodes in graph {n_nodes} is smaller than population size {popsize}.'
-            raise ValueError(errormsg)
+    def set_participation(self, people, upper_age=None):
+        if upper_age is None:
+            uids = people.uid
+        else:
+            uids = people.uid[(people.age < upper_age)]
+        uids = ss.true(people.male[uids])
 
-    def get_contacts(self):
-        p1s = []
-        p2s = []
-        for edge in self.graph.edges():
-            p1, p2 = edge
-            p1s.append(p1)
-            p2s.append(p2)
-        self.contacts.p1 = np.concatenate([self.contacts.p1, p1s])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, p2s])
-        self.contacts.beta = np.concatenate([self.contacts.beta, np.ones_like(p1s)])
+        # Get networks and overwrite default participation
+        mf = people.networks['mf']
+        msm = people.networks['msm']
+        mf.participant[uids] = False
+        msm.participant[uids] = False
+
+        # Male participation rate uses info about cross-network participation.
+        # First, we determine who's participating in the MSM network
+        pr = msm.pars.part_rates
+        dist = sps.bernoulli.rvs(p=pr, size=len(uids))
+        msm.participant[uids] = dist
+
+        # Now we take the MSM participants and determine which are also in the MF network
+        msm_uids = ss.true(msm.participant[uids])  # Males in the MSM network
+        bi_uids = self.bi_dist.filter(msm_uids)  # Males in both MSM and MF networks
+        mf_excl_set = np.setdiff1d(uids, msm_uids)  # Set of males who aren't in the MSM network
+
+        # What remaining share to we need?
+        mf_df = mf.pars.part_rates.loc[mf.pars.part_rates.sex == 'm']  # Male participation in the MF network
+        mf_pr = np.interp(people.year, mf_df['year'], mf_df['part_rates']) * mf.pars.rel_part_rates
+        remaining_pr = max(mf_pr*len(uids)-len(bi_uids), 0)/len(mf_excl_set)
+
+        # Don't love the following new syntax:
+        mf_excl_uids = mf_excl_set[sps.uniform.rvs(size=len(mf_excl_set)) < remaining_pr]
+
+        mf.participant[bi_uids] = True
+        mf.participant[mf_excl_uids] = True
         return
+
+    def update(self, people):
+        self.set_participation(people, upper_age=people.dt)
+        return
+
 
