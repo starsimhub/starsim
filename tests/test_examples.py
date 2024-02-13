@@ -10,7 +10,6 @@ import numpy as np
 
 def test_sir():
     ppl = ss.People(10000)
-    ppl.networks = ss.ndict(ss.RandomNetwork(n_contacts=sps.poisson(mu=4)))
 
     sir_pars = {
         'dur_inf': sps.norm(loc=10), # Override the default distribution
@@ -24,7 +23,9 @@ def test_sir():
     sir.pars['dur_inf'].kwds['loc'] = lambda self, sim, uids: sim.people.age[uids]/10
 
     sir.pars['beta'] = {'randomnetwork': 0.1}
-    sim = ss.Sim(people=ppl, diseases=sir)
+    networks =     ss.random(pars=dict(n_contacts=sps.poisson(mu=4)))
+
+    sim = ss.Sim(people=ppl, diseases=sir, networks=networks)
     sim.run()
 
     # CK: parameters changed
@@ -48,7 +49,6 @@ def test_sir():
 #@pytest.mark.skip(reason="Haven't converted yet")
 def test_ncd():
     ppl = ss.People(10000)
-    ppl.networks = None
     ncd = ss.NCD()
     sim = ss.Sim(people=ppl, diseases=ncd)
     sim.run()
