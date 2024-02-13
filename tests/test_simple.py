@@ -27,8 +27,11 @@ def test_simple():
     return  sim
 
 
+
+
 if __name__ == '__main__':
 
     sim = test_simple()
+    sims = test_parallel()
 
 
