@@ -307,11 +307,12 @@ class STI(Disease):
         """
         pass
 
-    def _make_new_cases_singlerng(self, people):
+    def _make_new_cases_singlerng(self, sim):
         # Not common-random-number-safe, but more efficient for when not using the multirng feature
         new_cases = []
         sources = []
-        for k, layer in people.networks.items():
+        people = sim.people
+        for k, layer in sim.networks.items():
             if k in self.pars['beta']:
                 contacts = layer.contacts
                 rel_trans = (self.infectious & people.alive) * self.rel_trans
@@ -337,7 +338,7 @@ class STI(Disease):
                     sources.append(a[new_cases_bool])
         return np.concatenate(new_cases), np.concatenate(sources)
 
-    def _make_new_cases_multirng(self, people):
+    def _make_new_cases_multirng(self, sim):
         '''
         Common-random-number-safe transmission code works by computing the
         probability of each _node_ acquiring a case rather than checking if each
@@ -345,13 +346,14 @@ class STI(Disease):
         Subsequent step uses a roulette wheel with slotted RNG to determine
         infection source.
         '''
+        people = sim.people
         n = len(people.uid)  # TODO: possibly could be shortened to just the people who are alive
         p_acq_node = np.zeros(n)
 
         avec = []
         bvec = []
         pvec = []
-        for lkey, layer in people.networks.items():
+        for lkey, layer in sim.networks.items():
             if lkey in self.pars['beta']:
                 contacts = layer.contacts
                 rel_trans = self.rel_trans * (self.infectious & people.alive)
@@ -406,10 +408,10 @@ class STI(Disease):
         """ Add new cases of module, through transmission, incidence, etc. """
         if not ss.options.multirng:
             # Determine new cases for singlerng
-            new_cases, sources = self._make_new_cases_singlerng(sim.people)
+            new_cases, sources = self._make_new_cases_singlerng(sim)
         else:
             # Determine new cases for multirng
-            new_cases, sources = self._make_new_cases_multirng(sim.people)
+            new_cases, sources = self._make_new_cases_multirng(sim)
 
         if len(new_cases):
             self._set_cases(sim, new_cases, sources)

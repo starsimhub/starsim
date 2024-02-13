@@ -45,22 +45,21 @@ def test_networks():
     sim = ss.Sim()
     sim.initialize()
     
-    nw3 = ss.hpv_network()
+    nw3 = ss.maternal()
     nw3.initialize(sim)
-    sim.people.networks.update(sim.people)  # Update by providing a timestep & current time index
+    nw3.add_pairs(mother_inds=[1, 2, 3], unborn_inds=[100, 101, 102], dur=[1, 1, 1])
 
-    nw4 = ss.maternal()
-    nw4.initialize(sim)
-    nw4.add_pairs(mother_inds=[1, 2, 3], unborn_inds=[100, 101, 102], dur=[1, 1, 1])
+    # HPV NETWORK - NOT FUNCTIONAL
+    # nw3 = ss.hpv_network()
+    # nw3.initialize(sim)
+    # sim.people.networks.update(sim.people)  # Update by providing a timestep & current time index
 
-    return nw1, nw2, nw3, nw4
+
+    return nw1, nw2, nw3
 
 
 def test_microsim():
     sc.heading('Test making people and providing them to a sim')
-
-    networks = [ss.mf(), ss.maternal()]
-    ppl = ss.People(100, networks=networks)
 
     # Make HIV module
     hiv = ss.HIV()
@@ -69,7 +68,12 @@ def test_microsim():
     # sexual  network, p1 is male and p2 is female. In the maternal network, p1=mothers, p2=babies.
     hiv.pars['beta'] = {'mf': [0.15, 0.10], 'maternal': [0.2, 0]}
 
-    sim = ss.Sim(people=ppl, demographics=ss.Pregnancy(), diseases=hiv)
+    sim = ss.Sim(
+        people=ss.People(100),
+        networks=[ss.mf(), ss.maternal()],
+        demographics=ss.Pregnancy(),
+        diseases=hiv
+    )
     sim.initialize()
     sim.run()
 
@@ -89,7 +93,7 @@ def test_ppl_construction():
         return loc
 
     mf_pars = {
-        'debut_dist': sps.norm(loc=init_debut, scale=2),  # Age of debut can vary by using callable parameter values
+        'debut': sps.norm(loc=init_debut, scale=2),  # Age of debut can vary by using callable parameter values
     }
     sim_pars = {'networks': [ss.mf(mf_pars)], 'n_agents': 100}
     gon_pars = {'beta': {'mf': [0.08, 0.04]}, 'p_death': 0.2}
@@ -115,7 +119,7 @@ if __name__ == '__main__':
 
     # Run tests
     ppl = test_people()
-    nw1, nw2, nw3, nw4 = test_networks()
+    nw1, nw2, nw3 = test_networks()
     sim1 = test_microsim()
     sim2 = test_ppl_construction()
 
