@@ -4,15 +4,17 @@ Test simple APIs
 
 # %% Imports and settings
 import starsim as ss
-
+import scipy.stats as sps
 
 def test_simple():
 
     pars = dict(
             n_agents = 10_000,
+        birth_rate=20,
+                death_rate=0.015,
         networks = dict(
             name= 'random',
-            n_contacts = 4,
+            n_contacts =4 # sps.poisson(mu=4),
         ),
         diseases = dict(
             name = 'sir',

@@ -19,7 +19,8 @@ def set_numba_seed(value):
 
 class Sim(sc.prettyobj):
 
-    def __init__(self, pars=None, label=None, people=None, **kwargs):
+    def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None,
+                 connectors=None, interventions=None, analyzers=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
@@ -101,6 +102,7 @@ class Sim(sc.prettyobj):
         self.init_connectors()
         self.init_interventions()
         self.init_analyzers()
+
 
         # Perform post-initialization validation
         self.validate_post_init()
@@ -279,16 +281,25 @@ class Sim(sc.prettyobj):
         return processed_plugins
 
     def init_demographics(self):
-        # Get demographics
-        for module in self.demographics.values():
-            module.initialize(self)
-            self.results[module.name] = module.results
+        """ Initialize demographics """
+        demographics = self.convert_plugins(ss.DemographicModule, plugin_name='demographics')
+
+        # We also allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
+        if self.pars.birth_rate is not None:
+            births = ss.births(pars={'birth_rate': self.pars.birth_rate})
+            demographics += births
+        if self.pars.death_rate is not None:
+            background_deaths = ss.background_deaths(pars={'death_rate': self.pars.death_rate})
+
+        for dem_mod in demographics:
+            dem_mod.initialize(self)
+            self.results[dem_mod.name] = dem_mod.results
+        self.demographics = ss.ndict(*demographics)
 
     def init_diseases(self):
-        """ Initialize modules and connectors to be simulated """
+        """ Initialize diseases """
 
         diseases = self.convert_plugins(ss.Disease, plugin_name='diseases')
-
         for disease in diseases:
 
             disease.initialize(self)

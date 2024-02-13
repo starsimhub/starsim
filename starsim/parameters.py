@@ -30,9 +30,10 @@ class Parameters(sc.objdict):
         self.pop_scale       = None  # How much to scale the population
         self.remove_dead     = True          # Remove dead agents each timestep
 
-        # Demographic parameters: NOT CURRENTLY FUNCTIONAL
-        # TBC whether these parameters live here or in separate demographic modules
-        self.location    = None  # What demographics to use
+        # Demographic parameters
+        self.location    = None  #  NOT CURRENTLY FUNCTIONAL - what demographics to use
+        self.birth_rate = None
+        self.death_rate = None
 
         # Simulation parameters
         self.start           = 1995.         # Start of the simulation
