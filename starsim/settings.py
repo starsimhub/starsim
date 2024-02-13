@@ -10,7 +10,9 @@ import numpy as np
 import sciris as sc
 
 
-__all__ = ['dtypes', 'options']
+__all__ = ['INT_NAN', 'dtypes', 'options']
+
+INT_NAN = 2147483647 # From np.iinfo(np.int32).max: value to use to flag invalid content (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
 
 # Define Starsim-default data types
 dtypes = sc.objdict(
@@ -18,7 +20,6 @@ dtypes = sc.objdict(
     int = np.int32,
     float = np.float32,
     result_float = np.float64,
-    INT_NAN = 2147483647 # From np.iinfo(np.int32).max: value to use to flag invalid content (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
 )
 
 # Not public to avoid confusion with ss.options

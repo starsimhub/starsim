@@ -22,8 +22,8 @@ class BasePeople(sc.prettyobj):
     def __init__(self, n_agents):
 
         self.initialized = False
-        self._uid_map = ss.DynamicView(int, default=ss.dtypes.INT_NAN)  # This variable tracks all UIDs ever created
-        self.uid = ss.DynamicView(int, default=ss.dtypes.INT_NAN)  # This variable tracks all UIDs currently in use
+        self._uid_map = ss.DynamicView(int, default=ss.INT_NAN)  # This variable tracks all UIDs ever created
+        self.uid = ss.DynamicView(int, default=ss.INT_NAN)  # This variable tracks all UIDs currently in use
 
         n = int(n_agents)
 
@@ -35,7 +35,7 @@ class BasePeople(sc.prettyobj):
         # A slot is a special state managed internally by BasePeople
         # This is because it needs to be updated separately from any other states, as other states
         # might have fill_values that depend on the slot
-        self.slot = ss.State('slot', int, ss.dtypes.INT_NAN)
+        self.slot = ss.State('slot', int, ss.INT_NAN)
 
         self.ti = None  # Track simulation time index
         self.dt = np.nan  # Track simulation time step
@@ -117,7 +117,7 @@ class BasePeople(sc.prettyobj):
             state._trim(keep_inds)
 
         # Update the UID map
-        self._uid_map[:] = ss.dtypes.INT_NAN  # Clear out all previously used UIDs
+        self._uid_map[:] = ss.INT_NAN  # Clear out all previously used UIDs
         self._uid_map[keep_uids] = np.arange(0, len(keep_uids))  # Assign the array indices for all of the current UIDs
 
         return
@@ -176,7 +176,7 @@ class People(BasePeople):
         states = [
             ss.State('age', float, np.nan), # NaN until conceived
             ss.State('female', bool, sps.bernoulli(p=0.5)),
-            ss.State('ti_dead', int, ss.dtypes.INT_NAN),  # Time index for death
+            ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
             ss.State('alive', bool, True),  # Time index for death
             ss.State('scale', float, 1.0),
         ]

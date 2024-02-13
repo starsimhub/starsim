@@ -147,7 +147,7 @@ class BaseTest(Intervention):
         self._parse_product(product)
         self.screened = ss.State('screened', bool, False)
         self.screens = ss.State('screens', int, 0)
-        self.ti_screened = ss.State('ti_screened', int, ss.dtypes.INT_NAN)
+        self.ti_screened = ss.State('ti_screened', int, ss.INT_NAN)
 
     def _parse_product(self, product):
         """
