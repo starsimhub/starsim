@@ -27,7 +27,7 @@ class HIV(STI):
             'cd4_min': 100,
             'cd4_max': 500,
             'cd4_rate': 5,
-            'seed_infections': sps.bernoulli(p=0.05),
+            'init_prev': sps.bernoulli(p=0.05),
             'eff_condoms': 0.7,
             'art_efficacy': 0.96,
         }, self.pars)

@@ -26,7 +26,7 @@ class Gonorrhea(STI):
             'dur_inf_in_days': sps.lognorm(s=0.6, scale=10),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
             'p_symp': sps.bernoulli(p=0.5),  # Share of infections that are symptomatic. Placeholder value
             'p_clear': sps.bernoulli(p=0.2),  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
-            'seed_infections': sps.bernoulli(p=0.1),
+            'init_prev': sps.bernoulli(p=0.1),
         }, self.pars)
 
         # Additional states dependent on parameter values, e.g. self.p_symp?

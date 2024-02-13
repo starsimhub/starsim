@@ -135,11 +135,12 @@ class Disease(ss.Module):
         :return: None if parameters are all valid
         :raises: Exception if there are any invalid parameters (or if the initialization is otherwise invalid in some way)
         """
-        if 'beta' not in self.pars:
-            self.pars.beta = sc.objdict({k: [1, 1] for k in sim.people.networks})
-        if sc.isnumber(self.pars.beta):
-            orig_beta = self.pars.beta
-            self.pars.beta = sc.objdict({k: [orig_beta, orig_beta] for k in sim.people.networks})
+        if sim.networks is not None and len(sim.networks)>0:
+            if 'beta' not in self.pars:
+                self.pars.beta = sc.objdict({k: [1, 1] for k in sim.networks})
+            if sc.isnumber(self.pars.beta):
+                orig_beta = self.pars.beta
+                self.pars.beta = sc.objdict({k: [orig_beta, orig_beta] for k in sim.networks})
 
     def set_initial_states(self, sim):
         """
@@ -281,11 +282,11 @@ class STI(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        if self.pars['seed_infections'] is None:
+        if self.pars['init_prev'] is None:
             return
 
         alive_uids = ss.true(sim.people.alive)  # Maybe just sim.people.uid?
-        initial_cases = self.pars['seed_infections'].filter(alive_uids)
+        initial_cases = self.pars['init_prev'].filter(alive_uids)
         self.set_prognoses(sim, initial_cases)  # TODO: sentinel value to indicate seeds?
         return
 
@@ -307,11 +308,12 @@ class STI(Disease):
         """
         pass
 
-    def _make_new_cases_singlerng(self, people):
+    def _make_new_cases_singlerng(self, sim):
         # Not common-random-number-safe, but more efficient for when not using the multirng feature
         new_cases = []
         sources = []
-        for k, layer in people.networks.items():
+        people = sim.people
+        for k, layer in sim.networks.items():
             if k in self.pars['beta']:
                 contacts = layer.contacts
                 rel_trans = (self.infectious & people.alive) * self.rel_trans
@@ -337,7 +339,7 @@ class STI(Disease):
                     sources.append(a[new_cases_bool])
         return np.concatenate(new_cases), np.concatenate(sources)
 
-    def _make_new_cases_multirng(self, people):
+    def _make_new_cases_multirng(self, sim):
         '''
         Common-random-number-safe transmission code works by computing the
         probability of each _node_ acquiring a case rather than checking if each
@@ -345,13 +347,14 @@ class STI(Disease):
         Subsequent step uses a roulette wheel with slotted RNG to determine
         infection source.
         '''
+        people = sim.people
         n = len(people.uid)  # TODO: possibly could be shortened to just the people who are alive
         p_acq_node = np.zeros(n)
 
         avec = []
         bvec = []
         pvec = []
-        for lkey, layer in people.networks.items():
+        for lkey, layer in sim.networks.items():
             if lkey in self.pars['beta']:
                 contacts = layer.contacts
                 rel_trans = self.rel_trans * (self.infectious & people.alive)
@@ -406,10 +409,10 @@ class STI(Disease):
         """ Add new cases of module, through transmission, incidence, etc. """
         if not ss.options.multirng:
             # Determine new cases for singlerng
-            new_cases, sources = self._make_new_cases_singlerng(sim.people)
+            new_cases, sources = self._make_new_cases_singlerng(sim)
         else:
             # Determine new cases for multirng
-            new_cases, sources = self._make_new_cases_multirng(sim.people)
+            new_cases, sources = self._make_new_cases_multirng(sim)
 
         if len(new_cases):
             self._set_cases(sim, new_cases, sources)

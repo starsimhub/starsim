@@ -70,7 +70,7 @@ class Syphilis(STI):
             birth_outcome_keys=['miscarriage', 'nnd', 'stillborn', 'congenital'],
 
             # Initial conditions
-            seed_infections=sps.bernoulli(p=0.03),
+            init_prev=sps.bernoulli(p=0.03),
         )
         self.pars = ss.omerge(default_pars, self.pars)
 
