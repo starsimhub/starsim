@@ -10,9 +10,7 @@ import starsim as ss
 import scipy.optimize as spo
 import scipy.stats as sps
 import scipy.spatial as spsp
-import pandas as pd
 from scipy.stats._distn_infrastructure import rv_frozen
-import scipy.stats as sps
 
 
 # Specify all externally visible functions this file defines
@@ -341,17 +339,26 @@ class mf(SexualNetwork, DynamicNetwork):
     relationship durations.
     """
 
-    def __init__(self, pars=None, key_dict=None):
+    def __init__(self, pars=None, par_dists=None, key_dict=None):
         pars = ss.omerge({
-            'duration_dist': ss.lognorm(mean=15, stdev=15),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
-            'participation_dist': sps.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
-            'debut_dist': sps.norm(loc=16, scale=2),  # Age of debut can vary by using callable parameter values
-            'acts': ss.lognorm(mean=80, stdev=20),
+            'duration': 15,  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+            'participation': 0.9,  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
+            'debut': 16,  # Age of debut can vary by using callable parameter values
+            'acts': 80,
             'rel_part_rates': 1.0,
         }, pars)
 
-        DynamicNetwork.__init__(self, key_dict)
-        SexualNetwork.__init__(self, pars, key_dict)
+        par_dists = ss.omerge({
+            'duration': sps.lognorm,
+            'participation': sps.bernoulli,
+            'debut': sps.norm,
+            'acts': sps.lognorm,
+        }, par_dists)
+
+        DynamicNetwork.__init__(self, key_dict=key_dict)
+        SexualNetwork.__init__(self, pars, key_dict=key_dict)
+
+        self.par_dists = par_dists
 
         return
 
@@ -371,13 +378,13 @@ class mf(SexualNetwork, DynamicNetwork):
         year = people.year
         if upper_age is None: uids = people.uid
         else: uids = people.uid[(people.age < upper_age)]
-        self.participant[uids] = self.pars.participation_dist.rvs(uids)
+        self.participant[uids] = self.pars.participation.rvs(uids)
 
     def set_debut(self, people, upper_age=None):
         # Set debut age
         if upper_age is None: uids = people.uid
         else: uids = people.uid[(people.age < upper_age)]
-        self.debut[uids] = self.pars.debut_dist.rvs(uids)
+        self.debut[uids] = self.pars.debut.rvs(uids)
         uids_to_update = uids[np.isnan(people.debut[uids])]
         people.debut[uids_to_update] = self.debut[uids_to_update]
         return
@@ -401,9 +408,9 @@ class mf(SexualNetwork, DynamicNetwork):
         # print('DJK TODO')
         if ss.options.multirng and (len(p1) == len(np.unique(p1))):
             # No duplicates and user has enabled multirng, so use slotting based on p1
-            dur_vals = self.pars.duration_dist.rvs(p1)
+            dur_vals = self.pars.duration.rvs(p1)
         else:
-            dur_vals = self.pars.duration_dist.rvs(len(p1))  # Just use len(p1) to say how many draws are needed
+            dur_vals = self.pars.duration.rvs(len(p1))  # Just use len(p1) to say how many draws are needed
 
         # Figure out acts
         act_vals = self.pars.acts.rvs(len(p1))  # TODO use slots
@@ -733,64 +740,45 @@ class random(DynamicNetwork):
 
 
 class hpv_network(mf):
-    def __init__(self, pars=None):
+    def __init__(self, pars=None, par_dists=None, key_dict=None):
+        pars = ss.omerge({
+            'duration': 15,
+            'participation': 0.9,
+            'debut': 16,
+            'acts': 80,
+            'rel_part_rates': 1.0,
+            'cross_layer': 0.05,
+            'concurrency': 0.05,
+            'condoms': 0.2,
+            'mixing': None,
+        }, pars)
+
+        self.par_dists = ss.omerge({
+            'duration': sps.lognorm,
+            'participation': sps.bernoulli,
+            'debut': sps.norm,
+            'acts': sps.lognorm,
+            'cross_layer': sps.bernoulli,
+            'concurrency': sps.bernoulli,
+        }, par_dists)
 
         key_dict = {
             'acts': ss.float_,
             'start': ss.float_,
         }
 
-        # Define default parameters
-        default_pars = dict()
-        default_pars['cross_layer'] = 0.05  # Proportion of agents who have concurrent cross-layer relationships
-        default_pars['partner_dist'] = sps.poisson(mu=0.01)  # The number of concurrent sexual partners
+        DynamicNetwork.__init__(self, key_dict)
+        SexualNetwork.__init__(self, pars, key_dict)
 
-        # TODO: Wrap so user can provide mean and dispersion directly - see #168
-        mu = 80  # Mean
-        alpha = 40  # Dispersion
-        sigma2 = mu + alpha * mu ** 2
-        n = mu ** 2 / (sigma2 - mu)
-        p = mu / sigma2
-        default_pars['act_dist'] = sps.nbinom(n=n, p=p)  # The number of sexual acts per year
-
-        default_pars['age_act_pars'] = dict(peak=30, retirement=100, debut_ratio=0.5,
-                                            retirement_ratio=0.1)  # Parameters describing changes in coital frequency over agent lifespans
-        default_pars['condoms'] = 0.2  # The proportion of acts in which condoms are used
-
-        low = 0
-        loc = 1
-        scale = 1
-        a = (low - loc) / scale
-        default_pars['duration_dist'] = sps.truncnorm(a=a, b=np.inf, loc=loc, scale=scale)  # Duration of partnerships
-
-        # default_pars['participation'] = None  # Incidence of partnership formation by age
-        default_pars['mixing'] = None  # Mixing matrices for storing age differences in partnerships
-
-        self.agebins = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75]
-        # Share of females of each age newly having casual relationships
-        self.f_participation = [0, 0, 0.10, 0.7, 0.8, 0.6, 0.6, 0.4, 0.1, 0.05, 0.001, 0.001, 0.001, 0.001, 0.001,
-                                0.001]
-        # Share of males of each age newly having casual relationships
-        self.m_participation = [0, 0, 0.05, 0.7, 0.8, 0.6, 0.6, 0.4, 0.4, 0.3, 0.1, 0.05, 0.01, 0.01, 0.001, 0.001]
-
-        default_pars['participation_dist'] = sps.bernoulli(p=self.participation)
-
-        pars = ss.omerge(default_pars, pars)
-        super().__init__(pars, key_dict)
+        super().__init__(pars, key_dict=key_dict)
 
         self.get_layer_probs()
-        self.validate_pars()
 
         return
 
     def initialize(self, sim):
         super().initialize(sim)
         return self.add_pairs(sim.people, ti=0)
-
-    def validate_pars(self):
-        for par in ['partner_dist', 'act_dist', 'duration_dist', 'participation_dist']:
-            if not isinstance(self.pars[par], rv_frozen):
-                raise Exception(f'Network parameter {par} must be an instance of a scipy frozen distribution')
 
     def update_pars(self, pars):
         if pars is not None:

@@ -19,7 +19,8 @@ def set_numba_seed(value):
 
 class Sim(sc.prettyobj):
 
-    def __init__(self, pars=None, label=None, people=None, **kwargs):
+    def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, networks=None,
+                 connectors=None, interventions=None, analyzers=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
@@ -43,13 +44,13 @@ class Sim(sc.prettyobj):
         self.pars.update_pars(sc.mergedicts(pars, kwargs))  # Update the parameters
 
         # Placeholders for plug-ins: demographics, diseases, connectors, analyzers, and interventions
-        # Networks are not here because they are stored within people - TODO, does this make sense?
-        # Likewise, products are not here because they are stored within interventions
-        self.demographics  = ss.ndict(type=ss.DemographicModule)
-        self.diseases      = ss.ndict(type=ss.Disease)
-        self.connectors    = ss.ndict(type=ss.Connector)
-        self.interventions = ss.ndict(type=ss.Intervention)
-        self.analyzers = ss.ndict(type=ss.Analyzer)
+        # Products are not here because they are stored within interventions
+        self.demographics  = ss.ndict(demographics, type=ss.DemographicModule)
+        self.diseases      = ss.ndict(diseases, type=ss.Disease)
+        self.networks       = ss.ndict(networks, type=ss.Network)
+        self.connectors    = ss.ndict(connectors, type=ss.Connector)
+        self.interventions = ss.ndict(interventions, type=ss.Intervention)
+        self.analyzers = ss.ndict(analyzers, type=ss.Analyzer)
 
         # Initialize the random number generator container
         self.rng_container = ss.RNGContainer()
@@ -70,7 +71,7 @@ class Sim(sc.prettyobj):
         products = [intv.product for intv in self.interventions.values() if hasattr(intv, 'product') and isinstance(intv.product, ss.Product)]
         return itertools.chain(
             self.demographics.values(),
-            self.people.networks.values(),
+            self.networks.values(),
             self.diseases.values(),
             self.connectors.values(),
             self.interventions.values(),
@@ -101,6 +102,7 @@ class Sim(sc.prettyobj):
         self.init_connectors()
         self.init_interventions()
         self.init_analyzers()
+
 
         # Perform post-initialization validation
         self.validate_post_init()
@@ -203,7 +205,7 @@ class Sim(sc.prettyobj):
 
         # If people have not been supplied, make them
         if self.people is None or reset:
-            self.people = ss.People(n=self.pars['n_agents'], **kwargs)  # This just assigns UIDs and length
+            self.people = ss.People(n_agents=self.pars['n_agents'], **kwargs)  # This just assigns UIDs and length
 
         # If a popdict has not been supplied, we can make one from location data
         if self.pars['location'] is not None:
@@ -236,7 +238,7 @@ class Sim(sc.prettyobj):
         self.people.init_results(self)
         return self
 
-    def convert_plugins(self, Plugin_Class, plugin_name=None, attr_plugins=None):
+    def convert_plugins(self, Plugin_Class, plugin_name=None):
         """
         Common logic for converting plug-ins to a standard format
         Used for networks, demographics, diseases, connectors, analyzers, and interventions
@@ -247,19 +249,23 @@ class Sim(sc.prettyobj):
         if plugin_name is None: plugin_name = Plugin_Class.__name__.lower()
 
         # Figure out if it's in the sim pars or provided directly
-        if attr_plugins is None or len(attr_plugins)==0:
-            if self.pars[plugin_name] is not None:
-                plugins = sc.tolist(self.pars[plugin_name])
+        attr_plugins = getattr(self, plugin_name)  # Get any plugins that have been provided directly
+        if attr_plugins is None or len(attr_plugins)==0:  # None have been provided directly
+            if self.pars.get(plugin_name) and len(self.pars[plugin_name]):  # See if they've been provided in the pars dict
+                plugins = ss.ndict(self.pars[plugin_name])
+            else:  # Not provided directly or in pars
+                plugins   = {}
         else:
-            plugins = sc.tolist(attr_plugins)
+            plugins = attr_plugins
 
         # Convert
         known_plugins = [n.__name__.lower() for n in ss.all_subclasses(Plugin_Class)]
 
         processed_plugins = sc.autolist()
-        for plugin in plugins:
+        for plugin in plugins.values():
 
             if not isinstance(plugin, Plugin_Class):
+
                 if isinstance(plugin, dict):
                     if plugin.get('name') and plugin['name'] in known_plugins:
                         # Make an instance of the requested plugin
@@ -274,23 +280,41 @@ class Sim(sc.prettyobj):
                         f'{plugin_name.capitalize()} must be provided as either class instances or dictionaries with a '
                         f'"name" key corresponding to one of these known subclasses: {known_plugins}.')
                     raise ValueError(errormsg)
+
             processed_plugins += plugin
 
         return processed_plugins
 
     def init_demographics(self):
-        # Get demographics
-        for module in self.demographics.values():
-            module.initialize(self)
-            self.results[module.name] = module.results
+        """ Initialize demographics """
+
+        # Demographics can be provided via sim.demographics or sim.pars - this methods reconciles them
+        demographics = self.convert_plugins(ss.DemographicModule, plugin_name='demographics')
+
+        # We also allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
+        if self.pars.birth_rate is not None:
+            births = ss.births(pars={'birth_rate': self.pars.birth_rate})
+            demographics += births
+        if self.pars.death_rate is not None:
+            background_deaths = ss.background_deaths(pars={'death_rate': self.pars.death_rate})
+            demographics += background_deaths
+
+        # Iterate over demographic modules and initialize them
+        for dem_mod in demographics:
+            dem_mod.initialize(self)
+            self.results[dem_mod.name] = dem_mod.results
+
+        # Ensure they're stored at the sim level
+        self.demographics = ss.ndict(*demographics)
 
     def init_diseases(self):
-        """ Initialize modules and connectors to be simulated """
+        """ Initialize diseases """
 
+        # Diseases can be provided in sim.demographics or sim.pars
         diseases = self.convert_plugins(ss.Disease, plugin_name='diseases')
 
+        # Interate over diseases and initialize them
         for disease in diseases:
-
             disease.initialize(self)
 
             # Add the disease's parameters and results into the Sim's dicts
@@ -300,6 +324,7 @@ class Sim(sc.prettyobj):
             # Add disease states to the People's dicts
             self.people.add_module(disease)
 
+        # Store diseases in the sim
         self.diseases = ss.ndict(*diseases)
 
         return
@@ -311,20 +336,22 @@ class Sim(sc.prettyobj):
     def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
 
-        processed_networks = self.convert_plugins(ss.Network, plugin_name='networks', attr_plugins=self.people.networks)
+        processed_networks = self.convert_plugins(ss.Network, plugin_name='networks')
 
         # Now store the networks in a Networks object, which also allows for connectors between networks
         if not isinstance(processed_networks, ss.Networks):
-            self.people.networks = ss.Networks(*processed_networks)
-        self.people.networks.initialize(self)
+            self.networks = ss.Networks(*processed_networks)
+        self.networks.initialize(self)
 
         return
 
     def init_interventions(self):
         """ Initialize and validate the interventions """
 
+        interventions = self.convert_plugins(ss.Intervention, plugin_name='interventions')
+
         # Translate the intervention specs into actual interventions
-        for i, intervention in enumerate(self.pars['interventions']):
+        for i, intervention in enumerate(interventions):
             if isinstance(intervention, type) and issubclass(intervention, ss.Intervention):
                 intervention = intervention()  # Convert from a class to an instance of a class
             if isinstance(intervention, ss.Intervention):
@@ -380,7 +407,7 @@ class Sim(sc.prettyobj):
         TBC whether we keep this or incorporate the checks into the init methods
         """
         # Make sure that there's a contact network if any diseases are present
-        if self.diseases and not self.people.networks:
+        if self.diseases and not self.networks:
             warnmsg = f'Warning: simulation has {len(self.diseases)} diseases but no contact network(s).'
             ss.warn(warnmsg, die=False)
         return

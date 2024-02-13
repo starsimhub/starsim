@@ -107,7 +107,7 @@ class births(DemographicModule):
 
 
 class background_deaths(DemographicModule):
-    def __init__(self, pars=None, metadata=None):
+    def __init__(self, pars=None, par_dists=None, metadata=None):
         """
         Configure disease-independent "background" deaths.
 
@@ -124,15 +124,18 @@ class background_deaths(DemographicModule):
         Alternatively, it is possible to override the `death_rate` parameter
         with a bernoulli distribution containing a constant value of function of
         your own design.
-        
-        :param pars: dict with arguments including:
-            rel_death: constant used to scale all death rates
-            death_rate: float, dict, or pandas dataframe/series containing mortality data
-            units: units for death rates (see in-line comment on par dict below)
 
-        :param metadata: data about the data contained within the data input.
-            "data_cols" is is a dictionary mapping standard keys, like "year" to the
-            corresponding column name in data. Similar for "sex_keys". Finally,
+        Args:
+            pars: dict with arguments including:
+                rel_death: constant used to scale all death rates
+                death_rate: float, dict, or pandas dataframe/series containing mortality data
+                units: units for death rates (see in-line comment on par dict below)
+
+            par_dists: dict
+
+            metadata: data about the data contained within the data input.
+                "data_cols" is is a dictionary mapping standard keys, like "year" to the
+                corresponding column name in data. Similar for "sex_keys". Finally,
         """
         super().__init__(pars)
 
@@ -142,6 +145,10 @@ class background_deaths(DemographicModule):
             'units': 1,  # units for death rates. If using percentages, leave as 1. If using a CMR (e.g. 12 deaths per 1000), change to 1/1000
         }, self.pars)
 
+        self.par_dists = ss.omerge({
+            'death_rate': sps.bernoulli
+        }, par_dists)
+
         # Process metadata. Defaults here are the labels used by UN data
         self.metadata = ss.omerge({
             'data_cols': {'year': 'Time', 'sex': 'Sex', 'age': 'AgeGrpStart', 'value': 'mx'},
@@ -150,11 +157,8 @@ class background_deaths(DemographicModule):
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
-        self.pars.death_rate = self.standardize_death_data()
-
-        # Create death_prob_fn, a function which returns a probability of death for each requested uid
-        self.death_prob_fn = self.make_death_prob_fn
-        self.death_dist = sps.bernoulli(p=self.death_prob_fn)
+        self.death_rate_data = self.standardize_death_data()
+        self.pars.death_rate = self.make_death_prob_fn
 
         return
 
@@ -162,8 +166,8 @@ class background_deaths(DemographicModule):
     def make_death_prob_fn(module, sim, uids):
         """ Take in the module, sim, and uids, and return the probability of death for each UID on this timestep """
 
-        if sc.isnumber(module.pars.death_rate):
-            death_rate = module.pars.death_rate
+        if sc.isnumber(module.death_rate_data):
+            death_rate = module.death_rate_data
 
         else:
             year_label = module.metadata.data_cols['year']
@@ -172,11 +176,11 @@ class background_deaths(DemographicModule):
             val_label = module.metadata.data_cols['value']
             sex_keys = module.metadata.sex_keys
 
-            available_years = module.pars.death_rate[year_label].unique()
+            available_years = module.death_rate_data[year_label].unique()
             year_ind = sc.findnearest(available_years, sim.year)
             nearest_year = available_years[year_ind]
 
-            df = module.pars.death_rate.loc[module.pars.death_rate[year_label] == nearest_year]
+            df = module.death_rate_data.loc[module.death_rate_data[year_label] == nearest_year]
             age_bins = df[age_label].unique()
             age_inds = np.digitize(sim.people.age[uids], age_bins) - 1
 
@@ -216,7 +220,7 @@ class background_deaths(DemographicModule):
     def apply_deaths(self, sim):
         """ Select people to die """
         alive_uids = ss.true(sim.people.alive)
-        death_uids = self.death_dist.filter(alive_uids)
+        death_uids = self.pars.death_rate.filter(alive_uids)
         sim.people.request_death(death_uids)
         return len(death_uids)
 
@@ -231,7 +235,7 @@ class background_deaths(DemographicModule):
 
 class Pregnancy(DemographicModule):
 
-    def __init__(self, pars=None, metadata=None):
+    def __init__(self, pars=None, par_dists=None, metadata=None):
         super().__init__(pars)
 
         # Other, e.g. postpartum, on contraception...
@@ -246,14 +250,20 @@ class Pregnancy(DemographicModule):
         self.conception_probs = ss.State('conception_probs', float, 0)
 
         self.pars = ss.omerge({
-            'dur_pregnancy': 0.75,  # Make this a distribution?
-            'dur_postpartum': 0.5,  # Make this a distribution?
+            'dur_pregnancy': 0.75,
+            'dur_postpartum': 0.5,
             'fertility_rate': 0,    # Usually this will be provided in CSV format
             'rel_fertility': 1,
             'maternal_death_rate': 0,
             'sex_ratio': 0.5,       # Ratio of babies born female
             'units': 1e-3,          # Assumes fertility rates are per 1000. If using percentages, switch this to 1
         }, self.pars)
+
+        self.par_dists = ss.omerge({
+            'fertility_rate': sps.bernoulli,
+            'maternal_death_rate': sps.bernoulli,
+            'sex_ratio': sps.bernoulli
+        }, par_dists)
 
         # Process metadata. Defaults here are the labels used by UN data
         self.metadata = ss.omerge({
@@ -264,15 +274,8 @@ class Pregnancy(DemographicModule):
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
-        self.pars.fertility_rate = self.standardize_fertility_data()
-
-        # Create fertility_prob_fn, a function which returns a probability of death for each requested uid
-        self.fertility_prob_fn = self.make_fertility_prob_fn
-        self.fertility_dist = sps.bernoulli(p=self.fertility_prob_fn)
-
-        # Add other sampling functions
-        self.sex_dist = sps.bernoulli(p=self.pars.sex_ratio)
-        self.death_dist = sps.bernoulli(p=self.pars.maternal_death_rate)
+        self.fertility_rate_data = self.standardize_fertility_data()
+        self.pars.fertility_rate = self.make_fertility_prob_fn
 
         return
 
@@ -280,8 +283,9 @@ class Pregnancy(DemographicModule):
     def make_fertility_prob_fn(module, sim, uids):
         """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
 
-        if sc.isnumber(module.pars.fertility_rate):
-            fertility_rate = module.pars.fertility_rate
+
+        if sc.isnumber(module.fertility_rate_data):
+            fertility_rate = module.fertility_rate_data
 
         else:
             # Abbreviate key variables
@@ -289,11 +293,11 @@ class Pregnancy(DemographicModule):
             age_label = module.metadata.data_cols['age']
             val_label = module.metadata.data_cols['value']
 
-            available_years = module.pars.fertility_rate[year_label].unique()
+            available_years = module.fertility_rate_data[year_label].unique()
             year_ind = sc.findnearest(available_years, sim.year-module.pars.dur_pregnancy)
             nearest_year = available_years[year_ind]
 
-            df = module.pars.fertility_rate.loc[module.pars.fertility_rate[year_label] == nearest_year]
+            df = module.fertility_rate_data.loc[module.fertility_rate_data[year_label] == nearest_year]
             df_arr = df[val_label].values  # Pull out dataframe values
             df_arr = np.append(df_arr, 0)  # Add zeros for those outside data range
 
@@ -390,7 +394,7 @@ class Pregnancy(DemographicModule):
         # are instead handled in the fertility_dist logic as the rates need to be adjusted
         denom_conds = ppl.female & ppl.alive
         inds_to_choose_from = ss.true(denom_conds)
-        conceive_uids = self.fertility_dist.filter(inds_to_choose_from)
+        conceive_uids = self.pars.fertility_rate.filter(inds_to_choose_from)
 
         # Set prognoses for the pregnancies
         if len(conceive_uids) > 0:
@@ -410,7 +414,7 @@ class Pregnancy(DemographicModule):
             new_uids = sim.people.grow(len(new_slots))
             sim.people.age[new_uids] = -self.pars.dur_pregnancy
             sim.people.slot[new_uids] = new_slots  # Before sampling female_dist
-            sim.people.female[new_uids] = self.sex_dist.rvs(new_uids)
+            sim.people.female[new_uids] = self.pars.sex_ratio.rvs(new_uids)
 
             # Add connections to any vertical transmission layers
             # Placeholder code to be moved / refactored. The maternal network may need to be
@@ -437,7 +441,7 @@ class Pregnancy(DemographicModule):
 
         # Outcomes for pregnancies
         dur = np.full(len(uids), sim.ti + self.pars.dur_pregnancy / sim.dt)
-        dead = self.death_dist.rvs(uids)
+        dead = self.pars.maternal_death_rate.rvs(uids)
         self.ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
         dur_post_partum = np.full(len(uids), dur + self.pars.dur_postpartum / sim.dt)
         self.ti_postpartum[uids] = dur_post_partum
