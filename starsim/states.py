@@ -4,7 +4,6 @@ import sciris as sc
 import numba as nb
 from starsim.utils import INT_NAN
 from starsim.distributions import ScipyDistribution
-from starsim.utils import warn
 from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
 from scipy.stats._distn_infrastructure import rv_frozen
 
@@ -86,13 +85,16 @@ class FusedArray(NDArrayOperatorsMixin):
 
         for i in range(len(key)):
             if key[i] >= len(uid_map):
-                raise IndexError('UID not present in array (requested UID is larger than the maximum UID in use)')
+                errormsg = f'UID not present in array (requested UID ({key[i]}) is larger than the maximum UID in use ({len(uid_map)}))'
+                raise IndexError(errormsg)
             idx = uid_map[key[i]]
             if idx == INT_NAN:
                 raise IndexError('UID not present in array')
             elif idx >= len(vals):
-                raise Exception(f'Attempted to write to a non-existant index - this can happen if attempting to write to new entries that have not yet been allocated via grow()')
+                errormsg = f'Attempted to write to a non-existant index ({idx}) - this can happen if attempting to write to new entries that have not yet been allocated via grow()'
+                raise IndexError(errormsg)
             vals[idx] = value[i]
+        return
 
     @staticmethod
     @nb.njit
@@ -145,7 +147,7 @@ class FusedArray(NDArrayOperatorsMixin):
             return FusedArray(values=values, uid=uids, uid_map=new_uid_map)
         except IndexError as e:
             if str(INT_NAN) in str(e):
-                raise IndexError(f'UID not present in array')
+                raise IndexError(f'UID {key} not present in array')
             else:
                 raise e
 
@@ -177,7 +179,7 @@ class FusedArray(NDArrayOperatorsMixin):
                     return self._set_vals_uids_single(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__(), value)
         except IndexError as e:
             if str(INT_NAN) in str(e):
-                raise IndexError(f'UID not present in array')
+                raise IndexError(f'UID {key} not present in array')
             else:
                 raise e
 
