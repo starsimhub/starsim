@@ -17,6 +17,7 @@ from .demographics  import *
 from .connectors    import *
 from .diseases      import *
 from .sim           import *
+from .run           import *
 
 import sciris as sc
 root = sc.thispath(__file__).parent

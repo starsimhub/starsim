@@ -4,7 +4,7 @@ Test simple APIs
 
 # %% Imports and settings
 import starsim as ss
-import scipy.stats as sps
+import numpy as np
 
 n_agents = 2_000
 
@@ -15,24 +15,28 @@ def test_default():
     sim.plot()
     return sim
 
-def test_simple():
-    """ Create, run, and plot a sim with specified parameters """
 
+def make_sim_pars():
     pars = dict(
-        n_agents = n_agents,
+        n_agents=n_agents,
         birth_rate=20,
         death_rate=0.015,
-        networks = dict(
-            name= 'random',
-            n_contacts =4 # sps.poisson(mu=4),
+        networks=dict(
+            name='random',
+            n_contacts=4  # sps.poisson(mu=4),
         ),
-        diseases = dict(
-            name = 'sir',
-            dur_inf = 10,
-            beta = 0.1,
+        diseases=dict(
+            name='sir',
+            dur_inf=10,
+            beta=0.1,
         )
     )
+    return pars
 
+
+def test_simple():
+    """ Create, run, and plot a sim by passing a parameters dictionary """
+    pars = make_sim_pars()
     sim = ss.Sim(pars)
     sim.run()
     sim.plot()
@@ -51,14 +55,17 @@ def test_components():
 
 
 def test_parallel():
-    return
+    """ Test running two identical sims in parallel """
+    pars = make_sim_pars()
+    s1 = ss.Sim(pars)
+    s2 = ss.Sim(pars)
+    s1, s2 = ss.parallel([s1, s2]).sims
+    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
+    return s1, s2
 
 
 if __name__ == '__main__':
-
-    sim1 = test_default()
-    sim2 = test_simple()
-    sim3 = test_components()
-    sims = test_parallel()
-
-
+    # sim1 = test_default()
+    # sim2 = test_simple()
+    # sim3 = test_components()
+    s1, s2 = test_parallel()

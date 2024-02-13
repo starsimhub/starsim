@@ -261,13 +261,13 @@ def single_run(sim, ind=0, reseed=True, keep_people=False, run_args=None, sim_ar
     sim_args = sc.mergedicts(sim_args, kwargs)
     run_args = sc.mergedicts({'verbose': verbose}, run_args)
     if verbose is None:
-        verbose = sim['verbose']
+        verbose = sim.pars['verbose']
 
     if not sim.label:
         sim.label = f'Sim {ind}'
 
     if reseed:
-        sim['rand_seed'] += ind  # Reset the seed, otherwise no point of parallel runs
+        sim.pars['rand_seed'] += ind  # Reset the seed, otherwise no point of parallel runs
         ss.set_seed()
 
     if verbose >= 1:
