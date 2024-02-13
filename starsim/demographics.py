@@ -243,10 +243,10 @@ class Pregnancy(DemographicModule):
         self.susceptible = ss.State('fecund', bool, True)  # Applies to girls and women inside the fertility window
         self.pregnant = ss.State('pregnant', bool, False)  # Currently pregnant
         self.postpartum = ss.State('postpartum', bool, False)  # Currently post-partum
-        self.ti_pregnant = ss.State('ti_pregnant', int, ss.INT_NAN)  # Time pregnancy begins
-        self.ti_delivery = ss.State('ti_delivery', int, ss.INT_NAN)  # Time of delivery
-        self.ti_postpartum = ss.State('ti_postpartum', int, ss.INT_NAN)  # Time postpartum ends
-        self.ti_dead = ss.State('ti_dead', int, ss.INT_NAN)  # Maternal mortality
+        self.ti_pregnant = ss.State('ti_pregnant', int, ss.dtypes.INT_NAN)  # Time pregnancy begins
+        self.ti_delivery = ss.State('ti_delivery', int, ss.dtypes.INT_NAN)  # Time of delivery
+        self.ti_postpartum = ss.State('ti_postpartum', int, ss.dtypes.INT_NAN)  # Time postpartum ends
+        self.ti_dead = ss.State('ti_dead', int, ss.dtypes.INT_NAN)  # Maternal mortality
         self.conception_probs = ss.State('conception_probs', float, 0)
 
         self.pars = ss.omerge({

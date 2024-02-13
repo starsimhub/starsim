@@ -10,8 +10,16 @@ import numpy as np
 import sciris as sc
 
 
-__all__ = ['options', 'float_', 'int_']
+__all__ = ['dtypes', 'options']
 
+# Define Starsim-default data types
+dtypes = sc.objdict(
+    bool = bool,
+    int = np.int32,
+    float = np.float32,
+    result_float = np.float64,
+    INT_NAN = 2147483647 # From np.iinfo(np.int32).max: value to use to flag invalid content (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
+)
 
 # Not public to avoid confusion with ss.options
 class Options(sc.objdict):
@@ -151,16 +159,16 @@ class Options(sc.objdict):
                 if value in [None, 'default']:
                     value = self.orig_options[key]
                 self[key] = value
+                
+                # Handle special cases
+                if key == 'precision':
+                    self.reset_precision()
 
         return
 
     def context(self, **kwargs):
         """
-        Alias to set() for non-plotting options, for use in a "with" block.
-
-        Note: for plotting options, use ``ss.options.with_style()``, which is linked
-        to Matplotlib's context manager. If you set plotting options with this,
-        they won't have any effect.
+        Alias to set(), for use in a "with" block.
 
         **Examples**::
 
@@ -175,7 +183,6 @@ class Options(sc.objdict):
             # Use with_style(), not context(), for plotting options
             with ss.options.with_style(dpi=50):
                 ss.Sim().run().plot()
-
         """
 
         # Store current settings
@@ -196,21 +203,19 @@ class Options(sc.objdict):
             return self[key] != self.orig_options[key]
         else:
             return None
+    
+    def set_precision(self):
+        if self.precision == 32:
+            dtypes.int = np.int32
+            dtypes.float = np.float32
+        elif self.precision == 64:
+            dtypes.int = np.int64
+            dtypes.float = np.float64
+        else:
+            errormsg = f'Precision {self.precision} not recognized; must be 32 or 64'
+            raise ValueError(errormsg)
+        return
 
 
-# Create the options on module load, and load the fonts
+# Create the options on module load
 options = Options()
-
-# Default for precision
-# Used in various places throughout the code, generally as:
-#   import stisim.settings as sss
-#   arr = np.full(100, 0, sss.float_)
-result_float = np.float64  # Always use float64 for results, for simplicity
-if options.precision == 32:
-    float_ = np.float32
-    int_ = np.int32
-elif options.precision == 64:  # pragma: no cover
-    float_ = np.float64
-    int_ = np.int64
-else:
-    raise NotImplementedError(f'Precision must be either 32 bit or 64 bit, not {options.precision}')

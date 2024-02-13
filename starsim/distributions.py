@@ -5,9 +5,9 @@ Distribution support extending scipy with two key functionalities:
 """
 
 import numpy as np
-from starsim.utils import INT_NAN
+from starsim.settings import dtypes as sdt
 from starsim.random import SingleRNG, MultiRNG
-from starsim import options, int_
+from starsim import options
 from copy import deepcopy
 from scipy.stats._discrete_distns import bernoulli_gen
 from scipy.stats import rv_histogram
@@ -40,7 +40,7 @@ class ScipyDistribution():
                 self.repeat_slot_handling = {}
                 # Work out how many samples to draw. If sampling by UID, this depends on the slots assigned to agents.
                 if np.isscalar(size):
-                    if not isinstance(size, (int, np.int64, int_)):
+                    if not isinstance(size, int):
                         raise Exception('Input "size" must be an integer')
                     if size < 0:
                         raise Exception('Input "size" cannot be negative')
@@ -52,7 +52,7 @@ class ScipyDistribution():
                     return np.array([], dtype=int)
                 elif size.dtype == bool:
                     n_samples = len(size) if options.multirng else size.sum()
-                elif size.dtype in [int, np.int64, int_]:
+                elif size.dtype in [int, np.int64, np.int32]: # CK: TODO: need to refactor
                     if not options.multirng:
                         n_samples = len(size)
                     else:
@@ -68,7 +68,7 @@ class ScipyDistribution():
                                     raise Exception('The MultiRNG instance must be initialized before use.')
                             raise e
 
-                        if max_slot == INT_NAN:
+                        if max_slot == sdt.INT_NAN:
                             raise Exception('Attempted to sample from an INT_NAN slot')
                         n_samples = max_slot + 1
                 else:
@@ -254,7 +254,7 @@ class ScipyHistogram(rv_histogram):
         slots = None
         # Work out how many samples to draw. If sampling by UID, this depends on the slots assigned to agents.
         if np.isscalar(size):
-            if not isinstance(size, (int, np.int64, int_)):
+            if not isinstance(size, int):
                 raise Exception('Input "size" must be an integer')
             if size < 0:
                 raise Exception('Input "size" cannot be negative')
@@ -266,7 +266,7 @@ class ScipyHistogram(rv_histogram):
             return np.array([], dtype=int)
         elif size.dtype == bool:
             n_samples = len(size) if options.multirng else size.sum()
-        elif size.dtype in [int, np.int64, int_]:
+        elif size.dtype in [int, np.int64, np.int32]: # CK: TODO -- need to refactor
             if not options.multirng:
                 n_samples = len(size)
             else:
@@ -282,7 +282,7 @@ class ScipyHistogram(rv_histogram):
                             raise Exception('The MultiRNG instance must be initialized before use.')
                     raise e
 
-                if max_slot == INT_NAN:
+                if max_slot == sdt.INT_NAN:
                     raise Exception('Attempted to sample from an INT_NAN slot')
                 n_samples = max_slot + 1
         else:
