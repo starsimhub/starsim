@@ -42,7 +42,7 @@ def test_simple():
 def test_components():
     """ Create, run, and plot a sim by assembling components """
     people = ss.People(n_agents=n_agents)
-    network = ss.networks.random(n_contacts=4)
+    network = ss.networks.random(pars=dict(n_contacts=4))
     sir = ss.SIR(dur_inf=10, beta=0.1)
     sim = ss.Sim(diseases=sir, people=people, networks=network)
     sim.run()
@@ -52,8 +52,8 @@ def test_components():
 
 if __name__ == '__main__':
 
-    # sim1 = test_default()
-    sim = test_simple()
-    # sim3 = test_components()
+    sim1 = test_default()
+    sim2 = test_simple()
+    sim3 = test_components()
 
 

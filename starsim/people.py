@@ -19,13 +19,13 @@ class BasePeople(sc.prettyobj):
     interesting implementation details.
     """
 
-    def __init__(self, n):
+    def __init__(self, n_agents):
 
         self.initialized = False
         self._uid_map = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs ever created
         self.uid = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs currently in use
 
-        n = int(n)
+        n = int(n_agents)
 
         self._uid_map.grow(n)
         self._uid_map[:] = np.arange(0, n)
@@ -168,10 +168,10 @@ class People(BasePeople):
         ppl = ss.People(2000)
     """
 
-    def __init__(self, n, age_data=None, extra_states=None, networks=None, rand_seed=0):
+    def __init__(self, n_agents, age_data=None, extra_states=None, networks=None, rand_seed=0):
         """ Initialize """
 
-        super().__init__(n)
+        super().__init__(n_agents)
 
         self.initialized = False
         self.version = ss.__version__  # Store version info
