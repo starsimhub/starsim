@@ -44,10 +44,10 @@ class Sim(sc.prettyobj):
         self.pars.update_pars(sc.mergedicts(pars, kwargs))  # Update the parameters
 
         # Placeholders for plug-ins: demographics, diseases, connectors, analyzers, and interventions
-        # Networks are not here because they are stored within people - TODO, does this make sense?
-        # Likewise, products are not here because they are stored within interventions
+        # Products are not here because they are stored within interventions
         self.demographics  = ss.ndict(type=ss.DemographicModule)
         self.diseases      = ss.ndict(type=ss.Disease)
+        self.networks       = ss.ndict(type=ss.Network)
         self.connectors    = ss.ndict(type=ss.Connector)
         self.interventions = ss.ndict(type=ss.Intervention)
         self.analyzers = ss.ndict(type=ss.Analyzer)
@@ -71,7 +71,7 @@ class Sim(sc.prettyobj):
         products = [intv.product for intv in self.interventions.values() if hasattr(intv, 'product') and isinstance(intv.product, ss.Product)]
         return itertools.chain(
             self.demographics.values(),
-            self.people.networks.values(),
+            self.networks.values(),
             self.diseases.values(),
             self.connectors.values(),
             self.interventions.values(),
@@ -282,6 +282,8 @@ class Sim(sc.prettyobj):
 
     def init_demographics(self):
         """ Initialize demographics """
+
+        # Demographics can be provided via sim.demographics or sim.pars - this methods reconciles them
         demographics = self.convert_plugins(ss.DemographicModule, plugin_name='demographics')
 
         # We also allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
@@ -291,17 +293,22 @@ class Sim(sc.prettyobj):
         if self.pars.death_rate is not None:
             background_deaths = ss.background_deaths(pars={'death_rate': self.pars.death_rate})
 
+        # Iterate over demographic modules and initialize them
         for dem_mod in demographics:
             dem_mod.initialize(self)
             self.results[dem_mod.name] = dem_mod.results
+
+        # Ensure they're stored at the sim level
         self.demographics = ss.ndict(*demographics)
 
     def init_diseases(self):
         """ Initialize diseases """
 
+        # Diseases can be provided in sim.demographics or sim.pars
         diseases = self.convert_plugins(ss.Disease, plugin_name='diseases')
-        for disease in diseases:
 
+        # Interate over diseases and initialize them
+        for disease in diseases:
             disease.initialize(self)
 
             # Add the disease's parameters and results into the Sim's dicts
@@ -311,6 +318,7 @@ class Sim(sc.prettyobj):
             # Add disease states to the People's dicts
             self.people.add_module(disease)
 
+        # Store diseases in the sim
         self.diseases = ss.ndict(*diseases)
 
         return
@@ -322,12 +330,12 @@ class Sim(sc.prettyobj):
     def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
 
-        processed_networks = self.convert_plugins(ss.Network, plugin_name='networks', attr_plugins=self.people.networks)
+        processed_networks = self.convert_plugins(ss.Network, plugin_name='networks')
 
         # Now store the networks in a Networks object, which also allows for connectors between networks
         if not isinstance(processed_networks, ss.Networks):
-            self.people.networks = ss.Networks(*processed_networks)
-        self.people.networks.initialize(self)
+            self.networks = ss.Networks(*processed_networks)
+        self.networks.initialize(self)
 
         return
 
@@ -391,7 +399,7 @@ class Sim(sc.prettyobj):
         TBC whether we keep this or incorporate the checks into the init methods
         """
         # Make sure that there's a contact network if any diseases are present
-        if self.diseases and not self.people.networks:
+        if self.diseases and not self.networks:
             warnmsg = f'Warning: simulation has {len(self.diseases)} diseases but no contact network(s).'
             ss.warn(warnmsg, die=False)
         return

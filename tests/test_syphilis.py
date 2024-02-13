@@ -35,7 +35,6 @@ def make_syph_sim(dt=1, n_agents=500):
         )
     )
     maternal = ss.maternal()
-    ppl.networks = ss.ndict(mf, maternal)
 
     sim_kwargs = dict(
         dt=dt,
@@ -44,6 +43,7 @@ def make_syph_sim(dt=1, n_agents=500):
         n_years=40,
         people=ppl,
         diseases=syph,
+        networks=ss.ndict(mf, maternal),
         demographics=[pregnancy, death],
     )
 
