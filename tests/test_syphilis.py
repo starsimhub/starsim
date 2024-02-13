@@ -180,6 +180,6 @@ if __name__ == '__main__':
     dt = [1/12, 1][quick_run]
     n_agents = [20e3, 500][quick_run]
 
-    # sim = test_syph(dt=dt, n_agents=n_agents)
+    sim = test_syph(dt=dt, n_agents=n_agents)
     sim_base, sim_intv = test_syph_intvs(dt=dt, n_agents=n_agents, do_plot=True)
 
