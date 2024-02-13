@@ -19,7 +19,7 @@ def set_numba_seed(value):
 
 class Sim(sc.prettyobj):
 
-    def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None,
+    def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, networks=None,
                  connectors=None, interventions=None, analyzers=None, **kwargs):
 
         # Set attributes
@@ -45,12 +45,12 @@ class Sim(sc.prettyobj):
 
         # Placeholders for plug-ins: demographics, diseases, connectors, analyzers, and interventions
         # Products are not here because they are stored within interventions
-        self.demographics  = ss.ndict(type=ss.DemographicModule)
-        self.diseases      = ss.ndict(type=ss.Disease)
-        self.networks       = ss.ndict(type=ss.Network)
-        self.connectors    = ss.ndict(type=ss.Connector)
-        self.interventions = ss.ndict(type=ss.Intervention)
-        self.analyzers = ss.ndict(type=ss.Analyzer)
+        self.demographics  = ss.ndict(demographics, type=ss.DemographicModule)
+        self.diseases      = ss.ndict(diseases, type=ss.Disease)
+        self.networks       = ss.ndict(networks, type=ss.Network)
+        self.connectors    = ss.ndict(connectors, type=ss.Connector)
+        self.interventions = ss.ndict(interventions, type=ss.Intervention)
+        self.analyzers = ss.ndict(analyzers, type=ss.Analyzer)
 
         # Initialize the random number generator container
         self.rng_container = ss.RNGContainer()
@@ -238,7 +238,7 @@ class Sim(sc.prettyobj):
         self.people.init_results(self)
         return self
 
-    def convert_plugins(self, Plugin_Class, plugin_name=None, attr_plugins=None):
+    def convert_plugins(self, Plugin_Class, plugin_name=None):
         """
         Common logic for converting plug-ins to a standard format
         Used for networks, demographics, diseases, connectors, analyzers, and interventions
@@ -249,19 +249,23 @@ class Sim(sc.prettyobj):
         if plugin_name is None: plugin_name = Plugin_Class.__name__.lower()
 
         # Figure out if it's in the sim pars or provided directly
-        if attr_plugins is None or len(attr_plugins)==0:
-            if self.pars[plugin_name] is not None:
-                plugins = sc.tolist(self.pars[plugin_name])
+        attr_plugins = getattr(self, plugin_name)  # Get any plugins that have been provided directly
+        if attr_plugins is None or len(attr_plugins)==0:  # None have been provided directly
+            if self.pars.get(plugin_name) and len(self.pars[plugin_name]):  # See if they've been provided in the pars dict
+                plugins = ss.ndict(self.pars[plugin_name])
+            else:  # Not provided directly or in pars
+                plugins   = {}
         else:
-            plugins = sc.tolist(attr_plugins)
+            plugins = attr_plugins
 
         # Convert
         known_plugins = [n.__name__.lower() for n in ss.all_subclasses(Plugin_Class)]
 
         processed_plugins = sc.autolist()
-        for plugin in plugins:
+        for plugin in plugins.values():
 
             if not isinstance(plugin, Plugin_Class):
+
                 if isinstance(plugin, dict):
                     if plugin.get('name') and plugin['name'] in known_plugins:
                         # Make an instance of the requested plugin
@@ -276,6 +280,7 @@ class Sim(sc.prettyobj):
                         f'{plugin_name.capitalize()} must be provided as either class instances or dictionaries with a '
                         f'"name" key corresponding to one of these known subclasses: {known_plugins}.')
                     raise ValueError(errormsg)
+
             processed_plugins += plugin
 
         return processed_plugins
@@ -292,6 +297,7 @@ class Sim(sc.prettyobj):
             demographics += births
         if self.pars.death_rate is not None:
             background_deaths = ss.background_deaths(pars={'death_rate': self.pars.death_rate})
+            demographics += background_deaths
 
         # Iterate over demographic modules and initialize them
         for dem_mod in demographics:

@@ -52,8 +52,8 @@ def test_components():
 
 if __name__ == '__main__':
 
-    sim1 = test_default()
-    sim2 = test_simple()
-    sim3 = test_components()
+    # sim1 = test_default()
+    sim = test_simple()
+    # sim3 = test_components()
 
 

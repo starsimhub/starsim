@@ -25,6 +25,7 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, 
         birth_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_births.csv')
         births = ss.births(pars={'birth_rate': birth_rates})
         demographics += births
+
     elif which == 'pregnancy':
         fertility_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')
         pregnancy = ss.Pregnancy(pars={'fertility_rate': fertility_rates, 'rel_fertility': 1})  # 4/3
@@ -35,7 +36,7 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, 
     demographics += death
 
     # Make people
-    n_agents = 10_000
+    n_agents = 5_000
     nga_pop_1995 = 106819805
     age_data = pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv')
     ppl = ss.People(n_agents, age_data=age_data)

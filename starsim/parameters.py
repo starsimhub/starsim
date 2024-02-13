@@ -47,14 +47,12 @@ class Parameters(sc.objdict):
         self.verbose         = ss.options.verbose # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
 
         # Plug-ins: demographics, diseases, connectors, networks, analyzers, and interventions
-        self.demographics = sc.autolist()
-        self.diseases = sc.autolist()
-        self.networks        = sc.autolist()
-        self.connectors = sc.autolist()
-        self.interventions = sc.autolist()
-        self.analyzers = sc.autolist()
-
-        # Network parameters, generally initialized after the population has been constructed
+        self.demographics = ss.ndict()
+        self.diseases = ss.ndict()
+        self.networks        = ss.ndict()
+        self.connectors = ss.ndict()
+        self.interventions = ss.ndict()
+        self.analyzers = ss.ndict()
 
         # Update with any supplied parameter values and generate things that need to be generated
         self.update(kwargs)
