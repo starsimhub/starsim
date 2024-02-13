@@ -22,7 +22,7 @@ class FusedArray(NDArrayOperatorsMixin):
 
     __slots__ = ('values','_uid_map', 'uid')
 
-    def __init__(self, values, uid, uid_map=None):
+    def __init__(self, values=None, uid=None, uid_map=None):
 
         self.values = values
         self.uid = uid
@@ -253,16 +253,16 @@ class FusedArray(NDArrayOperatorsMixin):
 
 
 class DynamicView(NDArrayOperatorsMixin):
-    def __init__(self, dtype, fill_value=None):
+    def __init__(self, dtype, default=None):
         """
         Args:
             name: name of the result as used in the model
             dtype: datatype
-            fill_value: default value for this state upon model initialization. If not provided, it will use the default value for the dtype
+            default: default value for this state upon model initialization. If not provided, it will use the default value for the dtype
             shape: If not none, set to match a string in `pars` containing the dimensionality
             label: text used to construct labels for the result for displaying on plots and other outputs
         """
-        self.fill_value = fill_value if fill_value is not None else dtype()
+        self.default = default if default is not None else dtype()
         self.n = 0  # Number of agents currently in use
         self._data = np.empty(0, dtype=dtype)  # The underlying memory array (length at least equal to n)
         self._view = None  # The view corresponding to what is actually accessible (length equal to n)
@@ -295,7 +295,7 @@ class DynamicView(NDArrayOperatorsMixin):
         # If the total number of agents exceeds the array size, extend the underlying arrays
         if self.n + n > self._s:
             n_new = max(n, int(self._s / 2))  # Minimum 50% growth
-            self._data = np.concatenate([self._data, np.full(n_new, dtype=self.dtype, fill_value=self.fill_value)], axis=0)
+            self._data = np.concatenate([self._data, np.full(n_new, dtype=self.dtype, fill_value=self.default)], axis=0)
         self.n += n  # Increase the count of the number of agents by `n` (the requested number of new agents)
         self._map_arrays()
 
@@ -304,7 +304,7 @@ class DynamicView(NDArrayOperatorsMixin):
         # Note that these are indices, not UIDs!
         n = len(inds)
         self._data[:n] = self._data[inds]
-        self._data[n:self.n] = self.fill_value
+        self._data[n:self.n] = self.default
         self.n = n
         self._map_arrays()
 
@@ -338,27 +338,27 @@ class DynamicView(NDArrayOperatorsMixin):
 
 class State(FusedArray):
 
-    def __init__(self, name, dtype, fill_value=None, label=None):
+    def __init__(self, name, dtype, default=None, label=None):
         """
+        Store a state of the agents (e.g. age, infection status, etc.)
 
-        :param name: A string name for the state
-        :param dtype: The dtype to use for this instance
-        :param fill_value: Specify default value for new agents. This can be
+        Args: 
+            name (str): The name for the state (also used as the dictionary key, so should not have spaces etc.)
+            dtype (class): The dtype to use for this instance (if None, infer from value)
+            default (any): Specify default value for new agents. This can be
             - A scalar with the same dtype (or castable to the same dtype) as the State
             - A callable, with a single argument for the number of values to produce
-            - An ss.ScipyDistribution instance
-        :param label:
+            - An ``ss.ScipyDistribution`` instance
+            label (str): The human-readable name for the state
         """
-
-        super().__init__(values=None, uid=None, uid_map=None)  # Call the FusedArray constructor
-
-        self.fill_value = fill_value
-
-        self._data = DynamicView(dtype=dtype)
+        super().__init__()  # Call the FusedArray constructor
+        self.default = default
         self.name = name
         self.label = label or name
+        self._data = DynamicView(dtype=dtype)
         self.values = self._data._view
         self._initialized = False
+        return
 
     def __repr__(self):
         if not self._initialized:
@@ -367,12 +367,12 @@ class State(FusedArray):
             return FusedArray.__repr__(self)
 
     def _new_vals(self, uids):
-        if isinstance(self.fill_value, ScipyDistribution):
-            new_vals = self.fill_value.rvs(uids)
-        elif callable(self.fill_value):
-            new_vals = self.fill_value(len(uids))
+        if isinstance(self.default, ScipyDistribution):
+            new_vals = self.default.rvs(uids)
+        elif callable(self.default):
+            new_vals = self.default(len(uids))
         else:
-            new_vals = self.fill_value
+            new_vals = self.default
         return new_vals
 
     def initialize(self, sim=None, people=None):
@@ -383,10 +383,10 @@ class State(FusedArray):
             people = sim.people
 
         sim_still_needed = False
-        if isinstance(self.fill_value, rv_frozen):
+        if isinstance(self.default, rv_frozen):
             if sim is not None:
-                self.fill_value = ScipyDistribution(self.fill_value, f'{self.__class__.__name__}_{self.label}')
-                self.fill_value.initialize(sim, self)
+                self.default = ScipyDistribution(self.default, f'{self.__class__.__name__}_{self.label}')
+                self.default.initialize(sim, self)
             else:
                 sim_still_needed = True
 

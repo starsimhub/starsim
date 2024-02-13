@@ -10,7 +10,6 @@ import starsim as ss
 import scipy.optimize as spo
 import scipy.stats as sps
 import scipy.spatial as spsp
-from scipy.stats._distn_infrastructure import rv_frozen
 
 
 # Specify all externally visible functions this file defines
@@ -82,8 +81,8 @@ class Network(ss.Module):
             self.initialized = True
 
         # Define states using placeholder values
-        self.participant = ss.State('participant', bool, fill_value=False)
-        self.debut = ss.State('debut', float, fill_value=0)
+        self.participant = ss.State('participant', bool, default=False)
+        self.debut = ss.State('debut', float, default=0.0)
         return
 
     def initialize(self, sim):
