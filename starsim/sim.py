@@ -348,8 +348,10 @@ class Sim(sc.prettyobj):
     def init_interventions(self):
         """ Initialize and validate the interventions """
 
+        interventions = self.convert_plugins(ss.Intervention, plugin_name='interventions')
+
         # Translate the intervention specs into actual interventions
-        for i, intervention in enumerate(self.pars['interventions']):
+        for i, intervention in enumerate(interventions):
             if isinstance(intervention, type) and issubclass(intervention, ss.Intervention):
                 intervention = intervention()  # Convert from a class to an instance of a class
             if isinstance(intervention, ss.Intervention):

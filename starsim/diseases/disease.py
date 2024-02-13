@@ -282,11 +282,11 @@ class STI(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        if self.pars['seed_infections'] is None:
+        if self.pars['init_prev'] is None:
             return
 
         alive_uids = ss.true(sim.people.alive)  # Maybe just sim.people.uid?
-        initial_cases = self.pars['seed_infections'].filter(alive_uids)
+        initial_cases = self.pars['init_prev'].filter(alive_uids)
         self.set_prognoses(sim, initial_cases)  # TODO: sentinel value to indicate seeds?
         return
 
