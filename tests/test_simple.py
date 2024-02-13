@@ -51,7 +51,7 @@ def test_components():
 
 
 def test_parallel():
-    return 
+    return
 
 
 if __name__ == '__main__':
