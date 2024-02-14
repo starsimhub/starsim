@@ -10,7 +10,9 @@ import networkx as nx
 from operator import itemgetter
 import pandas as pd
 
+
 __all__ = ['InfectionLog', 'Disease', 'Infection']
+
 
 class InfectionLog(nx.MultiDiGraph):
     """

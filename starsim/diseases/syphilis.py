@@ -4,17 +4,14 @@ Define default syphilis disease module
 
 import numpy as np
 import sciris as sc
-import pandas as pd
-from sciris import randround as rr
+from sciris import randround as rr # Since used frequently
 import scipy.stats as sps
-
 import starsim as ss
-from .disease import STI
 
 __all__ = ['Syphilis']
 
 
-class Syphilis(STI):
+class Syphilis(ss.Infection):
 
     def __init__(self, pars=None):
         super().__init__(pars)
@@ -280,7 +277,7 @@ def syph_dx(prod_name=None):
     """
     Create default diagnostic products
     """
-    dfdx = pd.read_csv(datafiles.dx)
+    dfdx = sc.dataframe.read_csv(datafiles.dx)
     dxprods = dict(
         rpr=ss.dx(dfdx[dfdx.name == 'rpr'], hierarchy=['positive', 'inadequate', 'negative']),
         rst=ss.dx(dfdx[dfdx.name == 'rst'], hierarchy=['positive', 'inadequate', 'negative']),
@@ -295,7 +292,7 @@ def syph_tx(prod_name=None):
     """
     Create default treatment products
     """
-    dftx = pd.read_csv(datafiles.tx)  # Read in dataframe with parameters
+    dftx = sc.dataframe.read_csv(datafiles.tx)  # Read in dataframe with parameters
     txprods = dict()
     for name in dftx.name.unique():
         txprods[name] = ss.tx(dftx[dftx.name == name])

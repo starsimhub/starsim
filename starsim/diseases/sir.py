@@ -105,20 +105,20 @@ class SIR(ss.Infection):
         self.results['new_infections'][sim.ti] += len(uids)
         return
 
-    def make_new_cases(self, sim): # TODO: Use function from STI
-        for k, layer in sim.people.networks.items():
-            if k in self.pars['beta']:
-                contacts = layer.contacts
-                rel_trans = (self.infected & sim.people.alive).astype(ss.dtypes.float)
-                rel_sus = (self.susceptible & sim.people.alive).astype(ss.dtypes.float)
-                for a, b, beta in [[contacts.p1, contacts.p2, self.pars.beta[k][0]],
-                                   [contacts.p2, contacts.p1, self.pars.beta[k][1]]]:
-                    # probability of a->b transmission
-                    p_transmit = rel_trans[a] * rel_sus[b] * layer.contacts['beta'] * beta * sim.dt
-                    new_cases = np.random.random(len(a)) < p_transmit # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
-                    if new_cases.any():
-                        self.infect(sim, b[new_cases], a[new_cases])
-        return
+    # def make_new_cases(self, sim): # TODO: Use function from STI
+    #     for k, layer in sim.people.networks.items():
+    #         if k in self.pars['beta']:
+    #             contacts = layer.contacts
+    #             rel_trans = (self.infected & sim.people.alive).astype(ss.dtypes.float)
+    #             rel_sus = (self.susceptible & sim.people.alive).astype(ss.dtypes.float)
+    #             for a, b, beta in [[contacts.p1, contacts.p2, self.pars.beta[k][0]],
+    #                                [contacts.p2, contacts.p1, self.pars.beta[k][1]]]:
+    #                 # probability of a->b transmission
+    #                 p_transmit = rel_trans[a] * rel_sus[b] * layer.contacts['beta'] * beta * sim.dt
+    #                 new_cases = np.random.random(len(a)) < p_transmit # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
+    #                 if new_cases.any():
+    #                     self.infect(sim, b[new_cases], a[new_cases])
+        # return
 
     def update_results(self, sim):
         super().update_results(sim)
