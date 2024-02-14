@@ -15,6 +15,7 @@ from .interventions import *
 from .analyzers     import *
 from .demographics  import *
 from .connectors    import *
+from .disease       import *
 from .diseases      import *
 from .sim           import *
 

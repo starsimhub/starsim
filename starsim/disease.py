@@ -10,7 +10,9 @@ import networkx as nx
 from operator import itemgetter
 import pandas as pd
 
-__all__ = ['InfectionLog', 'Disease', 'STI']
+
+__all__ = ['InfectionLog', 'Disease', 'Infection']
+
 
 class InfectionLog(nx.MultiDiGraph):
     """
@@ -71,14 +73,14 @@ class InfectionLog(nx.MultiDiGraph):
         a particular entry)
         """
         if len(self) == 0:
-            return pd.DataFrame(columns=['t','source','target'])
+            return sc.dataframe(columns=['t','source','target'])
 
         entries = []
         for source, target, t, data in self.edges(keys=True, data=True):
             d = data.copy()
             d.update(source=source, target=target, t=t)
             entries.append(d)
-        df = pd.DataFrame.from_records(entries)
+        df = sc.dataframe.from_records(entries)
         df = df.sort_values(['t','source','target'])
         df = df.reset_index(drop=True)
 
@@ -248,20 +250,20 @@ class Disease(ss.Module):
         return
 
 
-class STI(Disease):
+class Infection(Disease):
     """
-    Base class for STIs used in STIsim
+    Base class for infectious diseases used in Starsim
 
-    This class contains specializations for STI transmission (i.e., implements network-based
-    transmission with directional beta values) and defines attributes that STIsim connectors
+    This class contains specializations for infectious transmission (i.e., implements network-based
+    transmission with directional beta values) and defines attributes that connectors
     operate on to capture co-infection
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.rel_sus     = ss.State('rel_sus', float, 1)
-        self.rel_sev     = ss.State('rel_sev', float, 1)
-        self.rel_trans   = ss.State('rel_trans', float, 1)
+        self.rel_sus     = ss.State('rel_sus', float, 1.0)
+        self.rel_sev     = ss.State('rel_sev', float, 1.0)
+        self.rel_trans   = ss.State('rel_trans', float, 1.0)
         self.susceptible = ss.State('susceptible', bool, True)
         self.infected    = ss.State('infected', bool, False)
         self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)

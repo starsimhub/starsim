@@ -4,14 +4,13 @@ Define default gonorrhea disease module and related interventions
 
 import numpy as np
 import starsim as ss
-from .disease import STI
 import scipy.stats as sps
 
 
 __all__ = ['Gonorrhea']
 
 
-class Gonorrhea(STI):
+class Gonorrhea(ss.Infection):
 
     def __init__(self, pars=None):
         super().__init__(pars)
