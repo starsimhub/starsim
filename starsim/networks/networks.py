@@ -697,7 +697,7 @@ class random(DynamicNetwork):
 
         total_number_of_half_edges = np.sum(number_of_contacts)
         count = 0
-        source = np.zeros((total_number_of_half_edges,), dtype=np.int32) # TODO: use flexible precision
+        source = np.zeros((total_number_of_half_edges,), dtype=np.int64) # TODO: use flexible precision
         for i, person_id in enumerate(inds):
             n_contacts = number_of_contacts[i]
             source[count: count + n_contacts] = person_id

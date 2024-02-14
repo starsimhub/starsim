@@ -17,8 +17,8 @@ INT_NAN = 2147483647 # From np.iinfo(np.int32).max: value to use to flag invalid
 # Define Starsim-default data types
 dtypes = sc.objdict(
     bool = bool,
-    int = np.int32,
-    float = np.float32,
+    int = np.int64,
+    float = np.float64,
     result_float = np.float64,
 )
 
@@ -80,8 +80,8 @@ class Options(sc.objdict):
         optdesc.sep = 'Set thousands seperator for text output'
         options.sep = str(os.getenv('STARSIM_SEP', ','))
 
-        optdesc.precision = 'Set arithmetic precision -- 32-bit by default for efficiency'
-        options.precision = int(os.getenv('STARSIM_PRECISION', 32))
+        optdesc.precision = 'Set arithmetic precision -- 64-bit by default for efficiency'
+        options.precision = int(os.getenv('STARSIM_PRECISION', 64)) # CK: TODO
 
         return optdesc, options
 

@@ -96,7 +96,7 @@ class FusedArray(NDArrayOperatorsMixin):
         :return: A tuple of (values, uids, new_uid_map) suitable for passing into the FusedArray constructor
         """
         out = np.empty(len(key), dtype=vals.dtype)
-        new_uid_map = np.full(uid_map.shape[0], fill_value=ss.INT_NAN, dtype=np.int32)
+        new_uid_map = np.full(uid_map.shape[0], fill_value=ss.INT_NAN, dtype=np.int64)
 
         for i in range(len(key)):
             idx = uid_map[key[i]]
@@ -293,7 +293,7 @@ class FusedArray(NDArrayOperatorsMixin):
 
 
 class DynamicView(NDArrayOperatorsMixin):
-    def __init__(self, dtype, default=None):
+    def __init__(self, dtype, default=None, coerce=False):
         """
         Args:
             name: name of the result as used in the model
@@ -302,6 +302,8 @@ class DynamicView(NDArrayOperatorsMixin):
             shape: If not none, set to match a string in `pars` containing the dimensionality
             label: text used to construct labels for the result for displaying on plots and other outputs
         """
+        if coerce:
+            dtype = check_dtype(dtype, default)
         self.default = default if default is not None else dtype()
         self.n = 0  # Number of agents currently in use
         self._data = np.empty(0, dtype=dtype)  # The underlying memory array (length at least equal to n)
@@ -378,7 +380,7 @@ class DynamicView(NDArrayOperatorsMixin):
 
 class State(FusedArray):
 
-    def __init__(self, name, dtype=None, default=None, label=None, coerce=True):
+    def __init__(self, name, dtype=None, default=None, label=None, coerce=False):
         """
         Store a state of the agents (e.g. age, infection status, etc.)
 
