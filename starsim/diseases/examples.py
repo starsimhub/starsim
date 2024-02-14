@@ -124,7 +124,7 @@ class SIR(Disease):
 
     def update_results(self, sim):
         super().update_results(sim)
-        self.results['prevalence'][sim.ti] = self.results.n_infected[sim.ti] / np.count_nonzero(sim.people.alive)
+        self.results['prevalence'][sim.ti] = self.results[f"n_{self.infected.name}"][sim.ti] / np.count_nonzero(sim.people.alive)
         return
 
 
