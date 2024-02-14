@@ -9,12 +9,14 @@ import numpy as np
 import starsim as ss
 from starsim.random import SingleRNG, MultiRNG
 from starsim import options
-from scipy.stats import (bernoulli, lognorm, norm, randint, rv_discrete, uniform)
+from scipy.stats import (bernoulli, expon, lognorm, norm, randint, rv_discrete, 
+                         uniform, rv_histogram, weibull_min)
 from scipy.stats._discrete_distns import bernoulli_gen # TODO: can we remove this?
 
 
 __all__ = ['ScipyDistribution', 'ScipyHistogram']
-__all__ += ['bernoulli', 'lognorm', 'norm', 'randint', 'rv_discrete', 'uniform'] # Add common distributions so they can be imported directly
+__all__ += ['bernoulli', 'expon', 'lognorm', 'norm', 'randint', 'rv_discrete', 
+            'uniform', 'weibull_min'] # Add common distributions so they can be imported directly
 
 
 class ScipyDistribution():
