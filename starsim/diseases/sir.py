@@ -42,15 +42,6 @@ class SIR(ss.Infection):
 
         return
 
-    def init_results(self, sim):
-        """
-        Initialize results
-        """
-        super().init_results(sim)
-        self.results += ss.Result(self.name, 'prevalence', sim.npts, dtype=float)
-        self.results += ss.Result(self.name, 'new_infections', sim.npts, dtype=int)
-        return
-
     def update_pre(self, sim):
         # Progress infectious -> recovered
         recovered = ss.true(self.infected & (self.ti_recovered <= sim.year))
@@ -61,14 +52,11 @@ class SIR(ss.Infection):
         deaths = ss.true(self.ti_dead <= sim.year)
         if len(deaths):
             sim.people.request_death(deaths)
-        return len(deaths)
+
+        return
 
     def update_death(self, sim, uids):
         # Reset infected/recovered flags for dead agents
-        # This is an optional step. Implementing this function means that in `SIR.update_results()` the prevalence
-        # calculation does not need to filter the infected agents by the alive agents. An alternative would be
-        # to omit implementing this function, and instead filter by the alive agents when calculating prevalence
-        super().update_death(sim, uids)
         self.infected[uids] = False
         self.recovered[uids] = False
         return
