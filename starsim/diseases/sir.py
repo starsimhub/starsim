@@ -4,7 +4,6 @@ Define example disease modules
 
 import numpy as np
 import starsim as ss
-import sciris as sc
 import scipy.stats as sps
 
 
@@ -15,8 +14,6 @@ class SIR(ss.HHT):
     This class implements a basic SIR model with states for susceptible,
     infected/infectious, and recovered. It also includes deaths, and basic
     results.
-
-    Note that this class is not fully compatible with common random numbers.
     """
 
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
@@ -74,4 +71,3 @@ class SIR(ss.HHT):
         self.infected[uids] = False
         self.recovered[uids] = False
         return
-
