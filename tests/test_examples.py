@@ -22,8 +22,8 @@ def test_sir():
     # Or why not put a lambda here for fun!
     sir.pars['dur_inf'].kwds['loc'] = lambda self, sim, uids: sim.people.age[uids]/10
 
-    sir.pars['beta'] = {'randomnetwork': 0.1}
-    networks =     ss.random(pars=dict(n_contacts=sps.poisson(mu=4)))
+    sir.pars['beta'] = {'random': 0.1}
+    networks = ss.random(pars=dict(n_contacts=sps.poisson(mu=4)))
 
     sim = ss.Sim(people=ppl, diseases=sir, networks=networks)
     sim.run()

@@ -281,7 +281,6 @@ class Pregnancy(DemographicModule):
     def make_fertility_prob_fn(module, sim, uids):
         """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
 
-
         if sc.isnumber(module.fertility_rate_data):
             fertility_rate = module.fertility_rate_data
 
@@ -417,7 +416,7 @@ class Pregnancy(DemographicModule):
             # Add connections to any vertical transmission layers
             # Placeholder code to be moved / refactored. The maternal network may need to be
             # handled separately to the sexual networks, TBC how to handle this most elegantly
-            for lkey, layer in sim.people.networks.items():
+            for lkey, layer in sim.networks.items():
                 if layer.vertical:  # What happens if there's more than one vertical layer?
                     durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
                     layer.add_pairs(conceive_uids, new_uids, dur=durs)
