@@ -61,7 +61,7 @@ class FusedArray(NDArrayOperatorsMixin):
 
         if uid_map is None and uid is not None:
             # Construct a local UID map as opposed to using a shared one (i.e., the one for all agents contained in the People instance)
-            self.uid_map = np.full(np.max(uid) + 1, fill_value=INT_NAN, dtype=int)
+            self.uid_map = np.full(np.max(uid) + 1, fill_value=ss.INT_NAN, dtype=sdt.int)
             self.uid_map[uid] = np.arange(len(uid))
         else:
             self._uid_map = uid_map
@@ -220,9 +220,9 @@ class FusedArray(NDArrayOperatorsMixin):
             else:
                 raise e
                 
-    #def __getattr__(self, attr):
-    #    """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
-    #    return getattr(self.values, attr)
+    def __getattr__(self, attr):
+        """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
+        return getattr(self.values, attr)
 
     # Make it behave like a regular array mostly
     def __len__(self):
@@ -294,7 +294,7 @@ class FusedArray(NDArrayOperatorsMixin):
 
 
 class DynamicView(NDArrayOperatorsMixin):
-    def __init__(self, dtype, default=None, coerce=False):
+    def __init__(self, dtype, default=None, coerce=True):
         """
         Args:
             name: name of the result as used in the model
@@ -303,8 +303,8 @@ class DynamicView(NDArrayOperatorsMixin):
             shape: If not none, set to match a string in `pars` containing the dimensionality
             label: text used to construct labels for the result for displaying on plots and other outputs
         """
-        #if coerce:
-        #    dtype = check_dtype(dtype, default)
+        if coerce:
+            dtype = check_dtype(dtype, default)
         self.default = default if default is not None else dtype()
         self.n = 0  # Number of agents currently in use
         self._data = np.empty(0, dtype=dtype)  # The underlying memory array (length at least equal to n)
@@ -381,7 +381,7 @@ class DynamicView(NDArrayOperatorsMixin):
 
 class State(FusedArray):
 
-    def __init__(self, name, dtype=None, default=None, label=None, coerce=False):
+    def __init__(self, name, dtype=None, default=None, label=None, coerce=True):
         """
         Store a state of the agents (e.g. age, infection status, etc.)
 
@@ -395,13 +395,13 @@ class State(FusedArray):
             label (str): The human-readable name for the state
             coerce (bool): Whether to ensure the the data is one of the supported data types
         """
-        super().__init__(values=None, uid=None, uid_map=None)  # Call the FusedArray constructor
+        super().__init__()  # Call the FusedArray constructor
         
-        #if coerce:
-        #    dtype = check_dtype(dtype, default)
+        if coerce:
+            dtype = check_dtype(dtype, default)
         
-        #if default is None:
-        #    default = dtype()
+        if default is None:
+            default = dtype()
         
         # Set attributes
         self.default = default
