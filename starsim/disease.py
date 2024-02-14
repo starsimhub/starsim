@@ -140,11 +140,21 @@ class Disease(ss.Module):
         :raises: Exception if there are any invalid parameters (or if the initialization is otherwise invalid in some way)
         """
         if sim.networks is not None and len(sim.networks) > 0:
+
+            # If there's no beta, make a default one
             if 'beta' not in self.pars:
                 self.pars.beta = sc.objdict({k: [1, 1] for k in sim.networks})
+
+            # If beta is a scalar, apply this bi-directionally to all networks
             if sc.isnumber(self.pars.beta):
                 orig_beta = self.pars.beta
                 self.pars.beta = sc.objdict({k: [orig_beta, orig_beta] for k in sim.networks})
+
+            # If beta is a dict, check all entries are bi-directional
+            elif isinstance(self.pars.beta, dict):
+                for k, v in self.pars.beta.items():
+                    if sc.isnumber(v):
+                        self.pars.beta[k] = [v, v]
 
     def set_initial_states(self, sim):
         """
