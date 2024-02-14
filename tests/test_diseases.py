@@ -77,6 +77,7 @@ def test_ncd():
 
 
 def test_cholera():
+    ss.options(multirng=False)
     sim = ss.Sim(n_agents=n_agents, networks=ss.random(), diseases=ss.Cholera())
     sim.run()
     return sim
