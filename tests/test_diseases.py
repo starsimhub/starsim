@@ -1,5 +1,5 @@
 """
-Run through disease models and
+Run tests of disease models
 """
 
 # %% Imports and settings
@@ -84,7 +84,7 @@ def test_cholera():
 
 if __name__ == '__main__':
     ss.options(multirng=False)
-    # sim1 = test_sir()
-    # sim2 = test_ncd()
+    sim1 = test_sir()
+    sim2 = test_ncd()
     sim3 = test_cholera()
     plt.show()
