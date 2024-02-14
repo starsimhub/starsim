@@ -33,6 +33,7 @@ class ndict(sc.objdict):
         name (str): The items' attribute to use as keys.
         type (type): The expected type of items.
         strict (bool): If True, only items with the specified attribute will be accepted.
+        duplicates (bool): If True, it accepts duplicated keys an renames the using enumeration. Default: False.
 
     **Examples**::
 
@@ -42,10 +43,12 @@ class ndict(sc.objdict):
 
     """
 
-    def __init__(self, *args, name='name', type=None, strict=True, **kwargs):
+    def __init__(self, *args, name='name', type=None, strict=True, duplicates=ss.options.duplicates, **kwargs):
         self.setattribute('_name', name)  # Since otherwise treated as keys
         self.setattribute('_type', type)
         self.setattribute('_strict', strict)
+        self.setattribute('_duplicates', duplicates)
+
         self._initialize(*args, **kwargs)
         return
 
@@ -74,15 +77,18 @@ class ndict(sc.objdict):
             self._check_type(arg)
             # Check if this key already exists
             if key in self:
-                i = 1  # 1-based indexing seems appropriate here
-                new_key = f'{key}{i}'
-                # Find what's the next number we need to use for the new key
-                while new_key in self:
-                    i += 1
+                if self._duplicates:
+                    i = 1  # 1-based indexing seems appropriate here
                     new_key = f'{key}{i}'
-                warnmsg = f'Warning: duplicated name ({key}). Updated to {new_key}'  # Mssg can be removed
-                warn(warnmsg, die=False)
-                key = new_key
+                    # Find what's the next number we need to use for the new key
+                    while new_key in self:
+                        i += 1
+                        new_key = f'{key}{i}'
+                    warnmsg = f'Warning: Duplicate `name` {key}. Updated to {new_key}'  # Mssg can be removed if too verbose
+                    warn(warnmsg, die=False)
+                    key = new_key
+                else:
+                    raise DuplicateNameException(self[key])
             self[key] = arg
         elif valid is None:
             pass  # Nothing to do
@@ -403,3 +409,17 @@ def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
         raise ValueError(errormsg)
 
     return df
+
+
+#% Exceptions
+
+class DuplicateNameException(Exception):
+    """
+    Raised when either multiple instances of Module or State, or of any other type
+    passed to ndict have duplicate names."""
+
+
+    def __init__(self, obj):
+        msg = f"A {type(obj)} with name `{obj.name}` has already been added."
+        super().__init__(msg)
+        return
