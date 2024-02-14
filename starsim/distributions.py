@@ -154,6 +154,7 @@ class ScipyDistribution():
         self.gen.dist.sim = None
         self.gen.dist.rvs = partial(sps_rvs, self.gen.dist)
         self.rng = self.set_rng(rng, gen)
+        self.rvs = self.gen.dist.rvs
         return
 
     @staticmethod
@@ -179,38 +180,38 @@ class ScipyDistribution():
             self.rng.initialize(sim.rng_container, sim.people.slot)
         return
 
-    def __copy__(self):
-        cls = self.__class__
-        result = cls.__new__(cls)
-        result.__dict__.update(self.__dict__)
-        return result
+    # def __copy__(self):
+    #     cls = self.__class__
+    #     result = cls.__new__(cls)
+    #     result.__dict__.update(self.__dict__)
+    #     return result
 
-    def __deepcopy__(self, memo):
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memo[id(self)] = result
-        for k, v in self.__dict__.items():
-            setattr(result, k, deepcopy(v, memo))
-        return result
+    # def __deepcopy__(self, memo):
+    #     cls = self.__class__
+    #     result = cls.__new__(cls)
+    #     memo[id(self)] = result
+    #     for k, v in self.__dict__.items():
+    #         setattr(result, k, deepcopy(v, memo))
+    #     return result
     
-    def __getattr__(self, attr):
-        # Returns wrapped generator.(attr) if not a property
-        if attr == '__getstate__':
-            # Must be from pickle, return a callable function that returns None
-            return lambda: None
-        #elif attr == '__deepcopy__':
-        #    return self
-        elif attr in ['__setstate__', '__await__']:
-            # Must be from pickle, async programming, copy
-            return None
-        try:
-            return self.__getattribute__(attr)
-        except Exception:
-            try:
-                return getattr(self.gen, attr) # .dist?
-            except Exception:
-                errormsg = f'"{attr}" is not a member of this class or the underlying scipy stats class'
-                raise Exception(errormsg)
+    # def __getattr__(self, attr):
+    #     # Returns wrapped generator.(attr) if not a property
+    #     if attr == '__getstate__':
+    #         # Must be from pickle, return a callable function that returns None
+    #         return lambda: None
+    #     #elif attr == '__deepcopy__':
+    #     #    return self
+    #     elif attr in ['__setstate__', '__await__']:
+    #         # Must be from pickle, async programming, copy
+    #         return None
+    #     try:
+    #         return self.__getattribute__(attr)
+    #     except Exception:
+    #         try:
+    #             return getattr(self.gen, attr) # .dist?
+    #         except Exception:
+    #             errormsg = f'"{attr}" is not a member of this class or the underlying scipy stats class'
+    #             raise Exception(errormsg)
 
     def filter(self, size, **kwargs):
         return size[self.gen.rvs(size, **kwargs)]
