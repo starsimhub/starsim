@@ -438,10 +438,10 @@ class msm(SexualNetwork, DynamicNetwork):
     def __init__(self, pars=None, key_dict=None):
 
         pars = ss.omerge({
-'duration_dist': ss.lognorm(mean=15, stdev=15),
+'duration_dist': ss.lognorm_mean(mean=15, stdev=15),
             'participation_dist': ss.bernoulli(p=0.1),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
 'debut_dist': ss.norm(loc=16, scale=2),
-            'acts': ss.lognorm(mean=80, stdev=20),
+            'acts': ss.lognorm_mean(mean=80, stdev=20),
             'rel_part_rates': 1.0,
         }, pars)
         DynamicNetwork.__init__(self, key_dict)

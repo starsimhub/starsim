@@ -43,13 +43,13 @@ class Syphilis(ss.Infection):
         # Parameters
         default_pars = dict(
             # Adult syphilis natural history, all specified in years
-            dur_exposed=ss.lognorm(mean=1 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_primary=ss.lognorm(mean=1.5 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_secondary=ss.norm(loc=3.6 / 12, scale=1.5 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_temp=ss.lognorm(mean=1, stdev=6 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_long=ss.lognorm(mean=20, stdev=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            p_latent_temp=ss.bernoulli(p=0.25),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            p_tertiary=ss.bernoulli(p=0.35),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
+            dur_exposed = ss.lognorm_mean(mean=1 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_primary = ss.lognorm_mean(mean=1.5 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_secondary = ss.norm(loc=3.6 / 12, scale=1.5 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_temp = ss.lognorm_mean(mean=1, stdev=6 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_long = ss.lognorm_mean(mean=20, stdev=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            p_latent_temp = ss.bernoulli(p=0.25),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            p_tertiary = ss.bernoulli(p=0.35),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
 
             # Congenital syphilis outcomes
             # Birth outcomes coded as:
@@ -59,8 +59,8 @@ class Syphilis(ss.Infection):
             #   3: Live birth without syphilis-related complications
             # Source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5973824/)
             birth_outcomes=sc.objdict(
-                active=ss.rv_discrete(values=([0, 1, 2, 3, 4], [0.125, 0.125, 0.20, 0.35, 0.200])),
-                latent=ss.rv_discrete(values=([0, 1, 2, 3, 4], [0.050, 0.075, 0.10, 0.05, 0.725])),
+                active = ss.rv_discrete(values=([0, 1, 2, 3, 4], [0.125, 0.125, 0.20, 0.35, 0.200])),
+                latent = ss.rv_discrete(values=([0, 1, 2, 3, 4], [0.050, 0.075, 0.10, 0.05, 0.725])),
             ),
             birth_outcome_keys=['miscarriage', 'nnd', 'stillborn', 'congenital'],
 

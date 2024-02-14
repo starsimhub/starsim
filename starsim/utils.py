@@ -224,7 +224,7 @@ def set_seed(seed=None):
 
 
 # %% Helper functions related to distributions
-__all__ += ['lognorm_params', 'lognorm']
+__all__ += ['lognorm_params', 'lognorm_mean']
 
 
 def lognorm_params(mean, stdev):
@@ -238,7 +238,7 @@ def lognorm_params(mean, stdev):
     return s, scale
 
 
-def lognorm(mean, stdev):
+def lognorm_mean(mean, stdev):
     """
     Wrapper for scipy lognorm but using mean and stdev
     """
