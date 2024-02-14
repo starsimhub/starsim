@@ -674,7 +674,7 @@ class random(DynamicNetwork):
         self.add_pairs(sim.people)
 
     @staticmethod
-    @nb.njit
+    @nb.njit(cache=True)
     def get_contacts(inds, number_of_contacts):
         """
         Efficiently generate contacts

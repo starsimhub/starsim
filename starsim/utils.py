@@ -205,7 +205,7 @@ def set_seed(seed=None):
         seed (int): the random seed
     '''
 
-    @nb.njit
+    @nb.njit(cache=True)
     def set_seed_numba(seed):
         return np.random.seed(seed)
 
@@ -252,7 +252,7 @@ def lognorm(mean, stdev):
 __all__ += ['true', 'false', 'defined', 'undefined']
 
 
-@nb.njit
+@nb.njit(cache=True)
 def _true(uids, values):
     """
     Returns the UIDs for indices where the value evaluates as True
@@ -267,7 +267,7 @@ def _true(uids, values):
     return out
 
 
-@nb.njit
+@nb.njit(cache=True)
 def _false(uids, values):
     """
     Returns the UIDs for indices where the value evaluates as False

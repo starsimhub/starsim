@@ -82,7 +82,7 @@ class FusedArray(NDArrayOperatorsMixin):
         return self.values.dtype
 
     @staticmethod
-    @nb.njit
+    @nb.njit(cache=True)
     def _get_vals_uids(vals, key, uid_map):
         """
         Extract values from a collection of UIDs
@@ -108,7 +108,7 @@ class FusedArray(NDArrayOperatorsMixin):
         return out, key, new_uid_map
 
     @staticmethod
-    @nb.njit
+    @nb.njit(cache=True)
     def _set_vals_uids_multiple(vals, key, uid_map, value):
         """
         Insert an array of values based on UID
@@ -134,7 +134,7 @@ class FusedArray(NDArrayOperatorsMixin):
         return
 
     @staticmethod
-    @nb.njit
+    @nb.njit(cache=True)
     def _set_vals_uids_single(vals, key, uid_map, value):
         """
         Insert a single value into multiple UIDs
