@@ -5,6 +5,7 @@ Distribution support extending scipy with two key functionalities:
 """
 
 from copy import deepcopy
+from functools import partial
 import numpy as np
 import starsim as ss
 from starsim.random import SingleRNG, MultiRNG
@@ -99,7 +100,7 @@ def sps_rvs(self, *args, **kwargs):
             kwargs[pname] = pars_slots
 
     kwargs['size'] = n_samples
-    vals = super().rvs(*args, **kwargs)
+    vals = self.__class__.rvs(self, *args, **kwargs)
     if repeat_slot_flag:
         # Handle repeated slots
         repeat_slot_vals = np.full(len(slots), np.nan)
@@ -130,7 +131,7 @@ def sps_rvs(self, *args, **kwargs):
                     pars_slots[repeat_slot_u] = kwargs_pname # Take first instance of each
                     kwargs[pname] = pars_slots
 
-            vals = super().rvs(*args, **kwargs) # Draw again for slot repeat
+            vals = self.__class__.rvs(*args, **kwargs) # Draw again for slot repeat
             #assert np.allclose(slots[cur_inds], repeat_slot_u) # TEMP: Check alignment
             repeat_slot_vals[cur_inds] = vals[repeat_slot_u]
             todo_inds = np.where(np.isnan(repeat_slot_vals))[0]
@@ -155,9 +156,9 @@ def sps_rvs(self, *args, **kwargs):
 class ScipyDistribution():
     def __init__(self, gen, rng=None):
         self.gen = gen
-        self.gen.sim = None
-        self.gen.initialize = sps_initialize
-        self.gen.rvs = sps_rvs
+        self.gen.dist.sim = None
+        self.gen.dist.initialize = partial(sps_initialize, self.gen.dist)
+        self.gen.dist.rvs = partial(sps_rvs, self.gen.dist)
         # class starsim_gen(type(gen.dist)):
         #     def __init__(self, *args, **kwargs):
         #         super().__init__(*args, **kwargs)
