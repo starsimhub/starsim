@@ -110,8 +110,8 @@ class SIR(Disease):
         for k, layer in sim.people.networks.items():
             if k in self.pars['beta']:
                 contacts = layer.contacts
-                rel_trans = (self.infected & sim.people.alive).astype(ss.dtypes.float)
-                rel_sus = (self.susceptible & sim.people.alive).astype(ss.dtypes.float)
+                rel_trans = (self.infected & sim.people.alive).astype(float)
+                rel_sus = (self.susceptible & sim.people.alive).astype(float)
                 for a, b, beta in [[contacts.p1, contacts.p2, self.pars.beta[k][0]],
                                    [contacts.p2, contacts.p1, self.pars.beta[k][1]]]:
                     # probability of a->b transmission

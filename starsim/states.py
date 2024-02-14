@@ -5,6 +5,7 @@ Define array-handling classes, including agent states
 import numpy as np
 import sciris as sc
 import numba as nb
+from starsim.utils import INT_NAN
 import warnings
 import starsim as ss
 from starsim.settings import dtypes as sdt
@@ -60,7 +61,7 @@ class FusedArray(NDArrayOperatorsMixin):
 
         if uid_map is None and uid is not None:
             # Construct a local UID map as opposed to using a shared one (i.e., the one for all agents contained in the People instance)
-            self.uid_map = np.full(np.max(uid) + 1, fill_value=ss.INT_NAN, dtype=sdt.int)
+            self.uid_map = np.full(np.max(uid) + 1, fill_value=INT_NAN, dtype=int)
             self.uid_map[uid] = np.arange(len(uid))
         else:
             self._uid_map = uid_map
@@ -96,11 +97,11 @@ class FusedArray(NDArrayOperatorsMixin):
         :return: A tuple of (values, uids, new_uid_map) suitable for passing into the FusedArray constructor
         """
         out = np.empty(len(key), dtype=vals.dtype)
-        new_uid_map = np.full(uid_map.shape[0], fill_value=ss.INT_NAN, dtype=np.int64)
+        new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
 
         for i in range(len(key)):
             idx = uid_map[key[i]]
-            if idx == ss.INT_NAN:
+            if idx == INT_NAN:
                 raise IndexError('UID not present in array')
             out[i] = vals[idx]
             new_uid_map[key[i]] = i
@@ -124,7 +125,7 @@ class FusedArray(NDArrayOperatorsMixin):
                 errormsg = f'UID not present in array (requested UID ({key[i]}) is larger than the maximum UID in use ({len(uid_map)}))'
                 raise IndexError(errormsg)
             idx = uid_map[key[i]]
-            if idx == ss.INT_NAN:
+            if idx == INT_NAN:
                 raise IndexError('UID not present in array')
             elif idx >= len(vals):
                 errormsg = f'Attempted to write to a non-existant index ({idx}) - this can happen if attempting to write to new entries that have not yet been allocated via grow()'
@@ -148,7 +149,7 @@ class FusedArray(NDArrayOperatorsMixin):
             if key[i] >= len(uid_map):
                 raise IndexError('UID not present in array (requested UID is larger than the maximum UID in use)')
             idx = uid_map[key[i]]
-            if idx == ss.INT_NAN:
+            if idx == INT_NAN:
                 raise IndexError('UID not present in array')
             elif idx >= len(vals):
                 raise Exception('Attempted to write to a non-existant index - this can happen if attempting to write to new entries that have not yet been allocated via grow()')
@@ -165,7 +166,7 @@ class FusedArray(NDArrayOperatorsMixin):
                     # it to indices first. Also, the pure Python implementation is difficult to improve upon using numba
                     mapped_key = key.__array__().nonzero()[0]
                     uids = self.uid.__array__()[mapped_key]
-                    new_uid_map = np.full(len(self._uid_map), fill_value=ss.INT_NAN, dtype=int)
+                    new_uid_map = np.full(len(self._uid_map), fill_value=INT_NAN, dtype=int)
                     new_uid_map[uids] = np.arange(len(uids))
                     values = self.values[mapped_key]
                 else:
@@ -182,7 +183,7 @@ class FusedArray(NDArrayOperatorsMixin):
                 values, uids, new_uid_map = self._get_vals_uids(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__())
             return FusedArray(values=values, uid=uids, uid_map=new_uid_map)
         except IndexError as e:
-            if str(ss.INT_NAN) in str(e):
+            if str(INT_NAN) in str(e):
                 raise IndexError(f'UID {key} not present in array')
             else:
                 raise e
@@ -214,14 +215,14 @@ class FusedArray(NDArrayOperatorsMixin):
                 else:
                     return self._set_vals_uids_single(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__(), value)
         except IndexError as e:
-            if str(ss.INT_NAN) in str(e):
+            if str(INT_NAN) in str(e):
                 raise IndexError(f'UID {key} not present in array')
             else:
                 raise e
                 
-    def __getattr__(self, attr):
-        """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
-        return getattr(self.values, attr)
+    #def __getattr__(self, attr):
+    #    """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
+    #    return getattr(self.values, attr)
 
     # Make it behave like a regular array mostly
     def __len__(self):
@@ -233,17 +234,17 @@ class FusedArray(NDArrayOperatorsMixin):
     def astype(self, *args, **kwargs):
         return FusedArray(values=self.values.astype(*args, **kwargs), uid=self.uid, uid_map=self._uid_map)
 
-    # def sum(self, *args, **kwargs):
-    #     return self.values.sum(*args, **kwargs)
+    def sum(self, *args, **kwargs):
+        return self.values.sum(*args, **kwargs)
 
-    # def mean(self, *args, **kwargs):
-    #     return self.values.mean(*args, **kwargs)
+    def mean(self, *args, **kwargs):
+        return self.values.mean(*args, **kwargs)
 
-    # def any(self, *args, **kwargs):
-    #     return self.values.any(*args, **kwargs)
+    def any(self, *args, **kwargs):
+        return self.values.any(*args, **kwargs)
 
-    # def all(self, *args, **kwargs):
-    #     return self.values.all(*args, **kwargs)
+    def all(self, *args, **kwargs):
+        return self.values.all(*args, **kwargs)
 
     def count_nonzero(self, *args, **kwargs):
         return np.count_nonzero(self.values, *args, **kwargs)
@@ -302,8 +303,8 @@ class DynamicView(NDArrayOperatorsMixin):
             shape: If not none, set to match a string in `pars` containing the dimensionality
             label: text used to construct labels for the result for displaying on plots and other outputs
         """
-        if coerce:
-            dtype = check_dtype(dtype, default)
+        #if coerce:
+        #    dtype = check_dtype(dtype, default)
         self.default = default if default is not None else dtype()
         self.n = 0  # Number of agents currently in use
         self._data = np.empty(0, dtype=dtype)  # The underlying memory array (length at least equal to n)
@@ -394,13 +395,13 @@ class State(FusedArray):
             label (str): The human-readable name for the state
             coerce (bool): Whether to ensure the the data is one of the supported data types
         """
-        super().__init__()  # Call the FusedArray constructor
+        super().__init__(values=None, uid=None, uid_map=None)  # Call the FusedArray constructor
         
-        if coerce:
-            dtype = check_dtype(dtype, default)
+        #if coerce:
+        #    dtype = check_dtype(dtype, default)
         
-        if default is None:
-            default = dtype()
+        #if default is None:
+        #    default = dtype()
         
         # Set attributes
         self.default = default

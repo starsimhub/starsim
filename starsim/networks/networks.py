@@ -63,9 +63,9 @@ class Network(ss.Module):
 
         # Each relationship is characterized by these default set of keys, plus any user- or network-supplied ones
         default_keys = {
-            'p1': ss.dtypes.int,
-            'p2': ss.dtypes.int,
-            'beta': ss.dtypes.float,
+            'p1': ss.int_,
+            'p2': ss.int_,
+            'beta': ss.float_,
         }
         self.meta = ss.omerge(default_keys, key_dict)
         self.vertical = vertical  # Whether transmission is bidirectional
@@ -82,7 +82,7 @@ class Network(ss.Module):
 
         # Define states using placeholder values
         self.participant = ss.State('participant', bool, default=False)
-        self.debut = ss.State('debut', float, default=0.0)
+        self.debut = ss.State('debut', float, default=0)
         return
 
     def initialize(self, sim):
@@ -250,7 +250,7 @@ class Network(ss.Module):
         # Find the contacts
         contact_inds = ss.find_contacts(self.contacts.p1, self.contacts.p2, inds)
         if as_array:
-            contact_inds = np.fromiter(contact_inds, dtype=ss.dtypes.int)
+            contact_inds = np.fromiter(contact_inds, dtype=ss.int_)
             contact_inds.sort()
 
         return contact_inds
@@ -297,7 +297,7 @@ class Networks(ss.ndict):
 
 class DynamicNetwork(Network):
     def __init__(self, pars=None, key_dict=None):
-        key_dict = ss.omerge({'dur': ss.dtypes.float}, key_dict)
+        key_dict = ss.omerge({'dur': ss.float_}, key_dict)
         super().__init__(pars, key_dict=key_dict)
 
     def end_pairs(self, people):
@@ -313,7 +313,7 @@ class DynamicNetwork(Network):
 class SexualNetwork(Network):
     """ Base class for all sexual networks """
     def __init__(self, pars=None, key_dict=None):
-        key_dict = ss.omerge({'acts': ss.dtypes.int}, key_dict)
+        key_dict = ss.omerge({'acts': ss.int_}, key_dict)
         super().__init__(pars, key_dict=key_dict)
 
     def active(self, people):
@@ -571,7 +571,7 @@ class maternal(Network):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
-        key_dict = sc.mergedicts({'dur': ss.dtypes.float}, key_dict)
+        key_dict = sc.mergedicts({'dur': ss.float_}, key_dict)
         super().__init__(key_dict=key_dict, vertical=vertical, **kwargs)
         return
 
@@ -697,7 +697,7 @@ class random(DynamicNetwork):
 
         total_number_of_half_edges = np.sum(number_of_contacts)
         count = 0
-        source = np.zeros((total_number_of_half_edges,), dtype=np.int64) # TODO: use flexible precision
+        source = np.zeros((total_number_of_half_edges,), dtype=ss.int_)
         for i, person_id in enumerate(inds):
             n_contacts = number_of_contacts[i]
             source[count: count + n_contacts] = person_id
@@ -720,10 +720,10 @@ class random(DynamicNetwork):
         else:
             number_of_contacts = np.full(len(people), self.pars.n_contacts)
 
-        number_of_contacts = np.round(number_of_contacts / 2).astype(ss.dtypes.int)  # One-way contacts
+        number_of_contacts = np.round(number_of_contacts / 2).astype(ss.int_)  # One-way contacts
 
         p1, p2 = self.get_contacts(people.uid.__array__(), number_of_contacts)
-        beta = np.ones(len(p1), dtype=ss.dtypes.float)
+        beta = np.ones(len(p1), dtype=ss.float_)
 
         if isinstance(self.pars.dur, ss.ScipyDistribution):
             dur = self.pars.dur.rvs(p1)
@@ -762,8 +762,8 @@ class hpv_network(mf):
         }, par_dists)
 
         key_dict = {
-            'acts': ss.dtypes.float,
-            'start': ss.dtypes.float,
+            'acts': ss.float_,
+            'start': ss.float_,
         }
 
         DynamicNetwork.__init__(self, key_dict)
@@ -787,7 +787,7 @@ class hpv_network(mf):
 
     @staticmethod
     def participation(self, sim, uids):
-        p = np.ones_like(uids, dtype=ss.dtypes.float)
+        p = np.ones_like(uids, dtype=ss.float_)
         fem = sim.people.female[uids]
         p[fem] = np.interp(sim.people.age[uids[fem]], self.agebins, self.f_participation)
         p[~fem] = np.interp(sim.people.age[uids[~fem]], self.agebins, self.m_participation)
@@ -915,11 +915,11 @@ class hpv_network(mf):
         retired_vals = 0
 
         # Set values and return
-        scaled_acts = np.full(len(acts), np.nan, dtype=ss.dtypes.float)
+        scaled_acts = np.full(len(acts), np.nan, dtype=ss.float_)
         scaled_acts[below_peak_inds] = below_peak_vals
         scaled_acts[above_peak_inds] = above_peak_vals
         scaled_acts[retired_inds] = retired_vals
-        start = np.array([ti] * n_partnerships, dtype=ss.dtypes.float)
+        start = np.array([ti] * n_partnerships, dtype=ss.float_)
         beta = np.ones(n_partnerships)
 
         new_contacts = dict(

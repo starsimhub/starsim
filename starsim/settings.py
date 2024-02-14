@@ -11,6 +11,7 @@ import sciris as sc
 
 
 __all__ = ['INT_NAN', 'dtypes', 'options']
+__all__ += ['float_', 'int_']
 
 INT_NAN = 2147483647 # From np.iinfo(np.int32).max: value to use to flag invalid content (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
 
@@ -80,8 +81,8 @@ class Options(sc.objdict):
         optdesc.sep = 'Set thousands seperator for text output'
         options.sep = str(os.getenv('STARSIM_SEP', ','))
 
-        optdesc.precision = 'Set arithmetic precision -- 64-bit by default for efficiency'
-        options.precision = int(os.getenv('STARSIM_PRECISION', 64)) # CK: TODO
+        optdesc.precision = 'Set arithmetic precision -- 32-bit by default for efficiency'
+        options.precision = int(os.getenv('STARSIM_PRECISION', 32))
 
         return optdesc, options
 
@@ -220,3 +221,17 @@ class Options(sc.objdict):
 
 # Create the options on module load
 options = Options()
+
+# Default for precision
+# Used in various places throughout the code, generally as:
+#   import stisim.settings as sss
+#   arr = np.full(100, 0, sss.float_)
+result_float = np.float64  # Always use float64 for results, for simplicity
+if options.precision == 32:
+    float_ = np.float32
+    int_ = np.int32
+elif options.precision == 64:  # pragma: no cover
+    float_ = np.float64
+    int_ = np.int64
+else:
+    raise NotImplementedError(f'Precision must be either 32 bit or 64 bit, not {options.precision}')
