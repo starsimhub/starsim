@@ -20,12 +20,7 @@ __all__ += ['bernoulli', 'expon', 'lognorm', 'norm', 'randint', 'rv_discrete',
             'uniform', 'weibull_min'] # Add common distributions so they can be imported directly
 
 
-# Override default SciPy methods -- defined here to avoid unpickleable class otherwise
-def sps_initialize(self, sim, context):
-    self.sim = sim
-    self.context = context
-    return
-
+# Override default SciPy method -- defined here to avoid unpickleable class otherwise
 def sps_rvs(self, *args, **kwargs):
     """
     Return a specified number of samples from the distribution
@@ -157,18 +152,8 @@ class ScipyDistribution():
     def __init__(self, gen, rng=None):
         self.gen = gen
         self.gen.dist.sim = None
-        self.gen.dist.initialize = partial(sps_initialize, self.gen.dist)
         self.gen.dist.rvs = partial(sps_rvs, self.gen.dist)
-        # class starsim_gen(type(gen.dist)):
-        #     def __init__(self, *args, **kwargs):
-        #         super().__init__(*args, **kwargs)
-        #         self.sim = None
-        #         return
-
-
-
         self.rng = self.set_rng(rng, gen)
-        # self.gen = starsim_gen(name=gen.dist.name, seed=self.rng)(**gen.kwds)
         return
 
     @staticmethod
@@ -188,7 +173,8 @@ class ScipyDistribution():
 
     def initialize(self, sim, context):
         # Passing sim and context here allow callables to receive "self" and sim pointers
-        self.gen.dist.initialize(sim, context)
+        self.gen.dist.sim = sim
+        self.gen.dist.context = context
         if isinstance(self.rng, (SingleRNG, MultiRNG)):
             self.rng.initialize(sim.rng_container, sim.people.slot)
         return
