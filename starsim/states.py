@@ -9,7 +9,6 @@ from starsim.utils import INT_NAN
 import warnings
 import starsim as ss
 from starsim.settings import dtypes as sdt
-from starsim.distributions import ScipyDistribution
 from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
 from scipy.stats._distn_infrastructure import rv_frozen
 
@@ -419,7 +418,7 @@ class State(FusedArray):
             return FusedArray.__repr__(self)
 
     def _new_vals(self, uids):
-        if isinstance(self.default, ScipyDistribution):
+        if isinstance(self.default, ss.ScipyDistribution):
             new_vals = self.default.rvs(uids)
         elif callable(self.default):
             new_vals = self.default(len(uids))
@@ -437,7 +436,7 @@ class State(FusedArray):
         sim_still_needed = False
         if isinstance(self.default, rv_frozen):
             if sim is not None:
-                self.default = ScipyDistribution(self.default, f'{self.__class__.__name__}_{self.label}')
+                self.default = ss.ScipyDistribution(self.default, f'{self.__class__.__name__}_{self.label}')
                 self.default.initialize(sim, self)
             else:
                 sim_still_needed = True

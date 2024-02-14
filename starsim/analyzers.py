@@ -4,9 +4,7 @@ Define analyzers
 
 import starsim as ss
 
-
 __all__ = ['Analyzer']
-
 
 class Analyzer(ss.Module):
 

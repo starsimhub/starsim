@@ -5,10 +5,8 @@ Define interventions
 import starsim as ss
 import sciris as sc
 import numpy as np
-import scipy.stats as sps
 
 __all__ = ['Intervention']
-
 
 class Intervention(ss.Module):
 
@@ -25,9 +23,9 @@ class Intervention(ss.Module):
     def finalize(self, sim):
         super().finalize(sim)
 
+
 # %% Template classes for routine and campaign delivery
 __all__ += ['RoutineDelivery', 'CampaignDelivery']
-
 
 class RoutineDelivery(Intervention):
     """
@@ -40,7 +38,7 @@ class RoutineDelivery(Intervention):
         self.end_year = end_year
         self.prob = sc.promotetoarray(prob)
         self.annual_prob = annual_prob  # Determines whether the probability is annual or per timestep
-        self.coverage_dist = sps.bernoulli(p=0)  # Placeholder - initialize delivery
+        self.coverage_dist = ss.bernoulli(p=0)  # Placeholder - initialize delivery
         return
 
     def initialize(self, sim):
@@ -343,7 +341,7 @@ class BaseTreatment(Intervention):
         self.prob = sc.promotetoarray(prob)
         self.eligibility = eligibility
         self._parse_product(product)
-        self.coverage_dist = sps.bernoulli(p=0)  # Placeholder
+        self.coverage_dist = ss.bernoulli(p=0)  # Placeholder
 
     def _parse_product(self, product):
         """

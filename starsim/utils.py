@@ -9,7 +9,6 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 import numba as nb
-import scipy.stats as sps
 import pandas as pd
 
 # What functions are externally visible -- note, this gets populated in each section below
@@ -244,7 +243,7 @@ def lognorm(mean, stdev):
     Wrapper for scipy lognorm but using mean and stdev
     """
     s, scale = lognorm_params(mean, stdev)
-    return sps.lognorm(s=s, scale=scale)
+    return ss.lognorm(s=s, scale=scale)
 
 
 # %% Simple array operations
