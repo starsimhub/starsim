@@ -106,7 +106,7 @@ class SIR(ss.Infection):
         return
 
     def make_new_cases(self, sim): # TODO: Use function from STI
-        for k, layer in sim.people.networks.items():
+        for k, layer in sim.networks.items():
             if k in self.pars['beta']:
                 contacts = layer.contacts
                 rel_trans = (self.infected & sim.people.alive).astype(ss.dtypes.float)

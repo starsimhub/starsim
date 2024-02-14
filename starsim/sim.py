@@ -48,7 +48,7 @@ class Sim(sc.prettyobj):
         # Products are not here because they are stored within interventions
         self.demographics  = ss.ndict(demographics, type=ss.DemographicModule)
         self.diseases      = ss.ndict(diseases, type=ss.Disease)
-        self.networks       = ss.ndict(networks, type=ss.Network)
+        self.networks      = ss.ndict(networks, type=ss.Network)
         self.connectors    = ss.ndict(connectors, type=ss.Connector)
         self.interventions = ss.ndict(interventions, type=ss.Intervention)
         self.analyzers = ss.ndict(analyzers, type=ss.Analyzer)
@@ -239,7 +239,7 @@ class Sim(sc.prettyobj):
         self.people.init_results(self)
         return self
 
-    def convert_plugins(self, Plugin_Class, plugin_name=None):
+    def convert_plugins(self, plugin_class, plugin_name=None):
         """
         Common logic for converting plug-ins to a standard format
         Used for networks, demographics, diseases, connectors, analyzers, and interventions
@@ -247,7 +247,7 @@ class Sim(sc.prettyobj):
             plugin: class
         """
 
-        if plugin_name is None: plugin_name = Plugin_Class.__name__.lower()
+        if plugin_name is None: plugin_name = plugin_class.__name__.lower()
 
         # Figure out if it's in the sim pars or provided directly
         attr_plugins = getattr(self, plugin_name)  # Get any plugins that have been provided directly
@@ -260,18 +260,18 @@ class Sim(sc.prettyobj):
             plugins = attr_plugins
 
         # Convert
-        known_plugins = [n.__name__.lower() for n in ss.all_subclasses(Plugin_Class)]
+        known_plugins = [n.__name__.lower() for n in ss.all_subclasses(plugin_class)]
 
         processed_plugins = sc.autolist()
         for plugin in plugins.values():
 
-            if not isinstance(plugin, Plugin_Class):
+            if not isinstance(plugin, plugin_class):
 
                 if isinstance(plugin, dict):
                     if plugin.get('name') and plugin['name'] in known_plugins:
                         # Make an instance of the requested plugin
                         plugin_pars = {k: v for k, v in plugin.items() if k != 'name'}
-                        plugin = Plugin_Class.create(name=plugin['name'], pars=plugin_pars)
+                        plugin = plugin_class.create(name=plugin['name'], pars=plugin_pars)
                     else:
                         errormsg = (f'Could not convert {plugin} to an instance of class {plugin_name}. Try using lower'
                                     f'case or specifying it directly rather than as a dictionary.')
@@ -336,14 +336,14 @@ class Sim(sc.prettyobj):
 
     def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
-
+        
         processed_networks = self.convert_plugins(ss.Network, plugin_name='networks')
 
         # Now store the networks in a Networks object, which also allows for connectors between networks
         if not isinstance(processed_networks, ss.Networks):
             self.networks = ss.Networks(*processed_networks)
         self.networks.initialize(self)
-
+        
         return
 
     def init_interventions(self):
@@ -442,7 +442,7 @@ class Sim(sc.prettyobj):
 
         # Update networks - this takes place here in case autonomous state changes at this timestep
         # affect eligibility for contacts
-        self.people.update_networks()
+        self.networks.update(self.people)
 
         # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
         # interventions, by running them at this point

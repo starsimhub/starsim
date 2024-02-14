@@ -23,7 +23,7 @@ def test_simple():
         death_rate=0.015,
         networks = dict(
             name= 'random',
-            n_contacts =4 # sps.poisson(mu=4),
+            n_contacts = 4 # sps.poisson(mu=4),
         ),
         diseases = dict(
             name = 'sir',
