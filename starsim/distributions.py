@@ -19,148 +19,155 @@ __all__ += ['bernoulli', 'expon', 'lognorm', 'norm', 'randint', 'rv_discrete',
             'uniform', 'weibull_min'] # Add common distributions so they can be imported directly
 
 
+# Override default SciPy methods -- defined here to avoid unpickleable class otherwise
+def sps_initialize(self, sim, context):
+    self.sim = sim
+    self.context = context
+    return
+
+def sps_rvs(self, *args, **kwargs):
+    """
+    Return a specified number of samples from the distribution
+    """
+
+    size = kwargs['size']
+    slots = None
+    repeat_slot_flag = False
+    self.repeat_slot_handling = {}
+    # Work out how many samples to draw. If sampling by UID, this depends on the slots assigned to agents.
+    if np.isscalar(size):
+        if not isinstance(size, int):
+            raise Exception('Input "size" must be an integer')
+        if size < 0:
+            raise Exception('Input "size" cannot be negative')
+        elif size == 0:
+            return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
+        else:
+            n_samples = size
+    elif len(size) == 0:
+        return np.array([], dtype=int)
+    elif size.dtype == bool:
+        n_samples = len(size) if options.multirng else size.sum()
+    elif size.dtype in [int, np.int64, np.int32]: # CK: TODO: need to refactor
+        if not options.multirng:
+            n_samples = len(size)
+        else:
+            v = size.__array__() # TODO - check if this works without calling __array__()?
+            try:
+                slots = self.random_state.slots[v].__array__()
+                max_slot = slots.max()
+            except AttributeError as e:
+                if not isinstance(self.random_state, MultiRNG):
+                    raise Exception('With options.multirng and passing agent UIDs to a distribution, the random_state of the distribution must be a MultiRNG.')
+                else:
+                    if not self.random_state.initialized:
+                        raise Exception('The MultiRNG instance must be initialized before use.')
+                raise e
+
+            if max_slot == ss.INT_NAN:
+                raise Exception('Attempted to sample from an INT_NAN slot')
+            n_samples = max_slot + 1
+    else:
+        raise Exception("Unrecognized input type")
+
+    # Now handle distribution arguments
+    for pname in [p.name for p in self._param_info()]:
+        if pname in kwargs and callable(kwargs[pname]):
+            kwargs[pname] = kwargs[pname](self.context, self.sim, size)
+
+        # Now do slotting if MultiRNG
+        if options.multirng and (pname in kwargs) and (not np.isscalar(kwargs[pname])) and (len(kwargs[pname]) != n_samples):
+            # Fill in the blank. The number of UIDs provided is
+            # hopefully consistent with the length of pars
+            # provided, but we need to expand out the pars to be
+            # n_samples in length.
+            if len(kwargs[pname]) not in [len(size), sum(size)]: # Could handle uid and bool separately? len(size) for uid and sum(size) for bool
+                raise Exception('When providing an array of parameters, the length of the parameters must match the number of agents for the selected size (uids).')
+            pars_slots = np.full(n_samples, fill_value=1, dtype=kwargs[pname].dtype) # self.fill_value
+            if slots is not None:
+                if len(slots) != len(np.unique(slots)):
+                    # Tricky - repeated slots!
+                    if not repeat_slot_flag:
+                        repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots, return_index=True, return_inverse=True, return_counts=True)
+                    self.repeat_slot_handling[pname] = kwargs[pname].__array__().copy() # Save full pars for handling later
+                    pars_slots[repeat_slot_u] = self.repeat_slot_handling[pname][repeat_slot_ind] # Take first instance of each
+                    repeat_slot_flag = True
+                else:
+                    pars_slots[slots] = kwargs[pname]
+            else:
+                pars_slots[size] = kwargs[pname]
+            kwargs[pname] = pars_slots
+
+    kwargs['size'] = n_samples
+    vals = super().rvs(*args, **kwargs)
+    if repeat_slot_flag:
+        # Handle repeated slots
+        repeat_slot_vals = np.full(len(slots), np.nan)
+        repeat_slot_vals[repeat_slot_ind] = vals[repeat_slot_u] # Store results
+        todo_inds = np.where(np.isnan(repeat_slot_vals))[0]
+
+        if options.verbose > 1 and cnt.max() > 2:
+            print(f'MultiRNG slots are repeated up to {cnt.max()} times.')
+
+        #repeat_degree = repeat_slot_cnt.max()
+        while len(todo_inds):
+            repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots[todo_inds], return_index=True, return_inverse=True, return_counts=True)
+            cur_inds = todo_inds[repeat_slot_ind] # Absolute positions being filled this pass
+
+            # Reset RNG, note that ti=0 on initialization and ti+1
+            # there after, including ti=0. Assuming that repeat
+            # slots are not encountered during sim initialization.
+            if self.sim is not None:
+                self.random_state.step(self.sim.ti+1) 
+            else:
+                # Likely from a test? Just reset the random state.
+                self.random_state.reset()
+
+            for pname in [p.name for p in self._param_info()]:
+                if pname in self.repeat_slot_handling:
+                    kwargs_pname = self.repeat_slot_handling[pname][cur_inds]
+                    pars_slots = np.full(n_samples, fill_value=1, dtype=kwargs_pname.dtype) # self.fill_value
+                    pars_slots[repeat_slot_u] = kwargs_pname # Take first instance of each
+                    kwargs[pname] = pars_slots
+
+            vals = super().rvs(*args, **kwargs) # Draw again for slot repeat
+            #assert np.allclose(slots[cur_inds], repeat_slot_u) # TEMP: Check alignment
+            repeat_slot_vals[cur_inds] = vals[repeat_slot_u]
+            todo_inds = np.where(np.isnan(repeat_slot_vals))[0]
+
+        vals = repeat_slot_vals
+    
+    if isinstance(self, bernoulli_gen):
+        vals = vals.astype(bool)
+
+    # _select:
+    if not options.multirng or repeat_slot_flag:
+        return vals
+
+    if np.isscalar(size):
+        return vals
+    elif size.dtype == bool:
+        return vals[size]
+    else:
+        return vals[slots] # slots defined above
+
+
 class ScipyDistribution():
     def __init__(self, gen, rng=None):
-        self.gen = None
-        class starsim_gen(type(gen.dist)):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.sim = None
-                return
+        self.gen = gen
+        self.gen.sim = None
+        self.gen.initialize = sps_initialize
+        self.gen.rvs = sps_rvs
+        # class starsim_gen(type(gen.dist)):
+        #     def __init__(self, *args, **kwargs):
+        #         super().__init__(*args, **kwargs)
+        #         self.sim = None
+        #         return
 
-            def initialize(self, sim, context):
-                self.sim = sim
-                self.context = context
-                return
 
-            def rvs(self, *args, **kwargs):
-                """
-                Return a specified number of samples from the distribution
-                """
-
-                size = kwargs['size']
-                slots = None
-                repeat_slot_flag = False
-                self.repeat_slot_handling = {}
-                # Work out how many samples to draw. If sampling by UID, this depends on the slots assigned to agents.
-                if np.isscalar(size):
-                    if not isinstance(size, int):
-                        raise Exception('Input "size" must be an integer')
-                    if size < 0:
-                        raise Exception('Input "size" cannot be negative')
-                    elif size == 0:
-                        return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
-                    else:
-                        n_samples = size
-                elif len(size) == 0:
-                    return np.array([], dtype=int)
-                elif size.dtype == bool:
-                    n_samples = len(size) if options.multirng else size.sum()
-                elif size.dtype in [int, np.int64, np.int32]: # CK: TODO: need to refactor
-                    if not options.multirng:
-                        n_samples = len(size)
-                    else:
-                        v = size.__array__() # TODO - check if this works without calling __array__()?
-                        try:
-                            slots = self.random_state.slots[v].__array__()
-                            max_slot = slots.max()
-                        except AttributeError as e:
-                            if not isinstance(self.random_state, MultiRNG):
-                                raise Exception('With options.multirng and passing agent UIDs to a distribution, the random_state of the distribution must be a MultiRNG.')
-                            else:
-                                if not self.random_state.initialized:
-                                    raise Exception('The MultiRNG instance must be initialized before use.')
-                            raise e
-
-                        if max_slot == ss.INT_NAN:
-                            raise Exception('Attempted to sample from an INT_NAN slot')
-                        n_samples = max_slot + 1
-                else:
-                    raise Exception("Unrecognized input type")
-
-                # Now handle distribution arguments
-                for pname in [p.name for p in self._param_info()]:
-                    if pname in kwargs and callable(kwargs[pname]):
-                        kwargs[pname] = kwargs[pname](self.context, self.sim, size)
-
-                    # Now do slotting if MultiRNG
-                    if options.multirng and (pname in kwargs) and (not np.isscalar(kwargs[pname])) and (len(kwargs[pname]) != n_samples):
-                        # Fill in the blank. The number of UIDs provided is
-                        # hopefully consistent with the length of pars
-                        # provided, but we need to expand out the pars to be
-                        # n_samples in length.
-                        if len(kwargs[pname]) not in [len(size), sum(size)]: # Could handle uid and bool separately? len(size) for uid and sum(size) for bool
-                            raise Exception('When providing an array of parameters, the length of the parameters must match the number of agents for the selected size (uids).')
-                        pars_slots = np.full(n_samples, fill_value=1, dtype=kwargs[pname].dtype) # self.fill_value
-                        if slots is not None:
-                            if len(slots) != len(np.unique(slots)):
-                                # Tricky - repeated slots!
-                                if not repeat_slot_flag:
-                                    repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots, return_index=True, return_inverse=True, return_counts=True)
-                                self.repeat_slot_handling[pname] = kwargs[pname].__array__().copy() # Save full pars for handling later
-                                pars_slots[repeat_slot_u] = self.repeat_slot_handling[pname][repeat_slot_ind] # Take first instance of each
-                                repeat_slot_flag = True
-                            else:
-                                pars_slots[slots] = kwargs[pname]
-                        else:
-                            pars_slots[size] = kwargs[pname]
-                        kwargs[pname] = pars_slots
-
-                kwargs['size'] = n_samples
-                vals = super().rvs(*args, **kwargs)
-                if repeat_slot_flag:
-                    # Handle repeated slots
-                    repeat_slot_vals = np.full(len(slots), np.nan)
-                    repeat_slot_vals[repeat_slot_ind] = vals[repeat_slot_u] # Store results
-                    todo_inds = np.where(np.isnan(repeat_slot_vals))[0]
-
-                    if options.verbose > 1 and cnt.max() > 2:
-                        print(f'MultiRNG slots are repeated up to {cnt.max()} times.')
-
-                    #repeat_degree = repeat_slot_cnt.max()
-                    while len(todo_inds):
-                        repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots[todo_inds], return_index=True, return_inverse=True, return_counts=True)
-                        cur_inds = todo_inds[repeat_slot_ind] # Absolute positions being filled this pass
-
-                        # Reset RNG, note that ti=0 on initialization and ti+1
-                        # there after, including ti=0. Assuming that repeat
-                        # slots are not encountered during sim initialization.
-                        if self.sim is not None:
-                            self.random_state.step(self.sim.ti+1) 
-                        else:
-                            # Likely from a test? Just reset the random state.
-                            self.random_state.reset()
-
-                        for pname in [p.name for p in self._param_info()]:
-                            if pname in self.repeat_slot_handling:
-                                kwargs_pname = self.repeat_slot_handling[pname][cur_inds]
-                                pars_slots = np.full(n_samples, fill_value=1, dtype=kwargs_pname.dtype) # self.fill_value
-                                pars_slots[repeat_slot_u] = kwargs_pname # Take first instance of each
-                                kwargs[pname] = pars_slots
-
-                        vals = super().rvs(*args, **kwargs) # Draw again for slot repeat
-                        #assert np.allclose(slots[cur_inds], repeat_slot_u) # TEMP: Check alignment
-                        repeat_slot_vals[cur_inds] = vals[repeat_slot_u]
-                        todo_inds = np.where(np.isnan(repeat_slot_vals))[0]
-
-                    vals = repeat_slot_vals
-                
-                if isinstance(self, bernoulli_gen):
-                    vals = vals.astype(bool)
-
-                # _select:
-                if not options.multirng or repeat_slot_flag:
-                    return vals
-
-                if np.isscalar(size):
-                    return vals
-                elif size.dtype == bool:
-                    return vals[size]
-                else:
-                    return vals[slots] # slots defined above
 
         self.rng = self.set_rng(rng, gen)
-        self.gen = starsim_gen(name=gen.dist.name, seed=self.rng)(**gen.kwds)
+        # self.gen = starsim_gen(name=gen.dist.name, seed=self.rng)(**gen.kwds)
         return
 
     @staticmethod
