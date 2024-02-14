@@ -17,6 +17,7 @@ class SIR(ss.Infection):
     """
 
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
+
         pars = ss.omerge({
             'dur_inf': 1,
             'init_prev': 0.1,
