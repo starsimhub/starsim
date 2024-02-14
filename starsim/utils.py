@@ -9,7 +9,6 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 import numba as nb
-import scipy.stats as sps
 import pandas as pd
 
 # What functions are externally visible -- note, this gets populated in each section below
@@ -47,7 +46,7 @@ class ndict(sc.objdict):
         self.setattribute('_name', name)  # Since otherwise treated as keys
         self.setattribute('_type', type)
         self.setattribute('_strict', strict)
-        self._initialize(*args, **kwargs)
+        self.extend(*args, **kwargs)
         return
 
     def append(self, arg, key=None):
@@ -79,9 +78,8 @@ class ndict(sc.objdict):
         else:
             errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._name}"'
             raise ValueError(errormsg)
-
         return
-
+    
     def _check_type(self, arg):
         """ Check types """
         if self._type is not None:
@@ -90,7 +88,8 @@ class ndict(sc.objdict):
                 raise TypeError(errormsg)
         return
 
-    def _initialize(self, *args, **kwargs):
+    def extend(self, *args, **kwargs):
+        """ Add new items to the ndict, by item, list, or dict """
         args = sc.mergelists(*args)
         for arg in args:
             self.append(arg)
@@ -205,7 +204,7 @@ def set_seed(seed=None):
         seed (int): the random seed
     '''
 
-    @nb.njit
+    @nb.njit(cache=True)
     def set_seed_numba(seed):
         return np.random.seed(seed)
 
@@ -225,7 +224,7 @@ def set_seed(seed=None):
 
 
 # %% Helper functions related to distributions
-__all__ += ['lognorm_params', 'lognorm']
+__all__ += ['lognorm_params', 'lognorm_mean']
 
 
 def lognorm_params(mean, stdev):
@@ -239,12 +238,12 @@ def lognorm_params(mean, stdev):
     return s, scale
 
 
-def lognorm(mean, stdev):
+def lognorm_mean(mean, stdev):
     """
     Wrapper for scipy lognorm but using mean and stdev
     """
     s, scale = lognorm_params(mean, stdev)
-    return sps.lognorm(s=s, scale=scale)
+    return ss.lognorm(s=s, scale=scale)
 
 
 # %% Simple array operations
@@ -252,7 +251,7 @@ def lognorm(mean, stdev):
 __all__ += ['true', 'false', 'defined', 'undefined']
 
 
-@nb.njit
+@nb.njit(cache=True)
 def _true(uids, values):
     """
     Returns the UIDs for indices where the value evaluates as True
@@ -267,7 +266,7 @@ def _true(uids, values):
     return out
 
 
-@nb.njit
+@nb.njit(cache=True)
 def _false(uids, values):
     """
     Returns the UIDs for indices where the value evaluates as False
@@ -287,7 +286,7 @@ def true(state):
     Returns the UIDs of the values of the array that are true
 
     Args:
-        state (State, FusedArray)
+        state (State, UIDArray)
 
     **Example**::
 
@@ -301,7 +300,7 @@ def false(state):
     Returns the indices of the values of the array that are false.
 
     Args:
-        state (State, FusedArray)
+        state (State, UIDArray)
 
     **Example**::
 

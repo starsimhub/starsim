@@ -4,8 +4,8 @@ Define example disease modules
 
 import numpy as np
 import starsim as ss
-import scipy.stats as sps
 
+__all__ = ['SIR']
 
 class SIR(ss.Infection):
     """
@@ -27,9 +27,9 @@ class SIR(ss.Infection):
         }, pars)
 
         par_dists = ss.omerge({
-            'dur_inf': sps.lognorm,
-            'init_prev': sps.bernoulli,
-            'p_death': sps.bernoulli,
+            'dur_inf': ss.lognorm,
+            'init_prev': ss.bernoulli,
+            'p_death': ss.bernoulli,
         })
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)

@@ -6,10 +6,8 @@ import numpy as np
 import starsim as ss
 import sciris as sc
 import pandas as pd
-import scipy.stats as sps
 
 __all__ = ['DemographicModule', 'births', 'background_deaths', 'Pregnancy']
-
 
 class DemographicModule(ss.Module):
     # A demographic module typically handles births/deaths/migration and takes
@@ -146,7 +144,7 @@ class background_deaths(DemographicModule):
         }, self.pars)
 
         self.par_dists = ss.omerge({
-            'death_rate': sps.bernoulli
+            'death_rate': ss.bernoulli
         }, par_dists)
 
         # Process metadata. Defaults here are the labels used by UN data
@@ -260,9 +258,9 @@ class Pregnancy(DemographicModule):
         }, self.pars)
 
         self.par_dists = ss.omerge({
-            'fertility_rate': sps.bernoulli,
-            'maternal_death_rate': sps.bernoulli,
-            'sex_ratio': sps.bernoulli
+            'fertility_rate': ss.bernoulli,
+            'maternal_death_rate': ss.bernoulli,
+            'sex_ratio': ss.bernoulli
         }, par_dists)
 
         # Process metadata. Defaults here are the labels used by UN data
@@ -270,7 +268,7 @@ class Pregnancy(DemographicModule):
             'data_cols': {'year': 'Time', 'age': 'AgeGrp', 'value': 'ASFR'},
         }, metadata)
 
-        self.choose_slots = sps.randint(low=0, high=1) # Low and high will be reset upon initialization
+        self.choose_slots = ss.randint(low=0, high=1) # Low and high will be reset upon initialization
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
