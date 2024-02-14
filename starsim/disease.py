@@ -10,12 +10,8 @@ import networkx as nx
 from operator import itemgetter
 import pandas as pd
 
-<<<<<<< HEAD:starsim/diseases/disease.py
-__all__ = ['InfectionLog', 'Disease', 'HHT', 'STI']
-=======
 
-__all__ = ['InfectionLog', 'Disease', 'Infection']
->>>>>>> apis:starsim/disease.py
+__all__ = ['InfectionLog', 'Disease', 'Infection', 'STI']
 
 
 class InfectionLog(nx.MultiDiGraph):
@@ -79,24 +75,15 @@ class InfectionLog(nx.MultiDiGraph):
         a particular entry)
         """
         if len(self) == 0:
-<<<<<<< HEAD:starsim/diseases/disease.py
-            return pd.DataFrame(columns=['t', 'source', 'target'])
-=======
             return sc.dataframe(columns=['t','source','target'])
->>>>>>> apis:starsim/disease.py
 
         entries = []
         for source, target, t, data in self.edges(keys=True, data=True):
             d = data.copy()
             d.update(source=source, target=target, t=t)
             entries.append(d)
-<<<<<<< HEAD:starsim/diseases/disease.py
-        df = pd.DataFrame.from_records(entries)
-        df = df.sort_values(['t', 'source', 'target'])
-=======
         df = sc.dataframe.from_records(entries)
         df = df.sort_values(['t','source','target'])
->>>>>>> apis:starsim/disease.py
         df = df.reset_index(drop=True)
 
         # Use Pandas "Int64" type to allow nullable integers. This allows the 'source' column
@@ -265,11 +252,6 @@ class Disease(ss.Module):
         return
 
 
-<<<<<<< HEAD:starsim/diseases/disease.py
-class HHT(Disease):
-    """
-    Base class for Human-to-human transmission (HHT)
-=======
 class Infection(Disease):
     """
     Base class for infectious diseases used in Starsim
@@ -277,20 +259,13 @@ class Infection(Disease):
     This class contains specializations for infectious transmission (i.e., implements network-based
     transmission with directional beta values) and defines attributes that connectors
     operate on to capture co-infection
->>>>>>> apis:starsim/disease.py
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-<<<<<<< HEAD:starsim/diseases/disease.py
-        self.rel_sus = ss.State('rel_sus', float, 1)
-        self.rel_sev = ss.State('rel_sev', float, 1)
-        self.rel_trans = ss.State('rel_trans', float, 1)
-=======
         self.rel_sus     = ss.State('rel_sus', float, 1.0)
         self.rel_sev     = ss.State('rel_sev', float, 1.0)
         self.rel_trans   = ss.State('rel_trans', float, 1.0)
->>>>>>> apis:starsim/disease.py
         self.susceptible = ss.State('susceptible', bool, True)
         self.infected = ss.State('infected', bool, False)
         self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
@@ -348,6 +323,7 @@ class Infection(Disease):
                     # Calculate probability of a->b transmission. If we have information on the
                     # number of sexual acts, then beta is assumed to be a per-act transmission
                     # probability. If not, it's assumed to be annual.
+                    # TODO: move this to STI?
                     if 'acts' in contacts.keys():
                         beta_per_dt = 1 - (1 - beta) ** (contacts.acts * people.dt)
                         p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta_per_dt
@@ -392,6 +368,7 @@ class Infection(Disease):
                     avec.append(a[nzi])
                     bvec.append(b[nzi])
 
+                    # TODO: move this to STI?
                     if 'acts' in contacts.keys():
                         beta_per_dt = 1 - (1 - beta) ** (contacts.acts[nzi] * people.dt)
                     else:
@@ -449,7 +426,7 @@ class Infection(Disease):
         self.results['new_infections'][sim.ti] = np.count_nonzero(self.ti_infected == sim.ti)
 
 
-class STI(HHT):
+class STI(Infection):
     """
     Base class for STIs used in STIsim
 

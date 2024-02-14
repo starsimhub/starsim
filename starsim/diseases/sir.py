@@ -7,7 +7,7 @@ import starsim as ss
 import scipy.stats as sps
 
 
-class SIR(ss.HHT):
+class SIR(ss.Infection):
     """
     Example SIR model
 
