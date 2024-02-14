@@ -286,7 +286,7 @@ def true(state):
     Returns the UIDs of the values of the array that are true
 
     Args:
-        state (State, FusedArray)
+        state (State, UIDArray)
 
     **Example**::
 
@@ -300,7 +300,7 @@ def false(state):
     Returns the indices of the values of the array that are false.
 
     Args:
-        state (State, FusedArray)
+        state (State, UIDArray)
 
     **Example**::
 

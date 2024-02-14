@@ -40,7 +40,7 @@ def check_dtype(dtype, default=None):
     return dtype
 
 
-class FusedArray(NDArrayOperatorsMixin):
+class UIDArray(NDArrayOperatorsMixin):
     """
     This is a class that allows indexing by UID but does not support dynamic growth
     It's kind of like a Pandas series but one that only supports a monotonically increasing
@@ -48,7 +48,7 @@ class FusedArray(NDArrayOperatorsMixin):
     
     We explictly do NOT support slicing (except for `[:]`), as these arrays are indexed by UID and slicing
     by UID can be confusing/ambiguous when there are missing values. Indexing with a list/array returns
-    another FusedArray instance which enables chained filtering
+    another UIDArray instance which enables chained filtering
     """
 
     __slots__ = ('values', '_uid_map', 'uid')
@@ -86,14 +86,14 @@ class FusedArray(NDArrayOperatorsMixin):
         """
         Extract values from a collection of UIDs
 
-        This function is used to retrieve values based on UID. As indexing a FusedArray returns a new FusedArray,
-        this method also populates the new UID map for use in the subsequently created FusedArray, avoiding the
+        This function is used to retrieve values based on UID. As indexing a UIDArray returns a new UIDArray,
+        this method also populates the new UID map for use in the subsequently created UIDArray, avoiding the
         need to re-compute it separately.
 
         :param vals: A 1D np.ndarray containing the values
         :param key: A 1D np.ndnarray of integers containing the UIDs to query
         :param uid_map: A 1D np.ndarray of integers mapping UID to array position in ``vals``
-        :return: A tuple of (values, uids, new_uid_map) suitable for passing into the FusedArray constructor
+        :return: A tuple of (values, uids, new_uid_map) suitable for passing into the UIDArray constructor
         """
         out = np.empty(len(key), dtype=vals.dtype)
         new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
@@ -159,7 +159,7 @@ class FusedArray(NDArrayOperatorsMixin):
             if isinstance(key, (int, np.integer)):
                 # Handle getting a single item by UID
                 return self.values[self._uid_map[key]]
-            elif isinstance(key, (np.ndarray, FusedArray, DynamicView)):
+            elif isinstance(key, (np.ndarray, UIDArray, DynamicView)):
                 if key.dtype.kind == 'b':
                     # Handle accessing items with a logical array. Surprisingly, it seems faster to use nonzero() to convert
                     # it to indices first. Also, the pure Python implementation is difficult to improve upon using numba
@@ -180,7 +180,7 @@ class FusedArray(NDArrayOperatorsMixin):
                 # This branch is specifically handling the user passing in a list of integers instead of an array, therefore
                 # we need an additional conversion to an array first using np.fromiter to improve numba performance
                 values, uids, new_uid_map = self._get_vals_uids(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__())
-            return FusedArray(values=values, uid=uids, uid_map=new_uid_map)
+            return UIDArray(values=values, uid=uids, uid_map=new_uid_map)
         except IndexError as e:
             if str(INT_NAN) in str(e):
                 raise IndexError(f'UID {key} not present in array')
@@ -189,17 +189,17 @@ class FusedArray(NDArrayOperatorsMixin):
 
     def __setitem__(self, key, value):
         # nb. the use of .__array__() calls is to access the array interface and thereby treat both np.ndarray and DynamicView instances
-        # in the same way without needing an additional type check. This is also why the FusedArray.dtype property is defined. Noting
+        # in the same way without needing an additional type check. This is also why the UIDArray.dtype property is defined. Noting
         # that for a State, the uid_map is a dynamic view attached to the People, but after an indexing operation, it will be a bare
-        # FusedArray that has an ordinary numpy array as the uid_map
+        # UIDArray that has an ordinary numpy array as the uid_map
         try:
             if isinstance(key, (int, np.integer)):
                 return self.values.__setitem__(self._uid_map[key], value)
-            elif isinstance(key, (np.ndarray, FusedArray)):
+            elif isinstance(key, (np.ndarray, UIDArray)):
                 if key.dtype.kind == 'b':
                     self.values.__setitem__(key.__array__().nonzero()[0], value)
                 else:
-                    if isinstance(value, (np.ndarray, FusedArray)):
+                    if isinstance(value, (np.ndarray, UIDArray)):
                         return self._set_vals_uids_multiple(self.values, key, self._uid_map.__array__(), value.__array__())
                     else:
                         return self._set_vals_uids_single(self.values, key, self._uid_map.__array__(), value)
@@ -209,7 +209,7 @@ class FusedArray(NDArrayOperatorsMixin):
                 else:
                     raise Exception('Slicing not supported - slice the .values attribute by index instead e.g., x.values[0:5], not x[0:5]')
             else:
-                if isinstance(value, (np.ndarray, FusedArray)):
+                if isinstance(value, (np.ndarray, UIDArray)):
                     return self._set_vals_uids_multiple(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__(), value.__array__())
                 else:
                     return self._set_vals_uids_single(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__(), value)
@@ -231,7 +231,7 @@ class FusedArray(NDArrayOperatorsMixin):
         return self.values.__contains__(*args, **kwargs)
 
     def astype(self, *args, **kwargs):
-        return FusedArray(values=self.values.astype(*args, **kwargs), uid=self.uid, uid_map=self._uid_map)
+        return UIDArray(values=self.values.astype(*args, **kwargs), uid=self.uid, uid_map=self._uid_map)
 
     def sum(self, *args, **kwargs):
         return self.values.sum(*args, **kwargs)
@@ -274,22 +274,22 @@ class FusedArray(NDArrayOperatorsMixin):
             return self
         else:
             out = args[0](*args[2:], **kwargs)
-            if isinstance(out, FusedArray):
-                # For some operations (e.g., those involving two FusedArrays) the result of the ufunc will already be a FusedArray
-                # In particular, operating on two states will result in a FusedArray where the references to the original People uid_map and uids
-                # are still intact. In such cases, we can return the resulting FusedArray directly
+            if isinstance(out, UIDArray):
+                # For some operations (e.g., those involving two UIDArrays) the result of the ufunc will already be a UIDArray
+                # In particular, operating on two states will result in a UIDArray where the references to the original People uid_map and uids
+                # are still intact. In such cases, we can return the resulting UIDArray directly
                 return out
             else:
                 # Otherwise, if the result of the ufunc is an array (e.g., because one of the arguments was an array) then
-                # we need to wrap it up in a new FusedArray. With '__call__' the dimensions should hopefully be the same and we should
+                # we need to wrap it up in a new UIDArray. With '__call__' the dimensions should hopefully be the same and we should
                 # be able to reuse the UID arrays directly
-                return FusedArray(values=out, uid=self.uid, uid_map=self._uid_map)
+                return UIDArray(values=out, uid=self.uid, uid_map=self._uid_map)
 
     def __array_wrap__(self, out_arr, context=None):
-        # This allows numpy operations addition etc. to return instances of FusedArray
+        # This allows numpy operations addition etc. to return instances of UIDArray
         if out_arr.ndim == 0:
             return out_arr.item()
-        return FusedArray(values=out_arr, uid=self.uid, uid_map=self._uid_map) # Hardcoding class means State can inherit from FusedArray but return FusedArray base instances
+        return UIDArray(values=out_arr, uid=self.uid, uid_map=self._uid_map) # Hardcoding class means State can inherit from UIDArray but return UIDArray base instances
 
 
 class DynamicView(NDArrayOperatorsMixin):
@@ -378,7 +378,7 @@ class DynamicView(NDArrayOperatorsMixin):
         return self._view.__array_ufunc__(*args, **kwargs)
 
 
-class State(FusedArray):
+class State(UIDArray):
 
     def __init__(self, name, dtype=None, default=None, label=None, coerce=True):
         """
@@ -394,7 +394,7 @@ class State(FusedArray):
             label (str): The human-readable name for the state
             coerce (bool): Whether to ensure the the data is one of the supported data types
         """
-        super().__init__()  # Call the FusedArray constructor
+        super().__init__()  # Call the UIDArray constructor
         
         if coerce:
             dtype = check_dtype(dtype, default)
@@ -415,7 +415,7 @@ class State(FusedArray):
         if not self._initialized:
             return f'<State {self.name} (uninitialized)>'
         else:
-            return FusedArray.__repr__(self)
+            return UIDArray.__repr__(self)
 
     def _new_vals(self, uids):
         if isinstance(self.default, ss.ScipyDistribution):
