@@ -10,7 +10,8 @@ import networkx as nx
 from operator import itemgetter
 import pandas as pd
 
-__all__ = ['InfectionLog', 'Disease', 'STI']
+__all__ = ['InfectionLog', 'Disease', 'HHT', 'STI']
+
 
 class InfectionLog(nx.MultiDiGraph):
     """
@@ -40,6 +41,7 @@ class InfectionLog(nx.MultiDiGraph):
 
     A table of outcomes can be returned using `InfectionLog.line_list()`
     """
+
     # Add entries
     # Add items to the most recent infection for an agent
 
@@ -54,7 +56,8 @@ class InfectionLog(nx.MultiDiGraph):
         :param kwargs: Remaining arguments are stored as edge data
         """
         for uid in sc.promotetoarray(uids):
-            source, target, key = max(self.in_edges(uid, keys=True), key=itemgetter(2,0)) # itemgetter twice as fast as lambda apparently
+            source, target, key = max(self.in_edges(uid, keys=True),
+                                      key=itemgetter(2, 0))  # itemgetter twice as fast as lambda apparently
             self[source][target][key].update(**kwargs)
 
     def append(self, source, target, t, **kwargs):
@@ -71,7 +74,7 @@ class InfectionLog(nx.MultiDiGraph):
         a particular entry)
         """
         if len(self) == 0:
-            return pd.DataFrame(columns=['t','source','target'])
+            return pd.DataFrame(columns=['t', 'source', 'target'])
 
         entries = []
         for source, target, t, data in self.edges(keys=True, data=True):
@@ -79,7 +82,7 @@ class InfectionLog(nx.MultiDiGraph):
             d.update(source=source, target=target, t=t)
             entries.append(d)
         df = pd.DataFrame.from_records(entries)
-        df = df.sort_values(['t','source','target'])
+        df = df.sort_values(['t', 'source', 'target'])
         df = df.reset_index(drop=True)
 
         # Use Pandas "Int64" type to allow nullable integers. This allows the 'source' column
@@ -135,7 +138,7 @@ class Disease(ss.Module):
         :return: None if parameters are all valid
         :raises: Exception if there are any invalid parameters (or if the initialization is otherwise invalid in some way)
         """
-        if sim.networks is not None and len(sim.networks)>0:
+        if sim.networks is not None and len(sim.networks) > 0:
             if 'beta' not in self.pars:
                 self.pars.beta = sc.objdict({k: [1, 1] for k in sim.networks})
             if sc.isnumber(self.pars.beta):
@@ -248,22 +251,18 @@ class Disease(ss.Module):
         return
 
 
-class STI(Disease):
+class HHT(Disease):
     """
-    Base class for STIs used in STIsim
-
-    This class contains specializations for STI transmission (i.e., implements network-based
-    transmission with directional beta values) and defines attributes that STIsim connectors
-    operate on to capture co-infection
+    Base class for Human-to-human transmission (HHT)
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.rel_sus     = ss.State('rel_sus', float, 1)
-        self.rel_sev     = ss.State('rel_sev', float, 1)
-        self.rel_trans   = ss.State('rel_trans', float, 1)
+        self.rel_sus = ss.State('rel_sus', float, 1)
+        self.rel_sev = ss.State('rel_sev', float, 1)
+        self.rel_trans = ss.State('rel_trans', float, 1)
         self.susceptible = ss.State('susceptible', bool, True)
-        self.infected    = ss.State('infected', bool, False)
+        self.infected = ss.State('infected', bool, False)
         self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
         return
 
@@ -299,15 +298,6 @@ class STI(Disease):
         self.results += ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True)
         return
 
-    def update_pre(self, sim):
-        """
-        Carry out autonomous updates at the start of the timestep (prior to transmission)
-
-        :param sim:
-        :return:
-        """
-        pass
-
     def _make_new_cases_singlerng(self, sim):
         # Not common-random-number-safe, but more efficient for when not using the multirng feature
         new_cases = []
@@ -329,24 +319,25 @@ class STI(Disease):
                     # number of sexual acts, then beta is assumed to be a per-act transmission
                     # probability. If not, it's assumed to be annual.
                     if 'acts' in contacts.keys():
-                        beta_per_dt = 1-(1-beta)**(contacts.acts*people.dt)
+                        beta_per_dt = 1 - (1 - beta) ** (contacts.acts * people.dt)
                         p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta_per_dt
                     else:
                         p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt
 
-                    new_cases_bool = np.random.random(len(a)) < p_transmit  # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
+                    new_cases_bool = np.random.random(
+                        len(a)) < p_transmit  # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
                     new_cases.append(b[new_cases_bool])
                     sources.append(a[new_cases_bool])
         return np.concatenate(new_cases), np.concatenate(sources)
 
     def _make_new_cases_multirng(self, sim):
-        '''
+        """
         Common-random-number-safe transmission code works by computing the
         probability of each _node_ acquiring a case rather than checking if each
         _edge_ transmits.
         Subsequent step uses a roulette wheel with slotted RNG to determine
         infection source.
-        '''
+        """
         people = sim.people
         n = len(people.uid)  # TODO: possibly could be shortened to just the people who are alive
         p_acq_node = np.zeros(n)
@@ -367,7 +358,7 @@ class STI(Disease):
                         continue
 
                     a, b = contacts[lbl_src], contacts[lbl_tgt]
-                    nzi = (rel_trans[a]>0) & (rel_sus[b]>0) & (contacts.beta>0)
+                    nzi = (rel_trans[a] > 0) & (rel_sus[b] > 0) & (contacts.beta > 0)
                     avec.append(a[nzi])
                     bvec.append(b[nzi])
 
@@ -375,7 +366,8 @@ class STI(Disease):
                         beta_per_dt = 1 - (1 - beta) ** (contacts.acts[nzi] * people.dt)
                     else:
                         beta_per_dt = beta * people.dt
-                    new_pvec = rel_trans[a[nzi]].__array__() * rel_sus[b[nzi]].__array__() * contacts.beta[nzi] * beta_per_dt
+                    new_pvec = rel_trans[a[nzi]].__array__() * rel_sus[b[nzi]].__array__() * contacts.beta[
+                        nzi] * beta_per_dt
                     pvec.append(new_pvec)
 
         df = pd.DataFrame({'p1': np.concatenate(avec), 'p2': np.concatenate(bvec), 'p': np.concatenate(pvec)})
@@ -418,21 +410,33 @@ class STI(Disease):
             self._set_cases(sim, new_cases, sources)
 
     def _set_cases(self, sim, target_uids, source_uids=None):
+        self.set_prognoses(sim, target_uids, source_uids)
+        return
+
+    def update_results(self, sim):
+        super().update_results(sim)
+        self.results['prevalence'][sim.ti] = self.results.n_infected[sim.ti] / np.count_nonzero(sim.people.alive)
+        self.results['new_infections'][sim.ti] = np.count_nonzero(self.ti_infected == sim.ti)
+
+
+class STI(HHT):
+    """
+    Base class for STIs used in STIsim
+
+    This class contains specializations for STI transmission (i.e., implements network-based
+    transmission with directional beta values) and defines attributes that STIsim connectors
+    operate on to capture co-infection
+    """
+
+    def _set_cases(self, sim, target_uids, source_uids=None):
         congenital = sim.people.age[target_uids] <= sim.dt
-        if len(ss.true(congenital))>0:
+        if len(ss.true(congenital)) > 0:
             src_c = source_uids[congenital] if source_uids is not None else None
             self.set_congenital(sim, target_uids[congenital], src_c)
         src_p = source_uids[~congenital] if source_uids is not None else None
         self.set_prognoses(sim, target_uids[~congenital], src_p)
         return
 
-    def set_prognoses(self, sim, target_uids, source_uids=None):
-        pass
-
     def set_congenital(self, sim, target_uids, source_uids=None):
         pass
 
-    def update_results(self, sim):
-        super().update_results(sim)
-        self.results['prevalence'][sim.ti] = self.results.n_infected[sim.ti] / np.count_nonzero(sim.people.alive)
-        self.results['new_infections'][sim.ti] = np.count_nonzero(self.ti_infected == sim.ti)

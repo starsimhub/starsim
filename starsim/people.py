@@ -297,11 +297,6 @@ class People(BasePeople):
         self.alive[death_uids] = False
         return death_uids
 
-    def update_networks(self):
-        """
-        Update networks
-        """
-        return self.networks.update(self)
 
     @property
     def dead(self):

@@ -13,30 +13,41 @@ __all__ = ['HIV', 'ART', 'CD4_analyzer']
 
 class HIV(STI):
 
-    def __init__(self, pars=None):
-        super().__init__(pars)
+    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
 
+        # States
         self.on_art      = ss.State('on_art', bool, False)
         self.ti_art      = ss.State('ti_art', int, ss.INT_NAN)
         self.cd4         = ss.State('cd4', float, 500)
         self.ti_dead     = ss.State('ti_dead', int, ss.INT_NAN) # Time of HIV-cause death
 
-        self.death_prob_per_dt = sps.bernoulli(p=self.death_prob)
+        # self.death_prob_per_dt = sps.bernoulli(p=self.death_prob)
 
-        self.pars = ss.omerge({
+        pars = ss.omerge({
             'cd4_min': 100,
             'cd4_max': 500,
             'cd4_rate': 5,
-            'init_prev': sps.bernoulli(p=0.05),
+            'init_prev': 0.05,
             'eff_condoms': 0.7,
             'art_efficacy': 0.96,
-        }, self.pars)
+            'death_prob': 0.05
+        }, pars)
+
+        par_dists = ss.omerge({
+            'init_prev': sps.bernoulli,
+            'death_prob': sps.bernoulli,
+        }, par_dists)
+
+        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+        self.death_prob_data = sc.dcp(self.pars.death_prob)
+        self.pars.death_prob = self.make_death_prob
 
         return
 
     @staticmethod
-    def death_prob(self, sim, uids):
-        return 0.05 / (self.pars.cd4_min - self.pars.cd4_max)**2 *  (self.cd4[uids] - self.pars.cd4_max)**2
+    def make_death_prob(module, sim, uids):
+        p = module.pars
+        return module.death_prob_data / (p.cd4_min - p.cd4_max)**2 *  (module.cd4[uids] - p.cd4_max)**2
 
     def update_pre(self, sim):
         """ Update CD4 """
@@ -46,7 +57,7 @@ class HIV(STI):
         self.rel_trans[sim.people.alive & self.infected & self.on_art] = 1 - self.pars['art_efficacy']
 
         can_die = ss.true(sim.people.alive & sim.people.hiv.infected)
-        hiv_deaths = self.death_prob_per_dt.filter(can_die)
+        hiv_deaths = self.pars.death_prob.filter(can_die)
         
         sim.people.request_death(hiv_deaths)
         self.ti_dead[hiv_deaths] = sim.ti

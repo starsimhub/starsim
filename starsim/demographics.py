@@ -283,7 +283,6 @@ class Pregnancy(DemographicModule):
     def make_fertility_prob_fn(module, sim, uids):
         """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
 
-
         if sc.isnumber(module.fertility_rate_data):
             fertility_rate = module.fertility_rate_data
 

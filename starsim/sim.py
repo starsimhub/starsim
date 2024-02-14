@@ -446,7 +446,7 @@ class Sim(sc.prettyobj):
 
         # Update networks - this takes place here in case autonomous state changes at this timestep
         # affect eligibility for contacts
-        self.people.update_networks()
+        self.networks.update(self.people)
 
         # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
         # interventions, by running them at this point
