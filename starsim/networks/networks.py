@@ -10,7 +10,10 @@ import starsim as ss
 import scipy.optimize as spo
 import scipy.stats as sps
 import scipy.spatial as spsp
-from scipy.stats._distn_infrastructure import rv_frozen
+
+# CK: need to remove this, but slows down the code otherwise
+ss_float_ = ss.dtypes.float
+ss_int_ = ss.dtypes.int
 
 
 # Specify all externally visible functions this file defines
@@ -64,9 +67,9 @@ class Network(ss.Module):
 
         # Each relationship is characterized by these default set of keys, plus any user- or network-supplied ones
         default_keys = {
-            'p1': ss.int_,
-            'p2': ss.int_,
-            'beta': ss.float_,
+            'p1': ss_int_,
+            'p2': ss_int_,
+            'beta': ss_float_,
         }
         self.meta = ss.omerge(default_keys, key_dict)
         self.vertical = vertical  # Whether transmission is bidirectional
@@ -82,8 +85,8 @@ class Network(ss.Module):
             self.initialized = True
 
         # Define states using placeholder values
-        self.participant = ss.State('participant', bool, fill_value=False)
-        self.debut = ss.State('debut', float, fill_value=0)
+        self.participant = ss.State('participant', bool, default=False)
+        self.debut = ss.State('debut', float, default=0)
         return
 
     def initialize(self, sim):
@@ -251,7 +254,7 @@ class Network(ss.Module):
         # Find the contacts
         contact_inds = ss.find_contacts(self.contacts.p1, self.contacts.p2, inds)
         if as_array:
-            contact_inds = np.fromiter(contact_inds, dtype=ss.int_)
+            contact_inds = np.fromiter(contact_inds, dtype=ss_int_)
             contact_inds.sort()
 
         return contact_inds
@@ -298,7 +301,7 @@ class Networks(ss.ndict):
 
 class DynamicNetwork(Network):
     def __init__(self, pars=None, key_dict=None):
-        key_dict = ss.omerge({'dur': ss.float_}, key_dict)
+        key_dict = ss.omerge({'dur': ss_float_}, key_dict)
         super().__init__(pars, key_dict=key_dict)
 
     def end_pairs(self, people):
@@ -314,7 +317,7 @@ class DynamicNetwork(Network):
 class SexualNetwork(Network):
     """ Base class for all sexual networks """
     def __init__(self, pars=None, key_dict=None):
-        key_dict = ss.omerge({'acts': ss.int_}, key_dict)
+        key_dict = ss.omerge({'acts': ss_int_}, key_dict)
         super().__init__(pars, key_dict=key_dict)
 
     def active(self, people):
@@ -375,7 +378,6 @@ class mf(SexualNetwork, DynamicNetwork):
 
     def set_participation(self, people, upper_age=None):
         # Set people who will participate in the network at some point
-        year = people.year
         if upper_age is None: uids = people.uid
         else: uids = people.uid[(people.age < upper_age)]
         self.participant[uids] = self.pars.participation.rvs(uids)
@@ -572,7 +574,7 @@ class maternal(Network):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
-        key_dict = sc.mergedicts({'dur': ss.float_}, key_dict)
+        key_dict = sc.mergedicts({'dur': ss_float_}, key_dict)
         super().__init__(key_dict=key_dict, vertical=vertical, **kwargs)
         return
 
@@ -698,7 +700,7 @@ class random(DynamicNetwork):
 
         total_number_of_half_edges = np.sum(number_of_contacts)
         count = 0
-        source = np.zeros((total_number_of_half_edges,), dtype=ss.int_)
+        source = np.zeros((total_number_of_half_edges,), dtype=ss_int_)
         for i, person_id in enumerate(inds):
             n_contacts = number_of_contacts[i]
             source[count: count + n_contacts] = person_id
@@ -721,10 +723,10 @@ class random(DynamicNetwork):
         else:
             number_of_contacts = np.full(len(people), self.pars.n_contacts)
 
-        number_of_contacts = np.round(number_of_contacts / 2).astype(ss.int_)  # One-way contacts
+        number_of_contacts = np.round(number_of_contacts / 2).astype(ss_int_)  # One-way contacts
 
         p1, p2 = self.get_contacts(people.uid.__array__(), number_of_contacts)
-        beta = np.ones(len(p1), dtype=ss.float_)
+        beta = np.ones(len(p1), dtype=ss_float_)
 
         if isinstance(self.pars.dur, ss.ScipyDistribution):
             dur = self.pars.dur.rvs(p1)
@@ -763,8 +765,8 @@ class hpv_network(mf):
         }, par_dists)
 
         key_dict = {
-            'acts': ss.float_,
-            'start': ss.float_,
+            'acts': ss_float_,
+            'start': ss_float_,
         }
 
         DynamicNetwork.__init__(self, key_dict)
@@ -788,7 +790,7 @@ class hpv_network(mf):
 
     @staticmethod
     def participation(self, sim, uids):
-        p = np.ones_like(uids, dtype=ss.float_)
+        p = np.ones_like(uids, dtype=ss_float_)
         fem = sim.people.female[uids]
         p[fem] = np.interp(sim.people.age[uids[fem]], self.agebins, self.f_participation)
         p[~fem] = np.interp(sim.people.age[uids[~fem]], self.agebins, self.m_participation)
@@ -916,11 +918,11 @@ class hpv_network(mf):
         retired_vals = 0
 
         # Set values and return
-        scaled_acts = np.full(len(acts), np.nan, dtype=ss.float_)
+        scaled_acts = np.full(len(acts), np.nan, dtype=ss_float_)
         scaled_acts[below_peak_inds] = below_peak_vals
         scaled_acts[above_peak_inds] = above_peak_vals
         scaled_acts[retired_inds] = retired_vals
-        start = np.array([ti] * n_partnerships, dtype=ss.float_)
+        start = np.array([ti] * n_partnerships, dtype=ss_float_)
         beta = np.ones(n_partnerships)
 
         new_contacts = dict(

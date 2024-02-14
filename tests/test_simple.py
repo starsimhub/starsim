@@ -4,7 +4,6 @@ Test simple APIs
 
 # %% Imports and settings
 import starsim as ss
-import scipy.stats as sps
 
 n_agents = 2_000
 

@@ -22,6 +22,8 @@ INT_NAN = np.iinfo(
     np.int32).max  # Value to use to flag invalid content (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
 
 # %% Helper functions
+
+# What functions are externally visible -- note, this gets populated in each section below
 __all__ += ['ndict', 'omerge', 'warn', 'unique', 'find_contacts', 'get_subclasses', 'all_subclasses']
 
 

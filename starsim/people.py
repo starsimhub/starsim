@@ -22,8 +22,8 @@ class BasePeople(sc.prettyobj):
     def __init__(self, n_agents):
 
         self.initialized = False
-        self._uid_map = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs ever created
-        self.uid = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs currently in use
+        self._uid_map = ss.DynamicView(int, default=ss.INT_NAN)  # This variable tracks all UIDs ever created
+        self.uid = ss.DynamicView(int, default=ss.INT_NAN)  # This variable tracks all UIDs currently in use
 
         n = int(n_agents)
 
@@ -77,7 +77,7 @@ class BasePeople(sc.prettyobj):
         """
 
         if n == 0:
-            return np.array([], dtype=ss.int_)
+            return np.array([], dtype=ss.dtypes.int)
 
         start_uid = len(self._uid_map)
         start_idx = len(self.uid)
@@ -324,8 +324,8 @@ class People(BasePeople):
         return self.male
 
     def init_results(self, sim):
-        sim.results += ss.Result(None, 'n_alive', sim.npts, ss.int_, scale=True)
-        sim.results += ss.Result(None, 'new_deaths', sim.npts, ss.int_, scale=True)
+        sim.results += ss.Result(None, 'n_alive', sim.npts, ss.dtypes.int, scale=True)
+        sim.results += ss.Result(None, 'new_deaths', sim.npts, ss.dtypes.int, scale=True)
         return
 
     def update_results(self, sim):
