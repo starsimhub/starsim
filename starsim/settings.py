@@ -62,6 +62,14 @@ class Options(sc.objdict):
             centralized random number generator.'
         options.multirng = False
 
+        # NOTE-PSL: A temporary solution to accommodate development of multipathogen scenarios
+        optdesc.duplicates = 'Set True to enable automatic updating (enumerating) of \
+            the .name attribute of multiple instances of the same Module class, or \
+            of multiple instances of the State class. \
+            The default value is False, which means that an error will be raised by ss.utils.ndict()\
+            if it finds multiple instances with the identical names.'
+        options.duplicates = False
+
         optdesc.verbose = 'Set default level of verbosity (i.e. logging detail): e.g., 0.1 is an update every 10 simulated timesteps.'
         options.verbose = float(os.getenv('STARSIM_VERBOSE', 0.1))
 
