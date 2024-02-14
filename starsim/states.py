@@ -6,6 +6,7 @@ import numpy as np
 import sciris as sc
 import numba as nb
 import warnings
+import starsim as ss
 from starsim.settings import dtypes as sdt
 from starsim.distributions import ScipyDistribution
 from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
@@ -59,7 +60,7 @@ class FusedArray(NDArrayOperatorsMixin):
 
         if uid_map is None and uid is not None:
             # Construct a local UID map as opposed to using a shared one (i.e., the one for all agents contained in the People instance)
-            self.uid_map = np.full(np.max(uid) + 1, fill_value=sdt.sdt.INT_NAN, dtype=sdt.int)
+            self.uid_map = np.full(np.max(uid) + 1, fill_value=ss.INT_NAN, dtype=sdt.int)
             self.uid_map[uid] = np.arange(len(uid))
         else:
             self._uid_map = uid_map
@@ -95,11 +96,11 @@ class FusedArray(NDArrayOperatorsMixin):
         :return: A tuple of (values, uids, new_uid_map) suitable for passing into the FusedArray constructor
         """
         out = np.empty(len(key), dtype=vals.dtype)
-        new_uid_map = np.full(uid_map.shape[0], fill_value=sdt.INT_NAN, dtype=np.int64)
+        new_uid_map = np.full(uid_map.shape[0], fill_value=ss.INT_NAN, dtype=np.int64)
 
         for i in range(len(key)):
             idx = uid_map[key[i]]
-            if idx == sdt.INT_NAN:
+            if idx == ss.INT_NAN:
                 raise IndexError('UID not present in array')
             out[i] = vals[idx]
             new_uid_map[key[i]] = i
@@ -123,7 +124,7 @@ class FusedArray(NDArrayOperatorsMixin):
                 errormsg = f'UID not present in array (requested UID ({key[i]}) is larger than the maximum UID in use ({len(uid_map)}))'
                 raise IndexError(errormsg)
             idx = uid_map[key[i]]
-            if idx == sdt.INT_NAN:
+            if idx == ss.INT_NAN:
                 raise IndexError('UID not present in array')
             elif idx >= len(vals):
                 errormsg = f'Attempted to write to a non-existant index ({idx}) - this can happen if attempting to write to new entries that have not yet been allocated via grow()'
@@ -147,7 +148,7 @@ class FusedArray(NDArrayOperatorsMixin):
             if key[i] >= len(uid_map):
                 raise IndexError('UID not present in array (requested UID is larger than the maximum UID in use)')
             idx = uid_map[key[i]]
-            if idx == sdt.INT_NAN:
+            if idx == ss.INT_NAN:
                 raise IndexError('UID not present in array')
             elif idx >= len(vals):
                 raise Exception('Attempted to write to a non-existant index - this can happen if attempting to write to new entries that have not yet been allocated via grow()')
@@ -164,7 +165,7 @@ class FusedArray(NDArrayOperatorsMixin):
                     # it to indices first. Also, the pure Python implementation is difficult to improve upon using numba
                     mapped_key = key.__array__().nonzero()[0]
                     uids = self.uid.__array__()[mapped_key]
-                    new_uid_map = np.full(len(self._uid_map), fill_value=sdt.INT_NAN, dtype=int)
+                    new_uid_map = np.full(len(self._uid_map), fill_value=ss.INT_NAN, dtype=int)
                     new_uid_map[uids] = np.arange(len(uids))
                     values = self.values[mapped_key]
                 else:
@@ -181,7 +182,7 @@ class FusedArray(NDArrayOperatorsMixin):
                 values, uids, new_uid_map = self._get_vals_uids(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__())
             return FusedArray(values=values, uid=uids, uid_map=new_uid_map)
         except IndexError as e:
-            if str(sdt.INT_NAN) in str(e):
+            if str(ss.INT_NAN) in str(e):
                 raise IndexError(f'UID {key} not present in array')
             else:
                 raise e
@@ -213,7 +214,7 @@ class FusedArray(NDArrayOperatorsMixin):
                 else:
                     return self._set_vals_uids_single(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__(), value)
         except IndexError as e:
-            if str(sdt.INT_NAN) in str(e):
+            if str(ss.INT_NAN) in str(e):
                 raise IndexError(f'UID {key} not present in array')
             else:
                 raise e

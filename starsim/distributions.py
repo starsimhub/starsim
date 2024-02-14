@@ -4,11 +4,11 @@ Distribution support extending scipy with two key functionalities:
 2. Ability to use MultiRNG for common random number support
 """
 
+from copy import deepcopy
 import numpy as np
-from starsim.settings import dtypes as sdt
+import starsim as ss
 from starsim.random import SingleRNG, MultiRNG
 from starsim import options
-from copy import deepcopy
 from scipy.stats._discrete_distns import bernoulli_gen
 from scipy.stats import rv_histogram
 
@@ -68,7 +68,7 @@ class ScipyDistribution():
                                     raise Exception('The MultiRNG instance must be initialized before use.')
                             raise e
 
-                        if max_slot == sdt.INT_NAN:
+                        if max_slot == ss.INT_NAN:
                             raise Exception('Attempted to sample from an INT_NAN slot')
                         n_samples = max_slot + 1
                 else:
@@ -282,7 +282,7 @@ class ScipyHistogram(rv_histogram):
                             raise Exception('The MultiRNG instance must be initialized before use.')
                     raise e
 
-                if max_slot == sdt.INT_NAN:
+                if max_slot == ss.INT_NAN:
                     raise Exception('Attempted to sample from an INT_NAN slot')
                 n_samples = max_slot + 1
         else:
