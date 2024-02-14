@@ -141,7 +141,7 @@ class Disease(ss.Module):
         if sim.networks is not None and len(sim.networks) > 0:
 
             # If there's no beta, make a default one
-            if 'beta' not in self.pars:
+            if 'beta' not in self.pars or self.pars.beta is None:
                 self.pars.beta = sc.objdict({k: [1, 1] for k in sim.networks})
 
             # If beta is a scalar, apply this bi-directionally to all networks

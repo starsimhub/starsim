@@ -1,5 +1,5 @@
 """
-Define example disease modules
+Define non-communicable disease (NCD) model
 """
 
 import numpy as np
