@@ -47,7 +47,7 @@ class ndict(sc.objdict):
         self.setattribute('_name', name)  # Since otherwise treated as keys
         self.setattribute('_type', type)
         self.setattribute('_strict', strict)
-        self._initialize(*args, **kwargs)
+        self.extend(*args, **kwargs)
         return
 
     def append(self, arg, key=None):
@@ -79,9 +79,8 @@ class ndict(sc.objdict):
         else:
             errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._name}"'
             raise ValueError(errormsg)
-
         return
-
+    
     def _check_type(self, arg):
         """ Check types """
         if self._type is not None:
@@ -90,7 +89,8 @@ class ndict(sc.objdict):
                 raise TypeError(errormsg)
         return
 
-    def _initialize(self, *args, **kwargs):
+    def extend(self, *args, **kwargs):
+        """ Add new items to the ndict, by item, list, or dict """
         args = sc.mergelists(*args)
         for arg in args:
             self.append(arg)
