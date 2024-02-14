@@ -1,5 +1,5 @@
 """
-Test that the current version of HPVsim exactly matches
+Test that the current version of Starsim exactly matches
 the baseline results.
 """
 
