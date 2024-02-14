@@ -21,8 +21,8 @@ class BasePeople(sc.prettyobj):
     def __init__(self, n_agents):
 
         self.initialized = False
-        self._uid_map = ss.DynamicView(int, default=ss.INT_NAN)  # This variable tracks all UIDs ever created
-        self.uid = ss.DynamicView(int, default=ss.INT_NAN)  # This variable tracks all UIDs currently in use
+        self._uid_map = ss.ArrayView(int, default=ss.INT_NAN)  # This variable tracks all UIDs ever created
+        self.uid = ss.ArrayView(int, default=ss.INT_NAN)  # This variable tracks all UIDs currently in use
 
         n = int(n_agents)
 

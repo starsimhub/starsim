@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import sciris as sc
-from starsim.states import State, DynamicView
+from starsim.states import State, ArrayView
 
 INT_NAN = np.iinfo(int).max  # Value to use to flag removed UIDs (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
 
@@ -13,8 +13,8 @@ INT_NAN = np.iinfo(int).max  # Value to use to flag removed UIDs (i.e., an integ
 class DynamicPeople():
     def __init__(self, states=None):
 
-        self._uid_map = DynamicView(int, fill_value=INT_NAN) # This variable tracks all UIDs ever created
-        self.uid = DynamicView(int, fill_value=INT_NAN) # This variable tracks all UIDs currently in use
+        self._uid_map = ArrayView(int, fill_value=INT_NAN) # This variable tracks all UIDs ever created
+        self.uid = ArrayView(int, fill_value=INT_NAN) # This variable tracks all UIDs currently in use
 
         self.sex = State('sex',bool)
         self.dead = State('dead',bool)

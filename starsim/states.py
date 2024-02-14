@@ -13,7 +13,7 @@ from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to autom
 from scipy.stats._distn_infrastructure import rv_frozen
 
 
-__all__ = ['check_dtype', 'State', 'DynamicView']
+__all__ = ['check_dtype', 'State', 'ArrayView']
 
 
 def check_dtype(dtype, default=None):
@@ -159,7 +159,7 @@ class UIDArray(NDArrayOperatorsMixin):
             if isinstance(key, (int, np.integer)):
                 # Handle getting a single item by UID
                 return self.values[self._uid_map[key]]
-            elif isinstance(key, (np.ndarray, UIDArray, DynamicView)):
+            elif isinstance(key, (np.ndarray, UIDArray, ArrayView)):
                 if key.dtype.kind == 'b':
                     # Handle accessing items with a logical array. Surprisingly, it seems faster to use nonzero() to convert
                     # it to indices first. Also, the pure Python implementation is difficult to improve upon using numba
@@ -188,7 +188,7 @@ class UIDArray(NDArrayOperatorsMixin):
                 raise e
 
     def __setitem__(self, key, value):
-        # nb. the use of .__array__() calls is to access the array interface and thereby treat both np.ndarray and DynamicView instances
+        # nb. the use of .__array__() calls is to access the array interface and thereby treat both np.ndarray and ArrayView instances
         # in the same way without needing an additional type check. This is also why the UIDArray.dtype property is defined. Noting
         # that for a State, the uid_map is a dynamic view attached to the People, but after an indexing operation, it will be a bare
         # UIDArray that has an ordinary numpy array as the uid_map
@@ -292,15 +292,13 @@ class UIDArray(NDArrayOperatorsMixin):
         return UIDArray(values=out_arr, uid=self.uid, uid_map=self._uid_map) # Hardcoding class means State can inherit from UIDArray but return UIDArray base instances
 
 
-class DynamicView(NDArrayOperatorsMixin):
+class ArrayView(NDArrayOperatorsMixin):
     def __init__(self, dtype, default=None, coerce=True):
         """
         Args:
-            name: name of the result as used in the model
-            dtype: datatype
-            default: default value for this state upon model initialization. If not provided, it will use the default value for the dtype
-            shape: If not none, set to match a string in `pars` containing the dimensionality
-            label: text used to construct labels for the result for displaying on plots and other outputs
+            dtype (class): The dtype to use for this instance (if None, infer from value)
+            default (any): Specify default value for new agents. This can be
+            coerce (bool): Whether to ensure the the data is one of the supported data types
         """
         if coerce:
             dtype = check_dtype(dtype, default)
@@ -319,10 +317,10 @@ class DynamicView(NDArrayOperatorsMixin):
     @property
     def dtype(self):
         # The specified dtype and the underlying array dtype can be different. For instance, the user might pass in
-        # DynamicView(dtype=int) but the underlying array's dtype will be np.dtype('int32'). This distinction is important
-        # because the numpy dtype has attributes like 'kind' that the input dtype may not have. We need the DynamicView's
+        # ArrayView(dtype=int) but the underlying array's dtype will be np.dtype('int32'). This distinction is important
+        # because the numpy dtype has attributes like 'kind' that the input dtype may not have. We need the ArrayView's
         # dtype to match that of the underlying array so that it can be more seamlessly exchanged with direct numpy arrays
-        # Therefore, we retain the original dtype in DynamicView._dtype() and use
+        # Therefore, we retain the original dtype in ArrayView._dtype() and use
         return self._data.dtype
 
     def __len__(self):
@@ -406,7 +404,7 @@ class State(UIDArray):
         self.default = default
         self.name = name
         self.label = label or name
-        self._data = DynamicView(dtype=dtype)
+        self._data = ArrayView(dtype=dtype)
         self.values = self._data._view
         self._initialized = False
         return
