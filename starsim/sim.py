@@ -11,12 +11,8 @@ import numba as nb
 
 __all__ = ['Sim', 'AlreadyRunError', 'diff_sims']
 
-<<<<<<< HEAD
 
-@nb.njit
-=======
 @nb.njit(cache=True)
->>>>>>> apis
 def set_numba_seed(value):
     # Needed to ensure reproducibility when using random calls in numba, e.g. RandomNetwork
     # Note, these random numbers are not currently common-random-number safe
@@ -247,7 +243,7 @@ class Sim(sc.prettyobj):
         self.people.init_results(self)
         return self
 
-    def convert_plugins(self, Plugin_Class, plugin_name=None):
+    def convert_plugins(self, plugin_class, plugin_name=None):
         """
         Common logic for converting plug-ins to a standard format
         Used for networks, demographics, diseases, connectors, analyzers, and interventions
@@ -255,7 +251,7 @@ class Sim(sc.prettyobj):
             plugin: class
         """
 
-        if plugin_name is None: plugin_name = Plugin_Class.__name__.lower()
+        if plugin_name is None: plugin_name = plugin_class.__name__.lower()
 
         # Figure out if it's in the sim pars or provided directly
         attr_plugins = getattr(self, plugin_name)  # Get any plugins that have been provided directly
@@ -269,18 +265,18 @@ class Sim(sc.prettyobj):
             plugins = attr_plugins
 
         # Convert
-        known_plugins = [n.__name__.lower() for n in ss.all_subclasses(Plugin_Class)]
+        known_plugins = [n.__name__.lower() for n in ss.all_subclasses(plugin_class)]
 
         processed_plugins = sc.autolist()
         for plugin in plugins.values():
 
-            if not isinstance(plugin, Plugin_Class):
+            if not isinstance(plugin, plugin_class):
 
                 if isinstance(plugin, dict):
                     if plugin.get('name') and plugin['name'] in known_plugins:
                         # Make an instance of the requested plugin
                         plugin_pars = {k: v for k, v in plugin.items() if k != 'name'}
-                        plugin = Plugin_Class.create(name=plugin['name'], pars=plugin_pars)
+                        plugin = plugin_class.create(name=plugin['name'], pars=plugin_pars)
                     else:
                         errormsg = (f'Could not convert {plugin} to an instance of class {plugin_name}. Try using lower'
                                     f'case or specifying it directly rather than as a dictionary.')

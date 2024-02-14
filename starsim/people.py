@@ -163,7 +163,7 @@ class People(BasePeople):
         ppl = ss.People(2000)
     """
 
-    def __init__(self, n_agents, age_data=None, extra_states=None, networks=None, rand_seed=0):
+    def __init__(self, n_agents, age_data=None, extra_states=None, rand_seed=0):
         """ Initialize """
 
         super().__init__(n_agents)
@@ -183,8 +183,6 @@ class People(BasePeople):
         for state in states:
             self.add_state(state)
         self._initialize_states(sim=None) # No sim yet, but initialize what we can
-        
-        self.networks = ss.Networks(networks)
 
         # Set initial age distribution - likely move this somewhere else later
         self.age_data_dist = self.get_age_dist(age_data)
