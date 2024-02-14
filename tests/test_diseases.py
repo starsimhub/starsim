@@ -76,16 +76,22 @@ def test_ncd():
     return sim
 
 
-def test_cholera():
+def test_gavi(disease):
     ss.options(multirng=False)
-    sim = ss.Sim(n_agents=n_agents, networks=ss.random(), diseases=ss.Cholera())
+    pars = dict(
+        diseases=disease,
+        n_agents=n_agents,
+        networks='random',
+    )
+    sim = ss.Sim(pars)
     sim.run()
     return sim
 
 
 if __name__ == '__main__':
     ss.options(multirng=False)
-    sim1 = test_sir()
-    sim2 = test_ncd()
-    sim3 = test_cholera()
+    # sim1 = test_sir()
+    # sim2 = test_ncd()
+    for disease in ['measles']:
+        sim = test_gavi(disease)
     plt.show()
