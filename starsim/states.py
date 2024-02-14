@@ -96,7 +96,7 @@ class FusedArray(NDArrayOperatorsMixin):
         :return: A tuple of (values, uids, new_uid_map) suitable for passing into the FusedArray constructor
         """
         out = np.empty(len(key), dtype=vals.dtype)
-        new_uid_map = np.full(uid_map.shape[0], fill_value=ss.INT_NAN, dtype=np.int64)
+        new_uid_map = np.full(uid_map.shape[0], fill_value=ss.INT_NAN, dtype=np.int32)
 
         for i in range(len(key)):
             idx = uid_map[key[i]]
