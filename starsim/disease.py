@@ -5,7 +5,6 @@ Base classes for diseases
 import numpy as np
 import sciris as sc
 import starsim as ss
-import scipy.stats as sps
 import networkx as nx
 from operator import itemgetter
 import pandas as pd
@@ -396,7 +395,7 @@ class Infection(Disease):
 
         # Slotted draw, need to find a long-term place for this logic
         slots = people.slot[uids]
-        new_cases_bool = sps.uniform.rvs(size=np.max(slots) + 1)[slots] < p_acq_node.values
+        new_cases_bool = ss.uniform.rvs(size=np.max(slots) + 1)[slots] < p_acq_node.values
         new_cases = uids[new_cases_bool]
 
         # Now choose infection source for new cases
@@ -409,7 +408,7 @@ class Infection(Disease):
                 src_idx = np.argmax(cumsum >= df['r'])
             return df['p1'].iloc[src_idx]
 
-        df['r'] = sps.uniform.rvs(size=np.max(slots) + 1)[slots]
+        df['r'] = ss.uniform.rvs(size=np.max(slots) + 1)[slots]
         sources = df.set_index('p2').loc[new_cases].groupby('p2').apply(choose_source)
 
         return new_cases, sources[new_cases].values

@@ -8,13 +8,11 @@ import numba as nb
 import sciris as sc
 import starsim as ss
 import scipy.optimize as spo
-import scipy.stats as sps
 import scipy.spatial as spsp
 
 # CK: need to remove this, but slows down the code otherwise
 ss_float_ = ss.dtypes.float
 ss_int_ = ss.dtypes.int
-
 
 # Specify all externally visible functions this file defines
 __all__ = ['Network', 'Networks', 'DynamicNetwork', 'SexualNetwork']
@@ -352,10 +350,10 @@ class mf(SexualNetwork, DynamicNetwork):
         }, pars)
 
         par_dists = ss.omerge({
-            'duration': sps.lognorm,
-            'participation': sps.bernoulli,
-            'debut': sps.norm,
-            'acts': sps.lognorm,
+            'duration': ss.lognorm,
+            'participation': ss.bernoulli,
+            'debut': ss.norm,
+            'acts': ss.lognorm,
         }, par_dists)
 
         DynamicNetwork.__init__(self, key_dict=key_dict)
@@ -440,10 +438,10 @@ class msm(SexualNetwork, DynamicNetwork):
     def __init__(self, pars=None, key_dict=None):
 
         pars = ss.omerge({
-'duration_dist': ss.lognorm(mean=15, stdev=15),
-            'participation_dist': sps.bernoulli(p=0.1),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
-'debut_dist': sps.norm(loc=16, scale=2),
-            'acts': ss.lognorm(mean=80, stdev=20),
+'duration_dist': ss.lognorm_mean(mean=15, stdev=15),
+            'participation_dist': ss.bernoulli(p=0.1),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
+'debut_dist': ss.norm(loc=16, scale=2),
+            'acts': ss.lognorm_mean(mean=80, stdev=20),
             'rel_part_rates': 1.0,
         }, pars)
         DynamicNetwork.__init__(self, key_dict)
@@ -468,7 +466,7 @@ class msm(SexualNetwork, DynamicNetwork):
         # Participation
         self.participant[people.female] = False
         pr = self.pars.part_rates
-        dist = sps.bernoulli.rvs(p=pr, size=len(uids))
+        dist = ss.bernoulli.rvs(p=pr, size=len(uids))
         self.participant[uids] = dist
 
         # Debut
@@ -523,7 +521,7 @@ class embedding(mf):
         
         """
         pars = ss.omerge({
-            'embedding_func': sps.norm(loc=self.embedding_loc, scale=2),
+            'embedding_func': ss.norm(loc=self.embedding_loc, scale=2),
             'male_shift': 5,
         }, pars)
         super().__init__(pars, **kwargs)
@@ -674,7 +672,7 @@ class random(DynamicNetwork):
         self.add_pairs(sim.people)
 
     @staticmethod
-    @nb.njit
+    @nb.njit(cache=True)
     def get_contacts(inds, number_of_contacts):
         """
         Efficiently generate contacts
@@ -756,12 +754,12 @@ class hpv_network(mf):
         }, pars)
 
         self.par_dists = ss.omerge({
-            'duration': sps.lognorm,
-            'participation': sps.bernoulli,
-            'debut': sps.norm,
-            'acts': sps.lognorm,
-            'cross_layer': sps.bernoulli,
-            'concurrency': sps.bernoulli,
+            'duration': ss.lognorm,
+            'participation': ss.bernoulli,
+            'debut': ss.norm,
+            'acts': ss.lognorm,
+            'cross_layer': ss.bernoulli,
+            'concurrency': ss.bernoulli,
         }, par_dists)
 
         key_dict = {
@@ -977,7 +975,7 @@ class mf_msm(NetworkConnector):
         }, pars)
         super().__init__(networks=networks, pars=pars)
 
-        self.bi_dist = sps.bernoulli(p=self.pars.prop_bi)
+        self.bi_dist = ss.bernoulli(p=self.pars.prop_bi)
         return
 
     def initialize(self, sim):
@@ -1001,7 +999,7 @@ class mf_msm(NetworkConnector):
         # Male participation rate uses info about cross-network participation.
         # First, we determine who's participating in the MSM network
         pr = msm.pars.part_rates
-        dist = sps.bernoulli.rvs(p=pr, size=len(uids))
+        dist = ss.bernoulli.rvs(p=pr, size=len(uids))
         msm.participant[uids] = dist
 
         # Now we take the MSM participants and determine which are also in the MF network
@@ -1015,7 +1013,7 @@ class mf_msm(NetworkConnector):
         remaining_pr = max(mf_pr*len(uids)-len(bi_uids), 0)/len(mf_excl_set)
 
         # Don't love the following new syntax:
-        mf_excl_uids = mf_excl_set[sps.uniform.rvs(size=len(mf_excl_set)) < remaining_pr]
+        mf_excl_uids = mf_excl_set[ss.uniform.rvs(size=len(mf_excl_set)) < remaining_pr]
 
         mf.participant[bi_uids] = True
         mf.participant[mf_excl_uids] = True

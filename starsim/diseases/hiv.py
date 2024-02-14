@@ -5,10 +5,8 @@ Define default HIV disease module and related interventions
 import numpy as np
 import sciris as sc
 import starsim as ss
-import scipy.stats as sps
 
 __all__ = ['HIV', 'ART', 'CD4_analyzer']
-
 
 class HIV(ss.Infection):
 
@@ -19,8 +17,6 @@ class HIV(ss.Infection):
         self.ti_art      = ss.State('ti_art', int, ss.INT_NAN)
         self.cd4         = ss.State('cd4', float, 500)
         self.ti_dead     = ss.State('ti_dead', int, ss.INT_NAN) # Time of HIV-cause death
-
-        # self.death_prob_per_dt = sps.bernoulli(p=self.death_prob)
 
         pars = ss.omerge({
             'cd4_min': 100,
@@ -33,8 +29,8 @@ class HIV(ss.Infection):
         }, pars)
 
         par_dists = ss.omerge({
-            'init_prev': sps.bernoulli,
-            'death_prob': sps.bernoulli,
+            'init_prev': ss.bernoulli,
+            'death_prob': ss.bernoulli,
         }, par_dists)
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
@@ -103,7 +99,7 @@ class ART(ss.Intervention):
 
         super().__init__(**kwargs)
 
-        self.prob_art_at_infection = sps.bernoulli(p=lambda self, sim, uids: np.interp(sim.year, self.t, self.coverage))
+        self.prob_art_at_infection = ss.bernoulli(p=lambda self, sim, uids: np.interp(sim.year, self.t, self.coverage))
         return
 
     def initialize(self, sim):

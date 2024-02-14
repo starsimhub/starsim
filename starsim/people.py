@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-import scipy.stats as sps
 
 __all__ = ['BasePeople', 'People']
 
@@ -22,8 +21,8 @@ class BasePeople(sc.prettyobj):
     def __init__(self, n_agents):
 
         self.initialized = False
-        self._uid_map = ss.DynamicView(int, default=ss.INT_NAN)  # This variable tracks all UIDs ever created
-        self.uid = ss.DynamicView(int, default=ss.INT_NAN)  # This variable tracks all UIDs currently in use
+        self._uid_map = ss.ArrayView(int, default=ss.INT_NAN)  # This variable tracks all UIDs ever created
+        self.uid = ss.ArrayView(int, default=ss.INT_NAN)  # This variable tracks all UIDs currently in use
 
         n = int(n_agents)
 
@@ -175,7 +174,7 @@ class People(BasePeople):
         # Handle states
         states = [
             ss.State('age', float, np.nan), # NaN until conceived
-            ss.State('female', bool, sps.bernoulli(p=0.5)),
+            ss.State('female', bool, ss.bernoulli(p=0.5)),
             ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
             ss.State('alive', bool, True),  # Time index for death
             ss.State('scale', float, 1.0),
@@ -196,7 +195,7 @@ class People(BasePeople):
     def get_age_dist(age_data):
         """ Return an age distribution based on provided data """
         if age_data is None:
-            dist = sps.uniform(loc=0, scale=100)  # loc and width
+            dist = ss.uniform(loc=0, scale=100)  # loc and width
             return ss.ScipyDistribution(dist, 'Age distribution')
 
         if sc.checktype(age_data, pd.DataFrame):

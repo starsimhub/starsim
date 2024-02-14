@@ -11,12 +11,17 @@ import numba as nb
 
 __all__ = ['Sim', 'AlreadyRunError', 'diff_sims']
 
+<<<<<<< HEAD
 
 @nb.njit
+=======
+@nb.njit(cache=True)
+>>>>>>> apis
 def set_numba_seed(value):
     # Needed to ensure reproducibility when using random calls in numba, e.g. RandomNetwork
     # Note, these random numbers are not currently common-random-number safe
     np.random.seed(value)
+    return
 
 
 class Sim(sc.prettyobj):

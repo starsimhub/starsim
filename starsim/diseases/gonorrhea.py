@@ -4,11 +4,8 @@ Define default gonorrhea disease module and related interventions
 
 import numpy as np
 import starsim as ss
-import scipy.stats as sps
-
 
 __all__ = ['Gonorrhea']
-
 
 class Gonorrhea(ss.Infection):
 
@@ -21,17 +18,17 @@ class Gonorrhea(ss.Infection):
 
         # Parameters
         pars = ss.omerge({
-            'dur_inf_in_days': sps.lognorm(s=0.6, scale=10),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
+            'dur_inf_in_days': ss.lognorm(s=0.6, scale=10),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
             'p_symp': 0.5,  # Share of infections that are symptomatic. Placeholder value
             'p_clear': 0.2,  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
             'init_prev': 0.1,
         }, pars)
 
         par_dists = ss.omerge({
-            'dur_inf_in_days': sps.lognorm,
-            'p_symp': sps.bernoulli,
-            'p_clear': sps.bernoulli,
-            'init_prev': sps.bernoulli,
+            'dur_inf_in_days': ss.lognorm,
+            'p_symp': ss.bernoulli,
+            'p_clear': ss.bernoulli,
+            'init_prev': ss.bernoulli,
         }, par_dists)
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)

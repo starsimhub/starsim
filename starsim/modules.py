@@ -25,9 +25,15 @@ class Module(sc.prettyobj):
         return
 
     def check_requires(self, sim):
+        errs = sc.autolist()
+        all_names = [m.__class__ for m in sim.modules] + [m.name for m in sim.modules]
         for req in sc.tolist(self.requires):
-            if req not in [m.__class__ for m in sim.modules]:
-                raise Exception(f'{self.name} (label={self.label}) requires module {req} but the Sim did not contain a module of this type.')
+            if req not in all_names:
+                errs += req
+        if len(errs):
+            errormsg = f'{self.name} (label={self.label}) requires the following module(s), but the Sim does not contain them.'
+            errormsg += sc.newlinejoin(errs)
+            raise Exception(errormsg)
         return
 
     def initialize(self, sim):
@@ -35,9 +41,6 @@ class Module(sc.prettyobj):
         Perform initialization steps
 
         This method is called once, as part of initializing a Sim
-
-        :param sim:
-        :return:
         """
         self.check_requires(sim)
 
