@@ -5,13 +5,12 @@ Define default HIV disease module and related interventions
 import numpy as np
 import sciris as sc
 import starsim as ss
-from .disease import STI
 import scipy.stats as sps
 
 __all__ = ['HIV', 'ART', 'CD4_analyzer']
 
 
-class HIV(STI):
+class HIV(ss.Infection):
 
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
 

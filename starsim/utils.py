@@ -22,6 +22,8 @@ INT_NAN = np.iinfo(
     np.int32).max  # Value to use to flag invalid content (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
 
 # %% Helper functions
+
+# What functions are externally visible -- note, this gets populated in each section below
 __all__ += ['ndict', 'omerge', 'warn', 'unique', 'find_contacts', 'get_subclasses', 'all_subclasses']
 
 
@@ -30,7 +32,7 @@ class ndict(sc.objdict):
     A dictionary-like class that provides additional functionalities for handling named items.
 
     Args:
-        name (str): The items' attribute to use as keys.
+        name (str): The attribute of the item to use as the dict key (i.e., all items should have this attribute defined)
         type (type): The expected type of items.
         strict (bool): If True, only items with the specified attribute will be accepted.
 
@@ -39,7 +41,6 @@ class ndict(sc.objdict):
         networks = ss.ndict(ss.mf(), ss.maternal())
         networks = ss.ndict([ss.mf(), ss.maternal()])
         networks = ss.ndict({'mf':ss.mf(), 'maternal':ss.maternal()})
-
     """
 
     def __init__(self, *args, name='name', type=None, strict=True, **kwargs):

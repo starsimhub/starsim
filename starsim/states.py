@@ -1,45 +1,81 @@
-import pandas as pd
+"""
+Define array-handling classes, including agent states
+"""
+
 import numpy as np
 import sciris as sc
 import numba as nb
 from starsim.utils import INT_NAN
+import warnings
+import starsim as ss
+from starsim.settings import dtypes as sdt
 from starsim.distributions import ScipyDistribution
-from starsim.utils import warn
 from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
 from scipy.stats._distn_infrastructure import rv_frozen
 
-__all__ = ['State', 'DynamicView']
 
+__all__ = ['check_dtype', 'State', 'DynamicView']
+
+
+def check_dtype(dtype, default=None):
+    """ Check that the supplied dtype is one of the supported options """
+    
+    # Handle dtype
+    if dtype is None:
+        if default is None:
+            errormsg = 'Must supply either a dtype or a default value'
+            raise ValueError(errormsg)
+        else:
+            dtype = type(default)
+    
+    if dtype in ['float', float, np.float64, np.float32]:
+        dtype = sdt.float
+    elif dtype in ['int', int, np.int64, np.int32]:
+        dtype = sdt.int
+    elif dtype in ['bool', bool, np.bool_]:
+        dtype = sdt.bool
+    else:
+        warnmsg = f'Data type {type(default)} not a supported data type; set warn=False to suppress warning'
+        warnings.warn(warnmsg, category=UserWarning, stacklevel=2)
+    
+    return dtype
 
 
 class FusedArray(NDArrayOperatorsMixin):
-    # This is a class that allows indexing by UID but does not support dynamic growth
-    # It's kind of like a Pandas series but one that only supports a monotonically increasing
-    # unique integer index, and that we can customize and optimize indexing for.
-    #
-    # We explictly do NOT support slicing (except for `[:]`), as these arrays are indexed by UID and slicing
-    # by UID can be confusing/ambiguous when there are missing values. Indexing with a list/array returns
-    # another FusedArray instance which enables chained filtering
+    """
+    This is a class that allows indexing by UID but does not support dynamic growth
+    It's kind of like a Pandas series but one that only supports a monotonically increasing
+    unique integer index, and that we can customize and optimize indexing for.
+    
+    We explictly do NOT support slicing (except for `[:]`), as these arrays are indexed by UID and slicing
+    by UID can be confusing/ambiguous when there are missing values. Indexing with a list/array returns
+    another FusedArray instance which enables chained filtering
+    """
 
-    __slots__ = ('values','_uid_map', 'uid')
+    __slots__ = ('values', '_uid_map', 'uid')
 
-    def __init__(self, values, uid, uid_map=None):
+    def __init__(self, values=None, uid=None, uid_map=None):
 
         self.values = values
         self.uid = uid
 
         if uid_map is None and uid is not None:
             # Construct a local UID map as opposed to using a shared one (i.e., the one for all agents contained in the People instance)
-            self.uid_map = np.full(np.max(uid) + 1, fill_value=INT_NAN, dtype=int)
+            self.uid_map = np.full(np.max(uid) + 1, fill_value=ss.INT_NAN, dtype=sdt.int)
             self.uid_map[uid] = np.arange(len(uid))
         else:
             self._uid_map = uid_map
+        return
 
     def __repr__(self):
-        # TODO - optimize? Don't really need to create a dataframe just to print it, but on the other hand, it's fast enough and very easy
-        df = pd.DataFrame(self.values.T, index=self.uid, columns=['Quantity'])
-        df.index.name = 'UID'
+        df = self.to_df()
         return df.__repr__()
+    
+    def to_df(self):
+        """ Convert to a dataframe """
+        df = sc.dataframe({'Quantity':self.values.T}, index=self.uid)
+        df.index.name = 'UID'
+        return df
 
     @property
     def dtype(self):
@@ -86,13 +122,16 @@ class FusedArray(NDArrayOperatorsMixin):
 
         for i in range(len(key)):
             if key[i] >= len(uid_map):
-                raise IndexError('UID not present in array (requested UID is larger than the maximum UID in use)')
+                errormsg = f'UID not present in array (requested UID ({key[i]}) is larger than the maximum UID in use ({len(uid_map)}))'
+                raise IndexError(errormsg)
             idx = uid_map[key[i]]
             if idx == INT_NAN:
                 raise IndexError('UID not present in array')
             elif idx >= len(vals):
-                raise Exception(f'Attempted to write to a non-existant index - this can happen if attempting to write to new entries that have not yet been allocated via grow()')
+                errormsg = f'Attempted to write to a non-existant index ({idx}) - this can happen if attempting to write to new entries that have not yet been allocated via grow()'
+                raise IndexError(errormsg)
             vals[idx] = value[i]
+        return
 
     @staticmethod
     @nb.njit
@@ -145,7 +184,7 @@ class FusedArray(NDArrayOperatorsMixin):
             return FusedArray(values=values, uid=uids, uid_map=new_uid_map)
         except IndexError as e:
             if str(INT_NAN) in str(e):
-                raise IndexError(f'UID not present in array')
+                raise IndexError(f'UID {key} not present in array')
             else:
                 raise e
 
@@ -177,9 +216,13 @@ class FusedArray(NDArrayOperatorsMixin):
                     return self._set_vals_uids_single(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__(), value)
         except IndexError as e:
             if str(INT_NAN) in str(e):
-                raise IndexError(f'UID not present in array')
+                raise IndexError(f'UID {key} not present in array')
             else:
                 raise e
+                
+    def __getattr__(self, attr):
+        """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
+        return getattr(self.values, attr)
 
     # Make it behave like a regular array mostly
     def __len__(self):
@@ -251,16 +294,18 @@ class FusedArray(NDArrayOperatorsMixin):
 
 
 class DynamicView(NDArrayOperatorsMixin):
-    def __init__(self, dtype, fill_value=None):
+    def __init__(self, dtype, default=None, coerce=True):
         """
         Args:
             name: name of the result as used in the model
             dtype: datatype
-            fill_value: default value for this state upon model initialization. If not provided, it will use the default value for the dtype
+            default: default value for this state upon model initialization. If not provided, it will use the default value for the dtype
             shape: If not none, set to match a string in `pars` containing the dimensionality
             label: text used to construct labels for the result for displaying on plots and other outputs
         """
-        self.fill_value = fill_value if fill_value is not None else dtype()
+        if coerce:
+            dtype = check_dtype(dtype, default)
+        self.default = default if default is not None else dtype()
         self.n = 0  # Number of agents currently in use
         self._data = np.empty(0, dtype=dtype)  # The underlying memory array (length at least equal to n)
         self._view = None  # The view corresponding to what is actually accessible (length equal to n)
@@ -293,7 +338,7 @@ class DynamicView(NDArrayOperatorsMixin):
         # If the total number of agents exceeds the array size, extend the underlying arrays
         if self.n + n > self._s:
             n_new = max(n, int(self._s / 2))  # Minimum 50% growth
-            self._data = np.concatenate([self._data, np.full(n_new, dtype=self.dtype, fill_value=self.fill_value)], axis=0)
+            self._data = np.concatenate([self._data, np.full(n_new, dtype=self.dtype, fill_value=self.default)], axis=0)
         self.n += n  # Increase the count of the number of agents by `n` (the requested number of new agents)
         self._map_arrays()
 
@@ -302,7 +347,7 @@ class DynamicView(NDArrayOperatorsMixin):
         # Note that these are indices, not UIDs!
         n = len(inds)
         self._data[:n] = self._data[inds]
-        self._data[n:self.n] = self.fill_value
+        self._data[n:self.n] = self.default
         self.n = n
         self._map_arrays()
 
@@ -336,27 +381,36 @@ class DynamicView(NDArrayOperatorsMixin):
 
 class State(FusedArray):
 
-    def __init__(self, name, dtype, fill_value=None, label=None):
+    def __init__(self, name, dtype=None, default=None, label=None, coerce=True):
         """
+        Store a state of the agents (e.g. age, infection status, etc.)
 
-        :param name: A string name for the state
-        :param dtype: The dtype to use for this instance
-        :param fill_value: Specify default value for new agents. This can be
+        Args: 
+            name (str): The name for the state (also used as the dictionary key, so should not have spaces etc.)
+            dtype (class): The dtype to use for this instance (if None, infer from value)
+            default (any): Specify default value for new agents. This can be
             - A scalar with the same dtype (or castable to the same dtype) as the State
             - A callable, with a single argument for the number of values to produce
-            - An ss.ScipyDistribution instance
-        :param label:
+            - An ``ss.ScipyDistribution`` instance
+            label (str): The human-readable name for the state
+            coerce (bool): Whether to ensure the the data is one of the supported data types
         """
-
-        super().__init__(values=None, uid=None, uid_map=None)  # Call the FusedArray constructor
-
-        self.fill_value = fill_value
-
-        self._data = DynamicView(dtype=dtype)
+        super().__init__()  # Call the FusedArray constructor
+        
+        if coerce:
+            dtype = check_dtype(dtype, default)
+        
+        if default is None:
+            default = dtype()
+        
+        # Set attributes
+        self.default = default
         self.name = name
         self.label = label or name
+        self._data = DynamicView(dtype=dtype)
         self.values = self._data._view
         self._initialized = False
+        return
 
     def __repr__(self):
         if not self._initialized:
@@ -365,12 +419,12 @@ class State(FusedArray):
             return FusedArray.__repr__(self)
 
     def _new_vals(self, uids):
-        if isinstance(self.fill_value, ScipyDistribution):
-            new_vals = self.fill_value.rvs(uids)
-        elif callable(self.fill_value):
-            new_vals = self.fill_value(len(uids))
+        if isinstance(self.default, ScipyDistribution):
+            new_vals = self.default.rvs(uids)
+        elif callable(self.default):
+            new_vals = self.default(len(uids))
         else:
-            new_vals = self.fill_value
+            new_vals = self.default
         return new_vals
 
     def initialize(self, sim=None, people=None):
@@ -381,10 +435,10 @@ class State(FusedArray):
             people = sim.people
 
         sim_still_needed = False
-        if isinstance(self.fill_value, rv_frozen):
+        if isinstance(self.default, rv_frozen):
             if sim is not None:
-                self.fill_value = ScipyDistribution(self.fill_value, f'{self.__class__.__name__}_{self.label}')
-                self.fill_value.initialize(sim, self)
+                self.default = ScipyDistribution(self.default, f'{self.__class__.__name__}_{self.label}')
+                self.default.initialize(sim, self)
             else:
                 sim_still_needed = True
 

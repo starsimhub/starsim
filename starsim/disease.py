@@ -10,7 +10,12 @@ import networkx as nx
 from operator import itemgetter
 import pandas as pd
 
+<<<<<<< HEAD:starsim/diseases/disease.py
 __all__ = ['InfectionLog', 'Disease', 'HHT', 'STI']
+=======
+
+__all__ = ['InfectionLog', 'Disease', 'Infection']
+>>>>>>> apis:starsim/disease.py
 
 
 class InfectionLog(nx.MultiDiGraph):
@@ -74,15 +79,24 @@ class InfectionLog(nx.MultiDiGraph):
         a particular entry)
         """
         if len(self) == 0:
+<<<<<<< HEAD:starsim/diseases/disease.py
             return pd.DataFrame(columns=['t', 'source', 'target'])
+=======
+            return sc.dataframe(columns=['t','source','target'])
+>>>>>>> apis:starsim/disease.py
 
         entries = []
         for source, target, t, data in self.edges(keys=True, data=True):
             d = data.copy()
             d.update(source=source, target=target, t=t)
             entries.append(d)
+<<<<<<< HEAD:starsim/diseases/disease.py
         df = pd.DataFrame.from_records(entries)
         df = df.sort_values(['t', 'source', 'target'])
+=======
+        df = sc.dataframe.from_records(entries)
+        df = df.sort_values(['t','source','target'])
+>>>>>>> apis:starsim/disease.py
         df = df.reset_index(drop=True)
 
         # Use Pandas "Int64" type to allow nullable integers. This allows the 'source' column
@@ -251,16 +265,32 @@ class Disease(ss.Module):
         return
 
 
+<<<<<<< HEAD:starsim/diseases/disease.py
 class HHT(Disease):
     """
     Base class for Human-to-human transmission (HHT)
+=======
+class Infection(Disease):
+    """
+    Base class for infectious diseases used in Starsim
+
+    This class contains specializations for infectious transmission (i.e., implements network-based
+    transmission with directional beta values) and defines attributes that connectors
+    operate on to capture co-infection
+>>>>>>> apis:starsim/disease.py
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+<<<<<<< HEAD:starsim/diseases/disease.py
         self.rel_sus = ss.State('rel_sus', float, 1)
         self.rel_sev = ss.State('rel_sev', float, 1)
         self.rel_trans = ss.State('rel_trans', float, 1)
+=======
+        self.rel_sus     = ss.State('rel_sus', float, 1.0)
+        self.rel_sev     = ss.State('rel_sev', float, 1.0)
+        self.rel_trans   = ss.State('rel_trans', float, 1.0)
+>>>>>>> apis:starsim/disease.py
         self.susceptible = ss.State('susceptible', bool, True)
         self.infected = ss.State('infected', bool, False)
         self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
