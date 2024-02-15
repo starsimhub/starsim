@@ -252,7 +252,9 @@ class Sim(sc.prettyobj):
         if plugin_name is None: plugin_name = plugin_class.__name__.lower()
 
         # Get lower-case names of all subclasses
-        known_plugins = [n.__name__.lower() for n in ss.all_subclasses(plugin_class)]
+        known_plugins = {n.__name__.lower():n for n in ss.all_subclasses(plugin_class)}
+        if plugin_name == 'networks': # Allow "msm" or "msmnet"
+            known_plugins.update({k.removesuffix('net'):v for k,v in known_plugins.items()})
 
         # Figure out if it's in the sim pars or provided directly
         attr_plugins = getattr(self, plugin_name)  # Get any plugins that have been provided directly
@@ -282,10 +284,13 @@ class Sim(sc.prettyobj):
             if not isinstance(plugin, plugin_class):
 
                 if isinstance(plugin, dict):
-                    if plugin.get('name') and plugin['name'] in known_plugins:
+                    ptype = plugin.get('type') or plugin.get('name')
+                    name = plugin.get('name') or ptype
+                    if ptype in known_plugins:
                         # Make an instance of the requested plugin
-                        plugin_pars = {k: v for k, v in plugin.items() if k != 'name'}
-                        plugin = plugin_class.create(name=plugin['name'], pars=plugin_pars)
+                        plugin_pars = {k: v for k, v in plugin.items() if k not in ['type', 'name']}
+                        pclass = known_plugins[ptype]
+                        plugin = pclass(name=name, pars=plugin_pars) # TODO: does this handle par_dists, etc?
                     else:
                         errormsg = (f'Could not convert {plugin} to an instance of class {plugin_name}. Try using lower'
                                     f'case or specifying it directly rather than as a dictionary.')
