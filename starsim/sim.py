@@ -27,7 +27,7 @@ class Sim(sc.prettyobj):
         
         # Create a simple copying function
         def copy(obj):
-            if obj is None or not copy_inputs:
+            if not copy_inputs:
                 return obj
             else:
                 return sc.dcp(obj)

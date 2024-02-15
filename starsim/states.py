@@ -52,8 +52,31 @@ class UIDArray(NDArrayOperatorsMixin):
     """
 
     __slots__ = ('values', '_uid_map', 'uid')
+    
+    def __new__(cls, *args, **kwargs):
+        # print('hi -1')
+        return super().__new__(cls)
+    
+    def __copy__(self):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        result.__dict__.update(self.__dict__)
+        return result
+
+    # def __deepcopy__(self, memo):
+    #     from copy import deepcopy
+    #     cls = self.__class__
+    #     result = cls.__new__(cls)
+    #     memo[id(self)] = result
+    #     for k, v in self.__dict__.items():
+    #         if isinstance(v, self.__class__):
+    #             result.__dict__[k] = v
+    #         else:
+    #             setattr(result, k, deepcopy(v, memo))
+    #     return result
 
     def __init__(self, values=None, uid=None, uid_map=None):
+        # print('hi 0')
 
         self.values = values
         self.uid = uid
@@ -254,12 +277,15 @@ class UIDArray(NDArrayOperatorsMixin):
 
     @property
     def __array_interface__(self):
+        # print('hi 1')
         return self.values.__array_interface__
 
     def __array__(self):
+        # print('hi 2')
         return self.values
 
     def __array_ufunc__(self, *args, **kwargs):
+        # print('hi 3')
         if args[1] != '__call__':
             # This is a generic catch-all for ufuncs that are not being applied with '__call__' (e.g., operations returning a scalar like 'np.sum()' use reduce instead)
             args = [(x if x is not self else self.values) for x in args]
@@ -287,9 +313,18 @@ class UIDArray(NDArrayOperatorsMixin):
 
     def __array_wrap__(self, out_arr, context=None):
         # This allows numpy operations addition etc. to return instances of UIDArray
+        # print('hi 4')
         if out_arr.ndim == 0:
             return out_arr.item()
         return UIDArray(values=out_arr, uid=self.uid, uid_map=self._uid_map) # Hardcoding class means State can inherit from UIDArray but return UIDArray base instances
+
+
+    # def __array_finalize__(self, obj):
+    #     # see InfoArray.__array_finalize__ for comments
+    #     print('hi 5')
+    #     print(self, obj)
+    #     # if obj is None: return
+    #     # self.info = getattr(obj, 'info', None)
 
 
 class ArrayView(NDArrayOperatorsMixin):
