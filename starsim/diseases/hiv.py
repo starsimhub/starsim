@@ -13,25 +13,27 @@ class HIV(ss.Infection):
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
 
         # States
-        self.on_art      = ss.State('on_art', bool, False)
-        self.ti_art      = ss.State('ti_art', int, ss.INT_NAN)
-        self.cd4         = ss.State('cd4', float, 500)
-        self.ti_dead     = ss.State('ti_dead', int, ss.INT_NAN) # Time of HIV-cause death
+        self.add_states(
+            ss.State('on_art', bool, False),
+            ss.State('ti_art', int, ss.INT_NAN),
+            ss.State('cd4', float, 500),
+            ss.State('ti_dead', int, ss.INT_NAN), # Time of HIV-cause death
+        )
 
-        pars = ss.omerge({
-            'cd4_min': 100,
-            'cd4_max': 500,
-            'cd4_rate': 5,
-            'init_prev': 0.05,
-            'eff_condoms': 0.7,
-            'art_efficacy': 0.96,
-            'death_prob': 0.05
-        }, pars)
+        pars = ss.omergeleft(pars,
+            cd4_min = 100,
+            cd4_max = 500,
+            cd4_rate = 5,
+            init_prev = 0.05,
+            eff_condoms = 0.7,
+            art_efficacy = 0.96,
+            death_prob = 0.05,
+        )
 
-        par_dists = ss.omerge({
-            'init_prev': ss.bernoulli,
-            'death_prob': ss.bernoulli,
-        }, par_dists)
+        par_dists = ss.omergeleft(par_dists,
+            init_prev  = ss.bernoulli,
+            death_prob = ss.bernoulli,
+        )
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
         self.death_prob_data = sc.dcp(self.pars.death_prob)
