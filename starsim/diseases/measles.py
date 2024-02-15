@@ -16,32 +16,31 @@ class Measles(SIR):
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
         """ Initialize with parameters """
 
-        pars = ss.omerge({
+        pars = ss.omergeleft(pars,
             # Natural history parameters, all specified in days
-            'dur_exp': 8,       # (days) - source: US CDC
-            'dur_inf': 11,      # (days) - source: US CDC
-            'p_death': 0.005,   # Probability of death
+            dur_exp = 8,       # (days) - source: US CDC
+            dur_inf = 11,      # (days) - source: US CDC
+            p_death = 0.005,   # Probability of death
 
             # Initial conditions and beta
-            'init_prev': 0.005,
-            'beta': None,
-        }, pars)
+            init_prev = 0.005,
+            beta = None,
+        )
 
-        par_dists = ss.omerge({
-            'dur_exp': ss.norm,
-            'dur_inf': ss.norm,
-            'init_prev': ss.bernoulli,
-            'p_death': ss.bernoulli,
-        }, par_dists)
+        par_dists = ss.omergeleft(par_dists,
+            dur_exp   = ss.norm,
+            dur_inf   = ss.norm,
+            init_prev = ss.bernoulli,
+            p_death   = ss.bernoulli,
+        )
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
 
-        # Boolean states
         # SIR are added automatically, here we add E
-        self.exposed = ss.State('exposed', bool, False)
-
-        # Timepoint states
-        self.ti_exposed = ss.State('ti_exposed', float, np.nan)
+        self.add_states(
+            ss.State('exposed', bool, False),
+            ss.State('ti_exposed', float, np.nan),
+        )
 
         return
 
@@ -89,9 +88,7 @@ class Measles(SIR):
 
     def update_death(self, sim, uids):
         # Reset infected/recovered flags for dead agents
-        self.susceptible[uids] = False
-        self.exposed[uids] = False
-        self.infected[uids] = False
-        self.recovered[uids] = False
+        for state in ['susceptible', 'exposed', 'infected', 'recovered']:
+            self.statesdict[state][uids] = False
         return
 
