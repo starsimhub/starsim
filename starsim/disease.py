@@ -78,7 +78,7 @@ class Disease(ss.Module):
         """
         pass
 
-    def init_results(self, sim):
+    def init_results(self, sim, *args):
         """
         Initialize results
 
@@ -88,6 +88,8 @@ class Disease(ss.Module):
         """
         for state in self._boolean_states:
             self.results += ss.Result(self.name, f'n_{state.name}', sim.npts, dtype=int, scale=True)
+        for arg in args:
+            self.results += arg
         return
 
     def update_pre(self, sim):
@@ -209,11 +211,11 @@ class Infection(Disease):
         self.set_prognoses(sim, initial_cases)  # TODO: sentinel value to indicate seeds?
         return
 
-    def init_results(self, sim):
+    def init_results(self, sim, *args):
         """
         Initialize results
         """
-        super().init_results(sim)
+        super().init_results(sim, *args)
         self.results += [
             ss.Result(self.name, 'prevalence', sim.npts, dtype=float, scale=False),
             ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True),

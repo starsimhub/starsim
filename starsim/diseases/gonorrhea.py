@@ -12,24 +12,26 @@ class Gonorrhea(ss.Infection):
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
 
         # States additional to the default disease states (see base class)
-        self.symptomatic = ss.State('symptomatic', bool, False)
-        self.ti_clearance = ss.State('ti_clearance', int, ss.INT_NAN)
-        self.p_symp = ss.State('p_symp', float, 1)
+        self.add_states(
+            ss.State('symptomatic', bool, False),
+            ss.State('ti_clearance', int, ss.INT_NAN),
+            ss.State('p_symp', float, 1),
+        )
 
         # Parameters
-        pars = ss.omerge({
-            'dur_inf_in_days': ss.lognorm(s=0.6, scale=10),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
-            'p_symp': 0.5,  # Share of infections that are symptomatic. Placeholder value
-            'p_clear': 0.2,  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
-            'init_prev': 0.1,
-        }, pars)
+        pars = ss.omergeleft(pars,
+            dur_inf_in_days = ss.lognorm(s=0.6, scale=10),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
+            p_symp = 0.5,  # Share of infections that are symptomatic. Placeholder value
+            p_clear = 0.2,  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
+            init_prev = 0.1,
+        )
 
-        par_dists = ss.omerge({
-            'dur_inf_in_days': ss.lognorm,
-            'p_symp': ss.bernoulli,
-            'p_clear': ss.bernoulli,
-            'init_prev': ss.bernoulli,
-        }, par_dists)
+        par_dists = ss.omergeleft(par_dists,
+            dur_inf_in_days = ss.lognorm,
+            p_symp          = ss.bernoulli,
+            p_clear         = ss.bernoulli,
+            init_prev       = ss.bernoulli,
+        )
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
 
@@ -42,9 +44,10 @@ class Gonorrhea(ss.Infection):
         """
         Initialize results
         """
-        super().init_results(sim)
-        self.results += ss.Result(self.name, 'n_symptomatic', sim.npts, dtype=int)
-        self.results += ss.Result(self.name, 'new_clearances', sim.npts, dtype=int)
+        super().init_results(sim,
+            ss.Result(self.name, 'n_symptomatic', sim.npts, dtype=int),
+            ss.Result(self.name, 'new_clearances', sim.npts, dtype=int),
+        )
         return
 
     def update_results(self, sim):
