@@ -76,7 +76,7 @@ def test_ncd():
     return sim
 
 
-def test_gavi(disease):
+def test_gavi():
     ss.options(multirng=False)
     sims = sc.autolist()
     for disease in ['cholera', 'measles']:
