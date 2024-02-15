@@ -9,6 +9,18 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :depth: 1
 
 
+Version 0.2.0 (2024-02-15)
+--------------------------
+- Code reorganization, including making ``networks.py`` and ``disease.py`` to the top level
+- Networks moved from ``People`` to ``Sim``
+- Various classes renamed (e.g. ``FusedArray`` to ``UIDArray``, ``STI`` to ``Infection``)
+- Better type checking
+- Added ``MultiSim``
+- Added cholera, measles, and Ebola
+- Added vaccination
+- *GitHub info*: PR `235 <https://github.com/amath-idm/stisim/pull/235>`_
+
+
 Version 0.1.8 (2024-01-30)
 --------------------------
 - Transmission based on number of contacts
