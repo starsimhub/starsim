@@ -21,12 +21,11 @@ __all__ += ['bernoulli', 'expon', 'lognorm', 'norm', 'randint', 'rv_discrete',
 
 
 # Override default SciPy method -- defined here to avoid unpickleable class otherwise
-def sps_rvs(self, *args, **kwargs):
+def sps_rvs(self, size, *args, **kwargs):
     """
     Return a specified number of samples from the distribution
     """
 
-    size = kwargs['size']
     slots = None
     repeat_slot_flag = False
     self.repeat_slot_handling = {}
@@ -154,7 +153,7 @@ class ScipyDistribution():
         self.gen.dist.sim = None
         self.gen.dist.rvs = partial(sps_rvs, self.gen.dist)
         self.rng = self.set_rng(rng, gen)
-        self.rvs = self.gen.dist.rvs
+        self.rvs = self.gen.rvs
         return
 
     @staticmethod
@@ -181,7 +180,7 @@ class ScipyDistribution():
         return
     
     def rvs(self, *args, **kwargs):
-        return self.gen.rvs(*args, **kwargs)
+        return self.gen.dist.rvs(*args, **kwargs)
 
     # def __copy__(self):
     #     cls = self.__class__
