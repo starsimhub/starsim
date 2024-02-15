@@ -105,12 +105,18 @@ class ndict(sc.objdict):
     def __add__(self, dict2):
         """ Allow c = a + b """
         new = self.copy()
-        new.append(dict2)
+        if isinstance(dict2, list):
+            new.extend(dict2)
+        else:
+            new.append(dict2)
         return new
 
     def __iadd__(self, dict2):
         """ Allow a += b """
-        self.append(dict2)
+        if isinstance(dict2, list):
+            self.extend(dict2)
+        else:
+            self.append(dict2)
         return self
 
 

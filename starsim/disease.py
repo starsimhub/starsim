@@ -100,7 +100,7 @@ class Disease(ss.Module):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.results = ss.ndict(type=ss.Result)
+        self.results = ss.Results()
         self.log = InfectionLog()
         self.new_cases_RNG = ss.MultiRNG(name=f'New cases of {self.name}')
         return
