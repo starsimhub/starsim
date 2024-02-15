@@ -17,8 +17,7 @@ class Disease(ss.Module):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.results = ss.Results()
-        self.log = InfectionLog()
-        self.new_cases_RNG = ss.MultiRNG(name=f'New cases of {self.name}')
+        self.log = InfectionLog() # See below for definition
         return
 
     @property
@@ -28,8 +27,6 @@ class Disease(ss.Module):
 
         For diseases, these states typically represent attributes like 'susceptible',
         'infectious', 'diagnosed' etc. These variables are typically useful to
-
-        :return:
         """
         for state in self.states:
             if state.dtype == bool:
@@ -50,9 +47,6 @@ class Disease(ss.Module):
     def validate_pars(self, sim):
         """
         Perform any parameter validation
-
-        :return: None if parameters are all valid
-        :raises: Exception if there are any invalid parameters (or if the initialization is otherwise invalid in some way)
         """
         if sim.networks is not None and len(sim.networks) > 0:
 
@@ -98,9 +92,6 @@ class Disease(ss.Module):
     def update_pre(self, sim):
         """
         Carry out autonomous updates at the start of the timestep (prior to transmission)
-
-        :param sim:
-        :return:
         """
         pass
 
@@ -118,10 +109,6 @@ class Disease(ss.Module):
 
         Depending on the module and the results it produces, it may or may not be necessary
         to implement this.
-
-        :param sim:
-        :param uids:
-        :return:
         """
         pass
 
@@ -151,10 +138,10 @@ class Disease(ss.Module):
         The from_uids are relevant for infectious diseases, but would be left
         as `None` for NCDs.
 
-        :param sim:
-        :param uids: UIDs for agents to assign disease progoses to
-        :param from_uids: Optionally specify the infecting agent
-        :return:
+        Args:
+            sim (Sim): the STarsim simulation object
+            uids (array): UIDs for agents to assign disease progoses to
+            from_uids (array): Optionally specify the infecting agent
         """
         if source_uids is None:
             for target in target_uids:
