@@ -171,6 +171,10 @@ def check_name(name, n_suggest=5):
     Check whether a string in `name` is a valid Python identifier and
     suggests a new name if it is not.
 
+    NOTE: This function was written considering that users can provide/set the
+    name attribute of instances of Modules, States, Networks, etc, and they
+    may provide invalid Python identifiers, which can break dot notation.
+
     Args:
         name (str): The string attribute to use as keys.
         n_suggest (int): Maximum number of suggestions to return by sc.suggest()

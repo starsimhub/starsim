@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import sciris as sc
 import numba as nb
-from starsim.utils import INT_NAN
+from starsim.utils import INT_NAN, check_name
 from starsim.distributions import ScipyDistribution
 from starsim.utils import warn
 from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
@@ -353,7 +353,7 @@ class State(FusedArray):
         self.fill_value = fill_value
 
         self._data = DynamicView(dtype=dtype)
-        self.name = name
+        self.name = check_name(name)
         self.label = label or name
         self.values = self._data._view
         self._initialized = False
