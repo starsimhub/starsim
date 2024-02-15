@@ -62,7 +62,7 @@ class Sim(sc.prettyobj):
 
     @property
     def dt(self):
-        return self.pars['dt']
+        return self.pars.dt
 
     @property
     def year(self):
@@ -92,12 +92,11 @@ class Sim(sc.prettyobj):
         self.validate_pars()  # Ensure parameters have valid values
         self.validate_dt()
         self.init_time_vecs()  # Initialize time vecs
-        ss.set_seed(self.pars['rand_seed'])  # Reset the random seed before the population is created
-        set_numba_seed(self.pars['rand_seed'])
+        ss.set_seed(self.pars.rand_seed)  # Reset the random seed before the population is created
+        set_numba_seed(self.pars.rand_seed)
 
         # Initialize the core sim components
-        self.rng_container.initialize(self.pars[
-                                          'rand_seed'] + 2)  # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rng_container
+        self.rng_container.initialize(self.pars.rand_seed + 2)  # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rng_container
         self.init_people(reset=reset, **kwargs)  # Create all the people (the heaviest step)
 
         # Initialize plug-ins
@@ -113,8 +112,7 @@ class Sim(sc.prettyobj):
 
         # Reset the random seed to the default run seed, so that if the simulation is run with
         # reset_seed=False right after initialization, it will still produce the same output
-        ss.set_seed(
-            self.pars['rand_seed'] + 1)  # Hopefully not used now that we can use multiple random number generators
+        ss.set_seed(self.pars.rand_seed + 1)  # Hopefully not used now that we can use multiple random number generators
 
         # Final steps
         self.initialized = True
@@ -134,8 +132,8 @@ class Sim(sc.prettyobj):
             # Round the reciprocal
             reciprocal = int(reciprocal)
             rounded_dt = 1.0 / reciprocal
-            self.pars['dt'] = rounded_dt
-            if self.pars['verbose']:
+            self.pars.dt = rounded_dt
+            if self.pars.verbose:
                 warnmsg = f"Warning: Provided time step dt: {dt} resulted in a non-integer number of steps per year. Rounded to {rounded_dt}."
                 print(warnmsg)
         return
@@ -146,34 +144,34 @@ class Sim(sc.prettyobj):
         """
         # Handle n_agents
         if self.people is not None:
-            self.pars['n_agents'] = len(self.people)
+            self.pars.n_agents = len(self.people)
         # elif self.popdict is not None: # Starsim does not currenlty support self.popdict
-        # self.pars['n_agents'] = len(self.popdict)
-        elif self.pars['n_agents'] is not None:
-            self.pars['n_agents'] = int(self.pars['n_agents'])
+        # self.pars.n_agents = len(self.popdict)
+        elif self.pars.n_agents is not None:
+            self.pars.n_agents = int(self.pars.n_agents)
         else:
             errormsg = 'Must supply n_agents, a people object, or a popdict'
             raise ValueError(errormsg)
 
         # Handle end and n_years
-        if self.pars['end']:
-            self.pars['n_years'] = int(self.pars['end'] - self.pars['start'])
-            if self.pars['n_years'] <= 0:
-                errormsg = f"Number of years must be >0, but you supplied start={str(self.pars['start'])} and " \
-                           f"end={str(self.pars['end'])}, which gives n_years={self.pars['n_years']}"
+        if self.pars.end:
+            self.pars.n_years = int(self.pars.end - self.pars.start)
+            if self.pars.n_years <= 0:
+                errormsg = f"Number of years must be >0, but you supplied start={str(self.pars.start)} and " \
+                           f"end={str(self.pars.end)}, which gives n_years={self.pars.n_years}"
                 raise ValueError(errormsg)
         else:
-            if self.pars['n_years']:
-                self.pars['end'] = self.pars['start'] + self.pars['n_years']
+            if self.pars.n_years:
+                self.pars.end = self.pars.start + self.pars.n_years
             else:
                 errormsg = 'You must supply one of n_years and end."'
                 raise ValueError(errormsg)
 
         # Handle verbose
-        if self.pars['verbose'] == 'brief':
-            self.pars['verbose'] = -1
-        if not sc.isnumber(self.pars['verbose']):  # pragma: no cover
-            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self.pars["verbose"])} "{self.pars["verbose"]}"'
+        if self.pars.verbose == 'brief':
+            self.pars.verbose = -1
+        if not sc.isnumber(self.pars.verbose):  # pragma: no cover
+            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self.par.verbose)} "{self.par.verbose}"'
             raise ValueError(errormsg)
 
         return
@@ -182,8 +180,8 @@ class Sim(sc.prettyobj):
         """
         Construct vectors things that keep track of time
         """
-        self.yearvec = sc.inclusiverange(start=self.pars['start'], stop=self.pars['end'] + 1 - self.pars['dt'],
-                                         step=self.pars['dt'])  # Includes all the timepoints in the last year
+        self.yearvec = sc.inclusiverange(start=self.pars.start, stop=self.pars.end + 1 - self.pars.dt,
+                                         step=self.pars.dt)  # Includes all the timepoints in the last year
         self.npts = len(self.yearvec)
         self.tivec = np.arange(self.npts)
         return
@@ -201,7 +199,7 @@ class Sim(sc.prettyobj):
 
         # Handle inputs
         if verbose is None:
-            verbose = self.pars['verbose']
+            verbose = self.pars.verbose
         if verbose > 0:
             resetstr = ''
             if self.people and reset:
@@ -210,27 +208,27 @@ class Sim(sc.prettyobj):
 
         # If people have not been supplied, make them
         if self.people is None or reset:
-            self.people = ss.People(n_agents=self.pars['n_agents'], **kwargs)  # This just assigns UIDs and length
+            self.people = ss.People(n_agents=self.pars.n_agents, **kwargs)  # This just assigns UIDs and length
 
         # If a popdict has not been supplied, we can make one from location data
-        if self.pars['location'] is not None:
+        if self.pars.location is not None:
             # Check where to get total_pop from
-            if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
+            if self.pars.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
                 errormsg = 'You can either define total_pop explicitly or via the location, but not both'
                 raise ValueError(errormsg)
 
         else:
-            if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
-                total_pop = self.pars['total_pop']
+            if self.pars.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
+                total_pop = self.pars.total_pop
             else:
-                if self.pars['pop_scale'] is not None:
-                    total_pop = self.pars['pop_scale'] * self.pars['n_agents']
+                if self.pars.pop_scale is not None:
+                    total_pop = self.pars.pop_scale * self.pars.n_agents
                 else:
-                    total_pop = self.pars['n_agents']
+                    total_pop = self.pars.n_agents
 
-        self.pars['total_pop'] = total_pop
-        if self.pars['pop_scale'] is None:
-            self.pars['pop_scale'] = total_pop / self.pars['n_agents']
+        self.pars.total_pop = total_pop
+        if self.pars.pop_scale is None:
+            self.pars.pop_scale = total_pop / self.pars.n_agents
 
         # Any other initialization
         if not self.people.initialized:
@@ -407,7 +405,7 @@ class Sim(sc.prettyobj):
         """ Initialize the analyzers """
 
         # Interpret analyzers
-        for ai, analyzer in enumerate(self.pars['analyzers']):
+        for ai, analyzer in enumerate(self.pars.analyzers):
             if isinstance(analyzer, type) and issubclass(analyzer, ss.Analyzer):
                 analyzer = analyzer()  # Convert from a class to an instance of a class
             if not (isinstance(analyzer, ss.Analyzer) or callable(analyzer)):
@@ -507,10 +505,10 @@ class Sim(sc.prettyobj):
             self._orig_pars = sc.dcp(self.pars)  # Create a copy of the parameters to restore after the run
 
         if verbose is None:
-            verbose = self.pars['verbose']
+            verbose = self.pars.verbose
 
         if reset_seed:
-            ss.set_seed(self.pars['rand_seed'] + 1)
+            ss.set_seed(self.pars.rand_seed + 1)
 
         # Check for AlreadyRun errors
         errormsg = None
