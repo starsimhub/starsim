@@ -21,13 +21,12 @@ class Module(sc.prettyobj):
         self.results = ss.ndict(type=ss.Result)
         self.initialized = False
         self.finalized = False
-
         return
 
     def check_requires(self, sim):
         errs = sc.autolist()
         all_names = [m.__class__ for m in sim.modules] + [m.name for m in sim.modules]
-        for req in sc.tolist(self.requires):
+        for req in self.requires:
             if req not in all_names:
                 errs += req
         if len(errs):
@@ -93,6 +92,20 @@ class Module(sc.prettyobj):
             if isinstance(res, ss.Result) and res.scale:
                 self.results[reskey] = self.results[reskey]*sim.pars.pop_scale
         return
+    
+    def add_states(self, *args, check=True):
+        """
+        Add states to the module with the same attribute name as the state
+        
+        Args:
+            args (states): list of states to add
+            check (bool): whether to check that the object being added is a state
+        """
+        for state in args:
+            if check:
+                assert isinstance(state, ss.State), f'Could not add {state}: not a State object'
+            setattr(self, state.name, state)
+        return
 
     @property
     def states(self):
@@ -104,8 +117,6 @@ class Module(sc.prettyobj):
         within a list of states, or otherwise in some other nested structure - perhaps
         due to supporting features like multiple genotypes) then the Module should
         overload this attribute to ensure that all states appear in here.
-
-        :return:
         """
         return [x for x in self.__dict__.values() if isinstance(x, ss.State)]
 
@@ -113,20 +124,8 @@ class Module(sc.prettyobj):
     def rngs(self):
         """
         Return a flat collection of all random number generators, as with states above
-
-        :return:
         """
         return [x for x in self.__dict__.values() if isinstance(x, (ss.MultiRNG, ss.SingleRNG))]
-
-    @property
-    def scipy_dbns(self):
-        """
-        Return a flat collection of all ScipyDistributions
-
-        :return:
-        """
-        return [x for x in self.__dict__.values() if isinstance(x, ss.ScipyDistribution)] \
-             + [x for x in self.pars.values()     if isinstance(x, ss.ScipyDistribution)]
 
     @classmethod
     def create(cls, name, *args, **kwargs):
