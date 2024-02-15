@@ -87,7 +87,7 @@ class Births(BaseDemographics):
 
         scaled_birth_prob = this_birth_rate * p.units * p.rel_birth * sim.pars.dt
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
-        n_new = int(np.floor(np.count_nonzero(sim.people.alive) * scaled_birth_prob))
+        n_new = int(np.floor(sim.people.alive.count() * scaled_birth_prob))
         return n_new
 
     def add_births(self, sim):
@@ -454,7 +454,7 @@ class Pregnancy(BaseDemographics):
         dur_post_partum = np.full(len(uids), dur + self.pars.dur_postpartum / sim.dt)
         self.ti_postpartum[uids] = dur_post_partum
 
-        if np.count_nonzero(dead):
+        if np.any(dead): # NB: 100x faster than np.sum(), 10x faster than np.count_nonzero()
             self.ti_dead[uids[dead]] = dur[dead]
         return
 

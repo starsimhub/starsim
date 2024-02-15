@@ -16,7 +16,7 @@ class Disease(ss.Module):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.results = ss.Results()
+        self.results = ss.Results(self.name)
         self.log = InfectionLog() # See below for definition
         return
 

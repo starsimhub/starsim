@@ -46,17 +46,22 @@ class Result(np.ndarray):
 
 class Results(ss.ndict):
     
-    def __init__(self, strict=True, *args, **kwargs):
+    def __init__(self, module, strict=True, *args, **kwargs):
         super().__init__(type=Result, strict=strict)
+        if hasattr(module, 'name'):
+            module = module.name
+        self.setattribute('_module', module)
         return
     
     def append(self, arg, key=None):
         if isinstance(arg, (list, tuple)):
-            result = ss.Result(*arg)
+            result = ss.Result(self._module, *arg)
         elif isinstance(arg, dict):
-            result = ss.Result(**arg)
+            result = ss.Result(self._module, **arg)
         else:
             result = arg
+        if result.module != self._module:
+            result.module = self._module
         super().append(result, key=key)
         return
     

@@ -245,7 +245,7 @@ class UIDArray(NDArrayOperatorsMixin):
     def all(self, *args, **kwargs):
         return self.values.all(*args, **kwargs)
 
-    def count_nonzero(self, *args, **kwargs):
+    def count(self, *args, **kwargs):
         return np.count_nonzero(self.values, *args, **kwargs)
 
     @property

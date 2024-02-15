@@ -17,7 +17,7 @@ class Module(sc.prettyobj):
         self.name = name if name else self.__class__.__name__.lower() # Default name is the class name
         self.label = label if label else self.name
         self.requires = sc.mergelists(requires)
-        self.results = ss.Results()
+        self.results = ss.Results(self.name)
         self.initialized = False
         self.finalized = False
         return

@@ -29,7 +29,7 @@ class Sim(sc.prettyobj):
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
         self.people = people  # People object
-        self.results = ss.Results()  # For storing results
+        self.results = ss.Results(module='sim')  # For storing results
         self.summary = None  # For storing a summary of the results
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running # TODO: replace with finalized?
