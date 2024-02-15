@@ -22,7 +22,7 @@ INT_NAN = np.iinfo(
     np.int32).max  # Value to use to flag invalid content (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
 
 # %% Helper functions
-__all__ += ['ndict', 'omerge', 'warn', 'unique', 'find_contacts', 'get_subclasses']
+__all__ += ['ndict', 'omerge', 'warn', 'unique', 'find_contacts', 'get_subclasses', 'check_name']
 
 
 class ndict(sc.objdict):
@@ -164,6 +164,68 @@ def warn(msg, category=None, verbose=None, die=None):
         raise ValueError(errormsg)
 
     return
+
+
+def check_name(name, n_suggest=5):
+    """
+    Check whether a string in `name` is a valid Python identifier and
+    suggests a new name if it is not.
+
+    Args:
+        name (str): The string attribute to use as keys.
+        n_suggest (int): Maximum number of suggestions to return by sc.suggest()
+
+    Returns
+        None
+
+    **Examples**::
+
+        ss.check_name('()*')
+        ss.check_name('my object name ! 778923 @#')
+    """
+    if _is_valid_identifier(name):
+        return name
+    #NOTE: use regex?
+    valid_name = name.replace('-', '').replace(' ', '')
+    valid_name = ''.join(char for char in valid_name if char.isalnum() or char == '_')
+
+    vowels = 'aeiou'
+    valid_name_nv = ''.join([char for char in valid_name if char.lower() not in vowels])
+
+    valid_names = [valid_name, valid_name_nv]
+    alt_names = sc.suggest(name, valid_names, n=n_suggest)
+
+    rules_msg = f"""Unable to give a valid suggestion for `name`:`{name}`. Please choose a different `name` keeping in mind the following rules:
+        - use a combination of lower case (a to z), upper case (A to Z) characters
+        - can contain digits (0 to 9)
+        - can contain underscores (_)
+        - don't use spaces
+        - don't use special characters like !, @, #, $, %, or accents
+    """
+
+    if alt_names is None:
+        raise ValueError(rules_msg)
+
+    # Check that we produced valid names
+    valid_alt_names = [alt_name for alt_name in alt_names if _is_valid_identifier(alt_name)]
+
+    if not valid_alt_names:
+        raise ValueError(rules_msg)
+
+    # Fail anyways but suggest names
+    msg = f"Invalid `name`:`{name}. Suggested valid names {alt_names}"
+    raise ValueError(msg)
+
+
+def _is_valid_identifier(input_str):
+    """Checks whether a string is a valid identifier (including not a python keyword)."""
+    # NOTE: this is a lazy way to validate. We could use isidentifier() and
+    # the iskeyword(), but the latter requires us toimport from the keyword module"
+    try:
+        compile(f"{input_str} = None", "None", mode='exec') #
+        return True
+    except SyntaxError:
+        return False
 
 
 def unique(arr):
