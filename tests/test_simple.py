@@ -46,9 +46,25 @@ def test_simple():
 def test_simple_vax():
     """ Create and run a sim with vaccination """
     pars = make_sim_pars()
-    sim = ss.Sim(pars, interventions=ss.routine_vx(prob=0.5, product=ss.sir_vaccine()))
-    sim.run()
-    sim.plot()
+    sim_intv = ss.Sim(pars, interventions=ss.routine_vx(prob=0.5, product=ss.sir_vaccine()))
+    sim_intv.run()
+
+    sim_base = ss.Sim(pars)
+    sim_base.run()
+
+    # Check plots
+    if do_plot:
+        import matplotlib.pyplot as plt
+        pi = 0
+
+        plt.figure()
+        plt.plot(sim_base.yearvec[pi:], sim_base.results.sir.prevalence[pi:], label='Baseline')
+        plt.plot(sim_intv.yearvec[pi:], sim_intv.results.sir.prevalence[pi:], label='Vax')
+        plt.axvline(x=2020, color='k', ls='--')
+        plt.title('SPrevalence')
+        plt.legend()
+        plt.show()
+
     return sim
 
 
@@ -68,14 +84,14 @@ def test_parallel():
     pars = make_sim_pars()
     s1 = ss.Sim(pars)
     s2 = ss.Sim(pars)
-    # s1, s2 = ss.parallel(s1, s2).sims
+    s1, s2 = ss.parallel(s1, s2).sims
     # assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
     return s1, s2
 
 
 if __name__ == '__main__':
-    sim1 = test_default()
+    # sim1 = test_default()
     sim2 = test_simple()
-    sim = test_simple_vax()
-    sim3 = test_components()
-    s1, s2 = test_parallel()
+    sim3 = test_simple_vax()
+    # sim3 = test_components()
+    # s1, s2 = test_parallel()
