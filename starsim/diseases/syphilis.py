@@ -348,16 +348,6 @@ class syph_treatment(ss.treat_num):
             raise ValueError(errormsg)
         return product
 
-    def check_eligibility(self, sim):
-        """
-        Return an array of indices of agents eligible for screening at time t
-        """
-        if self.eligibility is not None:
-            is_eligible = self.eligibility(sim)
-        else:
-            is_eligible = sim.people.alive  # Probably not required
-        return is_eligible
-
     def initialize(self, sim):
         super().initialize(sim)
         self.results += ss.Result('syphilis', 'n_tx', sim.npts, dtype=int, scale=True)
@@ -367,4 +357,5 @@ class syph_treatment(ss.treat_num):
         treat_inds = super().apply(sim)
         sim.people.syphilis.infected[treat_inds] = False
         self.results['n_tx'][sim.ti] += len(treat_inds)
+
 
