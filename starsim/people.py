@@ -316,8 +316,10 @@ class People(BasePeople):
         return self.male
 
     def init_results(self, sim):
-        sim.results += ss.Result(None, 'n_alive', sim.npts, ss.dtypes.int, scale=True)
-        sim.results += ss.Result(None, 'new_deaths', sim.npts, ss.dtypes.int, scale=True)
+        sim.results += [
+            ss.Result(None, 'n_alive', sim.npts, ss.dtypes.int, scale=True),
+            ss.Result(None, 'new_deaths', sim.npts, ss.dtypes.int, scale=True),
+        ]
         return
 
     def update_results(self, sim):

@@ -1,12 +1,20 @@
 """
-Define interventions
+Define interventions (and analyzers)
 """
 
 import starsim as ss
 import sciris as sc
 import numpy as np
 
-__all__ = ['Intervention']
+__all__ = ['Analyzer', 'Intervention']
+
+class Analyzer(ss.Module):
+
+    def __call__(self, *args, **kwargs):
+        return self.apply(*args, **kwargs)
+
+    def update_results(self, sim):
+        raise NotImplementedError
 
 
 class Intervention(ss.Module):
@@ -55,13 +63,13 @@ class Intervention(ss.Module):
 # %% Template classes for routine and campaign delivery
 __all__ += ['RoutineDelivery', 'CampaignDelivery']
 
-
 class RoutineDelivery(Intervention):
     """
     Base class for any intervention that uses routine delivery; handles interpolation of input years.
     """
 
     def __init__(self, years=None, start_year=None, end_year=None, prob=None, annual_prob=True, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.years = years
         self.start_year = start_year
         self.end_year = end_year
@@ -122,6 +130,7 @@ class CampaignDelivery(Intervention):
     """
 
     def __init__(self, years, interpolate=None, prob=None, annual_prob=True, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.years = sc.promotetoarray(years)
         self.interpolate = True if interpolate is None else interpolate
         self.prob = sc.promotetoarray(prob)
@@ -168,13 +177,14 @@ class BaseTest(Intervention):
     """
 
     def __init__(self, product=None, prob=None, eligibility=None, **kwargs):
-        Intervention.__init__(self, **kwargs)
+        super().__init__(**kwargs)
         self.prob = sc.promotetoarray(prob)
         self.eligibility = eligibility
         self._parse_product(product)
         self.screened = ss.State('screened', bool, False)
         self.screens = ss.State('screens', int, 0)
         self.ti_screened = ss.State('ti_screened', int, ss.INT_NAN)
+        return
 
     def initialize(self, sim):
         Intervention.initialize(self, sim)
@@ -204,10 +214,6 @@ class BaseScreening(BaseTest):
     Args:
         kwargs (dict): passed to BaseTest
     """
-
-    def __init__(self, **kwargs):
-        BaseTest.__init__(self, **kwargs)  # Initialize the BaseTest object
-
     def check_eligibility(self, sim):
         """
         Check eligibility
@@ -236,10 +242,6 @@ class BaseTriage(BaseTest):
     Args:
         kwargs (dict): passed to BaseTest
     """
-
-    def __init__(self, **kwargs):
-        BaseTest.__init__(self, **kwargs)
-
     def check_eligibility(self, sim):
         return sc.promotetoarray(self.eligibility(sim))
 
@@ -350,7 +352,7 @@ class BaseTreatment(Intervention):
          kwargs         (dict)          : passed to Intervention()
     """
     def __init__(self, product=None, prob=None, eligibility=None, **kwargs):
-        Intervention.__init__(self, **kwargs)
+        super().__init__(**kwargs)
         self.prob = sc.promotetoarray(prob)
         self.eligibility = eligibility
         self._parse_product(product)
@@ -398,7 +400,7 @@ class treat_num(BaseTreatment):
          max_capacity (int): maximum number who can be treated each timestep
     """
     def __init__(self, max_capacity=None, **kwargs):
-        BaseTreatment.__init__(self, **kwargs)
+        super().__init__(**kwargs)
         self.queue = []
         self.max_capacity = max_capacity
         return

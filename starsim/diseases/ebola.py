@@ -16,53 +16,56 @@ class Ebola(SIR):
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
         """ Initialize with parameters """
 
-        pars = ss.omerge({
+        pars = ss.omergeleft(pars,
             # Natural history parameters, all specified in days
-            'dur_exp2symp':     12.7,   # Add source
-            'dur_symp2sev':        6,   # Add source
-            'dur_sev2dead':      1.5,   # Add source
-            'dur_dead2buried':     2,   # Add source
-            'dur_symp2rec':       10,   # Add source
-            'dur_sev2rec':      10.4,   # Add source
-            'p_sev':             0.7,   # Add source
-            'p_death':          0.55,   # Add source
-            'p_safe_bury':      0.25,   # Probability of a safe burial - should be linked to diagnoses
+            dur_exp2symp = 12.7, # Add source
+            dur_symp2sev =    6, # Add source
+            dur_sev2dead =  1.5, # Add source
+            dur_dead2buried = 2, # Add source
+            dur_symp2rec =   10, # Add source
+            dur_sev2rec =  10.4, # Add source
+            p_sev =         0.7, # Add source
+            p_death =      0.55, # Add source
+            p_safe_bury =  0.25, # Probability of a safe burial - should be linked to diagnoses
 
             # Initial conditions and beta
-            'init_prev': 0.005,
-            'beta': None,
-            'sev_factor': 2.2,
-            'unburied_factor': 2.1,
-        }, pars)
+            init_prev = 0.005,
+            beta = None,
+            sev_factor = 2.2,
+            unburied_factor = 2.1,
+        )
 
-        par_dists = ss.omerge({
-            'dur_exp2symp': ss.lognorm,
-            'dur_symp2sev': ss.lognorm,
-            'dur_sev2dead': ss.lognorm,
-            'dur_dead2buried': ss.lognorm,
-            'dur_symp2rec': ss.lognorm,
-            'dur_sev2rec': ss.lognorm,
-            'p_sev': ss.bernoulli,
-            'p_death': ss.bernoulli,
-            'p_safe_bury': ss.bernoulli,
-            'init_prev': ss.bernoulli,
-        }, par_dists)
+        par_dists = ss.omergeleft(par_dists,
+            dur_exp2symp    = ss.lognorm,
+            dur_symp2sev    = ss.lognorm,
+            dur_sev2dead    = ss.lognorm,
+            dur_dead2buried = ss.lognorm,
+            dur_symp2rec    = ss.lognorm,
+            dur_sev2rec     = ss.lognorm,
+            p_sev           = ss.bernoulli,
+            p_death         = ss.bernoulli,
+            p_safe_bury     = ss.bernoulli,
+            init_prev       = ss.bernoulli,
+        )
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
 
         # Boolean states
-        # SIR are added automatically, here we add E
-        self.exposed = ss.State('exposed', bool, False)
-        self.severe = ss.State('severe', bool, False)
-        self.recovered = ss.State('recovered', bool, False)
-        self.buried = ss.State('buried', bool, False)
-
-        # Timepoint states
-        self.ti_exposed = ss.State('ti_exposed', float, np.nan)
-        self.ti_severe = ss.State('ti_severe', float, np.nan)
-        self.ti_recovered = ss.State('ti_recovered', float, np.nan)
-        self.ti_dead = ss.State('ti_dead', float, np.nan)
-        self.ti_buried = ss.State('ti_buried', float, np.nan)
+        
+        self.add_states(
+            # SIR are added automatically, here we add E
+            ss.State('exposed', bool, False),
+            ss.State('severe', bool, False),
+            ss.State('recovered', bool, False),
+            ss.State('buried', bool, False),
+    
+            # Timepoint states
+            ss.State('ti_exposed', float, np.nan),
+            ss.State('ti_severe', float, np.nan),
+            ss.State('ti_recovered', float, np.nan),
+            ss.State('ti_dead', float, np.nan),
+            ss.State('ti_buried', float, np.nan),
+        )
 
         return
 
@@ -99,7 +102,8 @@ class Ebola(SIR):
         # Progress dead -> buried
         buried = ss.true(self.ti_buried <= sim.ti)
         self.buried[buried] = True
-
+        
+        return
 
     def set_prognoses(self, sim, uids, from_uids=None):
         """ Set prognoses for those who get infected """
@@ -136,11 +140,8 @@ class Ebola(SIR):
 
     def update_death(self, sim, uids):
         # Reset infected/recovered flags for dead agents
-        self.susceptible[uids] = False
-        self.exposed[uids] = False
-        self.infected[uids] = False
-        self.severe[uids] = False
-        self.recovered[uids] = False
+        for state in ['susceptible', 'exposed', 'infected', 'severe', 'recovered']:
+            self.statesdict[state][uids] = False
         return
 
     def make_new_cases(self, sim):
@@ -151,3 +152,4 @@ class Ebola(SIR):
         unburied_uids = ss.true((self.ti_dead <= sim.ti) & (self.ti_buried > sim.ti))
         self.rel_trans[unburied_uids] = self.pars['unburied_factor']
         super().make_new_cases(sim)
+        return

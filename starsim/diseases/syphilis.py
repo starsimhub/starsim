@@ -14,31 +14,33 @@ class Syphilis(ss.Infection):
     def __init__(self, pars=None):
         super().__init__(pars)
 
-        # Adult syphilis states
-        self.exposed = ss.State('exposed', bool, False)  # AKA incubating. Free of symptoms, not transmissible
-        self.primary = ss.State('primary', bool, False)  # Primary chancres
-        self.secondary = ss.State('secondary', bool, False)  # Inclusive of those who may still have primary chancres
-        self.latent_temp = ss.State('latent_temp', bool, False)  # Relapses to secondary (~1y)
-        self.latent_long = ss.State('latent_long', bool, False)  # Can progress to tertiary or remain here
-        self.tertiary = ss.State('tertiary', bool, False)  # Includes complications (cardio/neuro/disfigurement)
-        self.immune = ss.State('immune', bool, False)  # After effective treatment people may acquire temp immunity
-        self.ever_exposed = ss.State('ever_exposed', bool, False)  # Anyone ever exposed - stays true after treatment
-
-        # Congenital syphilis states
-        self.congenital = ss.State('congenital', bool, False)
-
-        # Timestep of state changes
-        self.ti_exposed = ss.State('ti_exposed', int, ss.INT_NAN)
-        self.ti_primary = ss.State('ti_primary', int, ss.INT_NAN)
-        self.ti_secondary = ss.State('ti_secondary', int, ss.INT_NAN)
-        self.ti_latent_temp = ss.State('ti_latent_temp', int, ss.INT_NAN)
-        self.ti_latent_long = ss.State('ti_latent_long', int, ss.INT_NAN)
-        self.ti_tertiary = ss.State('ti_tertiary', int, ss.INT_NAN)
-        self.ti_immune = ss.State('ti_immune', int, ss.INT_NAN)
-        self.ti_miscarriage = ss.State('ti_miscarriage', int, ss.INT_NAN)
-        self.ti_nnd = ss.State('ti_nnd', int, ss.INT_NAN)
-        self.ti_stillborn = ss.State('ti_stillborn', int, ss.INT_NAN)
-        self.ti_congenital = ss.State('ti_congenital', int, ss.INT_NAN)
+        self.add_states(
+            # Adult syphilis states
+            ss.State('exposed', bool, False),  # AKA incubating. Free of symptoms, not transmissible
+            ss.State('primary', bool, False),  # Primary chancres
+            ss.State('secondary', bool, False),  # Inclusive of those who may still have primary chancres
+            ss.State('latent_temp', bool, False),  # Relapses to secondary (~1y)
+            ss.State('latent_long', bool, False),  # Can progress to tertiary or remain here
+            ss.State('tertiary', bool, False),  # Includes complications (cardio/neuro/disfigurement)
+            ss.State('immune', bool, False),  # After effective treatment people may acquire temp immunity
+            ss.State('ever_exposed', bool, False),  # Anyone ever exposed - stays true after treatment
+    
+            # Congenital syphilis states
+            ss.State('congenital', bool, False),
+    
+            # Timestep of state changes
+            ss.State('ti_exposed', int, ss.INT_NAN),
+            ss.State('ti_primary', int, ss.INT_NAN),
+            ss.State('ti_secondary', int, ss.INT_NAN),
+            ss.State('ti_latent_temp', int, ss.INT_NAN),
+            ss.State('ti_latent_long', int, ss.INT_NAN),
+            ss.State('ti_tertiary', int, ss.INT_NAN),
+            ss.State('ti_immune', int, ss.INT_NAN),
+            ss.State('ti_miscarriage', int, ss.INT_NAN),
+            ss.State('ti_nnd', int, ss.INT_NAN),
+            ss.State('ti_stillborn', int, ss.INT_NAN),
+            ss.State('ti_congenital', int, ss.INT_NAN),
+        )
 
         # Parameters
         default_pars = dict(
@@ -67,7 +69,7 @@ class Syphilis(ss.Infection):
             # Initial conditions
             init_prev=ss.bernoulli(p=0.03),
         )
-        self.pars = ss.omerge(default_pars, self.pars)
+        self.pars = ss.omerge(default_pars, self.pars) # NB: regular omerge rather than omergeleft
 
         return
 
@@ -99,9 +101,11 @@ class Syphilis(ss.Infection):
     def init_results(self, sim):
         """ Initialize results """
         super().init_results(sim)
-        self.results += ss.Result(self.name, 'new_nnds', sim.npts, dtype=int, scale=True)
-        self.results += ss.Result(self.name, 'new_stillborns', sim.npts, dtype=int, scale=True)
-        self.results += ss.Result(self.name, 'new_congenital', sim.npts, dtype=int, scale=True)
+        self.results += [
+            ss.Result(self.name, 'new_nnds',       sim.npts, dtype=int, scale=True),
+            ss.Result(self.name, 'new_stillborns', sim.npts, dtype=int, scale=True),
+            ss.Result(self.name, 'new_congenital', sim.npts, dtype=int, scale=True),
+        ]
         return
 
     def update_pre(self, sim):
@@ -160,9 +164,10 @@ class Syphilis(ss.Infection):
 
     def update_results(self, sim):
         super(Syphilis, self).update_results(sim)
-        self.results['new_nnds'][sim.ti] = np.count_nonzero(self.ti_nnd == sim.ti)
-        self.results['new_stillborns'][sim.ti] = np.count_nonzero(self.ti_stillborn == sim.ti)
-        self.results['new_congenital'][sim.ti] = np.count_nonzero(self.ti_congenital == sim.ti)
+        ti = sim.ti
+        self.results.new_nnds[ti]       = np.count_nonzero(self.ti_nnd == ti)
+        self.results.new_stillborns[ti] = np.count_nonzero(self.ti_stillborn == ti)
+        self.results.new_congenital[ti] = np.count_nonzero(self.ti_congenital == ti)
         return
 
     def make_new_cases(self, sim):
@@ -328,8 +333,10 @@ class syph_screening(ss.routine_screening):
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.results += ss.Result('syphilis', 'n_screened', sim.npts, dtype=int, scale=True)
-        self.results += ss.Result('syphilis', 'n_dx', sim.npts, dtype=int, scale=True)
+        self.results += [
+            ss.Result('syphilis', 'n_screened', sim.npts, dtype=int, scale=True),
+            ss.Result('syphilis', 'n_dx', sim.npts, dtype=int, scale=True),
+        ]
         return
 
 

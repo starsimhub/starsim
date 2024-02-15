@@ -9,100 +9,15 @@ import networkx as nx
 from operator import itemgetter
 import pandas as pd
 
-
-__all__ = ['InfectionLog', 'Disease', 'Infection', 'STI']
-
-
-class InfectionLog(nx.MultiDiGraph):
-    """
-    Record infections
-
-    The infection log records transmission events and optionally other data
-    associated with each transmission. Basic functionality is to track
-    transmission with
-
-    >>> Disease.log.append(source, target, t)
-
-    Seed infections can be recorded with a source of `None`, although all infections
-    should have a target and a time. Other data can be captured in the log, either at
-    the time of creation, or later on. For example
-
-    >>> Disease.log.append(source, target, t, network='msm')
-
-    could be used by a module to track the network in which transmission took place.
-    Modules can optionally add per-infection outcomes later as well, for example
-
-    >>> Disease.log.add_data(source, t_dead=2024.25)
-
-    This would be equivalent to having specified the data at the original time the log
-    entry was created - however, it is more useful for tracking events that may or may
-    not occur after the infection and could be modified by interventions (e.g., tracking
-    diagnosis, treatment, notification etc.)
-
-    A table of outcomes can be returned using `InfectionLog.line_list()`
-    """
-
-    # Add entries
-    # Add items to the most recent infection for an agent
-
-    def add_data(self, uids, **kwargs):
-        """
-        Record extra infection data
-
-        This method can be used to add data to an existing transmission event.
-        The most recent transmission event will be used
-
-        :param uid: The UID of the target node (the agent that was infected)
-        :param kwargs: Remaining arguments are stored as edge data
-        """
-        for uid in sc.promotetoarray(uids):
-            source, target, key = max(self.in_edges(uid, keys=True),
-                                      key=itemgetter(2, 0))  # itemgetter twice as fast as lambda apparently
-            self[source][target][key].update(**kwargs)
-
-    def append(self, source, target, t, **kwargs):
-        self.add_edge(source, target, key=t, **kwargs)
-
-    @property
-    def line_list(self):
-        """
-        Return a tabular representation of the log
-
-        This function returns a dataframe containing columns for all quantities
-        recorded in the log. Note that the log will contain `NaN` for quantities
-        that are defined for some edges and not others (and which are missing for
-        a particular entry)
-        """
-        if len(self) == 0:
-            return sc.dataframe(columns=['t','source','target'])
-
-        entries = []
-        for source, target, t, data in self.edges(keys=True, data=True):
-            d = data.copy()
-            d.update(source=source, target=target, t=t)
-            entries.append(d)
-        df = sc.dataframe.from_records(entries)
-        df = df.sort_values(['t','source','target'])
-        df = df.reset_index(drop=True)
-
-        # Use Pandas "Int64" type to allow nullable integers. This allows the 'source' column
-        # to have an integer type corresponding to UIDs while simultaneously supporting the use
-        # of null values to represent exogenous/seed infections
-        df = df.fillna(pd.NA)
-        df['source'] = df['source'].astype("Int64")
-        df['target'] = df['target'].astype("Int64")
-
-        return df
-
+__all__ = ['Disease', 'Infection', 'STI', 'InfectionLog']
 
 class Disease(ss.Module):
     """ Base module class for diseases """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.results = ss.ndict(type=ss.Result)
-        self.log = InfectionLog()
-        self.new_cases_RNG = ss.MultiRNG(name=f'New cases of {self.name}')
+        self.results = ss.Results(self.name)
+        self.log = InfectionLog() # See below for definition
         return
 
     @property
@@ -112,8 +27,6 @@ class Disease(ss.Module):
 
         For diseases, these states typically represent attributes like 'susceptible',
         'infectious', 'diagnosed' etc. These variables are typically useful to
-
-        :return:
         """
         for state in self.states:
             if state.dtype == bool:
@@ -134,9 +47,6 @@ class Disease(ss.Module):
     def validate_pars(self, sim):
         """
         Perform any parameter validation
-
-        :return: None if parameters are all valid
-        :raises: Exception if there are any invalid parameters (or if the initialization is otherwise invalid in some way)
         """
         if sim.networks is not None and len(sim.networks) > 0:
 
@@ -154,6 +64,7 @@ class Disease(ss.Module):
                 for k, v in self.pars.beta.items():
                     if sc.isnumber(v):
                         self.pars.beta[k] = [v, v]
+        return
 
     def set_initial_states(self, sim):
         """
@@ -182,9 +93,6 @@ class Disease(ss.Module):
     def update_pre(self, sim):
         """
         Carry out autonomous updates at the start of the timestep (prior to transmission)
-
-        :param sim:
-        :return:
         """
         pass
 
@@ -202,10 +110,6 @@ class Disease(ss.Module):
 
         Depending on the module and the results it produces, it may or may not be necessary
         to implement this.
-
-        :param sim:
-        :param uids:
-        :return:
         """
         pass
 
@@ -220,7 +124,6 @@ class Disease(ss.Module):
 
         It is expected that this method will internally call Disease.set_prognoses()
         at some point.
-
         """
         pass
 
@@ -236,10 +139,10 @@ class Disease(ss.Module):
         The from_uids are relevant for infectious diseases, but would be left
         as `None` for NCDs.
 
-        :param sim:
-        :param uids: UIDs for agents to assign disease progoses to
-        :param from_uids: Optionally specify the infecting agent
-        :return:
+        Args:
+            sim (Sim): the STarsim simulation object
+            uids (array): UIDs for agents to assign disease progoses to
+            from_uids (array): Optionally specify the infecting agent
         """
         if source_uids is None:
             for target in target_uids:
@@ -247,6 +150,7 @@ class Disease(ss.Module):
         else:
             for target, source in zip(target_uids, source_uids):
                 self.log.append(source, target, sim.year)
+        return
 
     def update_results(self, sim):
         """
@@ -272,12 +176,14 @@ class Infection(Disease):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.rel_sus     = ss.State('rel_sus', float, 1.0)
-        self.rel_sev     = ss.State('rel_sev', float, 1.0)
-        self.rel_trans   = ss.State('rel_trans', float, 1.0)
-        self.susceptible = ss.State('susceptible', bool, True)
-        self.infected = ss.State('infected', bool, False)
-        self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
+        self.add_states(
+            ss.State('susceptible', bool, True),
+            ss.State('infected', bool, False),
+            ss.State('rel_sus', float, 1.0),
+            ss.State('rel_sev', float, 1.0),
+            ss.State('rel_trans', float, 1.0),
+            ss.State('ti_infected', int, ss.INT_NAN),
+        )
         return
 
     @property
@@ -308,8 +214,10 @@ class Infection(Disease):
         Initialize results
         """
         super().init_results(sim)
-        self.results += ss.Result(self.name, 'prevalence', sim.npts, dtype=float, scale=False)
-        self.results += ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True)
+        self.results += [
+            ss.Result(self.name, 'prevalence', sim.npts, dtype=float, scale=False),
+            ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True),
+        ]
         return
 
     def _make_new_cases_singlerng(self, sim):
@@ -460,4 +368,86 @@ class STI(Infection):
 
     def set_congenital(self, sim, target_uids, source_uids=None):
         pass
+
+
+class InfectionLog(nx.MultiDiGraph):
+    """
+    Record infections
+
+    The infection log records transmission events and optionally other data
+    associated with each transmission. Basic functionality is to track
+    transmission with
+
+    >>> Disease.log.append(source, target, t)
+
+    Seed infections can be recorded with a source of `None`, although all infections
+    should have a target and a time. Other data can be captured in the log, either at
+    the time of creation, or later on. For example
+
+    >>> Disease.log.append(source, target, t, network='msm')
+
+    could be used by a module to track the network in which transmission took place.
+    Modules can optionally add per-infection outcomes later as well, for example
+
+    >>> Disease.log.add_data(source, t_dead=2024.25)
+
+    This would be equivalent to having specified the data at the original time the log
+    entry was created - however, it is more useful for tracking events that may or may
+    not occur after the infection and could be modified by interventions (e.g., tracking
+    diagnosis, treatment, notification etc.)
+
+    A table of outcomes can be returned using `InfectionLog.line_list()`
+    """
+
+    # Add entries
+    # Add items to the most recent infection for an agent
+
+    def add_data(self, uids, **kwargs):
+        """
+        Record extra infection data
+
+        This method can be used to add data to an existing transmission event.
+        The most recent transmission event will be used
+
+        :param uid: The UID of the target node (the agent that was infected)
+        :param kwargs: Remaining arguments are stored as edge data
+        """
+        for uid in sc.promotetoarray(uids):
+            source, target, key = max(self.in_edges(uid, keys=True),
+                                      key=itemgetter(2, 0))  # itemgetter twice as fast as lambda apparently
+            self[source][target][key].update(**kwargs)
+
+    def append(self, source, target, t, **kwargs):
+        self.add_edge(source, target, key=t, **kwargs)
+
+    @property
+    def line_list(self):
+        """
+        Return a tabular representation of the log
+
+        This function returns a dataframe containing columns for all quantities
+        recorded in the log. Note that the log will contain `NaN` for quantities
+        that are defined for some edges and not others (and which are missing for
+        a particular entry)
+        """
+        if len(self) == 0:
+            return sc.dataframe(columns=['t','source','target'])
+
+        entries = []
+        for source, target, t, data in self.edges(keys=True, data=True):
+            d = data.copy()
+            d.update(source=source, target=target, t=t)
+            entries.append(d)
+        df = sc.dataframe.from_records(entries)
+        df = df.sort_values(['t','source','target'])
+        df = df.reset_index(drop=True)
+
+        # Use Pandas "Int64" type to allow nullable integers. This allows the 'source' column
+        # to have an integer type corresponding to UIDs while simultaneously supporting the use
+        # of null values to represent exogenous/seed infections
+        df = df.fillna(pd.NA)
+        df['source'] = df['source'].astype("Int64")
+        df['target'] = df['target'].astype("Int64")
+
+        return df
 

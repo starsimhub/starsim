@@ -29,7 +29,7 @@ class Sim(sc.prettyobj):
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
         self.people = people  # People object
-        self.results = ss.ndict(type=ss.Result)  # For storing results
+        self.results = ss.Results(module='sim')  # For storing results
         self.summary = None  # For storing a summary of the results
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running # TODO: replace with finalized?
@@ -48,7 +48,7 @@ class Sim(sc.prettyobj):
 
         # Placeholders for plug-ins: demographics, diseases, connectors, analyzers, and interventions
         # Products are not here because they are stored within interventions
-        self.demographics = ss.ndict(demographics, type=ss.DemographicModule)
+        self.demographics = ss.ndict(demographics, type=ss.BaseDemographics)
         self.diseases = ss.ndict(diseases, type=ss.Disease)
         self.networks = ss.ndict(networks, type=ss.Network)
         self.connectors = ss.ndict(connectors, type=ss.Connector)
@@ -306,14 +306,14 @@ class Sim(sc.prettyobj):
         """ Initialize demographics """
 
         # Demographics can be provided via sim.demographics or sim.pars - this methods reconciles them
-        demographics = self.convert_plugins(ss.DemographicModule, plugin_name='demographics')
+        demographics = self.convert_plugins(ss.BaseDemographics, plugin_name='demographics')
 
         # We also allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
         if self.pars.birth_rate is not None:
-            births = ss.births(pars={'birth_rate': self.pars.birth_rate})
+            births = ss.Births(pars={'birth_rate': self.pars.birth_rate})
             demographics += births
         if self.pars.death_rate is not None:
-            background_deaths = ss.background_deaths(pars={'death_rate': self.pars.death_rate})
+            background_deaths = ss.Deaths(pars={'death_rate': self.pars.death_rate})
             demographics += background_deaths
 
         # Iterate over demographic modules and initialize them

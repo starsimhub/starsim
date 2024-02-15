@@ -1,6 +1,6 @@
-'''
-Disease modules
-'''
+"""
+General module class -- base class for diseases, interventions, etc.
+"""
 
 import sciris as sc
 import starsim as ss
@@ -9,25 +9,24 @@ from inspect import signature, _empty
 
 __all__ = ['Module']
 
-
 class Module(sc.prettyobj):
 
     def __init__(self, pars=None, par_dists=None, name=None, label=None, requires=None, *args, **kwargs):
         self.pars = ss.omerge(pars)
         self.par_dists = ss.omerge(par_dists)
         self.name = name if name else self.__class__.__name__.lower() # Default name is the class name
-        self.label = label if label else ''
+        self.label = label if label else self.name
         self.requires = sc.mergelists(requires)
-        self.results = ss.ndict(type=ss.Result)
+        self.results = ss.Results(self.name)
         self.initialized = False
         self.finalized = False
-
         return
 
     def check_requires(self, sim):
+        """ Check that the module's requirements (of other modules) are met """
         errs = sc.autolist()
         all_names = [m.__class__ for m in sim.modules] + [m.name for m in sim.modules]
-        for req in sc.tolist(self.requires):
+        for req in self.requires:
             if req not in all_names:
                 errs += req
         if len(errs):
@@ -93,40 +92,55 @@ class Module(sc.prettyobj):
             if isinstance(res, ss.Result) and res.scale:
                 self.results[reskey] = self.results[reskey]*sim.pars.pop_scale
         return
+    
+    def add_states(self, *args, check=True):
+        """
+        Add states to the module with the same attribute name as the state
+        
+        Args:
+            args (states): list of states to add
+            check (bool): whether to check that the object being added is a state
+        """
+        for arg in args:
+            if isinstance(arg, (list, tuple)):
+                state = ss.State(*arg)
+            elif isinstance(arg, dict):
+                state = ss.State(**arg)
+            else:
+                state = arg
+                
+            if check:
+                assert isinstance(state, ss.State), f'Could not add {state}: not a State object'
+                
+            setattr(self, state.name, state)
+        return
 
     @property
     def states(self):
         """
-        Return a flat collection of all states
+        Return a flat list of all states
 
         The base class returns all states that are contained in top-level attributes
         of the Module. If a Module stores states in a non-standard location (e.g.,
         within a list of states, or otherwise in some other nested structure - perhaps
         due to supporting features like multiple genotypes) then the Module should
         overload this attribute to ensure that all states appear in here.
-
-        :return:
         """
         return [x for x in self.__dict__.values() if isinstance(x, ss.State)]
+
+    @property
+    def statesdict(self):
+        """
+        Return a flat dictionary (objdict) of all states
+        """
+        return sc.objdict({s.name:s for s in self.states})
 
     @property
     def rngs(self):
         """
         Return a flat collection of all random number generators, as with states above
-
-        :return:
         """
         return [x for x in self.__dict__.values() if isinstance(x, (ss.MultiRNG, ss.SingleRNG))]
-
-    @property
-    def scipy_dbns(self):
-        """
-        Return a flat collection of all ScipyDistributions
-
-        :return:
-        """
-        return [x for x in self.__dict__.values() if isinstance(x, ss.ScipyDistribution)] \
-             + [x for x in self.pars.values()     if isinstance(x, ss.ScipyDistribution)]
 
     @classmethod
     def create(cls, name, *args, **kwargs):
