@@ -9,7 +9,7 @@ import scipy.stats as sps
 import numpy as np
 
 test_run = True
-n_agents = [2_000, 10_000][test_run]
+n_agents = [10_000, 2_000][test_run]
 
 
 def test_sir():
