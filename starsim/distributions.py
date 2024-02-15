@@ -179,6 +179,9 @@ class ScipyDistribution():
         if isinstance(self.rng, (SingleRNG, MultiRNG)):
             self.rng.initialize(sim.rng_container, sim.people.slot)
         return
+    
+    def rvs(self, *args, **kwargs):
+        return self.gen.rvs(*args, **kwargs)
 
     # def __copy__(self):
     #     cls = self.__class__
@@ -204,14 +207,14 @@ class ScipyDistribution():
     #     elif attr in ['__setstate__', '__await__']:
     #         # Must be from pickle, async programming, copy
     #         return None
-    #     try:
-    #         return self.__getattribute__(attr)
-    #     except Exception:
-    #         try:
-    #             return getattr(self.gen, attr) # .dist?
-    #         except Exception:
-    #             errormsg = f'"{attr}" is not a member of this class or the underlying scipy stats class'
-    #             raise Exception(errormsg)
+        # try:
+        #     return self.__getattribute__(attr)
+        # except Exception:
+        #     try:
+        #         return getattr(self.gen, attr) # .dist?
+        #     except Exception:
+        #         errormsg = f'"{attr}" is not a member of this class or the underlying scipy stats class'
+        #         raise Exception(errormsg)
 
     def filter(self, size, **kwargs):
         return size[self.gen.rvs(size, **kwargs)]
