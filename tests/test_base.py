@@ -45,7 +45,7 @@ def test_networks():
     sim = ss.Sim()
     sim.initialize()
     
-    nw3 = ss.maternal()
+    nw3 = ss.MaternalNet()
     nw3.initialize(sim)
     nw3.add_pairs(mother_inds=[1, 2, 3], unborn_inds=[100, 101, 102], dur=[1, 1, 1])
 
@@ -70,7 +70,7 @@ def test_microsim():
 
     sim = ss.Sim(
         people=ss.People(100),
-        networks=[ss.mf(), ss.maternal()],
+        networks=[ss.MFNet(), ss.MaternalNet()],
         demographics=ss.Pregnancy(),
         diseases=hiv
     )
@@ -95,7 +95,7 @@ def test_ppl_construction():
     mf_pars = {
         'debut': sps.norm(loc=init_debut, scale=2),  # Age of debut can vary by using callable parameter values
     }
-    sim_pars = {'networks': [ss.mf(mf_pars)], 'n_agents': 100}
+    sim_pars = {'networks': [ss.MFNet(mf_pars)], 'n_agents': 100}
     gon_pars = {'beta': {'mf': [0.08, 0.04]}, 'p_death': 0.2}
     gon = ss.Gonorrhea(pars=gon_pars)
 

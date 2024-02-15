@@ -967,7 +967,7 @@ class HPVNet(MFNet):
 
 
 # %% Network connectors
-__all__ += ['NetworkConnector', 'mf_msm']
+__all__ += ['NetworkConnector', 'MF_MSM']
 
 class NetworkConnector(ss.Module):
     """
@@ -984,13 +984,13 @@ class NetworkConnector(ss.Module):
         pass
 
 
-class mf_msm(NetworkConnector):
+class MF_MSM(NetworkConnector):
     """ Combines the MF and MSM networks """
     def __init__(self, pars=None):
-        networks = [ss.mf, ss.msm]
-        pars = ss.omerge({
-            'prop_bi': 0.5,  # Could vary over time -- but not by age or sex or individual
-        }, pars)
+        networks = [ss.MFNet, ss.MSMNet]
+        pars = ss.omergeleft(pars,
+            prop_bi = 0.5,  # Could vary over time -- but not by age or sex or individual
+        )
         super().__init__(networks=networks, pars=pars)
 
         self.bi_dist = ss.bernoulli(p=self.pars.prop_bi)
@@ -1009,8 +1009,8 @@ class mf_msm(NetworkConnector):
         uids = ss.true(people.male[uids])
 
         # Get networks and overwrite default participation
-        mf = people.networks['mf']
-        msm = people.networks['msm']
+        mf = people.networks.mf
+        msm = people.networks.msm
         mf.participant[uids] = False
         msm.participant[uids] = False
 
