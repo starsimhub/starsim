@@ -23,7 +23,7 @@ INT_NAN = np.iinfo(
 # %% Helper functions
 
 # What functions are externally visible -- note, this gets populated in each section below
-__all__ += ['ndict', 'omerge', 'warn', 'unique', 'find_contacts', 'get_subclasses', 'all_subclasses']
+__all__ += ['ndict', 'omerge', 'omergeleft', 'warn', 'unique', 'find_contacts', 'get_subclasses', 'all_subclasses']
 
 
 class ndict(sc.objdict):
@@ -115,8 +115,22 @@ class ndict(sc.objdict):
 
 
 def omerge(*args, **kwargs):
-    """ Merge things into an objdict """
+    """ Merge things into an objdict, using standard order """
     return sc.objdict(sc.mergedicts(*args, **kwargs))
+
+
+def omergeleft(*args, **kwargs):
+    """ Merge things into an odict, using opposite order to allow defaults to be supplied second """
+    if len(args) == 1 and len(kwargs):
+        new = args[0]
+        default = kwargs
+    elif len(args) == 2 and len(kwargs) == 0:
+        new = args[0]
+        default = args[1]
+    else:
+        errormsg = 'Expecting either two arguments, or one argument and kwargs; for any other arrangement, use ss.omerge()'
+        raise ValueError(errormsg)
+    return sc.objdict(sc.mergedicts(default, new))
 
 
 def warn(msg, category=None, verbose=None, die=None):

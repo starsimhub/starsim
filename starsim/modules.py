@@ -101,9 +101,17 @@ class Module(sc.prettyobj):
             args (states): list of states to add
             check (bool): whether to check that the object being added is a state
         """
-        for state in args:
+        for arg in args:
+            if isinstance(arg, (list, tuple)):
+                state = ss.State(*arg)
+            elif isinstance(arg, dict):
+                state = ss.State(**arg)
+            else:
+                state = arg
+                
             if check:
                 assert isinstance(state, ss.State), f'Could not add {state}: not a State object'
+                
             setattr(self, state.name, state)
         return
 

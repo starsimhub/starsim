@@ -7,9 +7,9 @@ import starsim as ss
 import sciris as sc
 import pandas as pd
 
-__all__ = ['DemographicModule', 'births', 'background_deaths', 'Pregnancy']
+__all__ = ['BaseDemographics', 'Births', 'Deaths', 'Pregnancy']
 
-class DemographicModule(ss.Module):
+class BaseDemographics(ss.Module):
     # A demographic module typically handles births/deaths/migration and takes
     # place at the start of the timestep, before networks are updated and before
     # any disease modules are executed
@@ -27,21 +27,21 @@ class DemographicModule(ss.Module):
         # carried out inside this function
         pass
 
-class births(DemographicModule):
+class Births(BaseDemographics):
     def __init__(self, pars=None, metadata=None):
         super().__init__(pars)
 
         # Set defaults
-        self.pars = ss.omerge({
-            'birth_rate': 0,
-            'rel_birth': 1,
-            'units': 1e-3  # assumes birth rates are per 1000. If using percentages, switch this to 1
-        }, self.pars)
+        self.pars = ss.omergeleft(self.pars,
+            birth_rate = 0,
+            rel_birth = 1,
+            units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
+        )
 
         # Process metadata. Defaults here are the labels used by UN data
-        self.metadata = ss.omerge({
-            'data_cols': {'year': 'Year', 'cbr': 'CBR'},
-        }, metadata)
+        self.metadata = ss.omergeleft(metadata,
+            data_cols = dict(year='Year', cbr='CBR'),
+        )
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
@@ -63,9 +63,11 @@ class births(DemographicModule):
         return birth_rate
 
     def init_results(self, sim):
-        self.results += ss.Result(self.name, 'new', sim.npts, dtype=int, scale=True)
-        self.results += ss.Result(self.name, 'cumulative', sim.npts, dtype=int, scale=True)
-        self.results += ss.Result(self.name, 'cbr', sim.npts, dtype=int, scale=False)
+        self.results += [
+            ss.Result(self.name, 'new', sim.npts, dtype=int, scale=True),
+            ss.Result(self.name, 'cumulative', sim.npts, dtype=int, scale=True),
+            ss.Result(self.name, 'cbr', sim.npts, dtype=int, scale=False),
+        ]
         return
 
     def update(self, sim):
@@ -104,7 +106,7 @@ class births(DemographicModule):
         self.results['cbr'] = 1/self.pars.units*np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
 
 
-class background_deaths(DemographicModule):
+class Deaths(BaseDemographics):
     def __init__(self, pars=None, par_dists=None, metadata=None):
         """
         Configure disease-independent "background" deaths.
@@ -137,21 +139,21 @@ class background_deaths(DemographicModule):
         """
         super().__init__(pars)
 
-        self.pars = ss.omerge({
-            'rel_death': 1,
-            'death_rate': 0.02,  # Default = a fixed rate of 2%/year, overwritten if data provided
-            'units': 1,  # units for death rates. If using percentages, leave as 1. If using a CMR (e.g. 12 deaths per 1000), change to 1/1000
-        }, self.pars)
+        self.pars = ss.omergeleft(self.pars,
+            rel_death = 1,
+            death_rate = 0.02,  # Default = a fixed rate of 2%/year, overwritten if data provided
+            units = 1,  # units for death rates. If using percentages, leave as 1. If using a CMR (e.g. 12 deaths per 1000), change to 1/1000
+        )
 
-        self.par_dists = ss.omerge({
-            'death_rate': ss.bernoulli
-        }, par_dists)
+        self.par_dists = ss.omergeleft(par_dists,
+            death_rate = ss.bernoulli
+        )
 
         # Process metadata. Defaults here are the labels used by UN data
-        self.metadata = ss.omerge({
-            'data_cols': {'year': 'Time', 'sex': 'Sex', 'age': 'AgeGrpStart', 'value': 'mx'},
-            'sex_keys': {'f': 'Female', 'm': 'Male'},
-        }, metadata)
+        self.metadata = ss.omergeleft(metadata,
+            data_cols = dict(year='Time', sex='Sex', age='AgeGrpStart', value='mx'),
+            sex_keys = dict(f='Female', m='Male'),
+        )
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
@@ -168,10 +170,11 @@ class background_deaths(DemographicModule):
             death_rate = module.death_rate_data
 
         else:
-            year_label = module.metadata.data_cols['year']
-            age_label = module.metadata.data_cols['age']
-            sex_label = module.metadata.data_cols['sex']
-            val_label = module.metadata.data_cols['value']
+            data_cols = sc.objdict(module.metadata.data_cols)
+            year_label = data_cols.year
+            age_label  = data_cols.age
+            sex_label  = data_cols.sex
+            val_label  = data_cols.value
             sex_keys = module.metadata.sex_keys
 
             available_years = module.death_rate_data[year_label].unique()
@@ -187,7 +190,7 @@ class background_deaths(DemographicModule):
 
             # Initialize
             death_rate_df = pd.Series(index=uids)
-            death_rate_df[uids[sim.people.female[uids]]] = f_arr[age_inds[sim.people.female[uids]]]
+            death_rate_df[uids[sim.people.female[uids]]] = f_arr[age_inds[sim.people.female[uids]]] # TODO: avoid double indexing
             death_rate_df[uids[sim.people.male[uids]]] = m_arr[age_inds[sim.people.male[uids]]]
             death_rate_df[uids[sim.people.age[uids] < 0]] = 0  # Don't use background death rates for unborn babies
 
@@ -205,9 +208,11 @@ class background_deaths(DemographicModule):
         return death_rate
 
     def init_results(self, sim):
-        self.results += ss.Result(self.name, 'new', sim.npts, dtype=int, scale=True)
-        self.results += ss.Result(self.name, 'cumulative', sim.npts, dtype=int, scale=True)
-        self.results += ss.Result(self.name, 'cmr', sim.npts, dtype=int, scale=False)
+        self.results += [
+            ss.Result(self.name, 'new', sim.npts, dtype=int, scale=True),
+            ss.Result(self.name, 'cumulative', sim.npts, dtype=int, scale=True),
+            ss.Result(self.name, 'cmr', sim.npts, dtype=int, scale=False),
+        ]
         return
 
     def update(self, sim):
@@ -224,49 +229,52 @@ class background_deaths(DemographicModule):
 
     def update_results(self, n_deaths, sim):
         self.results['new'][sim.ti] = n_deaths
+        return
 
     def finalize(self, sim):
         super().finalize(sim)
         self.results['cumulative'] = np.cumsum(self.results['new'])
         self.results['cmr'] = 1/self.pars.units*np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
+        return
 
-
-class Pregnancy(DemographicModule):
+class Pregnancy(BaseDemographics):
 
     def __init__(self, pars=None, par_dists=None, metadata=None):
         super().__init__(pars)
 
         # Other, e.g. postpartum, on contraception...
-        self.infertile = ss.State('infertile', bool, False)  # Applies to girls and women outside the fertility window
-        self.susceptible = ss.State('fecund', bool, True)  # Applies to girls and women inside the fertility window
-        self.pregnant = ss.State('pregnant', bool, False)  # Currently pregnant
-        self.postpartum = ss.State('postpartum', bool, False)  # Currently post-partum
-        self.ti_pregnant = ss.State('ti_pregnant', int, ss.INT_NAN)  # Time pregnancy begins
-        self.ti_delivery = ss.State('ti_delivery', int, ss.INT_NAN)  # Time of delivery
-        self.ti_postpartum = ss.State('ti_postpartum', int, ss.INT_NAN)  # Time postpartum ends
-        self.ti_dead = ss.State('ti_dead', int, ss.INT_NAN)  # Maternal mortality
-        self.conception_probs = ss.State('conception_probs', float, 0)
+        self.add_states(
+            ss.State('infertile', bool, False),  # Applies to girls and women outside the fertility window
+            ss.State('fecund', bool, True),  # Applies to girls and women inside the fertility window
+            ss.State('pregnant', bool, False),  # Currently pregnant
+            ss.State('postpartum', bool, False),  # Currently post-partum
+            ss.State('ti_pregnant', int, ss.INT_NAN),  # Time pregnancy begins
+            ss.State('ti_delivery', int, ss.INT_NAN),  # Time of delivery
+            ss.State('ti_postpartum', int, ss.INT_NAN),  # Time postpartum ends
+            ss.State('ti_dead', int, ss.INT_NAN),  # Maternal mortality
+            ss.State('conception_probs', float, 0),
+        )
 
-        self.pars = ss.omerge({
-            'dur_pregnancy': 0.75,
-            'dur_postpartum': 0.5,
-            'fertility_rate': 0,    # Usually this will be provided in CSV format
-            'rel_fertility': 1,
-            'maternal_death_rate': 0,
-            'sex_ratio': 0.5,       # Ratio of babies born female
-            'units': 1e-3,          # Assumes fertility rates are per 1000. If using percentages, switch this to 1
-        }, self.pars)
+        self.pars = ss.omergeleft(self.pars,
+            dur_pregnancy = 0.75,
+            dur_postpartum = 0.5,
+            fertility_rate = 0,    # Usually this will be provided in CSV format
+            rel_fertility = 1,
+            maternal_death_rate = 0,
+            sex_ratio = 0.5,       # Ratio of babies born female
+            units = 1e-3,          # Assumes fertility rates are per 1000. If using percentages, switch this to 1
+        )
 
-        self.par_dists = ss.omerge({
-            'fertility_rate': ss.bernoulli,
-            'maternal_death_rate': ss.bernoulli,
-            'sex_ratio': ss.bernoulli
-        }, par_dists)
+        self.par_dists = ss.omergeleft(par_dists,
+            fertility_rate = ss.bernoulli,
+            maternal_death_rate = ss.bernoulli,
+            sex_ratio = ss.bernoulli
+        )
 
         # Process metadata. Defaults here are the labels used by UN data
-        self.metadata = ss.omerge({
-            'data_cols': {'year': 'Time', 'age': 'AgeGrp', 'value': 'ASFR'},
-        }, metadata)
+        self.metadata = ss.omergeleft(metadata,
+            data_cols = dict(year='Time', age='AgeGrp', value='ASFR'),
+        )
 
         self.choose_slots = ss.randint(low=0, high=1) # Low and high will be reset upon initialization
 
@@ -286,9 +294,10 @@ class Pregnancy(DemographicModule):
 
         else:
             # Abbreviate key variables
-            year_label = module.metadata.data_cols['year']
-            age_label = module.metadata.data_cols['age']
-            val_label = module.metadata.data_cols['value']
+            data_cols = sc.objdict(module.metadata.data_cols)
+            year_label = data_cols.year
+            age_label  = data_cols.age
+            val_label  = data_cols.value
 
             available_years = module.fertility_rate_data[year_label].unique()
             year_ind = sc.findnearest(available_years, sim.year-module.pars.dur_pregnancy)
@@ -343,9 +352,11 @@ class Pregnancy(DemographicModule):
         Still unclear whether this logic should live in the pregnancy module, the
         individual disease modules, the connectors, or the sim.
         """
-        self.results += ss.Result(self.name, 'pregnancies', sim.npts, dtype=int, scale=True)
-        self.results += ss.Result(self.name, 'births', sim.npts, dtype=int, scale=True)
-        self.results += ss.Result(self.name, 'cbr', sim.npts, dtype=int, scale=False)
+        self.results += [
+            ss.Result(self.name, 'pregnancies', sim.npts, dtype=int, scale=True),
+            ss.Result(self.name, 'births', sim.npts, dtype=int, scale=True),
+            ss.Result(self.name, 'cbr', sim.npts, dtype=int, scale=False),
+        ]
         return
 
     def update(self, sim):
