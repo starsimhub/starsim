@@ -1,6 +1,6 @@
-'''
-Disease modules
-'''
+"""
+General module class -- base class for diseases, interventions, etc.
+"""
 
 import sciris as sc
 import starsim as ss
@@ -9,14 +9,13 @@ from inspect import signature, _empty
 
 __all__ = ['Module']
 
-
 class Module(sc.prettyobj):
 
     def __init__(self, pars=None, par_dists=None, name=None, label=None, requires=None, *args, **kwargs):
         self.pars = ss.omerge(pars)
         self.par_dists = ss.omerge(par_dists)
         self.name = name if name else self.__class__.__name__.lower() # Default name is the class name
-        self.label = label if label else ''
+        self.label = label if label else name
         self.requires = sc.mergelists(requires)
         self.results = ss.ndict(type=ss.Result)
         self.initialized = False
@@ -24,6 +23,7 @@ class Module(sc.prettyobj):
         return
 
     def check_requires(self, sim):
+        """ Check that the module's requirements (of other modules) are met """
         errs = sc.autolist()
         all_names = [m.__class__ for m in sim.modules] + [m.name for m in sim.modules]
         for req in self.requires:
