@@ -339,7 +339,7 @@ class Infection(Disease):
             self._set_cases(sim, new_cases, sources)
 
     def _set_cases(self, sim, target_uids, source_uids=None):
-        self.set_prognoses(sim, target_uids, source_uids)
+        self.set_prognoses(sim, target_uids, source_uids=source_uids)
         return
 
     def update_results(self, sim):
