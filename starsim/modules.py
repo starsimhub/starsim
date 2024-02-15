@@ -118,7 +118,7 @@ class Module(sc.prettyobj):
     @property
     def states(self):
         """
-        Return a flat collection of all states
+        Return a flat list of all states
 
         The base class returns all states that are contained in top-level attributes
         of the Module. If a Module stores states in a non-standard location (e.g.,
@@ -127,6 +127,13 @@ class Module(sc.prettyobj):
         overload this attribute to ensure that all states appear in here.
         """
         return [x for x in self.__dict__.values() if isinstance(x, ss.State)]
+
+    @property
+    def statesdict(self):
+        """
+        Return a flat dictionary (objdict) of all states
+        """
+        return sc.objdict({s.name:s for s in self.states})
 
     @property
     def rngs(self):

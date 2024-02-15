@@ -150,6 +150,7 @@ class Disease(ss.Module):
         else:
             for target, source in zip(target_uids, source_uids):
                 self.log.append(source, target, sim.year)
+        return
 
     def update_results(self, sim):
         """
