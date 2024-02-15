@@ -40,7 +40,7 @@ def check_dtype(dtype, default=None):
     return dtype
 
 
-class UIDArray(NDArrayOperatorsMixin):
+class UIDArray():
     """
     This is a class that allows indexing by UID but does not support dynamic growth
     It's kind of like a Pandas series but one that only supports a monotonically increasing
@@ -53,15 +53,69 @@ class UIDArray(NDArrayOperatorsMixin):
 
     __slots__ = ('values', '_uid_map', 'uid')
     
-    def __new__(cls, *args, **kwargs):
-        # print('hi -1')
-        return super().__new__(cls)
+    def __add__(self, other)               : return self.values.__add__(other)
+    def __sub__(self, other)               : return self.values.__sub__(other)
+    def __mul__(self, other)               : return self.values.__mul__(other)
+    def __matmul__(self, other)            : return self.values.__matmul__(other)
+    def __truediv__(self, other)           : return self.values.__truediv__(other)
+    def __floordiv__(self, other)          : return self.values.__floordiv__(other)
+    def __mod__(self, other)               : return self.values.__mod__(other)
+    def __divmod__(self, other)            : return self.values.__divmod__(other)
+    def __pow__(self, other, modulo=None)  : return self.values.__pow__(other, modulo=None)
+    def __lshift__(self, other)            : return self.values.__lshift__(other)
+    def __rshift__(self, other)            : return self.values.__rshift__(other)
+    def __and__(self, other)               : return self.values.__and__(other)
+    def __xor__(self, other)               : return self.values.__xor__(other)
+    def __or__(self, other)                : return self.values.__or__(other)
+    def __radd__(self, other)              : return self.values.__radd__(other)
+    def __rsub__(self, other)              : return self.values.__rsub__(other)
+    def __rmul__(self, other)              : return self.values.__rmul__(other)
+    def __rmatmul__(self, other)           : return self.values.__rmatmul__(other)
+    def __rtruediv__(self, other)          : return self.values.__rtruediv__(other)
+    def __rfloordiv__(self, other)         : return self.values.__rfloordiv__(other)
+    def __rmod__(self, other)              : return self.values.__rmod__(other)
+    def __rdivmod__(self, other)           : return self.values.__rdivmod__(other)
+    def __rpow__(self, other, modulo=None) : return self.values.__rpow__(other, modulo=None)
+    def __rlshift__(self, other)           : return self.values.__rlshift__(other)
+    def __rrshift__(self, other)           : return self.values.__rrshift__(other)
+    def __rand__(self, other)              : return self.values.__rand__(other)
+    def __rxor__(self, other)              : return self.values.__rxor__(other)
+    def __ror__(self, other)               : return self.values.__ror__(other)
+    def __iadd__(self, other)              : return self.values.__iadd__(other)
+    def __isub__(self, other)              : return self.values.__isub__(other)
+    def __imul__(self, other)              : return self.values.__imul__(other)
+    def __imatmul__(self, other)           : return self.values.__imatmul__(other)
+    def __itruediv__(self, other)          : return self.values.__itruediv__(other)
+    def __ifloordiv__(self, other)         : return self.values.__ifloordiv__(other)
+    def __imod__(self, other)              : return self.values.__imod__(other)
+    def __ipow__(self, other, modulo=None) : return self.values.__ipow__(other, modulo=None)
+    def __ilshift__(self, other)           : return self.values.__ilshift__(other)
+    def __irshift__(self, other)           : return self.values.__irshift__(other)
+    def __iand__(self, other)              : return self.values.__iand__(other)
+    def __ixor__(self, other)              : return self.values.__ixor__(other)
+    def __ior__(self, other)               : return self.values.__ior__(other)
+    def __neg__(self)                      : return self.values.__neg__()
+    def __pos__(self)                      : return self.values.__pos__()
+    def __abs__(self)                      : return self.values.__abs__()
+    def __invert__(self)                   : return self.values.__invert__()
+    def __complex__(self)                  : return self.values.__complex__()
+    def __int__(self)                      : return self.values.__int__()
+    def __float__(self)                    : return self.values.__float__()
+    def __index__(self)                    : return self.values.__index__()
+    def __round__(self, ndigits=None)      : return self.values.__round__(ndigits=None)
+    def __trunc__(self)                    : return self.values.__trunc__()
+    def __floor__(self)                    : return self.values.__floor__()
+    def __ceil__(self)                     : return self.values.__ceil__()
     
-    def __copy__(self):
-        cls = self.__class__
-        result = cls.__new__(cls)
-        result.__dict__.update(self.__dict__)
-        return result
+    # def __new__(cls, *args, **kwargs):
+    #     # print('hi -1')
+    #     return super().__new__(cls)
+    
+    # def __copy__(self):
+    #     cls = self.__class__
+    #     result = cls.__new__(cls)
+    #     result.__dict__.update(self.__dict__)
+    #     return result
 
     # def __deepcopy__(self, memo):
     #     from copy import deepcopy
