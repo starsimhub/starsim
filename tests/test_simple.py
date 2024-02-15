@@ -60,7 +60,7 @@ def test_simple_vax(do_plot=False):
         plt.figure()
         plt.plot(sim_base.yearvec[pi:], sim_base.results.sir.prevalence[pi:], label='Baseline')
         plt.plot(sim_intv.yearvec[pi:], sim_intv.results.sir.prevalence[pi:], label='Vax')
-        plt.axvline(x=2020, color='k', ls='--')
+        plt.axvline(x=2015, color='k', ls='--')
         plt.title('Prevalence')
         plt.legend()
         plt.show()
@@ -84,14 +84,14 @@ def test_parallel():
     pars = make_sim_pars()
     s1 = ss.Sim(pars)
     s2 = ss.Sim(pars)
-    s1, s2 = ss.parallel(s1, s2).sims
+    # s1, s2 = ss.parallel(s1, s2).sims
     # assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
     return s1, s2
 
 
 if __name__ == '__main__':
-    # sim1 = test_default()
-    # sim2 = test_simple()
+    sim1 = test_default()
+    sim2 = test_simple()
     sim_b, sim_i = test_simple_vax(do_plot=True)
-    # sim3 = test_components()
-    # s1, s2 = test_parallel()
+    sim3 = test_components()
+    s1, s2 = test_parallel()

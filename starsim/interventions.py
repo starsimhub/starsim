@@ -466,19 +466,22 @@ class BaseVaccination(Intervention):
         """
         Deliver the diagnostics by finding who's eligible, finding who accepts, and applying the product.
         """
-        ti = sc.findinds(self.timepoints, sim.ti)[0]
-        prob = self.prob[ti]  # Get the proportion of people who will be tested this timestep
-        is_eligible = self.check_eligibility(sim)  # Check eligibility
-        self.coverage_dist.kwds['p'] = prob
-        accept_uids = self.coverage_dist.filter(ss.true(is_eligible))
+        accept_uids = np.array([])
+        if sim.ti in self.timepoints:
 
-        if len(accept_uids):
-            self.product.administer(sim.people, accept_uids)
+            ti = sc.findinds(self.timepoints, sim.ti)[0]
+            prob = self.prob[ti]  # Get the proportion of people who will be tested this timestep
+            is_eligible = self.check_eligibility(sim)  # Check eligibility
+            self.coverage_dist.kwds['p'] = prob
+            accept_uids = self.coverage_dist.filter(ss.true(is_eligible))
 
-            # Update people's state and dates
-            self.vaccinated[accept_uids] = True
-            self.ti_vaccinated[accept_uids] = sim.ti
-            self.n_doses[accept_uids] += 1
+            if len(accept_uids):
+                self.product.administer(sim.people, accept_uids)
+
+                # Update people's state and dates
+                self.vaccinated[accept_uids] = True
+                self.ti_vaccinated[accept_uids] = sim.ti
+                self.n_doses[accept_uids] += 1
 
         return accept_uids
 
