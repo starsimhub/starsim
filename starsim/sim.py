@@ -310,7 +310,7 @@ class Sim(sc.prettyobj):
 
         # We also allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
         if self.pars.birth_rate is not None:
-            births = ss.births(pars={'birth_rate': self.pars.birth_rate})
+            births = ss.Births(pars={'birth_rate': self.pars.birth_rate})
             demographics += births
         if self.pars.death_rate is not None:
             background_deaths = ss.Deaths(pars={'death_rate': self.pars.death_rate})

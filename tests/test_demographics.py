@@ -23,7 +23,7 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, 
 
     if which == 'births':
         birth_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_births.csv')
-        births = ss.births(pars={'birth_rate': birth_rates})
+        births = ss.Births(pars={'birth_rate': birth_rates})
         demographics += births
 
     elif which == 'pregnancy':
