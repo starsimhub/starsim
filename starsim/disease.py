@@ -64,6 +64,7 @@ class Disease(ss.Module):
                 for k, v in self.pars.beta.items():
                     if sc.isnumber(v):
                         self.pars.beta[k] = [v, v]
+        return
 
     def set_initial_states(self, sim):
         """
@@ -174,12 +175,14 @@ class Infection(Disease):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.rel_sus     = ss.State('rel_sus', float, 1.0)
-        self.rel_sev     = ss.State('rel_sev', float, 1.0)
-        self.rel_trans   = ss.State('rel_trans', float, 1.0)
-        self.susceptible = ss.State('susceptible', bool, True)
-        self.infected = ss.State('infected', bool, False)
-        self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
+        self.add_states(
+            ss.State('susceptible', bool, True),
+            ss.State('infected', bool, False),
+            ss.State('rel_sus', float, 1.0),
+            ss.State('rel_sev', float, 1.0),
+            ss.State('rel_trans', float, 1.0),
+            ss.State('ti_infected', int, ss.INT_NAN),
+        )
         return
 
     @property
@@ -210,8 +213,10 @@ class Infection(Disease):
         Initialize results
         """
         super().init_results(sim)
-        self.results += ss.Result(self.name, 'prevalence', sim.npts, dtype=float, scale=False)
-        self.results += ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True)
+        self.results += [
+            ss.Result(self.name, 'prevalence', sim.npts, dtype=float, scale=False),
+            ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True),
+        ]
         return
 
     def _make_new_cases_singlerng(self, sim):
