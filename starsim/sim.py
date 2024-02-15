@@ -23,12 +23,19 @@ def set_numba_seed(value):
 class Sim(sc.prettyobj):
 
     def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, networks=None,
-                 connectors=None, interventions=None, analyzers=None, **kwargs):
+                 connectors=None, interventions=None, analyzers=None, copy_inputs=True, **kwargs):
+        
+        # Create a simple copying function
+        def copy(obj):
+            if obj is None or not copy_inputs:
+                return obj
+            else:
+                return sc.dcp(obj)
 
         # Set attributes
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
-        self.people = people  # People object
+        self.people = copy(people)  # People object
         self.results = ss.Results(module='sim')  # For storing results
         self.summary = None  # For storing a summary of the results
         self.initialized = False  # Whether initialization is complete
@@ -44,16 +51,16 @@ class Sim(sc.prettyobj):
 
         # Make default parameters (using values from parameters.py)
         self.pars = ss.make_pars()  # Start with default pars
-        self.pars.update_pars(sc.mergedicts(pars, kwargs))  # Update the parameters
+        self.pars.update_pars(sc.mergedicts(pars, kwargs, _copy=copy_inputs))  # Update the parameters
 
         # Placeholders for plug-ins: demographics, diseases, connectors, analyzers, and interventions
         # Products are not here because they are stored within interventions
-        self.demographics = ss.ndict(demographics, type=ss.BaseDemographics)
-        self.diseases = ss.ndict(diseases, type=ss.Disease)
-        self.networks = ss.ndict(networks, type=ss.Network)
-        self.connectors = ss.ndict(connectors, type=ss.Connector)
-        self.interventions = ss.ndict(interventions, type=ss.Intervention)
-        self.analyzers = ss.ndict(analyzers, type=ss.Analyzer)
+        self.demographics = ss.ndict(copy(demographics), type=ss.BaseDemographics)
+        self.diseases = ss.ndict(copy(diseases), type=ss.Disease)
+        self.networks = ss.ndict(copy(networks), type=ss.Network)
+        self.connectors = ss.ndict(copy(connectors), type=ss.Connector)
+        self.interventions = ss.ndict(copy(interventions), type=ss.Intervention)
+        self.analyzers = ss.ndict(copy(analyzers), type=ss.Analyzer)
 
         # Initialize the random number generator container
         self.rng_container = ss.RNGContainer()
