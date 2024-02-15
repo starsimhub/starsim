@@ -97,7 +97,7 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, 
         ax[0].plot(sim.yearvec, sim.results.n_alive, color='k')
         ax[0].set_title('Population')
 
-        ax[1].plot(sim.yearvec, 1000 * sim.results.background_deaths.cmr / dt, label='Simulated CMR')
+        ax[1].plot(sim.yearvec, 1000 * sim.results.deaths.cmr / dt, label='Simulated CMR')
         ax[1].scatter(cmr_data.Year, cmr_data.CMR, label='Data CMR')
         ax[1].set_title('CMR')
         ax[1].legend()

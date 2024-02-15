@@ -378,12 +378,12 @@ class Pregnancy(BaseDemographics):
         deliveries = self.pregnant & (self.ti_delivery <= sim.ti)
         self.pregnant[deliveries] = False
         self.postpartum[deliveries] = True
-        self.susceptible[deliveries] = False
+        self.fecund[deliveries] = False
 
         # Check for new women emerging from post-partum
         postpartum = ~self.pregnant & (self.ti_postpartum <= sim.ti)
         self.postpartum[postpartum] = False
-        self.susceptible[postpartum] = True
+        self.fecund[postpartum] = True
 
         # Maternal deaths
         maternal_deaths = ss.true(self.ti_dead <= sim.ti)
@@ -443,7 +443,7 @@ class Pregnancy(BaseDemographics):
         """
 
         # Change states for the newly pregnant woman
-        self.susceptible[uids] = False
+        self.fecund[uids] = False
         self.pregnant[uids] = True
         self.ti_pregnant[uids] = sim.ti
 
