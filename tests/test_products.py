@@ -20,8 +20,8 @@ def test_dx():
         ['recovered', 'positive', 0.30],
         ['recovered', 'negative', 0.70],
     ], columns=['state', 'result', 'probability'])
-    #dxdf['name'] = 'SIR Dx'
     dxdf['disease'] = 'sir'
+
     dx = ss.dx(dxdf)
     test = ss.campaign_triage(product=dx, prob=0.6, annual_prob=True, years=2025, eligibility=lambda sim: sim.people.alive)
     

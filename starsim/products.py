@@ -4,6 +4,7 @@ Define products
 
 import starsim as ss
 import sciris as sc
+import pandas as pd
 import numpy as np
 import scipy.stats as sps
 
@@ -37,13 +38,25 @@ class dx(Product):
 
         # Create placehold for multinomial sampling
         n_results = len(self.hierarchy)
-        #self.result_dist = sps.rv_discrete(values=(np.arange(n_results), 1/n_results*np.ones(n_results)))
-        self.result_dist = sps.multinomial(n=n_results, p = 1/n_results * np.ones(n_results))
+        #sps.rv_discrete --> rv_sample
+        #self.result_dist = sps.multinomial(n=1, p = 1/n_results * np.ones(n_results))
+        self.result_dist = {}
+        for disease in self.diseases:
+            for state in self.health_states:
+                self.result_dist[(disease, state)] = ss.ScipyDiscrete(values=(np.arange(n_results), 1/n_results*np.ones(n_results))) # values=(xk, pk) where pk is a placeholder to be updated later
         return
 
     @property
     def default_value(self):
         return len(self.hierarchy) - 1
+
+    def initialize(self, sim):
+        # Due to the dictionary structure of the results_dist, the underlying
+        # ScipyDiscrete distributions will not be initialized automatically.
+        for disease in self.diseases:
+            for state in self.health_states:
+                self.result_dist[(disease, state)].initialize(sim, self)
+        return
 
     def administer(self, sim, uids, return_format='dict'):
         """
@@ -54,7 +67,8 @@ class dx(Product):
         """
 
         # Pre-fill with the default value, which is set to be the last value in the hierarchy
-        results = sc.dataframe({'uids': uids, 'result': self.default_value})
+        #results = sc.dataframe({'uids': uids, 'result': self.default_value})
+        results = pd.Series(self.default_value, name='results', index=pd.MultiIndex.from_product([self.diseases, uids], names=['disease', 'uids']))
 
         df = self.df.pivot(index=['disease', 'state'], columns='result', values='probability')[self.hierarchy] #self.df.set_index(['disease', 'state', 'result']).unstack('result')['probability']
         for disease in self.diseases:
@@ -64,17 +78,22 @@ class dx(Product):
 
                 # Filter the dataframe to extract test results for people in this state
                 probs = df.loc[(disease, state)].values #df.loc[(disease, state), self.hierarchy].values
-                self.result_dist.pk = probs  # Overwrite distribution probabilities
+                self.result_dist[(disease, state)].set_values(pk=probs)  # Overwrite distribution probabilities
 
                 # Sort people into one of the possible result states and then update their overall results
-                this_result = self.result_dist.rvs(size=these_uids)
-                row_inds = results.uids.isin(these_uids)
-                results.loc[row_inds, 'result'] = np.minimum(this_result, results.loc[row_inds, 'result'])
+                this_result = self.result_dist[(disease, state)].rvs(size=these_uids)
+                #row_inds = results.uids.isin(these_uids)
+                #results.loc[row_inds, 'result'] = np.minimum(this_result, results.loc[row_inds, 'result'])
+                results.loc[(disease, these_uids)] = np.minimum(this_result, results.loc[(disease, these_uids)])
 
-            if return_format == 'dict':
-                output = {self.hierarchy[i]: results[results.result == i].uids.values for i in range(len(self.hierarchy))}
-            elif return_format == 'array':
-                output = results
+        if return_format == 'dict':
+            output = results.reset_index() \
+                .groupby(['disease', 'results'])['uids'] \
+                .apply(list) \
+                .reset_index() \
+                .replace({'results': {i:h for i, h in enumerate(self.hierarchy)}})
+        else:
+            output = results
 
         return output
 

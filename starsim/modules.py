@@ -50,8 +50,6 @@ class Module(sc.prettyobj):
             if isinstance(value, rv_frozen):
                 self.pars[key] = ss.ScipyDistribution(value, f'{self.name}_{self.label}_{key}')
                 self.pars[key].initialize(sim, self)
-            #elif isinstance(value, ss.rate):
-            #    self.pars[key].initialize(sim, f'{self.name}_{self.label}_{key}')
 
         for key, value in self.__dict__.items():
             if isinstance(value, rv_frozen):

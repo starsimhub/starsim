@@ -10,7 +10,7 @@ import scipy.optimize as spo
 import scipy.stats as sps
 import scipy.spatial as spsp
 import pandas as pd
-from scipy.stats._distn_infrastructure import rv_frozen
+from scipy.stats._distn_infrastructure import rv_frozen, rv_sample
 import scipy.stats as sps
 
 
@@ -682,7 +682,7 @@ class hpv_network(mf):
 
     def validate_pars(self):
         for par in ['partner_dist', 'act_dist', 'duration_dist', 'participation_dist']:
-            if not isinstance(self.pars[par], rv_frozen):
+            if not isinstance(self.pars[par], (rv_frozen, rv_sample)):
                 raise Exception(f'Network parameter {par} must be an instance of a scipy frozen distribution')
 
     def update_pars(self, pars):

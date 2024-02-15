@@ -45,6 +45,8 @@ class RoutineDelivery(Intervention):
 
     def initialize(self, sim):
 
+        super().initialize(sim)
+
         # Validate inputs
         if (self.years is not None) and (self.start_year is not None or self.end_year is not None):
             errormsg = 'Provide either a list of years or a start year, not both.'
@@ -102,6 +104,8 @@ class CampaignDelivery(Intervention):
         return
 
     def initialize(self, sim):
+        super().initialize(sim)
+
         # Decide whether to apply the intervention at every timepoint throughout the year, or just once.
         if self.interpolate:
             self.timepoints = np.isin(np.floor(sim.yearvec), np.floor(self.years)).nonzero()[-1]
