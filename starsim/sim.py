@@ -253,19 +253,30 @@ class Sim(sc.prettyobj):
 
         if plugin_name is None: plugin_name = plugin_class.__name__.lower()
 
+        # Get lower-case names of all subclasses
+        known_plugins = [n.__name__.lower() for n in ss.all_subclasses(plugin_class)]
+
         # Figure out if it's in the sim pars or provided directly
         attr_plugins = getattr(self, plugin_name)  # Get any plugins that have been provided directly
         if attr_plugins is None or len(attr_plugins) == 0:  # None have been provided directly
-            if self.pars.get(plugin_name) and len(
-                    self.pars[plugin_name]):  # See if they've been provided in the pars dict
-                plugins = ss.ndict(self.pars[plugin_name])
+
+            # See if they've been provided in the pars dict
+            if self.pars.get(plugin_name):
+
+                par_plug = self.pars[plugin_name]
+
+                # String: convert to ndict
+                if isinstance(par_plug, str):
+                    plugins = ss.ndict(dict(name=par_plug))
+
+                # List: convert to ndict
+                elif isinstance(par_plug, list) and len(par_plug):
+                    plugins = ss.ndict(par_plug)
+
             else:  # Not provided directly or in pars
                 plugins = {}
         else:
             plugins = attr_plugins
-
-        # Convert
-        known_plugins = [n.__name__.lower() for n in ss.all_subclasses(plugin_class)]
 
         processed_plugins = sc.autolist()
         for plugin in plugins.values():

@@ -90,8 +90,8 @@ def test_gavi(disease):
 
 if __name__ == '__main__':
     ss.options(multirng=False)
-    # sim1 = test_sir()
-    # sim2 = test_ncd()
-    for disease in ['measles']:
+    sim1 = test_sir()
+    sim2 = test_ncd()
+    for disease in ['cholera', 'measles']:
         sim = test_gavi(disease)
     plt.show()
