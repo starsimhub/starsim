@@ -18,6 +18,7 @@ Version 0.2.0 (2024-02-15)
 - Added ``MultiSim``
 - Added cholera, measles, and Ebola
 - Added vaccination
+- More flexible inputs
 - *GitHub info*: PR `235 <https://github.com/amath-idm/stisim/pull/235>`_
 
 
