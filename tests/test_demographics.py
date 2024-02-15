@@ -78,12 +78,12 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, 
 
         print("Check we don't have more births than pregnancies")
         assert sum(sim.results.pregnancy.births) <= sum(sim.results.pregnancy.pregnancies)
-        print(f'✓ (births <= pregnancies)')
+        print('✓ (births <= pregnancies)')
 
         if dt == 1:
             print("Checking that births equal pregnancies with dt=1")
             assert np.array_equal(sim.results.pregnancy.pregnancies, sim.results.pregnancy.births)
-            print(f'✓ (births == pregnancies)')
+            print('✓ (births == pregnancies)')
 
     print("Check final pop size within 5% of data")
     assert np.isclose(data.n_alive.values[-1], sim.results.n_alive[-1], rtol=0.05)
