@@ -6,11 +6,12 @@ Original version by @alina-muellenmeister, @domdelport, and @RomeshA
 
 import numpy as np
 import starsim as ss
+from starsim.diseases.sir import SIR
 
 __all__ = ['Measles']
 
 
-class Measles(ss.diseases.SIR):
+class Measles(SIR):
 
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
         """ Initialize with parameters """
