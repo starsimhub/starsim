@@ -313,7 +313,7 @@ class Sim(sc.prettyobj):
             births = ss.births(pars={'birth_rate': self.pars.birth_rate})
             demographics += births
         if self.pars.death_rate is not None:
-            background_deaths = ss.background_deaths(pars={'death_rate': self.pars.death_rate})
+            background_deaths = ss.Deaths(pars={'death_rate': self.pars.death_rate})
             demographics += background_deaths
 
         # Iterate over demographic modules and initialize them
