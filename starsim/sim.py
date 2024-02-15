@@ -269,8 +269,8 @@ class Sim(sc.prettyobj):
                 if isinstance(par_plug, str):
                     plugins = ss.ndict(dict(name=par_plug))
 
-                # List: convert to ndict
-                elif isinstance(par_plug, list) and len(par_plug):
+                # List or dict: convert to ndict
+                elif sc.isiterable(par_plug) and len(par_plug):
                     plugins = ss.ndict(par_plug)
 
             else:  # Not provided directly or in pars
