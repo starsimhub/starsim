@@ -12,6 +12,8 @@ class Gonorrhea(ss.Infection):
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
 
         # States additional to the default disease states (see base class)
+        # Additional states dependent on parameter values, e.g. self.p_symp?
+        # These might be useful for connectors to target, e.g. if HIV reduces p_clear
         self.add_states(
             ss.State('symptomatic', bool, False),
             ss.State('ti_clearance', int, ss.INT_NAN),
@@ -34,26 +36,24 @@ class Gonorrhea(ss.Infection):
         )
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
-
-        # Additional states dependent on parameter values, e.g. self.p_symp?
-        # These might be useful for connectors to target, e.g. if HIV reduces p_clear
-
         return
 
     def init_results(self, sim):
         """
         Initialize results
         """
-        super().init_results(sim,
+        super().init_results(sim)
+        self.results += [
             ss.Result(self.name, 'n_symptomatic', sim.npts, dtype=int),
             ss.Result(self.name, 'new_clearances', sim.npts, dtype=int),
-        )
+        ]
         return
 
     def update_results(self, sim):
+        ti = sim.ti
         super(Gonorrhea, self).update_results(sim)
-        self.results['n_symptomatic'][sim.ti] = np.count_nonzero(self.symptomatic)
-        self.results['new_clearances'][sim.ti] = np.count_nonzero(self.ti_clearance == sim.ti)
+        self.results.n_symptomatic[ti] = self.symptomatic.count()
+        self.results.new_clearances[ti] = np.count_nonzero(self.ti_clearance == ti)
         return
 
     def update_pre(self, sim):
