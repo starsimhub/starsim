@@ -373,12 +373,14 @@ class Sim(sc.prettyobj):
                 intervention = intervention()  # Convert from a class to an instance of a class
             if isinstance(intervention, ss.Intervention):
                 intervention.initialize(self)
-                self.interventions += intervention
             elif callable(intervention):
-                self.interventions += intervention
+                pass # TODO: check if this fails with a plain function (it should?)
+                # self.interventions += intervention 
             else:
                 errormsg = f'Intervention {intervention} does not seem to be a valid intervention: must be a function or Intervention subclass'
                 raise TypeError(errormsg)
+            if intervention.name not in self.interventions:
+                self.interventions += intervention
 
             # Add the intervention parameters and results into the Sim's dicts
             self.pars[intervention.name] = intervention.pars
