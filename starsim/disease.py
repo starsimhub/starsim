@@ -415,6 +415,11 @@ class Infection(Disease):
 
     def make_new_cases(self, sim):
         """ Add new cases of module, through transmission, incidence, etc. """
+        if not sim.networks:
+            warnmsg = f'Disease {self.name} does not transmit without a network.'
+            if sim.ti == 0: ss.warn(warnmsg, die=False)
+            return
+
         if not ss.options.multirng:
             # Determine new cases for singlerng
             new_cases, sources = self._make_new_cases_singlerng(sim)
