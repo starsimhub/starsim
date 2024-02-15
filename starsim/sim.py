@@ -394,6 +394,7 @@ class Sim(sc.prettyobj):
             # If there's a product module present, initialize and add it
             if hasattr(intervention, 'product') and isinstance(intervention.product, ss.Product):
                 intervention.product.initialize(self)
+
                 self.people.add_module(intervention.product)
                 for rng in intervention.product.rngs:
                     rng.initialize(self.rng_container, self.people.slot)

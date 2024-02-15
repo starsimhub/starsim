@@ -60,3 +60,32 @@ class SIR(ss.Infection):
         self.infected[uids] = False
         self.recovered[uids] = False
         return
+
+
+# %% Interventions
+__all__ += ['sir_vaccine']
+
+
+class sir_vaccine(ss.vx):
+    """
+    Create a vaccine product that changes susceptible people to recovered (i.e., perfect immunity)
+    """
+    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
+        pars = ss.omerge({
+            'efficacy': 0.9,
+        }, pars)
+
+        par_dists = ss.omerge({
+            'efficacy': ss.bernoulli
+        }, par_dists)
+
+        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+
+        return
+
+    def administer(self, people, uids):
+        eff_vacc_uids = self.pars.efficacy.filter(uids)
+        people.sir.susceptible[eff_vacc_uids] = False
+        people.sir.recovered[eff_vacc_uids] = True
+        return
+
