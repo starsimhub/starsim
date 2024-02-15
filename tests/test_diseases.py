@@ -6,10 +6,10 @@ Run tests of disease models
 import starsim as ss
 import matplotlib.pyplot as plt
 import scipy.stats as sps
-import numpy as np
+import sciris as sc
 
 test_run = True
-n_agents = [2_000, 10_000][test_run]
+n_agents = [10_000, 2_000][test_run]
 
 
 def test_sir():
@@ -76,16 +76,24 @@ def test_ncd():
     return sim
 
 
-def test_cholera():
+def test_gavi():
     ss.options(multirng=False)
-    sim = ss.Sim(n_agents=n_agents, networks=ss.random(), diseases=ss.Cholera())
-    sim.run()
-    return sim
+    sims = sc.autolist()
+    for disease in ['cholera', 'measles', 'ebola']:
+        pars = dict(
+            diseases=disease,
+            n_agents=n_agents,
+            networks='random',
+        )
+        sim = ss.Sim(pars)
+        sim.run()
+        sims += sim
+    return sims
 
 
 if __name__ == '__main__':
     ss.options(multirng=False)
     sim1 = test_sir()
     sim2 = test_ncd()
-    sim3 = test_cholera()
+    sims = test_gavi()
     plt.show()
