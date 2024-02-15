@@ -17,18 +17,20 @@ class NCD(ss.Disease):
     mortality.
     """
     def __init__(self, pars=None):
-        default_pars = {
-            'initial_risk': ss.bernoulli(p=0.3), # Initial prevalence of risk factors
+        default_pars = dict(
+            initial_risk = ss.bernoulli(p=0.3), # Initial prevalence of risk factors
             #'affection_rate': ss.rate(p=0.1), # Instantaneous rate of acquisition applied to those at risk (units are acquisitions / year)
-            'dur_risk': ss.expon(scale=10),
-            'prognosis': ss.weibull_min(c=2, scale=5), # Time in years between first becoming affected and death
-        }
+            dur_risk = ss.expon(scale=10),
+            prognosis = ss.weibull_min(c=2, scale=5), # Time in years between first becoming affected and death
+        )
 
         super().__init__(ss.omerge(default_pars, pars))
-        self.at_risk      = ss.State('at_risk', bool, False)
-        self.affected     = ss.State('affected', bool, False)
-        self.ti_affected  = ss.State('ti_affected', int, ss.INT_NAN)
-        self.ti_dead      = ss.State('ti_dead', int, ss.INT_NAN)
+        self.add_states(
+            ss.State('at_risk', bool, False),
+            ss.State('affected', bool, False),
+            ss.State('ti_affected', int, ss.INT_NAN),
+            ss.State('ti_dead', int, ss.INT_NAN),
+        )
         return
 
     @property
@@ -68,14 +70,18 @@ class NCD(ss.Disease):
         Initialize results
         """
         super().init_results(sim)
-        self.results += ss.Result(self.name, 'n_not_at_risk', sim.npts, dtype=int)
-        self.results += ss.Result(self.name, 'prevalence', sim.npts, dtype=float)
-        self.results += ss.Result(self.name, 'new_deaths', sim.npts, dtype=int)
+        self.results += [
+            ss.Result(self.name, 'n_not_at_risk', sim.npts, dtype=int),
+            ss.Result(self.name, 'prevalence', sim.npts, dtype=float),
+            ss.Result(self.name, 'new_deaths', sim.npts, dtype=int),
+        ]
         return
 
     def update_results(self, sim):
         super().update_results(sim)
-        self.results['n_not_at_risk'][sim.ti] = np.count_nonzero(self.not_at_risk & sim.people.alive)
-        self.results['prevalence'][sim.ti] = np.count_nonzero(self.affected & sim.people.alive)/np.count_nonzero(sim.people.alive)
-        self.results['new_deaths'][sim.ti] = np.count_nonzero(self.ti_dead == sim.ti)
+        ti = sim.ti
+        alive = sim.people.alive
+        self.results.n_not_at_risk[ti] = np.count_nonzero(self.not_at_risk & alive)
+        self.results.prevalence[ti]    = np.count_nonzero(self.affected & alive)/alive.count()
+        self.results.new_deaths[ti]    = np.count_nonzero(self.ti_dead == ti)
         return
