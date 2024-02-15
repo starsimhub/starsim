@@ -74,8 +74,8 @@ def test_parallel():
 
 
 if __name__ == '__main__':
-    # sim1 = test_default()
-    # sim2 = test_simple()
+    sim1 = test_default()
+    sim2 = test_simple()
     sim = test_simple_vax()
-    # sim3 = test_components()
-    # s1, s2 = test_parallel()
+    sim3 = test_components()
+    s1, s2 = test_parallel()
