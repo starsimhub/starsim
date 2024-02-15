@@ -19,8 +19,11 @@ class RandomNetwork(Network):
         :param dynamic: If True, regenerate contacts each timestep
         """
         super().__init__(**kwargs)
+        self.name = 'RandomNetwork' # Otherwise will default to "randomnetwork"
         if isinstance(n_contacts, rv_frozen):
             self.n_contacts = ss.ScipyDistribution(n_contacts, f'{self.__class__.__name__}_{self.name}_{self.label}')
+        else:
+            self.n_contacts = n_contacts # An integer, homogeneous for all individuals
 
         self.dynamic = dynamic
 

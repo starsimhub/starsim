@@ -10,7 +10,7 @@ import numpy as np
 
 def test_sir():
     ppl = ss.People(10000)
-    ppl.networks = ss.ndict(ss.RandomNetwork(n_contacts=sps.poisson(mu=4)))
+    ppl.networks = ss.RandomNetwork(n_contacts=4)
 
     sir_pars = {
         'dur_inf': sps.norm(loc=10), # Override the default distribution
@@ -23,7 +23,7 @@ def test_sir():
     # Or why not put a lambda here for fun!
     sir.pars['dur_inf'].kwds['loc'] = lambda self, sim, uids: sim.people.age[uids]/10
 
-    sir.pars['beta'] = {'randomnetwork': 0.1}
+    sir.pars['beta'] = {'RandomNetwork': 0.1}
     sim = ss.Sim(people=ppl, diseases=sir)
     sim.run()
 
