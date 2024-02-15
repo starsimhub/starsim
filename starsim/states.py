@@ -70,6 +70,18 @@ class UIDArray(NDArrayOperatorsMixin):
         df = self.to_df()
         return df.__repr__()
     
+    def copy(self):
+        new = self.values.copy()
+        return UIDArray(values=new, uid=self.uid, uid_map=self._uid_map)
+
+    def __copy__(self):
+        new = self.values.copy()
+        return UIDArray(values=new, uid=self.uid, uid_map=self._uid_map)
+    
+    def __deepcopy__(self, *args, **kwargs):
+        new = self.values.__deepcopy__(*args, **kwargs)
+        return UIDArray(values=new, uid=self.uid.copy(), uid_map=self._uid_map.copy())
+    
     def to_df(self):
         """ Convert to a dataframe """
         df = sc.dataframe({'Quantity':self.values.T}, index=self.uid)
@@ -308,6 +320,21 @@ class ArrayView(NDArrayOperatorsMixin):
         self._view = None  # The view corresponding to what is actually accessible (length equal to n)
         self._map_arrays()
         return
+
+    def copy(self):
+        new = ArrayView(self._data.dtype, self.default)
+        for k in ['n', '_data', '_view']:
+            new.__dict__[k] = self.__dict__[k]
+        return new
+
+    def __copy__(self):
+        return self.copy()
+    
+    def __deepcopy__(self, *args, **kwargs):
+        new = ArrayView(self._data.dtype, self.default)
+        for k in ['n', '_data', '_view']:
+            new.__dict__[k] = self.__dict__[k].__deepcopy__(*args, **kwargs)
+        return new
 
     @property
     def _s(self):

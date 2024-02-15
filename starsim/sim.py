@@ -502,7 +502,7 @@ class Sim(sc.prettyobj):
         T = sc.timer()
         if not self.initialized:
             self.initialize()
-            self._orig_pars = sc.dcp(self.pars)  # Create a copy of the parameters to restore after the run
+            self._orig_pars = sc.dcp(self.pars, die=False)  # Create a copy of the parameters to restore after the run # TODO: should be die=True, but fails
 
         if verbose is None:
             verbose = self.pars['verbose']
