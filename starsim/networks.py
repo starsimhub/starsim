@@ -312,9 +312,9 @@ class Networks(ss.ndict):
 
 
 class DynamicNetwork(Network):
-    def __init__(self, pars=None, key_dict=None):
+    def __init__(self, pars=None, key_dict=None, **kwargs):
         key_dict = ss.omerge({'dur': ss_float_}, key_dict)
-        super().__init__(pars, key_dict=key_dict)
+        super().__init__(pars, key_dict=key_dict, **kwargs)
 
     def end_pairs(self, people):
         dt = people.dt
@@ -328,9 +328,9 @@ class DynamicNetwork(Network):
 
 class SexualNetwork(Network):
     """ Base class for all sexual networks """
-    def __init__(self, pars=None, key_dict=None):
+    def __init__(self, pars=None, key_dict=None, **kwargs):
         key_dict = ss.omerge({'acts': ss_int_}, key_dict)
-        super().__init__(pars, key_dict=key_dict)
+        super().__init__(pars, key_dict=key_dict, **kwargs)
         self.debut = ss.State('debut', float, default=0)
         return
 
@@ -451,7 +451,7 @@ class MSMNet(SexualNetwork, DynamicNetwork):
     A network that randomly pairs males
     """
 
-    def __init__(self, pars=None, key_dict=None):
+    def __init__(self, pars=None, key_dict=None, **kwargs):
         pars = ss.omergeleft(pars,
             duration_dist = ss.lognorm_mean(mean=15, stdev=15),
             participation_dist = ss.bernoulli(p=0.1),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
@@ -459,7 +459,7 @@ class MSMNet(SexualNetwork, DynamicNetwork):
             acts = ss.lognorm_mean(mean=80, stdev=20),
             rel_part_rates = 1.0,
         )
-        DynamicNetwork.__init__(self, key_dict)
+        DynamicNetwork.__init__(self, key_dict, **kwargs)
         SexualNetwork.__init__(self, pars, key_dict)
         return
 
@@ -637,16 +637,16 @@ class StaticNet(Network):
 
     """
 
-    def __init__(self, graph, **kwargs):
+    def __init__(self, graph, pars=None, **kwargs):
         self.graph = graph
-        self.kwargs = kwargs
-        super().__init__()
+        self.pars = ss.omerge(pars)
+        super().__init__(**kwargs)
         return
 
     def initialize(self, sim):
         popsize = sim.pars['n_agents']
         if callable(self.graph):
-            self.graph = self.graph(n=popsize, **self.kwargs)
+            self.graph = self.graph(n=popsize, **self.pars)
         self.validate_pop(popsize)
         super().initialize(sim)
         self.get_contacts()
@@ -674,20 +674,21 @@ class StaticNet(Network):
 class RandomNet(DynamicNetwork):
     """ Random connectivity between agents """
 
-    def __init__(self, pars=None, par_dists=None, key_dict=None):
+    def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
         """ Initialize """
         pars = ss.omerge({
             'n_contacts': 15,  # Distribution or int. If int, interpreted as the mean of the dist listed in par_dists
             'dur': 1,
         }, pars)
 
-        DynamicNetwork.__init__(self, pars, key_dict)
+        DynamicNetwork.__init__(self, pars=pars, key_dict=key_dict, **kwargs)
 
         return
 
     def initialize(self, sim):
         super().initialize(sim)
         self.add_pairs(sim.people)
+        return
 
     @staticmethod
     @nb.njit(cache=True)
@@ -758,7 +759,7 @@ class RandomNet(DynamicNetwork):
 
 
 class HPVNet(MFNet):
-    def __init__(self, pars=None, par_dists=None, key_dict=None):
+    def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
         pars = ss.omergeleft(pars,
             duration = 15,
             participation = 0.9,
@@ -788,7 +789,7 @@ class HPVNet(MFNet):
         DynamicNetwork.__init__(self, key_dict)
         SexualNetwork.__init__(self, pars, key_dict)
 
-        super().__init__(pars, key_dict=key_dict)
+        super().__init__(pars, key_dict=key_dict, **kwargs)
 
         self.get_layer_probs()
 

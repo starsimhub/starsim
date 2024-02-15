@@ -271,6 +271,8 @@ class Sim(sc.prettyobj):
 
                 # List or dict: convert to ndict
                 elif sc.isiterable(par_plug) and len(par_plug):
+                    if isinstance(par_plug, dict) and 'type' in par_plug and 'name' not in par_plug:
+                        par_plug['name'] = par_plug['type'] # TODO: simplify/remove this
                     plugins = ss.ndict(par_plug)
 
             else:  # Not provided directly or in pars
