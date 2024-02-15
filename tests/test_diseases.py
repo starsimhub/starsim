@@ -79,7 +79,7 @@ def test_ncd():
 def test_gavi():
     ss.options(multirng=False)
     sims = sc.autolist()
-    for disease in ['ebola']:  # 'cholera', 'measles',
+    for disease in ['cholera', 'measles', 'ebola']:
         pars = dict(
             diseases=disease,
             n_agents=n_agents,
