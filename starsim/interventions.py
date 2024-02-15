@@ -360,12 +360,6 @@ class BaseTreatment(Intervention):
         Intervention.initialize(self, sim)
         self.outcomes = {k: np.array([], dtype=int) for k in ['unsuccessful', 'successful']} # Store outcomes on each timestep
 
-    def check_eligibility(self, sim):
-        """
-        Check people's eligibility for treatment
-        """
-        raise NotImplementedError
-
     def get_accept_inds(self, sim):
         """
         Get indices of people who will acccept treatment; these people are then added to a queue or scheduled for receiving treatment
