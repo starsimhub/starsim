@@ -284,7 +284,7 @@ class Sim(sc.prettyobj):
             if not isinstance(plugin, plugin_class):
 
                 if isinstance(plugin, dict):
-                    ptype = plugin.get('type') or plugin.get('name')
+                    ptype = (plugin.get('type') or plugin.get('name') or '').lower()
                     name = plugin.get('name') or ptype
                     if ptype in known_plugins:
                         # Make an instance of the requested plugin
@@ -292,8 +292,8 @@ class Sim(sc.prettyobj):
                         pclass = known_plugins[ptype]
                         plugin = pclass(name=name, pars=plugin_pars) # TODO: does this handle par_dists, etc?
                     else:
-                        errormsg = (f'Could not convert {plugin} to an instance of class {plugin_name}. Try using lower'
-                                    f'case or specifying it directly rather than as a dictionary.')
+                        errormsg = (f'Could not convert {plugin} to an instance of class {plugin_name}.'
+                                    f'Try specifying it directly rather than as a dictionary.')
                         raise ValueError(errormsg)
                 else:
                     errormsg = (

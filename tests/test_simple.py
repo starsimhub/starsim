@@ -55,7 +55,7 @@ def test_simple_vax():
 def test_components():
     """ Create, run, and plot a sim by assembling components """
     people = ss.People(n_agents=n_agents)
-    network = ss.networks.random(pars=dict(n_contacts=4))
+    network = ss.RandomNet(pars=dict(n_contacts=4))
     sir = ss.SIR(pars=dict(dur_inf=10, beta=0.1))
     sim = ss.Sim(diseases=sir, people=people, networks=network)
     sim.run()
