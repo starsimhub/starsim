@@ -19,8 +19,39 @@ class Analyzer(ss.Module):
 
 class Intervention(ss.Module):
 
+    def __init__(self, eligibility=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.eligibility = eligibility
+        return
+
     def __call__(self, *args, **kwargs):
         return self.apply(*args, **kwargs)
+
+    def _parse_product(self, product):
+        """
+        Parse the product input
+        """
+        if isinstance(product, ss.Product):  # No need to do anything
+            self.product = product
+        elif isinstance(product, str):
+            self.product = self._parse_product_str(product)
+        else:
+            errormsg = f'Cannot understand {product} - please provide it as a Product.'
+            raise ValueError(errormsg)
+        return
+
+    def _parse_product_str(self, product):
+        raise NotImplementedError
+
+    def check_eligibility(self, sim):
+        """
+        Return an array of indices of agents eligible for screening at time t
+        """
+        if self.eligibility is not None:
+            is_eligible = self.eligibility(sim)
+        else:
+            is_eligible = sim.people.alive  # Probably not required
+        return is_eligible
 
     def apply(self, sim, *args, **kwargs):
         raise NotImplementedError
@@ -154,22 +185,6 @@ class BaseTest(Intervention):
         self.screens = ss.State('screens', int, 0)
         self.ti_screened = ss.State('ti_screened', int, ss.INT_NAN)
         return
-
-    def _parse_product(self, product):
-        """
-        Parse the product input
-        """
-        if isinstance(product, ss.Product):  # No need to do anything
-            self.product = product
-        elif isinstance(product, str):
-            self.product = self._parse_product_str(product)
-        else:
-            errormsg = f'Cannot understand {product} - please provide it as a Product.'
-            raise ValueError(errormsg)
-        return
-
-    def _parse_product_str(self, product):
-        raise NotImplementedError
 
     def initialize(self, sim):
         Intervention.initialize(self, sim)
@@ -343,31 +358,9 @@ class BaseTreatment(Intervention):
         self._parse_product(product)
         self.coverage_dist = ss.bernoulli(p=0)  # Placeholder
 
-    def _parse_product(self, product):
-        """
-        Parse the product input
-        """
-        if isinstance(product, ss.Product):  # No need to do anything
-            self.product = product
-        elif isinstance(product, str):  # Try to find it in the list of defaults
-            self.product = self._parse_product_str(product)
-        else:
-            errormsg = f'Cannot understand {product} - please provide it as a Product.'
-            raise ValueError(errormsg)
-        return
-
-    def _parse_product_str(self, product):
-        raise NotImplementedError
-
     def initialize(self, sim):
         Intervention.initialize(self, sim)
         self.outcomes = {k: np.array([], dtype=int) for k in ['unsuccessful', 'successful']} # Store outcomes on each timestep
-
-    def check_eligibility(self, sim):
-        """
-        Check people's eligibility for treatment
-        """
-        raise NotImplementedError
 
     def get_accept_inds(self, sim):
         """
@@ -440,4 +433,87 @@ class treat_num(BaseTreatment):
         treat_inds = BaseTreatment.apply(self, sim) # Apply method from BaseTreatment class
         self.queue = [e for e in self.queue if e not in treat_inds] # Recreate the queue, removing people who were treated
         return treat_inds
+
+
+
+#%% Vaccination
+
+
+__all__ += ['BaseVaccination', 'routine_vx', 'campaign_vx']
+
+
+class BaseVaccination(Intervention):
+    """
+    Base vaccination class for determining who will receive a vaccine.
+
+    Args:
+         product        (str/Product)   : the vaccine to use
+         prob           (float/arr)     : annual probability of eligible population getting vaccinated
+         eligibility    (inds/callable) : indices OR callable that returns inds
+         label          (str)           : the name of vaccination strategy
+         kwargs         (dict)          : passed to Intervention()
+    """
+    def __init__(self, product=None, prob=None, label=None, **kwargs):
+        Intervention.__init__(self, **kwargs)
+        self.prob = sc.promotetoarray(prob)
+        self.label = label
+        self._parse_product(product)
+        self.vaccinated = ss.State('vaccinated', bool, False)
+        self.n_doses = ss.State('doses', int, 0)
+        self.ti_vaccinated = ss.State('ti_vaccinated', int, ss.INT_NAN)
+
+    def apply(self, sim):
+        """
+        Deliver the diagnostics by finding who's eligible, finding who accepts, and applying the product.
+        """
+        ti = sc.findinds(self.timepoints, sim.ti)[0]
+        prob = self.prob[ti]  # Get the proportion of people who will be tested this timestep
+        is_eligible = self.check_eligibility(sim)  # Check eligibility
+        self.coverage_dist.kwds['p'] = prob
+        accept_uids = self.coverage_dist.filter(ss.true(is_eligible))
+
+        if len(accept_uids):
+            self.product.administer(sim.people, accept_uids)
+
+            # Update people's state and dates
+            self.vaccinated[accept_uids] = True
+            self.ti_vaccinated[accept_uids] = sim.ti
+            self.n_doses[accept_uids] += 1
+
+        return accept_uids
+
+
+class routine_vx(BaseVaccination, RoutineDelivery):
+    """
+    Routine vaccination - an instance of base vaccination combined with routine delivery.
+    See base classes for a description of input arguments.
+    """
+
+    def __init__(self, product=None, prob=None, eligibility=None,
+                 start_year=None, end_year=None, years=None, **kwargs):
+
+        BaseVaccination.__init__(self, product=product, eligibility=eligibility, **kwargs)
+        RoutineDelivery.__init__(self, prob=prob, start_year=start_year, end_year=end_year, years=years)
+
+    def initialize(self, sim):
+        RoutineDelivery.initialize(self, sim)  # Initialize this first, as it ensures that prob is interpolated properly
+        BaseVaccination.initialize(self, sim)  # Initialize this next
+
+
+class campaign_vx(BaseVaccination, CampaignDelivery):
+    """
+    Campaign vaccination - an instance of base vaccination combined with campaign delivery.
+    See base classes for a description of input arguments.
+    """
+
+    def __init__(self, product=None, prob=None, eligibility=None,
+                 years=None, interpolate=True, **kwargs):
+
+        BaseVaccination.__init__(self, product=product, eligibility=eligibility, **kwargs)
+        CampaignDelivery.__init__(self, prob=prob, years=years, interpolate=interpolate)
+
+    def initialize(self, sim):
+        CampaignDelivery.initialize(self, sim) # Initialize this first, as it ensures that prob is interpolated properly
+        BaseVaccination.initialize(self, sim) # Initialize this next
+
 

@@ -43,6 +43,15 @@ def test_simple():
     return sim
 
 
+def test_simple_vax():
+    """ Create and run a sim with vaccination """
+    pars = make_sim_pars()
+    sim = ss.Sim(pars, interventions=ss.routine_vx(prob=0.5, product=ss.sir_vaccine()))
+    sim.run()
+    sim.plot()
+    return sim
+
+
 def test_components():
     """ Create, run, and plot a sim by assembling components """
     people = ss.People(n_agents=n_agents)
@@ -65,7 +74,8 @@ def test_parallel():
 
 
 if __name__ == '__main__':
-    # sim1 = test_default()
+    sim1 = test_default()
     sim2 = test_simple()
-    # sim3 = test_components()
-    # s1, s2 = test_parallel()
+    sim = test_simple_vax()
+    sim3 = test_components()
+    s1, s2 = test_parallel()

@@ -7,7 +7,7 @@ import sciris as sc
 import numpy as np
 
 
-__all__ = ['Product', 'dx', 'tx']
+__all__ = ['Product', 'dx', 'tx', 'vx']
 
 
 class Product(ss.Module):
@@ -131,3 +131,20 @@ class tx(Product):
             output = tx_successful
 
         return output
+
+
+class vx(Product):
+    """ Vaccine product """
+    def __init__(self, diseases=None, pars=None, par_dists=None, *args, **kwargs):
+        pars = ss.omerge({}, pars)
+        par_dists = ss.omerge({}, par_dists)
+        super().__init__(pars, par_dists, *args, **kwargs)
+        self.diseases = sc.tolist(diseases)
+
+    def administer(self, people, uids):
+        """ Apply the vaccine to the requested uids. """
+        pass
+
+
+
+
