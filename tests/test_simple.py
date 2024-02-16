@@ -45,12 +45,15 @@ def test_simple():
 
 def test_simple_vax(do_plot=False):
     """ Create and run a sim with vaccination """
+    ss.set_seed(1)
     pars = make_sim_pars()
-    sim_intv = ss.Sim(pars, interventions=ss.routine_vx(start_year=2015, prob=0.5, product=ss.sir_vaccine()))
-    sim_intv.run()
-
-    sim_base = ss.Sim(pars)
+    sim_base = ss.Sim(pars=pars)
     sim_base.run()
+
+    ss.set_seed(1)
+    pars = make_sim_pars()
+    sim_intv = ss.Sim(pars=pars, interventions=ss.routine_vx(start_year=2015, prob=0.5, product=ss.sir_vaccine()))
+    sim_intv.run()
 
     # Check plots
     if do_plot:
@@ -90,8 +93,8 @@ def test_parallel():
 
 
 if __name__ == '__main__':
-    sim1 = test_default()
-    sim2 = test_simple()
+    # sim1 = test_default()
+    # sim2 = test_simple()
     sim_b, sim_i = test_simple_vax(do_plot=True)
-    sim3 = test_components()
-    s1, s2 = test_parallel()
+    # sim3 = test_components()
+    # s1, s2 = test_parallel()
