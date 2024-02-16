@@ -43,11 +43,11 @@ class ndict(sc.objdict):
 
     """
 
-    def __init__(self, *args, name='name', type=None, strict=True, duplicates=ss.options.duplicates, **kwargs):
+    def __init__(self, *args, name='name', type=None, strict=True, duplicates=None, **kwargs):
         self.setattribute('_name', name)  # Since otherwise treated as keys
         self.setattribute('_type', type)
         self.setattribute('_strict', strict)
-        self.setattribute('_duplicates', duplicates)
+        self.setattribute('_duplicates', ss.options.duplicates)
 
         self._initialize(*args, **kwargs)
         return
