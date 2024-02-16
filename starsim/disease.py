@@ -333,7 +333,7 @@ class Infection(Disease):
                 src_idx = 0
             else:
                 # Roulette selection using slotted draw r associated with this new case
-                cumsum = df['p'] / df['p'].sum()
+                cumsum = df['p'].cumsum() / df['p'].sum()
                 src_idx = np.argmax(cumsum >= df['r'])
             return df['p1'].iloc[src_idx]
 
