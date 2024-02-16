@@ -83,7 +83,7 @@ def test_gavi():
         pars = dict(
             diseases=disease,
             n_agents=n_agents,
-            networks='random',
+            networks='randomnet',
         )
         sim = ss.Sim(pars)
         sim.run()

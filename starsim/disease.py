@@ -232,7 +232,7 @@ class Infection(Disease):
             if bkey in netkeys:
                 betamap[bkey] = betapars[orig_bkey]
             if bkey not in netkeys:
-                errormsg = f'No network for beta parameter "{bkey}"; network keys:\n{sc.newlinemerge(netkeys)}'
+                errormsg = f'No network for beta parameter "{bkey}"; network keys:\n{netkeys}'
                 raise ValueError(errormsg)
         return betamap
 
