@@ -54,6 +54,22 @@ class SIR(ss.Infection):
             sim.people.request_death(deaths)
         return
 
+    def set_prognoses(self, sim, uids, source_uids=None):
+        """ Set prognoses """
+        self.susceptible[uids] = False
+        self.infected[uids] = True
+        self.ti_infected[uids] = sim.ti
+
+        p = self.pars
+
+        # Determine who dies and who recovers and when
+        dead_uids = p.p_death.filter(uids)
+        rec_uids = np.setdiff1d(uids, dead_uids)
+        self.ti_dead[rec_uids] = sim.ti + p.dur_inf.rvs(dead_uids)
+        self.ti_recovered[rec_uids] = sim.ti + p.dur_inf.rvs(rec_uids)
+
+        return
+
     def update_death(self, sim, uids):
         # Reset infected/recovered flags for dead agents
         self.infected[uids] = False

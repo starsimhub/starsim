@@ -137,9 +137,9 @@ class Cholera(ss.Infection):
         r.env_prev[sim.ti] = new_bacteria + old_bacteria
         r.env_conc[sim.ti] = r.env_prev[sim.ti] / (r.env_prev[sim.ti] + p.half_sat_rate)
 
-    def set_prognoses(self, sim, uids, from_uids=None):
+    def set_prognoses(self, sim, uids, source_uids=None):
         """ Set prognoses for those who get infected """
-        super().set_prognoses(sim, uids, from_uids)
+        super().set_prognoses(sim, uids, source_uids)
 
         self.susceptible[uids] = False
         self.exposed[uids] = True
@@ -180,7 +180,7 @@ class Cholera(ss.Infection):
         p.p_env_transmit.kwds['p'] = p_transmit
         new_cases = p.p_env_transmit.filter(self.susceptible)
         if new_cases.any():
-            self.set_prognoses(sim, new_cases)
+            self.set_prognoses(sim, new_cases, source_uids=None)
         return
 
     def update_death(self, sim, uids):

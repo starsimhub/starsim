@@ -83,7 +83,7 @@ class Sim(sc.prettyobj):
             self.analyzers.values(),
         )
 
-    def initialize(self, popdict=None, reset=False, **kwargs):
+    def initialize(self, reset=False, **kwargs):
         """
         Perform all initializations on the sim.
         """
@@ -881,9 +881,9 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
 
     **Example**::
 
-        s1 = hpv.Sim(rand_seed=1).run()
-        s2 = hpv.Sim(rand_seed=2).run()
-        hpv.diff_sims(s1, s2)
+        s1 = ss.Sim(rand_seed=1).run()
+        s2 = ss.Sim(rand_seed=2).run()
+        ss.diff_sims(s1, s2)
     '''
 
     if isinstance(sim1, Sim):

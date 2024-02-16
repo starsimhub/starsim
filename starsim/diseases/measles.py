@@ -65,9 +65,9 @@ class Measles(SIR):
         if len(deaths):
             sim.people.request_death(deaths)
 
-    def set_prognoses(self, sim, uids, from_uids=None):
+    def set_prognoses(self, sim, uids, source_uids=None):
         """ Set prognoses for those who get infected """
-        super().set_prognoses(sim, uids, from_uids)
+        super().set_prognoses(sim, uids, source_uids)
 
         self.susceptible[uids] = False
         self.exposed[uids] = True
