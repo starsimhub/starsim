@@ -298,11 +298,11 @@ class Infection(Disease):
         if len(df) == 0:
             return [], []
 
-        p_acq_node = df.groupby('p2').apply(lambda x: 1 - np.prod(1 - x['p']))
-        uids = p_acq_node.index.values
+        p_acq_node = df.groupby('p2').apply(lambda x: 1 - np.prod(1 - x['p']))  # prob(inf) for each potential infectee
+        uids = p_acq_node.index.values  # UIDs of those who get come into contact with 1 or more infected person
 
         # Slotted draw, need to find a long-term place for this logic
-        slots = people.slot[uids]
+        slots = people.slot[uids]  # Slots for the possible infectee
         new_cases_bool = ss.uniform.rvs(size=np.max(slots) + 1)[slots] < p_acq_node.values
         new_cases = uids[new_cases_bool]
 
@@ -316,7 +316,7 @@ class Infection(Disease):
                 src_idx = np.argmax(cumsum >= df['r'])
             return df['p1'].iloc[src_idx]
 
-        df['r'] = ss.uniform.rvs(size=np.max(slots) + 1)[slots]
+        df['r'] = ss.uniform.rvs(size=np.max(slots) + 1)[df.p2.values]  # Draws for each potential infectee
         sources = df.set_index('p2').loc[new_cases].groupby('p2').apply(choose_source)
 
         return new_cases, sources[new_cases].values
