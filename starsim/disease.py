@@ -221,15 +221,16 @@ class Infection(Disease):
         return
     
     def _check_betas(self, sim):
-        """ Check that networks and beta keys match """
+        """ Check that there's a network for each beta keys """
         betapars = self.pars.beta
         betamap = sc.objdict()
-        for nkey in sim.networks.keys():
-            for nk in [nkey, nkey.removesuffix('net')]: # allow e.g. 'mf' instead of 'mfnet'
-                if nk in betapars:
+        netkeys = list(sim.networks.keys())
+        for nkey in betapars.keys():
+            for nk in [nkey, nkey+'net']:  # allow e.g. 'mf' instead of 'mfnet'
+                if nk in netkeys:
                     betamap[nkey] = betapars[nk]
-            if nkey not in betamap:
-                errormsg = f'No beta parameter was specified for network "{nkey}"; beta keys:\n{sc.newlinemerge(betapars)}'
+            if nkey not in netkeys:
+                errormsg = f'No network for beta parameter "{nkey}"; network keys:\n{sc.newlinemerge(netkeys)}'
                 raise ValueError(errormsg)
         return betamap
 
