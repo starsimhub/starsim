@@ -316,7 +316,7 @@ class Infection(Disease):
                 src_idx = np.argmax(cumsum >= df['r'])
             return df['p1'].iloc[src_idx]
 
-        df['r'] = ss.uniform.rvs(size=np.max(slots) + 1)[df.p2.values]  # Draws for each potential infectee
+        df['r'] = ss.uniform.rvs(size=np.max(slots) + 1)[slots[df.p2.values]]  # Draws for each potential infectee
         sources = df.set_index('p2').loc[new_cases].groupby('p2').apply(choose_source)
 
         return new_cases, sources[new_cases].values
