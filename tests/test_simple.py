@@ -93,8 +93,8 @@ def test_parallel():
 
 
 if __name__ == '__main__':
-    # sim1 = test_default()
-    # sim2 = test_simple()
+    sim1 = test_default()
+    sim2 = test_simple()
     sim_b, sim_i = test_simple_vax(do_plot=True)
-    # sim3 = test_components()
-    # s1, s2 = test_parallel()
+    sim3 = test_components()
+    s1, s2 = test_parallel()
