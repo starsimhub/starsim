@@ -6,7 +6,7 @@ do_plot = False
 
 with sc.timer():
     ppl = ss.People(int(1e3))
-    networks = ss.ndict(ss.mf(), ss.maternal())
+    networks = ss.ndict(ss.MFNet(), ss.MaternalNet())
 
     hiv = ss.HIV()
     hiv.pars['beta'] = {'simple_sexual': [0.0008, 0.0004], 'maternal': [0.2, 0]}

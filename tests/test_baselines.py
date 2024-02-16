@@ -42,8 +42,8 @@ def make_sim(ppl=None, do_plot=False, **kwargs):
     
     # Make the sim
     hiv = ss.HIV()
-    hiv.pars['beta'] = {'mf': [0.15, 0.10], 'maternal': [0.2, 0]}
-    networks = [ss.mf(), ss.maternal()]
+    hiv.pars.beta = {'mf': [0.15, 0.10], 'maternal': [0.2, 0]}
+    networks = [ss.MFNet(), ss.MaternalNet()]
     sim = ss.Sim(pars=pars, people=ppl, networks=networks, demographics=ss.Pregnancy(), diseases=hiv)
 
     # Optionally plot

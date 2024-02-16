@@ -57,10 +57,11 @@ class BasePeople(sc.prettyobj):
         """ Length of people """
         return len(self.uid)
 
+    # TODO: CK: should not be needed
     def add_state(self, state, die=True):
         if id(state) not in self._states:
             self._states[id(state)] = state
-            self.states.append(state)  # Expose these states with their original names
+            self.states.append(state, overwrite=True)  # Expose these states with their original names # TODO: should have overwrite=False
             setattr(self, state.name, state)
         elif die:
             errormsg = f'Cannot add state {state} since already added'

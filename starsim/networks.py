@@ -14,7 +14,7 @@ import scipy.spatial as spsp
 ss_float_ = ss.dtypes.float
 ss_int_ = ss.dtypes.int
 
-# Specify all externally visible functions this file defines
+# Specify all externally visible functions this file defines; see also more definitions below
 __all__ = ['Network', 'Networks', 'DynamicNetwork', 'SexualNetwork']
 
 class Network(ss.Module):
@@ -64,11 +64,11 @@ class Network(ss.Module):
         super().__init__(pars, *args, **kwargs)
 
         # Each relationship is characterized by these default set of keys, plus any user- or network-supplied ones
-        default_keys = {
-            'p1': ss_int_,
-            'p2': ss_int_,
-            'beta': ss_float_,
-        }
+        default_keys = dict(
+            p1 = ss_int_,
+            p2 = ss_int_,
+            beta = ss_float_,
+        )
         self.meta = ss.omerge(default_keys, key_dict)
         self.vertical = vertical  # Whether transmission is bidirectional
 
@@ -84,8 +84,19 @@ class Network(ss.Module):
 
         # Define states using placeholder values
         self.participant = ss.State('participant', bool, default=False)
-        self.debut = ss.State('debut', float, default=0)
         return
+    
+    @property
+    def p1(self):
+        return self.contacts['p1'] if 'p1' in self.contacts else None
+    
+    @property
+    def p2(self):
+        return self.contats['p2'] if 'p2' in self.contacts else None
+
+    @property
+    def beta(self):
+        return self.contacts['beta'] if 'beta' in self.contacts else None
 
     def initialize(self, sim):
         super().initialize(sim)
@@ -277,6 +288,9 @@ class Network(ss.Module):
 
 
 class Networks(ss.ndict):
+    """
+    Container for networks
+    """
     def __init__(self, *args, type=Network, connectors=None, **kwargs):
         self.setattribute('_connectors', ss.ndict(connectors))
         super().__init__(*args, type=type, **kwargs)
@@ -298,9 +312,9 @@ class Networks(ss.ndict):
 
 
 class DynamicNetwork(Network):
-    def __init__(self, pars=None, key_dict=None):
+    def __init__(self, pars=None, key_dict=None, **kwargs):
         key_dict = ss.omerge({'dur': ss_float_}, key_dict)
-        super().__init__(pars, key_dict=key_dict)
+        super().__init__(pars, key_dict=key_dict, **kwargs)
 
     def end_pairs(self, people):
         dt = people.dt
@@ -314,9 +328,11 @@ class DynamicNetwork(Network):
 
 class SexualNetwork(Network):
     """ Base class for all sexual networks """
-    def __init__(self, pars=None, key_dict=None):
+    def __init__(self, pars=None, key_dict=None, **kwargs):
         key_dict = ss.omerge({'acts': ss_int_}, key_dict)
-        super().__init__(pars, key_dict=key_dict)
+        super().__init__(pars, key_dict=key_dict, **kwargs)
+        self.debut = ss.State('debut', float, default=0)
+        return
 
     def active(self, people):
         # Exclude people who are not alive
@@ -332,29 +348,29 @@ class SexualNetwork(Network):
 
 
 # %% Specific instances of networks
-__all__ += ['mf', 'msm', 'embedding', 'maternal', 'static', 'random', 'hpv_network']
+__all__ += ['MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet', 'StaticNet', 'RandomNet', 'HPVNet']
 
-class mf(SexualNetwork, DynamicNetwork):
+class MFNet(SexualNetwork, DynamicNetwork):
     """
     This network is built by **randomly pairing** males and female with variable
     relationship durations.
     """
 
     def __init__(self, pars=None, par_dists=None, key_dict=None):
-        pars = ss.omerge({
-            'duration': 15,  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
-            'participation': 0.9,  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
-            'debut': 16,  # Age of debut can vary by using callable parameter values
-            'acts': 80,
-            'rel_part_rates': 1.0,
-        }, pars)
+        pars = ss.omergeleft(pars,
+            duration = 15,  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+            participation = 0.9,  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
+            debut = 16,  # Age of debut can vary by using callable parameter values
+            acts = 80,
+            rel_part_rates = 1.0,
+        )
 
-        par_dists = ss.omerge({
-            'duration': ss.lognorm,
-            'participation': ss.bernoulli,
-            'debut': ss.norm,
-            'acts': ss.lognorm,
-        }, par_dists)
+        par_dists = ss.omergeleft(par_dists,
+            duration      = ss.lognorm,
+            participation = ss.bernoulli,
+            debut         = ss.norm,
+            acts          = ss.lognorm,
+        )
 
         DynamicNetwork.__init__(self, key_dict=key_dict)
         SexualNetwork.__init__(self, pars, key_dict=key_dict)
@@ -430,23 +446,21 @@ class mf(SexualNetwork, DynamicNetwork):
         return
 
 
-class msm(SexualNetwork, DynamicNetwork):
+class MSMNet(SexualNetwork, DynamicNetwork):
     """
     A network that randomly pairs males
     """
 
-    def __init__(self, pars=None, key_dict=None):
-
-        pars = ss.omerge({
-'duration_dist': ss.lognorm_mean(mean=15, stdev=15),
-            'participation_dist': ss.bernoulli(p=0.1),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
-'debut_dist': ss.norm(loc=16, scale=2),
-            'acts': ss.lognorm_mean(mean=80, stdev=20),
-            'rel_part_rates': 1.0,
-        }, pars)
-        DynamicNetwork.__init__(self, key_dict)
+    def __init__(self, pars=None, key_dict=None, **kwargs):
+        pars = ss.omergeleft(pars,
+            duration_dist = ss.lognorm_mean(mean=15, stdev=15),
+            participation_dist = ss.bernoulli(p=0.1),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
+            debut_dist = ss.norm(loc=16, scale=2),
+            acts = ss.lognorm_mean(mean=80, stdev=20),
+            rel_part_rates = 1.0,
+        )
+        DynamicNetwork.__init__(self, key_dict, **kwargs)
         SexualNetwork.__init__(self, pars, key_dict)
-
         return
 
     def initialize(self, sim):
@@ -507,7 +521,7 @@ class msm(SexualNetwork, DynamicNetwork):
         return
 
 
-class embedding(mf):
+class EmbeddingNet(MFNet):
     """
     Heterosexual age-assortative network based on a one-dimensional embedding. Could be made more generic.
     """
@@ -567,7 +581,10 @@ class embedding(mf):
         return len(beta)
 
 
-class maternal(Network):
+class MaternalNet(Network):
+    """
+    Vertical (birth-related) transmission network
+    """
     def __init__(self, key_dict=None, vertical=True, **kwargs):
         """
         Initialized empty and filled with pregnancies throughout the simulation
@@ -601,7 +618,7 @@ class maternal(Network):
         return len(mother_inds)
 
 
-class static(Network):
+class StaticNet(Network):
     """
     A network class of static partnerships converted from a networkx graph. There's no formation of new partnerships
     and initialized partnerships only end when one of the partners dies. The networkx graph can be created outside Starsim
@@ -620,16 +637,16 @@ class static(Network):
 
     """
 
-    def __init__(self, graph, **kwargs):
+    def __init__(self, graph, pars=None, **kwargs):
         self.graph = graph
-        self.kwargs = kwargs
-        super().__init__()
+        self.pars = ss.omerge(pars)
+        super().__init__(**kwargs)
         return
 
     def initialize(self, sim):
         popsize = sim.pars['n_agents']
         if callable(self.graph):
-            self.graph = self.graph(n=popsize, **self.kwargs)
+            self.graph = self.graph(n=popsize, **self.pars)
         self.validate_pop(popsize)
         super().initialize(sim)
         self.get_contacts()
@@ -654,22 +671,24 @@ class static(Network):
         return
 
 
-class random(DynamicNetwork):
+class RandomNet(DynamicNetwork):
+    """ Random connectivity between agents """
 
-    def __init__(self, pars=None, par_dists=None, key_dict=None):
+    def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
         """ Initialize """
         pars = ss.omerge({
             'n_contacts': 15,  # Distribution or int. If int, interpreted as the mean of the dist listed in par_dists
             'dur': 1,
         }, pars)
 
-        DynamicNetwork.__init__(self, pars, key_dict)
+        DynamicNetwork.__init__(self, pars=pars, key_dict=key_dict, **kwargs)
 
         return
 
     def initialize(self, sim):
         super().initialize(sim)
         self.add_pairs(sim.people)
+        return
 
     @staticmethod
     @nb.njit(cache=True)
@@ -739,38 +758,38 @@ class random(DynamicNetwork):
         return
 
 
-class hpv_network(mf):
-    def __init__(self, pars=None, par_dists=None, key_dict=None):
-        pars = ss.omerge({
-            'duration': 15,
-            'participation': 0.9,
-            'debut': 16,
-            'acts': 80,
-            'rel_part_rates': 1.0,
-            'cross_layer': 0.05,
-            'concurrency': 0.05,
-            'condoms': 0.2,
-            'mixing': None,
-        }, pars)
+class HPVNet(MFNet):
+    def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
+        pars = ss.omergeleft(pars,
+            duration = 15,
+            participation = 0.9,
+            debut = 16,
+            acts = 80,
+            rel_part_rates = 1.0,
+            cross_layer = 0.05,
+            concurrency = 0.05,
+            condoms = 0.2,
+            mixing = None,
+        )
 
-        self.par_dists = ss.omerge({
-            'duration': ss.lognorm,
-            'participation': ss.bernoulli,
-            'debut': ss.norm,
-            'acts': ss.lognorm,
-            'cross_layer': ss.bernoulli,
-            'concurrency': ss.bernoulli,
-        }, par_dists)
+        self.par_dists = ss.omergeleft(par_dists,
+            duration      = ss.lognorm,
+            participation = ss.bernoulli,
+            debut         = ss.norm,
+            acts          = ss.lognorm,
+            cross_layer   = ss.bernoulli,
+            concurrency   = ss.bernoulli,
+        )
 
-        key_dict = {
-            'acts': ss_float_,
-            'start': ss_float_,
-        }
+        key_dict = dict(
+            acts = ss_float_,
+            start = ss_float_,
+        )
 
         DynamicNetwork.__init__(self, key_dict)
         SexualNetwork.__init__(self, pars, key_dict)
 
-        super().__init__(pars, key_dict=key_dict)
+        super().__init__(pars, key_dict=key_dict, **kwargs)
 
         self.get_layer_probs()
 
@@ -798,23 +817,23 @@ class hpv_network(mf):
 
         defaults = {}
         mixing = np.array([
-            #       0,  5,  10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75
-            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [10, 0, 0, .1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [15, 0, 0, .1, .1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [20, 0, 0, .1, .1, .1, .1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [25, 0, 0, .5, .1, .5, .1, .1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-            [30, 0, 0, 1, .5, .5, .5, .5, .1, 0, 0, 0, 0, 0, 0, 0, 0],
-            [35, 0, 0, .5, 1, 1, .5, 1, 1, .5, 0, 0, 0, 0, 0, 0, 0],
-            [40, 0, 0, 0, .5, 1, 1, 1, 1, 1, .5, 0, 0, 0, 0, 0, 0],
-            [45, 0, 0, 0, 0, .1, 1, 1, 2, 1, 1, .5, 0, 0, 0, 0, 0],
-            [50, 0, 0, 0, 0, 0, .1, 1, 1, 1, 1, 2, .5, 0, 0, 0, 0],
-            [55, 0, 0, 0, 0, 0, 0, .1, 1, 1, 1, 1, 2, .5, 0, 0, 0],
-            [60, 0, 0, 0, 0, 0, 0, 0, .1, .5, 1, 1, 1, 2, .5, 0, 0],
-            [65, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 2, .5, 0],
-            [70, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, .5],
-            [75, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1],
+            # 0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 75+
+            [0 , 0,  0, 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0] ,
+            [5 , 0,  0, 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0] ,
+            [10, 0,  0, .1, 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0] ,
+            [15, 0,  0, .1, .1, 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0] ,
+            [20, 0,  0, .1, .1, .1, .1, 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0] ,
+            [25, 0,  0, .5, .1, .5, .1, .1, 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0] ,
+            [30, 0,  0, 1 , .5, .5, .5, .5, .1, 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0] ,
+            [35, 0,  0, .5, 1 , 1 , .5, 1 , 1 , .5, 0 , 0 , 0 , 0 , 0 , 0 , 0] ,
+            [40, 0,  0, 0 , .5, 1 , 1 , 1 , 1 , 1 , .5, 0 , 0 , 0 , 0 , 0 , 0] ,
+            [45, 0,  0, 0 , 0 , .1, 1 , 1 , 2 , 1 , 1 , .5, 0 , 0 , 0 , 0 , 0] ,
+            [50, 0,  0, 0 , 0 , 0 , .1, 1 , 1 , 1 , 1 , 2 , .5, 0 , 0 , 0 , 0] ,
+            [55, 0,  0, 0 , 0 , 0 , 0 , .1, 1 , 1 , 1 , 1 , 2 , .5, 0 , 0 , 0] ,
+            [60, 0,  0, 0 , 0 , 0 , 0 , 0 , .1, .5, 1 , 1 , 1 , 2 , .5, 0 , 0] ,
+            [65, 0,  0, 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 1 , 1 , 1 , 2 , .5, 0] ,
+            [70, 0,  0, 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 1 , 1 , 1 , 1 , .5],
+            [75, 0,  0, 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 0 , 1 , 1 , 1 , 1] ,
         ])
 
         defaults['mixing'] = mixing
@@ -949,7 +968,7 @@ class hpv_network(mf):
 
 
 # %% Network connectors
-__all__ += ['NetworkConnector', 'mf_msm']
+__all__ += ['NetworkConnector', 'MF_MSM']
 
 class NetworkConnector(ss.Module):
     """
@@ -966,13 +985,13 @@ class NetworkConnector(ss.Module):
         pass
 
 
-class mf_msm(NetworkConnector):
+class MF_MSM(NetworkConnector):
     """ Combines the MF and MSM networks """
     def __init__(self, pars=None):
-        networks = [ss.mf, ss.msm]
-        pars = ss.omerge({
-            'prop_bi': 0.5,  # Could vary over time -- but not by age or sex or individual
-        }, pars)
+        networks = [ss.MFNet, ss.MSMNet]
+        pars = ss.omergeleft(pars,
+            prop_bi = 0.5,  # Could vary over time -- but not by age or sex or individual
+        )
         super().__init__(networks=networks, pars=pars)
 
         self.bi_dist = ss.bernoulli(p=self.pars.prop_bi)
@@ -991,8 +1010,8 @@ class mf_msm(NetworkConnector):
         uids = ss.true(people.male[uids])
 
         # Get networks and overwrite default participation
-        mf = people.networks['mf']
-        msm = people.networks['msm']
+        mf = people.networks.mf
+        msm = people.networks.msm
         mf.participant[uids] = False
         msm.participant[uids] = False
 

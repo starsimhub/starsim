@@ -24,7 +24,7 @@ def make_run_sim():
     sir = ss.SIR()
     hiv = ss.HIV()
     hiv.pars['beta'] = {'mf': [0.15, 0.10], 'maternal': [0.2, 0]}
-    networks = [ss.mf(), ss.maternal()]
+    networks = [ss.MFNet(), ss.MaternalNet()]
     
     # Make the sim
     sim = ss.Sim(pars=pars, people=ppl, networks=networks, demographics=ss.Pregnancy(), diseases=[sir, hiv])

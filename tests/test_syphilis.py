@@ -27,13 +27,13 @@ def make_syph_sim(dt=1, n_agents=500):
     ppl = ss.People(n_agents, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
 
     # Marital
-    mf = ss.mf(
+    mf = ss.MFNet(
         pars = dict(
             duration = ss.lognorm_mean(mean=1/24, stdev=0.5),
             acts = ss.lognorm_mean(mean=80, stdev=30),
         )
     )
-    maternal = ss.maternal()
+    maternal = ss.MaternalNet()
 
     sim_kwargs = dict(
         dt=dt,

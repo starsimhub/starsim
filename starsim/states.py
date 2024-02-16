@@ -5,9 +5,8 @@ Define array-handling classes, including agent states
 import numpy as np
 import sciris as sc
 import numba as nb
-from starsim.utils import INT_NAN
-import warnings
 import starsim as ss
+from starsim.settings import INT_NAN
 from starsim.settings import dtypes as sdt
 from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
 from scipy.stats._distn_infrastructure import rv_frozen
@@ -35,7 +34,7 @@ def check_dtype(dtype, default=None):
         dtype = sdt.bool
     else:
         warnmsg = f'Data type {type(default)} not a supported data type; set warn=False to suppress warning'
-        warnings.warn(warnmsg, category=UserWarning, stacklevel=2)
+        ss.warn(warnmsg)
     
     return dtype
 
