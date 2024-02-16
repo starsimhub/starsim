@@ -11,13 +11,14 @@ import pandas as pd
 
 __all__ = ['Disease', 'Infection', 'STI', 'InfectionLog']
 
+
 class Disease(ss.Module):
     """ Base module class for diseases """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.results = ss.Results(self.name)
-        self.log = InfectionLog() # See below for definition
+        self.log = InfectionLog()  # See below for definition
         return
 
     @property
@@ -57,7 +58,7 @@ class Disease(ss.Module):
             # If beta is a scalar, apply this bi-directionally to all networks
             if sc.isnumber(self.pars.beta):
                 orig_beta = self.pars.beta
-                self.pars.beta = sc.objdict({k: [orig_beta]*2 for k in sim.networks})
+                self.pars.beta = sc.objdict({k: [orig_beta] * 2 for k in sim.networks})
 
             # If beta is a dict, check all entries are bi-directional
             elif isinstance(self.pars.beta, dict):
@@ -219,18 +220,19 @@ class Infection(Disease):
             ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True),
         ]
         return
-    
+
     def _check_betas(self, sim):
         """ Check that there's a network for each beta keys """
         betapars = self.pars.beta
         betamap = sc.objdict()
         netkeys = list(sim.networks.keys())
-        for nkey in betapars.keys():
-            for nk in [nkey, nkey+'net']:  # allow e.g. 'mf' instead of 'mfnet'
-                if nk in netkeys:
-                    betamap[nkey] = betapars[nk]
-            if nkey not in netkeys:
-                errormsg = f'No network for beta parameter "{nkey}"; network keys:\n{sc.newlinemerge(netkeys)}'
+        for bkey in betapars.keys():
+            orig_bkey = bkey[:]
+            if 'net' not in bkey: bkey += 'net'  # Add 'net' suffix if not already there
+            if bkey in netkeys:
+                betamap[bkey] = betapars[orig_bkey]
+            if bkey not in netkeys:
+                errormsg = f'No network for beta parameter "{bkey}"; network keys:\n{sc.newlinemerge(netkeys)}'
                 raise ValueError(errormsg)
         return betamap
 
@@ -240,8 +242,8 @@ class Infection(Disease):
         sources = []
         people = sim.people
         betamap = self._check_betas(sim)
-        
-        for nkey,net in sim.networks.items():
+
+        for nkey, net in sim.networks.items():
             nbetas = betamap[nkey]
             contacts = net.contacts
             rel_trans = (self.infectious & people.alive) * self.rel_trans
@@ -285,7 +287,7 @@ class Infection(Disease):
         avec = []
         bvec = []
         pvec = []
-        for nkey,net in sim.networks.items():
+        for nkey, net in sim.networks.items():
             nbetas = betamap[nkey]
             contacts = net.contacts
             rel_trans = self.rel_trans * (self.infectious & people.alive)
@@ -307,9 +309,9 @@ class Infection(Disease):
                     beta_per_dt = 1 - (1 - beta) ** (contacts.acts[nzi] * people.dt)
                 else:
                     beta_per_dt = beta * people.dt
-                
+
                 trans_arr = rel_trans[a[nzi]].__array__()
-                sus_arr   = rel_sus[b[nzi]].__array__()
+                sus_arr = rel_sus[b[nzi]].__array__()
                 new_pvec = trans_arr * sus_arr * beta_arr[nzi] * beta_per_dt
                 pvec.append(new_pvec)
 
@@ -450,7 +452,7 @@ class InfectionLog(nx.MultiDiGraph):
         a particular entry)
         """
         if len(self) == 0:
-            return sc.dataframe(columns=['t','source','target'])
+            return sc.dataframe(columns=['t', 'source', 'target'])
 
         entries = []
         for source, target, t, data in self.edges(keys=True, data=True):
@@ -458,7 +460,7 @@ class InfectionLog(nx.MultiDiGraph):
             d.update(source=source, target=target, t=t)
             entries.append(d)
         df = sc.dataframe.from_records(entries)
-        df = df.sort_values(['t','source','target'])
+        df = df.sort_values(['t', 'source', 'target'])
         df = df.reset_index(drop=True)
 
         # Use Pandas "Int64" type to allow nullable integers. This allows the 'source' column
@@ -469,4 +471,3 @@ class InfectionLog(nx.MultiDiGraph):
         df['target'] = df['target'].astype("Int64")
 
         return df
-

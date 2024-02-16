@@ -115,7 +115,7 @@ if __name__ == '__main__':
     # Start timing
     T = sc.tic()
 
-    ss.options.multirng = True
+    ss.options.multirng = False
 
     # Run tests
     ppl = test_people()
