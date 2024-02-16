@@ -11,13 +11,14 @@ import pandas as pd
 
 __all__ = ['Disease', 'Infection', 'STI', 'InfectionLog']
 
+
 class Disease(ss.Module):
     """ Base module class for diseases """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.results = ss.Results(self.name)
-        self.log = InfectionLog() # See below for definition
+        self.log = InfectionLog()  # See below for definition
         return
 
     @property
@@ -57,7 +58,7 @@ class Disease(ss.Module):
             # If beta is a scalar, apply this bi-directionally to all networks
             if sc.isnumber(self.pars.beta):
                 orig_beta = self.pars.beta
-                self.pars.beta = sc.objdict({k: [orig_beta, orig_beta] for k in sim.networks})
+                self.pars.beta = sc.objdict({k: [orig_beta] * 2 for k in sim.networks})
 
             # If beta is a dict, check all entries are bi-directional
             elif isinstance(self.pars.beta, dict):
@@ -201,11 +202,11 @@ class Infection(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        if self.pars['init_prev'] is None:
+        if self.pars.init_prev is None:
             return
 
         alive_uids = ss.true(sim.people.alive)  # Maybe just sim.people.uid?
-        initial_cases = self.pars['init_prev'].filter(alive_uids)
+        initial_cases = self.pars.init_prev.filter(alive_uids)
         self.set_prognoses(sim, initial_cases)  # TODO: sentinel value to indicate seeds?
         return
 
@@ -220,37 +221,54 @@ class Infection(Disease):
         ]
         return
 
+    def _check_betas(self, sim):
+        """ Check that there's a network for each beta keys """
+        betapars = self.pars.beta
+        betamap = sc.objdict()
+        netkeys = list(sim.networks.keys())
+        for bkey in betapars.keys():
+            orig_bkey = bkey[:]
+            if 'net' not in bkey: bkey += 'net'  # Add 'net' suffix if not already there
+            if bkey in netkeys:
+                betamap[bkey] = betapars[orig_bkey]
+            if bkey not in netkeys:
+                errormsg = f'No network for beta parameter "{bkey}"; your beta has network keys:\n{sc.newlinejoin(netkeys)}'
+                raise ValueError(errormsg)
+        return betamap
+
     def _make_new_cases_singlerng(self, sim):
         # Not common-random-number-safe, but more efficient for when not using the multirng feature
         new_cases = []
         sources = []
         people = sim.people
-        for k, layer in sim.networks.items():
-            if k in self.pars['beta']:
-                contacts = layer.contacts
-                rel_trans = (self.infectious & people.alive) * self.rel_trans
-                rel_sus = (self.susceptible & people.alive) * self.rel_sus
-                for a, b, beta in [[contacts.p1, contacts.p2, self.pars.beta[k][0]],
-                                   [contacts.p2, contacts.p1, self.pars.beta[k][1]]]:
+        betamap = self._check_betas(sim)
 
-                    # Skip networks with no transmission
-                    if beta == 0:
-                        continue
+        for nkey, net in sim.networks.items():
+            nbetas = betamap[nkey]
+            contacts = net.contacts
+            rel_trans = (self.infectious & people.alive) * self.rel_trans
+            rel_sus = (self.susceptible & people.alive) * self.rel_sus
+            for a, b, beta in [[contacts.p1, contacts.p2, nbetas[0]],
+                               [contacts.p2, contacts.p1, nbetas[1]]]:
 
-                    # Calculate probability of a->b transmission. If we have information on the
-                    # number of sexual acts, then beta is assumed to be a per-act transmission
-                    # probability. If not, it's assumed to be annual.
-                    # TODO: move this to STI?
-                    if 'acts' in contacts.keys():
-                        beta_per_dt = 1 - (1 - beta) ** (contacts.acts * people.dt)
-                        p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta_per_dt
-                    else:
-                        p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt
+                # Skip networks with no transmission
+                if beta == 0:
+                    continue
 
-                    new_cases_bool = np.random.random(
-                        len(a)) < p_transmit  # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
-                    new_cases.append(b[new_cases_bool])
-                    sources.append(a[new_cases_bool])
+                # Calculate probability of a->b transmission. If we have information on the
+                # number of sexual acts, then beta is assumed to be a per-act transmission
+                # probability. If not, it's assumed to be annual.
+                # TODO: move this to STI?
+                if 'acts' in contacts.keys():
+                    beta_per_dt = 1 - (1 - beta) ** (contacts.acts * people.dt)
+                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta_per_dt
+                else:
+                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt
+
+                new_cases_bool = np.random.random(
+                    len(a)) < p_transmit  # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
+                new_cases.append(b[new_cases_bool])
+                sources.append(a[new_cases_bool])
         return np.concatenate(new_cases), np.concatenate(sources)
 
     def _make_new_cases_multirng(self, sim):
@@ -264,35 +282,38 @@ class Infection(Disease):
         people = sim.people
         n = len(people.uid)  # TODO: possibly could be shortened to just the people who are alive
         p_acq_node = np.zeros(n)
+        betamap = self._check_betas(sim)
 
         avec = []
         bvec = []
         pvec = []
-        for lkey, layer in sim.networks.items():
-            if lkey in self.pars['beta']:
-                contacts = layer.contacts
-                rel_trans = self.rel_trans * (self.infectious & people.alive)
-                rel_sus = self.rel_sus * (self.susceptible & people.alive)
+        for nkey, net in sim.networks.items():
+            nbetas = betamap[nkey]
+            contacts = net.contacts
+            rel_trans = self.rel_trans * (self.infectious & people.alive)
+            rel_sus = self.rel_sus * (self.susceptible & people.alive)
 
-                a_to_b = ['p1', 'p2', self.pars.beta[lkey][0]]
-                b_to_a = ['p2', 'p1', self.pars.beta[lkey][1]]
-                for lbl_src, lbl_tgt, beta in [a_to_b, b_to_a]:  # Transmission from a --> b
-                    if beta == 0:
-                        continue
+            p1p2 = ['p1', 'p2', nbetas[0]]
+            p2p1 = ['p2', 'p1', nbetas[1]]
+            for source, target, beta in [p1p2, p2p1]:  # Transmission from a --> b
+                if beta == 0:
+                    continue
 
-                    a, b = contacts[lbl_src], contacts[lbl_tgt]
-                    nzi = (rel_trans[a] > 0) & (rel_sus[b] > 0) & (contacts.beta > 0)
-                    avec.append(a[nzi])
-                    bvec.append(b[nzi])
+                a, b, beta_arr = contacts[source], contacts[target], contacts.beta
+                nzi = (rel_trans[a] > 0) & (rel_sus[b] > 0) & (beta_arr > 0)
+                avec.append(a[nzi])
+                bvec.append(b[nzi])
 
-                    # TODO: move this to STI?
-                    if 'acts' in contacts.keys():
-                        beta_per_dt = 1 - (1 - beta) ** (contacts.acts[nzi] * people.dt)
-                    else:
-                        beta_per_dt = beta * people.dt
-                    new_pvec = rel_trans[a[nzi]].__array__() * rel_sus[b[nzi]].__array__() * contacts.beta[
-                        nzi] * beta_per_dt
-                    pvec.append(new_pvec)
+                # TODO: move this to STI?
+                if 'acts' in contacts.keys():
+                    beta_per_dt = 1 - (1 - beta) ** (contacts.acts[nzi] * people.dt)
+                else:
+                    beta_per_dt = beta * people.dt
+
+                trans_arr = rel_trans[a[nzi]].__array__()
+                sus_arr = rel_sus[b[nzi]].__array__()
+                new_pvec = trans_arr * sus_arr * beta_arr[nzi] * beta_per_dt
+                pvec.append(new_pvec)
 
         df = pd.DataFrame({'p1': np.concatenate(avec), 'p2': np.concatenate(bvec), 'p': np.concatenate(pvec)})
         if len(df) == 0:
@@ -431,7 +452,7 @@ class InfectionLog(nx.MultiDiGraph):
         a particular entry)
         """
         if len(self) == 0:
-            return sc.dataframe(columns=['t','source','target'])
+            return sc.dataframe(columns=['t', 'source', 'target'])
 
         entries = []
         for source, target, t, data in self.edges(keys=True, data=True):
@@ -439,7 +460,7 @@ class InfectionLog(nx.MultiDiGraph):
             d.update(source=source, target=target, t=t)
             entries.append(d)
         df = sc.dataframe.from_records(entries)
-        df = df.sort_values(['t','source','target'])
+        df = df.sort_values(['t', 'source', 'target'])
         df = df.reset_index(drop=True)
 
         # Use Pandas "Int64" type to allow nullable integers. This allows the 'source' column
@@ -450,4 +471,3 @@ class InfectionLog(nx.MultiDiGraph):
         df['target'] = df['target'].astype("Int64")
 
         return df
-

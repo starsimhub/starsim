@@ -62,6 +62,7 @@ class Results(ss.ndict):
             result = arg
         if result.module != self._module:
             result.module = self._module
+        
         super().append(result, key=key)
         return
     
