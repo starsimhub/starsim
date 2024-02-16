@@ -365,7 +365,21 @@ __all__ += ['standardize_data']
 
 
 def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
+    """
+    Args:
+        data (pandas.DataFrame, pandas.Series, dict, int, float): An associative array  or a number, with the
+        input data to be standardized.
+        metadata (dict): The metadata containing information about the columns of the data.
+        max_age (float): The maximum age allowed in the data. Default is 120 years.
+        min_year (float): The minimum year allowed in the data. Default is 1800.
 
+    Returns:
+        df (pandas.DataFrame or sciris.dataframe): The standardized data
+
+    Raises:
+        ValueError: If the columns in `data` do not match the column names in metadata.data_cols
+        or if the index of the data series is not understood.
+    """
     metadata = sc.objdict(metadata)
 
     if isinstance(data, pd.DataFrame):
