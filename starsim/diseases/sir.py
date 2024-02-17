@@ -65,7 +65,7 @@ class SIR(ss.Infection):
         # Determine who dies and who recovers and when
         dead_uids = p.p_death.filter(uids)
         rec_uids = np.setdiff1d(uids, dead_uids)
-        self.ti_dead[rec_uids] = sim.ti + p.dur_inf.rvs(dead_uids)
+        self.ti_dead[dead_uids] = sim.ti + p.dur_inf.rvs(dead_uids)
         self.ti_recovered[rec_uids] = sim.ti + p.dur_inf.rvs(rec_uids)
 
         return

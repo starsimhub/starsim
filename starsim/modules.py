@@ -52,12 +52,16 @@ class Module(sc.prettyobj):
         # First, convert any scalar pars to distributions if required
         for key in self.par_dists.keys():
             par = self.pars[key]
+            if isinstance(par, rv_frozen):
+                continue
+
             par_dist = self.par_dists[key]
             rqrd_args = [x for x, p in signature(par_dist._parse_args).parameters.items() if p.default == _empty]
-            if len(rqrd_args) !=0: par_dist_arg = rqrd_args[0]
-            else: par_dist_arg = 'loc'
-            if not isinstance(par, rv_frozen):
-                self.pars[key] = self.par_dists[key](**{par_dist_arg: par})
+            if len(rqrd_args) != 0:
+                par_dist_arg = rqrd_args[0]
+            else:
+                par_dist_arg = 'loc'
+            self.pars[key] = self.par_dists[key](**{par_dist_arg: par})
 
         # Initialize distributions in pars
         for key, value in self.pars.items():
