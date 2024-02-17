@@ -92,7 +92,7 @@ class Network(ss.Module):
     
     @property
     def p2(self):
-        return self.contats['p2'] if 'p2' in self.contacts else None
+        return self.contacts['p2'] if 'p2' in self.contacts else None
 
     @property
     def beta(self):
