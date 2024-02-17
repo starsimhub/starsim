@@ -479,7 +479,7 @@ class MSMNet(SexualNetwork, DynamicNetwork):
 
         # Participation
         self.participant[people.female] = False
-        pr = self.pars.part_rates
+        pr = self.pars.rel_part_rates
         dist = ss.bernoulli.rvs(p=pr, size=len(uids))
         self.participant[uids] = dist
 
