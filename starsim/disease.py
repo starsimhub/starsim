@@ -218,6 +218,7 @@ class Infection(Disease):
         self.results += [
             ss.Result(self.name, 'prevalence', sim.npts, dtype=float, scale=False),
             ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True),
+            ss.Result(self.name, 'cum_infections', sim.npts, dtype=int, scale=True),
         ]
         return
 
@@ -373,6 +374,7 @@ class Infection(Disease):
         super().update_results(sim)
         self.results['prevalence'][sim.ti] = self.results.n_infected[sim.ti] / np.count_nonzero(sim.people.alive)
         self.results['new_infections'][sim.ti] = np.count_nonzero(self.ti_infected == sim.ti)
+        self.results['cum_infections'][sim.ti] = np.sum(self.results['new_infections'][:sim.ti])
 
 
 class STI(Infection):

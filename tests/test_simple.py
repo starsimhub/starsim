@@ -5,6 +5,7 @@ Test simple APIs
 # %% Imports and settings
 import starsim as ss
 import numpy as np
+import sciris as sc
 
 n_agents = 2_000
 
@@ -41,6 +42,48 @@ def test_simple():
     sim.run()
     sim.plot()
     return sim
+
+
+def test_sir_epi():
+    sc.heading('Test basic epi dynamics')
+
+    # Define the parameters to vary
+    par_effects = dict(
+        beta=[0.01, 0.99],
+        n_contacts=[1, 20],
+        init_prev=[0.1, 0.8],
+        dur_inf=[1, 8],
+    )
+
+    # Loop over each of the above parameters and make sure they affect the epi dynamics in the expected ways
+    for par, par_val in par_effects.items():
+        lo = par_val[0]
+        hi = par_val[1]
+
+        # Make baseline pars
+        pars0 = make_sim_pars()
+        pars1 = make_sim_pars()
+
+        if par != 'n_contacts':
+            pars0['diseases'] = sc.mergedicts(pars0['diseases'], {par: lo})
+            pars1['diseases'] = sc.mergedicts(pars1['diseases'], {par: hi})
+        else:
+            pars0['networks'] = sc.mergedicts(pars0['networks'], {par: lo})
+            pars1['networks'] = sc.mergedicts(pars1['networks'], {par: hi})
+
+        # Run the simulations and pull out the results
+        s0 = ss.Sim(pars0, label=f'{par} {par_val[0]}').run()
+        s1 = ss.Sim(pars1, label=f'{par} {par_val[1]}').run()
+
+        # Check results
+        v0 = s0.results.sir.cum_infections[-1]
+        v1 = s1.results.sir.cum_infections[-1]
+        print(f'Checking with varying {par:10s} ... ', end='')
+        assert v0 <= v1, f'Expected infections to be lower with {par}={lo} than with {par}={hi}, but {v0} > {v1})'
+        print(f'✓ ({v0} <= {v1})')
+
+    return s0, s1
+
 
 
 def test_simple_vax(do_plot=False):
@@ -92,8 +135,9 @@ def test_parallel():
 
 
 if __name__ == '__main__':
-    sim1 = test_default()
-    sim2 = test_simple()
-    sim_b, sim_i = test_simple_vax(do_plot=True)
-    sim3 = test_components()
-    s1, s2 = test_parallel()
+    s1 = test_default()
+    s2 = test_simple()
+    s3a, s3b = test_sir_epi()
+    s4_base, s4_intv = test_simple_vax(do_plot=True)
+    s5 = test_components()
+    s6a, s6b = test_parallel()
