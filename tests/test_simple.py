@@ -50,9 +50,8 @@ def test_simple_vax(do_plot=False):
     sim_base = ss.Sim(pars=pars)
     sim_base.run()
 
-    ss.set_seed(1)
-    pars = make_sim_pars()
-    sim_intv = ss.Sim(pars=pars, interventions=ss.routine_vx(start_year=2015, prob=0.5, product=ss.sir_vaccine()))
+    my_vax = ss.sir_vaccine(pars=dict(efficacy=0.5))
+    sim_intv = ss.Sim(pars=pars, interventions=ss.routine_vx(start_year=2015, prob=0.2, product=my_vax))
     sim_intv.run()
 
     # Check plots
