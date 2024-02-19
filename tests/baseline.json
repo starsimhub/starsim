@@ -10,6 +10,7 @@
     "hiv_n_infected": 349.65714285714284,
     "hiv_prevalence": 0.0374800384088393,
     "hiv_new_infections": 14.523809523809524,
+    "hiv_cum_infections": 1248.990476190476,
     "hiv_new_deaths": 13.638095238095238
   }
 }

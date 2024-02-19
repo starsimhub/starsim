@@ -83,7 +83,6 @@ class Cholera(ss.Infection):
         """
         super().init_results(sim)
         self.results += [
-            ss.Result(self.name, 'cum_infections', sim.npts, dtype=int),
             ss.Result(self.name, 'new_deaths', sim.npts, dtype=int),
             ss.Result(self.name, 'cum_deaths', sim.npts, dtype=int),
             ss.Result(self.name, 'env_prev', sim.npts, dtype=float),
