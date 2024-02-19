@@ -330,6 +330,8 @@ class Infection(Disease):
             return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
 
         df = pd.DataFrame({'p1': dfp1, 'p2': dfp2, 'p': dfp})
+        if len(df) == 0:
+            return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
 
         p_acq_node = df.groupby('p2').apply(lambda x: 1 - np.prod(1 - x['p']))  # prob(inf) for each potential infectee
         uids = p_acq_node.index.values  # UIDs of those who get come into contact with 1 or more infected person
