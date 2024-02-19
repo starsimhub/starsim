@@ -91,7 +91,6 @@ def test_gavi():
 
 
 if __name__ == '__main__':
-    ss.options(multirng=False)
     sim1 = test_sir()
     sim2 = test_ncd()
     sims = test_gavi()

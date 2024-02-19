@@ -322,9 +322,14 @@ class Infection(Disease):
                 new_pvec = trans_arr * sus_arr * beta_arr[nzi] * beta_per_dt
                 pvec.append(new_pvec)
 
-        df = pd.DataFrame({'p1': np.concatenate(avec), 'p2': np.concatenate(bvec), 'p': np.concatenate(pvec)})
-        if len(df) == 0:
-            return [], []
+        if len(avec):
+            dfp1 = np.concatenate(avec)
+            dfp2 = np.concatenate(bvec)
+            dfp = np.concatenate(pvec)
+        else:
+            return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
+
+        df = pd.DataFrame({'p1': dfp1, 'p2': dfp2, 'p': dfp})
 
         p_acq_node = df.groupby('p2').apply(lambda x: 1 - np.prod(1 - x['p']))  # prob(inf) for each potential infectee
         uids = p_acq_node.index.values  # UIDs of those who get come into contact with 1 or more infected person
