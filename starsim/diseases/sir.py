@@ -72,6 +72,7 @@ class SIR(ss.Infection):
 
     def update_death(self, sim, uids):
         # Reset infected/recovered flags for dead agents
+        self.susceptible[uids] = False
         self.infected[uids] = False
         self.recovered[uids] = False
         return
