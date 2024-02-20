@@ -24,7 +24,7 @@ def make_sim_pars():
         death_rate = 0.015,
         networks = dict(
             type = 'randomnet',
-            n_contacts = 4  # sps.poisson(mu=4),
+            n_contacts = 4,
         ),
         diseases = dict(
             type = 'sir',
