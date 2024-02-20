@@ -137,7 +137,6 @@ def test_parallel():
 if __name__ == '__main__':
     T = sc.timer()
     
-    ss.options(multirng=False)
     s1 = test_default()
     s2 = test_simple()
     s3a, s3b = test_sir_epi()

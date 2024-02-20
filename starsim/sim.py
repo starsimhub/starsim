@@ -62,11 +62,17 @@ class Sim(sc.prettyobj):
 
     @property
     def dt(self):
-        return self.pars.dt
+        if 'dt' in self.pars:
+            return self.pars['dt']
+        else:
+            return np.nan
 
     @property
     def year(self):
-        return self.yearvec[self.ti]
+        try:
+            return self.yearvec[self.ti]
+        except:
+            return np.nan
 
     @property
     def modules(self):
