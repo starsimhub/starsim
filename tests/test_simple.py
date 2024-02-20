@@ -135,9 +135,13 @@ def test_parallel():
 
 
 if __name__ == '__main__':
+    T = sc.timer()
+    
     s1 = test_default()
     s2 = test_simple()
     s3a, s3b = test_sir_epi()
     s4_base, s4_intv = test_simple_vax(do_plot=True)
     s5 = test_components()
     s6a, s6b = test_parallel()
+    
+    T.toc()
