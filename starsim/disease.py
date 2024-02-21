@@ -229,12 +229,16 @@ class Infection(Disease):
         netkeys = list(sim.networks.keys())
         for bkey in betapars.keys():
             orig_bkey = bkey[:]
-            if 'net' not in bkey: bkey += 'net'  # Add 'net' suffix if not already there
-            if bkey in netkeys:
+            if bkey in netkeys: # TODO: CK: could tidy up logic
                 betamap[bkey] = betapars[orig_bkey]
-            if bkey not in netkeys:
-                errormsg = f'No network for beta parameter "{bkey}"; your beta has network keys:\n{sc.newlinejoin(netkeys)}'
-                raise ValueError(errormsg)
+            else:
+                if 'net' not in bkey:
+                    bkey += 'net'  # Add 'net' suffix if not already there
+                if bkey in netkeys:
+                    betamap[bkey] = betapars[orig_bkey]
+                else:
+                    errormsg = f'No network for beta parameter "{bkey}"; your beta should match network keys:\n{sc.newlinejoin(netkeys)}'
+                    raise ValueError(errormsg)
         return betamap
 
     def _make_new_cases_singlerng(self, sim):
