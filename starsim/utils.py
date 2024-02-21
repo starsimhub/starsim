@@ -76,7 +76,8 @@ class ndict(sc.objdict):
         if overwrite is None: overwrite = self._overwrite
         if key in self:
             if not overwrite:
-                errormsg = f'Cannot add object "{key}" since already present in ndict with keys:\n{sc.newlinejoin(self.keys())}'
+                typestr = ' "{self._type"}' if self._type else ''
+                errormsg = f'Cannot add object "{key}" since already present in ndict{typestr} with keys:\n{sc.newlinejoin(self.keys())}'
                 raise ValueError(errormsg)
             else:
                 ss.warn(f'Overwriting existing ndict entry "{key}"')
