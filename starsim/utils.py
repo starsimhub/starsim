@@ -2,27 +2,17 @@
 Numerical utilities
 """
 
-# %% Housekeeping
-
 import warnings
 import numpy as np
 import sciris as sc
 import starsim as ss
 import numba as nb
-import scipy.stats as sps
 import pandas as pd
 
-# What functions are externally visible -- note, this gets populated in each section below
-__all__ = []
-
-# System constants
-__all__ += ['INT_NAN']
-
-INT_NAN = np.iinfo(
-    np.int32).max  # Value to use to flag invalid content (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
-
 # %% Helper functions
-__all__ += ['ndict', 'omerge', 'warn', 'unique', 'find_contacts', 'get_subclasses']
+
+# What functions are externally visible -- note, this gets populated in each section below
+__all__ = ['ndict', 'omerge', 'omergeleft', 'warn', 'unique', 'find_contacts', 'get_subclasses', 'all_subclasses']
 
 
 class ndict(sc.objdict):
@@ -30,35 +20,36 @@ class ndict(sc.objdict):
     A dictionary-like class that provides additional functionalities for handling named items.
 
     Args:
-        name (str): The items' attribute to use as keys.
+        name (str): The attribute of the item to use as the dict key (i.e., all items should have this attribute defined)
         type (type): The expected type of items.
         strict (bool): If True, only items with the specified attribute will be accepted.
+        overwrite (bool): whether to allow adding a key when one has already been added
 
     **Examples**::
 
-        networks = ss.ndict(ss.mf(), ss.maternal())
-        networks = ss.ndict([ss.mf(), ss.maternal()])
-        networks = ss.ndict({'mf':ss.mf(), 'maternal':ss.maternal()})
-
+        networks = ss.ndict(ss.MFNet(), ss.MaternalNet())
+        networks = ss.ndict([ss.MFNet(), ss.MaternalNet()])
+        networks = ss.ndict({'mf':ss.MFNet(), 'maternal':ss.MaternalNet()})
     """
 
-    def __init__(self, *args, name='name', type=None, strict=True, **kwargs):
-        self.setattribute('_name', name)  # Since otherwise treated as keys
+    def __init__(self, *args, nameattr='name', type=None, strict=True, overwrite=False, **kwargs):
+        self.setattribute('_nameattr', nameattr)  # Since otherwise treated as keys
         self.setattribute('_type', type)
         self.setattribute('_strict', strict)
-        self._initialize(*args, **kwargs)
+        self.setattribute('_overwrite', overwrite)
+        self.extend(*args, **kwargs)
         return
 
-    def append(self, arg, key=None):
+    def append(self, arg, key=None, overwrite=None):
         valid = False
         if arg is None:
             return  # Nothing to do
-        elif hasattr(arg, self._name):
-            key = key or getattr(arg, self._name)
+        elif hasattr(arg, self._nameattr):
+            key = key or getattr(arg, self._nameattr)
             valid = True
         elif isinstance(arg, dict):
-            if self._name in arg:
-                key = key or arg[self._name]
+            if self._nameattr in arg:
+                key = key or arg[self._nameattr]
                 valid = True
             else:
                 for k, v in arg.items():
@@ -72,15 +63,25 @@ class ndict(sc.objdict):
 
         if valid is True:
             self._check_type(arg)
-            self[key] = arg
+            self._check_key(key, overwrite=overwrite)
+            self[key] = arg # Actually add to the ndict!
         elif valid is None:
             pass  # Nothing to do
         else:
-            errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._name}"'
-            raise ValueError(errormsg)
-
+            errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._nameattr}"'
+            raise TypeError(errormsg)
         return
-
+    
+    def _check_key(self, key, overwrite=None):
+        if overwrite is None: overwrite = self._overwrite
+        if key in self:
+            if not overwrite:
+                errormsg = f'Cannot add object "{key}" since already present in ndict with keys:\n{sc.newlinejoin(self.keys())}'
+                raise ValueError(errormsg)
+            else:
+                ss.warn(f'Overwriting existing ndict entry "{key}"')
+        return
+    
     def _check_type(self, arg):
         """ Check types """
         if self._type is not None:
@@ -89,7 +90,8 @@ class ndict(sc.objdict):
                 raise TypeError(errormsg)
         return
 
-    def _initialize(self, *args, **kwargs):
+    def extend(self, *args, **kwargs):
+        """ Add new items to the ndict, by item, list, or dict """
         args = sc.mergelists(*args)
         for arg in args:
             self.append(arg)
@@ -98,29 +100,49 @@ class ndict(sc.objdict):
         return
 
     def copy(self):
-        new = self.__class__.__new__(name=self._name, type=self._type, strict=self._strict)
+        new = self.__class__.__new__(nameattr=self._nameattr, type=self._type, strict=self._strict)
         new.update(self)
         return new
 
     def __add__(self, dict2):
         """ Allow c = a + b """
         new = self.copy()
-        new.append(dict2)
+        if isinstance(dict2, list):
+            new.extend(dict2)
+        else:
+            new.append(dict2)
         return new
 
     def __iadd__(self, dict2):
         """ Allow a += b """
-        self.append(dict2)
+        if isinstance(dict2, list):
+            self.extend(dict2)
+        else:
+            self.append(dict2)
         return self
 
 
 def omerge(*args, **kwargs):
-    """ Merge things into an objdict """
+    """ Merge things into an objdict, using standard order """
     return sc.objdict(sc.mergedicts(*args, **kwargs))
 
 
+def omergeleft(*args, **kwargs):
+    """ Merge things into an odict, using opposite order to allow defaults to be supplied second """
+    if len(args) == 1 and len(kwargs):
+        new = args[0]
+        default = kwargs
+    elif len(args) == 2 and len(kwargs) == 0:
+        new = args[0]
+        default = args[1]
+    else:
+        errormsg = 'Expecting either two arguments, or one argument and kwargs; for any other arrangement, use ss.omerge()'
+        raise ValueError(errormsg)
+    return sc.objdict(sc.mergedicts(default, new))
+
+
 def warn(msg, category=None, verbose=None, die=None):
-    """ Helper function to handle warnings -- not for the user """
+    """ Helper function to handle warnings -- shortcut to warnings.warn """
 
     # Handle inputs
     warnopt = ss.options.warnings if not die else 'error'
@@ -184,6 +206,10 @@ def get_subclasses(cls):
         yield from get_subclasses(subclass)
         yield subclass
 
+def all_subclasses(cls):
+    """ As above but also returns subsubclases """
+    return set(cls.__subclasses__()).union(
+        [s for c in cls.__subclasses__() for s in all_subclasses(c)])
 
 # %% Seed methods
 
@@ -200,7 +226,7 @@ def set_seed(seed=None):
         seed (int): the random seed
     '''
 
-    @nb.njit
+    @nb.njit(cache=True)
     def set_seed_numba(seed):
         return np.random.seed(seed)
 
@@ -220,7 +246,7 @@ def set_seed(seed=None):
 
 
 # %% Helper functions related to distributions
-__all__ += ['lognorm_params', 'lognorm']
+__all__ += ['lognorm_params', 'lognorm_mean']
 
 
 def lognorm_params(mean, stdev):
@@ -234,12 +260,12 @@ def lognorm_params(mean, stdev):
     return s, scale
 
 
-def lognorm(mean, stdev):
+def lognorm_mean(mean, stdev):
     """
     Wrapper for scipy lognorm but using mean and stdev
     """
     s, scale = lognorm_params(mean, stdev)
-    return sps.lognorm(s=s, scale=scale)
+    return ss.lognorm(s=s, scale=scale)
 
 
 # %% Simple array operations
@@ -247,7 +273,7 @@ def lognorm(mean, stdev):
 __all__ += ['true', 'false', 'defined', 'undefined']
 
 
-@nb.njit
+@nb.njit(cache=True)
 def _true(uids, values):
     """
     Returns the UIDs for indices where the value evaluates as True
@@ -262,7 +288,7 @@ def _true(uids, values):
     return out
 
 
-@nb.njit
+@nb.njit(cache=True)
 def _false(uids, values):
     """
     Returns the UIDs for indices where the value evaluates as False
@@ -282,7 +308,7 @@ def true(state):
     Returns the UIDs of the values of the array that are true
 
     Args:
-        state (State, FusedArray)
+        state (State, UIDArray)
 
     **Example**::
 
@@ -296,7 +322,7 @@ def false(state):
     Returns the indices of the values of the array that are false.
 
     Args:
-        state (State, FusedArray)
+        state (State, UIDArray)
 
     **Example**::
 
@@ -339,7 +365,21 @@ __all__ += ['standardize_data']
 
 
 def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
+    """
+    Args:
+        data (pandas.DataFrame, pandas.Series, dict, int, float): An associative array  or a number, with the
+        input data to be standardized.
+        metadata (dict): The metadata containing information about the columns of the data.
+        max_age (float): The maximum age allowed in the data. Default is 120 years.
+        min_year (float): The minimum year allowed in the data. Default is 1800.
 
+    Returns:
+        df (pandas.DataFrame or sciris.dataframe): The standardized data
+
+    Raises:
+        ValueError: If the columns in `data` do not match the column names in metadata.data_cols
+        or if the index of the data series is not understood.
+    """
     metadata = sc.objdict(metadata)
 
     if isinstance(data, pd.DataFrame):
@@ -351,13 +391,13 @@ def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
     elif isinstance(data, pd.Series):
         if metadata.data_cols.get('age'):
             if (data.index <= max_age).all():  # Assume index is age bins
-                df = pd.DataFrame({
+                df = sc.dataframe({
                     metadata.data_cols['year']: 2000,
                     metadata.data_cols['age']: data.index.values,
                     metadata.data_cols['value']: data.values,
                 })
             elif (data.index >= min_year).all():  # Assume index year
-                df = pd.DataFrame({
+                df = sc.dataframe({
                     metadata.data_cols['year']: data.index.values,
                     metadata.data_cols['age']: 0,
                     metadata.data_cols['value']: data.values,
@@ -366,7 +406,7 @@ def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
                 errormsg = 'Could not understand index of data series: should be age (all values less than 120) or year (all values greater than 1900).'
                 raise ValueError(errormsg)
         else:
-            df = pd.DataFrame({
+            df = sc.dataframe({
                 metadata.data_cols['year']: data.index.values,
                 metadata.data_cols['value']: data.values,
             })
@@ -382,7 +422,7 @@ def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
         new_data = dict()
         for sim_name, col_name in metadata.data_cols.items():
             new_data[sim_name] = sc.tolist(data[col_name])
-        df = pd.DataFrame(new_data)
+        df = sc.dataframe(new_data)
 
     elif sc.isnumber(data):
         df = data  # Just return it as-is

@@ -5,9 +5,7 @@ Set parameters
 import sciris as sc
 import starsim as ss
 
-
 __all__ = ['Parameters', 'make_pars']
-
 
 class Parameters(sc.objdict):
     """
@@ -30,9 +28,10 @@ class Parameters(sc.objdict):
         self.pop_scale       = None  # How much to scale the population
         self.remove_dead     = True          # Remove dead agents each timestep
 
-        # Demographic parameters: NOT CURRENTLY FUNCTIONAL
-        # TBC whether these parameters live here or in separate demographic modules
-        self.location    = None  # What demographics to use
+        # Demographic parameters
+        self.location    = None  #  NOT CURRENTLY FUNCTIONAL - what demographics to use
+        self.birth_rate = None
+        self.death_rate = None
 
         # Simulation parameters
         self.start           = 1995.         # Start of the simulation
@@ -45,13 +44,13 @@ class Parameters(sc.objdict):
         self.slot_scale      = 5             # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents. Choosing a larger value here will reduce the probability of two agents using the same slot (and hence random draws), but increase the number of random numbers that are required.
         self.verbose         = ss.options.verbose # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
 
-        # Events and interventions
-        self.connectors = sc.autolist()
-        self.interventions = sc.autolist()  # The interventions present in this simulation; populated by the user
-        self.analyzers = sc.autolist()  # The functions present in this simulation; populated by the user
-
-        # Network parameters, generally initialized after the population has been constructed
-        self.networks        = sc.autolist()  # Network types and parameters
+        # Plug-ins: demographics, diseases, connectors, networks, analyzers, and interventions
+        self.demographics = ss.ndict()
+        self.diseases = ss.ndict()
+        self.networks        = ss.ndict()
+        self.connectors = ss.ndict()
+        self.interventions = ss.ndict()
+        self.analyzers = ss.ndict()
 
         # Update with any supplied parameter values and generate things that need to be generated
         self.update(kwargs)

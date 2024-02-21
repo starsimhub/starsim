@@ -1,5 +1,5 @@
 """
-Test that the current version of HPVsim exactly matches
+Test that the current version of Starsim exactly matches
 the baseline results.
 """
 
@@ -26,8 +26,7 @@ pars = sc.objdict(
 def make_people():
     ss.set_seed(pars.rand_seed)
     n_agents = int(10e3)
-    networks = [ss.mf(), ss.maternal()]
-    ppl = ss.People(n_agents, networks=networks)
+    ppl = ss.People(n_agents=n_agents)
     return ppl
 
 
@@ -43,8 +42,9 @@ def make_sim(ppl=None, do_plot=False, **kwargs):
     
     # Make the sim
     hiv = ss.HIV()
-    hiv.pars['beta'] = {'mf': [0.15, 0.10], 'maternal': [0.2, 0]}
-    sim = ss.Sim(pars=pars, people=ppl, demographics=ss.Pregnancy(), diseases=hiv)
+    hiv.pars.beta = {'mf': [0.15, 0.10], 'maternal': [0.2, 0]}
+    networks = [ss.MFNet(), ss.MaternalNet()]
+    sim = ss.Sim(pars=pars, people=ppl, networks=networks, demographics=ss.Pregnancy(), diseases=hiv)
 
     # Optionally plot
     if do_plot:

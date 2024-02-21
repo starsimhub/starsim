@@ -12,11 +12,12 @@ from .results       import *
 from .demographics  import *
 from .products      import *
 from .interventions import *
-from .analyzers     import *
 from .demographics  import *
 from .connectors    import *
+from .disease       import *
 from .diseases      import *
 from .sim           import *
+from .run           import *
 
 import sciris as sc
 root = sc.thispath(__file__).parent

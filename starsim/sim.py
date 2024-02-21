@@ -11,43 +11,49 @@ import numba as nb
 
 __all__ = ['Sim', 'AlreadyRunError', 'diff_sims']
 
-@nb.njit
+
+@nb.njit(cache=True)
 def set_numba_seed(value):
     # Needed to ensure reproducibility when using random calls in numba, e.g. RandomNetwork
     # Note, these random numbers are not currently common-random-number safe
     np.random.seed(value)
+    return
+
 
 class Sim(sc.prettyobj):
 
-    def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, connectors=None, **kwargs):
+    def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, networks=None,
+                 connectors=None, interventions=None, analyzers=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
         self.people = people  # People object
-        self.demographics  = ss.ndict(demographics, type=ss.DemographicModule)
-        self.diseases      = ss.ndict(diseases, type=ss.Disease)
-        self.connectors    = ss.ndict(connectors, type=ss.Connector)
-        self.results       = ss.ndict(type=ss.Result)  # For storing results
-        self.summary       = None  # For storing a summary of the results
-        self.initialized   = False  # Whether initialization is complete
-        self.complete      = False  # Whether a simulation has completed running # TODO: replace with finalized?
+        self.results = ss.Results(module='sim')  # For storing results
+        self.summary = None  # For storing a summary of the results
+        self.initialized = False  # Whether initialization is complete
+        self.complete = False  # Whether a simulation has completed running # TODO: replace with finalized?
         self.results_ready = False  # Whether results are ready
-        self.filename      = None
+        self.filename = None
 
         # Time indexing
-        self.ti      = None  # The time index, e.g. 0, 1, 2 # TODO: do we need all of these?
+        self.ti = None  # The time index, e.g. 0, 1, 2 # TODO: do we need all of these?
         self.yearvec = None
-        self.tivec   = None
-        self.npts    = None
+        self.tivec = None
+        self.npts = None
 
         # Make default parameters (using values from parameters.py)
         self.pars = ss.make_pars()  # Start with default pars
         self.pars.update_pars(sc.mergedicts(pars, kwargs))  # Update the parameters
 
-        # Initialize other quantities
-        self.interventions = ss.ndict(type=ss.Intervention)
-        self.analyzers = ss.ndict(type=ss.Analyzer)
+        # Placeholders for plug-ins: demographics, diseases, connectors, analyzers, and interventions
+        # Products are not here because they are stored within interventions
+        self.demographics = ss.ndict(demographics, type=ss.BaseDemographics)
+        self.diseases = ss.ndict(diseases, type=ss.Disease)
+        self.networks = ss.ndict(networks, type=ss.Network)
+        self.connectors = ss.ndict(connectors, type=ss.Connector)
+        self.interventions = ss.ndict(interventions, type=ss.Intervention)
+        self.analyzers = ss.ndict(analyzers, type=ss.Analyzer)
 
         # Initialize the random number generator container
         self.rng_container = ss.RNGContainer()
@@ -56,19 +62,26 @@ class Sim(sc.prettyobj):
 
     @property
     def dt(self):
-        return self.pars['dt']
+        if 'dt' in self.pars:
+            return self.pars['dt']
+        else:
+            return np.nan
 
     @property
     def year(self):
-        return self.yearvec[self.ti]
+        try:
+            return self.yearvec[self.ti]
+        except:
+            return np.nan
 
     @property
     def modules(self):
         # Return iterator over all Module instances (stored in standard places) in the Sim
-        products = [intv.product for intv in self.interventions.values() if hasattr(intv, 'product') and isinstance(intv.product, ss.Product)]
+        products = [intv.product for intv in self.interventions.values() if
+                    hasattr(intv, 'product') and isinstance(intv.product, ss.Product)]
         return itertools.chain(
             self.demographics.values(),
-            self.people.networks.values(),
+            self.networks.values(),
             self.diseases.values(),
             self.connectors.values(),
             self.interventions.values(),
@@ -76,7 +89,7 @@ class Sim(sc.prettyobj):
             self.analyzers.values(),
         )
 
-    def initialize(self, popdict=None, reset=False, **kwargs):
+    def initialize(self, reset=False, **kwargs):
         """
         Perform all initializations on the sim.
         """
@@ -85,12 +98,14 @@ class Sim(sc.prettyobj):
         self.validate_pars()  # Ensure parameters have valid values
         self.validate_dt()
         self.init_time_vecs()  # Initialize time vecs
-        ss.set_seed(self.pars['rand_seed'])  # Reset the random seed before the population is created
-        set_numba_seed(self.pars['rand_seed'])
+        ss.set_seed(self.pars.rand_seed)  # Reset the random seed before the population is created
+        set_numba_seed(self.pars.rand_seed)
 
         # Initialize the core sim components
-        self.rng_container.initialize(self.pars['rand_seed'] + 2) # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rng_container
+        self.rng_container.initialize(self.pars.rand_seed + 2)  # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rng_container
         self.init_people(reset=reset, **kwargs)  # Create all the people (the heaviest step)
+
+        # Initialize plug-ins
         self.init_demographics()
         self.init_networks()
         self.init_diseases()
@@ -103,7 +118,7 @@ class Sim(sc.prettyobj):
 
         # Reset the random seed to the default run seed, so that if the simulation is run with
         # reset_seed=False right after initialization, it will still produce the same output
-        ss.set_seed(self.pars['rand_seed'] + 1) # Hopefully not used now that we can use multiple random number generators
+        ss.set_seed(self.pars.rand_seed + 1)  # Hopefully not used now that we can use multiple random number generators
 
         # Final steps
         self.initialized = True
@@ -123,8 +138,8 @@ class Sim(sc.prettyobj):
             # Round the reciprocal
             reciprocal = int(reciprocal)
             rounded_dt = 1.0 / reciprocal
-            self.pars['dt'] = rounded_dt
-            if self.pars['verbose']:
+            self.pars.dt = rounded_dt
+            if self.pars.verbose:
                 warnmsg = f"Warning: Provided time step dt: {dt} resulted in a non-integer number of steps per year. Rounded to {rounded_dt}."
                 print(warnmsg)
         return
@@ -135,34 +150,34 @@ class Sim(sc.prettyobj):
         """
         # Handle n_agents
         if self.people is not None:
-            self.pars['n_agents'] = len(self.people)
-        #elif self.popdict is not None: # Starsim does not currenlty support self.popdict
-            #self.pars['n_agents'] = len(self.popdict)
-        elif self.pars['n_agents'] is not None:
-            self.pars['n_agents'] = int(self.pars['n_agents'])
+            self.pars.n_agents = len(self.people)
+        # elif self.popdict is not None: # Starsim does not currenlty support self.popdict
+        # self.pars.n_agents = len(self.popdict)
+        elif self.pars.n_agents is not None:
+            self.pars.n_agents = int(self.pars.n_agents)
         else:
             errormsg = 'Must supply n_agents, a people object, or a popdict'
             raise ValueError(errormsg)
 
         # Handle end and n_years
-        if self.pars['end']:
-            self.pars['n_years'] = int(self.pars['end'] - self.pars['start'])
-            if self.pars['n_years'] <= 0:
-                errormsg = f"Number of years must be >0, but you supplied start={str(self.pars['start'])} and " \
-                           f"end={str(self.pars['end'])}, which gives n_years={self.pars['n_years']}"
+        if self.pars.end:
+            self.pars.n_years = int(self.pars.end - self.pars.start)
+            if self.pars.n_years <= 0:
+                errormsg = f"Number of years must be >0, but you supplied start={str(self.pars.start)} and " \
+                           f"end={str(self.pars.end)}, which gives n_years={self.pars.n_years}"
                 raise ValueError(errormsg)
         else:
-            if self.pars['n_years']:
-                self.pars['end'] = self.pars['start'] + self.pars['n_years']
+            if self.pars.n_years:
+                self.pars.end = self.pars.start + self.pars.n_years
             else:
                 errormsg = 'You must supply one of n_years and end."'
                 raise ValueError(errormsg)
 
         # Handle verbose
-        if self.pars['verbose'] == 'brief':
-            self.pars['verbose'] = -1
-        if not sc.isnumber(self.pars['verbose']):  # pragma: no cover
-            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self.pars["verbose"])} "{self.pars["verbose"]}"'
+        if self.pars.verbose == 'brief':
+            self.pars.verbose = -1
+        if not sc.isnumber(self.pars.verbose):  # pragma: no cover
+            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self.par.verbose)} "{self.par.verbose}"'
             raise ValueError(errormsg)
 
         return
@@ -171,8 +186,8 @@ class Sim(sc.prettyobj):
         """
         Construct vectors things that keep track of time
         """
-        self.yearvec = sc.inclusiverange(start=self.pars['start'], stop=self.pars['end'] + 1 - self.pars['dt'],
-                                         step=self.pars['dt'])  # Includes all the timepoints in the last year
+        self.yearvec = sc.inclusiverange(start=self.pars.start, stop=self.pars.end + 1 - self.pars.dt,
+                                         step=self.pars.dt)  # Includes all the timepoints in the last year
         self.npts = len(self.yearvec)
         self.tivec = np.arange(self.npts)
         return
@@ -190,7 +205,7 @@ class Sim(sc.prettyobj):
 
         # Handle inputs
         if verbose is None:
-            verbose = self.pars['verbose']
+            verbose = self.pars.verbose
         if verbose > 0:
             resetstr = ''
             if self.people and reset:
@@ -199,27 +214,27 @@ class Sim(sc.prettyobj):
 
         # If people have not been supplied, make them
         if self.people is None or reset:
-            self.people = ss.People(n=self.pars['n_agents'], **kwargs)  # This just assigns UIDs and length
+            self.people = ss.People(n_agents=self.pars.n_agents, **kwargs)  # This just assigns UIDs and length
 
         # If a popdict has not been supplied, we can make one from location data
-        if self.pars['location'] is not None:
+        if self.pars.location is not None:
             # Check where to get total_pop from
-            if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
+            if self.pars.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
                 errormsg = 'You can either define total_pop explicitly or via the location, but not both'
                 raise ValueError(errormsg)
 
         else:
-            if self.pars['total_pop'] is not None:  # If no pop_scale has been provided, try to get it from the location
-                total_pop = self.pars['total_pop']
+            if self.pars.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
+                total_pop = self.pars.total_pop
             else:
-                if self.pars['pop_scale'] is not None:
-                    total_pop = self.pars['pop_scale'] * self.pars['n_agents']
+                if self.pars.pop_scale is not None:
+                    total_pop = self.pars.pop_scale * self.pars.n_agents
                 else:
-                    total_pop = self.pars['n_agents']
+                    total_pop = self.pars.n_agents
 
-        self.pars['total_pop'] = total_pop
-        if self.pars['pop_scale'] is None:
-            self.pars['pop_scale'] = total_pop / self.pars['n_agents']
+        self.pars.total_pop = total_pop
+        if self.pars.pop_scale is None:
+            self.pars.pop_scale = total_pop / self.pars.n_agents
 
         # Any other initialization
         if not self.people.initialized:
@@ -232,14 +247,102 @@ class Sim(sc.prettyobj):
         self.people.init_results(self)
         return self
 
+    def convert_plugins(self, plugin_class, plugin_name=None):
+        """
+        Common logic for converting plug-ins to a standard format
+        Used for networks, demographics, diseases, connectors, analyzers, and interventions
+        Args:
+            plugin: class
+        """
+
+        if plugin_name is None: plugin_name = plugin_class.__name__.lower()
+
+        # Get lower-case names of all subclasses
+        known_plugins = {n.__name__.lower():n for n in ss.all_subclasses(plugin_class)}
+        if plugin_name == 'networks': # Allow "msm" or "msmnet"
+            known_plugins.update({k.removesuffix('net'):v for k,v in known_plugins.items()})
+
+        # Figure out if it's in the sim pars or provided directly
+        attr_plugins = getattr(self, plugin_name)  # Get any plugins that have been provided directly
+        if attr_plugins is None or len(attr_plugins) == 0:  # None have been provided directly
+
+            # See if they've been provided in the pars dict
+            if self.pars.get(plugin_name):
+
+                par_plug = self.pars[plugin_name]
+
+                # String: convert to ndict
+                if isinstance(par_plug, str):
+                    plugins = ss.ndict(dict(name=par_plug))
+
+                # List or dict: convert to ndict
+                elif sc.isiterable(par_plug) and len(par_plug):
+                    if isinstance(par_plug, dict) and 'type' in par_plug and 'name' not in par_plug:
+                        par_plug['name'] = par_plug['type'] # TODO: simplify/remove this
+                    plugins = ss.ndict(par_plug)
+
+            else:  # Not provided directly or in pars
+                plugins = {}
+        else:
+            plugins = attr_plugins
+
+        processed_plugins = sc.autolist()
+        for plugin in plugins.values():
+
+            if not isinstance(plugin, plugin_class):
+
+                if isinstance(plugin, dict):
+                    ptype = (plugin.get('type') or plugin.get('name') or '').lower()
+                    name = plugin.get('name') or ptype
+                    if ptype in known_plugins:
+                        # Make an instance of the requested plugin
+                        plugin_pars = {k: v for k, v in plugin.items() if k not in ['type', 'name']}
+                        pclass = known_plugins[ptype]
+                        plugin = pclass(name=name, pars=plugin_pars) # TODO: does this handle par_dists, etc?
+                    else:
+                        errormsg = (f'Could not convert {plugin} to an instance of class {plugin_name}.'
+                                    f'Try specifying it directly rather than as a dictionary.')
+                        raise ValueError(errormsg)
+                else:
+                    errormsg = (
+                        f'{plugin_name.capitalize()} must be provided as either class instances or dictionaries with a '
+                        f'"name" key corresponding to one of these known subclasses: {known_plugins}.')
+                    raise ValueError(errormsg)
+
+            processed_plugins += plugin
+
+        return processed_plugins
+
     def init_demographics(self):
-        for module in self.demographics.values():
-            module.initialize(self)
-            self.results[module.name] = module.results
+        """ Initialize demographics """
+
+        # Demographics can be provided via sim.demographics or sim.pars - this methods reconciles them
+        demographics = self.convert_plugins(ss.BaseDemographics, plugin_name='demographics')
+
+        # We also allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
+        if self.pars.birth_rate is not None:
+            births = ss.Births(pars={'birth_rate': self.pars.birth_rate})
+            demographics += births
+        if self.pars.death_rate is not None:
+            background_deaths = ss.Deaths(pars={'death_rate': self.pars.death_rate})
+            demographics += background_deaths
+
+        # Iterate over demographic modules and initialize them
+        for dem_mod in demographics:
+            dem_mod.initialize(self)
+            self.results[dem_mod.name] = dem_mod.results
+
+        # Ensure they're stored at the sim level
+        self.demographics = ss.ndict(*demographics)
 
     def init_diseases(self):
-        """ Initialize modules and connectors to be simulated """
-        for disease in self.diseases.values():
+        """ Initialize diseases """
+
+        # Diseases can be provided in sim.demographics or sim.pars
+        diseases = self.convert_plugins(ss.Disease, plugin_name='diseases')
+
+        # Interate over diseases and initialize them
+        for disease in diseases:
             disease.initialize(self)
 
             # Add the disease's parameters and results into the Sim's dicts
@@ -248,6 +351,9 @@ class Sim(sc.prettyobj):
 
             # Add disease states to the People's dicts
             self.people.add_module(disease)
+
+        # Store diseases in the sim
+        self.diseases = ss.ndict(*diseases)
 
         return
 
@@ -258,46 +364,34 @@ class Sim(sc.prettyobj):
     def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
 
-        # One possible workflow is that users will provide a location and a set of networks but not people.
-        # This means networks will be stored in self.pars['networks'] and we'll need to copy them to the people.
-        if self.people.networks is None or len(self.people.networks) == 0:
-            if self.pars['networks'] is not None:
-                self.people.networks = ss.Networks(self.pars['networks'])
+        processed_networks = self.convert_plugins(ss.Network, plugin_name='networks')
 
-        if not isinstance(self.people.networks, ss.Networks):
-            self.people.networks = ss.Networks(networks=self.people.networks)
-
-        self.people.networks.initialize(self)
-
-        # for key, network in self.people.networks.networks.items():  # TODO rename
-            # if network.label is not None:
-            #     layer_name = network.label
-            # else:
-            #     layer_name = key
-            #     network.label = layer_name
-            # network.initialize(self)
-
-            # Add network states to the People's dicts
-            # self.people.add_module(network)
-            # self.people.networks[network.name] = network
+        # Now store the networks in a Networks object, which also allows for connectors between networks
+        if not isinstance(processed_networks, ss.Networks):
+            self.networks = ss.Networks(*processed_networks)
+        self.networks.initialize(self)
 
         return
 
     def init_interventions(self):
         """ Initialize and validate the interventions """
 
+        interventions = self.convert_plugins(ss.Intervention, plugin_name='interventions')
+
         # Translate the intervention specs into actual interventions
-        for i, intervention in enumerate(self.pars['interventions']):
+        for i, intervention in enumerate(interventions):
             if isinstance(intervention, type) and issubclass(intervention, ss.Intervention):
                 intervention = intervention()  # Convert from a class to an instance of a class
             if isinstance(intervention, ss.Intervention):
                 intervention.initialize(self)
-                self.interventions += intervention
             elif callable(intervention):
-                self.interventions += intervention
+                pass # TODO: check if this fails with a plain function (it should?)
+                # self.interventions += intervention 
             else:
                 errormsg = f'Intervention {intervention} does not seem to be a valid intervention: must be a function or Intervention subclass'
                 raise TypeError(errormsg)
+            if intervention.name not in self.interventions:
+                self.interventions += intervention
 
             # Add the intervention parameters and results into the Sim's dicts
             self.pars[intervention.name] = intervention.pars
@@ -313,6 +407,7 @@ class Sim(sc.prettyobj):
             # If there's a product module present, initialize and add it
             if hasattr(intervention, 'product') and isinstance(intervention.product, ss.Product):
                 intervention.product.initialize(self)
+
                 self.people.add_module(intervention.product)
                 for rng in intervention.product.rngs:
                     rng.initialize(self.rng_container, self.people.slot)
@@ -323,7 +418,7 @@ class Sim(sc.prettyobj):
         """ Initialize the analyzers """
 
         # Interpret analyzers
-        for ai, analyzer in enumerate(self.pars['analyzers']):
+        for ai, analyzer in enumerate(self.pars.analyzers):
             if isinstance(analyzer, type) and issubclass(analyzer, ss.Analyzer):
                 analyzer = analyzer()  # Convert from a class to an instance of a class
             if not (isinstance(analyzer, ss.Analyzer) or callable(analyzer)):
@@ -343,7 +438,7 @@ class Sim(sc.prettyobj):
         TBC whether we keep this or incorporate the checks into the init methods
         """
         # Make sure that there's a contact network if any diseases are present
-        if self.diseases and not self.people.networks:
+        if self.diseases and not self.networks:
             warnmsg = f'Warning: simulation has {len(self.diseases)} diseases but no contact network(s).'
             ss.warn(warnmsg, die=False)
         return
@@ -356,7 +451,7 @@ class Sim(sc.prettyobj):
             raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
 
         # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
-        self.rng_container.step(self.ti+1) # +1 offset because ti=0 is used on initialization
+        self.rng_container.step(self.ti + 1)  # +1 offset because ti=0 is used on initialization
 
         # Clean up dead agents, if removing agents is enabled
         if self.pars.remove_dead:
@@ -377,7 +472,7 @@ class Sim(sc.prettyobj):
 
         # Update networks - this takes place here in case autonomous state changes at this timestep
         # affect eligibility for contacts
-        self.people.update_networks()
+        self.networks.update(self.people)
 
         # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
         # interventions, by running them at this point
@@ -423,10 +518,10 @@ class Sim(sc.prettyobj):
             self._orig_pars = sc.dcp(self.pars)  # Create a copy of the parameters to restore after the run
 
         if verbose is None:
-            verbose = self.pars['verbose']
+            verbose = self.pars.verbose
 
         if reset_seed:
-            ss.set_seed(self.pars['rand_seed'] + 1)
+            ss.set_seed(self.pars.rand_seed + 1)
 
         # Check for AlreadyRun errors
         errormsg = None
@@ -477,7 +572,7 @@ class Sim(sc.prettyobj):
         # Scale the results
         for reskey, res in self.results.items():
             if isinstance(res, ss.Result) and res.scale:
-                self.results[reskey] = self.results[reskey]*self.pars.pop_scale
+                self.results[reskey] = self.results[reskey] * self.pars.pop_scale
 
         for module in self.modules:
             module.finalize(self)
@@ -486,15 +581,14 @@ class Sim(sc.prettyobj):
         self.results_ready = True  # Set this first so self.summary() knows to print the results
         self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
         return
-    
+
     def summarize(self):
         summary = sc.objdict()
         flat = sc.flattendict(self.results, sep='_')
-        for k,v in flat.items():
+        for k, v in flat.items():
             summary[k] = v.mean()
         self.summary = summary
         return summary
-        
 
     def shrink(self, skip_attrs=None, in_place=True):
         """
@@ -533,14 +627,14 @@ class Sim(sc.prettyobj):
         """ Helper method for get_interventions() and get_analyzers(); see get_interventions() docstring """
 
         # Handle inputs
-        if which not in ['interventions', 'analyzers']: # pragma: no cover
+        if which not in ['interventions', 'analyzers']:  # pragma: no cover
             errormsg = f'This method is only defined for interventions and analyzers, not "{which}"'
             raise ValueError(errormsg)
 
-        ia_ndict = self.analyzers if which == 'analyzers' else self.interventions # List of interventions or analyzers
+        ia_ndict = self.analyzers if which == 'analyzers' else self.interventions  # List of interventions or analyzers
         n_ia = len(ia_ndict)  # Number of interventions/analyzers
 
-        position = 0 if first else -1 # Choose either the first or last element
+        position = 0 if first else -1  # Choose either the first or last element
         if label is None:  # Get all interventions if no label is supplied, e.g. sim.get_interventions()
             label = np.arange(n_ia)
         if isinstance(label, np.ndarray):  # Allow arrays to be provided
@@ -564,24 +658,25 @@ class Sim(sc.prettyobj):
                     elif isinstance(label, type) and isinstance(ia_obj, label):
                         matches.append(ia_obj)
                         match_inds.append(ind)
-            else: # pragma: no cover
+            else:  # pragma: no cover
                 errormsg = f'Could not interpret label type "{type(label)}": should be str, int, list, or {which} class'
                 raise TypeError(errormsg)
 
         # Parse the output options
         if as_inds:
             output = match_inds
-        elif as_list: # Used by get_interventions()
+        elif as_list:  # Used by get_interventions()
             output = matches
         else:
-            if len(matches) == 0: # pragma: no cover
+            if len(matches) == 0:  # pragma: no cover
                 if die:
                     errormsg = f'No {which} matching "{label}" were found'
                     raise ValueError(errormsg)
                 else:
                     output = None
             else:
-                output = matches[position] # Return either the first or last match (usually), used by get_intervention()
+                output = matches[
+                    position]  # Return either the first or last match (usually), used by get_intervention()
 
         return output
 
@@ -598,7 +693,6 @@ class Sim(sc.prettyobj):
         """
         return self._get_ia('interventions', label=label, partial=partial, as_inds=as_inds, as_list=True)
 
-
     def get_intervention(self, label=None, partial=False, first=False, die=True):
         """
         Find the matching intervention(s) by label, index, or type.
@@ -611,7 +705,8 @@ class Sim(sc.prettyobj):
             first (bool): if true, return first matching intervention (otherwise, return last)
             die (bool): whether to raise an exception if no intervention is found
         """
-        return self._get_ia('interventions', label=label, partial=partial, first=first, die=die, as_inds=False, as_list=False)
+        return self._get_ia('interventions', label=label, partial=partial, first=first, die=die, as_inds=False,
+                            as_list=False)
 
     def save(self, filename=None, keep_people=None, skip_attrs=None, **kwargs):
         """
@@ -742,7 +837,7 @@ class Sim(sc.prettyobj):
                     d['short_summary'] = dict(sc.dcp(self.short_summary))
                 else:
                     d['short_summary'] = 'Full summary not available (Sim has not yet been run)'
-            else: # pragma: no cover
+            else:  # pragma: no cover
                 try:
                     d[key] = sc.sanitizejson(getattr(self, key))
                 except Exception as E:
@@ -755,15 +850,15 @@ class Sim(sc.prettyobj):
             output = sc.savejson(filename=filename, obj=d, indent=indent, *args, **kwargs)
 
         return output
-    
+
     def plot(self):
         flat = sc.flattendict(self.results, sep=': ')
         fig, axs = sc.getrowscols(len(flat), make=True)
-        for ax,(k,v) in zip(axs.flatten(), flat.items()):
+        for ax, (k, v) in zip(axs.flatten(), flat.items()):
             ax.plot(v)
             ax.set_title(k)
         return fig
-            
+
 
 class AlreadyRunError(RuntimeError):
     """
@@ -792,9 +887,9 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
 
     **Example**::
 
-        s1 = hpv.Sim(rand_seed=1).run()
-        s2 = hpv.Sim(rand_seed=2).run()
-        hpv.diff_sims(s1, s2)
+        s1 = ss.Sim(rand_seed=1).run()
+        s2 = ss.Sim(rand_seed=2).run()
+        ss.diff_sims(s1, s2)
     '''
 
     if isinstance(sim1, Sim):
@@ -802,7 +897,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     if isinstance(sim2, Sim):
         sim2 = sim2.summarize()
     for sim in [sim1, sim2]:
-        if not isinstance(sim, dict): # pragma: no cover
+        if not isinstance(sim, dict):  # pragma: no cover
             errormsg = f'Cannot compare object of type {type(sim)}, must be a sim or a sim.summary dict'
             raise TypeError(errormsg)
 
@@ -810,10 +905,10 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     keymatchmsg = ''
     sim1_keys = set(sim1.keys())
     sim2_keys = set(sim2.keys())
-    if sim1_keys != sim2_keys and not skip_key_diffs: # pragma: no cover
+    if sim1_keys != sim2_keys and not skip_key_diffs:  # pragma: no cover
         keymatchmsg = "Keys don't match!\n"
         missing = list(sim1_keys - sim2_keys)
-        extra   = list(sim2_keys - sim1_keys)
+        extra = list(sim2_keys - sim1_keys)
         if missing:
             keymatchmsg += f'  Missing sim1 keys: {missing}\ns'
         if extra:
@@ -823,8 +918,8 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     valmatchmsg = ''
     mismatches = {}
     skip = sc.tolist(skip)
-    for key in sim2.keys(): # To ensure order
-        if key in sim1_keys and key not in skip: # If a key is missing, don't count it as a mismatch
+    for key in sim2.keys():  # To ensure order
+        if key in sim1_keys and key not in skip:  # If a key is missing, don't count it as a mismatch
             sim1_val = sim1[key] if key in sim1 else 'not present'
             sim2_val = sim2[key] if key in sim2 else 'not present'
             if not np.isclose(sim1_val, sim2_val, equal_nan=True):
@@ -833,21 +928,21 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     if len(mismatches):
         valmatchmsg = '\nThe following values differ between the two simulations:\n'
         df = sc.dataframe.from_dict(mismatches).transpose()
-        diff   = []
-        ratio  = []
+        diff = []
+        ratio = []
         change = []
-        small_change = 1e-3 # Define a small change, e.g. a rounding error
+        small_change = 1e-3  # Define a small change, e.g. a rounding error
         for mdict in mismatches.values():
             old = mdict['sim1']
             new = mdict['sim2']
             numeric = sc.isnumber(sim1_val) and sc.isnumber(sim2_val)
-            if numeric and old>0:
-                this_diff  = new - old
-                this_ratio = new/old
-                abs_ratio  = max(this_ratio, 1.0/this_ratio)
+            if numeric and old > 0:
+                this_diff = new - old
+                this_ratio = new / old
+                abs_ratio = max(this_ratio, 1.0 / this_ratio)
 
                 # Set the character to use
-                if abs_ratio<small_change:
+                if abs_ratio < small_change:
                     change_char = '≈'
                 elif new > old:
                     change_char = '↑'
@@ -866,10 +961,10 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
                 if abs_ratio >= 10:
                     repeats = 4
 
-                this_change = change_char*repeats
-            else: # pragma: no cover
-                this_diff   = np.nan
-                this_ratio  = np.nan
+                this_change = change_char * repeats
+            else:  # pragma: no cover
+                this_diff = np.nan
+                this_ratio = np.nan
                 this_change = 'N/A'
 
             diff.append(this_diff)
@@ -885,7 +980,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
 
     # Raise an error if mismatches were found
     mismatchmsg = keymatchmsg + valmatchmsg
-    if mismatchmsg: # pragma: no cover
+    if mismatchmsg:  # pragma: no cover
         if die:
             raise ValueError(mismatchmsg)
         elif output:

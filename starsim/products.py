@@ -5,10 +5,9 @@ Define products
 import starsim as ss
 import sciris as sc
 import numpy as np
-import scipy.stats as sps
 
 
-__all__ = ['Product', 'dx', 'tx']
+__all__ = ['Product', 'dx', 'tx', 'vx']
 
 
 class Product(ss.Module):
@@ -37,7 +36,7 @@ class dx(Product):
 
         # Create placehold for multinomial sampling
         n_results = len(self.hierarchy)
-        self.result_dist = sps.rv_discrete(values=(np.arange(n_results), 1/n_results*np.ones(n_results)))
+        self.result_dist = ss.rv_discrete(values=(np.arange(n_results), 1/n_results*np.ones(n_results)))
 
     @property
     def default_value(self):
@@ -87,7 +86,7 @@ class tx(Product):
         self.df = df
         self.diseases = df.disease.unique()
         self.health_states = df.state.unique()
-        self.efficacy_dist = sps.bernoulli(p=0)
+        self.efficacy_dist = ss.bernoulli(p=0)
         # # TEMP
         # self.efficacy_dist = ss.ScipyDistribution(self.efficacy_dist, f'{self.name}_{self.label}_efficacy_dist')
 
@@ -132,3 +131,20 @@ class tx(Product):
             output = tx_successful
 
         return output
+
+
+class vx(Product):
+    """ Vaccine product """
+    def __init__(self, diseases=None, pars=None, par_dists=None, *args, **kwargs):
+        pars = ss.omerge({}, pars)
+        par_dists = ss.omerge({}, par_dists)
+        super().__init__(pars, par_dists, *args, **kwargs)
+        self.diseases = sc.tolist(diseases)
+
+    def administer(self, people, uids):
+        """ Apply the vaccine to the requested uids. """
+        pass
+
+
+
+
