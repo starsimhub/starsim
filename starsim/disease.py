@@ -241,8 +241,13 @@ class Infection(Disease):
                     raise ValueError(errormsg)
         return betamap
 
-    def _make_new_cases_singlerng(self, sim):
-        # Not common-random-number-safe, but more efficient for when not using the multirng feature
+    def make_new_cases(self, sim):
+        """
+        Add new cases of module, through transmission, incidence, etc.
+        
+        Common-random-number-safe transmission code works by mapping edges onto
+        slots.
+        """
         new_cases = []
         sources = []
         people = sim.people
@@ -255,8 +260,9 @@ class Infection(Disease):
             contacts = net.contacts
             rel_trans = (self.infectious & people.alive) * self.rel_trans
             rel_sus = (self.susceptible & people.alive) * self.rel_sus
-            for a, b, beta in [[contacts.p1, contacts.p2, nbetas[0]],
-                               [contacts.p2, contacts.p1, nbetas[1]]]:
+            p1p2b0 = [contacts.p1, contacts.p2, nbetas[0]]
+            p2p1b1 = [contacts.p2, contacts.p1, nbetas[1]]
+            for src, trg, beta in [p1p2b0, p2p1b1]:
 
                 # Skip networks with no transmission
                 if beta == 0:
@@ -268,17 +274,26 @@ class Infection(Disease):
                 # TODO: move this to STI?
                 if 'acts' in contacts.keys():
                     beta_per_dt = 1 - (1 - beta) ** (contacts.acts * people.dt)
-                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta_per_dt
+                    p_transmit = rel_trans[src] * rel_sus[trg] * contacts.beta * beta_per_dt
                 else:
-                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt
+                    p_transmit = rel_trans[src] * rel_sus[trg] * contacts.beta * beta * people.dt
 
-                new_cases_bool = np.random.random(
-                    len(a)) < p_transmit  # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
-                new_cases.append(b[new_cases_bool])
-                sources.append(a[new_cases_bool])
+                if not ss.options.multirng:
+                    new_cases_bool = np.random.random(len(src)) < p_transmit  # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
+                else:
+                    # TODO
+                new_cases.append(trg[new_cases_bool])
+                sources.append(src[new_cases_bool])
         if len(new_cases) and len(sources):
-            return np.concatenate(new_cases), np.concatenate(sources)
-        return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
+            new_cases = np.concatenate(new_cases)
+            sources = np.concatenate(sources)
+        else:
+            new_cases = np.empty(0, dtype=int)
+            sources = np.empty(0, dtype=int)
+    
+        if len(new_cases):
+            self.set_prognoses(sim, new_cases, sources)
+        return
 
     def _make_new_cases_multirng(self, sim):
         """
