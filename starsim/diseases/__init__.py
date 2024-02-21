@@ -7,5 +7,5 @@ from .ebola         import *
 from .gonorrhea     import *
 from .hiv           import *
 from .measles       import *
-from .syphilis      import *
 from .rsv           import *
+from .syphilis      import *
