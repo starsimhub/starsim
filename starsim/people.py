@@ -49,10 +49,6 @@ class BasePeople(sc.prettyobj):
         # a selection of the states e.g., module states could be added in there, while intervention states might not
         self._states = {}
 
-    @property
-    def rngs(self):
-        return [x for x in self.__dict__.values() if isinstance(x, (ss.MultiRNG, ss.SingleRNG))]
-
     def __len__(self):
         """ Length of people """
         return len(self.uid)
@@ -214,10 +210,6 @@ class People(BasePeople):
         # This is because some states may depend on RNGs being initialized to generate initial values
         self.slot.initialize(sim)
         self.slot[:] = self.uid
-    
-        # Initialize all RNGs (noting that includes those that are declared in child classes)
-        for rng in self.rngs:
-            rng.initialize(sim.rng_container, self.slot)
 
         self.age_data_dist.initialize(sim, self)
             
