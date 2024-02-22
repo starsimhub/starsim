@@ -90,15 +90,17 @@ class RSV(ss.STI):
     def infectious(self):
         return self.symptomatic
 
-    @property
-    def rel_sus(self):
-        return self.rel_sus_imm * self.rel_sus_vx
+    # @property
+    # def rel_sus(self):
+    #     return self.rel_sus_imm * self.rel_sus_vx
 
+    def __repr__(self):
+        return object.__repr__(self)
 
     def make_prob_array(self, uids, prob_array):
-        prob = np.zeros((len(self)))
-        prob[uids] = prob_array
-        return
+        prob = np.zeros((len(self.susceptible)))
+        prob[uids] = prob_array.values
+        return ss.bernoulli(p=prob)
 
 
     def init_results(self, sim):
