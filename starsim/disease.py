@@ -281,7 +281,19 @@ class Infection(Disease):
                 if not ss.options.multirng:
                     new_cases_bool = np.random.random(len(src)) < p_transmit  # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
                 else:
-                    # TODO
+                    pseudo_uids = (src + trg) // 2 # Create pseudo-UIDs by taking the "average" of the source and target's UIDs
+                    cin = 0
+                    cou = 0
+                    for i,pu in enumerate(pseudo_uids):
+                        try:
+                            people.slot[pu]
+                            cin += 1
+                        except:
+                            print(i, pu, src[i], trg[i])
+                            cou += 1
+                    print("IN", cin, "OUT", cou)
+                    slots = people.slot[pseudo_uids]  # Slots for the possible infectee
+                    new_cases_bool = ss.uniform.rvs(size=np.max(slots) + 1)[slots] < p_transmit
                 new_cases.append(trg[new_cases_bool])
                 sources.append(src[new_cases_bool])
         if len(new_cases) and len(sources):
@@ -295,106 +307,106 @@ class Infection(Disease):
             self.set_prognoses(sim, new_cases, sources)
         return
 
-    def _make_new_cases_multirng(self, sim):
-        """
-        Common-random-number-safe transmission code works by computing the
-        probability of each _node_ acquiring a case rather than checking if each
-        _edge_ transmits.
-        Subsequent step uses a roulette wheel with slotted RNG to determine
-        infection source.
-        """
-        people = sim.people
-        n = len(people.uid)  # TODO: possibly could be shortened to just the people who are alive
-        p_acq_node = np.zeros(n)
-        betamap = self._check_betas(sim)
+    # def _make_new_cases_multirng(self, sim):
+    #     """
+    #     Common-random-number-safe transmission code works by computing the
+    #     probability of each _node_ acquiring a case rather than checking if each
+    #     _edge_ transmits.
+    #     Subsequent step uses a roulette wheel with slotted RNG to determine
+    #     infection source.
+    #     """
+    #     people = sim.people
+    #     n = len(people.uid)  # TODO: possibly could be shortened to just the people who are alive
+    #     p_acq_node = np.zeros(n)
+    #     betamap = self._check_betas(sim)
 
-        avec = []
-        bvec = []
-        pvec = []
-        for nkey, net in sim.networks.items():
-            if not len(net):
-                break
-            nbetas = betamap[nkey]
-            contacts = net.contacts
-            rel_trans = self.rel_trans * (self.infectious & people.alive)
-            rel_sus = self.rel_sus * (self.susceptible & people.alive)
+    #     avec = []
+    #     bvec = []
+    #     pvec = []
+    #     for nkey, net in sim.networks.items():
+    #         if not len(net):
+    #             break
+    #         nbetas = betamap[nkey]
+    #         contacts = net.contacts
+    #         rel_trans = self.rel_trans * (self.infectious & people.alive)
+    #         rel_sus = self.rel_sus * (self.susceptible & people.alive)
 
-            p1p2 = ['p1', 'p2', nbetas[0]]
-            p2p1 = ['p2', 'p1', nbetas[1]]
-            for source, target, beta in [p1p2, p2p1]:  # Transmission from a --> b
-                if beta == 0:
-                    continue
+    #         p1p2 = ['p1', 'p2', nbetas[0]]
+    #         p2p1 = ['p2', 'p1', nbetas[1]]
+    #         for source, target, beta in [p1p2, p2p1]:  # Transmission from a --> b
+    #             if beta == 0:
+    #                 continue
 
-                a, b, beta_arr = contacts[source], contacts[target], contacts.beta
-                nzi = (rel_trans[a] > 0) & (rel_sus[b] > 0) & (beta_arr > 0)
-                avec.append(a[nzi])
-                bvec.append(b[nzi])
+    #             a, b, beta_arr = contacts[source], contacts[target], contacts.beta
+    #             nzi = (rel_trans[a] > 0) & (rel_sus[b] > 0) & (beta_arr > 0)
+    #             avec.append(a[nzi])
+    #             bvec.append(b[nzi])
 
-                # TODO: move this to STI?
-                if 'acts' in contacts.keys():
-                    beta_per_dt = 1 - (1 - beta) ** (contacts.acts[nzi] * people.dt)
-                else:
-                    beta_per_dt = beta * people.dt
+    #             # TODO: move this to STI?
+    #             if 'acts' in contacts.keys():
+    #                 beta_per_dt = 1 - (1 - beta) ** (contacts.acts[nzi] * people.dt)
+    #             else:
+    #                 beta_per_dt = beta * people.dt
 
-                trans_arr = rel_trans[a[nzi]].__array__()
-                sus_arr = rel_sus[b[nzi]].__array__()
-                new_pvec = trans_arr * sus_arr * beta_arr[nzi] * beta_per_dt
-                pvec.append(new_pvec)
+    #             trans_arr = rel_trans[a[nzi]].__array__()
+    #             sus_arr = rel_sus[b[nzi]].__array__()
+    #             new_pvec = trans_arr * sus_arr * beta_arr[nzi] * beta_per_dt
+    #             pvec.append(new_pvec)
 
-        if len(avec):
-            dfp1 = np.concatenate(avec)
-            dfp2 = np.concatenate(bvec)
-            dfp = np.concatenate(pvec)
-        else:
-            return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
+    #     if len(avec):
+    #         dfp1 = np.concatenate(avec)
+    #         dfp2 = np.concatenate(bvec)
+    #         dfp = np.concatenate(pvec)
+    #     else:
+    #         return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
 
-        df = pd.DataFrame({'p1': dfp1, 'p2': dfp2, 'p': dfp})
-        if len(df) == 0:
-            return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
+    #     df = pd.DataFrame({'p1': dfp1, 'p2': dfp2, 'p': dfp})
+    #     if len(df) == 0:
+    #         return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
 
-        p_acq_node = df.groupby('p2').apply(lambda x: 1 - np.prod(1 - x['p']))  # prob(inf) for each potential infectee
-        uids = p_acq_node.index.values  # UIDs of those who get come into contact with 1 or more infected person
+    #     p_acq_node = df.groupby('p2').apply(lambda x: 1 - np.prod(1 - x['p']))  # prob(inf) for each potential infectee
+    #     uids = p_acq_node.index.values  # UIDs of those who get come into contact with 1 or more infected person
 
-        # Slotted draw, need to find a long-term place for this logic
-        slots = people.slot[uids]  # Slots for the possible infectee
-        new_cases_bool = ss.uniform.rvs(size=np.max(slots) + 1)[slots] < p_acq_node.values
-        new_cases = uids[new_cases_bool]
+    #     # Slotted draw, need to find a long-term place for this logic
+    #     slots = people.slot[uids]  # Slots for the possible infectee
+    #     new_cases_bool = ss.uniform.rvs(size=np.max(slots) + 1)[slots] < p_acq_node.values
+    #     new_cases = uids[new_cases_bool]
 
-        # Now choose infection source for new cases
-        def choose_source(df):
-            if len(df) == 1:  # Easy if only one possible source
-                src_idx = 0
-            else:
-                # Roulette selection using slotted draw r associated with this new case
-                cumsum = df['p'].cumsum() / df['p'].sum()
-                src_idx = np.argmax(cumsum >= df['r'])
-            return df['p1'].iloc[src_idx]
+    #     # Now choose infection source for new cases
+    #     def choose_source(df):
+    #         if len(df) == 1:  # Easy if only one possible source
+    #             src_idx = 0
+    #         else:
+    #             # Roulette selection using slotted draw r associated with this new case
+    #             cumsum = df['p'].cumsum() / df['p'].sum()
+    #             src_idx = np.argmax(cumsum >= df['r'])
+    #         return df['p1'].iloc[src_idx]
 
-        df['r'] = ss.uniform.rvs(size=np.max(slots) + 1)[slots[df.p2.values]]  # Draws for each potential infectee
-        sources = df.set_index('p2').loc[new_cases].groupby('p2').apply(choose_source)
+    #     df['r'] = ss.uniform.rvs(size=np.max(slots) + 1)[slots[df.p2.values]]  # Draws for each potential infectee
+    #     sources = df.set_index('p2').loc[new_cases].groupby('p2').apply(choose_source)
 
-        return new_cases, sources[new_cases].values
+    #     return new_cases, sources[new_cases].values
 
-    def make_new_cases(self, sim):
-        """ Add new cases of module, through transmission, incidence, etc. """
-        if not sim.networks:
-            warnmsg = f'Disease {self.name} does not transmit without a network.'
-            if sim.ti == 0: ss.warn(warnmsg, die=False)
-            return
+    # def make_new_cases(self, sim):
+    #     """ Add new cases of module, through transmission, incidence, etc. """
+    #     if not sim.networks:
+    #         warnmsg = f'Disease {self.name} does not transmit without a network.'
+    #         if sim.ti == 0: ss.warn(warnmsg, die=False)
+    #         return
 
-        if not ss.options.multirng:
-            # Determine new cases for singlerng
-            new_cases, sources = self._make_new_cases_singlerng(sim)
-        else:
-            # Determine new cases for multirng
-            new_cases, sources = self._make_new_cases_multirng(sim)
+    #     if not ss.options.multirng:
+    #         # Determine new cases for singlerng
+    #         new_cases, sources = self._make_new_cases_singlerng(sim)
+    #     else:
+    #         # Determine new cases for multirng
+    #         new_cases, sources = self._make_new_cases_multirng(sim)
 
-        if len(new_cases):
-            self._set_cases(sim, new_cases, sources)
+    #     if len(new_cases):
+    #         self._set_cases(sim, new_cases, sources)
 
-    def _set_cases(self, sim, target_uids, source_uids=None):
-        self.set_prognoses(sim, target_uids, source_uids=source_uids)
-        return
+    # def _set_cases(self, sim, target_uids, source_uids=None):
+    #     self.set_prognoses(sim, target_uids, source_uids=source_uids)
+    #     return
 
     def update_results(self, sim):
         super().update_results(sim)
