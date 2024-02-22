@@ -23,19 +23,20 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, 
 
     if which == 'births':
         birth_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_births.csv')
-        births = ss.births(pars={'birth_rate': birth_rates})
+        births = ss.Births(pars={'birth_rate': birth_rates})
         demographics += births
+
     elif which == 'pregnancy':
         fertility_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')
         pregnancy = ss.Pregnancy(pars={'fertility_rate': fertility_rates, 'rel_fertility': 1})  # 4/3
         demographics += pregnancy
 
     death_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')
-    death = ss.background_deaths(pars={'death_rate': death_rates})
+    death = ss.Deaths(pars={'death_rate': death_rates})
     demographics += death
 
     # Make people
-    n_agents = 10_000
+    n_agents = 5_000
     nga_pop_1995 = 106819805
     age_data = pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv')
     ppl = ss.People(n_agents, age_data=age_data)
@@ -77,12 +78,12 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, 
 
         print("Check we don't have more births than pregnancies")
         assert sum(sim.results.pregnancy.births) <= sum(sim.results.pregnancy.pregnancies)
-        print(f'✓ (births <= pregnancies)')
+        print('✓ (births <= pregnancies)')
 
         if dt == 1:
             print("Checking that births equal pregnancies with dt=1")
             assert np.array_equal(sim.results.pregnancy.pregnancies, sim.results.pregnancy.births)
-            print(f'✓ (births == pregnancies)')
+            print('✓ (births == pregnancies)')
 
     print("Check final pop size within 5% of data")
     assert np.isclose(data.n_alive.values[-1], sim.results.n_alive[-1], rtol=0.05)
@@ -96,7 +97,7 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, 
         ax[0].plot(sim.yearvec, sim.results.n_alive, color='k')
         ax[0].set_title('Population')
 
-        ax[1].plot(sim.yearvec, 1000 * sim.results.background_deaths.cmr / dt, label='Simulated CMR')
+        ax[1].plot(sim.yearvec, 1000 * sim.results.deaths.cmr / dt, label='Simulated CMR')
         ax[1].scatter(cmr_data.Year, cmr_data.CMR, label='Data CMR')
         ax[1].set_title('CMR')
         ax[1].legend()

@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-import scipy.stats as sps
 
 __all__ = ['BasePeople', 'People']
 
@@ -19,13 +18,13 @@ class BasePeople(sc.prettyobj):
     interesting implementation details.
     """
 
-    def __init__(self, n):
+    def __init__(self, n_agents):
 
         self.initialized = False
-        self._uid_map = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs ever created
-        self.uid = ss.DynamicView(int, fill_value=ss.INT_NAN)  # This variable tracks all UIDs currently in use
+        self._uid_map = ss.ArrayView(int, default=ss.INT_NAN)  # This variable tracks all UIDs ever created
+        self.uid = ss.ArrayView(int, default=ss.INT_NAN)  # This variable tracks all UIDs currently in use
 
-        n = int(n)
+        n = int(n_agents)
 
         self._uid_map.grow(n)
         self._uid_map[:] = np.arange(0, n)
@@ -58,10 +57,11 @@ class BasePeople(sc.prettyobj):
         """ Length of people """
         return len(self.uid)
 
+    # TODO: CK: should not be needed
     def add_state(self, state, die=True):
         if id(state) not in self._states:
             self._states[id(state)] = state
-            self.states.append(state)  # Expose these states with their original names
+            self.states.append(state, overwrite=True)  # Expose these states with their original names # TODO: should have overwrite=False
             setattr(self, state.name, state)
         elif die:
             errormsg = f'Cannot add state {state} since already added'
@@ -77,7 +77,7 @@ class BasePeople(sc.prettyobj):
         """
 
         if n == 0:
-            return np.array([], dtype=ss.int_)
+            return np.array([], dtype=ss.dtypes.int)
 
         start_uid = len(self._uid_map)
         start_idx = len(self.uid)
@@ -119,10 +119,6 @@ class BasePeople(sc.prettyobj):
         # Update the UID map
         self._uid_map[:] = ss.INT_NAN  # Clear out all previously used UIDs
         self._uid_map[keep_uids] = np.arange(0, len(keep_uids))  # Assign the array indices for all of the current UIDs
-
-        # Remove the UIDs from the network too
-        for network in self.networks.values():
-            network.remove_uids(uids_to_remove)
 
         return
 
@@ -168,10 +164,10 @@ class People(BasePeople):
         ppl = ss.People(2000)
     """
 
-    def __init__(self, n, age_data=None, extra_states=None, networks=None, rand_seed=0):
+    def __init__(self, n_agents, age_data=None, extra_states=None, rand_seed=0):
         """ Initialize """
 
-        super().__init__(n)
+        super().__init__(n_agents)
 
         self.initialized = False
         self.version = ss.__version__  # Store version info
@@ -179,7 +175,7 @@ class People(BasePeople):
         # Handle states
         states = [
             ss.State('age', float, np.nan), # NaN until conceived
-            ss.State('female', bool, sps.bernoulli(p=0.5)),
+            ss.State('female', bool, ss.bernoulli(p=0.5)),
             ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
             ss.State('alive', bool, True),  # Time index for death
             ss.State('scale', float, 1.0),
@@ -188,8 +184,6 @@ class People(BasePeople):
         for state in states:
             self.add_state(state)
         self._initialize_states(sim=None) # No sim yet, but initialize what we can
-        
-        self.networks = ss.Networks(networks)
 
         # Set initial age distribution - likely move this somewhere else later
         self.age_data_dist = self.get_age_dist(age_data)
@@ -200,7 +194,7 @@ class People(BasePeople):
     def get_age_dist(age_data):
         """ Return an age distribution based on provided data """
         if age_data is None:
-            dist = sps.uniform(loc=0, scale=100)  # loc and width
+            dist = ss.uniform(loc=0, scale=100)  # loc and width
             return ss.ScipyDistribution(dist, 'Age distribution')
 
         if sc.checktype(age_data, pd.DataFrame):
@@ -274,6 +268,11 @@ class People(BasePeople):
         uids_to_remove = ss.true(self.dead)
         if len(uids_to_remove):
             self.remove(uids_to_remove)
+
+        # Remove the UIDs from the network too
+        for network in sim.networks.values():
+            network.remove_uids(uids_to_remove)
+
         return
 
     def update_post(self, sim):
@@ -296,11 +295,6 @@ class People(BasePeople):
         self.alive[death_uids] = False
         return death_uids
 
-    def update_networks(self):
-        """
-        Update networks
-        """
-        return self.networks.update(self)
 
     @property
     def dead(self):
@@ -323,8 +317,10 @@ class People(BasePeople):
         return self.male
 
     def init_results(self, sim):
-        sim.results += ss.Result(None, 'n_alive', sim.npts, ss.int_, scale=True)
-        sim.results += ss.Result(None, 'new_deaths', sim.npts, ss.int_, scale=True)
+        sim.results += [
+            ss.Result(None, 'n_alive', sim.npts, ss.dtypes.int, scale=True),
+            ss.Result(None, 'new_deaths', sim.npts, ss.dtypes.int, scale=True),
+        ]
         return
 
     def update_results(self, sim):

@@ -4,9 +4,10 @@ Result structures.
 
 import numpy as np
 import sciris as sc
+import starsim as ss
 
 
-__all__ = ['Result']
+__all__ = ['Result', 'Results']
 
 
 class Result(np.ndarray):
@@ -41,3 +42,35 @@ class Result(np.ndarray):
     
     def to_df(self):
         return sc.dataframe({self.name:self})
+    
+
+class Results(ss.ndict):
+    
+    def __init__(self, module, strict=True, *args, **kwargs):
+        super().__init__(type=Result, strict=strict)
+        if hasattr(module, 'name'):
+            module = module.name
+        self.setattribute('_module', module)
+        return
+    
+    def append(self, arg, key=None):
+        if isinstance(arg, (list, tuple)):
+            result = ss.Result(self._module, *arg)
+        elif isinstance(arg, dict):
+            result = ss.Result(self._module, **arg)
+        else:
+            result = arg
+        if result.module != self._module:
+            result.module = self._module
+        
+        super().append(result, key=key)
+        return
+    
+    def to_df(self):
+        pass
+    
+    def __repr__(self, *args, **kwargs): # TODO: replace with dataframe summary
+        return super().__repr__(*args, **kwargs)
+        
+    def plot(self):
+        pass
