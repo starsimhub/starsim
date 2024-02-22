@@ -97,12 +97,12 @@ class UIDArray(NDArrayOperatorsMixin):
         out = np.empty(len(key), dtype=vals.dtype)
         new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
 
-        for i in range(len(key)):
-            idx = uid_map[key[i]]
+        for i,kv in enumerate(key):
+            idx = uid_map[kv]
             if idx == INT_NAN:
                 raise IndexError('UID not present in array')
             out[i] = vals[idx]
-            new_uid_map[key[i]] = i
+            new_uid_map[kv] = i
         return out, key, new_uid_map
 
     @staticmethod
@@ -118,11 +118,11 @@ class UIDArray(NDArrayOperatorsMixin):
         :return:
         """
 
-        for i in range(len(key)):
-            if key[i] >= len(uid_map):
+        for i,kv in enumerate(key):
+            if kv >= len(uid_map):
                 errormsg = f'UID not present in array (requested UID ({key[i]}) is larger than the maximum UID in use ({len(uid_map)}))'
                 raise IndexError(errormsg)
-            idx = uid_map[key[i]]
+            idx = uid_map[kv]
             if idx == INT_NAN:
                 raise IndexError('UID not present in array')
             elif idx >= len(vals):
@@ -143,10 +143,10 @@ class UIDArray(NDArrayOperatorsMixin):
         :param value: A scalar value to insert at every position specified by ``key``
         :return:
         """
-        for i in range(len(key)):
-            if key[i] >= len(uid_map):
+        for i,kv in enumerate(key):
+            if kv >= len(uid_map):
                 raise IndexError('UID not present in array (requested UID is larger than the maximum UID in use)')
-            idx = uid_map[key[i]]
+            idx = uid_map[kv]
             if idx == INT_NAN:
                 raise IndexError('UID not present in array')
             elif idx >= len(vals):
