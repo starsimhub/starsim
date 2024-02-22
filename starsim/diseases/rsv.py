@@ -9,59 +9,59 @@ from sciris import randround as rr
 import scipy.stats as sps
 
 import starsim as ss
-from .disease import STI
 
 __all__ = ['RSV']
 
 
-class RSV(STI):
+class RSV(ss.STI):
 
     def __init__(self, pars=None):
         super().__init__(pars)
 
-        self.rel_sus_imm = ss.State('rel_sus_imm', float, 1)
-        self.rel_sus_vx = ss.State('rel_sus_vx', float, 1)
-        self.rel_sev = ss.State('rel_sev', float, 1)
-        self.rel_trans = ss.State('rel_trans', float, 1)
+        self.add_states(
+            ss.State('rel_sus_imm', float, 1),
+            ss.State('rel_sus_vx', float, 1),
+            ss.State('rel_sev', float, 1),
+            ss.State('rel_trans', float, 1),
 
 
-        # RSV states
-        self.susceptible = ss.State('susceptible', bool, True)
-        self.exposed = ss.State('exposed', bool, False)  # AKA incubating. Free of symptoms, not transmissible
-        self.infected = ss.State('infected', bool, False)
-        self.symptomatic = ss.State('symptomatic', bool, False)
-        self.severe = ss.State('severe', bool, False)
-        self.critical = ss.State('critical', bool, False)
-        self.recovered = ss.State('recovered', bool, False)
-        self.immune = ss.State('immune', bool, False)
+            # RSV states
+            ss.State('susceptible', bool, True),
+            ss.State('exposed', bool, False),  # AKA incubating. Free of symptoms, not transmissible
+            ss.State('infected', bool, False),
+            ss.State('symptomatic', bool, False),
+            ss.State('severe', bool, False),
+            ss.State('critical', bool, False),
+            ss.State('recovered', bool, False),
+            ss.State('immune', bool, False),
 
-        # Duration of stages
-        self.dur_exposed = ss.State('dur_exposed', float, np.nan)
-        self.dur_symptomatic = ss.State('dur_symptomatic', float, np.nan)
-        self.dur_infection = ss.State('dur_infection', float, np.nan)  # Sum of all the stages
-        self.dur_immune = ss.State('dur_immune', float, np.nan)
+            # Duration of stages
+            ss.State('dur_exposed', float, np.nan),
+            ss.State('dur_symptomatic', float, np.nan),
+            ss.State('dur_infection', float, np.nan),  # Sum of all the stages
+            ss.State('dur_immune', float, np.nan),
 
-        # Timestep of state changes
-        self.ti_exposed = ss.State('ti_exposed', int, ss.INT_NAN)
-        self.ti_infected = ss.State('ti_infected', int, ss.INT_NAN)
-        self.ti_symptomatic = ss.State('ti_symptomatic', int, ss.INT_NAN)
-        self.ti_severe = ss.State('ti_severe', int, ss.INT_NAN)
-        self.ti_critical = ss.State('ti_critical', int, ss.INT_NAN)
-        self.ti_recovered = ss.State('ti_recovered', int, ss.INT_NAN)
-        self.ti_susceptible = ss.State('ti_susceptible', int, ss.INT_NAN)
-        self.ti_dead = ss.State('ti_dead', int, ss.INT_NAN)
+            # Timestep of state changes
+            ss.State('ti_exposed', int, ss.INT_NAN),
+            ss.State('ti_infected', int, ss.INT_NAN),
+            ss.State('ti_symptomatic', int, ss.INT_NAN),
+            ss.State('ti_severe', int, ss.INT_NAN),
+            ss.State('ti_critical', int, ss.INT_NAN),
+            ss.State('ti_recovered', int, ss.INT_NAN),
+            ss.State('ti_susceptible', int, ss.INT_NAN),
+            ss.State('ti_dead', int, ss.INT_NAN),
 
-        # Immunity state
-        self.peak_nab = ss.State('nab', float, np.nan)
-
+            # Immunity state
+            ss.State('nab', float, np.nan)
+        )
 
         # Parameters
         default_pars = dict(
             # RSV natural history
-            dur_exposed=ss.lognorm(mean=5, stdev=2),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4072624/
-            dur_symptomatic=ss.lognorm(mean=12, stdev=20),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4072624/
-            dur_severe=ss.lognorm(mean=20, stdev=5),  # SOURCE
-            dur_immune=ss.lognorm(mean=110, stdev=10),
+            dur_exposed=ss.lognorm_mean(mean=5, stdev=2),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4072624/
+            dur_symptomatic=ss.lognorm_mean(mean=12, stdev=20),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4072624/
+            dur_severe=ss.lognorm_mean(mean=20, stdev=5),  # SOURCE
+            dur_immune=ss.lognorm_mean(mean=110, stdev=10),
             prognoses=dict(
                 age_cutoffs=np.array([0, 1, 5, 15, 55]),  # Age cutoffs (lower limits)
                 sus_ORs=np.array([2.50, 1.50, 0.25, 0.50, 1.00]),  # Odds ratios for relative susceptibility
@@ -76,7 +76,7 @@ class RSV(STI):
 
             # Initial conditions
             init_prev=dict(age_range=[1, 5]),
-            seed_infections=sps.bernoulli(p=0.1),
+            seed_infections=ss.bernoulli(p=0.1),
             # imm_init=1,
             # imm_decay=dict(form='growth_decay', growth_time=14, decay_rate=0.01),
             # immunity=None
