@@ -53,12 +53,16 @@ class BasePeople(sc.prettyobj):
         """ Length of people """
         return len(self.uid)
 
-    # TODO: CK: should not be needed
-    def add_state(self, state, die=True):
+    def register_state(self, state, die=True):
+        """
+        Register a state with the People instance for dynamic resizing
+
+        All states should be registered by this function for the purpose of connecting them to the
+        People's UIDs and to have them be automatically resized when the number of agents changes.
+        This operation is normally triggered as part of initializing the state (via `State.initialize()`)
+        """
         if id(state) not in self._states:
             self._states[id(state)] = state
-            self.states.append(state, overwrite=True)  # Expose these states with their original names # TODO: should have overwrite=False
-            setattr(self, state.name, state)
         elif die:
             errormsg = f'Cannot add state {state} since already added'
             raise ValueError(errormsg)
@@ -177,9 +181,12 @@ class People(BasePeople):
             ss.State('scale', float, 1.0),
         ]
         states.extend(sc.promotetolist(extra_states))
+
+        # Expose states with their original names directly as people attributes (e.g., `People.age`) and nested under states
+        # (e.g., `People.states.age`)
         for state in states:
-            self.add_state(state)
-        self._initialize_states(sim=None) # No sim yet, but initialize what we can
+            self.states.append(state, overwrite=False)
+            setattr(self, state.name, state)
 
         # Set initial age distribution - likely move this somewhere else later
         self.age_data_dist = self.get_age_dist(age_data)
@@ -198,28 +205,44 @@ class People(BasePeople):
             vv = age_data['value'].values
             return ss.ScipyHistogram((vv, bb), density=False, rng='Age distribution')
 
-    def _initialize_states(self, sim=None):
-        for state in self.states.values():
-            state.initialize(sim=sim, people=self)  # Connect the state to this people instance
-        return
 
     def initialize(self, sim):
         """ Initialization """
-    
+
+        if self.initialized:
+            return
+        else:
+            self.initialized = True
+
         # For People initialization, first initialize slots, then initialize RNGs, then initialize remaining states
         # This is because some states may depend on RNGs being initialized to generate initial values
         self.slot.initialize(sim)
         self.slot[:] = self.uid
 
         self.age_data_dist.initialize(sim, self)
-            
-        # Define age (CK: why is age handled differently than sex?)
-        self._initialize_states(sim=sim)  # Now initialize with the sim
+
+        # Initialize states
+        # Age is handled separately because the default value for new agents is NaN until they are concieved/born whereas
+        # the initial values need to depend on the current age distribution for the setting. In contrast, the sex for new
+        # agents can be sampled from the same distribution used to initialize the population
+        for state in self.states.values():
+            state.initialize(sim)
+
+        # Assign initial ages based on the current age distribution
         self.age[:] = self.age_data_dist.rvs(size=self.uid)
-        self.initialized = True
         return
 
     def add_module(self, module, force=False):
+        """
+        Add a Module to the People instance
+
+        This method is used to add a module to the People. It will register any module states with this
+        people instance for dynamic resizing, and expose the states contained in the module to the user
+        via `People.states.<module_name>.<state_name>`
+        :param module:
+        :param force:
+        :return:
+        """
         # Map the module's states into the People state ndict
         if hasattr(self, module.name) and not force:
             raise Exception(f'Module {module.name} already added')
@@ -227,6 +250,7 @@ class People(BasePeople):
 
         # The entries created below make it possible to do `sim.people.hiv.susceptible` or
         # `sim.people.states['hiv.susceptible']` and have both of them work
+
         module_states = sc.objdict()
         setattr(self, module.name, module_states)
         self._register_module_states(module, module_states)
