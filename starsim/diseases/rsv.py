@@ -15,8 +15,8 @@ __all__ = ['RSV']
 
 class RSV(ss.STI):
 
-    def __init__(self, pars=None):
-        super().__init__(pars)
+    def __init__(self, pars=None, **kwargs):
+        super().__init__(pars, **kwargs)
 
         self.add_states(
             ss.State('rel_sus_imm', float, 1),
