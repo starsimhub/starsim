@@ -423,29 +423,48 @@ class State(UIDArray):
             new_vals = self.default
         return new_vals
 
-    def initialize(self, sim=None, people=None):
+    def initialize(self, sim):
+        """
+        Initialize state
+
+        This method should be called as part of initialization of the parent class containing the state -
+        specifically, `People.initialize()` and `Module.initialize()`. Initialization of a State object
+        involves two processes:
+
+        - Converting any distribution objects to a ScipyDistribution instance and linking it to RNGs stored in a `Sim`
+        - Establishing a bidirectional connection with a `People` object for the purpose of UID indexing and resizing
+
+        Since State objects can be stored in `People` or in a `Module` and the collection of all states in a `Sim` should
+        be connected to RNGs within that same `Sim`, the states must necessarily be linked to the same `People` object that
+        is inside a `Sim`. Initializing States outside of a `Sim` is not possible because of this RNG dependency, particularly
+        because the states in a `People` object cannot be initialized without a `Sim` and therefore it would not be possible to
+        have an initialized `People` object outside of a `Sim`.
+
+        :param sim: A `Sim` instance that contains an initialized `People` object
+        """
+
         if self._initialized:
             return
 
-        if sim is not None and people is None:
-            people = sim.people
+        people = sim.people
+        assert people.initialized, 'People must be initialized before initializing states'
 
-        sim_still_needed = False
+        # Connect any distributions in the default to RNGs in the Sim
         if isinstance(self.default, rv_frozen):
-            if sim is not None:
-                self.default = ss.ScipyDistribution(self.default, f'{self.__class__.__name__}_{self.label}')
-                self.default.initialize(sim, self)
-            else:
-                sim_still_needed = True
+            self.default = ss.ScipyDistribution(self.default, f'{self.__class__.__name__}_{self.label}')
+            self.default.initialize(sim, self)
 
-        people.add_state(self, die=False) # CK: should not be needed
-        if not sim_still_needed:
-            self._uid_map = people._uid_map
-            self.uid = people.uid
-            self._data.grow(len(self.uid))
-            self._data[:len(self.uid)] = self._new_vals(self.uid)
-            self.values = self._data._view
-            self._initialized = True
+        # Establish connection with the People object
+        people.register_state(self)
+        self._uid_map = people._uid_map
+        self.uid = people.uid
+
+        # Populate initial values
+        self._data.grow(len(self.uid))
+        self._data[:len(self.uid)] = self._new_vals(self.uid)
+        self.values = self._data._view
+
+        self._initialized = True
         return
 
     def grow(self, uids):

@@ -401,8 +401,6 @@ class MFNet(SexualNetwork, DynamicNetwork):
         if upper_age is None: uids = people.uid
         else: uids = people.uid[(people.age < upper_age)]
         self.debut[uids] = self.pars.debut.rvs(uids)
-        uids_to_update = uids[np.isnan(people.debut[uids])]
-        people.debut[uids_to_update] = self.debut[uids_to_update]
         return
 
     def add_pairs(self, people, ti=None):
@@ -485,8 +483,6 @@ class MSMNet(SexualNetwork, DynamicNetwork):
 
         # Debut
         self.debut[uids] = self.pars.debut_dist.rvs(len(uids)) # Just pass len(uids) as this network is not crn safe anyway
-        uids_to_update = uids[np.isnan(people.debut[uids])]
-        people.debut[uids_to_update] = self.debut[uids_to_update]
         return
 
     def add_pairs(self, people, ti=None):
@@ -907,8 +903,8 @@ class HPVNet(MFNet):
         age_p1 = people.age[p1]
         age_p2 = people.age[p2]
 
-        age_debut_p1 = people.debut[p1]
-        age_debut_p2 = people.debut[p2]
+        age_debut_p1 = self.debut[p1] # TODO: Check that this still works - it was previously people.debut
+        age_debut_p2 = self.debut[p2]
 
         # For each couple, get the average age they are now and the average age of debut
         avg_age = np.array([age_p1, age_p2]).mean(axis=0)
