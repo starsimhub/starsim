@@ -100,7 +100,7 @@ class RSV(ss.STI):
     def make_prob_array(self, uids, prob_array):
         prob = np.zeros((len(self.susceptible)))
         prob[uids] = prob_array.values
-        return ss.bernoulli(p=prob)
+        return prob
 
 
     def init_results(self, sim):
@@ -192,14 +192,16 @@ class RSV(ss.STI):
         symptomatic_uids = ss.true(symptomatic)
         age_bins = np.digitize(sim.people.age[symptomatic],bins=self.pars['prognoses']['age_cutoffs']) - 1  # Age bins of individuals
         sev_probs = self.pars['prognoses']['severe_probs'][age_bins] * self.rel_sev[symptomatic_uids]
-        sev_dist = self.make_prob_array(prob_array=sev_probs, uids=symptomatic_uids)
+        # sev_dist = self.make_prob_array(prob_array=sev_probs, uids=symptomatic_uids)
+        sev_bools = np.random.random(sev_probs.shape) < sev_probs
+        severe_uids = symptomatic_uids[sev_bools]
 
-        severe_uids = sev_dist.filter(symptomatic_uids)
-        dur_symptomatic_severe = self.pars.dur_symptomatic(len(severe_uids)) / 365  # duration in years
+        # severe_uids = sev_dist.filter(symptomatic_uids)
+        dur_symptomatic_severe = self.pars.dur_symptomatic.rvs(severe_uids) / 365  # duration in years
         self.ti_severe[severe_uids] = sim.ti + rr(dur_symptomatic_severe / sim.dt)
 
         never_severe_uids = np.setdiff1d(symptomatic_uids, severe_uids)
-        dur_symptomatic_not_severe = self.pars.dur_symptomatic(len(never_severe_uids)) / 365  # duration in years
+        dur_symptomatic_not_severe = self.pars.dur_symptomatic.rvs(never_severe_uids) / 365  # duration in years
 
         self.ti_recovered[never_severe_uids] = sim.ti + rr(dur_symptomatic_not_severe/sim.dt)
 
@@ -212,16 +214,18 @@ class RSV(ss.STI):
         age_bins = np.digitize(sim.people.age[severe], bins=self.pars['prognoses']['age_cutoffs']) - 1  # Age bins of individuals
         crit_probs = self.pars['prognoses']['crit_probs'][age_bins]
         severe_uids = ss.true(severe)
-        crit_dist = self.make_prob_array(prob_array=crit_probs, uids=severe_uids)
+        crit_bools = np.random.random(crit_probs.shape) < crit_probs
+        crit_uids = severe_uids[crit_bools]
+        # crit_dist = self.make_prob_array(prob_array=crit_probs, uids=severe_uids)
 
-        crit_uids = crit_dist.filter(severe_uids)
-        dur_severe_crit = self.pars.dur_symptomatic(len(crit_uids)) / 365  # duration in years
+        # crit_uids = crit_dist.filter(severe_uids)
+        dur_severe_crit = self.pars.dur_symptomatic.rvs(crit_uids) / 365  # duration in years
 
 
         self.ti_critical[crit_uids] = sim.ti + rr(dur_severe_crit / sim.dt)
 
         never_crit_uids = np.setdiff1d(severe_uids, crit_uids)
-        dur_severe_not_crit = self.pars.dur_symptomatic(len(never_crit_uids)) / 365  # duration in years
+        dur_severe_not_crit = self.pars.dur_symptomatic.rvs(never_crit_uids) / 365  # duration in years
         self.ti_recovered[never_crit_uids] = sim.ti + rr(dur_severe_not_crit / sim.dt)
 
 
@@ -249,7 +253,7 @@ class RSV(ss.STI):
 
         recovered_uids = ss.true(recovered)
 
-        dur_immune = self.pars.dur_immune(len(recovered_uids)) / 365
+        dur_immune = self.pars.dur_immune.rvs(recovered_uids) / 365
         self.dur_immune[recovered_uids] = dur_immune
         self.ti_susceptible[recovered_uids] = sim.ti + rr(dur_immune / sim.dt)
 
@@ -285,12 +289,13 @@ class RSV(ss.STI):
         # Determine which infections will become symptomatic
         age_bins = np.digitize(sim.people.age[uids], bins=self.pars['prognoses']['age_cutoffs']) - 1  # Age bins of individuals
         symp_probs = self.pars['prognoses']['symp_probs'][age_bins] * self.rel_sev[uids]
-        symp_dist = self.make_prob_array(prob_array=symp_probs, uids = uids)
-        symptomatic_uids = symp_dist.filter(uids)
+        # symp_dist = self.make_prob_array(prob_array=symp_probs, uids = uids)
+        symptomatic_bools = np.random.random(symp_probs.shape) < symp_probs
+        symptomatic_uids = uids[symptomatic_bools]
         never_symptomatic_uids = np.setdiff1d(uids, symptomatic_uids)
 
         # Exposed to symptomatic
-        dur_exposed = self.pars.dur_exposed(n_uids)/365 # duration in years
+        dur_exposed = self.pars.dur_exposed.rvs(uids)/365 # duration in years
         self.dur_exposed[uids] = dur_exposed
         self.ti_symptomatic[symptomatic_uids] = sim.ti + rr(self.dur_exposed[symptomatic_uids].values/sim.dt)
 

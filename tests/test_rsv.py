@@ -16,7 +16,7 @@ ss_float_ = ss.dtypes.float
 ss_int_ = ss.dtypes.int
 
 
-class HouseholdNetwork(net.RandomNet):
+class HouseholdNetwork(net.Network):
 
     def __init__(self, *, pars=None, par_dists=None, key_dict=None, **kwargs):
         """
@@ -24,6 +24,12 @@ class HouseholdNetwork(net.RandomNet):
         :param dynamic: If True, regenerate contacts each timestep
         """
         super().__init__(pars=pars, key_dict=key_dict, **kwargs)
+
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.set_network_states(sim.people)
+        self.add_pairs(sim.people)
+        return
 
 
     def update(self, people):
@@ -82,7 +88,7 @@ class HouseholdNetwork(net.RandomNet):
         return
 
 
-class SchoolNetwork(net.RandomNet):
+class SchoolNetwork(net.Network):
 
     def __init__(self, *, pars=None, par_dists=None, key_dict=None, age_range=[3,12], **kwargs):
         """
@@ -92,7 +98,11 @@ class SchoolNetwork(net.RandomNet):
         super().__init__(pars=pars, key_dict=key_dict, **kwargs)
         self.age_range=age_range
 
-
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.set_network_states(sim.people)
+        self.add_pairs(sim.people)
+        return
     def add_pairs(self, people):
         """
         Regenerate contacts
@@ -260,13 +270,13 @@ def test_rsv():
 
     # Make people and networks
     ppl = ss.People(10000, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
-    RandomNetwork_household = HouseholdNetwork(n_contacts=sps.poisson(5))
-    RandomNetwork_school = SchoolNetwork(n_contacts=sps.poisson(20))
+    RandomNetwork_household = HouseholdNetwork(
+        pars = dict(n_contacts=sps.poisson(mu=5))
+    )
+    RandomNetwork_school = SchoolNetwork(
+        pars = dict(n_contacts=sps.poisson(mu=20))
+    )
     maternal = ss.MaternalNet()
-    ppl.networks = ss.ndict(household=RandomNetwork_household,
-                            school=RandomNetwork_school,
-                            # community=RandomNetwork_community,
-                            maternal=maternal)
     diseases = ss.ndict(rsv_a=rsv_a, rsv_b=rsv_b)
     rsv_connector=rsv(name='rsv_connector')
     pars = {'interventions':[
@@ -274,6 +284,10 @@ def test_rsv():
         rsv_pediatric_vaccine(start_year=1997, efficacy_inf=1, efficacy_sev=1),
     ]}
     sim = ss.Sim(dt=1/52, n_years=3, people=ppl,
+                 networks=ss.ndict(household=RandomNetwork_household,
+                            school=RandomNetwork_school,
+                            # community=RandomNetwork_community,
+                            maternal=maternal),
                  # pars=pars,
                  diseases=diseases, demographics=[pregnancy, death],
                  connectors=rsv_connector
