@@ -4,10 +4,9 @@ Test simple APIs
 
 # %% Imports and settings
 import starsim as ss
-import numpy as np
 import sciris as sc
 
-n_agents = 2_000
+n_agents = 1_000
 
 
 def test_default():

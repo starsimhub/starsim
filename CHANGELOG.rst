@@ -9,6 +9,12 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :depth: 1
 
 
+Version 0.2.1 (2024-02-22)
+--------------------------
+- Only remove dead agents on certain timesteps
+- *GitHub info*: PR `294 <https://github.com/amath-idm/stisim/pull/294>`_
+
+
 Version 0.2.0 (2024-02-15)
 --------------------------
 - Code reorganization, including making ``networks.py`` and ``disease.py`` to the top level

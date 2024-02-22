@@ -449,7 +449,7 @@ class Sim(sc.prettyobj):
         self.rng_container.step(self.ti + 1)  # +1 offset because ti=0 is used on initialization
 
         # Clean up dead agents, if removing agents is enabled
-        if self.pars.remove_dead:
+        if self.pars.remove_dead and (self.ti % self.pars.remove_dead == 0):
             self.people.remove_dead(self)
 
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)

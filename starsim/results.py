@@ -69,8 +69,8 @@ class Results(ss.ndict):
     def to_df(self):
         pass
     
-    def __repr__(self): # TODO: replace with dataframe summary
-        super().__repr__()
+    def __repr__(self, *args, **kwargs): # TODO: replace with dataframe summary
+        return super().__repr__(*args, **kwargs)
         
     def plot(self):
         pass
