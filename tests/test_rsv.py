@@ -154,7 +154,7 @@ class rsv(cn.Connector):
 
 
 class rsv_maternal_vaccine(ss.Intervention):
-    def __init__(self, start_year=None, prob=0.5, efficacy_inf=0.3, efficacy_sev=0.8, duration=ss.lognorm(mean=60, stdev=10), **kwargs):
+    def __init__(self, start_year=None, prob=0.5, efficacy_inf=0.3, efficacy_sev=0.8, duration=ss.lognorm_mean(mean=60, stdev=10), **kwargs):
         super().__init__(**kwargs)
         self.prob=prob
         self.efficacy_inf=efficacy_inf
@@ -197,7 +197,7 @@ class rsv_maternal_vaccine(ss.Intervention):
 
 
 class rsv_pediatric_vaccine(ss.Intervention):
-    def __init__(self, start_year=None, prob=0.5, efficacy_inf=0.3, efficacy_sev=0.8, duration=ss.lognorm(mean=200, stdev=10),
+    def __init__(self, start_year=None, prob=0.5, efficacy_inf=0.3, efficacy_sev=0.8, duration=ss.lognorm_mean(mean=200, stdev=10),
                  **kwargs):
         super().__init__(**kwargs)
         self.prob = prob
