@@ -90,10 +90,12 @@ class RSV(ss.STI):
     def infectious(self):
         return self.symptomatic
 
-    # @property
-    # def rel_sus(self):
-    #     return self.rel_sus_imm * self.rel_sus_vx
-
+    @property
+    def rel_sus(self):
+        return self.rel_sus_imm * self.rel_sus_vx
+    @rel_sus.setter
+    def rel_sus(self, value):
+        pass
     def __repr__(self):
         return object.__repr__(self)
 
@@ -151,20 +153,20 @@ class RSV(ss.STI):
         self.rel_sus *= sus_OR
 
         old_betas = dict()
-        for k, layer in sim.people.networks.items():
+        for k, layer in sim.networks.items():
             if k in self.pars['beta']:
                 old_betas[k] = sc.dcp(self.pars['beta'][k])
-                self.pars['beta'][k] *= beta_seasonality
+                self.pars['beta'][k] = [self.pars['beta'][k][i]* beta_seasonality for i in range(len(self.pars['beta'][k]))]
 
         super(RSV, self).make_new_cases(sim)
 
         # Restore betas/transmissibility/susceptibility
-        for k, layer in sim.people.networks.items():
+        for k, layer in sim.networks.items():
             if k in self.pars['beta']:
                 self.pars['beta'][k] = old_betas[k]
 
-        self.rel_trans = orig_rel_trans
-        self.rel_sus = orig_rel_sus
+        self.rel_trans.values = orig_rel_trans
+        self.rel_sus.values = orig_rel_sus
         return
     def update_results(self, sim):
         """ Update results """

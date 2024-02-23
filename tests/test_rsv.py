@@ -11,6 +11,7 @@ import numpy as np
 from starsim import connectors as cn
 from starsim import networks as net
 import scipy.stats as sps
+import numba as nb
 
 ss_float_ = ss.dtypes.float
 ss_int_ = ss.dtypes.int
@@ -36,8 +37,9 @@ class HouseholdNetwork(net.Network):
         """
         Regenerate contacts
         """
-        self.check_births(people)
+        # self.check_births(people)
         # self.add_pairs(people)
+        return
 
     def add_pairs(self, people):
         """
@@ -87,6 +89,41 @@ class HouseholdNetwork(net.Network):
 
         return
 
+    @staticmethod
+    @nb.njit(cache=True)
+    def get_contacts(inds, number_of_contacts):
+        """
+        Efficiently generate contacts
+
+        Note that because of the shuffling operation, each person is assigned 2N contacts
+        (i.e. if a person has 5 contacts, they appear 5 times in the 'source' array and 5
+        times in the 'target' array). Therefore, the `number_of_contacts` argument to this
+        function should be HALF of the total contacts a person is expected to have, if both
+        the source and target array outputs are used (e.g. for social contacts)
+
+        adjusted_number_of_contacts = np.round(number_of_contacts / 2).astype(cvd.default_int)
+
+        Whereas for asymmetric contacts (e.g. staff-public interactions) it might not be necessary
+
+        Args:
+            inds: List/array of person indices
+            number_of_contacts: List/array the same length as `inds` with the number of unidirectional
+            contacts to assign to each person. Therefore, a person will have on average TWICE this number
+            of random contacts.
+
+        Returns: Two arrays, for source and target
+        """
+
+        total_number_of_half_edges = np.sum(number_of_contacts)
+        count = 0
+        source = np.zeros((total_number_of_half_edges,), dtype=ss_int_)
+        for i, person_id in enumerate(inds):
+            n_contacts = number_of_contacts[i]
+            source[count: count + n_contacts] = person_id
+            count += n_contacts
+        target = np.random.permutation(source)
+        return source, target
+
 
 class SchoolNetwork(net.Network):
 
@@ -131,6 +168,41 @@ class SchoolNetwork(net.Network):
 
     def update(self, people, dt=None):
         return
+
+    @staticmethod
+    @nb.njit(cache=True)
+    def get_contacts(inds, number_of_contacts):
+        """
+        Efficiently generate contacts
+
+        Note that because of the shuffling operation, each person is assigned 2N contacts
+        (i.e. if a person has 5 contacts, they appear 5 times in the 'source' array and 5
+        times in the 'target' array). Therefore, the `number_of_contacts` argument to this
+        function should be HALF of the total contacts a person is expected to have, if both
+        the source and target array outputs are used (e.g. for social contacts)
+
+        adjusted_number_of_contacts = np.round(number_of_contacts / 2).astype(cvd.default_int)
+
+        Whereas for asymmetric contacts (e.g. staff-public interactions) it might not be necessary
+
+        Args:
+            inds: List/array of person indices
+            number_of_contacts: List/array the same length as `inds` with the number of unidirectional
+            contacts to assign to each person. Therefore, a person will have on average TWICE this number
+            of random contacts.
+
+        Returns: Two arrays, for source and target
+        """
+
+        total_number_of_half_edges = np.sum(number_of_contacts)
+        count = 0
+        source = np.zeros((total_number_of_half_edges,), dtype=ss_int_)
+        for i, person_id in enumerate(inds):
+            n_contacts = number_of_contacts[i]
+            source[count: count + n_contacts] = person_id
+            count += n_contacts
+        target = np.random.permutation(source)
+        return source, target
 
 
 class rsv(cn.Connector):
@@ -253,11 +325,12 @@ def test_rsv():
 
     # Make rsv module
     rsv_a = ss.RSV(name='rsv_a')
-    rsv_a.pars['beta'] = {'household': .25, 'school': .15, 'community': .05, 'maternal': 0}
+    rsv_a.pars['beta'] = {'householdnetwork': .5, 'schoolnetwork': .15, 'maternal': 0}
     rsv_a.pars['init_prev'] = dict(age_range=[0,5])
+    rsv_a.pars['dur_immune'] = ss.lognorm_mean(mean=60, stdev=10)
 
     rsv_b = ss.RSV(name='rsv_b')
-    rsv_b.pars['beta'] = {'household': .25, 'school': .15, 'community': .05, 'maternal': 0}
+    rsv_b.pars['beta'] = {'householdnetwork': .5, 'schoolnetwork': .15, 'maternal': 0}
     rsv_b.pars['init_prev'] = dict(age_range=[0,5])
 
 
@@ -284,8 +357,8 @@ def test_rsv():
         rsv_pediatric_vaccine(start_year=1997, efficacy_inf=1, efficacy_sev=1),
     ]}
     sim = ss.Sim(dt=1/52, n_years=3, people=ppl,
-                 networks=ss.ndict(household=RandomNetwork_household,
-                            school=RandomNetwork_school,
+                 networks=ss.ndict(householdnetwork=RandomNetwork_household,
+                            schoolnetwork=RandomNetwork_school,
                             # community=RandomNetwork_community,
                             maternal=maternal),
                  # pars=pars,
