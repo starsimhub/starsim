@@ -126,10 +126,10 @@ def test_components():
 def test_parallel():
     """ Test running two identical sims in parallel """
     pars = make_sim_pars()
-    s1 = ss.Sim(pars)
-    s2 = ss.Sim(pars)
-    # s1, s2 = ss.parallel(s1, s2).sims
-    # assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
+    sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars, label='Sim2')])
+    sims.run()
+    s1, s2 = sims.sims
+    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
     return s1, s2
 
 
