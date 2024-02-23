@@ -17,6 +17,54 @@ ss_float_ = ss.dtypes.float
 ss_int_ = ss.dtypes.int
 
 
+class Pregnancy_householdupdate(ss.Pregnancy):
+
+    def __init__(self, pars=None, par_dists=None, metadata=None):
+        super().__init__(pars, par_dists, metadata)
+
+    def make_embryos(self, sim, conceive_uids):
+        """ Add properties for the just-conceived """
+        n_unborn_agents = len(conceive_uids)
+        if n_unborn_agents > 0:
+
+            # Choose slots for the unborn agents
+            new_slots = self.choose_slots.rvs(conceive_uids)
+
+            # Grow the arrays and set properties for the unborn agents
+            new_uids = sim.people.grow(len(new_slots))
+            sim.people.age[new_uids] = -self.pars.dur_pregnancy
+            sim.people.slot[new_uids] = new_slots  # Before sampling female_dist
+            sim.people.female[new_uids] = self.pars.sex_ratio.rvs(new_uids)
+
+            # Add connections to any vertical transmission layers
+            # Placeholder code to be moved / refactored. The maternal network may need to be
+            # handled separately to the sexual networks, TBC how to handle this most elegantly
+            for lkey, layer in sim.networks.items():
+                if layer.vertical:  # What happens if there's more than one vertical layer?
+                    durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
+                    layer.add_pairs(conceive_uids, new_uids, dur=durs)
+
+                elif 'household' in lkey:
+                    p1 = []
+                    p2 = []
+                    beta = []
+                    for i, mat_uid in enumerate(conceive_uids):
+                        p1.append(mat_uid)
+                        p2.append(new_uids[i])
+                        beta.append(1)
+                        household_contacts = list(layer.contacts.p2[(
+                                layer.contacts.p1 == mat_uid).nonzero()]) + \
+                                             list(layer.contacts.p1[(layer.contacts.p2 == mat_uid).nonzero()])
+                        p1 += household_contacts
+                        p2 += [new_uids[i]] * len(household_contacts)
+                        beta += [1] * len(household_contacts)
+
+                    layer.contacts.p1 = np.concatenate([layer.contacts.p1, p1])
+                    layer.contacts.p2 = np.concatenate([layer.contacts.p2, p2])
+                    layer.contacts.beta = np.concatenate([layer.contacts.beta, beta])
+
+
+
 class HouseholdNetwork(net.Network):
 
     def __init__(self, *, pars=None, par_dists=None, key_dict=None, **kwargs):
@@ -335,10 +383,10 @@ def test_rsv():
 
 
     # Make demographic modules
-    fertility_rates = {'fertility_rates': pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')}
-    death_rates = {'death_rates': pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')}
+    fertility_rates = {'fertility_rate': pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')}
+    death_rates = {'death_rate': pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')}
 
-    pregnancy = ss.Pregnancy(pars=fertility_rates)
+    pregnancy = Pregnancy_householdupdate(pars=fertility_rates)
     death = ss.Deaths(death_rates)
 
     # Make people and networks
