@@ -61,7 +61,7 @@ class RSV(ss.STI):
             dur_exposed=ss.lognorm_mean(mean=5, stdev=1),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4072624/
             dur_symptomatic=ss.lognorm_mean(mean=12, stdev=20),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4072624/
             dur_severe=ss.lognorm_mean(mean=20, stdev=5),  # SOURCE
-            dur_immune=ss.lognorm_mean(mean=90, stdev=10),
+            dur_immune=ss.lognorm_mean(mean=100, stdev=10),
             prognoses=dict(
                 age_cutoffs=np.array([0, 1, 5, 15, 55]),  # Age cutoffs (lower limits)
                 sus_ORs=np.array([2.50, 1.50, 0.25, 0.50, 1.00]),  # Odds ratios for relative susceptibility

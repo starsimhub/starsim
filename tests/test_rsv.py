@@ -336,34 +336,36 @@ class rsv_pediatric_vaccine(ss.Intervention):
         self.duration = duration
         self.diseases = ['rsv_a', 'rsv_b']
         self.start_year = start_year
+        self.vaccinated = ss.State('vaccinated', bool, False)
+        self.n_doses = ss.State('doses', int, 0)
+        self.ti_vaccinated = ss.State('ti_vaccinated', int, ss.INT_NAN)
         return
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.results += ss.Result(None, 'n_vaccinated', sim.npts, ss.int_)
+        self.results += ss.Result(None, 'n_vaccinated', sim.npts, dtype=int, scale=True)
         if self.start_year is None:
             self.start_year = sim.yearvec[0]
-        for disease in self.diseases:
-            state = ss.State('vaccinated', bool, False)
-            state.initialize(sim.people)
-            sim.people[disease].vaccinated = state
-            sim.people.states[f'{disease}.vaccinated'] = state
 
         return
 
     def apply(self, sim):
         if sim.year >= self.start_year:
             pediatric_uids = ss.true((sim.people.age > 0) & (sim.people.age <= 3))
-            unvaccinated_bools = ~sim.people.rsv_a.vaccinated[pediatric_uids]
-            vaccinate_bools = ss.binomial_arr(
-                np.full(len(pediatric_uids), fill_value=self.prob)) * unvaccinated_bools
+            unvaccinated_bools = ~self.vaccinated[pediatric_uids]
+            prob_array = np.full(len(pediatric_uids), fill_value=self.prob)
+            vaccinate_bools = np.random.random(prob_array.shape) < prob_array * unvaccinated_bools
             ped_to_vaccinate = pediatric_uids[vaccinate_bools]
-            ped_protected = ss.binomial_filter(self.efficacy_inf, ped_to_vaccinate)
+            prob_array = np.full(len(ped_to_vaccinate), fill_value=self.efficacy_inf)
+            ped_protected = ped_to_vaccinate[np.random.random(prob_array.shape)<prob_array]
             self.results.n_vaccinated[sim.ti] = len(ped_to_vaccinate)
-            dur_immune = self.duration(len(ped_protected)) / 365
+            dur_immune = self.duration.rvs(ped_protected) / 365
+
+            self.vaccinated[ped_to_vaccinate] = True
+            self.ti_vaccinated[ped_to_vaccinate] = sim.ti
+            self.n_doses[ped_to_vaccinate] += 1
 
             for disease in self.diseases:
-                sim.people[disease].vaccinated[ped_to_vaccinate] = True
                 sim.people[disease].dur_immune[ped_protected] = dur_immune
                 sim.people[disease].immune[ped_protected] = True
                 sim.people[disease].ti_susceptible[ped_protected] = sim.ti + sciris.randround(dur_immune / sim.dt)
@@ -400,7 +402,7 @@ def test_rsv():
     diseases = ss.ndict(rsv_a=rsv_a, rsv_b=rsv_b)
     rsv_connector=rsv(name='rsv_connector')
     pars = {'interventions':[
-        rsv_maternal_vaccine(start_year=1997, efficacy_inf=1, efficacy_sev=1),
+        # rsv_maternal_vaccine(start_year=1997, efficacy_inf=1, efficacy_sev=1),
         rsv_pediatric_vaccine(start_year=1997, efficacy_inf=1, efficacy_sev=1),
     ]}
     sim = ss.Sim(dt=1/52, n_years=3, people=ppl,
@@ -408,9 +410,9 @@ def test_rsv():
                             schoolnetwork=RandomNetwork_school,
                             # community=RandomNetwork_community,
                             maternal=maternal),
-                 # pars=pars,
+                 pars=pars,
                  diseases=diseases, demographics=[pregnancy, death],
-                 # connectors=rsv_connector
+                 connectors=rsv_connector
                  )
     sim.run()
 
