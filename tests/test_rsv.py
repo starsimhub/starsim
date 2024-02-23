@@ -373,12 +373,11 @@ def test_rsv():
 
     # Make rsv module
     rsv_a = ss.RSV(name='rsv_a')
-    rsv_a.pars['beta'] = {'householdnetwork': .5, 'schoolnetwork': .15, 'maternal': 0}
+    rsv_a.pars['beta'] = {'householdnetwork': .25, 'schoolnetwork': .15, 'maternal': 0}
     rsv_a.pars['init_prev'] = dict(age_range=[0,5])
-    rsv_a.pars['dur_immune'] = ss.lognorm_mean(mean=60, stdev=10)
 
     rsv_b = ss.RSV(name='rsv_b')
-    rsv_b.pars['beta'] = {'householdnetwork': .5, 'schoolnetwork': .15, 'maternal': 0}
+    rsv_b.pars['beta'] = {'householdnetwork': .25, 'schoolnetwork': .15, 'maternal': 0}
     rsv_b.pars['init_prev'] = dict(age_range=[0,5])
 
 
@@ -392,10 +391,10 @@ def test_rsv():
     # Make people and networks
     ppl = ss.People(10000, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
     RandomNetwork_household = HouseholdNetwork(
-        pars = dict(n_contacts=sps.poisson(mu=5))
+        pars = dict(n_contacts=sps.poisson(mu=10))
     )
     RandomNetwork_school = SchoolNetwork(
-        pars = dict(n_contacts=sps.poisson(mu=20))
+        pars = dict(n_contacts=sps.poisson(mu=30))
     )
     maternal = ss.MaternalNet()
     diseases = ss.ndict(rsv_a=rsv_a, rsv_b=rsv_b)
@@ -404,7 +403,7 @@ def test_rsv():
         rsv_maternal_vaccine(start_year=1997, efficacy_inf=1, efficacy_sev=1),
         rsv_pediatric_vaccine(start_year=1997, efficacy_inf=1, efficacy_sev=1),
     ]}
-    sim = ss.Sim(dt=1/365, n_years=3, people=ppl,
+    sim = ss.Sim(dt=1/52, n_years=3, people=ppl,
                  networks=ss.ndict(householdnetwork=RandomNetwork_household,
                             schoolnetwork=RandomNetwork_school,
                             # community=RandomNetwork_community,

@@ -59,9 +59,9 @@ class RSV(ss.STI):
         default_pars = dict(
             # RSV natural history
             dur_exposed=ss.lognorm_mean(mean=5, stdev=1),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4072624/
-            dur_symptomatic=ss.lognorm_mean(mean=12, stdev=10),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4072624/
+            dur_symptomatic=ss.lognorm_mean(mean=12, stdev=20),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4072624/
             dur_severe=ss.lognorm_mean(mean=20, stdev=5),  # SOURCE
-            dur_immune=ss.lognorm_mean(mean=110, stdev=10),
+            dur_immune=ss.lognorm_mean(mean=90, stdev=10),
             prognoses=dict(
                 age_cutoffs=np.array([0, 1, 5, 15, 55]),  # Age cutoffs (lower limits)
                 sus_ORs=np.array([2.50, 1.50, 0.25, 0.50, 1.00]),  # Odds ratios for relative susceptibility
@@ -75,8 +75,8 @@ class RSV(ss.STI):
             phase_shift=5,
 
             # Initial conditions
-            init_prev=dict(age_range=[1, 5]),
-            seed_infections=ss.bernoulli(p=0.5),
+            init_prev=dict(age_range=[0, 5]),
+            seed_infections=ss.bernoulli(p=0.1),
             # imm_init=1,
             # imm_decay=dict(form='growth_decay', growth_time=14, decay_rate=0.01),
             # immunity=None
@@ -146,27 +146,39 @@ class RSV(ss.STI):
         trans_OR = self.pars['prognoses']['trans_ORs'][age_bins]
         sus_OR = self.pars['prognoses']['sus_ORs'][age_bins]
 
-        orig_rel_trans = sc.dcp(self.rel_trans)
-        orig_rel_sus = sc.dcp(self.rel_sus)
-
-        self.rel_trans *= trans_OR
-        self.rel_sus *= sus_OR
-
-        old_betas = dict()
         for k, layer in sim.networks.items():
             if k in self.pars['beta']:
-                old_betas[k] = sc.dcp(self.pars['beta'][k])
-                self.pars['beta'][k] = [self.pars['beta'][k][i]* beta_seasonality for i in range(len(self.pars['beta'][k]))]
+                rel_trans = (self.infectious & sim.people.alive).astype(float) * trans_OR * self.rel_trans
+                rel_sus = (self.susceptible & sim.people.alive).astype(float) * sus_OR * self.rel_sus
+                for a, b, beta in [[layer.contacts['p1'], layer.contacts['p2'], self.pars['beta'][k][0]],
+                                   [layer.contacts['p2'], layer.contacts['p1'], self.pars['beta'][k][0]]]:
+                    # probability of a->b transmission
+                    p_transmit = rel_trans[a] * rel_sus[b] * layer.contacts['beta'] * beta * beta_seasonality #* sim.dt
+                    new_cases = np.random.random(len(a)) < p_transmit
+                    if new_cases.any():
+                        self.set_prognoses(sim, b[new_cases], source_uids=a[new_cases])
 
-        super(RSV, self).make_new_cases(sim)
-
-        # Restore betas/transmissibility/susceptibility
-        for k, layer in sim.networks.items():
-            if k in self.pars['beta']:
-                self.pars['beta'][k] = old_betas[k]
-
-        self.rel_trans.values = orig_rel_trans
-        self.rel_sus.values = orig_rel_sus
+        # orig_rel_trans = sc.dcp(self.rel_trans)
+        # orig_rel_sus = sc.dcp(self.rel_sus)
+        #
+        # self.rel_trans *= trans_OR
+        # self.rel_sus *= sus_OR
+        #
+        # old_betas = dict()
+        # for k, layer in sim.networks.items():
+        #     if k in self.pars['beta']:
+        #         old_betas[k] = sc.dcp(self.pars['beta'][k])
+        #         self.pars['beta'][k] = [self.pars['beta'][k][i]* beta_seasonality for i in range(len(self.pars['beta'][k]))]
+        #
+        # super(RSV, self).make_new_cases(sim)
+        #
+        # # Restore betas/transmissibility/susceptibility
+        # for k, layer in sim.networks.items():
+        #     if k in self.pars['beta']:
+        #         self.pars['beta'][k] = old_betas[k]
+        #
+        # self.rel_trans.values = orig_rel_trans
+        # self.rel_sus.values = orig_rel_sus
         return
     def update_results(self, sim):
         """ Update results """
