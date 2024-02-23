@@ -58,8 +58,8 @@ class RSV(ss.STI):
         # Parameters
         default_pars = dict(
             # RSV natural history
-            dur_exposed=ss.lognorm_mean(mean=5, stdev=2),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4072624/
-            dur_symptomatic=ss.lognorm_mean(mean=12, stdev=20),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4072624/
+            dur_exposed=ss.lognorm_mean(mean=5, stdev=1),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4072624/
+            dur_symptomatic=ss.lognorm_mean(mean=12, stdev=10),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4072624/
             dur_severe=ss.lognorm_mean(mean=20, stdev=5),  # SOURCE
             dur_immune=ss.lognorm_mean(mean=110, stdev=10),
             prognoses=dict(
@@ -76,7 +76,7 @@ class RSV(ss.STI):
 
             # Initial conditions
             init_prev=dict(age_range=[1, 5]),
-            seed_infections=ss.bernoulli(p=0.1),
+            seed_infections=ss.bernoulli(p=0.5),
             # imm_init=1,
             # imm_decay=dict(form='growth_decay', growth_time=14, decay_rate=0.01),
             # immunity=None
@@ -193,7 +193,7 @@ class RSV(ss.STI):
         # Determine which symptomatic cases will become severe
         symptomatic_uids = ss.true(symptomatic)
         age_bins = np.digitize(sim.people.age[symptomatic],bins=self.pars['prognoses']['age_cutoffs']) - 1  # Age bins of individuals
-        sev_probs = self.pars['prognoses']['severe_probs'][age_bins] * self.rel_sev[symptomatic_uids]
+        sev_probs = (self.pars['prognoses']['severe_probs'][age_bins] * self.rel_sev[symptomatic_uids]).values
         # sev_dist = self.make_prob_array(prob_array=sev_probs, uids=symptomatic_uids)
         sev_bools = np.random.random(sev_probs.shape) < sev_probs
         severe_uids = symptomatic_uids[sev_bools]
@@ -290,7 +290,7 @@ class RSV(ss.STI):
 
         # Determine which infections will become symptomatic
         age_bins = np.digitize(sim.people.age[uids], bins=self.pars['prognoses']['age_cutoffs']) - 1  # Age bins of individuals
-        symp_probs = self.pars['prognoses']['symp_probs'][age_bins] * self.rel_sev[uids]
+        symp_probs = (self.pars['prognoses']['symp_probs'][age_bins] * self.rel_sev[uids]).values
         # symp_dist = self.make_prob_array(prob_array=symp_probs, uids = uids)
         symptomatic_bools = np.random.random(symp_probs.shape) < symp_probs
         symptomatic_uids = uids[symptomatic_bools]

@@ -338,7 +338,7 @@ def test_rsv():
     fertility_rates = {'fertility_rates': pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')}
     death_rates = {'death_rates': pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')}
 
-    pregnancy = ss.Pregnancy(fertility_rates)
+    pregnancy = ss.Pregnancy(pars=fertility_rates)
     death = ss.Deaths(death_rates)
 
     # Make people and networks
@@ -356,14 +356,14 @@ def test_rsv():
         rsv_maternal_vaccine(start_year=1997, efficacy_inf=1, efficacy_sev=1),
         rsv_pediatric_vaccine(start_year=1997, efficacy_inf=1, efficacy_sev=1),
     ]}
-    sim = ss.Sim(dt=1/52, n_years=3, people=ppl,
+    sim = ss.Sim(dt=1/365, n_years=3, people=ppl,
                  networks=ss.ndict(householdnetwork=RandomNetwork_household,
                             schoolnetwork=RandomNetwork_school,
                             # community=RandomNetwork_community,
                             maternal=maternal),
                  # pars=pars,
                  diseases=diseases, demographics=[pregnancy, death],
-                 connectors=rsv_connector
+                 # connectors=rsv_connector
                  )
     sim.run()
 
