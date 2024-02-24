@@ -217,7 +217,17 @@ class UIDArray(NDArrayOperatorsMixin):
                 raise IndexError(f'UID {key} not present in array')
             else:
                 raise e
-                
+
+    def __getstate__(self):
+        slots_dict = {s: getattr(self, s) for s in self.__slots__ if hasattr(self, s) and getattr(self, s) is not None}
+        return (self.__dict__, slots_dict)
+
+    def __setstate__(self, state):
+        for st in state:
+            for k, v in st.items():
+                setattr(self, k, v)
+        return
+
     def __getattr__(self, attr):
         """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
         return getattr(self.values, attr)
