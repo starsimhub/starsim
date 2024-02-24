@@ -2,7 +2,7 @@ import hashlib
 import numpy as np
 import starsim as ss
 
-__all__ = ['RNGContainer', 'MultiRNG', 'SingleRNG', 'RNG']
+__all__ = ['RNGContainer', 'MultiRNG', 'SingleRNG', 'RNG', 'NotReadyException']
 
 
 class RNGContainer:
@@ -69,6 +69,14 @@ class SeedRepeatException(Exception):
     "Raised when two random number generators have the same seed."
     def __init__(self, rng_name, seed_offset):
         msg = f'Requested seed offset {seed_offset} for the random number generator named {rng_name} has already been used.'
+        super().__init__(msg)
+        return
+
+
+class NotReadyException(Exception):
+    "Raised when a random generator is called without being ready."
+    def __init__(self, rng_name):
+        msg = f'The random generator named "{rng_name}" was not ready when called. This error is likely caused by calling a distribution or underlying MultiRNG generator two or more times in a single step.'
         super().__init__(msg)
         return
 

@@ -44,7 +44,7 @@ class ScipyDistribution():
                 self.repeat_slot_handling = {}
                 # Work out how many samples to draw. If sampling by UID, this depends on the slots assigned to agents.
                 if np.isscalar(size):
-                    if not isinstance(size, int):
+                    if type(size) not in [int, np.int64, np.int32]: # CK: TODO: need to refactor
                         raise Exception('Input "size" must be an integer')
                     if size < 0:
                         raise Exception('Input "size" cannot be negative')
@@ -107,7 +107,18 @@ class ScipyDistribution():
                         kwargs[pname] = pars_slots
 
                 kwargs['size'] = n_samples
+                
+                # If multirng, make sure the generator is ready to avoid multiple calls without jumping in between
+                if options.multirng and not self.random_state.ready:
+                    raise ss.NotReadyException(self.random_state.name)
+
+                # Actually sample the random values
                 vals = super().rvs(*args, **kwargs)
+
+                # Again if multirng, mark the generator as not ready (needs to be jumped)
+                if options.multirng:
+                    self.random_state.ready = False
+
                 if repeat_slot_flag:
                     # Handle repeated slots
                     repeat_slot_vals = np.full(len(slots), np.nan)

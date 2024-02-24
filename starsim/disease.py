@@ -185,6 +185,12 @@ class Infection(Disease):
             ss.State('rel_trans', float, 1.0),
             ss.State('ti_infected', int, ss.INT_NAN),
         )
+
+        if ss.options.multirng:
+            # Used only in _make_new_cases_multirng
+            self.rng_acquisition = ss.uniform()
+            self.rng_source = ss.uniform()
+
         return
 
     @property
@@ -342,7 +348,7 @@ class Infection(Disease):
 
         # Slotted draw, need to find a long-term place for this logic
         slots = people.slot[uids]  # Slots for the possible infectee
-        new_cases_bool = ss.uniform.rvs(size=np.max(slots) + 1)[slots] < p_acq_node.values
+        new_cases_bool = self.rng_acquisition.rvs(size=np.max(slots) + 1)[slots] < p_acq_node.values
         new_cases = uids[new_cases_bool]
 
         # Now choose infection source for new cases
@@ -355,7 +361,7 @@ class Infection(Disease):
                 src_idx = np.argmax(cumsum >= df['r'])
             return df['p1'].iloc[src_idx]
 
-        df['r'] = ss.uniform.rvs(size=np.max(slots) + 1)[slots[df.p2.values]]  # Draws for each potential infectee
+        df['r'] = self.rng_source.rvs(size=np.max(slots) + 1)[slots[df.p2.values]]  # Draws for each potential infectee
         sources = df.set_index('p2').loc[new_cases].groupby('p2').apply(choose_source)
 
         return new_cases, sources[new_cases].values

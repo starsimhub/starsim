@@ -107,7 +107,8 @@ class Ebola(SIR):
 
     def set_prognoses(self, sim, uids, source_uids=None):
         """ Set prognoses for those who get infected """
-        super().set_prognoses(sim, uids, source_uids)
+        # Do not call set_prognoses on the parent
+        #super().set_prognoses(sim, uids, source_uids)
 
         self.susceptible[uids] = False
         self.exposed[uids] = True

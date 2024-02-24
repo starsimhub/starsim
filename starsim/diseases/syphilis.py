@@ -123,6 +123,11 @@ class Syphilis(ss.STI):
             self.primary[secondary_from_primary] = False
             self.set_secondary_prognoses(sim, ss.true(secondary_from_primary))
 
+        if ss.options.multirng:
+            # Hack to reset the MultiRNGs in set_secondary_prognoses so that they can be called again in this timestep. TODO: Refactor
+            self.pars.p_latent_temp.random_state.step(sim.ti+1)
+            self.pars.dur_secondary.random_state.step(sim.ti+1)
+
         # Secondary reactivation from latent
         secondary_from_latent = self.latent_temp & (self.ti_secondary <= sim.ti)
         if len(ss.true(secondary_from_latent)) > 0:
@@ -208,14 +213,17 @@ class Syphilis(ss.STI):
     def set_secondary_prognoses(self, sim, uids):
         """ Set prognoses for people who have just progressed to secondary infection """
 
-        # Secondary to latent_temp or latent_long
-        latent_temp_uids = self.pars.p_latent_temp.filter(uids)
-        latent_long_uids = np.setdiff1d(uids, latent_temp_uids)
+        dur_secondary = self.pars.dur_secondary.rvs(uids)
 
-        dur_secondary_temp = self.pars.dur_secondary.rvs(latent_temp_uids)
+        # Secondary to latent_temp or latent_long
+        latent_temp = self.pars.p_latent_temp.rvs(uids)
+        latent_temp_uids = uids[latent_temp]
+        latent_long_uids = uids[~latent_temp]
+
+        dur_secondary_temp = dur_secondary[latent_temp]
         self.ti_latent_temp[latent_temp_uids] = self.ti_secondary[latent_temp_uids] + rr(dur_secondary_temp / sim.dt)
 
-        dur_secondary_long = self.pars.dur_secondary.rvs(latent_long_uids)
+        dur_secondary_long = dur_secondary[~latent_temp]
         self.ti_latent_long[latent_long_uids] = self.ti_secondary[latent_long_uids] + rr(dur_secondary_long / sim.dt)
 
         return
@@ -227,14 +235,17 @@ class Syphilis(ss.STI):
         return
 
     def set_latent_long_prognoses(self, sim, uids):
+
+        dur_latent = self.pars.dur_latent_long.rvs(uids)
+
         # Primary to secondary
-        dur_latent_long = self.pars.dur_latent_long.rvs(uids)
+        dur_latent_long = dur_latent
         self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_long / sim.dt)
 
         # Latent_long to tertiary
-        tertiary_uids = self.pars.p_tertiary.filter(uids)
-        dur_latent_long = self.pars.dur_latent_long.rvs(tertiary_uids)
-        self.ti_tertiary[tertiary_uids] = self.ti_latent_long[tertiary_uids] + rr(dur_latent_long / sim.dt)
+        tertiary = self.pars.p_tertiary.rvs(uids)
+        tertiary_uids = uids[tertiary]
+        self.ti_tertiary[tertiary_uids] = self.ti_latent_long[tertiary_uids] + rr(dur_latent_long[tertiary] / sim.dt)
 
         return
 
