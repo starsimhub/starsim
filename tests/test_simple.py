@@ -20,7 +20,7 @@ def make_sim_pars():
     pars = dict(
         n_agents = n_agents,
         birth_rate = 20,
-        death_rate = 0.015,
+        death_rate = 15,
         networks = dict(
             type = 'randomnet',
             n_contacts = 4,

@@ -453,8 +453,8 @@ class Sim(sc.prettyobj):
             self.people.remove_dead(self)
 
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
-        for module in self.demographics.values():
-            module.update(self)
+        for dem_mod in self.demographics.values():
+            dem_mod.update(self)
 
         # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
         # to be applied to newly created agents

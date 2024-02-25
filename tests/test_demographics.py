@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import sciris as sc
 
-do_plot = True
+do_plot = False
 
 
 def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, do_plot=True):
@@ -32,7 +32,7 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, 
         demographics += pregnancy
 
     death_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')
-    death = ss.Deaths(pars={'death_rate': death_rates})
+    death = ss.Deaths(pars={'death_rate': death_rates, 'units': 1})
     demographics += death
 
     # Make people
@@ -123,6 +123,22 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, 
     return sim
 
 
+def test_constant_pop():
+    # Test pars for constant pop size
+    sim = ss.Sim(n_agents=10e3, birth_rate=10, death_rate=10/1010*1000, n_years=200, rand_seed=1).run()
+    print("Check final pop size within 5% of starting pop")
+    assert np.isclose(sim.results.n_alive[0], sim.results.n_alive[-1], rtol=0.05)
+    print(f'✓ (final pop / starting pop={sim.results.n_alive[-1] / sim.results.n_alive[0]:.2f})')
+
+    # Plots
+    if do_plot:
+        sim.plot()
+        import matplotlib.pyplot as plt
+        plt.show()
+    return sim
+
 if __name__ == '__main__':
     # Test Nigeria demographic consistency
     sim = test_nigeria(dt=1, which='pregnancy', n_years=15, plot_init=True, do_plot=do_plot)
+    sim = test_constant_pop()
+
