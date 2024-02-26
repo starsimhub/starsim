@@ -289,16 +289,19 @@ class Infection(Disease):
                 new_cases_bool = rvs < p_transmit
                 new_cases.append(trg[new_cases_bool])
                 sources.append(src[new_cases_bool])
+        
+        # Tidy up
         if len(new_cases) and len(sources):
             new_cases = np.concatenate(new_cases)
             sources = np.concatenate(sources)
         else:
             new_cases = np.empty(0, dtype=int)
             sources = np.empty(0, dtype=int)
-    
+            
         if len(new_cases):
             self.set_prognoses(sim, new_cases, sources)
-        return
+            
+        return new_cases, sources
 
     def update_results(self, sim):
         super().update_results(sim)
