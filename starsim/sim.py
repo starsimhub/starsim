@@ -265,28 +265,34 @@ class Sim(sc.prettyobj):
 
         # Figure out if it's in the sim pars or provided directly
         attr_plugins = getattr(self, plugin_name)  # Get any plugins that have been provided directly
-        if attr_plugins is None or len(attr_plugins) == 0:  # None have been provided directly
 
-            # See if they've been provided in the pars dict
-            if self.pars.get(plugin_name):
+        # See if they've been provided in the pars dict
+        if self.pars.get(plugin_name):
 
-                par_plug = self.pars[plugin_name]
+            par_plug = self.pars[plugin_name]
 
-                # String: convert to ndict
-                if isinstance(par_plug, str):
-                    plugins = ss.ndict(dict(name=par_plug))
+            # String: convert to ndict
+            if isinstance(par_plug, str):
+                plugins = ss.ndict(dict(name=par_plug))
 
-                # List or dict: convert to ndict
-                elif sc.isiterable(par_plug) and len(par_plug):
-                    if isinstance(par_plug, dict) and 'type' in par_plug and 'name' not in par_plug:
-                        par_plug['name'] = par_plug['type'] # TODO: simplify/remove this
-                    plugins = ss.ndict(par_plug)
+            # List or dict: convert to ndict
+            elif sc.isiterable(par_plug) and len(par_plug):
+                if isinstance(par_plug, dict) and 'type' in par_plug and 'name' not in par_plug:
+                    par_plug['name'] = par_plug['type'] # TODO: simplify/remove this
+                plugins = ss.ndict(par_plug)
 
-            else:  # Not provided directly or in pars
-                plugins = {}
-        else:
-            plugins = attr_plugins
+        else:  # Not provided directly or in pars
+            plugins = {}
 
+        # Check that we don't have two copies
+        for attr_key in attr_plugins.keys():
+            if plugins.get(attr_key):
+                errormsg = f'Sim was created with {attr_key} module, cannot create another through the pars dict.'
+                raise ValueError(errormsg)
+
+        plugins = sc.mergedicts(plugins, attr_plugins)
+
+        # Process
         processed_plugins = sc.autolist()
         for plugin in plugins.values():
 
