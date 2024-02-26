@@ -141,12 +141,11 @@ def test_constant_pop():
 
 def test_module_adding():
 
-    # births = ss.Births(pars={'birth_rate': 10})
-    # deaths = ss.Deaths(pars={'death_rate': 10})
-    # demographics = [births, deaths]
-    # with pytest.raises(ValueError):
-    #     sim = ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=10, death_rate=10).run()
-    sim = ss.Sim(n_agents=1e3, demographics=True).run()
+    births = ss.Births(pars={'birth_rate': 10})
+    deaths = ss.Deaths(pars={'death_rate': 10})
+    demographics = [births, deaths]
+    with pytest.raises(ValueError):
+        sim = ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=10, death_rate=10).run()
 
 if __name__ == '__main__':
 
