@@ -400,17 +400,12 @@ class Sim(sc.prettyobj):
             # Add intervention states to the People's dicts
             self.people.add_module(intervention)
 
-            # Intervention and product RNGs
-            for rng in intervention.rngs:
-                rng.initialize(self.rng_container, self.people.slot)
-
             # If there's a product module present, initialize and add it
             if hasattr(intervention, 'product') and isinstance(intervention.product, ss.Product):
                 intervention.product.initialize(self)
 
                 self.people.add_module(intervention.product)
-                for rng in intervention.product.rngs:
-                    rng.initialize(self.rng_container, self.people.slot)
+
 
         return
 
@@ -454,7 +449,7 @@ class Sim(sc.prettyobj):
         self.rng_container.step(self.ti + 1)  # +1 offset because ti=0 is used on initialization
 
         # Clean up dead agents, if removing agents is enabled
-        if self.pars.remove_dead:
+        if self.pars.remove_dead and (self.ti % self.pars.remove_dead == 0):
             self.people.remove_dead(self)
 
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)

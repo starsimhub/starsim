@@ -44,12 +44,6 @@ class Module(sc.prettyobj):
         """
         self.check_requires(sim)
 
-        # Connect the random number generators to the sim. The RNGs for this module should be initialized
-        # first as some of the module's State instances may require them to generate initial values
-        for rng in self.rngs:
-            if not rng.initialized:
-                rng.initialize(sim.rng_container, sim.people.slot)
-
         # First, convert any scalar pars to distributions if required
         for key in self.par_dists.keys():
             par = self.pars[key]
@@ -144,15 +138,10 @@ class Module(sc.prettyobj):
     def statesdict(self):
         """
         Return a flat dictionary (objdict) of all states
+
+        Note that name collisions may affect the output of this function
         """
         return sc.objdict({s.name:s for s in self.states})
-
-    @property
-    def rngs(self):
-        """
-        Return a flat collection of all random number generators, as with states above
-        """
-        return [x for x in self.__dict__.values() if isinstance(x, (ss.MultiRNG, ss.SingleRNG))]
 
     @classmethod
     def create(cls, name, *args, **kwargs):
