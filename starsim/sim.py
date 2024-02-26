@@ -332,6 +332,22 @@ class Sim(sc.prettyobj):
             dem_mod.initialize(self)
             self.results[dem_mod.name] = dem_mod.results
 
+        # Count how many of each kind of demographic module we have
+        demdict = {'births': ss.Births, 'pregnancy': ss.Pregnancy, 'deaths': ss.Deaths}
+        mod_names = dict()
+        for demname, demtype in demdict.items():
+            mod_names[demname] = [d.name for d in demographics if isinstance(d, demtype)]
+
+            # Validation
+            if len(mod_names[demname]) > 1:
+                if len(mod_names[demname]) == len(set(mod_names[demname])):  # No duplicate names, raise warning
+                    ss.warn(f'Two instances of {demname} module added to the sim; was this intentional?')
+                else:
+                    errormsg = (f'Cannot add two identically-named {demname} modules to a sim.\n '
+                                f'Demographic modules are: \n{sc.newlinejoin(mod_names[demname])}.\n'
+                                f'Tip: if using demographic modules, do not use birth and death rates in the sim pars.')
+                    raise ValueError(errormsg)
+
         # Ensure they're stored at the sim level
         self.demographics = ss.ndict(*demographics)
 
