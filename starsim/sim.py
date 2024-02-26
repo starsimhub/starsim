@@ -316,6 +316,10 @@ class Sim(sc.prettyobj):
     def init_demographics(self):
         """ Initialize demographics """
 
+        # Support adding default demographics
+        if self.pars.demographics == True:
+            self.pars.demographics = [ss.Births(), ss.Deaths()]
+
         # Demographics can be provided via sim.demographics or sim.pars - this methods reconciles them
         demographics = self.convert_plugins(ss.BaseDemographics, plugin_name='demographics')
 
