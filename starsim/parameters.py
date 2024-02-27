@@ -34,10 +34,10 @@ class Parameters(sc.objdict):
         self.death_rate = None
 
         # Simulation parameters
-        self.start           = 1995.         # Start of the simulation
-        self.end             = None          # End of the simulation
-        self.n_years         = 35            # Number of years to run, if end isn't specified. Note that this includes burn-in
-        self.burnin          = 25            # Number of years of burnin. NB, this is doesn't affect the start and end dates of the simulation, but it is possible remove these years from plots
+        self.start           = 2000          # Start of the simulation
+        self.end             = 2049          # End of the simulation
+        self.n_years         = None          # Number of years to run, if end isn't specified. Note that this includes burn-in
+        self.burnin          = 0             # Number of years of burnin. NB, this is doesn't affect the start and end dates of the simulation, but it is possible remove these years from plots
         self.dt              = 1.0           # Timestep (in years)
         self.dt_demog        = 1.0           # Timestep for demographic updates (in years)
         self.rand_seed       = 1             # Random seed, if None, don't reset

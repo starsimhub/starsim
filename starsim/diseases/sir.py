@@ -18,10 +18,10 @@ class SIR(ss.Infection):
 
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
         pars = ss.omergeleft(pars,
-            dur_inf = 1,
-            init_prev = 0.1,
-            p_death = 0.2,
-            beta = None,
+            dur_inf = 10,
+            init_prev = 0.01,
+            p_death = 0.1,
+            beta = 0.1,
         )
 
         par_dists = ss.omergeleft(par_dists,

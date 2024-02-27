@@ -601,11 +601,54 @@ class Sim(sc.prettyobj):
         self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
         return
 
-    def summarize(self):
+    def summarize(self, how='default'):
+        """
+        Provide a quick summary of the sim
+        
+        Args:
+            how (str): how to summarize: can be 'mean', 'median', 'last', or a mapping of result keys to those
+        
+        Returns the last entry for count and cumulative results, and the mean otherwise
+        """
+        
+        def get_func(key, how, default='mean'):
+            """
+            Find the right function by matching the "how" key with the result key
+            
+            For example, hkey="cum_ " will match result key "cum_infections"
+            """
+            func = None
+            for hkey,hfunc in how.items():
+                if hkey in key:
+                    func = hfunc
+                    break
+            if func is None:
+                func = default
+            return func
+            
+        def get_result(res, func):
+            """ Convert a string to the actual function to use, e.g. "median" maps to np.median() """
+            if   func == 'mean':   return res.mean()
+            elif func == 'median': return np.median(res)
+            elif func == 'last':   return res[-1]
+            elif callable(func):   return func(res)
+            else: raise Exception(f'"{func}" is not a valid function')
+        
+        # Convert "how" from a string to a dict
+        if how == 'default':
+            how = {'n_':'mean', 'new_':'mean', 'cum_':'last', '':'mean'}
+        elif isinstance(how, str):
+            how = {'':how} # Match everything
+        
         summary = sc.objdict()
         flat = sc.flattendict(self.results, sep='_')
-        for k, v in flat.items():
-            summary[k] = v.mean()
+        for key, res in flat.items():
+            try:
+                func = get_func(key, how)
+                entry = get_result(res, func)
+            except Exception as E:
+                entry = f'N/A {E}'
+            summary[key] = entry
         self.summary = summary
         return summary
 
@@ -898,11 +941,13 @@ class Sim(sc.prettyobj):
         return output
 
     def plot(self):
-        flat = sc.flattendict(self.results, sep=': ')
-        fig, axs = sc.getrowscols(len(flat), make=True)
-        for ax, (k, v) in zip(axs.flatten(), flat.items()):
-            ax.plot(v)
-            ax.set_title(k)
+        with sc.options.with_style('fancy'):
+            flat = sc.flattendict(self.results, sep=': ')
+            fig, axs = sc.getrowscols(len(flat), make=True)
+            for ax, (k, v) in zip(axs.flatten(), flat.items()):
+                ax.plot(self.yearvec, v)
+                ax.set_title(k)
+                ax.set_xlabel('Year')
         return fig
 
 
