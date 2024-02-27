@@ -1,16 +1,14 @@
-import zipfile
+"""
+Create a class for storing a large number of simulations.
+
+Hierarchy
+- result: parameters, seed, beta
+- samples: collection of results with same parameters but different seeds
+- dataset: collection of samples (with different parameters)
+"""
+
 import io
 import sciris as sc
-import pandas as pd
-from collections import namedtuple, defaultdict
-import numpy as np
-import copy
-from pathlib import Path
-
-# Hierarchy
-# - result: parameters, seed, beta
-# - samples: collection of results with same parameters but different seeds
-# - dataset: collection of samples (with different parameters)
 
 __all__ = ['Dataset', 'Samples']
 
@@ -19,7 +17,7 @@ class Dataset:
         # Note that results are not deep copied, to save memory
         if folder is not None:
             self.results = sc.odict()
-            for file in sorted(Path(folder).iterdir()):
+            for file in sorted(sc.path(folder).iterdir()):
                 if file.suffix == ".zip":
                     res = Samples(file, *args, **kwargs)
                     self.results[res.identifier] = res
@@ -33,7 +31,7 @@ class Dataset:
         """
         Return dictionary of parameters across results
         """
-        ids = defaultdict(set)
+        ids = sc.ddict(set)
         for res in self.results.values():
             for k, v in res.id.items():
                 ids[k].add(v)
@@ -90,6 +88,8 @@ class Dataset:
         else:
             return ds[0]
 
+identifiers_file = 'identifiers.txt'
+summary_file = 'summary.csv'
 
 class Samples:
     """
@@ -123,19 +123,16 @@ class Samples:
         self._zipfile = None
 
         if memory_buffer:
-            with open(fname, "rb") as f:
-                buffer = io.BytesIO(f.read())
-            self._zipfile = zipfile.ZipFile(buffer, mode="r")
+            self._zipfile = sc.loadzip(fname)
 
         # Read the identifiers
-        with self.zipfile.open("identifiers.txt") as f:
-            identifiers = f.readlines()
-            identifiers = [x.decode().strip() for x in identifiers]
+        identifiers = self.zipfile[identifiers_file].splitlines()
+        identifiers = [x.strip() for x in identifiers]
 
-        with self.zipfile.open("summary.csv") as f:
-            self.summary = pd.read_csv(f)
-            self.summary.set_index(identifiers, inplace=True)
-            self.summary = self.summary.sort_index()
+        summary_str = io.StringIO(self.zipfile[summary_file])
+        self.summary = sc.dataframe.read_csv(summary_str)
+        self.summary.set_index(identifiers, inplace=True)
+        self.summary = self.summary.sort_index()
 
         self._cache = {}  # Cache the dataframes
 
@@ -149,13 +146,9 @@ class Samples:
         This allows efficient filtering of seeds within runs by removing rows from
         the copy's summary, while not reloading or duplicating any of the dataframes
         in memory
-
-        Returns:
-
         """
-
-        new = copy.copy(self)  # Shallow copy of
-        new.summary = copy.deepcopy(self.summary)
+        new = sc.cp(self)  # Shallow copy of
+        new.summary = sc.dcp(self.summary)
         return new
 
     def preload(self):
@@ -165,15 +158,16 @@ class Samples:
         This is done based on the seeds in self.seeds, therefore if some of the seeds
         are removed prior to preloading, then those dataframes will not be loaded
         """
-
-        _ = [self[x] for x in self.seeds]
+        for seed in self.seeds:
+            self[seed] # This automatically caches the loaded seeds
+        return
 
     @property
     def zipfile(self):
         if self._zipfile:
             return self._zipfile
         else:
-            return zipfile.ZipFile(self._fname, mode="r")
+            return sc.loadzip(self._fname)
 
     def __repr__(self):
         return f"<Samples {'-'.join(str(x) for x in self.id.values())}, {len(self)} seeds>"
@@ -189,7 +183,7 @@ class Samples:
         return self.summary.columns
 
     @property
-    def identifier(self) -> namedtuple:
+    def identifier(self):
         """
         Return tuple identifier for this run
 
@@ -203,13 +197,11 @@ class Samples:
         just be expected that all results being analyzed at the same time would have the same set of
         identifiers. The first two index levels are always 'beta' and 'seed', therefore these are
         dropped from the ID.
-
         """
-
         return tuple(self.summary.iloc[0].name[1:])
 
     @property
-    def id(self) -> dict:
+    def id(self):
         """
         Return a dictionary with the identifiers and associated values
 
@@ -226,16 +218,14 @@ class Samples:
          'incursions_per_day': 1}
 
         Returns: A dictionary {identifier name: value}
-
         """
         return dict(zip(tuple(self.summary.index.names[1:]), self.identifier))
 
-    def __len__(self) -> int:
+    def __len__(self):
         """
         Return number of runs
 
         Returns: Integer number of seeds
-
         """
         return len(self.summary)
 
@@ -249,24 +239,16 @@ class Samples:
         >>>     max(df['new_diagnoses'])
 
         Returns: Generator over dataframes
-
         """
         for seed in self.seeds:
             yield self[seed]
 
     def __contains__(self, seed):
-        """
-        Check if a seed is contained
-        Args:
-            seed:
-
-        Returns:
-
-        """
+        """ Check if a seed is contained """
         return seed in set(self.seeds)
 
     @property
-    def seeds(self) -> np.array:
+    def seeds(self):
         """
         Return array of all seeds
 
@@ -277,89 +259,69 @@ class Samples:
         been removed from the summary.
 
         Returns: Array of seed values
-
         """
-
         return self.index.get_level_values("seed").values
 
     @classmethod
     def new(cls, folder, outputs, identifiers, fname=None):
         """
-
         Args:
-            fname:
+            folder: The folder name
             outputs: A list of tuples (df:pd.DataFrame, summary_row:dict) where the summary row as an entry 'seed' for the seed
             identifiers: A list of columns to use as identifiers. These should appear in the summary dataframe and should have the same
                          value for all samples.
-
-        Returns: None
-
         """
+        zipdata = {}
+        summary_rows = []
+        for df, row in outputs:
+            row_str = df.to_csv()
+            name = f'seed_{row["seed"]}.csv'
+            zipdata[name] = row_str
+            summary_rows.append(row)
 
-        buffer = io.BytesIO()
+        # Write the identifier metadata
+        if identifiers is None:
+            identifiers = ["seed"]
+        else:
+            identifiers = ["seed"] + list(identifiers)
+        identifiers = list(dict.fromkeys(identifiers))  # Unique, maintaining order
+        zipdata[identifiers_file] = "\n".join(identifiers)
 
-        with zipfile.ZipFile(buffer, mode="x", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+        # Write the summary
+        summary = sc.dataframe(summary_rows)
 
-            summary_rows = []
-            for df, row in outputs:
-                f = io.BytesIO()
-                df.to_csv(f)
-                f.flush()
-                zf.writestr(f'seed_{row["seed"]}.csv', f.getvalue())
-                summary_rows.append(row)
+        # Check that each identifier column only contains one unique value
+        for identifier in identifiers:
+            if summary[identifier].nunique() > 1 and identifier != 'seed':
+                raise ValueError(f"Identifier column '{identifier}' contains more than one unique value")
 
-            # Write the identifier metadata
-            if identifiers is None:
-                identifiers = ["seed"]
-            else:
-                identifiers = ["seed"] + list(identifiers)
-            identifiers = list(dict.fromkeys(identifiers))  # Unique, maintaining order
-
-            # Write the summary
-            summary = pd.DataFrame(summary_rows)
-
-            # Check that each identifier column only contains one unique value
-            for identifier in identifiers:
-                if summary[identifier].nunique() > 1 and identifier != 'seed':
-                    raise ValueError(f"Identifier column '{identifier}' contains more than one unique value")
-
-            summary.set_index(identifiers, inplace=True)
-            f = io.BytesIO()
-            summary.to_csv(f)
-            f.flush()
-            zf.writestr(f"summary.csv", f.getvalue())
-
-            zf.writestr("identifiers.txt", "\n".join(identifiers))
-
-        buffer.flush()
-
+        # Finish working on and write the summary
+        summary.set_index(identifiers, inplace=True)
+        summary_str = summary.to_csv()
+        zipdata[summary_file] = summary_str
+        
+        # Handle the zip file name
         if fname is None:
             fname = "-".join(str(row[x]) for x in identifiers[1:]) + ".zip"
         folder.mkdir(parents=True, exist_ok=True)
+        
+        # Save the zip file
+        sc.savezip(folder/fname, data=zipdata)
 
-        with open(folder / fname, mode="wb") as f2:
-            f2.write(buffer.getvalue())
+        return cls(folder/fname, memory_buffer=False)
 
-        return cls(folder / fname, memory_buffer=False)
-
-    def get(self, seed) -> tuple:
+    def get(self, seed):
         """
         Retrieve dataframe and summary row
 
         Use ``Samples[seed]`` to read only the dataframe.
         Use ``Samples.get(seed)`` to read both the dataframe and summary row
-
-        Args:
-            seed:
-
-        Returns:
-
         """
         df = self[seed]
         row = sc.objdict(self.summary.xs(seed, level="seed").reset_index().iloc[0])
         return row, df
 
-    def items(self) -> tuple:
+    def items(self):
         """
         Iterate over seeds and dataframes
 
@@ -374,11 +336,10 @@ class Samples:
             - Samples.get(seed) i.e. a tuple with
                 - the summary dataframe row for the requested seed
                 - the corresponding CSV output for that run
-
         """
         for seed in self.seeds:
             yield seed, self.get(seed)
-
+            
     def __getitem__(self, item):
         """
         Overload getitem for convenience
@@ -403,14 +364,7 @@ class Samples:
 
         Naturally, this means that the seeds must be integers (but this is the only data type
         that would make sense with Numpy's random number generator anyway)
-
-        Args:
-            item:
-
-        Returns:
-
         """
-
         if isinstance(item, tuple):
             return self[item[0]][item[1]]
 
@@ -425,11 +379,11 @@ class Samples:
 
         if item not in self._cache:
             with self.zipfile.open(f"seed_{item}.csv") as f:
-                self._cache[item] = pd.read_csv(f, index_col="t")
+                self._cache[item] = sc.dataframe.read_csv(f, index_col="t")
 
         return self._cache[item].copy()
 
-    def apply(self, fcn, *args, **kwargs) -> list:
+    def apply(self, fcn, *args, **kwargs):
         """
         Apply/map function to every dataframe
 
@@ -441,7 +395,5 @@ class Samples:
             **kwargs: Additional arguments for ``fcn``
 
         Returns: A list with the output of ``fcn``
-
         """
-
         return [fcn(x, *args, **kwargs) for x in self]

@@ -25,8 +25,8 @@ def test_samples():
     outputs = get_outputs(0.2)
     resultsdir = tempdir/'samples_results'
     resultsdir.mkdir(exist_ok=True)
-    ss.Samples.new(resultsdir, outputs, identifiers=["p_death"])
-
+    s = ss.Samples.new(resultsdir, outputs, identifiers=["p_death"])
+    return s
 
 def test_dataset():
     resultsdir = tempdir / 'dataset_results'
@@ -35,3 +35,9 @@ def test_dataset():
         outputs = get_outputs(p_death)
         ss.Samples.new(resultsdir, outputs, identifiers=["p_death"])
     results = ss.Dataset(resultsdir)
+    return results
+
+
+if __name__ == '__main__':
+    samples = test_samples()
+    results = test_dataset()
