@@ -44,7 +44,7 @@ class HIV(ss.Infection):
     @staticmethod
     def make_death_prob(module, sim, uids):
         p = module.pars
-        return module.death_prob_data / (p.cd4_min - p.cd4_max)**2 *  (module.cd4[uids] - p.cd4_max)**2
+        return sim.dt * module.death_prob_data / (p.cd4_min - p.cd4_max)**2 *  (module.cd4[uids] - p.cd4_max)**2
 
     def update_pre(self, sim):
         """ Update CD4 """
@@ -94,14 +94,14 @@ class HIV(ss.Infection):
 
 class ART(ss.Intervention):
 
-    def __init__(self, t: np.array, coverage: np.array, **kwargs):
+    def __init__(self, year: np.array, coverage: np.array, **kwargs):
         self.requires = HIV
-        self.t = sc.promotetoarray(t)
+        self.year = sc.promotetoarray(year)
         self.coverage = sc.promotetoarray(coverage)
 
         super().__init__(**kwargs)
 
-        self.prob_art_at_infection = ss.bernoulli(p=lambda self, sim, uids: np.interp(sim.year, self.t, self.coverage))
+        self.prob_art_at_infection = ss.bernoulli(p=lambda self, sim, uids: np.interp(sim.year, self.year, self.coverage))
         return
 
     def initialize(self, sim):
@@ -111,7 +111,7 @@ class ART(ss.Intervention):
         return
 
     def apply(self, sim):
-        if sim.ti < self.t[0]:
+        if sim.year < self.year[0]:
             return
 
         ti_delay = 1 # 1 time step delay TODO

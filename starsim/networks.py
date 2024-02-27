@@ -369,7 +369,7 @@ class MFNet(SexualNetwork, DynamicNetwork):
             duration      = ss.lognorm,
             participation = ss.bernoulli,
             debut         = ss.norm,
-            acts          = ss.lognorm,
+            acts          = ss.poisson,
         )
 
         DynamicNetwork.__init__(self, key_dict=key_dict)
@@ -418,16 +418,19 @@ class MFNet(SexualNetwork, DynamicNetwork):
 
         beta = np.ones_like(p1)
 
-        # Figure out durations
-        # print('DJK TODO')
+        # Figure out durations and acts
         if ss.options.multirng and (len(p1) == len(np.unique(p1))):
             # No duplicates and user has enabled multirng, so use slotting based on p1
             dur_vals = self.pars.duration.rvs(p1)
+            act_vals = self.pars.acts.rvs(p1)
         else:
+            # If multirng is enabled, we're here because some individuals in p1
+            # are starting multiple relationships on this timestep. If using
+            # slotted draws, as above, repeated relationships will get the same
+            # duration and act rates, which is scientifically undesirable.
+            # Instead, we fall back to a not-CRN safe approach:
             dur_vals = self.pars.duration.rvs(len(p1))  # Just use len(p1) to say how many draws are needed
-
-        # Figure out acts
-        act_vals = self.pars.acts.rvs(len(p1))  # TODO use slots
+            act_vals = self.pars.acts.rvs(len(p1))
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
@@ -493,15 +496,13 @@ class MSMNet(SexualNetwork, DynamicNetwork):
         p2 = available_m[n_pairs:n_pairs*2]
 
         # Figure out durations
-        # print('DJK TODO')
         if ss.options.multirng and (len(p1) == len(np.unique(p1))):
             # No duplicates and user has enabled multirng, so use slotting based on p1
-            dur = self.pars['duration_dist'].rvs(p1)
+            dur = self.pars['duration'].rvs(p1)
+            act_vals = self.pars.acts.rvs(p1)
         else:
-            dur = self.pars['duration_dist'].rvs(len(p1)) # Just use len(p1) to say how many draws are needed
-
-        # Figure out acts
-        act_vals = self.pars.acts.rvs(len(p1))  # TODO use slots
+            dur = self.pars['duration'].rvs(len(p1)) # Just use len(p1) to say how many draws are needed
+            act_vals = self.pars.acts.rvs(len(p1))
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
@@ -568,12 +569,14 @@ class EmbeddingNet(MFNet):
 
         # Figure out durations
         p1 = available_m[ind_m]
-        dur_vals = self.pars['duration_dist'].rvs(p1)
+        dur_vals = self.pars.duration.rvs(p1)
+        act_vals = self.pars.acts.rvs(p1)
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, available_f[ind_f]])
         self.contacts.beta = np.concatenate([self.contacts.beta, beta])
         self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
+        self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
         return len(beta)
 
 
@@ -898,8 +901,8 @@ class HPVNet(MFNet):
         p1 = selected_males
         p2 = f
         n_partnerships = len(p2)
-        dur = self.pars.duration_dist.rvs(n_partnerships)
-        acts = self.pars.act_dist.rvs(n_partnerships)
+        dur = self.pars.duration.rvs(n_partnerships)
+        acts = self.pars.acts.rvs(n_partnerships)
         age_p1 = people.age[p1]
         age_p2 = people.age[p2]
 
