@@ -185,6 +185,12 @@ class Infection(Disease):
             ss.State('rel_trans', float, 1.0),
             ss.State('ti_infected', int, ss.INT_NAN),
         )
+
+        if ss.options.multirng:
+            # Used only in _make_new_cases_multirng
+            self.rng_acquisition = ss.uniform()
+            self.rng_source = ss.uniform()
+
         return
 
     @property
@@ -253,7 +259,7 @@ class Infection(Disease):
         people = sim.people
         betamap = self._check_betas(sim)
 
-        for nkey, net in sim.networks.items():
+        for i,nkey,net in sim.networks.enumitems():
             if not len(net):
                 break
             nbetas = betamap[nkey]
@@ -275,10 +281,12 @@ class Infection(Disease):
                 if not ss.options.multirng:
                     rvs = np.random.rand(len(src))
                 else:
+                    for rng in [self.rng_source, self.rng_acquisition]: # Reset the random states
+                        rng.random_state.step(sim.ti+i)
                     slots_s = people.slot[src] # Slots for the possible source
                     slots_t = people.slot[trg] # Slots for the possible target
-                    rvs_s = ss.uniform.rvs(size=np.max(slots_s) + 1)[slots_s]
-                    rvs_t = ss.uniform.rvs(size=np.max(slots_t) + 1)[slots_t]
+                    rvs_s = self.rng_source.rvs(size=np.max(slots_s) + 1)[slots_s]
+                    rvs_t = self.rng_acquisition.rvs(size=np.max(slots_t) + 1)[slots_t]
                     rvs = np.remainder(rvs_s + rvs_t, 1) # Generate a new random number based on the two other random numbers
                 new_cases_bool = rvs < p_transmit
                 new_cases.append(trg[new_cases_bool])
