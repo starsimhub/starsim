@@ -12,8 +12,8 @@ __all__ = ['Module']
 
 class Module(sc.prettyobj):
 
-    def __init__(self, pars=None, par_dists=None, name=None, label=None, requires=None, *args, **kwargs):
-        self.pars = ss.omerge(pars)
+    def __init__(self, pars=None, par_dists=None, name=None, label=None, requires=None, **kwargs):
+        self.pars = ss.omerge(pars, kwargs)
         self.par_dists = ss.omerge(par_dists)
         self.name = name if name else self.__class__.__name__.lower() # Default name is the class name
         self.label = label if label else self.name
