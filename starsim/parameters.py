@@ -35,8 +35,8 @@ class Parameters(sc.objdict):
 
         # Simulation parameters
         self.start           = 2000          # Start of the simulation
-        self.end             = 2049          # End of the simulation
-        self.n_years         = None          # Number of years to run, if end isn't specified. Note that this includes burn-in
+        self.end             = None          # End of the simulation
+        self.n_years         = 49            # Number of years to run, if end isn't specified. Note that this includes burn-in
         self.burnin          = 0             # Number of years of burnin. NB, this is doesn't affect the start and end dates of the simulation, but it is possible remove these years from plots
         self.dt              = 1.0           # Timestep (in years)
         self.dt_demog        = 1.0           # Timestep for demographic updates (in years)
