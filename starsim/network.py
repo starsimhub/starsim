@@ -377,7 +377,7 @@ class MFNet(SexualNetwork, DynamicNetwork):
             duration      = ss.lognorm,
             participation = ss.bernoulli,
             debut         = ss.norm,
-            acts          = ss.lognorm,
+            acts          = ss.poisson,
         )
 
         DynamicNetwork.__init__(self, key_dict=key_dict)
@@ -426,16 +426,19 @@ class MFNet(SexualNetwork, DynamicNetwork):
 
         beta = np.ones_like(p1)
 
-        # Figure out durations
-        # print('DJK TODO')
+        # Figure out durations and acts
         if ss.options.multirng and (len(p1) == len(np.unique(p1))):
             # No duplicates and user has enabled multirng, so use slotting based on p1
             dur_vals = self.pars.duration.rvs(p1)
+            act_vals = self.pars.acts.rvs(p1)
         else:
+            # If multirng is enabled, we're here because some individuals in p1
+            # are starting multiple relationships on this timestep. If using
+            # slotted draws, as above, repeated relationships will get the same
+            # duration and act rates, which is scientifically undesirable.
+            # Instead, we fall back to a not-CRN safe approach:
             dur_vals = self.pars.duration.rvs(len(p1))  # Just use len(p1) to say how many draws are needed
-
-        # Figure out acts
-        act_vals = self.pars.acts.rvs(len(p1))  # TODO use slots
+            act_vals = self.pars.acts.rvs(len(p1))
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
@@ -501,15 +504,13 @@ class MSMNet(SexualNetwork, DynamicNetwork):
         p2 = available_m[n_pairs:n_pairs*2]
 
         # Figure out durations
-        # print('DJK TODO')
         if ss.options.multirng and (len(p1) == len(np.unique(p1))):
             # No duplicates and user has enabled multirng, so use slotting based on p1
-            dur = self.pars['duration_dist'].rvs(p1)
+            dur = self.pars.duration.rvs(p1)
+            act_vals = self.pars.acts.rvs(p1)
         else:
-            dur = self.pars['duration_dist'].rvs(len(p1)) # Just use len(p1) to say how many draws are needed
-
-        # Figure out acts
-        act_vals = self.pars.acts.rvs(len(p1))  # TODO use slots
+            dur = self.pars.duration.rvs(len(p1)) # Just use len(p1) to say how many draws are needed
+            act_vals = self.pars.acts.rvs(len(p1))
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
@@ -561,7 +562,7 @@ class EmbeddingNet(MFNet):
             return 0
 
         available = np.concatenate((available_m, available_f))
-        loc = self.pars['embedding_func'].rvs(available)
+        loc = self.pars.embedding_func.rvs(available)
         loc_f = loc[people.female[available]]
         loc_m = loc[~people.female[available]]
 
@@ -576,12 +577,14 @@ class EmbeddingNet(MFNet):
 
         # Figure out durations
         p1 = available_m[ind_m]
-        dur_vals = self.pars['duration_dist'].rvs(p1)
+        dur_vals = self.pars.duration.rvs(p1)
+        act_vals = self.pars.acts.rvs(p1)
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, available_f[ind_f]])
         self.contacts.beta = np.concatenate([self.contacts.beta, beta])
         self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
+        self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
         return len(beta)
 
 
@@ -648,7 +651,7 @@ class StaticNet(Network):
         return
 
     def initialize(self, sim):
-        popsize = sim.pars['n_agents']
+        popsize = sim.pars.n_agents
         if callable(self.graph):
             self.graph = self.graph(n=popsize, **self.pars)
         self.validate_pop(popsize)
@@ -879,7 +882,7 @@ class HPVNet(MFNet):
                                  bins=self.agebins) - 1  # Age bins of females that are entering new relationships
         age_bins_m = np.digitize(people.age[m], bins=self.agebins) - 1  # Age bins of active and participating males
         age_f, age_m = np.meshgrid(age_bins_f, age_bins_m)
-        pair_probs = self.pars['mixing'][age_m, age_f + 1]
+        pair_probs = self.pars.mixing[age_m, age_f + 1]
 
         f_to_remove = pair_probs.max(axis=0) == 0  # list of female inds to remove if no male partners are found for her
         # f = [i for i, flag in zip(f, f_to_remove) if ~flag]  # remove the inds who don't get paired on this timestep
@@ -906,8 +909,8 @@ class HPVNet(MFNet):
         p1 = selected_males
         p2 = f
         n_partnerships = len(p2)
-        dur = self.pars.duration_dist.rvs(n_partnerships)
-        acts = self.pars.act_dist.rvs(n_partnerships)
+        dur = self.pars.duration.rvs(n_partnerships)
+        acts = self.pars.acts.rvs(n_partnerships)
         age_p1 = people.age[p1]
         age_p2 = people.age[p2]
 
@@ -919,16 +922,17 @@ class HPVNet(MFNet):
         avg_debut = np.array([age_debut_p1, age_debut_p2]).mean(axis=0)
 
         # Shorten parameter names
-        dr = self.pars['age_act_pars']['debut_ratio']
-        peak = self.pars['age_act_pars']['peak']
-        rr = self.pars['age_act_pars']['retirement_ratio']
-        retire = self.pars['age_act_pars']['retirement']
+        aap = self.pars.age_act_pars
+        dr = aap['debut_ratio']
+        peak = aap['peak']
+        rr = aap['retirement_ratio']
+        retire = aap['retirement']
+        peak = aap['peak']
 
         # Get indices of people at different stages
-        below_peak_inds = avg_age <= self.pars['age_act_pars']['peak']
-        above_peak_inds = (avg_age > self.pars['age_act_pars']['peak']) & (
-                avg_age < self.pars['age_act_pars']['retirement'])
-        retired_inds = avg_age > self.pars['age_act_pars']['retirement']
+        below_peak_inds = avg_age <= peak
+        above_peak_inds = (avg_age > peak) & (avg_age < retire)
+        retired_inds = avg_age > retire
 
         # Set values by linearly scaling the number of acts for each partnership according to
         # the age of the couple at the commencement of the relationship
