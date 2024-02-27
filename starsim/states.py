@@ -217,10 +217,13 @@ class UIDArray(NDArrayOperatorsMixin):
                 raise IndexError(f'UID {key} not present in array')
             else:
                 raise e
-                
+
     def __getattr__(self, attr):
         """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
-        return getattr(self.values, attr)
+        if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
+            return self.__getattribute__(attr)
+        else:
+            return getattr(self.values, attr)
 
     # Make it behave like a regular array mostly
     def __len__(self):
@@ -292,6 +295,9 @@ class UIDArray(NDArrayOperatorsMixin):
 
 
 class ArrayView(NDArrayOperatorsMixin):
+
+    __slots__ = ('_data', '_view', 'n', 'default')
+
     def __init__(self, dtype, default=None, coerce=True):
         """
         Args:
@@ -347,6 +353,19 @@ class ArrayView(NDArrayOperatorsMixin):
         self.n = n
         self._map_arrays()
 
+
+    def __getstate__(self):
+        # When pickling, skip storing the `._view` attribute, which should be re-linked after unpickling
+        return {k:getattr(self, k) for k in self.__slots__ if k != '_view'}
+
+    def __setstate__(self, state):
+        # Re-map arrays after unpickling so that `.view` is a reference to the correct array in-memory
+        for k,v in state.items():
+            setattr(self, k, v)
+        self._map_arrays()
+        return
+
+
     def _map_arrays(self):
         """
         Set main simulation attributes to be views of the underlying data
@@ -376,6 +395,8 @@ class ArrayView(NDArrayOperatorsMixin):
 
 
 class State(UIDArray):
+
+    __slots__ = ('values', '_uid_map', 'uid', 'default', 'name', 'label', '_data', 'values', '_initialized')
 
     def __init__(self, name, dtype=None, default=None, label=None, coerce=True):
         """
@@ -485,5 +506,16 @@ class State(UIDArray):
     def _trim(self, inds):
         # Trim arrays to remove agents - should only be called via `People.remove()`
         self._data._trim(inds)
+        self.values = self._data._view
+        return
+
+    def __getstate__(self):
+        # When pickling, skip storing the `.values` attribute, which should be re-linked after unpickling
+        return {k:getattr(self, k) for k in self.__slots__ if k != 'values'}
+
+    def __setstate__(self, state):
+        # When unpickling, re-link the `.values` attribute
+        for k,v in state.items():
+            setattr(self, k, v)
         self.values = self._data._view
         return
