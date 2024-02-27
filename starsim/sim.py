@@ -22,8 +22,7 @@ def set_numba_seed(value):
 
 class Sim(sc.prettyobj):
 
-    def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, networks=None,
-                 connectors=None, interventions=None, analyzers=None, **kwargs):
+    def __init__(self, pars=None, label=None, people=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
@@ -46,20 +45,23 @@ class Sim(sc.prettyobj):
         self.pars = ss.make_pars()  # Start with default pars
         self.pars.update_pars(sc.mergedicts(pars, kwargs))  # Update the parameters
 
-        # Placeholders for plug-ins: demographics, diseases, connectors, analyzers, and interventions
-        # Products are not here because they are stored within interventions
-        if demographics == True: demographics = [ss.Births(), ss.Deaths()]  # Use default assumptions for demographics
-        self.demographics = ss.ndict(demographics, type=ss.BaseDemographics)
-        self.diseases = ss.ndict(diseases, type=ss.Disease)
-        self.networks = ss.ndict(networks, type=ss.Network)
-        self.connectors = ss.ndict(connectors, type=ss.Connector)
-        self.interventions = ss.ndict(interventions, type=ss.Intervention)
-        self.analyzers = ss.ndict(analyzers, type=ss.Analyzer)
+        # Initialize places to store the modules, but need to validate them before adding
+        self.demographics = ss.ndict(type=ss.BaseDemographics)
+        self.diseases = ss.ndict(type=ss.Disease)
+        self.networks = ss.ndict(type=ss.Network)
+        self.connectors = ss.ndict(type=ss.Connector)
+        self.interventions = ss.ndict(type=ss.Intervention)
+        self.analyzers = ss.ndict(type=ss.Analyzer)
 
         # Initialize the random number generator container
         self.rng_container = ss.RNGContainer()
 
         return
+
+    def add_modules(self, module):
+        if isinstance(module, str):
+            module = {'type': module}
+        return module
 
     @property
     def dt(self):
@@ -263,9 +265,6 @@ class Sim(sc.prettyobj):
         if plugin_name == 'networks': # Allow "msm" or "msmnet"
             known_plugins.update({k.removesuffix('net'):v for k,v in known_plugins.items()})
 
-        # Figure out if it's in the sim pars or provided directly
-        attr_plugins = getattr(self, plugin_name)  # Get any plugins that have been provided directly
-
         # See if they've been provided in the pars dict
         if self.pars.get(plugin_name):
 
@@ -281,16 +280,19 @@ class Sim(sc.prettyobj):
                     par_plug['name'] = par_plug['type'] # TODO: simplify/remove this
                 plugins = ss.ndict(par_plug)
 
+            else:
+                import traceback; traceback.print_exc(); import pdb; pdb.set_trace()
+
         else:  # Not provided directly or in pars
             plugins = {}
 
-        # Check that we don't have two copies
-        for attr_key in attr_plugins.keys():
-            if plugins.get(attr_key):
-                errormsg = f'Sim was created with {attr_key} module, cannot create another through the pars dict.'
-                raise ValueError(errormsg)
-
-        plugins = sc.mergedicts(plugins, attr_plugins)
+        # # Check that we don't have two copies
+        # for attr_key in attr_plugins.keys():
+        #     if plugins.get(attr_key):
+        #         errormsg = f'Sim was created with {attr_key} module, cannot create another through the pars dict.'
+        #         raise ValueError(errormsg)
+        #
+        # plugins = sc.mergedicts(plugins, attr_plugins)
 
         # Process
         processed_plugins = sc.autolist()
@@ -324,6 +326,11 @@ class Sim(sc.prettyobj):
         """ Initialize demographics """
 
         # Demographics can be provided via sim.demographics or sim.pars - this methods reconciles them
+        if isinstance(self.pars.demographics, bool):
+            if self.pars.demographics:
+                self.pars.demographics = [ss.Births(), ss.Deaths()]
+            else:
+                self.pars.demographics = []
         demographics = self.convert_plugins(ss.BaseDemographics, plugin_name='demographics')
 
         # We also allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
