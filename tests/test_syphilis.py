@@ -19,7 +19,7 @@ def make_syph_sim(dt=1, n_agents=500):
     # Make demographic modules
     fertility_rates = {'fertility_rate': pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')}
     pregnancy = ss.Pregnancy(pars=fertility_rates)
-    death_rates = {'death_rate': pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')}
+    death_rates = {'death_rate': pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv'), 'units': 1}
     death = ss.Deaths(death_rates)
 
     # Make people and networks
