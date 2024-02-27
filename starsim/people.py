@@ -141,6 +141,19 @@ class BasePeople(sc.prettyobj):
         for i in range(len(self)):
             yield self[i]
 
+    def __setstate__(self, state):
+        """
+        Set the state upon unpickling/deepcopying
+
+        If a People instance is copied (by any mechanism) then the keys in the `_states`
+        registry will no longer match the memory addresses of the new copied states. Therefore,
+        after copying, we need to re-create the states registry with the new object IDs
+
+        :param state:
+        :return:
+        """
+        state['_states'] =  {id(v):v for v in state['_states'].values()}
+        self.__dict__ = state
 
 class People(BasePeople):
     """
