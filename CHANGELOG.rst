@@ -14,7 +14,7 @@ Version 0.2.4 (2024-02-27)
 - Improve ``sim.summarize()``
 - Improve ``sim.plot()``
 - Improve SIR model defaults
-- *GitHub info*: PR `311 <https://github.com/amath-idm/stisim/pull/311>`_
+- *GitHub info*: PR `320 <https://github.com/amath-idm/stisim/pull/320>`_
 
 
 Version 0.2.3 (2024-02-26)
