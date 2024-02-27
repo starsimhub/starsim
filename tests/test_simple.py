@@ -21,7 +21,7 @@ def make_sim_pars():
     pars = dict(
         n_agents = n_agents,
         birth_rate = 20,
-        death_rate = 0.015,
+        death_rate = 15,
         networks = dict(
             type = 'randomnet',
             n_contacts = 4,
@@ -128,7 +128,7 @@ def test_parallel():
     """ Test running two identical sims in parallel """
     pars = make_sim_pars()
     sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars, label='Sim2')])
-    sims.run()
+    sims.run(keep_people=True)
     s1, s2 = sims.sims
     assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
     return s1, s2

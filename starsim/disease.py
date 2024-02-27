@@ -9,7 +9,7 @@ import networkx as nx
 from operator import itemgetter
 import pandas as pd
 
-__all__ = ['Disease', 'Infection', 'STI', 'InfectionLog']
+__all__ = ['Disease', 'Infection', 'InfectionLog']
 
 
 class Disease(ss.Module):
@@ -268,15 +268,9 @@ class Infection(Disease):
                 if beta == 0:
                     continue
 
-                # Calculate probability of a->b transmission. If we have information on the
-                # number of sexual acts, then beta is assumed to be a per-act transmission
-                # probability. If not, it's assumed to be annual.
-                # TODO: move this to STI?
-                if 'acts' in contacts.keys():
-                    beta_per_dt = 1 - (1 - beta) ** (contacts.acts * people.dt)
-                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta_per_dt
-                else:
-                    p_transmit = rel_trans[a] * rel_sus[b] * contacts.beta * beta * people.dt
+                # Calculate probability of a->b transmission.
+                beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=people.dt)
+                p_transmit = rel_trans[a] * rel_sus[b] * beta_per_dt
 
                 new_cases_bool = np.random.random(
                     len(a)) < p_transmit  # As this class is not common-random-number safe anyway, calling np.random is perfectly fine!
@@ -321,15 +315,10 @@ class Infection(Disease):
                 avec.append(a[nzi])
                 bvec.append(b[nzi])
 
-                # TODO: move this to STI?
-                if 'acts' in contacts.keys():
-                    beta_per_dt = 1 - (1 - beta) ** (contacts.acts[nzi] * people.dt)
-                else:
-                    beta_per_dt = beta * people.dt
-
+                beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=people.dt, uids=nzi)
                 trans_arr = rel_trans[a[nzi]].__array__()
                 sus_arr = rel_sus[b[nzi]].__array__()
-                new_pvec = trans_arr * sus_arr * beta_arr[nzi] * beta_per_dt
+                new_pvec = trans_arr * sus_arr * beta_per_dt
                 pvec.append(new_pvec)
 
         if len(avec):
@@ -384,27 +373,7 @@ class Infection(Disease):
             self._set_cases(sim, new_cases, sources)
 
     def _set_cases(self, sim, target_uids, source_uids=None):
-        self.set_prognoses(sim, target_uids, source_uids=source_uids)
-        return
-
-    def update_results(self, sim):
-        super().update_results(sim)
-        self.results['prevalence'][sim.ti] = self.results.n_infected[sim.ti] / np.count_nonzero(sim.people.alive)
-        self.results['new_infections'][sim.ti] = np.count_nonzero(self.ti_infected == sim.ti)
-        self.results['cum_infections'][sim.ti] = np.sum(self.results['new_infections'][:sim.ti])
-
-
-class STI(Infection):
-    """
-    Base class for STIs used in STIsim
-
-    This class contains specializations for STI transmission (i.e., implements network-based
-    transmission with directional beta values) and defines attributes that STIsim connectors
-    operate on to capture co-infection
-    """
-
-    def _set_cases(self, sim, target_uids, source_uids=None):
-        congenital = sim.people.age[target_uids] <= sim.dt
+        congenital = sim.people.age[target_uids] <= 0
         if len(ss.true(congenital)) > 0:
             src_c = source_uids[congenital] if source_uids is not None else None
             self.set_congenital(sim, target_uids[congenital], src_c)
@@ -414,6 +383,14 @@ class STI(Infection):
 
     def set_congenital(self, sim, target_uids, source_uids=None):
         pass
+
+
+    def update_results(self, sim):
+        super().update_results(sim)
+        res = self.results
+        res['prevalence'][sim.ti] = res.n_infected[sim.ti] / np.count_nonzero(sim.people.alive)
+        res['new_infections'][sim.ti] = np.count_nonzero(self.ti_infected == sim.ti)
+        res['cum_infections'][sim.ti] = np.sum(res['new_infections'][:sim.ti])
 
 
 class InfectionLog(nx.MultiDiGraph):

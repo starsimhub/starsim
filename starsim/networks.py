@@ -286,6 +286,10 @@ class Network(ss.Module):
         for k in self.meta_keys():
             self.contacts[k] = self.contacts[k][keep]
 
+    def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
+        if uids is None: uids = Ellipsis
+        return self.contacts.beta[uids] * disease_beta * dt
+
 
 class Networks(ss.ndict):
     """
@@ -345,6 +349,10 @@ class SexualNetwork(Network):
         # which could incorporate information about membership in other
         # contact networks
         return np.setdiff1d(ss.true(people[sex] & self.active(people)), self.members) # ss.true instead of people.uid[]?
+
+    def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
+        if uids is None: uids = Ellipsis
+        return self.contacts.beta[uids] * (1 - (1 - disease_beta) ** (self.contacts.acts[uids] * dt))
 
 
 # %% Specific instances of networks
