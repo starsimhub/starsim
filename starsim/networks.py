@@ -287,8 +287,8 @@ class Network(ss.Module):
             self.contacts[k] = self.contacts[k][keep]
 
     def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
-        if uids is not None: return self.contacts.beta[uids] * disease_beta * dt
-        return self.contacts.beta * disease_beta * dt
+        if uids is None: uids = Ellipsis
+        return self.contacts.beta[uids] * disease_beta * dt
 
 
 class Networks(ss.ndict):
