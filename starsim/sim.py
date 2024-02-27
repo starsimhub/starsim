@@ -8,7 +8,6 @@ import sciris as sc
 import starsim as ss
 import itertools
 import numba as nb
-import pandas as pd
 
 
 __all__ = ['Sim', 'AlreadyRunError', 'diff_sims']
@@ -729,7 +728,7 @@ class Sim(sc.prettyobj):
         resdict = flatten_results(self.results)
         resdict['t'] = self.yearvec
 
-        df = pd.DataFrame.from_dict(resdict).set_index('t')
+        df = sc.dataframe.from_dict(resdict).set_index('t')
         return df
 
     def save(self, filename=None, keep_people=None, skip_attrs=None, **kwargs):

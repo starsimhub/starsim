@@ -9,6 +9,12 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :depth: 1
 
 
+Version 0.2.2 (2024-02-26)
+--------------------------
+- Add the ``Samples`` class
+- *GitHub info*: PR `311 <https://github.com/amath-idm/stisim/pull/311>`_
+
+
 Version 0.2.1 (2024-02-22)
 --------------------------
 - Only remove dead agents on certain timesteps
