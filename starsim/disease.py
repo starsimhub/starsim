@@ -9,7 +9,7 @@ import networkx as nx
 from operator import itemgetter
 import pandas as pd
 
-__all__ = ['Disease', 'Infection', 'STI', 'InfectionLog']
+__all__ = ['Disease', 'Infection', 'InfectionLog']
 
 
 class Disease(ss.Module):
@@ -268,15 +268,9 @@ class Infection(Disease):
                 if beta == 0:
                     continue
 
-                # Calculate probability of a->b transmission. If we have information on the
-                # number of sexual acts, then beta is assumed to be a per-act transmission
-                # probability. If not, it's assumed to be annual.
-                # TODO: move this to STI?
-                if 'acts' in contacts.keys():
-                    beta_per_dt = 1 - (1 - beta) ** (contacts.acts * people.dt)
-                    p_transmit = rel_trans[src] * rel_sus[trg] * contacts.beta * beta_per_dt
-                else:
-                    p_transmit = rel_trans[src] * rel_sus[trg] * contacts.beta * beta * people.dt
+                # Calculate probability of a->b transmission.
+                beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=people.dt)
+                p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
 
                 if not ss.options.multirng:
                     rvs = np.random.rand(len(src))
@@ -299,29 +293,12 @@ class Infection(Disease):
             sources = np.empty(0, dtype=int)
             
         if len(new_cases):
-            self.set_prognoses(sim, new_cases, sources)
+            self._set_cases(sim, new_cases, sources)
             
         return new_cases, sources
 
-    def update_results(self, sim):
-        super().update_results(sim)
-        self.results['prevalence'][sim.ti] = self.results.n_infected[sim.ti] / np.count_nonzero(sim.people.alive)
-        self.results['new_infections'][sim.ti] = np.count_nonzero(self.ti_infected == sim.ti)
-        self.results['cum_infections'][sim.ti] = np.sum(self.results['new_infections'][:sim.ti])
-        return
-
-
-class STI(Infection):
-    """
-    Base class for STIs used in STIsim
-
-    This class contains specializations for STI transmission (i.e., implements network-based
-    transmission with directional beta values) and defines attributes that STIsim connectors
-    operate on to capture co-infection
-    """
-
     def _set_cases(self, sim, target_uids, source_uids=None):
-        congenital = sim.people.age[target_uids] <= sim.dt
+        congenital = sim.people.age[target_uids] <= 0
         if len(ss.true(congenital)) > 0:
             src_c = source_uids[congenital] if source_uids is not None else None
             self.set_congenital(sim, target_uids[congenital], src_c)
@@ -331,6 +308,15 @@ class STI(Infection):
 
     def set_congenital(self, sim, target_uids, source_uids=None):
         pass
+
+    def update_results(self, sim):
+        super().update_results(sim)
+        res = self.results
+        ti = sim.ti
+        res.prevalence[ti] = res.n_infected[ti] / np.count_nonzero(sim.people.alive)
+        res.new_infections[ti] = np.count_nonzero(self.ti_infected == ti)
+        res.cum_infections[ti] = np.sum(res['new_infections'][:ti])
+        return
 
 
 class InfectionLog(nx.MultiDiGraph):
