@@ -533,6 +533,8 @@ class Sim(sc.prettyobj):
         # Main simulation loop
         while self.ti < until:
 
+            print(self.ti)
+            print(self.diseases[0].susceptible.sum())
             # Check if we were asked to stop
             elapsed = T.toc(output=True)
 

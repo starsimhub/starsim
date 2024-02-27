@@ -128,7 +128,7 @@ def test_parallel():
     """ Test running two identical sims in parallel """
     pars = make_sim_pars()
     sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars, label='Sim2')])
-    sims.run()
+    sims.run(keep_people=True)
     s1, s2 = sims.sims
     assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
     return s1, s2
@@ -137,11 +137,11 @@ def test_parallel():
 if __name__ == '__main__':
     T = sc.timer()
     
-    s1 = test_default()
-    s2 = test_simple()
-    s3a, s3b = test_sir_epi()
-    s4_base, s4_intv = test_simple_vax(do_plot=True)
-    s5 = test_components()
+    # s1 = test_default()
+    # s2 = test_simple()
+    # s3a, s3b = test_sir_epi()
+    # s4_base, s4_intv = test_simple_vax(do_plot=True)
+    # s5 = test_components()
     s6a, s6b = test_parallel()
     
     T.toc()

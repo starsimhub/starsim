@@ -218,12 +218,12 @@ class UIDArray(NDArrayOperatorsMixin):
             else:
                 raise e
 
-    def __getattr__(self, attr):
-        """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
-        if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
-            return self.__getattribute__(attr)
-        else:
-            return getattr(self.values, attr)
+    # def __getattr__(self, attr):
+    #     """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
+    #     if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
+    #         return self.__getattribute__(attr)
+    #     else:
+    #         return getattr(self.values, attr)
 
     # Make it behave like a regular array mostly
     def __len__(self):
@@ -349,6 +349,10 @@ class ArrayView(NDArrayOperatorsMixin):
         self._data[n:self.n] = self.default
         self.n = n
         self._map_arrays()
+
+    def __setstate__(self, state):
+        state['_view'] = state['_data'][:state['n']] # Reassign the view
+        self.__dict__ = state
 
     def _map_arrays(self):
         """
