@@ -18,6 +18,7 @@ from .disease       import *
 from .diseases      import *
 from .sim           import *
 from .run           import *
+from .samples       import *
 
 import sciris as sc
 root = sc.thispath(__file__).parent
