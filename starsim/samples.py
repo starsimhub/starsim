@@ -123,16 +123,19 @@ class Samples:
         self._zipfile = None
 
         if memory_buffer:
-            self._zipfile = sc.loadzip(fname)
+            with open(fname, "rb") as f:
+                buffer = io.BytesIO(f.read())
+            self._zipfile = zipfile.ZipFile(buffer, mode="r")
 
         # Read the identifiers
-        identifiers = self.zipfile[identifiers_file].splitlines()
-        identifiers = [x.strip() for x in identifiers]
+        with self.zipfile.open(identifiers_file) as f:
+            identifiers = f.readlines()
+            identifiers = [x.decode().strip() for x in identifiers]
 
-        summary_str = io.StringIO(self.zipfile[summary_file])
-        self.summary = sc.dataframe.read_csv(summary_str)
-        self.summary.set_index(identifiers, inplace=True)
-        self.summary = self.summary.sort_index()
+        with self.zipfile.open(summary_file) as f:
+            self.summary = pd.read_csv(f)
+            self.summary.set_index(identifiers, inplace=True)
+            self.summary = self.summary.sort_index()
 
         self._cache = {}  # Cache the dataframes
 
@@ -167,7 +170,7 @@ class Samples:
         if self._zipfile:
             return self._zipfile
         else:
-            return sc.loadzip(self._fname)
+            return zipfile.ZipFile(self._fname, mode="r")
 
     def __repr__(self):
         return f"<Samples {'-'.join(str(x) for x in self.id.values())}, {len(self)} seeds>"
