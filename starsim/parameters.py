@@ -47,7 +47,7 @@ class Parameters(sc.objdict):
         # Plug-ins: demographics, diseases, connectors, networks, analyzers, and interventions
         self.demographics = ss.ndict()
         self.diseases = ss.ndict()
-        self.networks        = ss.ndict()
+        self.networks = ss.ndict()
         self.connectors = ss.ndict()
         self.interventions = ss.ndict()
         self.analyzers = ss.ndict()
