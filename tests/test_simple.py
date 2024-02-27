@@ -53,6 +53,7 @@ def test_sir_epi():
         n_contacts=[1, 20],
         init_prev=[0.1, 0.9],
         dur_inf=[1, 8],
+        p_death=[.01, .1],
     )
 
     # Loop over each of the above parameters and make sure they affect the epi dynamics in the expected ways
@@ -76,9 +77,13 @@ def test_sir_epi():
         s1 = ss.Sim(pars1, label=f'{par} {par_val[1]}').run()
 
         # Check results
-        ind = 1 if par == 'init_prev' else -1
-        v0 = s0.results.sir.cum_infections[ind]
-        v1 = s1.results.sir.cum_infections[ind]
+        if par == 'p_death':
+            v0 = s0.results.cum_deaths[-1]
+            v1 = s1.results.cum_deaths[-1]
+        else:
+            ind = 1 if par == 'init_prev' else -1
+            v0 = s0.results.sir.cum_infections[ind]
+            v1 = s1.results.sir.cum_infections[ind]
 
         print(f'Checking with varying {par:10s} ... ', end='')
         assert v0 <= v1, f'Expected infections to be lower with {par}={lo} than with {par}={hi}, but {v0} > {v1})'
