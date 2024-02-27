@@ -2,6 +2,7 @@
   "summary": {
     "n_alive": 9666.47619047619,
     "new_deaths": 6.704761904761905,
+    "cum_deaths": 696.0,
     "pregnancy_pregnancies": 0.0,
     "pregnancy_births": 0.0,
     "pregnancy_cbr": 0.0,
