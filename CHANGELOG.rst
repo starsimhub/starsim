@@ -9,6 +9,15 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :depth: 1
 
 
+Version 0.2.3 (2024-02-26)
+--------------------------
+- Removes ``STI`` class
+- Changes default death rate from units of per person to per thousand people
+- Allows ``ss.Sim(demographics=True)`` to enable births and deaths
+- Fix pickling of ``State`` objects
+- *GitHub info*: PRs `305 <https://github.com/amath-idm/stisim/pull/305>`_, `308 <https://github.com/amath-idm/stisim/pull/308>`_
+
+
 Version 0.2.2 (2024-02-26)
 --------------------------
 - Add the ``Samples`` class
