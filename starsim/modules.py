@@ -54,7 +54,19 @@ class Module(sc.prettyobj):
 
             # If it's a lognormal distribution, initialize assuming the par is the desired mean
             if par_dist.name == 'lognorm':
-                self.pars[key] = self.par_dists[key](s=1, scale=np.exp(par))
+                if sc.isiterable(par):
+                    if isinstance(par, dict):
+                        mu = par['mu']
+                        stdev = par['stdev']
+                    elif isinstance(par, list):
+                        mu = par[0]
+                        stdev = par[1]
+                elif sc.isnumber(par):
+                    mu = par
+                    stdev = 1
+
+                s, scale = ss.lognorm_params(mu, stdev)  # Assume stdev of 1
+                self.pars[key] = self.par_dists[key](s=s, scale=scale)
 
             # Otherwise, figure out the required arguments and assume the user is trying to set them
             else:
