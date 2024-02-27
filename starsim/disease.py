@@ -54,6 +54,8 @@ class Disease(ss.Module):
             # If there's no beta, make a default one
             if 'beta' not in self.pars or self.pars.beta is None:
                 self.pars.beta = sc.objdict({k: [1, 1] for k in sim.networks})
+                msg = f'Beta not supplied for disease "{self.name}"; defaulting to 1'
+                ss.warn(msg)
 
             # If beta is a scalar, apply this bi-directionally to all networks
             if sc.isnumber(self.pars.beta):

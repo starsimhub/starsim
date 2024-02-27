@@ -2,7 +2,6 @@
 Networks that connect people within a population
 '''
 
-# %% Imports
 import numpy as np
 import numba as nb
 import sciris as sc
@@ -16,6 +15,9 @@ ss_int_ = ss.dtypes.int
 
 # Specify all externally visible functions this file defines; see also more definitions below
 __all__ = ['Network', 'Networks', 'DynamicNetwork', 'SexualNetwork']
+
+
+# %% General network classes
 
 class Network(ss.Module):
     """
@@ -316,9 +318,11 @@ class Networks(ss.ndict):
 
 
 class DynamicNetwork(Network):
+    """ A network where partnerships update dynamically """
     def __init__(self, pars=None, key_dict=None, **kwargs):
         key_dict = ss.omerge({'dur': ss_float_}, key_dict)
         super().__init__(pars, key_dict=key_dict, **kwargs)
+        return
 
     def end_pairs(self, people):
         dt = people.dt
@@ -328,6 +332,7 @@ class DynamicNetwork(Network):
         active = (self.contacts.dur > 0) & people.alive[self.contacts.p1] & people.alive[self.contacts.p2]
         for k in self.meta_keys():
             self.contacts[k] = self.contacts[k][active]
+        return
 
 
 class SexualNetwork(Network):
@@ -356,7 +361,147 @@ class SexualNetwork(Network):
 
 
 # %% Specific instances of networks
-__all__ += ['MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet', 'StaticNet', 'RandomNet', 'HPVNet']
+__all__ += ['StaticNet', 'RandomNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet', 'HPVNet']
+
+
+class StaticNet(Network):
+    """
+    A network class of static partnerships converted from a networkx graph. There's no formation of new partnerships
+    and initialized partnerships only end when one of the partners dies. The networkx graph can be created outside Starsim
+    if population size is known. Or the graph can be created by passing a networkx generator function to Starsim.
+
+    **Examples**::
+
+    # Generate a networkx graph and pass to Starsim
+    import networkx as nx
+    import starsim as ss
+    g = nx.scale_free_graph(n=10000)
+    ss.static(graph=g)
+
+    # Pass a networkx graph generator to Starsim
+    ss.static(graph=nx.erdos_renyi_graph, p=0.0001)
+    """
+
+    def __init__(self, graph, pars=None, **kwargs):
+        self.graph = graph
+        self.pars = ss.omerge(pars)
+        super().__init__(**kwargs)
+        return
+
+    def initialize(self, sim):
+        popsize = sim.pars.n_agents
+        if callable(self.graph):
+            self.graph = self.graph(n=popsize, **self.pars)
+        self.validate_pop(popsize)
+        super().initialize(sim)
+        self.get_contacts()
+        return
+
+    def validate_pop(self, popsize):
+        n_nodes = self.graph.number_of_nodes()
+        if n_nodes > popsize:
+            errormsg = f'Please ensure the number of nodes in graph {n_nodes} is smaller than population size {popsize}.'
+            raise ValueError(errormsg)
+
+    def get_contacts(self):
+        p1s = []
+        p2s = []
+        for edge in self.graph.edges():
+            p1, p2 = edge
+            p1s.append(p1)
+            p2s.append(p2)
+        self.contacts.p1 = np.concatenate([self.contacts.p1, p1s])
+        self.contacts.p2 = np.concatenate([self.contacts.p2, p2s])
+        self.contacts.beta = np.concatenate([self.contacts.beta, np.ones_like(p1s)])
+        return
+
+
+class RandomNet(DynamicNetwork):
+    """ Random connectivity between agents """
+
+    def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
+        """ Initialize """
+        pars = ss.omerge({
+            'n_contacts': 10,  # Distribution or int. If int, interpreted as the mean of the dist listed in par_dists
+            'dur': 1,
+        }, pars)
+
+        DynamicNetwork.__init__(self, pars=pars, key_dict=key_dict, **kwargs)
+
+        return
+
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.add_pairs(sim.people)
+        return
+
+    @staticmethod
+    @nb.njit(cache=True)
+    def get_contacts(inds, number_of_contacts):
+        """
+        Efficiently generate contacts
+
+        Note that because of the shuffling operation, each person is assigned 2N contacts
+        (i.e. if a person has 5 contacts, they appear 5 times in the 'source' array and 5
+        times in the 'target' array). Therefore, the `number_of_contacts` argument to this
+        function should be HALF of the total contacts a person is expected to have, if both
+        the source and target array outputs are used (e.g. for social contacts)
+
+        adjusted_number_of_contacts = np.round(number_of_contacts / 2).astype(cvd.default_int)
+
+        Whereas for asymmetric contacts (e.g. staff-public interactions) it might not be necessary
+
+        Args:
+            inds: List/array of person indices
+            number_of_contacts: List/array the same length as `inds` with the number of unidirectional
+            contacts to assign to each person. Therefore, a person will have on average TWICE this number
+            of random contacts.
+
+        Returns: Two arrays, for source and target
+        """
+
+        total_number_of_half_edges = np.sum(number_of_contacts)
+        count = 0
+        source = np.zeros((total_number_of_half_edges,), dtype=ss_int_)
+        for i, person_id in enumerate(inds):
+            n_contacts = number_of_contacts[i]
+            source[count: count + n_contacts] = person_id
+            count += n_contacts
+        target = np.random.permutation(source)
+        return source, target
+
+    def update(self, people, dt=None):
+        self.end_pairs(people)
+        self.add_pairs(people)
+        return
+
+    def add_pairs(self, people):
+        """
+        Generate contacts
+        """
+
+        if isinstance(self.pars.n_contacts, ss.ScipyDistribution):
+            number_of_contacts = self.pars.n_contacts.rvs(people.alive)  # or people.uid?
+        else:
+            number_of_contacts = np.full(len(people), self.pars.n_contacts)
+
+        number_of_contacts = np.round(number_of_contacts / 2).astype(ss_int_)  # One-way contacts
+
+        p1, p2 = self.get_contacts(people.uid.__array__(), number_of_contacts)
+        beta = np.ones(len(p1), dtype=ss_float_)
+
+        if isinstance(self.pars.dur, ss.ScipyDistribution):
+            dur = self.pars.dur.rvs(p1)
+        else:
+            dur = np.full(len(p1), self.pars.dur)
+
+        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
+        self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
+        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
+        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
+
+        return
+
 
 class MFNet(SexualNetwork, DynamicNetwork):
     """
@@ -623,146 +768,6 @@ class MaternalNet(Network):
         self.contacts.beta = np.concatenate([self.contacts.beta, beta])
         self.contacts.dur = np.concatenate([self.contacts.dur, dur])
         return len(mother_inds)
-
-
-class StaticNet(Network):
-    """
-    A network class of static partnerships converted from a networkx graph. There's no formation of new partnerships
-    and initialized partnerships only end when one of the partners dies. The networkx graph can be created outside Starsim
-    if population size is known. Or the graph can be created by passing a networkx generator function to Starsim.
-
-    **Examples**::
-
-    # Generate a networkx graph and pass to Starsim
-    import networkx as nx
-    import starsim as ss
-    g = nx.scale_free_graph(n=10000)
-    ss.static(graph=g)
-
-    # Pass a networkx graph generator to Starsim
-    ss.static(graph=nx.erdos_renyi_graph, p=0.0001)
-
-    """
-
-    def __init__(self, graph, pars=None, **kwargs):
-        self.graph = graph
-        self.pars = ss.omerge(pars)
-        super().__init__(**kwargs)
-        return
-
-    def initialize(self, sim):
-        popsize = sim.pars.n_agents
-        if callable(self.graph):
-            self.graph = self.graph(n=popsize, **self.pars)
-        self.validate_pop(popsize)
-        super().initialize(sim)
-        self.get_contacts()
-        return
-
-    def validate_pop(self, popsize):
-        n_nodes = self.graph.number_of_nodes()
-        if n_nodes > popsize:
-            errormsg = f'Please ensure the number of nodes in graph {n_nodes} is smaller than population size {popsize}.'
-            raise ValueError(errormsg)
-
-    def get_contacts(self):
-        p1s = []
-        p2s = []
-        for edge in self.graph.edges():
-            p1, p2 = edge
-            p1s.append(p1)
-            p2s.append(p2)
-        self.contacts.p1 = np.concatenate([self.contacts.p1, p1s])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, p2s])
-        self.contacts.beta = np.concatenate([self.contacts.beta, np.ones_like(p1s)])
-        return
-
-
-class RandomNet(DynamicNetwork):
-    """ Random connectivity between agents """
-
-    def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
-        """ Initialize """
-        pars = ss.omerge({
-            'n_contacts': 15,  # Distribution or int. If int, interpreted as the mean of the dist listed in par_dists
-            'dur': 1,
-        }, pars)
-
-        DynamicNetwork.__init__(self, pars=pars, key_dict=key_dict, **kwargs)
-
-        return
-
-    def initialize(self, sim):
-        super().initialize(sim)
-        self.add_pairs(sim.people)
-        return
-
-    @staticmethod
-    @nb.njit(cache=True)
-    def get_contacts(inds, number_of_contacts):
-        """
-        Efficiently generate contacts
-
-        Note that because of the shuffling operation, each person is assigned 2N contacts
-        (i.e. if a person has 5 contacts, they appear 5 times in the 'source' array and 5
-        times in the 'target' array). Therefore, the `number_of_contacts` argument to this
-        function should be HALF of the total contacts a person is expected to have, if both
-        the source and target array outputs are used (e.g. for social contacts)
-
-        adjusted_number_of_contacts = np.round(number_of_contacts / 2).astype(cvd.default_int)
-
-        Whereas for asymmetric contacts (e.g. staff-public interactions) it might not be necessary
-
-        Args:
-            inds: List/array of person indices
-            number_of_contacts: List/array the same length as `inds` with the number of unidirectional
-            contacts to assign to each person. Therefore, a person will have on average TWICE this number
-            of random contacts.
-
-        Returns: Two arrays, for source and target
-        """
-
-        total_number_of_half_edges = np.sum(number_of_contacts)
-        count = 0
-        source = np.zeros((total_number_of_half_edges,), dtype=ss_int_)
-        for i, person_id in enumerate(inds):
-            n_contacts = number_of_contacts[i]
-            source[count: count + n_contacts] = person_id
-            count += n_contacts
-        target = np.random.permutation(source)
-        return source, target
-
-    def update(self, people, dt=None):
-        self.end_pairs(people)
-        self.add_pairs(people)
-        return
-
-    def add_pairs(self, people):
-        """
-        Generate contacts
-        """
-
-        if isinstance(self.pars.n_contacts, ss.ScipyDistribution):
-            number_of_contacts = self.pars.n_contacts.rvs(people.alive)  # or people.uid?
-        else:
-            number_of_contacts = np.full(len(people), self.pars.n_contacts)
-
-        number_of_contacts = np.round(number_of_contacts / 2).astype(ss_int_)  # One-way contacts
-
-        p1, p2 = self.get_contacts(people.uid.__array__(), number_of_contacts)
-        beta = np.ones(len(p1), dtype=ss_float_)
-
-        if isinstance(self.pars.dur, ss.ScipyDistribution):
-            dur = self.pars.dur.rvs(p1)
-        else:
-            dur = np.full(len(p1), self.pars.dur)
-
-        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
-        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
-
-        return
 
 
 class HPVNet(MFNet):
