@@ -8,6 +8,7 @@ Hierarchy
 """
 
 import io
+import zipfile
 import sciris as sc
 
 __all__ = ['Dataset', 'Samples']
@@ -133,7 +134,7 @@ class Samples:
             identifiers = [x.decode().strip() for x in identifiers]
 
         with self.zipfile.open(summary_file) as f:
-            self.summary = pd.read_csv(f)
+            self.summary = sc.dataframe.read_csv(f)
             self.summary.set_index(identifiers, inplace=True)
             self.summary = self.summary.sort_index()
 
@@ -311,7 +312,7 @@ class Samples:
         folder.mkdir(parents=True, exist_ok=True)
         
         # Save the zip file
-        sc.savezip(folder/fname, data=zipdata)
+        sc.savezip(folder/fname, data=zipdata, tobytes=False)
 
         return cls(folder/fname, memory_buffer=False)
 
