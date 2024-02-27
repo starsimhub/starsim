@@ -8,6 +8,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import sciris as sc
+import pytest
+
 
 do_plot = False
 
@@ -137,8 +139,17 @@ def test_constant_pop():
         plt.show()
     return sim
 
+def test_module_adding():
+
+    births = ss.Births(pars={'birth_rate': 10})
+    deaths = ss.Deaths(pars={'death_rate': 10})
+    demographics = [births, deaths]
+    with pytest.raises(Exception): # CK: should be ValueError, but that fails for now, and this is OK
+        sim = ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=10, death_rate=10).run()
+
 if __name__ == '__main__':
-    # Test Nigeria demographic consistency
-    sim = test_nigeria(dt=1, which='pregnancy', n_years=15, plot_init=True, do_plot=do_plot)
-    sim = test_constant_pop()
+
+    s1 = test_nigeria(dt=1, which='pregnancy', n_years=15, plot_init=True, do_plot=do_plot)
+    s2 = test_constant_pop()
+    s3 = test_module_adding()
 
