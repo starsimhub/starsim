@@ -506,10 +506,10 @@ class MSMNet(SexualNetwork, DynamicNetwork):
         # Figure out durations
         if ss.options.multirng and (len(p1) == len(np.unique(p1))):
             # No duplicates and user has enabled multirng, so use slotting based on p1
-            dur = self.pars['duration'].rvs(p1)
+            dur = self.pars.duration.rvs(p1)
             act_vals = self.pars.acts.rvs(p1)
         else:
-            dur = self.pars['duration'].rvs(len(p1)) # Just use len(p1) to say how many draws are needed
+            dur = self.pars.duration.rvs(len(p1)) # Just use len(p1) to say how many draws are needed
             act_vals = self.pars.acts.rvs(len(p1))
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
@@ -562,7 +562,7 @@ class EmbeddingNet(MFNet):
             return 0
 
         available = np.concatenate((available_m, available_f))
-        loc = self.pars['embedding_func'].rvs(available)
+        loc = self.pars.embedding_func.rvs(available)
         loc_f = loc[people.female[available]]
         loc_m = loc[~people.female[available]]
 
@@ -651,7 +651,7 @@ class StaticNet(Network):
         return
 
     def initialize(self, sim):
-        popsize = sim.pars['n_agents']
+        popsize = sim.pars.n_agents
         if callable(self.graph):
             self.graph = self.graph(n=popsize, **self.pars)
         self.validate_pop(popsize)
@@ -882,7 +882,7 @@ class HPVNet(MFNet):
                                  bins=self.agebins) - 1  # Age bins of females that are entering new relationships
         age_bins_m = np.digitize(people.age[m], bins=self.agebins) - 1  # Age bins of active and participating males
         age_f, age_m = np.meshgrid(age_bins_f, age_bins_m)
-        pair_probs = self.pars['mixing'][age_m, age_f + 1]
+        pair_probs = self.pars.mixing[age_m, age_f + 1]
 
         f_to_remove = pair_probs.max(axis=0) == 0  # list of female inds to remove if no male partners are found for her
         # f = [i for i, flag in zip(f, f_to_remove) if ~flag]  # remove the inds who don't get paired on this timestep
@@ -922,16 +922,17 @@ class HPVNet(MFNet):
         avg_debut = np.array([age_debut_p1, age_debut_p2]).mean(axis=0)
 
         # Shorten parameter names
-        dr = self.pars['age_act_pars']['debut_ratio']
-        peak = self.pars['age_act_pars']['peak']
-        rr = self.pars['age_act_pars']['retirement_ratio']
-        retire = self.pars['age_act_pars']['retirement']
+        aap = self.pars.age_act_pars
+        dr = aap['debut_ratio']
+        peak = aap['peak']
+        rr = aap['retirement_ratio']
+        retire = aap['retirement']
+        peak = aap['peak']
 
         # Get indices of people at different stages
-        below_peak_inds = avg_age <= self.pars['age_act_pars']['peak']
-        above_peak_inds = (avg_age > self.pars['age_act_pars']['peak']) & (
-                avg_age < self.pars['age_act_pars']['retirement'])
-        retired_inds = avg_age > self.pars['age_act_pars']['retirement']
+        below_peak_inds = avg_age <= peak
+        above_peak_inds = (avg_age > peak) & (avg_age < retire)
+        retired_inds = avg_age > retire
 
         # Set values by linearly scaling the number of acts for each partnership according to
         # the age of the couple at the commencement of the relationship

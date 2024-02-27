@@ -15,7 +15,8 @@ Version 0.2.3 (2024-02-26)
 - Changes default death rate from units of per person to per thousand people
 - Allows ``ss.Sim(demographics=True)`` to enable births and deaths
 - Fix pickling of ``State`` objects
-- *GitHub info*: PRs `305 <https://github.com/amath-idm/stisim/pull/305>`_, `308 <https://github.com/amath-idm/stisim/pull/308>`_
+- Rename ``networks.py`` to ``network.py``, and fix HIV mortality
+- *GitHub info*: PRs `305 <https://github.com/amath-idm/stisim/pull/305>`_, `308 <https://github.com/amath-idm/stisim/pull/308>`_, `317 <https://github.com/amath-idm/stisim/pull/317>`_
 
 
 Version 0.2.2 (2024-02-26)
