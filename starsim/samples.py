@@ -261,6 +261,11 @@ class Samples:
         Returns: Array of seed values
         """
         return self.index.get_level_values("seed").values
+    
+    @staticmethod
+    def _seedfile(seed):
+        """ Helper function to generate a seed file name """
+        return f'seed_{seed}.csv'
 
     @classmethod
     def new(cls, folder, outputs, identifiers, fname=None):
@@ -271,12 +276,10 @@ class Samples:
             identifiers: A list of columns to use as identifiers. These should appear in the summary dataframe and should have the same
                          value for all samples.
         """
-        zipdata = {}
+        zipdata = {} # Store all the data to be written as files inside the zipfile
         summary_rows = []
         for df, row in outputs:
-            row_str = df.to_csv()
-            name = f'seed_{row["seed"]}.csv'
-            zipdata[name] = row_str
+            zipdata[cls._seedfile(row["seed"])] = df.to_csv()
             summary_rows.append(row)
 
         # Write the identifier metadata
@@ -297,8 +300,7 @@ class Samples:
 
         # Finish working on and write the summary
         summary.set_index(identifiers, inplace=True)
-        summary_str = summary.to_csv()
-        zipdata[summary_file] = summary_str
+        zipdata[summary_file] = summary.to_csv()
         
         # Handle the zip file name
         if fname is None:
@@ -378,7 +380,7 @@ class Samples:
             raise Exception(f'This dataset does not contain item "{item}"')
 
         if item not in self._cache:
-            with self.zipfile.open(f"seed_{item}.csv") as f:
+            with self.zipfile.open(self._seedfile(item)) as f:
                 self._cache[item] = sc.dataframe.read_csv(f, index_col="t")
 
         return self._cache[item].copy()
