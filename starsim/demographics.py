@@ -28,8 +28,8 @@ class BaseDemographics(ss.Module):
         pass
 
 class Births(BaseDemographics):
-    def __init__(self, pars=None, metadata=None):
-        super().__init__(pars)
+    def __init__(self, pars=None, metadata=None, **kwargs):
+        super().__init__(pars, **kwargs)
 
         # Set defaults
         self.pars = ss.omergeleft(self.pars,
@@ -107,7 +107,7 @@ class Births(BaseDemographics):
 
 
 class Deaths(BaseDemographics):
-    def __init__(self, pars=None, par_dists=None, metadata=None):
+    def __init__(self, pars=None, par_dists=None, metadata=None, **kwargs):
         """
         Configure disease-independent "background" deaths.
 
@@ -137,7 +137,7 @@ class Deaths(BaseDemographics):
                 "data_cols" is is a dictionary mapping standard keys, like "year" to the
                 corresponding column name in data. Similar for "sex_keys". Finally,
         """
-        super().__init__(pars)
+        super().__init__(pars, **kwargs)
 
         self.pars = ss.omergeleft(self.pars,
             rel_death = 1,
@@ -239,8 +239,8 @@ class Deaths(BaseDemographics):
 
 class Pregnancy(BaseDemographics):
 
-    def __init__(self, pars=None, par_dists=None, metadata=None):
-        super().__init__(pars)
+    def __init__(self, pars=None, par_dists=None, metadata=None, **kwargs):
+        super().__init__(pars, **kwargs)
 
         # Other, e.g. postpartum, on contraception...
         self.add_states(
