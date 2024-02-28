@@ -32,7 +32,8 @@ class ndict(sc.objdict):
         networks = ss.ndict({'mf':ss.MFNet(), 'maternal':ss.MaternalNet()})
     """
 
-    def __init__(self, *args, nameattr='name', type=None, strict=True, overwrite=False, accept_str=False, **kwargs):
+    def __init__(self, *args, nameattr='name', type=None, strict=True, overwrite=False, **kwargs):
+        super().__init__()
         self.setattribute('_nameattr', nameattr)  # Since otherwise treated as keys
         self.setattribute('_type', type)
         self.setattribute('_strict', strict)
@@ -45,10 +46,6 @@ class ndict(sc.objdict):
         valid = False
         if arg is None:
             return  # Nothing to do
-
-        if isinstance(arg, str) and self._accept_str:
-            arg = {self._nameattr: arg}
-            valid = True
 
         if hasattr(arg, self._nameattr):
             key = key or getattr(arg, self._nameattr)

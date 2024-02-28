@@ -3,6 +3,7 @@ Define example disease modules
 """
 
 import numpy as np
+import pylab as pl
 import starsim as ss
 
 __all__ = ['SIR']
@@ -18,10 +19,10 @@ class SIR(ss.Infection):
 
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
         pars = ss.omergeleft(pars,
-            dur_inf = 1,
-            init_prev = 0.1,
-            p_death = 0.2,
-            beta = None,
+            dur_inf = 6,
+            init_prev = 0.01,
+            p_death = 0.01,
+            beta = 0.5,
         )
 
         par_dists = ss.omergeleft(par_dists,
@@ -36,15 +37,16 @@ class SIR(ss.Infection):
             ss.State('susceptible', bool, True),
             ss.State('infected', bool, False),
             ss.State('recovered', bool, False),
-            ss.State('ti_infected', float, np.nan),
-            ss.State('ti_recovered', float, np.nan),
-            ss.State('ti_dead', float, np.nan),
+            ss.State('ti_infected', int, ss.INT_NAN),
+            ss.State('ti_recovered', int, ss.INT_NAN),
+            ss.State('ti_dead', int, ss.INT_NAN),
         )
         return
 
     def update_pre(self, sim):
         # Progress infectious -> recovered
-        recovered = ss.true(self.infected & (self.ti_recovered <= sim.year))
+        recovered = ss.true(self.infected & (self.ti_recovered <= sim.ti))
+
         self.infected[recovered] = False
         self.recovered[recovered] = True
 
@@ -65,18 +67,28 @@ class SIR(ss.Infection):
         # Determine who dies and who recovers and when
         dead_uids = p.p_death.filter(uids)
         rec_uids = np.setdiff1d(uids, dead_uids)
-        self.ti_dead[dead_uids] = sim.ti + p.dur_inf.rvs(dead_uids)
-        self.ti_recovered[rec_uids] = sim.ti + p.dur_inf.rvs(rec_uids)
+        d_rvs = p.dur_inf.rvs(dead_uids)
+        r_rvs = p.dur_inf.rvs(rec_uids)
+        self.ti_dead[dead_uids] = sim.ti + d_rvs
+        self.ti_recovered[rec_uids] = sim.ti + r_rvs
 
         return
 
     def update_death(self, sim, uids):
-        # Reset infected/recovered flags for dead agents
+        """ Reset infected/recovered flags for dead agents """
         self.susceptible[uids] = False
         self.infected[uids] = False
         self.recovered[uids] = False
         return
 
+    def plot(self):
+        """ Default plot for SIR model """
+        fig = pl.figure()
+        for rkey in ['susceptible', 'infected', 'recovered']:
+            pl.plot(self.results['n_'+rkey], label=rkey.title())
+        pl.legend()
+        return fig
+    
 
 # %% Interventions
 __all__ += ['sir_vaccine']

@@ -2,7 +2,6 @@
 Networks that connect people within a population
 '''
 
-# %% Imports
 import numpy as np
 import numba as nb
 import sciris as sc
@@ -16,6 +15,9 @@ ss_int_ = ss.dtypes.int
 
 # Specify all externally visible functions this file defines; see also more definitions below
 __all__ = ['Network', 'Networks', 'DynamicNetwork', 'SexualNetwork']
+
+
+# %% General network classes
 
 class Network(ss.Module):
     """
@@ -287,8 +289,8 @@ class Network(ss.Module):
             self.contacts[k] = self.contacts[k][keep]
 
     def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
-        if uids is not None: return self.contacts.beta[uids] * disease_beta * dt
-        return self.contacts.beta * disease_beta * dt
+        if uids is None: uids = Ellipsis
+        return self.contacts.beta[uids] * disease_beta * dt
 
 
 class Networks(ss.ndict):
@@ -316,9 +318,11 @@ class Networks(ss.ndict):
 
 
 class DynamicNetwork(Network):
+    """ A network where partnerships update dynamically """
     def __init__(self, pars=None, key_dict=None, **kwargs):
         key_dict = ss.omerge({'dur': ss_float_}, key_dict)
         super().__init__(pars, key_dict=key_dict, **kwargs)
+        return
 
     def end_pairs(self, people):
         dt = people.dt
@@ -328,6 +332,7 @@ class DynamicNetwork(Network):
         active = (self.contacts.dur > 0) & people.alive[self.contacts.p1] & people.alive[self.contacts.p2]
         for k in self.meta_keys():
             self.contacts[k] = self.contacts[k][active]
+        return
 
 
 class SexualNetwork(Network):
@@ -356,270 +361,7 @@ class SexualNetwork(Network):
 
 
 # %% Specific instances of networks
-__all__ += ['MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet', 'StaticNet', 'RandomNet', 'HPVNet']
-
-class MFNet(SexualNetwork, DynamicNetwork):
-    """
-    This network is built by **randomly pairing** males and female with variable
-    relationship durations.
-    """
-
-    def __init__(self, pars=None, par_dists=None, key_dict=None):
-        pars = ss.omergeleft(pars,
-            duration = 15,  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
-            participation = 0.9,  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
-            debut = 16,  # Age of debut can vary by using callable parameter values
-            acts = 80,
-            rel_part_rates = 1.0,
-        )
-
-        par_dists = ss.omergeleft(par_dists,
-            duration      = ss.lognorm,
-            participation = ss.bernoulli,
-            debut         = ss.norm,
-            acts          = ss.lognorm,
-        )
-
-        DynamicNetwork.__init__(self, key_dict=key_dict)
-        SexualNetwork.__init__(self, pars, key_dict=key_dict)
-
-        self.par_dists = par_dists
-
-        return
-
-    def initialize(self, sim):
-        super().initialize(sim)
-        self.set_network_states(sim.people)
-        self.add_pairs(sim.people, ti=0)
-        return
-
-    def set_network_states(self, people, upper_age=None):
-        """ Set network states including age of entry into network and participation rates """
-        self.set_debut(people, upper_age=upper_age)
-        self.set_participation(people, upper_age=upper_age)
-
-    def set_participation(self, people, upper_age=None):
-        # Set people who will participate in the network at some point
-        if upper_age is None: uids = people.uid
-        else: uids = people.uid[(people.age < upper_age)]
-        self.participant[uids] = self.pars.participation.rvs(uids)
-
-    def set_debut(self, people, upper_age=None):
-        # Set debut age
-        if upper_age is None: uids = people.uid
-        else: uids = people.uid[(people.age < upper_age)]
-        self.debut[uids] = self.pars.debut.rvs(uids)
-        return
-
-    def add_pairs(self, people, ti=None):
-        available_m = self.available(people, 'male')
-        available_f = self.available(people, 'female')
-
-        # random.choice is not common-random-number safe, and therefore we do
-        # not try to Stream-ify the following draws at this time.
-        if len(available_m) <= len(available_f):
-            p1 = available_m
-            p2 = np.random.choice(a=available_f, size=len(p1), replace=False)
-        else:
-            p2 = available_f
-            p1 = np.random.choice(a=available_m, size=len(p2), replace=False)
-
-        beta = np.ones_like(p1)
-
-        # Figure out durations
-        # print('DJK TODO')
-        if ss.options.multirng and (len(p1) == len(np.unique(p1))):
-            # No duplicates and user has enabled multirng, so use slotting based on p1
-            dur_vals = self.pars.duration.rvs(p1)
-        else:
-            dur_vals = self.pars.duration.rvs(len(p1))  # Just use len(p1) to say how many draws are needed
-
-        # Figure out acts
-        act_vals = self.pars.acts.rvs(len(p1))  # TODO use slots
-
-        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
-        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
-        self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
-
-        return len(p1)
-
-    def update(self, people, dt=None):
-        self.end_pairs(people)
-        self.set_network_states(people, upper_age=people.dt)
-        self.add_pairs(people)
-        return
-
-
-class MSMNet(SexualNetwork, DynamicNetwork):
-    """
-    A network that randomly pairs males
-    """
-
-    def __init__(self, pars=None, key_dict=None, **kwargs):
-        pars = ss.omergeleft(pars,
-            duration_dist = ss.lognorm_mean(mean=15, stdev=15),
-            participation_dist = ss.bernoulli(p=0.1),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
-            debut_dist = ss.norm(loc=16, scale=2),
-            acts = ss.lognorm_mean(mean=80, stdev=20),
-            rel_part_rates = 1.0,
-        )
-        DynamicNetwork.__init__(self, key_dict, **kwargs)
-        SexualNetwork.__init__(self, pars, key_dict)
-        return
-
-    def initialize(self, sim):
-        # Add more here in line with MF network, e.g. age of debut
-        # Or if too much replication then perhaps both these networks
-        # should be subclasss of a specific network type (ask LY/DK)
-        super().initialize(sim)
-        self.set_network_states(sim.people)
-        self.add_pairs(sim.people, ti=0)
-        return
-
-    def set_network_states(self, people, upper_age=None):
-        """ Set network states including age of entry into network and participation rates """
-        if upper_age is None: uids = people.uid[people.male]
-        else: uids = people.uid[people.male & (people.age < upper_age)]
-
-        # Participation
-        self.participant[people.female] = False
-        pr = self.pars.rel_part_rates
-        dist = ss.bernoulli.rvs(p=pr, size=len(uids))
-        self.participant[uids] = dist
-
-        # Debut
-        self.debut[uids] = self.pars.debut_dist.rvs(len(uids)) # Just pass len(uids) as this network is not crn safe anyway
-        return
-
-    def add_pairs(self, people, ti=None):
-        # Pair all unpartnered MSM
-        available_m = self.available(people, 'm')
-        n_pairs = int(len(available_m)/2)
-        p1 = available_m[:n_pairs]
-        p2 = available_m[n_pairs:n_pairs*2]
-
-        # Figure out durations
-        # print('DJK TODO')
-        if ss.options.multirng and (len(p1) == len(np.unique(p1))):
-            # No duplicates and user has enabled multirng, so use slotting based on p1
-            dur = self.pars['duration_dist'].rvs(p1)
-        else:
-            dur = self.pars['duration_dist'].rvs(len(p1)) # Just use len(p1) to say how many draws are needed
-
-        # Figure out acts
-        act_vals = self.pars.acts.rvs(len(p1))  # TODO use slots
-
-        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
-        self.contacts.beta = np.concatenate([self.contacts.beta, np.ones_like(p1)])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
-        self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
-        return len(p1)
-
-    def update(self, people, dt=None):
-        self.end_pairs(people)
-        self.set_network_states(people, upper_age=people.dt)
-        self.add_pairs(people)
-        return
-
-
-class EmbeddingNet(MFNet):
-    """
-    Heterosexual age-assortative network based on a one-dimensional embedding. Could be made more generic.
-    """
-
-    def __init__(self, pars=None, **kwargs):
-        """
-        Create a sexual network from a 1D embedding based on age
-
-        male_shift is the average age that males are older than females in partnerships
-        std is the standard deviation of noise added to the age of each individual when seeking a pair. Larger values will created more diversity in age gaps.
-        
-        """
-        pars = ss.omerge({
-            'embedding_func': ss.norm(loc=self.embedding_loc, scale=2),
-            'male_shift': 5,
-        }, pars)
-        super().__init__(pars, **kwargs)
-        return
-
-    @staticmethod
-    def embedding_loc(self, sim, uids):
-        loc = sim.people.age[uids].values
-        loc[sim.people.female[uids]] += self.pars.male_shift  # Shift females so they will be paired with older men
-        return loc
-
-    def add_pairs(self, people, ti=None):
-        available_m = self.available(people, 'male')
-        available_f = self.available(people, 'female')
-
-        if not len(available_m) or not len(available_f):
-            if ss.options.verbose > 1:
-                print('No pairs to add')
-            return 0
-
-        available = np.concatenate((available_m, available_f))
-        loc = self.pars['embedding_func'].rvs(available)
-        loc_f = loc[people.female[available]]
-        loc_m = loc[~people.female[available]]
-
-        dist_mat = spsp.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
-
-        ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
-        # loc_f[ind_f[0]] is close to loc_m[ind_m[0]]
-
-        n_pairs = len(ind_f)
-
-        beta = np.ones(n_pairs)
-
-        # Figure out durations
-        p1 = available_m[ind_m]
-        dur_vals = self.pars['duration_dist'].rvs(p1)
-
-        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, available_f[ind_f]])
-        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
-        return len(beta)
-
-
-class MaternalNet(Network):
-    """
-    Vertical (birth-related) transmission network
-    """
-    def __init__(self, key_dict=None, vertical=True, **kwargs):
-        """
-        Initialized empty and filled with pregnancies throughout the simulation
-        """
-        key_dict = sc.mergedicts({'dur': ss_float_}, key_dict)
-        super().__init__(key_dict=key_dict, vertical=vertical, **kwargs)
-        return
-
-    def update(self, people, dt=None):
-        if dt is None: dt = people.dt
-        # Set beta to 0 for women who complete post-partum period
-        # Keep connections for now, might want to consider removing
-        self.contacts.dur = self.contacts.dur - dt
-        inactive = self.contacts.dur <= 0
-        self.contacts.beta[inactive] = 0
-        return
-
-    def initialize(self, sim):
-        """ No pairs added upon initialization """
-        pass
-
-    def add_pairs(self, mother_inds, unborn_inds, dur):
-        """
-        Add connections between pregnant women and their as-yet-unborn babies
-        """
-        beta = np.ones_like(mother_inds)
-        self.contacts.p1 = np.concatenate([self.contacts.p1, mother_inds])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, unborn_inds])
-        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
-        return len(mother_inds)
+__all__ += ['StaticNet', 'RandomNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet', 'HPVNet']
 
 
 class StaticNet(Network):
@@ -638,7 +380,6 @@ class StaticNet(Network):
 
     # Pass a networkx graph generator to Starsim
     ss.static(graph=nx.erdos_renyi_graph, p=0.0001)
-
     """
 
     def __init__(self, graph, pars=None, **kwargs):
@@ -648,7 +389,7 @@ class StaticNet(Network):
         return
 
     def initialize(self, sim):
-        popsize = sim.pars['n_agents']
+        popsize = sim.pars.n_agents
         if callable(self.graph):
             self.graph = self.graph(n=popsize, **self.pars)
         self.validate_pop(popsize)
@@ -681,7 +422,7 @@ class RandomNet(DynamicNetwork):
     def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
         """ Initialize """
         pars = ss.omerge({
-            'n_contacts': 15,  # Distribution or int. If int, interpreted as the mean of the dist listed in par_dists
+            'n_contacts': 10,  # Distribution or int. If int, interpreted as the mean of the dist listed in par_dists
             'dur': 1,
         }, pars)
 
@@ -760,6 +501,273 @@ class RandomNet(DynamicNetwork):
         self.contacts.dur = np.concatenate([self.contacts.dur, dur])
 
         return
+
+
+class MFNet(SexualNetwork, DynamicNetwork):
+    """
+    This network is built by **randomly pairing** males and female with variable
+    relationship durations.
+    """
+
+    def __init__(self, pars=None, par_dists=None, key_dict=None):
+        pars = ss.omergeleft(pars,
+            duration = 15,  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+            participation = 0.9,  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
+            debut = 16,  # Age of debut can vary by using callable parameter values
+            acts = 80,
+            rel_part_rates = 1.0,
+        )
+
+        par_dists = ss.omergeleft(par_dists,
+            duration      = ss.lognorm,
+            participation = ss.bernoulli,
+            debut         = ss.norm,
+            acts          = ss.poisson,
+        )
+
+        DynamicNetwork.__init__(self, key_dict=key_dict)
+        SexualNetwork.__init__(self, pars, key_dict=key_dict)
+
+        self.par_dists = par_dists
+
+        return
+
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.set_network_states(sim.people)
+        self.add_pairs(sim.people, ti=0)
+        return
+
+    def set_network_states(self, people, upper_age=None):
+        """ Set network states including age of entry into network and participation rates """
+        self.set_debut(people, upper_age=upper_age)
+        self.set_participation(people, upper_age=upper_age)
+
+    def set_participation(self, people, upper_age=None):
+        # Set people who will participate in the network at some point
+        if upper_age is None: uids = people.uid
+        else: uids = people.uid[(people.age < upper_age)]
+        self.participant[uids] = self.pars.participation.rvs(uids)
+
+    def set_debut(self, people, upper_age=None):
+        # Set debut age
+        if upper_age is None: uids = people.uid
+        else: uids = people.uid[(people.age < upper_age)]
+        self.debut[uids] = self.pars.debut.rvs(uids)
+        return
+
+    def add_pairs(self, people, ti=None):
+        available_m = self.available(people, 'male')
+        available_f = self.available(people, 'female')
+
+        # random.choice is not common-random-number safe, and therefore we do
+        # not try to Stream-ify the following draws at this time.
+        if len(available_m) <= len(available_f):
+            p1 = available_m
+            p2 = np.random.choice(a=available_f, size=len(p1), replace=False)
+        else:
+            p2 = available_f
+            p1 = np.random.choice(a=available_m, size=len(p2), replace=False)
+
+        beta = np.ones_like(p1)
+
+        # Figure out durations and acts
+        if ss.options.multirng and (len(p1) == len(np.unique(p1))):
+            # No duplicates and user has enabled multirng, so use slotting based on p1
+            dur_vals = self.pars.duration.rvs(p1)
+            act_vals = self.pars.acts.rvs(p1)
+        else:
+            # If multirng is enabled, we're here because some individuals in p1
+            # are starting multiple relationships on this timestep. If using
+            # slotted draws, as above, repeated relationships will get the same
+            # duration and act rates, which is scientifically undesirable.
+            # Instead, we fall back to a not-CRN safe approach:
+            dur_vals = self.pars.duration.rvs(len(p1))  # Just use len(p1) to say how many draws are needed
+            act_vals = self.pars.acts.rvs(len(p1))
+
+        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
+        self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
+        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
+        self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
+        self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
+
+        return len(p1)
+
+    def update(self, people, dt=None):
+        self.end_pairs(people)
+        self.set_network_states(people, upper_age=people.dt)
+        self.add_pairs(people)
+        return
+
+
+class MSMNet(SexualNetwork, DynamicNetwork):
+    """
+    A network that randomly pairs males
+    """
+
+    def __init__(self, pars=None, key_dict=None, **kwargs):
+        pars = ss.omergeleft(pars,
+            duration_dist = ss.lognorm_mean(mean=15, stdev=15),
+            participation_dist = ss.bernoulli(p=0.1),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
+            debut_dist = ss.norm(loc=16, scale=2),
+            acts = ss.lognorm_mean(mean=80, stdev=20),
+            rel_part_rates = 1.0,
+        )
+        DynamicNetwork.__init__(self, key_dict, **kwargs)
+        SexualNetwork.__init__(self, pars, key_dict)
+        return
+
+    def initialize(self, sim):
+        # Add more here in line with MF network, e.g. age of debut
+        # Or if too much replication then perhaps both these networks
+        # should be subclasss of a specific network type (ask LY/DK)
+        super().initialize(sim)
+        self.set_network_states(sim.people)
+        self.add_pairs(sim.people, ti=0)
+        return
+
+    def set_network_states(self, people, upper_age=None):
+        """ Set network states including age of entry into network and participation rates """
+        if upper_age is None: uids = people.uid[people.male]
+        else: uids = people.uid[people.male & (people.age < upper_age)]
+
+        # Participation
+        self.participant[people.female] = False
+        pr = self.pars.rel_part_rates
+        dist = ss.bernoulli.rvs(p=pr, size=len(uids))
+        self.participant[uids] = dist
+
+        # Debut
+        self.debut[uids] = self.pars.debut_dist.rvs(len(uids)) # Just pass len(uids) as this network is not crn safe anyway
+        return
+
+    def add_pairs(self, people, ti=None):
+        # Pair all unpartnered MSM
+        available_m = self.available(people, 'm')
+        n_pairs = int(len(available_m)/2)
+        p1 = available_m[:n_pairs]
+        p2 = available_m[n_pairs:n_pairs*2]
+
+        # Figure out durations
+        if ss.options.multirng and (len(p1) == len(np.unique(p1))):
+            # No duplicates and user has enabled multirng, so use slotting based on p1
+            dur = self.pars.duration.rvs(p1)
+            act_vals = self.pars.acts.rvs(p1)
+        else:
+            dur = self.pars.duration.rvs(len(p1)) # Just use len(p1) to say how many draws are needed
+            act_vals = self.pars.acts.rvs(len(p1))
+
+        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
+        self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
+        self.contacts.beta = np.concatenate([self.contacts.beta, np.ones_like(p1)])
+        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
+        self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
+        return len(p1)
+
+    def update(self, people, dt=None):
+        self.end_pairs(people)
+        self.set_network_states(people, upper_age=people.dt)
+        self.add_pairs(people)
+        return
+
+
+class EmbeddingNet(MFNet):
+    """
+    Heterosexual age-assortative network based on a one-dimensional embedding. Could be made more generic.
+    """
+
+    def __init__(self, pars=None, **kwargs):
+        """
+        Create a sexual network from a 1D embedding based on age
+
+        male_shift is the average age that males are older than females in partnerships
+        std is the standard deviation of noise added to the age of each individual when seeking a pair. Larger values will created more diversity in age gaps.
+        
+        """
+        pars = ss.omerge({
+            'embedding_func': ss.norm(loc=self.embedding_loc, scale=2),
+            'male_shift': 5,
+        }, pars)
+        super().__init__(pars, **kwargs)
+        return
+
+    @staticmethod
+    def embedding_loc(self, sim, uids):
+        loc = sim.people.age[uids].values
+        loc[sim.people.female[uids]] += self.pars.male_shift  # Shift females so they will be paired with older men
+        return loc
+
+    def add_pairs(self, people, ti=None):
+        available_m = self.available(people, 'male')
+        available_f = self.available(people, 'female')
+
+        if not len(available_m) or not len(available_f):
+            if ss.options.verbose > 1:
+                print('No pairs to add')
+            return 0
+
+        available = np.concatenate((available_m, available_f))
+        loc = self.pars.embedding_func.rvs(available)
+        loc_f = loc[people.female[available]]
+        loc_m = loc[~people.female[available]]
+
+        dist_mat = spsp.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
+
+        ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
+        # loc_f[ind_f[0]] is close to loc_m[ind_m[0]]
+
+        n_pairs = len(ind_f)
+
+        beta = np.ones(n_pairs)
+
+        # Figure out durations
+        p1 = available_m[ind_m]
+        dur_vals = self.pars.duration.rvs(p1)
+        act_vals = self.pars.acts.rvs(p1)
+
+        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
+        self.contacts.p2 = np.concatenate([self.contacts.p2, available_f[ind_f]])
+        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
+        self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
+        self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
+        return len(beta)
+
+
+class MaternalNet(Network):
+    """
+    Vertical (birth-related) transmission network
+    """
+    def __init__(self, key_dict=None, vertical=True, **kwargs):
+        """
+        Initialized empty and filled with pregnancies throughout the simulation
+        """
+        key_dict = sc.mergedicts({'dur': ss_float_}, key_dict)
+        super().__init__(key_dict=key_dict, vertical=vertical, **kwargs)
+        return
+
+    def update(self, people, dt=None):
+        if dt is None: dt = people.dt
+        # Set beta to 0 for women who complete post-partum period
+        # Keep connections for now, might want to consider removing
+        self.contacts.dur = self.contacts.dur - dt
+        inactive = self.contacts.dur <= 0
+        self.contacts.beta[inactive] = 0
+        return
+
+    def initialize(self, sim):
+        """ No pairs added upon initialization """
+        pass
+
+    def add_pairs(self, mother_inds, unborn_inds, dur):
+        """
+        Add connections between pregnant women and their as-yet-unborn babies
+        """
+        beta = np.ones_like(mother_inds)
+        self.contacts.p1 = np.concatenate([self.contacts.p1, mother_inds])
+        self.contacts.p2 = np.concatenate([self.contacts.p2, unborn_inds])
+        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
+        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
+        return len(mother_inds)
 
 
 class HPVNet(MFNet):
@@ -879,7 +887,7 @@ class HPVNet(MFNet):
                                  bins=self.agebins) - 1  # Age bins of females that are entering new relationships
         age_bins_m = np.digitize(people.age[m], bins=self.agebins) - 1  # Age bins of active and participating males
         age_f, age_m = np.meshgrid(age_bins_f, age_bins_m)
-        pair_probs = self.pars['mixing'][age_m, age_f + 1]
+        pair_probs = self.pars.mixing[age_m, age_f + 1]
 
         f_to_remove = pair_probs.max(axis=0) == 0  # list of female inds to remove if no male partners are found for her
         # f = [i for i, flag in zip(f, f_to_remove) if ~flag]  # remove the inds who don't get paired on this timestep
@@ -906,8 +914,8 @@ class HPVNet(MFNet):
         p1 = selected_males
         p2 = f
         n_partnerships = len(p2)
-        dur = self.pars.duration_dist.rvs(n_partnerships)
-        acts = self.pars.act_dist.rvs(n_partnerships)
+        dur = self.pars.duration.rvs(n_partnerships)
+        acts = self.pars.acts.rvs(n_partnerships)
         age_p1 = people.age[p1]
         age_p2 = people.age[p2]
 
@@ -919,16 +927,17 @@ class HPVNet(MFNet):
         avg_debut = np.array([age_debut_p1, age_debut_p2]).mean(axis=0)
 
         # Shorten parameter names
-        dr = self.pars['age_act_pars']['debut_ratio']
-        peak = self.pars['age_act_pars']['peak']
-        rr = self.pars['age_act_pars']['retirement_ratio']
-        retire = self.pars['age_act_pars']['retirement']
+        aap = self.pars.age_act_pars
+        dr = aap['debut_ratio']
+        peak = aap['peak']
+        rr = aap['retirement_ratio']
+        retire = aap['retirement']
+        peak = aap['peak']
 
         # Get indices of people at different stages
-        below_peak_inds = avg_age <= self.pars['age_act_pars']['peak']
-        above_peak_inds = (avg_age > self.pars['age_act_pars']['peak']) & (
-                avg_age < self.pars['age_act_pars']['retirement'])
-        retired_inds = avg_age > self.pars['age_act_pars']['retirement']
+        below_peak_inds = avg_age <= peak
+        above_peak_inds = (avg_age > peak) & (avg_age < retire)
+        retired_inds = avg_age > retire
 
         # Set values by linearly scaling the number of acts for each partnership according to
         # the age of the couple at the commencement of the relationship

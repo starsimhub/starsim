@@ -141,6 +141,16 @@ class BasePeople(sc.prettyobj):
         for i in range(len(self)):
             yield self[i]
 
+    def __setstate__(self, state):
+        """
+        Set the state upon unpickling/deepcopying
+
+        If a People instance is copied (by any mechanism) then the keys in the `_states`
+        registry will no longer match the memory addresses of the new copied states. Therefore,
+        after copying, we need to re-create the states registry with the new object IDs
+        """
+        state['_states'] =  {id(v):v for v in state['_states'].values()}
+        self.__dict__ = state
 
 class People(BasePeople):
     """
@@ -336,12 +346,15 @@ class People(BasePeople):
         sim.results += [
             ss.Result(None, 'n_alive', sim.npts, ss.dtypes.int, scale=True),
             ss.Result(None, 'new_deaths', sim.npts, ss.dtypes.int, scale=True),
+            ss.Result(None, 'cum_deaths', sim.npts, ss.dtypes.int, scale=True),
         ]
         return
 
     def update_results(self, sim):
-        sim.results.n_alive[self.ti] = np.count_nonzero(self.alive)
-        sim.results.new_deaths[self.ti] = np.count_nonzero(self.ti_dead == self.ti)
+        res = sim.results
+        res.n_alive[self.ti] = np.count_nonzero(self.alive)
+        res.new_deaths[self.ti] = np.count_nonzero(self.ti_dead == self.ti)
+        res.cum_deaths[self.ti] = np.sum(res.new_deaths[:sim.ti])
         return
 
     def request_death(self, uids):

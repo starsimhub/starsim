@@ -54,6 +54,8 @@ class Disease(ss.Module):
             # If there's no beta, make a default one
             if 'beta' not in self.pars or self.pars.beta is None:
                 self.pars.beta = sc.objdict({k: [1, 1] for k in sim.networks})
+                msg = f'Beta not supplied for disease "{self.name}"; defaulting to 1'
+                ss.warn(msg)
 
             # If beta is a scalar, apply this bi-directionally to all networks
             if sc.isnumber(self.pars.beta):
@@ -251,6 +253,7 @@ class Infection(Disease):
         for nkey, net in sim.networks.items():
             if not len(net):
                 break
+
             nbetas = betamap[nkey]
             contacts = net.contacts
             rel_trans = (self.infectious & people.alive) * self.rel_trans
@@ -381,9 +384,10 @@ class Infection(Disease):
 
     def update_results(self, sim):
         super().update_results(sim)
-        self.results['prevalence'][sim.ti] = self.results.n_infected[sim.ti] / np.count_nonzero(sim.people.alive)
-        self.results['new_infections'][sim.ti] = np.count_nonzero(self.ti_infected == sim.ti)
-        self.results['cum_infections'][sim.ti] = np.sum(self.results['new_infections'][:sim.ti])
+        res = self.results
+        res['prevalence'][sim.ti] = res.n_infected[sim.ti] / np.count_nonzero(sim.people.alive)
+        res['new_infections'][sim.ti] = np.count_nonzero(self.ti_infected == sim.ti)
+        res['cum_infections'][sim.ti] = np.sum(res['new_infections'][:sim.ti])
 
 
 class InfectionLog(nx.MultiDiGraph):

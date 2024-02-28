@@ -7,7 +7,7 @@ from .states        import *
 from .random        import *
 from .people        import *
 from .modules       import *
-from .networks      import *
+from .network       import *
 from .results       import *
 from .demographics  import *
 from .products      import *
@@ -18,6 +18,7 @@ from .disease       import *
 from .diseases      import *
 from .sim           import *
 from .run           import *
+from .samples       import *
 
 import sciris as sc
 root = sc.thispath(__file__).parent

@@ -9,6 +9,30 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :depth: 1
 
 
+Version 0.2.4 (2024-02-27)
+--------------------------
+- Improve ``sim.summarize()``
+- Improve ``sim.plot()``
+- Improve SIR model defaults
+- *GitHub info*: PR `320 <https://github.com/amath-idm/stisim/pull/320>`_
+
+
+Version 0.2.3 (2024-02-26)
+--------------------------
+- Removes ``STI`` class
+- Changes default death rate from units of per person to per thousand people
+- Allows ``ss.Sim(demographics=True)`` to enable births and deaths
+- Fix pickling of ``State`` objects
+- Rename ``networks.py`` to ``network.py``, and fix HIV mortality
+- *GitHub info*: PRs `305 <https://github.com/amath-idm/stisim/pull/305>`_, `308 <https://github.com/amath-idm/stisim/pull/308>`_, `317 <https://github.com/amath-idm/stisim/pull/317>`_
+
+
+Version 0.2.2 (2024-02-26)
+--------------------------
+- Add the ``Samples`` class
+- *GitHub info*: PR `311 <https://github.com/amath-idm/stisim/pull/311>`_
+
+
 Version 0.2.1 (2024-02-22)
 --------------------------
 - Only remove dead agents on certain timesteps

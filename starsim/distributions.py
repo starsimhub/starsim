@@ -21,7 +21,7 @@ __all__ += ['bernoulli', 'expon', 'lognorm', 'norm', 'poisson', 'randint', 'rv_d
 
 class ScipyDistribution():
     def __init__(self, gen, rng=None):
-        self.gen = None
+        self._gen = gen
         class starsim_gen(type(gen.dist)):
             def __init__(self, *args, **kwargs):
                 super().__init__(*args, **kwargs)
@@ -198,16 +198,19 @@ class ScipyDistribution():
         for k, v in self.__dict__.items():
             setattr(result, k, deepcopy(v, memo))
         return result
+
+    def __getstate__(self):
+        dct = self.__dict__.copy()
+        dct.pop('gen')
+        return dct
+
+    def __setstate__(self, state):
+        self.__init__(state['_gen'], state['rng'])
+        return
     
     def __getattr__(self, attr):
         # Returns wrapped generator.(attr) if not a property
-        if attr == '__getstate__':
-            # Must be from pickle, return a callable function that returns None
-            return lambda: None
-        #elif attr == '__deepcopy__':
-        #    return self
-        elif attr in ['__setstate__', '__await__']:
-            # Must be from pickle, async programming, copy
+        if attr in ['__await__']:
             return None
         try:
             return self.__getattribute__(attr)

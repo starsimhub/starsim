@@ -5,6 +5,7 @@ Test simple APIs
 # %% Imports and settings
 import starsim as ss
 import sciris as sc
+import numpy as np
 
 n_agents = 1_000
 
@@ -50,8 +51,9 @@ def test_sir_epi():
     par_effects = dict(
         beta=[0.01, 0.99],
         n_contacts=[1, 20],
-        init_prev=[0.1, 0.8],
+        init_prev=[0.1, 0.9],
         dur_inf=[1, 8],
+        p_death=[.01, .1],
     )
 
     # Loop over each of the above parameters and make sure they affect the epi dynamics in the expected ways
@@ -75,8 +77,14 @@ def test_sir_epi():
         s1 = ss.Sim(pars1, label=f'{par} {par_val[1]}').run()
 
         # Check results
-        v0 = s0.results.sir.cum_infections[-1]
-        v1 = s1.results.sir.cum_infections[-1]
+        if par == 'p_death':
+            v0 = s0.results.cum_deaths[-1]
+            v1 = s1.results.cum_deaths[-1]
+        else:
+            ind = 1 if par == 'init_prev' else -1
+            v0 = s0.results.sir.cum_infections[ind]
+            v1 = s1.results.sir.cum_infections[ind]
+
         print(f'Checking with varying {par:10s} ... ', end='')
         assert v0 <= v1, f'Expected infections to be lower with {par}={lo} than with {par}={hi}, but {v0} > {v1})'
         print(f'✓ ({v0} <= {v1})')
@@ -126,10 +134,10 @@ def test_components():
 def test_parallel():
     """ Test running two identical sims in parallel """
     pars = make_sim_pars()
-    s1 = ss.Sim(pars)
-    s2 = ss.Sim(pars)
-    # s1, s2 = ss.parallel(s1, s2).sims
-    # assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
+    sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars, label='Sim2')])
+    sims.run(keep_people=True)
+    s1, s2 = sims.sims
+    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
     return s1, s2
 
 def test_strings():
