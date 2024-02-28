@@ -6,6 +6,17 @@ import starsim as ss
 __all__ = ['Dists', 'Dist', 'RNGs', 'RNG']
 
 
+def str2int(string, modulo=1e8):
+    """
+    Convert a string to an int via hashing
+    
+    Cannot use Python's built-in hash() since it's randomized for strings. While
+    hashlib is slower, this function is only used at initialization, so makes no
+    appreciable difference to runtime.
+    """
+    return int(hashlib.sha256(string.encode('utf-8')).hexdigest(), 16) % int(modulo)
+
+
 class Dists(sc.prettyobj):
     """ Class for managing a collection of Dist objects """
 
@@ -58,17 +69,6 @@ class Dists(sc.prettyobj):
         for dist in self.dists.values():
             out += dist.reset()
         return out
-
-
-def str2int(string, modulo=1e8):
-    """
-    Convert a string to an int via hashing
-    
-    Cannot use Python's built-in hash() since it's randomized for strings. While
-    hashlib is slower, this function is only used at initialization, so makes no
-    appreciable difference to runtime.
-    """
-    return int(hashlib.sha256(string.encode('utf-8')).hexdigest(), 16) % int(modulo)
 
 
 class Dist(sc.prettyobj):
@@ -126,7 +126,7 @@ class Dist(sc.prettyobj):
         Create a random number generator
         
         Args:
-            dist (str): the name of the (default) distribution to draw random numbers from
+            dist (str): the name of the (default) distribution to draw random numbers from, or a SciPy distribution
             name (str): the unique name of this distribution, e.g. "coin_flip" (in practice, usually generated automatically)
             offset (int): the seed offset; will be automatically assigned (based on hashing the name) if None
             kwargs (dict): (default) parameters of the distribution
@@ -184,6 +184,18 @@ class Dist(sc.prettyobj):
         # Create the actual RNG
         self.rng = np.random.default_rng(seed=self.seed)
         self.init_state = self.bitgen.state # Store the initial state
+        
+        # Initialize the distribution, if not a string
+        if not isinstance(self.dist, str):
+            if callable(self.dist):
+                self.dist = self.dist(**self.kwargs)
+            if hasattr(self.dist, 'random_state'):
+                self.dist.random_state = self.rng # Override the default random state with the correct one
+            else:
+                errormsg = f'Unknown distribution type {type(self.dist)}: must be string or scipy.stats distribution'
+                raise TypeError(errormsg)
+        
+        # Finalize
         self.ready = True
         self.initialized = True
         return
@@ -208,8 +220,55 @@ class Dist(sc.prettyobj):
         else:
             raise NotImplementedError("Placeholder for calling ScipyDistribution-style distributions")
         rvs = dist(**kwds)
+        if ss.options.multirng:
+            self.ready = False # Needs to reset before being called again
         return rvs
 
+
+# TODO: define custom distributions like ss.lognormal
+
+
+#%% Dist exceptions
+
+class NotInitializedException(RuntimeError):
+    "Raised when a random number generator or a RNGContainer object is called when not initialized."
+    def __init__(self, obj_name=None):
+        if obj_name is None: 
+            msg = 'An RNG is being used without proper initialization; please initialize first'
+        else:
+            msg = f'The RNG "{obj_name}" is being used prior to initialization.'
+        super().__init__(msg)
+
+class NotReadyException(RuntimeError):
+    "Raised when a random generator is called without being ready."
+    def __init__(self, rng_name):
+        msg = f'The random generator named "{rng_name}" was not ready when called. This error is likely caused by calling a distribution or underlying MultiRNG generator two or more times in a single step.'
+        super().__init__(msg)
+
+class SeedRepeatException(ValueError):
+    "Raised when two random number generators have the same seed."
+    def __init__(self, rng_name, seed_offset):
+        msg = f'Requested seed offset {seed_offset} for the random number generator named {rng_name} has already been used.'
+        super().__init__(msg)
+
+class RepeatNameException(ValueError):
+    "Raised when adding a random number generator to a RNGContainer when the rng name has already been used."
+    def __init__(self, rng_name):
+        msg = f'A random number generator with name {rng_name} has already been added.'
+        super().__init__(msg)
+
+
+
+
+
+
+
+
+
+
+
+
+#%% Archive
 
 class RNGs(sc.prettyobj):
     """
@@ -378,41 +437,4 @@ class RNG(np.random.Generator):
         # Now take ti jumps
         # jumped returns a new bit_generator, use directly instead of setting state?
         self.bit_generator.state = self.bit_generator.jumped(jumps=ti).state
-        return
-
-
-#%% RNG exceptions
-
-class NotInitializedException(Exception):
-    "Raised when a random number generator or a RNGContainer object is called when not initialized."
-    def __init__(self, obj_name=None):
-        if obj_name is None: 
-            msg = 'An RNG is being used without proper initialization; please initialize first'
-        else:
-            msg = f'The RNG "{obj_name}" is being used prior to initialization.'
-        super().__init__(msg)
-        return
-
-
-class SeedRepeatException(Exception):
-    "Raised when two random number generators have the same seed."
-    def __init__(self, rng_name, seed_offset):
-        msg = f'Requested seed offset {seed_offset} for the random number generator named {rng_name} has already been used.'
-        super().__init__(msg)
-        return
-
-
-class NotReadyException(Exception):
-    "Raised when a random generator is called without being ready."
-    def __init__(self, rng_name):
-        msg = f'The random generator named "{rng_name}" was not ready when called. This error is likely caused by calling a distribution or underlying MultiRNG generator two or more times in a single step.'
-        super().__init__(msg)
-        return
-
-
-class RepeatNameException(Exception):
-    "Raised when adding a random number generator to a RNGContainer when the rng name has already been used."
-    def __init__(self, rng_name):
-        msg = f'A random number generator with name {rng_name} has already been added.'
-        super().__init__(msg)
         return
