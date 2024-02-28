@@ -143,8 +143,9 @@ def test_parallel():
 def test_strings():
     # Supply strings as kwargs
     ppl = ss.People(n_agents=n_agents)
-    sim = ss.Sim(people=ppl, demographics=True, networks='random', diseases='sir')
+    sim = ss.Sim(people=ppl, demographics=ss.Births(), networks='randomnet', diseases='sir')
     sim.run()
+    return sim
 
     # # Supply people as a parameter
     # pars=dict(networks='random', diseases='sir', people=ppl, demographics=demographics)
@@ -154,12 +155,12 @@ def test_strings():
 if __name__ == '__main__':
     T = sc.timer()
     
-    # s1 = test_default()
-    # s2 = test_simple()
-    # s3a, s3b = test_sir_epi()
-    # s4_base, s4_intv = test_simple_vax(do_plot=True)
-    # s5 = test_components()
-    # s6a, s6b = test_parallel()
+    s1 = test_default()
+    s2 = test_simple()
+    s3a, s3b = test_sir_epi()
+    s4_base, s4_intv = test_simple_vax(do_plot=True)
+    s5 = test_components()
+    s6a, s6b = test_parallel()
     s7 = test_strings()
     
     T.toc()

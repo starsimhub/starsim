@@ -38,7 +38,6 @@ class ndict(sc.objdict):
         self.setattribute('_type', type)
         self.setattribute('_strict', strict)
         self.setattribute('_overwrite', overwrite)
-        self.setattribute('_accept_str', accept_str)
         self.extend(*args, **kwargs)
         return
 

@@ -46,23 +46,13 @@ class Sim(sc.prettyobj):
         self.pars = ss.make_pars()  # Start with default pars
         self.pars.update_pars(sc.mergedicts(pars, kwargs))  # Update the parameters
 
-        # Initialize places to store the modules, but need to validate them before adding
-        self.demographics = ss.ndict(type=ss.BaseDemographics)
-        self.diseases = ss.ndict(type=ss.Disease)
-        self.networks = ss.ndict(type=ss.Network)
-        self.connectors = ss.ndict(type=ss.Connector)
-        self.interventions = ss.ndict(type=ss.Intervention)
-        self.analyzers = ss.ndict(type=ss.Analyzer)
+        for mname in self.pars.modules.keys():
+            setattr(self, mname, self.pars[mname])
 
         # Initialize the random number generator container
         self.rng_container = ss.RNGContainer()
 
         return
-
-    def add_modules(self, module):
-        if isinstance(module, str):
-            module = {'type': module}
-        return module
 
     @property
     def dt(self):
@@ -251,7 +241,7 @@ class Sim(sc.prettyobj):
         self.people.init_results(self)
         return self
 
-    def convert_plugins(self, plugin_class, plugin_name=None):
+    def convert_modules(self, module_class, plugin_name=None):
         """
         Common logic for converting plug-ins to a standard format
         Used for networks, demographics, diseases, connectors, analyzers, and interventions
@@ -287,63 +277,48 @@ class Sim(sc.prettyobj):
         else:  # Not provided directly or in pars
             plugins = {}
 
-        # # Check that we don't have two copies
-        # for attr_key in attr_plugins.keys():
-        #     if plugins.get(attr_key):
-        #         errormsg = f'Sim was created with {attr_key} module, cannot create another through the pars dict.'
-        #         raise ValueError(errormsg)
+        return plugins
+        # # Process
+        # processed_plugins = sc.autolist()
+        # for plugin in plugins.values():
         #
-        # plugins = sc.mergedicts(plugins, attr_plugins)
+        #     if not isinstance(plugin, plugin_class):
+        #
+        #         if isinstance(plugin, dict):
+        #             ptype = (plugin.get('type') or plugin.get('name') or '').lower()
+        #             name = plugin.get('name') or ptype
+        #             if ptype in known_plugins:
+        #                 # Make an instance of the requested plugin
+        #                 plugin_pars = {k: v for k, v in plugin.items() if k not in ['type', 'name']}
+        #                 pclass = known_plugins[ptype]
+        #                 plugin = pclass(name=name, pars=plugin_pars) # TODO: does this handle par_dists, etc?
+        #             else:
+        #                 errormsg = (f'Could not convert {plugin} to an instance of class {plugin_name}.'
+        #                             f'Try specifying it directly rather than as a dictionary.')
+        #                 raise ValueError(errormsg)
+        #         else:
+        #             errormsg = (
+        #                 f'{plugin_name.capitalize()} must be provided as either class instances or dictionaries with a '
+        #                 f'"name" key corresponding to one of these known subclasses: {known_plugins}.')
+        #             raise ValueError(errormsg)
+        #
+        #     processed_plugins += plugin
 
-        # Process
-        processed_plugins = sc.autolist()
-        for plugin in plugins.values():
-
-            if not isinstance(plugin, plugin_class):
-
-                if isinstance(plugin, dict):
-                    ptype = (plugin.get('type') or plugin.get('name') or '').lower()
-                    name = plugin.get('name') or ptype
-                    if ptype in known_plugins:
-                        # Make an instance of the requested plugin
-                        plugin_pars = {k: v for k, v in plugin.items() if k not in ['type', 'name']}
-                        pclass = known_plugins[ptype]
-                        plugin = pclass(name=name, pars=plugin_pars) # TODO: does this handle par_dists, etc?
-                    else:
-                        errormsg = (f'Could not convert {plugin} to an instance of class {plugin_name}.'
-                                    f'Try specifying it directly rather than as a dictionary.')
-                        raise ValueError(errormsg)
-                else:
-                    errormsg = (
-                        f'{plugin_name.capitalize()} must be provided as either class instances or dictionaries with a '
-                        f'"name" key corresponding to one of these known subclasses: {known_plugins}.')
-                    raise ValueError(errormsg)
-
-            processed_plugins += plugin
-
-        return processed_plugins
+        # return processed_plugins
 
     def init_demographics(self):
         """ Initialize demographics """
 
-        # Demographics can be provided via sim.demographics or sim.pars - this methods reconciles them
-        if isinstance(self.pars.demographics, bool):
-            if self.pars.demographics:
-                self.pars.demographics = [ss.Births(), ss.Deaths()]
-            else:
-                self.pars.demographics = []
-        demographics = self.convert_plugins(ss.BaseDemographics, plugin_name='demographics')
-
         # We also allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
         if self.pars.birth_rate is not None:
             births = ss.Births(pars={'birth_rate': self.pars.birth_rate})
-            demographics += births
+            self.pars.demographics += births
         if self.pars.death_rate is not None:
             background_deaths = ss.Deaths(pars={'death_rate': self.pars.death_rate})
-            demographics += background_deaths
+            self.pars.demographics += background_deaths
 
         # Iterate over demographic modules and initialize them
-        for dem_mod in demographics:
+        for dem_mod in self.demographics.values():
             dem_mod.initialize(self)
             self.results[dem_mod.name] = dem_mod.results
 
@@ -351,7 +326,7 @@ class Sim(sc.prettyobj):
         demdict = {'births': ss.Births, 'pregnancy': ss.Pregnancy, 'deaths': ss.Deaths}
         mod_names = dict()
         for demname, demtype in demdict.items():
-            mod_names[demname] = [d.name for d in demographics if isinstance(d, demtype)]
+            mod_names[demname] = [d.name for d in self.demographics.values() if isinstance(d, demtype)]
 
             # Validation
             if len(mod_names[demname]) > 1:
@@ -363,17 +338,11 @@ class Sim(sc.prettyobj):
                                 f'Tip: if using demographic modules, do not use birth and death rates in the sim pars.')
                     raise ValueError(errormsg)
 
-        # Ensure they're stored at the sim level
-        self.demographics = ss.ndict(*demographics)
-
     def init_diseases(self):
         """ Initialize diseases """
 
-        # Diseases can be provided in sim.demographics or sim.pars
-        diseases = self.convert_plugins(ss.Disease, plugin_name='diseases')
-
         # Interate over diseases and initialize them
-        for disease in diseases:
+        for disease in self.diseases.values():
             disease.initialize(self)
 
             # Add the disease's parameters and results into the Sim's dicts
@@ -383,9 +352,6 @@ class Sim(sc.prettyobj):
             # Add disease states to the People's dicts
             self.people.add_module(disease)
 
-        # Store diseases in the sim
-        self.diseases = ss.ndict(*diseases)
-
         return
 
     def init_connectors(self):
@@ -394,12 +360,10 @@ class Sim(sc.prettyobj):
 
     def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
-
-        processed_networks = self.convert_plugins(ss.Network, plugin_name='networks')
-
-        # Now store the networks in a Networks object, which also allows for connectors between networks
-        if not isinstance(processed_networks, ss.Networks):
-            self.networks = ss.Networks(*processed_networks)
+        # Store the networks in a Networks object, which also allows for connectors between networks
+        # TODO, this probably isn't necessary
+        if not isinstance(self.networks, ss.Networks):
+            self.networks = ss.Networks(self.networks)
         self.networks.initialize(self)
 
         return
@@ -407,23 +371,8 @@ class Sim(sc.prettyobj):
     def init_interventions(self):
         """ Initialize and validate the interventions """
 
-        interventions = self.convert_plugins(ss.Intervention, plugin_name='interventions')
-
         # Translate the intervention specs into actual interventions
-        for i, intervention in enumerate(interventions):
-            if isinstance(intervention, type) and issubclass(intervention, ss.Intervention):
-                intervention = intervention()  # Convert from a class to an instance of a class
-            if isinstance(intervention, ss.Intervention):
-                intervention.initialize(self)
-            elif callable(intervention):
-                pass # TODO: check if this fails with a plain function (it should?)
-                # self.interventions += intervention 
-            else:
-                errormsg = f'Intervention {intervention} does not seem to be a valid intervention: must be a function or Intervention subclass'
-                raise TypeError(errormsg)
-            if intervention.name not in self.interventions:
-                self.interventions += intervention
-
+        for intervention in self.interventions.values():
             # Add the intervention parameters and results into the Sim's dicts
             self.pars[intervention.name] = intervention.pars
             self.results[intervention.name] = intervention.results
@@ -437,21 +386,10 @@ class Sim(sc.prettyobj):
 
                 self.people.add_module(intervention.product)
 
-
         return
 
     def init_analyzers(self):
         """ Initialize the analyzers """
-
-        # Interpret analyzers
-        for ai, analyzer in enumerate(self.pars.analyzers):
-            if isinstance(analyzer, type) and issubclass(analyzer, ss.Analyzer):
-                analyzer = analyzer()  # Convert from a class to an instance of a class
-            if not (isinstance(analyzer, ss.Analyzer) or callable(analyzer)):
-                errormsg = f'Analyzer {analyzer} does not seem to be a valid analyzer: must be a function or Analyzer subclass'
-                raise TypeError(errormsg)
-            self.analyzers += analyzer  # Add it in
-
         for analyzer in self.analyzers.values():
             if isinstance(analyzer, ss.Analyzer):
                 analyzer.initialize(self)

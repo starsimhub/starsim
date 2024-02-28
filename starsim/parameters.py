@@ -45,12 +45,16 @@ class Parameters(sc.objdict):
         self.verbose         = ss.options.verbose # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
 
         # Plug-ins: demographics, diseases, connectors, networks, analyzers, and interventions
-        self.demographics = ss.ndict()
-        self.diseases = ss.ndict()
-        self.networks = ss.ndict()
-        self.connectors = ss.ndict()
-        self.interventions = ss.ndict()
-        self.analyzers = ss.ndict()
+        self.modules = dict(
+            demographics=ss.BaseDemographics,
+            diseases=ss.Disease,
+            networks=ss.Network,
+            connectors=ss.Connector,
+            analyzers=ss.Analyzer,
+            interventions=ss.Intervention
+        )
+        for m,mtype in self.modules.items():
+            self[m] = ss.ndict(type=mtype)
 
         # Update with any supplied parameter values and generate things that need to be generated
         self.update(kwargs)
@@ -72,6 +76,12 @@ class Parameters(sc.objdict):
                 raise TypeError(f'The pars object must be a dict; you supplied a {type(pars)}')
 
             pars = sc.mergedicts(pars, kwargs)
+
+            # Initialize modules here??
+            for mname, mtype in self.modules.items():
+                if pars.get(mname):
+                    pars[mname] = self.init_module_pars(pars[mname], mtype)
+
             if not create:
                 available_keys = list(self.keys())
                 mismatches = [key for key in pars.keys() if key not in available_keys]
@@ -80,6 +90,64 @@ class Parameters(sc.objdict):
                     raise sc.KeyNotFoundError(errormsg)
             self.update(pars)
         return
+
+    def init_module_pars(self, mpar, mtype):
+        """ Initialize modules """
+        known_modules = {n.__name__.lower():n for n in ss.all_subclasses(mtype)}
+        processed_m = sc.autolist()
+
+        # Boolean: convert
+        # Process boolean inputs for demographics
+        if isinstance(mpar, bool):
+            if mpar:
+                mpar = [ss.Births(), ss.Deaths()]
+            else:
+                mpar = []
+
+        # String: convert to a dict
+        if isinstance(mpar, str):
+            mpar = {'type': mpar}
+
+        # Dict: check the keys and convert to a class instance
+        if isinstance(mpar, dict):
+            ptype = (mpar.get('type') or mpar.get('name') or '').lower()
+            name = mpar.get('name') or ptype
+
+            if ptype in known_modules:
+                # Make an instance of the requested module
+                module_pars = {k: v for k, v in mpar.items() if k not in ['type', 'name']}
+                pclass = known_modules[ptype]
+                module = pclass(name=name, pars=module_pars) # TODO: does this handle par_dists, etc?
+            else:
+                errormsg = (f'Could not convert {mpar} to an instance of class {mtype}.'
+                            f'Try specifying it directly rather than as a dictionary.')
+                raise ValueError(errormsg)
+            processed_m += module
+
+        # Class instance
+        elif isinstance(mpar, mtype):
+            processed_m += mpar
+
+        # Class
+        elif isinstance(mpar, type) and issubclass(mpar, mtype):
+            processed_m += mpar()  # Convert from a class to an instance of a class
+
+        # Function - only for interventions
+        elif callable(mpar) and mtype==ss.Intervention:
+            processed_m += mpar
+
+        # It's a list - iterate
+        elif isinstance(mpar, list):
+            for mpar_val in mpar:
+                processed_m += self.init_module_pars(mpar_val, mtype)
+
+        else:
+            errormsg = (
+                f'{mpar.name.capitalize()} must be provided as either class instances or dictionaries with a '
+                f'"name" key corresponding to one of these known subclasses: {known_modules}.')
+            raise ValueError(errormsg)
+
+        return ss.ndict(processed_m)
 
 
 def make_pars(**kwargs):
