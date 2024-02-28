@@ -1,5 +1,5 @@
 """
-Test Distributions from distributions.py
+Test ScipyDistribution from distributions.py
 """
 
 # %% Imports and settings
@@ -7,9 +7,9 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 import scipy.stats as sps
-from starsim.distributions import ScipyDistribution
-import pytest
 import matplotlib.pyplot as plt
+import pytest
+
 
 @pytest.fixture(params=[5, 50])
 def n(request):
@@ -23,7 +23,7 @@ def test_basic(n):
         rng = ss.RNG('Uniform')
         rng.initialize(container=None, slots=n)
         dist.random_state = rng
-    d = ScipyDistribution(dist)
+    d = ss.ScipyDistribution(dist)
 
     sample = d.rvs(1)  # Draw a sample
 
@@ -45,7 +45,7 @@ def test_uniform_scalar(n):
     rng.initialize(container=None, slots=n)
     dist = sps.uniform(loc=1, scale=4)
     dist.random_state = rng
-    d = ScipyDistribution(dist)
+    d = ss.ScipyDistribution(dist)
 
     uids = np.array([1,3])
     draws = d.rvs(uids)
@@ -59,7 +59,7 @@ def test_uniform_scalar_str(n):
     sc.heading('test_uniform: Testing uniform with scalar parameters')
 
     dist = sps.uniform(loc=1, scale=4)
-    d = ScipyDistribution(dist, 'Uniform') # String here!
+    d = ss.ScipyDistribution(dist, 'Uniform') # String here!
     if ss.options.multirng:
         d.rng.initialize(container=None, slots=n) # Only really needed for testing as initializing the distribution will do something similar.
 
@@ -81,7 +81,7 @@ def test_uniform_callable(n):
     scale = 1 # Width, could also be a lambda
     dist = sps.uniform(loc=loc, scale=scale)
 
-    d = ScipyDistribution(dist, 'Uniform')
+    d = ss.ScipyDistribution(dist, 'Uniform')
     d.initialize(sim, context=None)
 
     uids = np.array([1,3])
@@ -107,7 +107,7 @@ def test_uniform_array(n):
     dist = sps.uniform(loc=loc, scale=scale)
     dist.random_state = rng
 
-    d = ScipyDistribution(dist)
+    d = ss.ScipyDistribution(dist)
     draws = d.rvs(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
@@ -131,7 +131,7 @@ def test_repeat_slot():
     dist = sps.uniform(loc=loc, scale=scale)
     dist.random_state = rng
 
-    d = ScipyDistribution(dist)
+    d = ss.ScipyDistribution(dist)
     draws = d.rvs(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
