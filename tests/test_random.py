@@ -30,18 +30,18 @@ def test_random(rng, n=5):
     return draws
 
 
-def test_SingleRNG_using_np_singleton(rng, n=5):
-    """ Make sure the SingleRNG is using the numpy.random singleton """
-    if ss.options.multirng:
-        pytest.skip('Skipping multirng mode')
-    sc.heading('test_singleton_rng: Testing RNG object')
+# def test_SingleRNG_using_np_singleton(rng, n=5):
+#     """ Make sure the SingleRNG is using the numpy.random singleton """
+#     if ss.options.multirng:
+#         pytest.skip('Skipping multirng mode')
+#     sc.heading('test_singleton_rng: Testing RNG object')
 
-    np.random.seed(0)
-    draws_np = np.random.rand(n)
-    np.random.seed(0)
-    draws_SingleRNG = rng.random(n)
-    assert np.array_equal(draws_np, draws_SingleRNG)
-    return draws_np, draws_SingleRNG
+#     np.random.seed(0)
+#     draws_np = np.random.rand(n)
+#     np.random.seed(0)
+#     draws_SingleRNG = rng.random(n)
+#     assert np.array_equal(draws_np, draws_SingleRNG)
+#     return draws_np, draws_SingleRNG
 
 
 def test_reset(rng, n=5):
@@ -57,10 +57,8 @@ def test_reset(rng, n=5):
     draws2 = rng.random(n)
     print(f'After reset, random sample of size {n} returned {draws2}')
 
-    if isinstance(rng, ss.RNG):
-        assert np.array_equal(draws1, draws2)
-    else:
-        assert not np.array_equal(draws1, draws2)
+    assert np.array_equal(draws1, draws2)
+
     return draws1, draws2
 
 

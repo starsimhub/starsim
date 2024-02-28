@@ -6,7 +6,6 @@ Test Distributions from distributions.py
 import numpy as np
 import sciris as sc
 import starsim as ss
-from starsim.random import RNG
 import scipy.stats as sps
 from starsim.distributions import ScipyDistribution
 import pytest
@@ -21,7 +20,7 @@ def n(request):
 def test_basic(n):
     dist = sps.norm(loc=1, scale=1) # Make a distribution
     if ss.options.multirng:
-        rng = ss.MultiRNG('Uniform')
+        rng = ss.RNG('Uniform')
         rng.initialize(container=None, slots=n)
         dist.random_state = rng
     d = ScipyDistribution(dist)
@@ -42,7 +41,7 @@ def test_uniform_scalar(n):
     """ Create a uniform distribution """
     sc.heading('test_uniform: Testing uniform with scalar parameters')
 
-    rng = ss.MultiRNG('Uniform')
+    rng = ss.RNG('Uniform')
     rng.initialize(container=None, slots=n)
     dist = sps.uniform(loc=1, scale=4)
     dist.random_state = rng
@@ -98,7 +97,7 @@ def test_uniform_array(n):
     """ Create a uniform distribution """
     sc.heading('test_uniform: Testing uniform with a array parameters')
 
-    rng = ss.MultiRNG('Uniform')
+    rng = ss.RNG('Uniform')
     rng.initialize(container=None, slots=n)
 
     uids = np.array([1, 3])
@@ -120,7 +119,7 @@ def test_repeat_slot():
     """ Test behavior of repeated slots """
     sc.heading('test_repeat_slot: Test behavior of repeated slots')
 
-    rng = ss.MultiRNG('Uniform')
+    rng = ss.RNG('Uniform')
     slots = np.array([4,2,3,2,2,3])
     n = len(slots)
     rng.initialize(container=None, slots=slots)
@@ -155,7 +154,6 @@ if __name__ == '__main__':
     # Start timing
     ###T = sc.tic()
 
-    n = 5
     nTrials = 3
 
     for multirng in [True, False]:

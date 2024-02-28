@@ -1,5 +1,5 @@
 """
-Test the RNGContainer object from random.py
+Test the RNGs object from random.py
 """
 
 # %% Imports and settings
@@ -7,7 +7,6 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 from starsim.random import NotInitializedException, SeedRepeatException, RepeatNameException
-from starsim.random import SingleRNG, MultiRNG
 import scipy.stats as sps
 import pytest
 
@@ -16,7 +15,7 @@ import pytest
 
 @pytest.fixture
 def rng_container():
-    rng_container = ss.RNGContainer()
+    rng_container = ss.RNGs()
     rng_container.initialize(base_seed=10)
     return rng_container
 
@@ -36,7 +35,7 @@ def dists():
 
 def test_rng(rng_container, rngs, n=5):
     """ Simple sample from rng """
-    sc.heading('test_container: Testing RNGContainer object')
+    sc.heading('test_container: Testing RNGs object')
 
     rng0 = rngs[0]
     rng0.initialize(rng_container, slots=n)
@@ -50,10 +49,10 @@ def test_rng(rng_container, rngs, n=5):
 
 def test_dists(rng_container, dists, n=5):
     """ Simple sample from distribution """
-    sc.heading('test_container: Testing RNGContainer object')
+    sc.heading('test_container: Testing RNGs object')
 
     d0 = dists[0]
-    if isinstance(d0.rng, (SingleRNG, MultiRNG)):
+    if isinstance(d0.rng, ss.RNG):
         d0.rng.initialize(rng_container, slots=n)
 
     uids = np.arange(0,n,2) # every other to make it interesting
@@ -129,7 +128,7 @@ def test_step(rng_container, dists, n=5):
 def test_initialize(rngs, n=5):
     """ Sample without initializing, should raise exception """
     sc.heading('test_initialize: Testing without initializing, should raise exception.')
-    rng_container = ss.RNGContainer()
+    rng_container = ss.RNGs()
     #rng_container.initialize(base_seed=3) # Do not initialize
 
     with pytest.raises(NotInitializedException):
@@ -141,11 +140,11 @@ def test_seedrepeat(rng_container, n=5):
     """ Two random number generators with the same seed, should raise exception """
     sc.heading('test_seedrepeat: Testing two random number generators with the same seed, should raise exception.')
 
-    rng0 = ss.MultiRNG('rng0', seed_offset=0)
+    rng0 = ss.RNG('rng0', seed_offset=0)
     rng0.initialize(rng_container, slots=n)
 
     with pytest.raises(SeedRepeatException):
-        rng1 = ss.MultiRNG('rng1', seed_offset=0)
+        rng1 = ss.RNG('rng1', seed_offset=0)
         rng1.initialize(rng_container, slots=n)
     return rng0, rng1
 
