@@ -24,7 +24,7 @@ class Parameters(sc.objdict):
 
         # Population parameters
         self.n_agents        = 10e3  # Number of agents
-        self.total_pop       = 10e3  # If defined, used for calculating the scale factor
+        self.total_pop       = None  # If defined, used for calculating the scale factor
         self.pop_scale       = None  # How much to scale the population
         self.remove_dead     = 10    # How many timesteps to go between removing dead agents (0 to not remove)
 
@@ -34,10 +34,10 @@ class Parameters(sc.objdict):
         self.death_rate = None
 
         # Simulation parameters
-        self.start           = 1995.         # Start of the simulation
+        self.start           = 2000          # Start of the simulation
         self.end             = None          # End of the simulation
-        self.n_years         = 35            # Number of years to run, if end isn't specified. Note that this includes burn-in
-        self.burnin          = 25            # Number of years of burnin. NB, this is doesn't affect the start and end dates of the simulation, but it is possible remove these years from plots
+        self.n_years         = 49            # Number of years to run, if end isn't specified. Note that this includes burn-in
+        self.burnin          = 0             # Number of years of burnin. NB, this is doesn't affect the start and end dates of the simulation, but it is possible remove these years from plots
         self.dt              = 1.0           # Timestep (in years)
         self.dt_demog        = 1.0           # Timestep for demographic updates (in years)
         self.rand_seed       = 1             # Random seed, if None, don't reset
@@ -47,7 +47,7 @@ class Parameters(sc.objdict):
         # Plug-ins: demographics, diseases, connectors, networks, analyzers, and interventions
         self.demographics = ss.ndict()
         self.diseases = ss.ndict()
-        self.networks        = ss.ndict()
+        self.networks = ss.ndict()
         self.connectors = ss.ndict()
         self.interventions = ss.ndict()
         self.analyzers = ss.ndict()

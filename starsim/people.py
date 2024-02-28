@@ -346,12 +346,15 @@ class People(BasePeople):
         sim.results += [
             ss.Result(None, 'n_alive', sim.npts, ss.dtypes.int, scale=True),
             ss.Result(None, 'new_deaths', sim.npts, ss.dtypes.int, scale=True),
+            ss.Result(None, 'cum_deaths', sim.npts, ss.dtypes.int, scale=True),
         ]
         return
 
     def update_results(self, sim):
-        sim.results.n_alive[self.ti] = np.count_nonzero(self.alive)
-        sim.results.new_deaths[self.ti] = np.count_nonzero(self.ti_dead == self.ti)
+        res = sim.results
+        res.n_alive[self.ti] = np.count_nonzero(self.alive)
+        res.new_deaths[self.ti] = np.count_nonzero(self.ti_dead == self.ti)
+        res.cum_deaths[self.ti] = np.sum(res.new_deaths[:sim.ti])
         return
 
     def request_death(self, uids):
