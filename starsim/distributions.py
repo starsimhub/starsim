@@ -7,7 +7,7 @@ Distribution support extending scipy with two key functionalities:
 from copy import deepcopy
 import numpy as np
 import starsim as ss
-from starsim.random import SingleRNG, MultiRNG
+# from starsim.random import SingleRNG, MultiRNG
 from starsim import options
 from scipy.stats import (bernoulli, expon, lognorm, norm, poisson, randint, rv_discrete, 
                          uniform, rv_histogram, weibull_min)
@@ -65,7 +65,7 @@ class ScipyDistribution():
                             slots = self.random_state.slots[v].__array__()
                             max_slot = slots.max()
                         except AttributeError as e:
-                            if not isinstance(self.random_state, MultiRNG):
+                            if not isinstance(self.random_state, ss.RNG):
                                 raise Exception('With options.multirng and passing agent UIDs to a distribution, the random_state of the distribution must be a MultiRNG.')
                             else:
                                 if not self.random_state.initialized:
@@ -182,7 +182,7 @@ class ScipyDistribution():
             # MultiRNG, rng not none, and the current "random_state" is the
             # numpy global singleton... so let's override
             if isinstance(rng, str):
-                ret = MultiRNG(rng) # Crate a new generator with the user-provided string
+                ret = ss.RNG(rng) # Crate a new generator with the user-provided string
             elif isinstance(rng, np.random.Generator):
                 ret = rng
             else:
@@ -192,8 +192,8 @@ class ScipyDistribution():
     def initialize(self, sim, context):
         # Passing sim and context here allow callables to receive "self" and sim pointers
         self.gen.dist.initialize(sim, context)
-        if isinstance(self.rng, (SingleRNG, MultiRNG)):
-            self.rng.initialize(sim.rng_container, sim.people.slot)
+        if isinstance(self.rng, ss.RNG):
+            self.rng.initialize(sim.rngs, sim.people.slot)
         return
 
     def __copy__(self):
@@ -245,8 +245,8 @@ class ScipyHistogram(rv_histogram):
     def initialize(self, sim, context):
         # Note: context not used here, but maintained for consistency with ScipyDistribution
         # Passing sim and context here allow callables to receive "self" and sim pointers
-        if isinstance(self.random_state, (SingleRNG, MultiRNG)):
-            self.random_state.initialize(sim.rng_container, sim.people.slot)
+        if isinstance(self.random_state, ss.RNG):
+            self.random_state.initialize(sim.rngs, sim.people.slot)
         return
 
     def set_rng(self, rng):
@@ -256,7 +256,7 @@ class ScipyHistogram(rv_histogram):
             # MultiRNG, rng not none, and the current "random_state" is the
             # numpy global singleton... so let's override
             if isinstance(rng, str):
-                ret = MultiRNG(rng) # Crate a new generator with the user-provided string
+                ret = ss.RNG(rng) # Crate a new generator with the user-provided string
             elif isinstance(rng, np.random.Generator):
                 ret = rng
             else:
@@ -293,7 +293,7 @@ class ScipyHistogram(rv_histogram):
                     slots = self.random_state.slots[v].__array__()
                     max_slot = slots.max()
                 except AttributeError as e:
-                    if not isinstance(self.random_state, MultiRNG):
+                    if not isinstance(self.random_state, ss.RNG):
                         raise Exception('With options.multirng and passing agent UIDs to a distribution, the random_state of the distribution must be a MultiRNG.')
                     else:
                         if not self.random_state.initialized:
