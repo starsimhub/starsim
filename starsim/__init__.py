@@ -7,7 +7,7 @@ from .states        import *
 from .random        import *
 from .people        import *
 from .modules       import *
-from .networks      import *
+from .network       import *
 from .results       import *
 from .demographics  import *
 from .products      import *

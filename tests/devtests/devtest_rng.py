@@ -5,6 +5,7 @@ Exploring singlerng vs multirng for a model HIV system sweeping coverage of ART.
 # %% Imports and settings
 import os
 import starsim as ss
+import scipy.stats as sps
 import sciris as sc
 import pandas as pd
 import seaborn as sns
@@ -28,21 +29,24 @@ def run_sim(n, idx, intv_cov, rand_seed, multirng):
 
     ppl = ss.People(n)
 
-    ppl.networks = ss.ndict( ss.embedding(), ss.maternal())
+    en_pars = dict(duration=sps.weibull_min(c=1.5, scale=3)) # c is shape, gives a mean of about 0.9*scale years.
+    networks = ss.ndict(ss.EmbeddingNet(en_pars), ss.MaternalNet())
 
     hiv_pars = {
-        'beta': {'embedding': [0.2, 0.15], 'maternal': [0.3, 0]},
-        'init_prev': np.maximum(10/n, 0.01),
+        'beta': {'embedding': [0.08, 0.06], 'maternal': [0.3, 0]},
+        'init_prev': np.maximum(5/n, 0.01),
         'art_efficacy': 0.96,
+        'death_prob': 0.06,
     }
     hiv = ss.HIV(hiv_pars)
 
-    pregnancy = ss.Pregnancy()
-    deaths = ss.background_deaths()
+    pregnancy = ss.Pregnancy(pars={'fertility_rate': 10})
+    deaths = ss.Deaths()
 
     pars = {
         'start': 1980,
         'end': 2070,
+        'dt': 0.1,
         'rand_seed': rand_seed,
         'verbose': 0,
         'remove_dead': True,
@@ -50,14 +54,14 @@ def run_sim(n, idx, intv_cov, rand_seed, multirng):
     }
 
     if intv_cov > 0:
-        pars['interventions'] = [ ss.hiv.ART(t=[0, 10, 20], coverage=[0, intv_cov/3, intv_cov]) ]
+        pars['interventions'] = [ ss.hiv.ART(year=[2004, 2020], coverage=[0, intv_cov]) ]
 
-    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[pregnancy, deaths], pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}')
+    sim = ss.Sim(people=ppl, networks=networks, diseases=[hiv], demographics=[pregnancy, deaths], pars=pars, label=f'Sim with {n} agents and intv_cov={intv_cov}')
     sim.initialize()
     sim.run()
 
     df = pd.DataFrame( {
-        'ti': sim.tivec,
+        'year': sim.yearvec,
         #'hiv.n_infected': sim.results.hiv.n_infected, # Optional, but mostly redundant with prevalence
         'hiv.prevalence': sim.results.hiv.prevalence,
         'hiv.cum_deaths': sim.results.hiv.new_deaths.cumsum(),
@@ -91,20 +95,20 @@ def run_scenarios():
     return df
 
 def plot_scenarios(df):
-    d = pd.melt(df, id_vars=['ti', 'rand_seed', 'intv_cov', 'multirng'], var_name='channel', value_name='Value')
+    d = pd.melt(df, id_vars=['year', 'rand_seed', 'intv_cov', 'multirng'], var_name='channel', value_name='Value')
     d['baseline'] = d['intv_cov']==0
     bl = d.loc[d['baseline']]
     scn = d.loc[~d['baseline']]
-    bl = bl.set_index(['ti', 'channel', 'rand_seed', 'intv_cov', 'multirng'])[['Value']].reset_index('intv_cov')
-    scn = scn.set_index(['ti', 'channel', 'rand_seed', 'intv_cov', 'multirng'])[['Value']].reset_index('intv_cov')
-    mrg = scn.merge(bl, on=['ti', 'channel', 'rand_seed', 'multirng'], suffixes=('', '_ref'))
+    bl = bl.set_index(['year', 'channel', 'rand_seed', 'intv_cov', 'multirng'])[['Value']].reset_index('intv_cov')
+    scn = scn.set_index(['year', 'channel', 'rand_seed', 'intv_cov', 'multirng'])[['Value']].reset_index('intv_cov')
+    mrg = scn.merge(bl, on=['year', 'channel', 'rand_seed', 'multirng'], suffixes=('', '_ref'))
     mrg['Value - Reference'] = mrg['Value'] - mrg['Value_ref']
     mrg = mrg.sort_index()
 
     fkw = {'sharey': False, 'sharex': 'col', 'margin_titles': True}
 
     ## TIMESERIES
-    g = sns.relplot(kind='line', data=d, x='ti', y='Value', hue='intv_cov', col='channel', row='multirng',
+    g = sns.relplot(kind='line', data=d, x='year', y='Value', hue='intv_cov', col='channel', row='multirng',
         height=5, aspect=1.2, palette='Set1', errorbar='sd', lw=2, facet_kws=fkw)
     g.set_titles(col_template='{col_name}', row_template='multirng: {row_name}')
     g.set_xlabels(r'$t_i$')
@@ -112,21 +116,21 @@ def plot_scenarios(df):
 
     ## DIFF TIMESERIES
     for ms, mrg_by_ms in mrg.groupby('multirng'):
-        g = sns.relplot(kind='line', data=mrg_by_ms, x='ti', y='Value - Reference', hue='intv_cov', col='channel', row='intv_cov',
+        g = sns.relplot(kind='line', data=mrg_by_ms, x='year', y='Value - Reference', hue='intv_cov', col='channel', row='intv_cov',
             height=3, aspect=1.0, palette='Set1', estimator=None, units='rand_seed', lw=0.5, facet_kws=fkw) #errorbar='sd', lw=2, 
         g.set_titles(col_template='{col_name}', row_template='Coverage: {row_name}')
         g.fig.suptitle('MultiRNG' if ms else 'SingleRNG')
         g.fig.subplots_adjust(top=0.88)
-        g.set_xlabels(r'Timestep $t_i$')
+        g.set_xlabels('Year')
         g.fig.savefig(os.path.join(figdir, 'diff_multi.png' if ms else 'diff_single.png'), bbox_inches='tight', dpi=300)
 
     ## FINAL TIME
-    tf = df['ti'].max()
+    tf = df['year'].max()
     mtf = mrg.loc[tf]
     g = sns.displot(data=mtf.reset_index(), kind='kde', fill=True, rug=True, cut=0, hue='intv_cov', x='Value - Reference', col='channel', row='multirng',
         height=5, aspect=1.2, facet_kws=fkw, palette='Set1')
     g.set_titles(col_template='{col_name}', row_template='multirng: {row_name}')
-    g.set_xlabels(f'Value - Reference at $t_i={{{tf}}}$')
+    g.set_xlabels(f'Value - Reference at year {tf}')
     g.fig.savefig(os.path.join(figdir, 'final.png'), bbox_inches='tight', dpi=300)
 
     print('Figures saved to:', os.path.join(os.getcwd(), figdir))

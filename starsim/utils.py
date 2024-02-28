@@ -33,6 +33,7 @@ class ndict(sc.objdict):
     """
 
     def __init__(self, *args, nameattr='name', type=None, strict=True, overwrite=False, **kwargs):
+        super().__init__()
         self.setattribute('_nameattr', nameattr)  # Since otherwise treated as keys
         self.setattribute('_type', type)
         self.setattribute('_strict', strict)

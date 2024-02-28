@@ -19,5 +19,5 @@ Developer tutorials
 .. toctree::
     :maxdepth: 1
 
-    tutorials/tut_dev_diseases.ipynb
+    tutorials/dev_tut_diseases.ipynb
     
