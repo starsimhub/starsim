@@ -5,7 +5,7 @@ General module class -- base class for diseases, interventions, etc.
 import sciris as sc
 import starsim as ss
 from scipy.stats._distn_infrastructure import rv_frozen
-from inspect import signature, _empty
+import inspect
 import numpy as np
 
 __all__ = ['Module']
@@ -13,6 +13,7 @@ __all__ = ['Module']
 class Module(sc.prettyobj):
 
     def __init__(self, pars=None, par_dists=None, name=None, label=None, requires=None, **kwargs):
+        self._store_args() # Store the input arguments so the module can be recreated
         self.pars = ss.omerge(pars, kwargs)
         self.par_dists = ss.omerge(par_dists)
         self.name = name if name else self.__class__.__name__.lower() # Default name is the class name
@@ -70,7 +71,7 @@ class Module(sc.prettyobj):
 
             # Otherwise, figure out the required arguments and assume the user is trying to set them
             else:
-                rqrd_args = [x for x, p in signature(par_dist._parse_args).parameters.items() if p.default == _empty]
+                rqrd_args = [x for x, p in inspect.signature(par_dist._parse_args).parameters.items() if p.default == inspect._empty]
                 if len(rqrd_args) != 0:
                     par_dist_arg = rqrd_args[0]
                 else:
@@ -167,3 +168,43 @@ class Module(sc.prettyobj):
                 return subcls(*args, **kwargs)
         else:
             raise KeyError(f'Module "{name}" did not match any known Starsim Modules')
+
+    def _store_args(self):
+        """
+        Store user-supplied arguments for later use in to_json
+        """
+        f0 = inspect.currentframe()
+        f1 = inspect.getouterframes(f0)
+        if self.__class__.__init__ is Module.__init__:
+            parent = f1[1].frame
+        else:
+            parent = f1[2].frame
+        _,_,_,values = inspect.getargvalues(parent) # Get the values of the arguments
+        if values:
+            self.input_args = {}
+            for key,value in values.items():
+                if key == 'kwargs': # Store additional kwargs directly
+                    for k2,v2 in value.items(): # pragma: no cover
+                        self.input_args[k2] = v2 # These are already a dict
+                elif key not in ['self', '__class__']: # Everything else, but skip these
+                    self.input_args[key] = value
+        return
+
+    def to_json(self):
+        '''
+        Return JSON-compatible representation
+
+        Custom classes can't be directly represented in JSON. This method is a
+        one-way export to produce a JSON-compatible representation of the
+        intervention. In the first instance, the object dict will be returned.
+        However, if an intervention itself contains non-standard variables as
+        attributes, then its ``to_json`` method will need to handle those.
+
+        Returns:
+            JSON-serializable representation (typically a dict, but could be anything else)
+        '''
+        which = self.__class__.__name__
+        pars = sc.jsonify(self.input_args)
+        output = dict(which=which, pars=pars)
+        return output
+

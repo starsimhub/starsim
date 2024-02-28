@@ -145,6 +145,8 @@ def test_inputs():
     ppl = ss.People(n_agents=n_agents)
     sim = ss.Sim(people=ppl, demographics=ss.Births(), networks='randomnet', diseases='sir')
     sim.run()
+
+    ppl = ss.People(n_agents=n_agents)
     pars=dict(networks='randomnet', diseases='sir', people=ppl, demographics=False)
     sim = ss.Sim(pars)
     sim.run()
@@ -160,6 +162,6 @@ if __name__ == '__main__':
     s4_base, s4_intv = test_simple_vax(do_plot=True)
     s5 = test_components()
     s6a, s6b = test_parallel()
-    s7 = test_strings()
+    s7 = test_inputs()
     
     T.toc()

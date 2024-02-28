@@ -41,12 +41,24 @@ class Sim(sc.prettyobj):
         self.tivec = None
         self.npts = None
 
-        # Make default parameters (using values from parameters.py)
-        self.pars = ss.make_pars()  # Start with default pars
-        self.pars.update_pars(sc.mergedicts(pars, kwargs))  # Update the parameters
+        # Define accepted types of module
+        self.module_types = dict(
+            demographics=ss.BaseDemographics,
+            diseases=ss.Disease,
+            networks=ss.Network,
+            connectors=ss.Connector,
+            analyzers=ss.Analyzer,
+            interventions=ss.Intervention
+        )
 
-        # Set modules
-        for mname in self.pars.modules.keys():
+        self.module_keys = list(self.module_types.keys())
+
+        # Make default parameters (using values from parameters.py)
+        module_kwargs = {k:ss.ndict(type=v) for k, v in self.module_types.items()}
+        self.pars = ss.make_pars(**module_kwargs)
+        self.pars.update_pars(sc.mergedicts(pars, kwargs), module_types=self.module_types)  # Update the parameters
+
+        for mname in self.module_keys:
             setattr(self, mname, self.pars[mname])
 
         # Set people
@@ -747,13 +759,14 @@ class Sim(sc.prettyobj):
             pardict (dict): a dictionary containing all the parameter values
         '''
         pardict = {}
+
         for key in self.pars.keys():
-            if key == 'interventions':
-                pardict[key] = [intervention.to_json() for intervention in self.pars[key]]
-            elif key == 'start_day':
-                pardict[key] = str(self.pars[key])
-            else:
-                pardict[key] = self.pars[key]
+            if key not in ['people']:
+                if key in self.module_keys:
+                    pardict[key] = [module.to_json() for module in self.pars[key].values()]
+                else:
+                    pardict[key] = self.pars[key]
+
         if filename is not None:
             sc.savejson(filename=filename, obj=pardict, indent=indent, *args, **kwargs)
         return pardict

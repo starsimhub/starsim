@@ -45,18 +45,6 @@ class Parameters(sc.objdict):
         self.slot_scale      = 5             # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents. Choosing a larger value here will reduce the probability of two agents using the same slot (and hence random draws), but increase the number of random numbers that are required.
         self.verbose         = ss.options.verbose # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
 
-        # Plug-ins: demographics, diseases, connectors, networks, analyzers, and interventions
-        self.modules = dict(
-            demographics=ss.BaseDemographics,
-            diseases=ss.Disease,
-            networks=ss.Network,
-            connectors=ss.Connector,
-            analyzers=ss.Analyzer,
-            interventions=ss.Intervention
-        )
-        for m,mtype in self.modules.items():
-            self[m] = ss.ndict(type=mtype)
-
         # Update with any supplied parameter values and generate things that need to be generated
         self.update(kwargs)
 
@@ -65,12 +53,13 @@ class Parameters(sc.objdict):
 
         return
 
-    def update_pars(self, pars=None, create=False, **kwargs):
+    def update_pars(self, pars=None, create=False, module_types=None, **kwargs):
         """
         Update internal dict with new pars.
         Args:
             pars (dict): the parameters to update (if None, do nothing)
             create (bool): if create is False, then raise a KeyNotFoundError if the key does not already exist
+            module_types (dict): types of parameters to convert to modules
         """
         if pars is not None:
             if not isinstance(pars, dict):
@@ -79,7 +68,7 @@ class Parameters(sc.objdict):
             pars = sc.mergedicts(pars, kwargs)
 
             # Initialize modules here??
-            for mname, mtype in self.modules.items():
+            for mname, mtype in module_types.items():
                 if mname in pars.keys():
                     pars[mname] = self.init_module_pars(pars[mname], mtype)
 
@@ -110,6 +99,11 @@ class Parameters(sc.objdict):
 
         # Dict: check the keys and convert to a class instance
         if isinstance(mpar, dict):
+
+            # It might be an already-converted ndict
+            if all([isinstance(v, mtype) for v in mpar.values()]):
+                return mpar
+
             ptype = (mpar.get('type') or mpar.get('name') or '').lower()
             name = mpar.get('name') or ptype
 
