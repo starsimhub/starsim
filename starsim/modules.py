@@ -80,16 +80,21 @@ class Module(sc.prettyobj):
         # Initialize distributions in pars
         for key, value in self.pars.items():
             if isinstance(value, rv_frozen):
-                self.pars[key] = ss.ScipyDistribution(value, f'{self.name}_{self.label}_{key}')
-                self.pars[key].initialize(sim, self)
+                print('PAR', key)
+                self.pars[key] = ss.Dist(value, f'{self.name}_{self.label}_{key}')
+            
+            elif isinstance(value, ss.Dist):
+                self.pars[key].initialize(sim)
 
         for key, value in self.__dict__.items():
             if isinstance(value, rv_frozen):
-                setattr(self, key, ss.ScipyDistribution(value, f'{self.name}_{self.label}_{key}'))
-                getattr(self, key).initialize(sim, self)
+                print('ATTR', key)
+                setattr(self, key, ss.Dist(value, f'{self.name}_{self.label}_{key}'))
+                getattr(self, key).initialize(sim)
 
-            if isinstance(value, ss.RNG):
-                value.initialize(sim.rngs, sim.people.slot)
+            elif isinstance(value, ss.Dist):
+                print('DIST YAYY', key)
+                value.initialize(sim)
 
         # Connect the states to the sim
         # Will use random numbers, so do after distribution initialization

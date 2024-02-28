@@ -9,6 +9,8 @@ import numpy as np
 
 n_agents = 1_000
 
+ss.options(multirng=False)
+
 
 def test_default():
     """ Create, run, and plot a sim with default settings """

@@ -165,9 +165,12 @@ class Dist(sc.prettyobj):
             return self.rng.bit_generator
         except:
             return None
-
-    def initialize(self, container, slots):
+        
+    def initialize(self, sim):
         """ Calculate the starting seed and create the RNG """
+        
+        container = sim.dists
+        slots = sim.people.slots
         
         # Set the seed, usually from within a container
         if container is not None:

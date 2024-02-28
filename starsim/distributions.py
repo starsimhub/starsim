@@ -193,7 +193,7 @@ class ScipyDistribution():
         # Passing sim and context here allow callables to receive "self" and sim pointers
         self.gen.dist.initialize(sim, context)
         if isinstance(self.rng, ss.RNG):
-            self.rng.initialize(sim.rngs, sim.people.slot)
+            self.rng.initialize(sim.dists, sim.people.slot)
         return
 
     def __copy__(self):

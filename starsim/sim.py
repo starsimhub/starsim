@@ -58,7 +58,7 @@ class Sim(sc.prettyobj):
         self.analyzers = ss.ndict(analyzers, type=ss.Analyzer)
 
         # Initialize the random number generator container
-        self.rngs = ss.RNGs()
+        self.dists = ss.Dists()
 
         return
 
@@ -104,7 +104,7 @@ class Sim(sc.prettyobj):
         set_numba_seed(self.pars.rand_seed)
 
         # Initialize the core sim components
-        self.rngs.initialize(self.pars.rand_seed + 2)  # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rngs
+        self.dists.initialize(self.pars.rand_seed + 2)  # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rngs
         self.init_people(reset=reset, **kwargs)  # Create all the people (the heaviest step)
 
         # Initialize plug-ins
@@ -470,7 +470,7 @@ class Sim(sc.prettyobj):
             raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
 
         # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
-        self.rngs.step(self.ti + 1)  # +1 offset because ti=0 is used on initialization
+        self.dists.step(self.ti + 1)  # +1 offset because ti=0 is used on initialization
 
         # Clean up dead agents, if removing agents is enabled
         if self.pars.remove_dead and (self.ti % self.pars.remove_dead == 0):
