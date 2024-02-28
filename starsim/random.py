@@ -138,7 +138,7 @@ class Dist(sc.prettyobj):
         """
         self.dist = dist
         self.name = name
-        self.kwargs = kwargs
+        self.kwds = kwargs
 
         # Get the offset
         if offset is None: # Obtain the seed offset by hashing the class name
@@ -166,11 +166,12 @@ class Dist(sc.prettyobj):
         except:
             return None
         
-    def initialize(self, sim):
+    def initialize(self, sim=None, container=None, slots=None):
         """ Calculate the starting seed and create the RNG """
         
-        container = sim.dists
-        slots = sim.people.slots
+        if sim: # TODO: can probably remove
+            container = sim.dists
+            slots = sim.people.slot
         
         # Set the seed, usually from within a container
         if container is not None:
@@ -191,7 +192,7 @@ class Dist(sc.prettyobj):
         # Initialize the distribution, if not a string
         if not isinstance(self.dist, str):
             if callable(self.dist):
-                self.dist = self.dist(**self.kwargs)
+                self.dist = self.dist(**self.kwds)
             if hasattr(self.dist, 'random_state'):
                 self.dist.random_state = self.rng # Override the default random state with the correct one
             else:
@@ -217,7 +218,7 @@ class Dist(sc.prettyobj):
     
     def rvs(self, size=1, **kwargs):
         """ Main method for getting random numbers """
-        kwds = sc.mergedicts(dict(size=size), self.kwargs, kwargs)
+        kwds = sc.mergedicts(dict(size=size), self.kwds, kwargs)
         if isinstance(self.dist, str):
             dist = getattr(self.rng, self.dist)
             rvs = dist(**kwds)

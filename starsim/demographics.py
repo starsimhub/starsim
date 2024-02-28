@@ -143,10 +143,11 @@ class Deaths(BaseDemographics):
             rel_death = 1,
             death_rate = 20,  # Default = a fixed rate of 2%/year, overwritten if data provided
             units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
+            death_dist = 1, # TODO: fix
         )
 
         self.par_dists = ss.omergeleft(par_dists,
-            death_rate = ss.bernoulli
+            death_dist = ss.uniform
         )
 
         # Process metadata. Defaults here are the labels used by UN data
@@ -162,26 +163,25 @@ class Deaths(BaseDemographics):
 
         return
 
-    @staticmethod
-    def make_death_prob_fn(module, sim, uids):
+    def make_death_prob_fn(self, sim, uids):
         """ Take in the module, sim, and uids, and return the probability of death for each UID on this timestep """
 
-        if sc.isnumber(module.death_rate_data):
-            death_rate = module.death_rate_data
+        if sc.isnumber(self.death_rate_data):
+            death_rate = self.death_rate_data
 
         else:
-            data_cols = sc.objdict(module.metadata.data_cols)
+            data_cols = sc.objdict(self.metadata.data_cols)
             year_label = data_cols.year
             age_label  = data_cols.age
             sex_label  = data_cols.sex
             val_label  = data_cols.value
-            sex_keys = module.metadata.sex_keys
+            sex_keys = self.metadata.sex_keys
 
-            available_years = module.death_rate_data[year_label].unique()
+            available_years = self.death_rate_data[year_label].unique()
             year_ind = sc.findnearest(available_years, sim.year)
             nearest_year = available_years[year_ind]
 
-            df = module.death_rate_data.loc[module.death_rate_data[year_label] == nearest_year]
+            df = self.death_rate_data.loc[self.death_rate_data[year_label] == nearest_year]
             age_bins = df[age_label].unique()
             age_inds = np.digitize(sim.people.age[uids], age_bins) - 1
 
@@ -197,7 +197,7 @@ class Deaths(BaseDemographics):
             death_rate = death_rate_df.values
 
         # Scale from rate to probability. Consider an exponential here.
-        death_prob = death_rate * (module.pars.units * module.pars.rel_death * sim.pars.dt)
+        death_prob = death_rate * (self.pars.units * self.pars.rel_death * sim.pars.dt)
         death_prob = np.clip(death_prob, a_min=0, a_max=1)
 
         return death_prob
@@ -223,7 +223,9 @@ class Deaths(BaseDemographics):
     def apply_deaths(self, sim):
         """ Select people to die """
         alive_uids = ss.true(sim.people.alive)
-        death_uids = self.pars.death_rate.filter(alive_uids) # Instead, do death_uids = rand() < death_probs
+        death_prob = self.make_death_prob_fn(sim, alive_uids)
+        died = self.pars.death_dist.rvs(alive_uids) < death_prob
+        death_uids = alive_uids[died]
         sim.people.request_death(death_uids)
         return len(death_uids)
 
@@ -236,6 +238,7 @@ class Deaths(BaseDemographics):
         self.results['cumulative'] = np.cumsum(self.results['new'])
         self.results['cmr'] = 1/self.pars.units*np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
         return
+
 
 class Pregnancy(BaseDemographics):
 
@@ -266,7 +269,7 @@ class Pregnancy(BaseDemographics):
         )
 
         self.par_dists = ss.omergeleft(par_dists,
-            fertility_rate = ss.bernoulli,
+            fertility_dist = ss.bernoulli,
             maternal_death_rate = ss.bernoulli,
             sex_ratio = ss.bernoulli
         )
@@ -281,11 +284,12 @@ class Pregnancy(BaseDemographics):
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.fertility_rate_data = self.standardize_fertility_data()
-        self.pars.fertility_rate = self.make_fertility_prob_fn
+        # self.pars.fertility_rate = self.make_fertility_prob_fn
+        self.pars.fertility_dist = 1 # TODO: refactor
 
         return
 
-    @staticmethod
+    # TODO: refactor
     def make_fertility_prob_fn(module, sim, uids):
         """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
 
@@ -402,7 +406,11 @@ class Pregnancy(BaseDemographics):
         # are instead handled in the fertility_dist logic as the rates need to be adjusted
         denom_conds = ppl.female & ppl.alive
         inds_to_choose_from = ss.true(denom_conds)
-        conceive_uids = self.pars.fertility_rate.filter(inds_to_choose_from)
+        
+        fert_prob = self.make_fertility_prob_fn(sim, inds_to_choose_from)
+        conceive = self.pars.fertility_dist.rvs(inds_to_choose_from) < fert_prob
+        conceive_uids = inds_to_choose_from[conceive]
+        # conceive_uids = self.pars.fertility_rate.filter(inds_to_choose_from)
 
         # Set prognoses for the pregnancies
         if len(conceive_uids) > 0:

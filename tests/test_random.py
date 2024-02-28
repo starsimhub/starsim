@@ -16,7 +16,7 @@ def make_rng(slots=5, base_seed=1, name='Test', **kwargs):
     rngs = ss.Dists()
     rngs.initialize(base_seed=base_seed)
     rng = ss.Dist('random', name, **kwargs)
-    rng.initialize(rngs, slots=slots)
+    rng.initialize(container=rngs, slots=slots)
     return rng
 
 
