@@ -23,12 +23,11 @@ def set_numba_seed(value):
 
 class Sim(sc.prettyobj):
 
-    def __init__(self, pars=None, label=None, people=None, **kwargs):
+    def __init__(self, pars=None, label=None, **kwargs):
 
         # Set attributes
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
-        self.people = people  # People object
         self.results = ss.Results(module='sim')  # For storing results
         self.summary = None  # For storing a summary of the results
         self.initialized = False  # Whether initialization is complete
@@ -49,6 +48,9 @@ class Sim(sc.prettyobj):
         # Set modules
         for mname in self.pars.modules.keys():
             setattr(self, mname, self.pars[mname])
+
+        # Set people
+        self.people = self.pars.people
 
         # Initialize the random number generator container
         self.rng_container = ss.RNGContainer()

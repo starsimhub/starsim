@@ -23,6 +23,7 @@ class Parameters(sc.objdict):
     def __init__(self, **kwargs):
 
         # Population parameters
+        self.people          = None
         self.n_agents        = 10e3  # Number of agents
         self.total_pop       = None  # If defined, used for calculating the scale factor
         self.pop_scale       = None  # How much to scale the population
@@ -79,7 +80,7 @@ class Parameters(sc.objdict):
 
             # Initialize modules here??
             for mname, mtype in self.modules.items():
-                if pars.get(mname):
+                if mname in pars.keys():
                     pars[mname] = self.init_module_pars(pars[mname], mtype)
 
             if not create:
@@ -96,13 +97,12 @@ class Parameters(sc.objdict):
         known_modules = {n.__name__.lower():n for n in ss.all_subclasses(mtype)}
         processed_m = sc.autolist()
 
-        # Boolean: convert
         # Process boolean inputs for demographics
-        if isinstance(mpar, bool):
+        if isinstance(mpar, bool) and mtype==ss.BaseDemographics:
             if mpar:
-                mpar = [ss.Births(), ss.Deaths()]
+                return ss.ndict([ss.Births(), ss.Deaths()], type=mtype)
             else:
-                mpar = []
+                return ss.ndict(type=mtype)
 
         # String: convert to a dict
         if isinstance(mpar, str):
@@ -147,7 +147,7 @@ class Parameters(sc.objdict):
                 f'"name" key corresponding to one of these known subclasses: {known_modules}.')
             raise ValueError(errormsg)
 
-        return ss.ndict(processed_m)
+        return ss.ndict(processed_m, type=mtype)
 
 
 def make_pars(**kwargs):

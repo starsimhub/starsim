@@ -140,16 +140,15 @@ def test_parallel():
     assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
     return s1, s2
 
-def test_strings():
-    # Supply strings as kwargs
+def test_inputs():
+    """ Test multiple ways of entering inputs """
     ppl = ss.People(n_agents=n_agents)
     sim = ss.Sim(people=ppl, demographics=ss.Births(), networks='randomnet', diseases='sir')
     sim.run()
+    pars=dict(networks='randomnet', diseases='sir', people=ppl, demographics=False)
+    sim = ss.Sim(pars)
+    sim.run()
     return sim
-
-    # # Supply people as a parameter
-    # pars=dict(networks='random', diseases='sir', people=ppl, demographics=demographics)
-    # sim = ss.Sim(pars)
 
 
 if __name__ == '__main__':
