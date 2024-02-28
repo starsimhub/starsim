@@ -8,7 +8,7 @@ def get_outputs(p_death):
     outputs = []
     for i in range(3):
         ppl = ss.People(1000)
-        network = ss.RandomNet(n_contacts=ss.poisson(5))
+        network = ss.RandomNet(n_contacts=ss.poisson(mu=5))
         sir = ss.SIR(pars={'p_death':p_death})
         sim = ss.Sim(people=ppl, networks=network, diseases=sir, rand_seed=0, n_years=5)
         sim.run(verbose=0)
