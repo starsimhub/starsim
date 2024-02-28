@@ -223,7 +223,7 @@ class Deaths(BaseDemographics):
     def apply_deaths(self, sim):
         """ Select people to die """
         alive_uids = ss.true(sim.people.alive)
-        death_uids = self.pars.death_rate.filter(alive_uids)
+        death_uids = self.pars.death_rate.filter(alive_uids) # Instead, do death_uids = rand() < death_probs
         sim.people.request_death(death_uids)
         return len(death_uids)
 

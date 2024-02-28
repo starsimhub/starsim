@@ -220,12 +220,19 @@ class Dist(sc.prettyobj):
         kwds = sc.mergedicts(dict(size=size), self.kwargs, kwargs)
         if isinstance(self.dist, str):
             dist = getattr(self.rng, self.dist)
+            rvs = dist(**kwds)
         else:
-            raise NotImplementedError("Placeholder for calling ScipyDistribution-style distributions")
-        rvs = dist(**kwds)
+            if not np.isscalar(size):
+                print('WARNING, not random number safe yet!')
+                size = len(size)
+            rvs = self.dist.rvs(size=size, **kwargs) # TODO: CHECK!!!!!
         if ss.options.multirng:
             self.ready = False # Needs to reset before being called again
         return rvs
+
+    def filter(self, size, **kwargs):
+        return size[self.rvs(size, **kwargs)]
+
 
 
 # TODO: define custom distributions like ss.lognormal
