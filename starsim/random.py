@@ -3,7 +3,212 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['RNGs', 'RNG']
+__all__ = ['Dists', 'Dist', 'RNGs', 'RNG']
+
+
+class Dists(sc.prettyobj):
+    """ Class for managing a collection of Dist objects """
+
+    def __init__(self):
+        self.dists = ss.ndict()
+        self.used_offsets = set()
+        self.base_seed = None
+        self.current_seed = None
+        self.initialized = False
+        return
+
+    def initialize(self, base_seed):
+        self.base_seed = base_seed
+        self.initialized = True
+        return
+    
+    def add(self, dist, check_repeats=True):
+        """
+        Keep track of a new Dist
+        
+        Can request an offset, will check for overlap
+        Otherwise, return value will be used as the seed offset for this rng
+        """
+        if not self.initialized:
+            raise NotInitializedException()
+
+        if dist.name in self.dists:
+            raise RepeatNameException(dist.name)
+
+        if check_repeats:
+            if dist.offset in self.used_offsets:
+                raise SeedRepeatException(dist.name, dist.offset)
+            self.used_offsets.add(dist.offset)
+
+        self.dists.append(dist)
+        self.current_seed = self.base_seed + dist.offset # Add in the base seed
+
+        return self.current_seed
+
+    def step(self, ti):
+        """ Step each RNG forward, for each sim timestep """
+        out = sc.autolist()
+        for dist in self.dists.values():
+            out += dist.step(ti)
+        return out
+
+    def reset(self):
+        """ Reset each RNG """
+        out = sc.autolist()
+        for dist in self.dists.values():
+            out += dist.reset()
+        return out
+
+
+def str2int(string, modulo=1e8):
+    """
+    Convert a string to an int via hashing
+    
+    Cannot use Python's built-in hash() since it's randomized for strings. While
+    hashlib is slower, this function is only used at initialization, so makes no
+    appreciable difference to runtime.
+    """
+    return int(hashlib.sha256(string.encode('utf-8')).hexdigest(), 16) % int(modulo)
+
+
+class Dist(sc.prettyobj):
+    """
+    Class for tracking one random number generator associated with one distribution,
+    i.e. one decision per timestep.
+
+    The main use case is to sample random numbers from various distributions
+    that are specific to each agent (per decision and timestep) so as to enable
+    variance reduction between simulations through the use of common random
+    numbers. For example, the user might create a random number generator called
+    rng and ultimately ask for randomly distributed random numbers for agents
+    with UIDs 1 and 4:
+
+    >>> import starsim as ss
+    >>> import numpy as np
+    >>> dist = ss.Dist('Test') # The hashed name determines the seed offset.
+    >>> dist.initialize(slots=5) # In practice, slots will be sim.people.slots. When scalar (for testing), an np.arange will be used.
+    >>> uids = np.array([1,4])
+    >>> dist.random(uids)
+    array([0.88110549, 0.86915719])
+
+    In theory, what this is doing is drawing 5 random numbers and returning the
+    draws at positions 1 and 4.
+
+    In practice, using UIDs as "slots" (the indices into the larger draw) falls
+    apart when new agents are born.  The issue is that one simulation might have
+    more births than another, so an agent born in one simulation may not
+    get the same UID as that same agent in a comparison simulation.
+    
+    The solution applied here is for each agent to have a property called "slot"
+    that is precisely the index used when selecting from an array of random
+    numbers.  When new agents are born, the mother uses her UID to sample a
+    random integer for the newborn that is used as the "slot".  With this
+    approach, newborns will be identical between two different simulations,
+    unless an intervention mechanistically drove a change.
+
+    The slot-based approach is not without challenges.
+    * Two newborn agents may received the same "slot," and thus will receive the
+      same random draws.
+    * The chance of overlapping slots can be reduced by
+      allowing mothers to choose from a larger number of possible slots (say up
+      to one-million). However, as slots are used as indices, the number of
+      random variables drawn for each query must number the maximum slot. So if
+      one agent has a slot of 1M, then 1M random numbers will be drawn,
+      consuming more time than would be necessary if the maximum slot was
+      smaller.
+    * The maximum slot is now determined by a new configure parameter named
+      "slot_scale". A value of 5 will mean that new agents will be assigned
+      slots between 1*N and 5*N, where N is sim.pars['n_agents'].
+    """
+    
+    def __init__(self, dist='random', name=None, offset=None, **kwargs):
+        """
+        Create a random number generator
+        
+        Args:
+            dist (str): the name of the (default) distribution to draw random numbers from
+            name (str): the unique name of this distribution, e.g. "coin_flip" (in practice, usually generated automatically)
+            offset (int): the seed offset; will be automatically assigned (based on hashing the name) if None
+            kwargs (dict): (default) parameters of the distribution
+            
+        **Examples**::
+            
+            dist = ss.Dist('normal', loc=3)
+            dist.rvs(10) # Return 10 normally distributed random numbers
+        """
+        self.dist = dist
+        self.name = name
+        self.kwargs = kwargs
+
+        # Get the offset
+        if offset is None: # Obtain the seed offset by hashing the class name
+            self.offset = str2int(self.name)
+        else: # Use user-provided offset (unlikely)
+            self.offset = offset
+
+        self.seed = None # Will be determined once added to the container
+        self.rng = None # The actual RNG generator for generating random numbers
+        self.ready = True
+        self.initialized = False
+        return
+    
+    def __getattr__(self, attr):
+        """ Make it behave like a random number generator mostly -- enables things like uniform(), normal(), etc. """
+        if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
+            return self.__getattribute__(attr)
+        else:
+            return getattr(self.rng, attr)
+        
+    @property
+    def bitgen(self):
+        try:
+            return self.rng.bit_generator
+        except:
+            return None
+
+    def initialize(self, container, slots):
+        """ Calculate the starting seed and create the RNG """
+        
+        # Set the seed, usually from within a container
+        if container is not None:
+            self.seed = container.add(self) # base_seed + offset
+        else: # Enable use of Dist without a container
+            self.seed = self.offset
+
+        # Set up the slots (corresponding to agents)
+        if isinstance(slots, int): # Handle edge case in which the user wants n sequential slots, as used in testing
+            self.slots = np.arange(slots)
+        else:
+            self.slots = slots # E.g. sim.people.slots (instead of using uid as the slots directly)
+
+        # Create the actual RNG
+        self.rng = np.random.default_rng(seed=self.seed)
+        self.init_state = self.bitgen.state # Store the initial state
+        self.ready = True
+        self.initialized = True
+        return
+
+    def reset(self):
+        """ Restore initial state """
+        self.bitgen.state = self.init_state
+        self.ready = True
+        return self.bitgen.state
+
+    def step(self, ti):
+        """ Advance to time ti step by jumping """
+        self.reset() # First reset back to the initial state
+        self.bitgen.state = self.bitgen.jumped(jumps=ti).state # Now take ti jumps
+        return self.bitgen.state
+    
+    def rvs(self, size=1, **kwargs):
+        """ Main method for getting random numbers """
+        kwds = sc.mergedicts(dict(size=size), self.kwargs, kwargs)
+        if isinstance(self.dist, str):
+            dist = getattr(self.rng, self.dist)
+        else:
+            raise NotImplementedError("Placeholder for calling ScipyDistribution-style distributions")
+        rvs = dist(**kwds)
+        return rvs
 
 
 class RNGs(sc.prettyobj):

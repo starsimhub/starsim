@@ -13,9 +13,9 @@ def rng(request, slots=5, base_seed=1, name='Test', **kwargs):
     return make_rng(slots, base_seed, name, **kwargs)
 
 def make_rng(slots=5, base_seed=1, name='Test', **kwargs):
-    rngs = ss.RNGs()
+    rngs = ss.Dists()
     rngs.initialize(base_seed=base_seed)
-    rng = ss.RNG(name, **kwargs)
+    rng = ss.Dist('random', name, **kwargs)
     rng.initialize(rngs, slots=slots)
     return rng
 
@@ -24,7 +24,7 @@ def make_rng(slots=5, base_seed=1, name='Test', **kwargs):
 def test_random(rng, n=5):
     """ Simple random draw """
     sc.heading('test_random: Testing simple random draw from a RNG object')
-    draws = rng.random(n)
+    draws = rng.rvs(n)
     print(f'Sampled {n} random draws', draws)
     assert len(draws) == n
     return draws
@@ -48,13 +48,13 @@ def test_reset(rng, n=5):
     """ Sample, reset, sample """
     sc.heading('test_reset: Testing sample, reset, sample')
 
-    draws1 = rng.random(n)
+    draws1 = rng.rvs(n)
     print(f'Random sample of size {n} returned {draws1}')
 
     print('Reset')
     rng.reset()
 
-    draws2 = rng.random(n)
+    draws2 = rng.rvs(n)
     print(f'After reset, random sample of size {n} returned {draws2}')
 
     assert np.array_equal(draws1, draws2)
@@ -66,13 +66,13 @@ def test_step(rng, n=5):
     """ Sample, step, sample """
     sc.heading('test_step: Testing sample, step, sample')
 
-    draws1 = rng.random(n)
+    draws1 = rng.rvs(n)
     print(f'Random sample of size {n} returned {draws1}')
 
     print('Reset')
     rng.step(1)
 
-    draws2 = rng.random(n)
+    draws2 = rng.rvs(n)
     print(f'After reset, random sample of size {n} returned {draws2}')
 
     assert not np.array_equal(draws1, draws2)
