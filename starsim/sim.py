@@ -46,6 +46,7 @@ class Sim(sc.prettyobj):
         self.pars = ss.make_pars()  # Start with default pars
         self.pars.update_pars(sc.mergedicts(pars, kwargs))  # Update the parameters
 
+        # Set modules
         for mname in self.pars.modules.keys():
             setattr(self, mname, self.pars[mname])
 
@@ -99,7 +100,7 @@ class Sim(sc.prettyobj):
         self.rng_container.initialize(self.pars.rand_seed + 2)  # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rng_container
         self.init_people(reset=reset, **kwargs)  # Create all the people (the heaviest step)
 
-        # Initialize plug-ins
+        # Initialize modules
         self.init_demographics()
         self.init_networks()
         self.init_diseases()
@@ -145,8 +146,6 @@ class Sim(sc.prettyobj):
         # Handle n_agents
         if self.people is not None:
             self.pars.n_agents = len(self.people)
-        # elif self.popdict is not None: # Starsim does not currenlty support self.popdict
-        # self.pars.n_agents = len(self.popdict)
         elif self.pars.n_agents is not None:
             self.pars.n_agents = int(self.pars.n_agents)
         else:
@@ -241,75 +240,10 @@ class Sim(sc.prettyobj):
         self.people.init_results(self)
         return self
 
-    def convert_modules(self, module_class, plugin_name=None):
-        """
-        Common logic for converting plug-ins to a standard format
-        Used for networks, demographics, diseases, connectors, analyzers, and interventions
-        Args:
-            plugin: class
-        """
-
-        if plugin_name is None: plugin_name = plugin_class.__name__.lower()
-
-        # Get lower-case names of all subclasses
-        known_plugins = {n.__name__.lower():n for n in ss.all_subclasses(plugin_class)}
-        if plugin_name == 'networks': # Allow "msm" or "msmnet"
-            known_plugins.update({k.removesuffix('net'):v for k,v in known_plugins.items()})
-
-        # See if they've been provided in the pars dict
-        if self.pars.get(plugin_name):
-
-            par_plug = self.pars[plugin_name]
-
-            # String: convert to ndict
-            if isinstance(par_plug, str):
-                plugins = ss.ndict(dict(name=par_plug))
-
-            # List or dict: convert to ndict
-            elif sc.isiterable(par_plug) and len(par_plug):
-                if isinstance(par_plug, dict) and 'type' in par_plug and 'name' not in par_plug:
-                    par_plug['name'] = par_plug['type'] # TODO: simplify/remove this
-                plugins = ss.ndict(par_plug)
-
-            else:
-                import traceback; traceback.print_exc(); import pdb; pdb.set_trace()
-
-        else:  # Not provided directly or in pars
-            plugins = {}
-
-        return plugins
-        # # Process
-        # processed_plugins = sc.autolist()
-        # for plugin in plugins.values():
-        #
-        #     if not isinstance(plugin, plugin_class):
-        #
-        #         if isinstance(plugin, dict):
-        #             ptype = (plugin.get('type') or plugin.get('name') or '').lower()
-        #             name = plugin.get('name') or ptype
-        #             if ptype in known_plugins:
-        #                 # Make an instance of the requested plugin
-        #                 plugin_pars = {k: v for k, v in plugin.items() if k not in ['type', 'name']}
-        #                 pclass = known_plugins[ptype]
-        #                 plugin = pclass(name=name, pars=plugin_pars) # TODO: does this handle par_dists, etc?
-        #             else:
-        #                 errormsg = (f'Could not convert {plugin} to an instance of class {plugin_name}.'
-        #                             f'Try specifying it directly rather than as a dictionary.')
-        #                 raise ValueError(errormsg)
-        #         else:
-        #             errormsg = (
-        #                 f'{plugin_name.capitalize()} must be provided as either class instances or dictionaries with a '
-        #                 f'"name" key corresponding to one of these known subclasses: {known_plugins}.')
-        #             raise ValueError(errormsg)
-        #
-        #     processed_plugins += plugin
-
-        # return processed_plugins
-
     def init_demographics(self):
         """ Initialize demographics """
 
-        # We also allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
+        # We allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
         if self.pars.birth_rate is not None:
             births = ss.Births(pars={'birth_rate': self.pars.birth_rate})
             self.pars.demographics += births
@@ -376,6 +310,8 @@ class Sim(sc.prettyobj):
             # Add the intervention parameters and results into the Sim's dicts
             self.pars[intervention.name] = intervention.pars
             self.results[intervention.name] = intervention.results
+            if isinstance(intervention, ss.Intervention):
+                intervention.initialize(self)
 
             # Add intervention states to the People's dicts
             self.people.add_module(intervention)
