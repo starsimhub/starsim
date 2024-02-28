@@ -37,15 +37,16 @@ class SIR(ss.Infection):
             ss.State('susceptible', bool, True),
             ss.State('infected', bool, False),
             ss.State('recovered', bool, False),
-            ss.State('ti_infected', float, np.nan),
-            ss.State('ti_recovered', float, np.nan),
-            ss.State('ti_dead', float, np.nan),
+            ss.State('ti_infected', int, ss.INT_NAN),
+            ss.State('ti_recovered', int, ss.INT_NAN),
+            ss.State('ti_dead', int, ss.INT_NAN),
         )
         return
 
     def update_pre(self, sim):
         # Progress infectious -> recovered
-        recovered = ss.true(self.infected & (self.ti_recovered <= sim.year))
+        recovered = ss.true(self.infected & (self.ti_recovered <= sim.ti))
+
         self.infected[recovered] = False
         self.recovered[recovered] = True
 
@@ -70,6 +71,7 @@ class SIR(ss.Infection):
         r_rvs = p.dur_inf.rvs(rec_uids)
         self.ti_dead[dead_uids] = sim.ti + d_rvs
         self.ti_recovered[rec_uids] = sim.ti + r_rvs
+
         return
 
     def update_death(self, sim, uids):

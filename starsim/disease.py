@@ -253,6 +253,7 @@ class Infection(Disease):
         for nkey, net in sim.networks.items():
             if not len(net):
                 break
+
             nbetas = betamap[nkey]
             contacts = net.contacts
             rel_trans = (self.infectious & people.alive) * self.rel_trans
