@@ -6,7 +6,6 @@ Test the RNG object from random.py
 import numpy as np
 import sciris as sc
 import starsim as ss
-from starsim.random import RNG
 import pytest
 
 @pytest.fixture
@@ -14,10 +13,10 @@ def rng(request, slots=5, base_seed=1, name='Test', **kwargs):
     return make_rng(slots, base_seed, name, **kwargs)
 
 def make_rng(slots=5, base_seed=1, name='Test', **kwargs):
-    rng_container = ss.RNGContainer()
-    rng_container.initialize(base_seed=base_seed)
+    rngs = ss.RNGs()
+    rngs.initialize(base_seed=base_seed)
     rng = ss.RNG(name, **kwargs)
-    rng.initialize(rng_container, slots=slots)
+    rng.initialize(rngs, slots=slots)
     return rng
 
 
@@ -58,7 +57,7 @@ def test_reset(rng, n=5):
     draws2 = rng.random(n)
     print(f'After reset, random sample of size {n} returned {draws2}')
 
-    if isinstance(rng, ss.MultiRNG):
+    if isinstance(rng, ss.RNG):
         assert np.array_equal(draws1, draws2)
     else:
         assert not np.array_equal(draws1, draws2)
