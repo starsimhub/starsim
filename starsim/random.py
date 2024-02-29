@@ -1,6 +1,7 @@
 import hashlib
 import numpy as np
 import starsim as ss
+from copy import deepcopy
 
 __all__ = ['RNGContainer', 'MultiRNG', 'SingleRNG', 'RNG']
 
@@ -210,6 +211,24 @@ class MultiRNG(np.random.Generator):
         # jumped returns a new bit_generator, use directly instead of setting state?
         self.bit_generator.state = self.bit_generator.jumped(jumps=ti).state
         return
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, deepcopy(v, memo))
+
+        #'bit_generator' kwarg has changed
+        super(MultiRNG, result).__init__(**result.kwargs)
+
+        # and so has the _init_state
+        result._init_state = result.bit_generator.state # Store the initial state
+
+        result.initialized = True
+        result.ready = True
+
+        return result
 
 
 class SingleRNG(np.random.Generator):
