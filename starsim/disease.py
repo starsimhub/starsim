@@ -187,6 +187,12 @@ class Infection(Disease):
             ss.State('rel_trans', float, 1.0),
             ss.State('ti_infected', int, ss.INT_NAN),
         )
+
+        if ss.options.multirng:
+            # Used only in _make_new_cases_multirng
+            self.rng_acquisition = ss.uniform()
+            self.rng_source = ss.uniform()
+
         return
 
     @property
@@ -332,8 +338,8 @@ class Infection(Disease):
 
         # Pre-draw random numbers
         slots = people.slot[p2uniq]  # Slots for the possible infectee
-        r = ss.uniform.rvs(size=np.max(slots) + 1)
-        q = ss.uniform.rvs(size=np.max(slots) + 1)
+        r = self.rng_acquisition.rvs(size=np.max(slots) + 1)
+        q = self.rng_source.rvs(size=np.max(slots) + 1)
 
         # Now address nodes with multiple possible infectees
         degrees = np.unique(p2cnt)
