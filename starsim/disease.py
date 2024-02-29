@@ -331,9 +331,9 @@ class Infection(Disease):
         p2uniq, p2idx, p2inv, p2cnt = np.unique(dfp2, return_index=True, return_inverse=True, return_counts=True)
 
         # Pre-draw random numbers
-        slots = people.slot[uids]  # Slots for the possible infectee
-        r = ss.uniform.rvs(size=np.max(slots) + 1)[slots]
-        q = ss.uniform.rvs(size=np.max(slots) + 1)[slots]
+        slots = people.slot[p2uniq]  # Slots for the possible infectee
+        r = ss.uniform.rvs(size=np.max(slots) + 1)
+        q = ss.uniform.rvs(size=np.max(slots) + 1)
 
         # Now address nodes with multiple possible infectees
         degrees = np.unique(p2cnt)
@@ -346,7 +346,7 @@ class Infection(Disease):
                 uids = p2uniq[cnt1]
                 idx = p2idx[cnt1]
                 p_acq_node = dfp[idx]
-                cases = r[uids] < p_acq_node
+                cases = r[people.slot[uids]] < p_acq_node
                 if cases.any():
                     s = dfp1[idx][cases]
             else:
@@ -356,21 +356,23 @@ class Infection(Disease):
                 probs = dfp[inds]
                 p_acq_node = 1-np.prod(1-probs, axis=1)
 
-                cases = r[uids] < p_acq_node
+                cases = r[people.slot[uids]] < p_acq_node
                 if cases.any():
                     # Vectorized roulette wheel
                     cumsum = probs[cases].cumsum(axis=1)
                     cumsum /= cumsum[:,-1][:,np.newaxis]
-                    ix = np.argmax(cumsum >= q[uids[cases]], axis=1)
-                    s = dfp1[inds][cases][np.arange(len(cases)),ix]
+                    ix = np.argmax(cumsum >= q[people.slot[uids[cases]]][:,np.newaxis], axis=1)
+                    s = np.take_along_axis(dfp1[inds][cases], ix[:,np.newaxis], axis=1).flatten()#dfp1[inds][cases][np.arange(len(cases)),ix]
 
             if cases.any():
                 new_cases.append(uids[cases])
                 sources.append(s)
 
+        if len(new_cases) == 0:
+            return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
+
         new_cases = np.concatenate(new_cases)
         sources = np.concatenate(sources)
-
         return new_cases, sources
 
     def make_new_cases(self, sim):
