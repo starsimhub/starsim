@@ -49,7 +49,6 @@ class Measles(SIR):
         return self.infected | self.exposed
 
     def update_pre(self, sim):
-
         # Progress exposed -> infected
         infected = ss.true(self.exposed & (self.ti_infected <= sim.ti))
         self.exposed[infected] = False
@@ -64,10 +63,12 @@ class Measles(SIR):
         deaths = ss.true(self.ti_dead <= sim.year)
         if len(deaths):
             sim.people.request_death(deaths)
+        return
 
     def set_prognoses(self, sim, uids, source_uids=None):
         """ Set prognoses for those who get infected """
-        super().set_prognoses(sim, uids, source_uids)
+        # Do not call set_prognosis on parent
+        # super().set_prognoses(sim, uids, source_uids)
 
         self.susceptible[uids] = False
         self.exposed[uids] = True
@@ -78,11 +79,16 @@ class Measles(SIR):
         # Determine when exposed become infected
         self.ti_infected[uids] = sim.ti + p.dur_exp.rvs(uids)
 
+        # Sample duration of infection, being careful to only sample from the
+        # distribution once per timestep.
+        dur_inf = p.dur_inf.rvs(uids)
+
         # Determine who dies and who recovers and when
-        dead_uids = p.p_death.filter(uids)
-        self.ti_dead[dead_uids] = self.ti_infected[dead_uids] + p.dur_inf.rvs(dead_uids)
-        rec_uids = np.setdiff1d(uids, dead_uids)
-        self.ti_recovered[rec_uids] = self.ti_infected[rec_uids] + p.dur_inf.rvs(rec_uids)
+        will_die = p.p_death.rvs(uids)
+        dead_uids = uids[will_die]
+        rec_uids = uids[~will_die]
+        self.ti_dead[dead_uids] = self.ti_infected[dead_uids] + dur_inf[will_die]
+        self.ti_recovered[rec_uids] = self.ti_infected[rec_uids] + dur_inf[~will_die]
 
         return
 

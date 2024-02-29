@@ -18,35 +18,25 @@ def n(request):
 
 
 # %% Define the tests
-def test_basic():
+def test_basic(n):
     dist = sps.norm(loc=1, scale=1) # Make a distribution
+    if ss.options.multirng:
+        rng = ss.MultiRNG('Uniform')
+        rng.initialize(container=None, slots=n)
+        dist.random_state = rng
     d = ScipyDistribution(dist)
 
     sample = d.rvs(1)  # Draw a sample
+
+    # Reset before the next call
+    if ss.options.multirng: d.random_state.reset()
     samples = d.rvs(10) # Draw several samples
 
-    if ss.options.multirng:
-        print('Attempting to sample for specific UIDs, but have not provided a MultiRNG so an Exception should be raised.')
-        with pytest.raises(Exception):
-            d.rvs(np.array([1,3,8])) # Draw samples for specific uids
-    else:
-        d.rvs(np.array([1,3,8])) # Draw three samples
+    if ss.options.multirng: d.random_state.reset()
+    samples_uid = d.rvs(size=np.array([1,3,4])) # Draw three samples
 
-    mu = 5 # mean (mu) of the underlying normal
-    sigma = 1 # stdev (sigma) of the underlying normal
-    s = sigma 
-    loc = 0
-    scale = np.exp(mu)
-    fig, ax = plt.subplots(1, 1)
-    x = np.linspace(sps.lognorm.ppf(0.01, s=s, loc=loc, scale=scale), sps.lognorm.ppf(0.99, s=s, loc=loc, scale=scale), 100)
-    ax.plot(x, sps.lognorm.pdf(x, s=s, loc=loc, scale=scale), 'r-', lw=5, alpha=0.6, label='lognorm pdf')
+    return sample, samples, samples_uid
 
-    mean, var, skew, kurt = sps.lognorm.stats(s, loc=loc, scale=scale, moments='mvsk')
-    print('mean', mean, 'var', var, 'skew', skew, 'kurt', kurt)
-    print('calc mean', np.exp(mu + sigma**2/2), 'calc var', (np.exp(sigma**2)-1)*np.exp(2*mu+sigma**2)) # Check against math
-
-    temp_poisson_samples = sps.poisson(mu=2).rvs(10)  # Sample from a temporary distribution
-    return sample, samples, temp_poisson_samples
 
 def test_uniform_scalar(n):
     """ Create a uniform distribution """
