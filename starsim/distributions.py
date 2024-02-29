@@ -44,7 +44,7 @@ class ScipyDistribution():
                 self.repeat_slot_handling = {}
                 # Work out how many samples to draw. If sampling by UID, this depends on the slots assigned to agents.
                 if np.isscalar(size):
-                    if not isinstance(size, int):
+                    if type(size) not in [int, np.int64, np.int32]: # CK: TODO: need to refactor
                         raise Exception('Input "size" must be an integer')
                     if size < 0:
                         raise Exception('Input "size" cannot be negative')
