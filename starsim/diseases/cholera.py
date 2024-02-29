@@ -151,10 +151,10 @@ class Cholera(ss.Infection):
 
         # Determine who becomes symptomatic and when
         symp_uids = p.p_symp.filter(uids)
-        self.ti_symptomatic[symp_uids] = sim.ti + p.dur_exp2inf.rvs(symp_uids)
+        self.ti_symptomatic[symp_uids] = self.ti_infected[symp_uids]
 
         # Determine who dies and when
-        dead_uids = p.p_symp.filter(symp_uids)
+        dead_uids = p.p_death.filter(symp_uids)
         self.ti_dead[dead_uids] = self.ti_symptomatic[dead_uids] + p.dur_symp2dead.rvs(dead_uids)
         symp_rev_uids = np.setdiff1d(symp_uids, dead_uids)
         asymp_uids = np.setdiff1d(uids, symp_uids)

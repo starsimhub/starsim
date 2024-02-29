@@ -107,7 +107,18 @@ class ScipyDistribution():
                         kwargs[pname] = pars_slots
 
                 kwargs['size'] = n_samples
+                
+                # If multirng, make sure the generator is ready to avoid multiple calls without jumping in between
+                if options.multirng and not self.random_state.ready:
+                    raise ss.NotReadyException(self.random_state.name)
+
+                # Actually sample the random values
                 vals = super().rvs(*args, **kwargs)
+
+                # Again if multirng, mark the generator as not ready (needs to be jumped)
+                if options.multirng:
+                    self.random_state.ready = False
+
                 if repeat_slot_flag:
                     # Handle repeated slots
                     repeat_slot_vals = np.full(len(slots), np.nan)
