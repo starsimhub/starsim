@@ -89,9 +89,23 @@ def test_gavi():
         sims += sim
     return sims
 
+def test_multidisease():
+    ppl = ss.People(n_agents)
+    sir1 = ss.SIR(name='sir1')
+    sir2 = ss.SIR(name='sir2')
+
+    sir1.pars.beta = {'randomnet': 0.1}
+    sir2.pars.beta = {'randomnet': 0.2}
+    networks = ss.RandomNet(pars=dict(n_contacts=sps.poisson(mu=4)))
+
+    sim = ss.Sim(people=ppl, diseases=[sir1, sir2], networks=networks)
+    sim.run()
+    return sim
+
 
 if __name__ == '__main__':
     sim1 = test_sir()
     sim2 = test_ncd()
     sims = test_gavi()
+    sim = test_multidisease()
     plt.show()

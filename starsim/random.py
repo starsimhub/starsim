@@ -1,8 +1,9 @@
 import hashlib
 import numpy as np
 import starsim as ss
+from copy import deepcopy
 
-__all__ = ['RNGContainer', 'MultiRNG', 'SingleRNG', 'RNG']
+__all__ = ['RNGContainer', 'MultiRNG', 'SingleRNG', 'RNG', 'NotReadyException']
 
 
 class RNGContainer:
@@ -69,6 +70,14 @@ class SeedRepeatException(Exception):
     "Raised when two random number generators have the same seed."
     def __init__(self, rng_name, seed_offset):
         msg = f'Requested seed offset {seed_offset} for the random number generator named {rng_name} has already been used.'
+        super().__init__(msg)
+        return
+
+
+class NotReadyException(Exception):
+    "Raised when a random generator is called without being ready."
+    def __init__(self, rng_name):
+        msg = f'The random generator named "{rng_name}" was not ready when called. This error is likely caused by calling a distribution or underlying MultiRNG generator two or more times in a single step.'
         super().__init__(msg)
         return
 
@@ -210,6 +219,24 @@ class MultiRNG(np.random.Generator):
         # jumped returns a new bit_generator, use directly instead of setting state?
         self.bit_generator.state = self.bit_generator.jumped(jumps=ti).state
         return
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, deepcopy(v, memo))
+
+        #'bit_generator' kwarg has changed
+        super(MultiRNG, result).__init__(**result.kwargs)
+
+        # and so has the _init_state
+        result._init_state = result.bit_generator.state # Store the initial state
+
+        result.initialized = True
+        result.ready = True
+
+        return result
 
 
 class SingleRNG(np.random.Generator):

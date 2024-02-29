@@ -9,11 +9,23 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :depth: 1
 
 
-Version 0.3.0 (2024-02-28)
+Version 0.3.0 (2024-02-29)
 --------------------------
 - Add ``SimpleABM`` module
 - Update ``StaticNet`` with defaults and correct argument passing
 - *GitHub info*: PR `339 <https://github.com/amath-idm/stisim/pull/339>`_
+
+
+Version 0.2.6 (2024-02-29)
+--------------------------
+- Make random number streams independent for SIR
+- *GitHub info*: PR `307 <https://github.com/amath-idm/stisim/pull/307>`_
+
+
+Version 0.2.5 (2024-02-29)
+--------------------------
+- Improve logic for making new cases with multi-RNG
+- *GitHub info*: PR `337 <https://github.com/amath-idm/stisim/pull/337>`_
 
 
 Version 0.2.4 (2024-02-27)

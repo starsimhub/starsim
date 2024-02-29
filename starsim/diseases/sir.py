@@ -64,13 +64,16 @@ class SIR(ss.Infection):
 
         p = self.pars
 
+        # Sample duration of infection, being careful to only sample from the
+        # distribution once per timestep.
+        dur_inf = p.dur_inf.rvs(uids)
+
         # Determine who dies and who recovers and when
-        dead_uids = p.p_death.filter(uids)
-        rec_uids = np.setdiff1d(uids, dead_uids)
-        d_rvs = p.dur_inf.rvs(dead_uids)
-        r_rvs = p.dur_inf.rvs(rec_uids)
-        self.ti_dead[dead_uids] = sim.ti + d_rvs
-        self.ti_recovered[rec_uids] = sim.ti + r_rvs
+        will_die = p.p_death.rvs(uids)
+        dead_uids = uids[will_die]
+        rec_uids = uids[~will_die]
+        self.ti_dead[dead_uids] = sim.ti + dur_inf[will_die]
+        self.ti_recovered[rec_uids] = sim.ti + dur_inf[~will_die]
 
         return
 
