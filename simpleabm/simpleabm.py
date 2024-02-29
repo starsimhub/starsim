@@ -3,7 +3,7 @@ Simple agent-based network model in Python
 
 NOTE: How to view the animation depends on what IDE you're using.
 Specifically:
-- It will work without change from the command line, Spyder, or VS Code.
+- It will work without change when running from the command line, Spyder, or VS Code.
 - For PyCharm, ensure you disable "SciView" before running.
 - For Jupyter, set save_movie = True and view the saved movie
   (you might need to run "pip install ffmpeg-python" in a terminal first)
@@ -13,9 +13,9 @@ import numpy as np
 import sciris as sc
 import pylab as pl
 
-sc.options(dpi=200)
 
 __all__ = ['default_pars', 'Person', 'Sim']
+
 
 # Set default parameters
 default_pars = sc.objdict(
@@ -27,14 +27,19 @@ default_pars = sc.objdict(
     N = 1000, # Total population size
     maxtime = 20, # How long to simulate for
     npts = 100, # Number of time points during the simulation
-    seed = 4, # Random seed to use
+    seed = 3, # Random seed to use -- NB, not all seeds "take off"
     colors = sc.dictobj(S='darkgreen', I='gold', R='skyblue'),
     save_movie = False, # Whether to save the movie (slow)
 )
 
 
-# Define each person
 class Person(sc.dictobj):
+    """
+    Define each person (agent) in SimpleABM
+    
+    They have three (mutually exclusive) states: susceptible (S), infected (I),
+    recovered (R). They also have x,y coordinates for plotting.
+    """
 
     def __init__(self, pars):
         self.pars = pars
@@ -66,12 +71,13 @@ class Person(sc.dictobj):
                 self.recover()
 
 
-# Define the simulation
+
 class Sim(sc.dictobj):
+    """
+    Define the simulation
+    """
 
     def __init__(self, **kwargs):
-        
-        # Initialize parameters
         pars = sc.mergedicts(default_pars, kwargs) # Parameters to use
         pars.dt = pars.maxtime/pars.npts # Timestep length
         self.T = np.arange(pars.npts)
@@ -105,6 +111,7 @@ class Sim(sc.dictobj):
         return x,y
         
     def make_network(self):
+        """ Create the network by pairing agents who are close to each other """
         pars = self.pars
         x,y = self.get_xy()
         dist = np.zeros((pars.N, pars.N))
@@ -119,18 +126,21 @@ class Sim(sc.dictobj):
         contacts = np.unravel_index(inds, ratios.shape)
         self.contacts = np.vstack(contacts).T
 
-    def check_infections(self): # Check which infectious occur
+    def check_infections(self):
+        """ Check which agents become infected """
         for p1,p2 in self.contacts:
             person1 = self.people[p1]
             person2 = self.people[p2]
             person1.check_infection(person2)
             person2.check_infection(person1)
 
-    def check_recoveries(self): # Check which recoveries occur
+    def check_recoveries(self):
+        """ Check which agents recover """
         for person in self.people:
             person.check_recovery()
     
     def count(self, t):
+        """ Count the number of agents in each state """
         this_S = []
         this_I = []
         this_R = []
@@ -146,18 +156,20 @@ class Sim(sc.dictobj):
         self.S_full.append(this_S)
         self.I_full.append(this_I)
         self.R_full.append(this_R)
-            
+        
     def run(self):
+        """ Run the simulation by integrating over time """
         for t in self.T:
             self.check_infections() # Check which infectious occur
             self.check_recoveries() # Check which recoveries occur
             self.count(t) # Store results
 
     def plot(self):
+        """ Plot numbers of S, I, R over time """
         pl.figure()
         cols = self.pars.colors
         pl.plot(self.time, self.S, label='Susceptible', c=cols.S)
-        pl.plot(self.time, self.I, label='Infectious', c=cols.I)
+        pl.plot(self.time, self.I, label='Infected', c=cols.I)
         pl.plot(self.time, self.R, label='Recovered', c=cols.R)
         pl.legend()
         pl.xlabel('Time')
@@ -167,6 +179,7 @@ class Sim(sc.dictobj):
         pl.show()
         
     def animate(self, pause=0.01, save=False):
+        """ Create an animation of the infection as it spreads across the network """
         anim = sc.animation()
         fig,ax = pl.subplots()
         x,y = self.get_xy()
@@ -202,10 +215,8 @@ class Sim(sc.dictobj):
         
 if __name__ == '__main__':
     
-    save = False
-    
     # Create and run the simulation
     sim = Sim()
     sim.run()
     sim.plot()
-    sim.animate(save=save)
+    sim.animate(save=False)
