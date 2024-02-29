@@ -12,6 +12,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 Version 0.3.0 (2024-02-28)
 --------------------------
 - Add ``SimpleABM`` module
+- Update ``StaticNet`` with defaults and correct argument passing
 - *GitHub info*: PR `339 <https://github.com/amath-idm/stisim/pull/339>`_
 
 
