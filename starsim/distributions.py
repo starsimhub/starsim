@@ -192,9 +192,13 @@ class ScipyDistribution():
     def initialize(self, sim, context):
         # Passing sim and context here allow callables to receive "self" and sim pointers
         self.gen.dist.initialize(sim, context)
-        if isinstance(self.gen.random_state, (SingleRNG, MultiRNG)):
-            self.gen.random_state.initialize(sim.rng_container, sim.people.slot)
+        if isinstance(self.rng, (SingleRNG, MultiRNG)):
+            self.rng.initialize(sim.rng_container, sim.people.slot)
         return
+
+    @property
+    def rng(self):
+        return self.dist.random_state
 
     def __copy__(self):
         cls = self.__class__
@@ -210,10 +214,10 @@ class ScipyDistribution():
             setattr(result, k, deepcopy(v, memo))
 
         if self.gen.random_state == np.random.mtrand._rand:
-            # Using the centralized numpy random number generator
+            # The gen is using the centralized numpy random number generator
             # If we copy over the state, we'll get _separate_ random number generators
-            # for each distribution which do not draw from the centralized generator
-            # in the new instance....
+            # for each distribution which do not draw from the _centralized_ generator
+            # in the new instance.
             # Not clear what to do, I suppose keep as centralized?
             result.gen.random_state = np.random.mtrand._rand
 
@@ -225,7 +229,7 @@ class ScipyDistribution():
         return dct
 
     def __setstate__(self, state):
-        self.__init__(state['_gen'], state['rng'])
+        self.__init__(state['_gen'])
         return
     
     def __getattr__(self, attr):

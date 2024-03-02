@@ -5,8 +5,10 @@ import matplotlib.pyplot as plt
 
 sc.options.set(interactive=False) # Assume not running interactively
 
+n_agents = 250
+
 def test_dcp():
-    s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'))
+    s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=n_agents)
     s1.initialize()
     
     s2 = sc.dcp(s1)
@@ -21,7 +23,7 @@ def test_dcp():
     return s1, s2
 
 def test_dcp_until():
-    s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'))
+    s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=n_agents)
     s1.initialize()
 
     s1.run(until=5)
