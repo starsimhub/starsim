@@ -230,12 +230,6 @@ class MultiRNG(np.random.Generator):
         #'bit_generator' kwarg has changed
         super(MultiRNG, result).__init__(**result.kwargs)
 
-        # and so has the _init_state
-        result._init_state = result.bit_generator.state # Store the initial state
-
-        result.initialized = True
-        result.ready = True
-
         return result
 
 

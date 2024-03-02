@@ -170,8 +170,8 @@ class ScipyDistribution():
                 else:
                     return vals[slots] # slots defined above
 
-        self.rng = self.set_rng(rng, gen)
-        self.gen = starsim_gen(name=gen.dist.name, seed=self.rng)(**gen.kwds)
+        rng = self.set_rng(rng, gen)
+        self.gen = starsim_gen(name=gen.dist.name, seed=rng)(**gen.kwds)
         return
 
     @staticmethod
@@ -192,8 +192,8 @@ class ScipyDistribution():
     def initialize(self, sim, context):
         # Passing sim and context here allow callables to receive "self" and sim pointers
         self.gen.dist.initialize(sim, context)
-        if isinstance(self.rng, (SingleRNG, MultiRNG)):
-            self.rng.initialize(sim.rng_container, sim.people.slot)
+        if isinstance(self.gen.random_state, (SingleRNG, MultiRNG)):
+            self.gen.random_state.initialize(sim.rng_container, sim.people.slot)
         return
 
     def __copy__(self):
@@ -208,6 +208,15 @@ class ScipyDistribution():
         memo[id(self)] = result
         for k, v in self.__dict__.items():
             setattr(result, k, deepcopy(v, memo))
+
+        if self.gen.random_state == np.random.mtrand._rand:
+            # Using the centralized numpy random number generator
+            # If we copy over the state, we'll get _separate_ random number generators
+            # for each distribution which do not draw from the centralized generator
+            # in the new instance....
+            # Not clear what to do, I suppose keep as centralized?
+            result.gen.random_state = np.random.mtrand._rand
+
         return result
 
     def __getstate__(self):

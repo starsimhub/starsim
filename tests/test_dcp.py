@@ -6,19 +6,38 @@ import matplotlib.pyplot as plt
 sc.options.set(interactive=False) # Assume not running interactively
 
 def test_dcp():
-    s = ss.Sim(pars=dict(diseases='sir', networks='embedding'))
-    s.initialize()
-    s2 = sc.dcp(s)
-    s.run()
+    s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'))
+    s1.initialize()
+    
+    s2 = sc.dcp(s1)
+
+    s1.run()
     s2.run()
-    s.plot()
+    s1.plot()
     s2.plot()
 
-    for k in s.results.keys():
-        assert np.allclose(s.results[k], s2.results[k])
+    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
 
-    return s, s2
+    return s1, s2
+
+def test_dcp_until():
+    s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'))
+    s1.initialize()
+
+    s1.run(until=5)
+
+    s2 = sc.dcp(s1)
+
+    s1.run()
+    s2.run()
+    s1.plot()
+    s2.plot()
+
+    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
+
+    return s1, s2
 
 if __name__ == '__main__':
     s1 = test_dcp()
+    s1 = test_dcp_until()
     plt.show()
