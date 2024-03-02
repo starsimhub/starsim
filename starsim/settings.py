@@ -67,7 +67,7 @@ class Options(sc.objdict):
 
         optdesc.rng = 'Set how random numbers are handled in Starsim with three options:\
             "centralized" uses the centralized numpy random number generator for all distributions\
-            "stream" uses a separate (default) random number generator for each distribution\
+            "single" uses a separate (default) random number generator for each distribution\
             "multi" uses a separate (MultiRNG) random number generator for each distribution.\
             In comparing two simulations, the "stream" option may be slightly better than the\
             "centralized option without any real disadvantages. Only "multi" can achieve full\
