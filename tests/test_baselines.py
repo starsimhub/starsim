@@ -8,12 +8,12 @@ import sciris as sc
 import starsim as ss
 import pytest
 
-do_plot = 1
-do_save = 0
+do_plot = True
+do_save = False
 baseline_filename  = sc.thisdir(__file__, 'baseline.json')
 benchmark_filename = sc.thisdir(__file__, 'benchmark.json')
 parameters_filename = sc.thisdir(ss.__file__, 'regression', f'pars_v{ss.__version__}.json')
-sc.options.set(interactive=False) # Assume not running interactively
+sc.options(interactive=False) # Assume not running interactively
 
 # Define the parameters
 pars = sc.objdict(
@@ -37,10 +37,10 @@ def make_sim(ppl=None, do_plot=False, **kwargs):
     interventions to increase coverage. If run directly (not via pytest), also
     plot the sim by default.
     '''
-    
+
     if ppl is None:
         ppl = make_people()
-    
+
     # Make the sim
     hiv = ss.HIV()
     hiv.pars.beta = {'mf': [0.15, 0.10], 'maternal': [0.2, 0]}
@@ -213,7 +213,7 @@ def test_benchmark(do_save=do_save, repeats=1, verbose=True):
 if __name__ == '__main__':
 
     # Start timing and optionally enable interactive plotting
-    sc.options.set(interactive=do_plot)
+    sc.options(interactive=do_plot)
     T = sc.tic()
 
     json = test_benchmark(do_save=do_save, repeats=5) # Run this first so benchmarking is available even if results are different
