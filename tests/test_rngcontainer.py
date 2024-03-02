@@ -35,7 +35,7 @@ def dists():
 
 def test_rng(rng_container, rngs, n=5):
     """ Simple sample from rng """
-    sc.heading('test_container: Testing RNGs object')
+    sc.heading('test_rng: Testing RNGs object')
 
     rng0 = rngs[0]
     rng0.initialize(rng_container, slots=n)
@@ -49,7 +49,7 @@ def test_rng(rng_container, rngs, n=5):
 
 def test_dists(rng_container, dists, n=5):
     """ Simple sample from distribution """
-    sc.heading('test_container: Testing RNGs object')
+    sc.heading('test_dists: Testing RNGs object')
 
     d0 = dists[0]
     if isinstance(d0.rng, ss.RNG):

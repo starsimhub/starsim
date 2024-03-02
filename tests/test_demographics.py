@@ -11,7 +11,8 @@ import sciris as sc
 import pytest
 
 
-do_plot = False
+do_plot = True
+sc.options(interactive=False) # Assume not running interactively
 
 
 def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, do_plot=True):
@@ -61,7 +62,6 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, 
         plt.bar(bins[:-1], counts * init_scale, alpha=0.5, label='Simulated')
         plt.bar(bins, age_data.value.values * 1000, alpha=0.5, color='r', label='Data')
         plt.legend(loc='upper right')
-        plt.show()
 
     sim.run()
 
@@ -118,9 +118,7 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, 
             ax[3].set_title('Pregnancies and births')
             ax[3].legend()
 
-        fig.tight_layout
-
-        plt.show()
+        fig.tight_layout()
 
     return sim
 
@@ -135,21 +133,20 @@ def test_constant_pop():
     # Plots
     if do_plot:
         sim.plot()
-        import matplotlib.pyplot as plt
-        plt.show()
     return sim
 
-def test_module_adding():
 
+def test_module_adding():
     births = ss.Births(pars={'birth_rate': 10})
     deaths = ss.Deaths(pars={'death_rate': 10})
     demographics = [births, deaths]
     with pytest.raises(Exception): # CK: should be ValueError, but that fails for now, and this is OK
         sim = ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=10, death_rate=10).run()
 
-if __name__ == '__main__':
 
+if __name__ == '__main__':
+    sc.options(interactive=do_plot)
     s1 = test_nigeria(dt=1, which='pregnancy', n_years=15, plot_init=True, do_plot=do_plot)
     s2 = test_constant_pop()
     s3 = test_module_adding()
-
+    plt.show()

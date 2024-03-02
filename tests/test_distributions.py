@@ -11,6 +11,11 @@ import matplotlib.pyplot as plt
 import pytest
 
 
+
+do_plot = True
+sc.options(interactive=False) # Assume not running interactively
+
+
 @pytest.fixture(params=[5, 50])
 def n(request):
     yield request.param
@@ -39,7 +44,7 @@ def test_basic(n):
 
 def test_uniform_scalar(n):
     """ Create a uniform distribution """
-    sc.heading('test_uniform: Testing uniform with scalar parameters')
+    sc.heading('test_uniform_scalar: Testing uniform with scalar parameters')
 
     rng = ss.RNG('Uniform')
     rng.initialize(container=None, slots=n)
@@ -54,9 +59,10 @@ def test_uniform_scalar(n):
     assert len(draws) == len(uids)
     return draws
 
+
 def test_uniform_scalar_str(n):
     """ Create a uniform distribution """
-    sc.heading('test_uniform: Testing uniform with scalar parameters')
+    sc.heading('test_uniform_scalar_str: Testing uniform with scalar parameters')
 
     dist = sps.uniform(loc=1, scale=4)
     d = ss.ScipyDistribution(dist, 'Uniform') # String here!
@@ -73,7 +79,7 @@ def test_uniform_scalar_str(n):
 
 def test_uniform_callable(n):
     """ Create a uniform distribution """
-    sc.heading('test_uniform: Testing uniform with callable parameters')
+    sc.heading('test_uniform_callable: Testing uniform with callable parameters')
 
     sim = ss.Sim().initialize()
 
@@ -151,30 +157,30 @@ def test_repeat_slot():
 
 # %% Run as a script
 if __name__ == '__main__':
-    # Start timing
-    ###T = sc.tic()
+    sc.options(interactive=do_plot)
 
     nTrials = 3
 
+    times = {}
     for multirng in [True, False]:
         ss.options(multirng=multirng)
+        key = f'MultiRNG: {multirng}'
+        times[key] = []
         sc.heading('Testing with multirng set to', multirng)
 
-        times = []
         for trial in range(nTrials):
             T = sc.tic()
 
             # Run tests - some will only pass if multirng is True
-            test_basic()
+            test_basic(n)
             test_uniform_scalar(n)
             test_uniform_scalar_str(n)
             test_uniform_callable(n)
             test_uniform_array(n)
 
-            times.append(sc.toc(T, doprint=False, output=True))
+            times[key].append(sc.toc(T, doprint=False, output=True))
 
-    print(times)
-    ###sc.toc(T)
+    print('Times:', times)
 
     plt.show()
     print('Done.')

@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 
 ppl = ss.People(9000)
-ppl.networks = ss.ndict(ss.mf(), ss.maternal())
+ppl.networks = ss.ndict(ss.MFNet(), ss.MaternalNet())
 
 hiv = ss.HIV()
 hiv.pars['beta'] = {'mf': [0.08, 0.04], 'maternal': [0.2, 0]}

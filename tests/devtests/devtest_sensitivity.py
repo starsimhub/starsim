@@ -5,6 +5,7 @@ A simple beta sweep with multisim on and off using HIV as an example pathogen
 # %% Imports and settings
 import os
 import starsim as ss
+import scipy.stats as sps
 import sciris as sc
 import pandas as pd
 import seaborn as sns
@@ -28,12 +29,12 @@ def run_sim(n, xf, rand_seed, multirng):
         'male_shift': 5,
         'std': 3,
         'pars': {
-            'dur': ss.lognormal(15*xf, 15*xf),  # Can vary by age, year, and individual pair
+            'dur': sps.lognorm(15*xf, 15*xf),  # Can vary by age, year, and individual pair
             'part_rates': 0.9,  # Participation rates - can vary by sex and year
             'rel_part_rates': 1.0,
             'debut': 16,  # Age of debut can vary by sex, year, and individual
         }} 
-    ppl.networks = ss.ndict(ss.embedding(**rel_pars), ss.maternal())
+    ppl.networks = ss.ndict(ss.EmbeddingNet(**rel_pars), ss.MaternalNet())
 
     hiv_pars = {
         #'beta': {'embedding': [xf * 0.30, xf * 0.25], 'maternal': [xf * 0.2, 0]},
