@@ -9,9 +9,11 @@ import starsim as ss
 from starsim.random import RNG
 import pytest
 
+
 @pytest.fixture
 def rng(request, slots=5, base_seed=1, name='Test', **kwargs):
     return make_rng(slots, base_seed, name, **kwargs)
+
 
 def make_rng(slots=5, base_seed=1, name='Test', **kwargs):
     rng_container = ss.RNGContainer()
@@ -91,8 +93,6 @@ def test_seed(n=5):
     """ Changing seeds """
     sc.heading('test_seed: Testing sample with seeds 0 and 1')
 
-    # NOTE: SingleRNG is using the numpy random singleton, and thus ignores base_seed here
-
     rng0 = make_rng(n, base_seed=0)
     draws0 = rng0.uniform(size=n)
     print(f'Random sample of size {n} for rng0 with base_seed 0 returned {draws0}')
@@ -111,15 +111,16 @@ if __name__ == '__main__':
     T = sc.tic()
 
     n=5
+    rng = make_rng()
 
     for multirng in [True, False]:
         ss.options(multirng=multirng)
         sc.heading('Testing with multirng set to', multirng)
 
         # Run tests - some will only pass if multirng is True
-        test_random(n)
-        test_reset(n)
-        test_step(n)
+        test_random(rng, n)
+        test_reset(rng, n)
+        test_step(rng, n)
         test_seed(n)
 
     sc.toc(T)

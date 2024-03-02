@@ -292,3 +292,22 @@ class SingleRNG(np.random.Generator):
 
     def step(self, ti):
         pass
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, deepcopy(v, memo))
+
+        #'bit_generator' kwarg has changed
+        super(SingleRNG, result).__init__(**result.kwargs)
+
+        # and so has the _init_state
+        result._init_state = result.bit_generator.state # Store the initial state
+
+        self.seed = None # Will be determined once added to the RNG Container
+        result.initialized = True
+        result.ready = True
+
+        return result

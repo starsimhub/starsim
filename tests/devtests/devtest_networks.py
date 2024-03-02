@@ -20,8 +20,8 @@ ppl = ss.People(10000)
 mf_pars = {'part_rates': 0.85}
 msm_pars = {'part_rates': 0.1}
 ppl.networks = ss.Networks(
-    ss.msm(pars=msm_pars), ss.mf(pars=mf_pars), ss.maternal(),
-    connectors=ss.mf_msm(pars={'prop_bi': 0.4})
+    ss.MSMNet(pars=msm_pars), ss.MFNet(pars=mf_pars), ss.MaternalNet(),
+    connectors=ss.MF_MSM(pars={'prop_bi': 0.4})
 )
 
 hiv = ss.HIV()
