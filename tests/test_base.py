@@ -9,6 +9,8 @@ import starsim as ss
 import matplotlib.pyplot as plt
 import scipy.stats as sps
 
+do_plot = True
+sc.options.set(interactive=False) # Assume not running interactively
 
 # %% Define the tests
 
@@ -87,7 +89,7 @@ def test_microsim():
 def test_ppl_construction():
 
     def init_debut(self, sim, uids):
-        #loc = 16
+        # Test setting the mean debut age by sex, 16 for men and 21 for women.
         loc = np.full(len(uids), 16)
         loc[sim.people.female[uids]] = 21
         return loc
@@ -112,10 +114,10 @@ def test_ppl_construction():
 
 # %% Run as a script
 if __name__ == '__main__':
+    sc.options.set(interactive=do_plot)
+
     # Start timing
     T = sc.tic()
-
-    ss.options.multirng = False
 
     # Run tests
     ppl = test_people()

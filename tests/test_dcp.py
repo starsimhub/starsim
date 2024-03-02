@@ -7,6 +7,7 @@ sc.options.set(interactive=False) # Assume not running interactively
 
 n_agents = 250
 
+
 def test_dcp():
     s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=n_agents)
     s1.initialize()
@@ -21,6 +22,7 @@ def test_dcp():
     assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
 
     return s1, s2
+
 
 def test_dcp_until():
     s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=n_agents)
@@ -39,7 +41,9 @@ def test_dcp_until():
 
     return s1, s2
 
+
 if __name__ == '__main__':
+    sc.options.set(interactive=True)
     s1 = test_dcp()
     s1 = test_dcp_until()
     plt.show()

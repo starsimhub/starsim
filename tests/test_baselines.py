@@ -7,8 +7,8 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-do_plot = 1
-do_save = 0
+do_plot = True
+do_save = False
 baseline_filename  = sc.thisdir(__file__, 'baseline.json')
 benchmark_filename = sc.thisdir(__file__, 'benchmark.json')
 parameters_filename = sc.thisdir(ss.__file__, 'regression', f'pars_v{ss.__version__}.json')
@@ -36,10 +36,10 @@ def make_sim(ppl=None, do_plot=False, **kwargs):
     interventions to increase coverage. If run directly (not via pytest), also
     plot the sim by default.
     '''
-    
+
     if ppl is None:
         ppl = make_people()
-    
+
     # Make the sim
     hiv = ss.HIV()
     hiv.pars.beta = {'mf': [0.15, 0.10], 'maternal': [0.2, 0]}
