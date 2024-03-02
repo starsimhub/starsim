@@ -32,11 +32,11 @@ def run_test(remove_dead=True, do_plot=False, rand_seed=0, verbose=False):
         'rel_death': 7
     }
 
-    births = ss.births(realistic_birth)
-    deaths = ss.background_deaths(series_death)
+    births = ss.Births(realistic_birth)
+    deaths = ss.Deaths(series_death)
     gon = ss.Gonorrhea({'p_death': 0.5, 'init_prev': 0.1})
 
-    sim = ss.Sim(people=ppl, demographics=[births,deaths], diseases=[gon], networks=ss.mf(), remove_dead=remove_dead, n_years=100, analyzers=[agent_analyzer()], rand_seed=rand_seed, verbose=verbose)
+    sim = ss.Sim(people=ppl, demographics=[births,deaths], diseases=[gon], networks=ss.MFNet(), remove_dead=remove_dead, n_years=100, analyzers=[agent_analyzer()], rand_seed=rand_seed, verbose=verbose)
 
     sim.initialize()
     sim.run()
@@ -79,8 +79,8 @@ if __name__ == '__main__':
     ax[0].set_title('Births')
 
 
-    ax[1].plot(sim1.tivec, sim1.results.background_deaths.new, label='No removal')
-    ax[1].plot(sim2.tivec, sim2.results.background_deaths.new, label='Removal', linestyle='--')
+    ax[1].plot(sim1.tivec, sim1.results.deaths.new, label='No removal')
+    ax[1].plot(sim2.tivec, sim2.results.deaths.new, label='Removal', linestyle='--')
     ax[1].set_title('Background deaths')
 
     ax[1].plot(sim1.tivec, sim1.results.new_deaths, label='(all) No removal')

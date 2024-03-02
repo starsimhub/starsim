@@ -3,7 +3,7 @@ Test different formats for demographic data
 """
 
 # %% Imports and settings
-import stisim as ss
+import starsim as ss
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -14,7 +14,7 @@ do_plot = True
 def test_fixed_death_rate():
     """ Simple fixed death rate for all agents """
     ppl = ss.People(1000)
-    bdm1 = ss.background_deaths(pars={'death_rate': 0.015})
+    bdm1 = ss.Deaths(pars={'death_rate': 0.015})
     sim1 = ss.Sim(people=ppl, demographics=bdm1, label='Constant death rate')
     sim1.run()
     return sim1
@@ -32,7 +32,7 @@ def test_series_death_rate():
         'data_cols': {'year': 'Time', 'sex': 'Sex', 'age': 'AgeGrpStart', 'value': 'mx'},
         'sex_keys': {'f': 'Female', 'm': 'Male'},
     }))
-    bdm2 = ss.background_deaths(pars={'death_rate': death_rate})
+    bdm2 = ss.Deaths(pars={'death_rate': death_rate})
     sim2 = ss.Sim(people=ppl, demographics=bdm2, label='Using age-specific data from a pandas series')
     sim2.run()
     return sim2
@@ -42,7 +42,7 @@ def test_file_death_rate():
     """ Realistic death rates in dataframe format, read from a csv file """
     realistic_death = pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')
     ppl = ss.People(1000)
-    bdm3 = ss.background_deaths(pars={'death_rate': realistic_death})
+    bdm3 = ss.Deaths(pars={'death_rate': realistic_death})
     sim3 = ss.Sim(people=ppl, demographics=bdm3, label='Realistic death rates read from a CSV file')
     sim3.run()
     return sim3
@@ -52,7 +52,7 @@ def test_file_birth_data():
     """ Test births using CSV data """
     ppl = ss.People(1000)
     realistic_birth = pd.read_csv(ss.root / 'tests/test_data/nigeria_births.csv')
-    births = ss.births(pars={'birth_rate': realistic_birth})
+    births = ss.Births(pars={'birth_rate': realistic_birth})
     sim1 = ss.Sim(people=ppl, demographics=births, label='UN birth rates read from a CSV file')
     sim1.run()
     return sim1
@@ -61,7 +61,7 @@ def test_file_birth_data():
 def test_crude_birth_data():
     """ Test births using a crude rate """
     ppl = ss.People(1000)
-    births = ss.births(pars={'birth_rate': 36, 'units': 1 / 1000})
+    births = ss.Births(pars={'birth_rate': 36, 'units': 1 / 1000})
     sim2 = ss.Sim(people=ppl, demographics=births, label='Overall crude birth rate')
     sim2.run()
     return sim2
@@ -99,7 +99,7 @@ if __name__ == '__main__':
         # Plot deaths
         fig, ax = plt.subplots(2, 1)
         for sim in [sim_death1, sim_death2, sim_death3]:
-            ax[0].plot(sim.tivec, sim.results.background_deaths.new, label=sim.label)
+            ax[0].plot(sim.tivec, sim.results.deaths.new, label=sim.label)
             ax[1].plot(sim.tivec, sim.results.n_alive)
 
         ax[0].set_title('New background deaths')
