@@ -15,7 +15,7 @@ import sciris as sc
 
 default_n_agents = 25
 # Three choices for network here, note that only the first two are common-random-number safe
-network = ['stable_monogamy', 'EmbeddingNet', 'hpv_network'][1]
+network = ['stable_monogamy', 'EmbeddingNet'][1]
 
 do_plot_graph = True
 # Several choices for how to layout the graph when plotting

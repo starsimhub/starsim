@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 
 
 do_plot = True
-sc.options.set(interactive=False) # Assume not running interactively
+sc.options(interactive=False) # Assume not running interactively
 
 
 @pytest.fixture(params=[5, 50])
@@ -158,7 +158,7 @@ def test_repeat_slot():
 
 # %% Run as a script
 if __name__ == '__main__':
-    sc.options.set(interactive=do_plot)
+    sc.options(interactive=do_plot)
 
     n = 5
     nTrials = 3

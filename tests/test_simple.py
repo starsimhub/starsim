@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 
 n_agents = 1_000
 do_plot = True
-sc.options.set(interactive=False) # Assume not running interactively
+sc.options(interactive=False) # Assume not running interactively
 
 
 def test_default():
@@ -143,7 +143,7 @@ def test_parallel():
 
 
 if __name__ == '__main__':
-    sc.options.set(interactive=do_plot)
+    sc.options(interactive=do_plot)
     T = sc.timer()
     
     s1 = test_default()

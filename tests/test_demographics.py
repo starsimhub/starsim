@@ -12,7 +12,7 @@ import pytest
 
 
 do_plot = True
-sc.options.set(interactive=False) # Assume not running interactively
+sc.options(interactive=False) # Assume not running interactively
 
 
 def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, do_plot=True):
@@ -145,7 +145,7 @@ def test_module_adding():
 
 
 if __name__ == '__main__':
-    sc.options.set(interactive=do_plot)
+    sc.options(interactive=do_plot)
     s1 = test_nigeria(dt=1, which='pregnancy', n_years=15, plot_init=True, do_plot=do_plot)
     s2 = test_constant_pop()
     s3 = test_module_adding()

@@ -3,7 +3,7 @@ import sciris as sc
 import numpy as np
 import matplotlib.pyplot as plt
 
-sc.options.set(interactive=False) # Assume not running interactively
+sc.options(interactive=False) # Assume not running interactively
 
 n_agents = 250
 
@@ -43,7 +43,7 @@ def test_dcp_until():
 
 
 if __name__ == '__main__':
-    sc.options.set(interactive=True)
+    sc.options(interactive=True)
     s1 = test_dcp()
     s1 = test_dcp_until()
     plt.show()

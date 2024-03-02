@@ -12,7 +12,7 @@ do_save = False
 baseline_filename  = sc.thisdir(__file__, 'baseline.json')
 benchmark_filename = sc.thisdir(__file__, 'benchmark.json')
 parameters_filename = sc.thisdir(ss.__file__, 'regression', f'pars_v{ss.__version__}.json')
-sc.options.set(interactive=False) # Assume not running interactively
+sc.options(interactive=False) # Assume not running interactively
 
 # Define the parameters
 pars = sc.objdict(
@@ -212,7 +212,7 @@ def test_benchmark(do_save=do_save, repeats=1, verbose=True):
 if __name__ == '__main__':
 
     # Start timing and optionally enable interactive plotting
-    sc.options.set(interactive=do_plot)
+    sc.options(interactive=do_plot)
     T = sc.tic()
 
     json = test_benchmark(do_save=do_save, repeats=5) # Run this first so benchmarking is available even if results are different

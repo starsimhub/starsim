@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 import scipy.stats as sps
 
 do_plot = True
-sc.options.set(interactive=False) # Assume not running interactively
+sc.options(interactive=False) # Assume not running interactively
 
 # %% Define the tests
 
@@ -114,7 +114,7 @@ def test_ppl_construction():
 
 # %% Run as a script
 if __name__ == '__main__':
-    sc.options.set(interactive=do_plot)
+    sc.options(interactive=do_plot)
 
     # Start timing
     T = sc.tic()

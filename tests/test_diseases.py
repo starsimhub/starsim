@@ -12,7 +12,7 @@ import sciris as sc
 test_run = True
 n_agents = [10_000, 2_000][test_run]
 do_plot = True
-sc.options.set(interactive=False) # Assume not running interactively
+sc.options(interactive=False) # Assume not running interactively
 
 
 def test_sir():
@@ -111,7 +111,7 @@ def test_multidisease():
 
 
 if __name__ == '__main__':
-    sc.options.set(interactive=do_plot)
+    sc.options(interactive=do_plot)
     sim1 = test_sir()
     sim2 = test_ncd()
     sims = test_gavi()
