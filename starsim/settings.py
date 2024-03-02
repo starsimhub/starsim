@@ -69,7 +69,7 @@ class Options(sc.objdict):
             "centralized" uses the centralized numpy random number generator for all distributions\
             "single" uses a separate (default) random number generator for each distribution\
             "multi" uses a separate (MultiRNG) random number generator for each distribution.\
-            In comparing two simulations, the "stream" option may be slightly better than the\
+            In comparing two simulations, the "single" option may be slightly better than the\
             "centralized option without any real disadvantages. Only "multi" can achieve full\
             common random number (CRN) coherence, but is more computationally expensive and only\
             produces CRN results when using CRN-safe code.'
