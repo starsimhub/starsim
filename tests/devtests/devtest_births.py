@@ -26,17 +26,17 @@ series_death = {'death_rates': pd.Series(
 
 # births = ss.births(realistic_birth)
 pregnancy = ss.Pregnancy(realistic_fertility)
-deaths = ss.background_deaths(series_death)
-births = ss.births(realistic_birth)
+deaths = ss.Deaths(series_death)
+births = ss.Births(realistic_birth)
 gon = ss.Gonorrhea({'p_death': 0.5, 'initial': 1000})
-sim = ss.Sim(people=ppl, demographics=[pregnancy, deaths], diseases=gon, networks=ss.mf(), n_years=100)
+sim = ss.Sim(people=ppl, demographics=[pregnancy, deaths], diseases=gon, networks=ss.MFNet(), n_years=100)
 sim.initialize()
 sim.run()
 
 fig, ax = plt.subplots(2, 1)
 # ax[0].plot(sim.tivec, sim.results.births.new, label='Births')
 ax[0].plot(sim.tivec, sim.results.pregnancy.births, label='Births')
-ax[0].plot(sim.tivec, sim.results.background_deaths.new, label='Deaths')
+ax[0].plot(sim.tivec, sim.results.deaths.new, label='Deaths')
 ax[1].plot(sim.tivec, sim.results.n_alive)
 
 ax[0].set_title('Births and deaths')
@@ -44,5 +44,3 @@ ax[1].set_title('Population size')
 ax[0].legend()
 
 plt.show()
-
-
