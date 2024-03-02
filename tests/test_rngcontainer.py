@@ -39,7 +39,8 @@ def test_rng(rng_container, rngs, n=5):
     sc.heading('test_container: Testing RNGContainer object')
 
     rng0 = rngs[0]
-    rng0.initialize(rng_container, slots=n)
+    if ss.options.rng in ['single', 'multi']:
+        rng0.initialize(rng_container, slots=n)
 
     draws = rng0.random(n)
     print(f'Created seed and sampled: {draws}')
@@ -86,7 +87,7 @@ def test_reset(rng_container, dists, n=5):
     sc.heading('test_reset: Testing sample, reset, sample')
 
     d0 = dists[0]
-    if ss.options.multirng:
+    if ss.options.rng in ['single', 'multi']:
         d0.rng.initialize(rng_container, slots=n)
 
     uids = np.arange(0,n,2) # every other to make it interesting
@@ -110,7 +111,7 @@ def test_step(rng_container, dists, n=5):
     sc.heading('test_step: Testing sample, step, sample')
 
     d0 = dists[0]
-    if ss.options.multirng:
+    if ss.options.rng in ['single', 'multi']:
         d0.rng.initialize(rng_container, slots=n)
 
     uids = np.arange(0,n,2) # every other to make it interesting
@@ -128,6 +129,8 @@ def test_step(rng_container, dists, n=5):
 
 def test_initialize(rngs, n=5):
     """ Sample without initializing, should raise exception """
+    if ss.options.rng not in ['single', 'multi']:
+        pytest.skip('Initialize only for SingleRNG and MultiRNG.')
     sc.heading('test_initialize: Testing without initializing, should raise exception.')
     rng_container = ss.RNGContainer()
     #rng_container.initialize(base_seed=3) # Do not initialize
@@ -157,7 +160,7 @@ def test_samplingorder(rng_container, dists, n=5):
     uids = np.arange(0,n,2) # every other to make it interesting
 
     d0, d1 = dists
-    if ss.options.multirng:
+    if ss.options.rng in ['single', 'multi']:
         d0.rng.initialize(rng_container, slots=n)
         d1.rng.initialize(rng_container, slots=n)
 
@@ -183,6 +186,8 @@ def test_samplingorder(rng_container, dists, n=5):
 
 def test_repeatname(rng_container, n=5):
     """ Test two random number generators with the same name """
+    if ss.options.rng not in ['single', 'multi']:
+        pytest.skip('Repeate name is only for SingleRNG and MultiRNG.')
     sc.heading('test_repeatname: Testing if two random number generators with the same name are allowed')
 
     rng0 = ss.RNG('test')

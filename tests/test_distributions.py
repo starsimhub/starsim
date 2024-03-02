@@ -61,7 +61,7 @@ def test_uniform_scalar_str(n):
 
     dist = sps.uniform(loc=1, scale=4)
     d = ScipyDistribution(dist, 'Uniform') # String here!
-    if ss.options.multirng:
+    if ss.options.rng in ['single', 'multi']:
         d.rng.initialize(container=None, slots=n) # Only really needed for testing as initializing the distribution will do something similar.
 
     uids = np.array([1,3])

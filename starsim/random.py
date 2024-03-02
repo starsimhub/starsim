@@ -97,11 +97,13 @@ def RNG(*args, **kwargs):
     Returns:
     Numpy RandomState singleton or a MultiRNG: Instance of a random number generator
     """
-    if ss.options.multirng:
-        rng = MultiRNG(*args, **kwargs)
-    else:
-        rng = SingleRNG(*args, **kwargs)
-    return rng
+    if ss.options.rng == 'multi':
+        return MultiRNG(*args, **kwargs)
+    elif ss.options.rng == 'single':
+        return SingleRNG(*args, **kwargs)
+    
+    # Centralized
+    return np.random.mtrand._rand
 
 
 class MultiRNG(np.random.Generator):
@@ -233,6 +235,7 @@ class MultiRNG(np.random.Generator):
         # and so has the _init_state
         result._init_state = result.bit_generator.state # Store the initial state
 
+        self.seed = None # Will be determined once added to the RNG Container
         result.initialized = True
         result.ready = True
 
@@ -241,7 +244,8 @@ class MultiRNG(np.random.Generator):
 
 class SingleRNG(np.random.Generator):
     """
-    Dummy class that mirrors MultiRNG but provides the numpy singleton rng instead
+    Enable a single random number generator stream per distribution without the complexity of MultiRNG.
+    Used with options.rng = 'single'
     """
     
     def __init__(self, name, seed_offset=None, **kwargs):
@@ -271,10 +275,13 @@ class SingleRNG(np.random.Generator):
             return
 
         if container is not None:
-            container.add(self) # base_seed + seed_offset
+            self.seed = container.add(self) # base_seed + seed_offset
+        else:
+            # Enable use of SingleRNG without a container
+            self.seed = self.seed_offset
 
         if 'bit_generator' not in self.kwargs:
-            self.kwargs['bit_generator'] = np.random.mtrand._rand._bit_generator
+            self.kwargs['bit_generator'] = np.random.PCG64DXSM(seed=self.seed)
         super().__init__(**self.kwargs)
 
         self.initialized = True

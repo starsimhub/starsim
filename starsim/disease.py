@@ -388,12 +388,12 @@ class Infection(Disease):
             if sim.ti == 0: ss.warn(warnmsg, die=False)
             return
 
-        if not ss.options.multirng:
-            # Determine new cases for singlerng
-            new_cases, sources = self._make_new_cases_singlerng(sim)
-        else:
+        if ss.options.multirng:
             # Determine new cases for multirng
             new_cases, sources = self._make_new_cases_multirng(sim)
+        else:
+            # Determine new cases for singlerng
+            new_cases, sources = self._make_new_cases_singlerng(sim)
 
         if len(new_cases):
             self._set_cases(sim, new_cases, sources)
