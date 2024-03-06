@@ -66,6 +66,8 @@ class UIDArray(NDArrayOperatorsMixin):
         return
 
     def __repr__(self):
+        if len(self) == 0:
+            return f'<{self.__class__.__name__} (empty)>'
         df = self.to_df()
         return df.__repr__()
     
