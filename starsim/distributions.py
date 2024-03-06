@@ -129,7 +129,7 @@ class ScipyDistribution():
 
                     #repeat_degree = repeat_slot_cnt.max()
                     while len(todo_inds):
-                        repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots[todo_inds], return_index=True, return_inverse=True, return_counts=True)
+                        repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots.values[todo_inds], return_index=True, return_inverse=True, return_counts=True)
                         cur_inds = todo_inds[repeat_slot_ind] # Absolute positions being filled this pass
 
                         # Reset RNG, note that ti=0 on initialization and ti+1
