@@ -60,9 +60,8 @@ class ScipyDistribution():
                     if not options.multirng:
                         n_samples = len(size)
                     else:
-                        v = size.__array__() # TODO - check if this works without calling __array__()?
                         try:
-                            slots = self.random_state.slots[v].__array__()
+                            slots = self.random_state.slots[size]
                             max_slot = slots.max()
                         except AttributeError as e:
                             if not isinstance(self.random_state, MultiRNG):
@@ -97,7 +96,7 @@ class ScipyDistribution():
                                 # Tricky - repeated slots!
                                 if not repeat_slot_flag:
                                     repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots, return_index=True, return_inverse=True, return_counts=True)
-                                self.repeat_slot_handling[pname] = kwargs[pname].__array__().copy() # Save full pars for handling later
+                                self.repeat_slot_handling[pname] = kwargs[pname].__array__()  # Save full pars for handling later. Use .__array__() here to provide seamless interoperability with States, UIDArrays, and np.ndarrays
                                 pars_slots[repeat_slot_u] = self.repeat_slot_handling[pname][repeat_slot_ind] # Take first instance of each
                                 repeat_slot_flag = True
                             else:
@@ -130,7 +129,7 @@ class ScipyDistribution():
 
                     #repeat_degree = repeat_slot_cnt.max()
                     while len(todo_inds):
-                        repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots[todo_inds], return_index=True, return_inverse=True, return_counts=True)
+                        repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots.values[todo_inds], return_index=True, return_inverse=True, return_counts=True)
                         cur_inds = todo_inds[repeat_slot_ind] # Absolute positions being filled this pass
 
                         # Reset RNG, note that ti=0 on initialization and ti+1
@@ -301,9 +300,8 @@ class ScipyHistogram(rv_histogram):
             if not options.multirng:
                 n_samples = len(size)
             else:
-                v = size.__array__() # TODO - check if this works without calling __array__()?
                 try:
-                    slots = self.random_state.slots[v].__array__()
+                    slots = self.random_state.slots[size]
                     max_slot = slots.max()
                 except AttributeError as e:
                     if not isinstance(self.random_state, MultiRNG):

@@ -1,6 +1,7 @@
 import hashlib
 import numpy as np
 import starsim as ss
+from starsim.states import UIDArray
 from copy import deepcopy
 
 __all__ = ['RNGContainer', 'MultiRNG', 'SingleRNG', 'RNG', 'NotReadyException']
@@ -118,7 +119,7 @@ class MultiRNG(np.random.Generator):
     >>> import starsim as ss
     >>> import numpy as np
     >>> rng = ss.MultiRNG('Test') # The hashed name determines the seed offset.
-    >>> rng.initialize(container=None, slots=5) # In practice, slots will be sim.people.slots. When scalar (for testing), an np.arange will be used.
+    >>> rng.initialize(container=None, slots=5) # In practice, slots will be sim.people.slots. When scalar (for testing), a state-like UIDArray will be used.
     >>> uids = np.array([1,4])
     >>> rng.random(uids)
     array([0.88110549, 0.86915719])
@@ -189,7 +190,7 @@ class MultiRNG(np.random.Generator):
 
         if isinstance(slots, int):
             # Handle edge case in which the user wants n sequential slots, as used in testing.
-            self.slots = np.arange(slots)
+            self.slots = UIDArray(np.arange(slots),np.arange(slots))
         else:
             self.slots = slots # E.g. sim.people.slots (instead of using uid as the slots directly)
 
