@@ -60,9 +60,8 @@ class ScipyDistribution():
                     if not options.multirng:
                         n_samples = len(size)
                     else:
-                        v = size.__array__() # TODO - check if this works without calling __array__()?
                         try:
-                            slots = self.random_state.slots[v].__array__()
+                            slots = self.random_state.slots[size]
                             max_slot = slots.max()
                         except AttributeError as e:
                             if not isinstance(self.random_state, MultiRNG):
