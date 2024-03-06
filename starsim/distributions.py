@@ -96,7 +96,7 @@ class ScipyDistribution():
                                 # Tricky - repeated slots!
                                 if not repeat_slot_flag:
                                     repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots, return_index=True, return_inverse=True, return_counts=True)
-                                self.repeat_slot_handling[pname] = kwargs[pname].__array__().copy() # Save full pars for handling later
+                                self.repeat_slot_handling[pname] = kwargs[pname].__array__()  # Save full pars for handling later. Use .__array__() here to provide seamless interoperability with States, UIDArrays, and np.ndarrays
                                 pars_slots[repeat_slot_u] = self.repeat_slot_handling[pname][repeat_slot_ind] # Take first instance of each
                                 repeat_slot_flag = True
                             else:
