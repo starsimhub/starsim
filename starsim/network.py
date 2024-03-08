@@ -372,14 +372,14 @@ class StaticNet(Network):
 
     **Examples**::
 
-    # Generate a networkx graph and pass to Starsim
-    import networkx as nx
-    import starsim as ss
-    g = nx.scale_free_graph(n=10000)
-    ss.static(graph=g)
+        # Generate a networkx graph and pass to Starsim
+        import networkx as nx
+        import starsim as ss
+        g = nx.scale_free_graph(n=10000)
+        ss.static(graph=g)
 
-    # Pass a networkx graph generator to Starsim
-    ss.static(graph=nx.erdos_renyi_graph, p=0.0001)
+        # Pass a networkx graph generator to Starsim
+        ss.static(graph=nx.erdos_renyi_graph, p=0.0001)
     """
 
     def __init__(self, graph, pars=None, **kwargs):

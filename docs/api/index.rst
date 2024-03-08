@@ -18,13 +18,14 @@ This page lists Starsim's full API, including all functions and classes.
    starsim.distributions
    starsim.interventions
    starsim.modules
-   starsim.networks
+   starsim.network
    starsim.parameters
    starsim.people
    starsim.products
    starsim.random
    starsim.results
    starsim.run
+   starsim.samples
    starsim.settings
    starsim.sim
    starsim.states
