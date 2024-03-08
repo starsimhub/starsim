@@ -11,7 +11,7 @@ ng.pars['beta'] = {'mf': [0.05, 0.025]}
 ng.pars['init_prev'] = 0.025
 
 ppl1 = ss.People(10000)
-sim_nohiv = ss.Sim(people=ppl1, networks=ss.mf(), diseases=ng)
+sim_nohiv = ss.Sim(people=ppl1, networks=ss.MFNet(), diseases=ng)
 sim_nohiv.run()
 
 hiv = ss.HIV()
@@ -21,7 +21,7 @@ ng = ss.Gonorrhea()
 ng.pars['beta'] = {'mf': [0.05, 0.025]}
 ng.pars['init_prev'] = 0.025
 ppl2 = ss.People(10000)
-sim_hiv = ss.Sim(people=ppl2, networks=ss.mf(), diseases=[hiv, ng], connectors=ss.simple_hiv_ng())
+sim_hiv = ss.Sim(people=ppl2, networks=ss.MFNet(), diseases=[hiv, ng], connectors=ss.simple_hiv_ng())
 sim_hiv.run()
 
 plt.figure()

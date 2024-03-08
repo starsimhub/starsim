@@ -1,8 +1,10 @@
 import hashlib
 import numpy as np
 import starsim as ss
+from starsim.states import UIDArray
+from copy import deepcopy
 
-__all__ = ['RNGContainer', 'MultiRNG', 'SingleRNG', 'RNG']
+__all__ = ['RNGContainer', 'MultiRNG', 'SingleRNG', 'RNG', 'NotReadyException']
 
 
 class RNGContainer:
@@ -73,6 +75,14 @@ class SeedRepeatException(Exception):
         return
 
 
+class NotReadyException(Exception):
+    "Raised when a random generator is called without being ready."
+    def __init__(self, rng_name):
+        msg = f'The random generator named "{rng_name}" was not ready when called. This error is likely caused by calling a distribution or underlying MultiRNG generator two or more times in a single step.'
+        super().__init__(msg)
+        return
+
+
 class RepeatNameException(Exception):
     "Raised when adding a random number generator to a RNGContainer when the rng name has already been used."
     def __init__(self, rng_name):
@@ -106,13 +116,13 @@ class MultiRNG(np.random.Generator):
     rng and ultimately ask for randomly distributed random numbers for agents
     with UIDs 1 and 4:
 
-    >>> import starsim as ss
-    >>> import numpy as np
-    >>> rng = ss.MultiRNG('Test') # The hashed name determines the seed offset.
-    >>> rng.initialize(container=None, slots=5) # In practice, slots will be sim.people.slots. When scalar (for testing), an np.arange will be used.
-    >>> uids = np.array([1,4])
-    >>> rng.random(uids)
-    array([0.88110549, 0.86915719])
+        >>> import starsim as ss
+        >>> import numpy as np
+        >>> rng = ss.MultiRNG('Test') # The hashed name determines the seed offset.
+        >>> rng.initialize(container=None, slots=5) # In practice, slots will be sim.people.slots. When scalar (for testing), a state-like UIDArray will be used.
+        >>> uids = np.array([1,4])
+        >>> rng.random(uids)
+        array([0.88110549, 0.86915719])
 
     In theory, what this is doing is drawing 5 random numbers and returning the
     draws at positions 1 and 4.
@@ -130,18 +140,18 @@ class MultiRNG(np.random.Generator):
     unless an intervention mechanistically drove a change.
 
     The slot-based approach is not without challenges.
-    * Two newborn agents may received the same "slot," and thus will receive the
-      same random draws.
-    * The chance of overlapping slots can be reduced by
-      allowing mothers to choose from a larger number of possible slots (say up
-      to one-million). However, as slots are used as indices, the number of
-      random variables drawn for each query must number the maximum slot. So if
-      one agent has a slot of 1M, then 1M random numbers will be drawn,
-      consuming more time than would be necessary if the maximum slot was
-      smaller.
-    * The maximum slot is now determined by a new configure parameter named
-      "slot_scale". A value of 5 will mean that new agents will be assigned
-      slots between 1*N and 5*N, where N is sim.pars['n_agents'].
+    - Two newborn agents may received the same "slot," and thus will receive the
+    same random draws.
+    - The chance of overlapping slots can be reduced by
+    allowing mothers to choose from a larger number of possible slots (say up
+    to one-million). However, as slots are used as indices, the number of
+    random variables drawn for each query must number the maximum slot. So if
+    one agent has a slot of 1M, then 1M random numbers will be drawn,
+    consuming more time than would be necessary if the maximum slot was
+    smaller.
+    - The maximum slot is now determined by a new configure parameter named
+    "slot_scale". A value of 5 will mean that new agents will be assigned
+    slots between 1*N and 5*N, where N is sim.pars['n_agents'].
     """
     
     def __init__(self, name, seed_offset=None, **kwargs):
@@ -180,7 +190,7 @@ class MultiRNG(np.random.Generator):
 
         if isinstance(slots, int):
             # Handle edge case in which the user wants n sequential slots, as used in testing.
-            self.slots = np.arange(slots)
+            self.slots = UIDArray(np.arange(slots),np.arange(slots))
         else:
             self.slots = slots # E.g. sim.people.slots (instead of using uid as the slots directly)
 
@@ -210,6 +220,18 @@ class MultiRNG(np.random.Generator):
         # jumped returns a new bit_generator, use directly instead of setting state?
         self.bit_generator.state = self.bit_generator.jumped(jumps=ti).state
         return
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, deepcopy(v, memo))
+
+        #'bit_generator' kwarg has changed
+        super(MultiRNG, result).__init__(**result.kwargs)
+
+        return result
 
 
 class SingleRNG(np.random.Generator):

@@ -89,6 +89,9 @@ class Module(sc.prettyobj):
                 setattr(self, key, ss.ScipyDistribution(value, f'{self.name}_{self.label}_{key}'))
                 getattr(self, key).initialize(sim, self)
 
+            if isinstance(value, ss.MultiRNG):
+                value.initialize(sim.rng_container, sim.people.slot)
+
         # Connect the states to the sim
         # Will use random numbers, so do after distribution initialization
         for state in self.states:

@@ -6,8 +6,11 @@ Test simple APIs
 import starsim as ss
 import sciris as sc
 import numpy as np
+import matplotlib.pyplot as plt
 
 n_agents = 1_000
+do_plot = True
+sc.options(interactive=False) # Assume not running interactively
 
 
 def test_default():
@@ -92,7 +95,6 @@ def test_sir_epi():
     return s0, s1
 
 
-
 def test_simple_vax(do_plot=False):
     """ Create and run a sim with vaccination """
     ss.set_seed(1)
@@ -101,12 +103,12 @@ def test_simple_vax(do_plot=False):
     sim_base.run()
 
     my_vax = ss.sir_vaccine(pars=dict(efficacy=0.5))
-    sim_intv = ss.Sim(pars=pars, interventions=ss.routine_vx(start_year=2015, prob=0.2, product=my_vax))
+    intv = ss.routine_vx(start_year=2015, prob=0.2, product=my_vax)
+    sim_intv = ss.Sim(pars=pars, interventions=intv)
     sim_intv.run()
 
     # Check plots
     if do_plot:
-        import matplotlib.pyplot as plt
         pi = 0
 
         plt.figure()
@@ -115,7 +117,6 @@ def test_simple_vax(do_plot=False):
         plt.axvline(x=2015, color='k', ls='--')
         plt.title('Prevalence')
         plt.legend()
-        plt.show()
 
     return sim_base, sim_intv
 
@@ -154,6 +155,7 @@ def test_inputs():
 
 
 if __name__ == '__main__':
+    sc.options(interactive=do_plot)
     T = sc.timer()
     
     s1 = test_default()
@@ -165,3 +167,5 @@ if __name__ == '__main__':
     s7 = test_inputs()
     
     T.toc()
+
+    plt.show()

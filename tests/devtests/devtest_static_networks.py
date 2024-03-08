@@ -11,7 +11,7 @@ ppl = ss.People(10000)
 
 # This example runs on one static networks + the maternal network
 ppl.networks = ss.Networks(
-    ss.static(graph=nx.erdos_renyi_graph, p=0.0001), ss.maternal()
+    ss.StaticNet(graph=nx.erdos_renyi_graph, p=0.0001), ss.MaternalNet()
 )
 
 hiv = ss.HIV()

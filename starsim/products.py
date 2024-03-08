@@ -45,7 +45,9 @@ class dx(Product):
     def administer(self, sim, uids, return_format='dict'):
         """
         Administer a testing product.
+        
         Returns:
+
              if return_format=='array': an array of length len(inds) with integer entries that map each person to one of the result_states
              if return_format=='dict': a dictionary keyed by result_states with values containing the indices of people classified into this state
         """
@@ -87,8 +89,7 @@ class tx(Product):
         self.diseases = df.disease.unique()
         self.health_states = df.state.unique()
         self.efficacy_dist = ss.bernoulli(p=0)
-        # # TEMP
-        # self.efficacy_dist = ss.ScipyDistribution(self.efficacy_dist, f'{self.name}_{self.label}_efficacy_dist')
+        return
 
     def administer(self, sim, uids, return_format='dict'):
         """
@@ -113,6 +114,10 @@ class tx(Product):
 
                     # Determine whether treatment is successful
                     self.efficacy_dist.kwds['p'] = thisdf.efficacy.values[0]
+
+                    if ss.options.multirng:
+                    # HACK to reset the efficacy_dist as it is called multiple times per timestep. TODO: Refactor
+                        self.efficacy_dist.random_state.step(sim.ti+1)
                     eff_treat_inds = self.efficacy_dist.filter(these_uids)
 
                     post_tx_state_name = thisdf.post_state.values[0]

@@ -15,7 +15,7 @@ import sciris as sc
 
 default_n_agents = 25
 # Three choices for network here, note that only the first two are common-random-number safe
-network = ['stable_monogamy', 'embedding', 'hpv_network'][1]
+network = ['stable_monogamy', 'EmbeddingNet'][1]
 
 do_plot_graph = True
 # Several choices for how to layout the graph when plotting
@@ -105,7 +105,7 @@ class GraphAnalyzer(ss.Analyzer):
             'cd4': sim.people.hiv.cd4.values,
         })
 
-        edges = sim.people.networks[network].to_df()
+        edges = sim.people.networks[network.lower()].to_df()
 
         idx = sim.ti if not init else -1
         self.graphs[idx] = Graph(nodes, edges)
@@ -123,7 +123,7 @@ def run_sim(n=25, rand_seed=0, intervention=False, analyze=False, lbl=None):
         net_class = eval(network)
     except Exception as e:
         net_class = getattr(ss, network)
-    ppl.networks = ss.ndict(net_class(), ss.maternal())
+    ppl.networks = ss.ndict(net_class(), ss.MaternalNet())
 
     hiv_pars = {
         'beta': {network: [0.3, 0.25], 'maternal': [0.2, 0]},
@@ -142,7 +142,7 @@ def run_sim(n=25, rand_seed=0, intervention=False, analyze=False, lbl=None):
         'rand_seed': rand_seed,
         'analyzers': [GraphAnalyzer()] if analyze else [],
     }
-    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[ss.Pregnancy(), ss.background_deaths()], pars=pars, label=lbl)
+    sim = ss.Sim(people=ppl, diseases=[hiv], demographics=[ss.Pregnancy(), ss.Deaths()], pars=pars, label=lbl)
     sim.initialize()
 
     # Infect every other person, useful for exploration in conjunction with init_prev=0

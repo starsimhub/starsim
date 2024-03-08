@@ -372,14 +372,14 @@ class StaticNet(Network):
 
     **Examples**::
 
-    # Generate a networkx graph and pass to Starsim
-    import networkx as nx
-    import starsim as ss
-    g = nx.scale_free_graph(n=10000)
-    ss.static(graph=g)
+        # Generate a networkx graph and pass to Starsim
+        import networkx as nx
+        import starsim as ss
+        g = nx.scale_free_graph(n=10000)
+        ss.static(graph=g)
 
-    # Pass a networkx graph generator to Starsim
-    ss.static(graph=nx.erdos_renyi_graph, p=0.0001)
+        # Pass a networkx graph generator to Starsim
+        ss.static(graph=nx.erdos_renyi_graph, p=0.0001)
     """
 
     def __init__(self, graph, pars=None, **kwargs):
@@ -509,7 +509,7 @@ class MFNet(SexualNetwork, DynamicNetwork):
     relationship durations.
     """
 
-    def __init__(self, pars=None, par_dists=None, key_dict=None):
+    def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
         pars = ss.omergeleft(pars,
             duration = 15,  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             participation = 0.9,  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
@@ -525,8 +525,8 @@ class MFNet(SexualNetwork, DynamicNetwork):
             acts          = ss.poisson,
         )
 
-        DynamicNetwork.__init__(self, key_dict=key_dict)
-        SexualNetwork.__init__(self, pars, key_dict=key_dict)
+        DynamicNetwork.__init__(self, key_dict=key_dict, **kwargs)
+        SexualNetwork.__init__(self, pars, key_dict=key_dict, **kwargs)
 
         self.par_dists = par_dists
 

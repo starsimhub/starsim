@@ -187,6 +187,12 @@ class Infection(Disease):
             ss.State('rel_trans', float, 1.0),
             ss.State('ti_infected', int, ss.INT_NAN),
         )
+
+        if ss.options.multirng:
+            # Used only in _make_new_cases_multirng
+            self.rng_acquisition = ss.uniform()
+            self.rng_source = ss.uniform()
+
         return
 
     @property
@@ -313,8 +319,8 @@ class Infection(Disease):
                 bvec.append(b[nzi])
 
                 beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=people.dt, uids=nzi)
-                trans_arr = rel_trans[a[nzi]].__array__()
-                sus_arr = rel_sus[b[nzi]].__array__()
+                trans_arr = rel_trans[a[nzi]]
+                sus_arr = rel_sus[b[nzi]]
                 new_pvec = trans_arr * sus_arr * beta_per_dt
                 pvec.append(new_pvec)
 
@@ -325,32 +331,55 @@ class Infection(Disease):
         else:
             return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
 
-        df = pd.DataFrame({'p1': dfp1, 'p2': dfp2, 'p': dfp})
-        if len(df) == 0:
+        if len(dfp) == 0:
             return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
 
-        p_acq_node = df.groupby('p2').apply(lambda x: 1 - np.prod(1 - x['p']))  # prob(inf) for each potential infectee
-        uids = p_acq_node.index.values  # UIDs of those who get come into contact with 1 or more infected person
+        p2uniq, p2idx, p2inv, p2cnt = np.unique(dfp2, return_index=True, return_inverse=True, return_counts=True)
 
-        # Slotted draw, need to find a long-term place for this logic
-        slots = people.slot[uids]  # Slots for the possible infectee
-        new_cases_bool = ss.uniform.rvs(size=np.max(slots) + 1)[slots] < p_acq_node.values
-        new_cases = uids[new_cases_bool]
+        # Pre-draw random numbers
+        slots = people.slot[p2uniq]  # Slots for the possible infectee
+        r = self.rng_acquisition.rvs(size=np.max(slots) + 1)
+        q = self.rng_source.rvs(size=np.max(slots) + 1)
 
-        # Now choose infection source for new cases
-        def choose_source(df):
-            if len(df) == 1:  # Easy if only one possible source
-                src_idx = 0
+        # Now address nodes with multiple possible infectees
+        degrees = np.unique(p2cnt)
+        new_cases = []
+        sources = []
+        for deg in degrees:
+            if deg == 1:
+                # UIDs that only appear once
+                cnt1 = p2cnt == 1
+                uids = p2uniq[cnt1]
+                idx = p2idx[cnt1]
+                p_acq_node = dfp[idx]
+                cases = r[people.slot[uids]] < p_acq_node
+                if cases.any():
+                    s = dfp1[idx][cases]
             else:
-                # Roulette selection using slotted draw r associated with this new case
-                cumsum = df['p'].cumsum() / df['p'].sum()
-                src_idx = np.argmax(cumsum >= df['r'])
-            return df['p1'].iloc[src_idx]
+                dups = np.argwhere(p2cnt==deg).flatten()
+                uids = p2uniq[dups]
+                inds = [np.argwhere(np.isin(p2inv, d)).flatten() for d in dups]
+                probs = dfp[inds]
+                p_acq_node = 1-np.prod(1-probs, axis=1)
 
-        df['r'] = ss.uniform.rvs(size=np.max(slots) + 1)[slots[df.p2.values]]  # Draws for each potential infectee
-        sources = df.set_index('p2').loc[new_cases].groupby('p2').apply(choose_source)
+                cases = r[people.slot[uids]] < p_acq_node
+                if cases.any():
+                    # Vectorized roulette wheel
+                    cumsum = probs[cases].cumsum(axis=1)
+                    cumsum /= cumsum[:,-1][:,np.newaxis]
+                    ix = np.argmax(cumsum >= q[people.slot[uids[cases]]][:,np.newaxis], axis=1)
+                    s = np.take_along_axis(dfp1[inds][cases], ix[:,np.newaxis], axis=1).flatten()#dfp1[inds][cases][np.arange(len(cases)),ix]
 
-        return new_cases, sources[new_cases].values
+            if cases.any():
+                new_cases.append(uids[cases])
+                sources.append(s)
+
+        if len(new_cases) == 0:
+            return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
+
+        new_cases = np.concatenate(new_cases)
+        sources = np.concatenate(sources)
+        return new_cases, sources
 
     def make_new_cases(self, sim):
         """ Add new cases of module, through transmission, incidence, etc. """

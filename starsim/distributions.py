@@ -44,7 +44,7 @@ class ScipyDistribution():
                 self.repeat_slot_handling = {}
                 # Work out how many samples to draw. If sampling by UID, this depends on the slots assigned to agents.
                 if np.isscalar(size):
-                    if not isinstance(size, int):
+                    if type(size) not in [int, np.int64, np.int32]: # CK: TODO: need to refactor
                         raise Exception('Input "size" must be an integer')
                     if size < 0:
                         raise Exception('Input "size" cannot be negative')
@@ -60,9 +60,8 @@ class ScipyDistribution():
                     if not options.multirng:
                         n_samples = len(size)
                     else:
-                        v = size.__array__() # TODO - check if this works without calling __array__()?
                         try:
-                            slots = self.random_state.slots[v].__array__()
+                            slots = self.random_state.slots[size]
                             max_slot = slots.max()
                         except AttributeError as e:
                             if not isinstance(self.random_state, MultiRNG):
@@ -97,7 +96,7 @@ class ScipyDistribution():
                                 # Tricky - repeated slots!
                                 if not repeat_slot_flag:
                                     repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots, return_index=True, return_inverse=True, return_counts=True)
-                                self.repeat_slot_handling[pname] = kwargs[pname].__array__().copy() # Save full pars for handling later
+                                self.repeat_slot_handling[pname] = kwargs[pname].__array__()  # Save full pars for handling later. Use .__array__() here to provide seamless interoperability with States, UIDArrays, and np.ndarrays
                                 pars_slots[repeat_slot_u] = self.repeat_slot_handling[pname][repeat_slot_ind] # Take first instance of each
                                 repeat_slot_flag = True
                             else:
@@ -107,7 +106,18 @@ class ScipyDistribution():
                         kwargs[pname] = pars_slots
 
                 kwargs['size'] = n_samples
+                
+                # If multirng, make sure the generator is ready to avoid multiple calls without jumping in between
+                if options.multirng and not self.random_state.ready:
+                    raise ss.NotReadyException(self.random_state.name)
+
+                # Actually sample the random values
                 vals = super().rvs(*args, **kwargs)
+
+                # Again if multirng, mark the generator as not ready (needs to be jumped)
+                if options.multirng:
+                    self.random_state.ready = False
+
                 if repeat_slot_flag:
                     # Handle repeated slots
                     repeat_slot_vals = np.full(len(slots), np.nan)
@@ -119,7 +129,7 @@ class ScipyDistribution():
 
                     #repeat_degree = repeat_slot_cnt.max()
                     while len(todo_inds):
-                        repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots[todo_inds], return_index=True, return_inverse=True, return_counts=True)
+                        repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots.values[todo_inds], return_index=True, return_inverse=True, return_counts=True)
                         cur_inds = todo_inds[repeat_slot_ind] # Absolute positions being filled this pass
 
                         # Reset RNG, note that ti=0 on initialization and ti+1
@@ -159,8 +169,8 @@ class ScipyDistribution():
                 else:
                     return vals[slots] # slots defined above
 
-        self.rng = self.set_rng(rng, gen)
-        self.gen = starsim_gen(name=gen.dist.name, seed=self.rng)(**gen.kwds)
+        rng = self.set_rng(rng, gen)
+        self.gen = starsim_gen(name=gen.dist.name, seed=rng)(**gen.kwds)
         return
 
     @staticmethod
@@ -185,6 +195,10 @@ class ScipyDistribution():
             self.rng.initialize(sim.rng_container, sim.people.slot)
         return
 
+    @property
+    def rng(self):
+        return self.dist.random_state
+
     def __copy__(self):
         cls = self.__class__
         result = cls.__new__(cls)
@@ -197,6 +211,15 @@ class ScipyDistribution():
         memo[id(self)] = result
         for k, v in self.__dict__.items():
             setattr(result, k, deepcopy(v, memo))
+
+        if self.gen.random_state == np.random.mtrand._rand:
+            # The gen is using the centralized numpy random number generator
+            # If we copy over the state, we'll get _separate_ random number generators
+            # for each distribution which do not draw from the _centralized_ generator
+            # in the new instance.
+            # Not clear what to do, I suppose keep as centralized?
+            result.gen.random_state = np.random.mtrand._rand
+
         return result
 
     def __getstate__(self):
@@ -205,7 +228,7 @@ class ScipyDistribution():
         return dct
 
     def __setstate__(self, state):
-        self.__init__(state['_gen'], state['rng'])
+        self.__init__(state['_gen'])
         return
     
     def __getattr__(self, attr):
@@ -277,9 +300,8 @@ class ScipyHistogram(rv_histogram):
             if not options.multirng:
                 n_samples = len(size)
             else:
-                v = size.__array__() # TODO - check if this works without calling __array__()?
                 try:
-                    slots = self.random_state.slots[v].__array__()
+                    slots = self.random_state.slots[size]
                     max_slot = slots.max()
                 except AttributeError as e:
                     if not isinstance(self.random_state, MultiRNG):

@@ -9,8 +9,14 @@ import starsim as ss
 from starsim.random import RNG
 import scipy.stats as sps
 from starsim.distributions import ScipyDistribution
+from starsim.states import UIDArray
 import pytest
 import matplotlib.pyplot as plt
+
+
+do_plot = True
+sc.options(interactive=False) # Assume not running interactively
+
 
 @pytest.fixture(params=[5, 50])
 def n(request):
@@ -18,39 +24,29 @@ def n(request):
 
 
 # %% Define the tests
-def test_basic():
+def test_basic(n):
     dist = sps.norm(loc=1, scale=1) # Make a distribution
+    if ss.options.multirng:
+        rng = ss.MultiRNG('Uniform')
+        rng.initialize(container=None, slots=n)
+        dist.random_state = rng
     d = ScipyDistribution(dist)
 
     sample = d.rvs(1)  # Draw a sample
+
+    # Reset before the next call
+    if ss.options.multirng: d.random_state.reset()
     samples = d.rvs(10) # Draw several samples
 
-    if ss.options.multirng:
-        print('Attempting to sample for specific UIDs, but have not provided a MultiRNG so an Exception should be raised.')
-        with pytest.raises(Exception):
-            d.rvs(np.array([1,3,8])) # Draw samples for specific uids
-    else:
-        d.rvs(np.array([1,3,8])) # Draw three samples
+    if ss.options.multirng: d.random_state.reset()
+    samples_uid = d.rvs(size=np.array([1,3,4])) # Draw three samples
 
-    mu = 5 # mean (mu) of the underlying normal
-    sigma = 1 # stdev (sigma) of the underlying normal
-    s = sigma 
-    loc = 0
-    scale = np.exp(mu)
-    fig, ax = plt.subplots(1, 1)
-    x = np.linspace(sps.lognorm.ppf(0.01, s=s, loc=loc, scale=scale), sps.lognorm.ppf(0.99, s=s, loc=loc, scale=scale), 100)
-    ax.plot(x, sps.lognorm.pdf(x, s=s, loc=loc, scale=scale), 'r-', lw=5, alpha=0.6, label='lognorm pdf')
+    return sample, samples, samples_uid
 
-    mean, var, skew, kurt = sps.lognorm.stats(s, loc=loc, scale=scale, moments='mvsk')
-    print('mean', mean, 'var', var, 'skew', skew, 'kurt', kurt)
-    print('calc mean', np.exp(mu + sigma**2/2), 'calc var', (np.exp(sigma**2)-1)*np.exp(2*mu+sigma**2)) # Check against math
-
-    temp_poisson_samples = sps.poisson(mu=2).rvs(10)  # Sample from a temporary distribution
-    return sample, samples, temp_poisson_samples
 
 def test_uniform_scalar(n):
     """ Create a uniform distribution """
-    sc.heading('test_uniform: Testing uniform with scalar parameters')
+    sc.heading('test_uniform_scalar: Testing uniform with scalar parameters')
 
     rng = ss.MultiRNG('Uniform')
     rng.initialize(container=None, slots=n)
@@ -65,9 +61,10 @@ def test_uniform_scalar(n):
     assert len(draws) == len(uids)
     return draws
 
+
 def test_uniform_scalar_str(n):
     """ Create a uniform distribution """
-    sc.heading('test_uniform: Testing uniform with scalar parameters')
+    sc.heading('test_uniform_scalar_str: Testing uniform with scalar parameters')
 
     dist = sps.uniform(loc=1, scale=4)
     d = ScipyDistribution(dist, 'Uniform') # String here!
@@ -84,7 +81,7 @@ def test_uniform_scalar_str(n):
 
 def test_uniform_callable(n):
     """ Create a uniform distribution """
-    sc.heading('test_uniform: Testing uniform with callable parameters')
+    sc.heading('test_uniform_callable: Testing uniform with callable parameters')
 
     sim = ss.Sim().initialize()
 
@@ -131,7 +128,7 @@ def test_repeat_slot():
     sc.heading('test_repeat_slot: Test behavior of repeated slots')
 
     rng = ss.MultiRNG('Uniform')
-    slots = np.array([4,2,3,2,2,3])
+    slots = UIDArray(values=np.array([4,2,3,2,2,3]), uid=np.arange(6))
     n = len(slots)
     rng.initialize(container=None, slots=slots)
 
@@ -162,31 +159,31 @@ def test_repeat_slot():
 
 # %% Run as a script
 if __name__ == '__main__':
-    # Start timing
-    ###T = sc.tic()
+    sc.options(interactive=do_plot)
 
     n = 5
     nTrials = 3
 
+    times = {}
     for multirng in [True, False]:
         ss.options(multirng=multirng)
+        key = f'MultiRNG: {multirng}'
+        times[key] = []
         sc.heading('Testing with multirng set to', multirng)
 
-        times = []
         for trial in range(nTrials):
             T = sc.tic()
 
             # Run tests - some will only pass if multirng is True
-            test_basic()
+            test_basic(n)
             test_uniform_scalar(n)
             test_uniform_scalar_str(n)
             test_uniform_callable(n)
             test_uniform_array(n)
 
-            times.append(sc.toc(T, doprint=False, output=True))
+            times[key].append(sc.toc(T, doprint=False, output=True))
 
-    print(times)
-    ###sc.toc(T)
+    print('Times:', times)
 
     plt.show()
     print('Done.')
