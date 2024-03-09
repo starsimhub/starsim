@@ -22,12 +22,13 @@ CLASSIFIERS = [
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
 ]
 
 setup(
     name="starsim",
     version=version,
-    author="Robyn Stuart, Romesh Abeysuriya, Jamie Cohen, Cliff Kerr, Daniel Klein",
+    author="Robyn Stuart, Cliff Kerr, Romesh Abeysuriya, Paula Sanz-Leon, Jamie Cohen, and Daniel Klein on behalf of the Starsim Collective",
     description="Starsim",
     long_description=long_description,
     long_description_content_type="text/x-rst",
