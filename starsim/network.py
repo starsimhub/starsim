@@ -2,6 +2,7 @@
 Networks that connect people within a population
 '''
 
+import networkx as nx
 import numpy as np
 import numba as nb
 import sciris as sc
@@ -62,7 +63,6 @@ class Network(ss.Module):
     def __init__(self, pars=None, key_dict=None, vertical=False, *args, **kwargs):
 
         # Initialize as a module
-        pars = self.validate_pars(pars)
         super().__init__(pars, *args, **kwargs)
 
         # Each relationship is characterized by these default set of keys, plus any user- or network-supplied ones
@@ -103,9 +103,6 @@ class Network(ss.Module):
     def initialize(self, sim):
         super().initialize(sim)
         return
-
-    def validate_pars(self, pars):
-        return pars
 
     def __len__(self):
         try:
@@ -382,17 +379,23 @@ class StaticNet(Network):
         ss.static(graph=nx.erdos_renyi_graph, p=0.0001)
     """
 
-    def __init__(self, graph, pars=None, **kwargs):
+    def __init__(self, graph=None, pars=None, **kwargs):
+        super().__init__(**kwargs)
+        if graph is None:
+            graph = nx.fast_gnp_random_graph # Fast random (Erdos-Renyi) graph creator
+            if not pars:
+                pars = dict(n_contacts=10)
         self.graph = graph
         self.pars = ss.omerge(pars)
-        super().__init__(**kwargs)
         return
 
     def initialize(self, sim):
-        popsize = sim.pars.n_agents
+        n_agents = sim.pars.n_agents
         if callable(self.graph):
-            self.graph = self.graph(n=popsize, **self.pars)
-        self.validate_pop(popsize)
+            if 'n_contacts' in self.pars: # Convert from n_contacts to probability
+                self.pars.p = self.pars.pop('n_contacts')/n_agents
+            self.graph = self.graph(n=n_agents, **self.pars)
+        self.validate_pop(n_agents)
         super().initialize(sim)
         self.get_contacts()
         return
