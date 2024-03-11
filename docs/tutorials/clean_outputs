@@ -1,7 +1,0 @@
-#!/bin/bash
-# Remove auto-generated files; use -f in case they don't exist
-echo 'Deleting:'
-echo `ls -1 ./my-*.* 2> /dev/null`
-echo '...in 1 second'
-sleep 1
-rm -vf ./my-*.*
