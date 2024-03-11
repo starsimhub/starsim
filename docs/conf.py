@@ -75,7 +75,7 @@ html_theme_options = {
         {"name": "Web", "url": "https://starsim.org", "icon": "fas fa-home"},
         {
             "name": "GitHub",
-            "url": "https://github.com/institutefordiseasemodeling/starsim",
+            "url": "https://github.com/starsimhub/starsim",
             "icon": "fab fa-github-square",
         },
     ],
