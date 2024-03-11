@@ -1,5 +1,3 @@
-name: github-repo-stats
-
 on:
   schedule:
     # Run this once per day, towards the end of the day for keeping the most
