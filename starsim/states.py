@@ -438,7 +438,7 @@ class State(UIDArray):
             return UIDArray.__repr__(self)
 
     def _new_vals(self, uids):
-        if isinstance(self.default, ss.ScipyDistribution):
+        if isinstance(self.default, (ss.Dist, ss.ScipyDistribution)):
             new_vals = self.default.rvs(uids)
         elif callable(self.default):
             new_vals = self.default(len(uids))
