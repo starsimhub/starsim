@@ -392,6 +392,7 @@ class RNG(np.random.Generator):
         
         name: a name for this random number generator, like "coin_flip"
         """
+        raise Exception
 
         self.name = name
         self.kwargs = kwargs
