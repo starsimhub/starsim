@@ -126,7 +126,7 @@ def test_repeat_slot():
     sc.heading('test_repeat_slot: Test behavior of repeated slots')
 
     rng = ss.RNG('Uniform')
-    slots = np.array([4,2,3,2,2,3])
+    slots = ss.UIDArray(values=np.array([4,2,3,2,2,3]), uid=np.arange(6))
     n = len(slots)
     rng.initialize(container=None, slots=slots)
 

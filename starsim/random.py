@@ -346,13 +346,13 @@ class RNG(np.random.Generator):
     rng and ultimately ask for randomly distributed random numbers for agents
     with UIDs 1 and 4:
 
-    >>> import starsim as ss
-    >>> import numpy as np
-    >>> rng = ss.MultiRNG('Test') # The hashed name determines the seed offset.
-    >>> rng.initialize(container=None, slots=5) # In practice, slots will be sim.people.slots. When scalar (for testing), an np.arange will be used.
-    >>> uids = np.array([1,4])
-    >>> rng.random(uids)
-    array([0.88110549, 0.86915719])
+        >>> import starsim as ss
+        >>> import numpy as np
+        >>> rng = ss.MultiRNG('Test') # The hashed name determines the seed offset.
+        >>> rng.initialize(container=None, slots=5) # In practice, slots will be sim.people.slots. When scalar (for testing), a state-like UIDArray will be used.
+        >>> uids = np.array([1,4])
+        >>> rng.random(uids)
+        array([0.88110549, 0.86915719])
 
     In theory, what this is doing is drawing 5 random numbers and returning the
     draws at positions 1 and 4.
@@ -370,18 +370,18 @@ class RNG(np.random.Generator):
     unless an intervention mechanistically drove a change.
 
     The slot-based approach is not without challenges.
-    * Two newborn agents may received the same "slot," and thus will receive the
-      same random draws.
-    * The chance of overlapping slots can be reduced by
-      allowing mothers to choose from a larger number of possible slots (say up
-      to one-million). However, as slots are used as indices, the number of
-      random variables drawn for each query must number the maximum slot. So if
-      one agent has a slot of 1M, then 1M random numbers will be drawn,
-      consuming more time than would be necessary if the maximum slot was
-      smaller.
-    * The maximum slot is now determined by a new configure parameter named
-      "slot_scale". A value of 5 will mean that new agents will be assigned
-      slots between 1*N and 5*N, where N is sim.pars['n_agents'].
+    - Two newborn agents may received the same "slot," and thus will receive the
+    same random draws.
+    - The chance of overlapping slots can be reduced by
+    allowing mothers to choose from a larger number of possible slots (say up
+    to one-million). However, as slots are used as indices, the number of
+    random variables drawn for each query must number the maximum slot. So if
+    one agent has a slot of 1M, then 1M random numbers will be drawn,
+    consuming more time than would be necessary if the maximum slot was
+    smaller.
+    - The maximum slot is now determined by a new configure parameter named
+    "slot_scale". A value of 5 will mean that new agents will be assigned
+    slots between 1*N and 5*N, where N is sim.pars['n_agents'].
     """
     
     def __init__(self, name, seed_offset=None, **kwargs):
@@ -420,7 +420,7 @@ class RNG(np.random.Generator):
 
         if isinstance(slots, int):
             # Handle edge case in which the user wants n sequential slots, as used in testing.
-            self.slots = np.arange(slots)
+            self.slots = ss.UIDArray(np.arange(slots),np.arange(slots))
         else:
             self.slots = slots # E.g. sim.people.slots (instead of using uid as the slots directly)
 

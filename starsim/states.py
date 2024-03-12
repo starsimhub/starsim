@@ -12,7 +12,7 @@ from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to autom
 from scipy.stats._distn_infrastructure import rv_frozen
 
 
-__all__ = ['check_dtype', 'State', 'ArrayView']
+__all__ = ['check_dtype', 'UIDArray', 'State', 'ArrayView']
 
 
 def check_dtype(dtype, default=None):
@@ -59,13 +59,15 @@ class UIDArray(NDArrayOperatorsMixin):
 
         if uid_map is None and uid is not None:
             # Construct a local UID map as opposed to using a shared one (i.e., the one for all agents contained in the People instance)
-            self.uid_map = np.full(np.max(uid) + 1, fill_value=ss.INT_NAN, dtype=sdt.int)
-            self.uid_map[uid] = np.arange(len(uid))
+            self._uid_map = np.full(np.max(uid) + 1, fill_value=ss.INT_NAN, dtype=sdt.int)
+            self._uid_map[uid] = np.arange(len(uid))
         else:
             self._uid_map = uid_map
         return
 
     def __repr__(self):
+        if len(self) == 0:
+            return f'<{self.__class__.__name__} (empty)>'
         df = self.to_df()
         return df.__repr__()
     
