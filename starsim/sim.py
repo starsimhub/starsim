@@ -10,7 +10,7 @@ import itertools
 import numba as nb
 
 
-__all__ = ['Sim', 'AlreadyRunError', 'diff_sims']
+__all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims']
 
 
 @nb.njit(cache=True)
@@ -651,7 +651,7 @@ class Sim(sc.prettyobj):
             summary[key] = entry
         self.summary = summary
         return summary
-
+    
     def shrink(self, skip_attrs=None, in_place=True):
         """
         "Shrinks" the simulation by removing the people and other memory-intensive
@@ -959,6 +959,36 @@ class AlreadyRunError(RuntimeError):
     :py:func:`Sim.run` and not taking any timesteps, would be an inadvertent error.
     """
     pass
+
+
+def demo(run=True, plot=True, summary=True, **kwargs):
+    """
+    Create a simple demo simulation for Starsim
+    
+    Defaults to using the SIR model with a random network, but these can be configured.
+    
+    Args:
+        run (bool): whether to run the sim
+        plot (bool): whether to plot the results
+        summary (bool): whether to print a summary of the results
+        kwargs (dict): passed to ``ss.Sim()``
+    
+    **Examples**::
+        
+        ss.demo() # Run, plot, and show results
+        ss.demo(diseases='hiv', networks='mf') # Run with different defaults
+    """
+    kw = sc.mergedicts(dict(pars=dict(diseases='sir', networks='random')), kwargs)
+    sim = Sim(**kw)
+    if run:
+        sc.heading('Running demo:')
+        sim.run()
+    if summary:
+        sc.heading('Results:')
+        print(sim.summary)
+    if plot:
+        sim.plot()
+    return sim
 
 
 def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=False, die=False):

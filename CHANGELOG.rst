@@ -9,6 +9,12 @@ All notable changes to the codebase are documented in this file. Changes that ma
    :depth: 1
 
 
+Version 0.2.8 (2024-03-13)
+--------------------------
+- Add ``ss.demo()`` to quickly create a default simulation.
+- *GitHub info*: PR `380 <https://github.com/amath-idm/stisim/pull/380>`_
+
+
 Version 0.2.7 (2024-03-09)
 --------------------------
 - Update ``StaticNet`` with defaults and correct argument passing
