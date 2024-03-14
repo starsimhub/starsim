@@ -8,6 +8,7 @@ import sciris as sc
 import starsim as ss
 import itertools
 import numba as nb
+import pylab as pl
 
 
 __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims']
@@ -961,7 +962,7 @@ class AlreadyRunError(RuntimeError):
     pass
 
 
-def demo(run=True, plot=True, summary=True, **kwargs):
+def demo(run=True, plot=True, summary=True, show=True, **kwargs):
     """
     Create a simple demo simulation for Starsim
     
@@ -988,6 +989,8 @@ def demo(run=True, plot=True, summary=True, **kwargs):
         print(sim.summary)
     if plot:
         sim.plot()
+    if show:
+        pl.show()
     return sim
 
 
