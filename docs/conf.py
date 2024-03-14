@@ -82,7 +82,7 @@ html_theme_options = {
     "navbar_end": ["theme-switcher", "navbar-icon-links"],
     "secondary_sidebar_items": ["navbar-side"],
     "header_links_before_dropdown": 5,
-    "footer_end": ["theme-version", "footer"],
+    "footer_end": ["footer"],
 }
 html_sidebars = {
     "**": ["sidebar-nav-bs", "page-toc"],
