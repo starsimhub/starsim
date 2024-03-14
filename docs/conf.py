@@ -4,6 +4,7 @@
 
 import os
 import sys
+import sciris as sc
 import starsim as ss
 
 # Set environment
@@ -14,8 +15,8 @@ on_rtd = os.environ.get('READTHEDOCS') == 'True'
 # -- Project information -----------------------------------------------------
 
 project = 'Starsim'
-copyright = f'2020 - 2023, Bill & Melinda Gates Foundation. All rights reserved.\nThese docs were built for Starsim version {ss.__version__}\n'
-author = 'Institute for Disease Modeling'
+copyright = f'2023 - {sc.now().year}, Bill & Melinda Gates Foundation. All rights reserved. These docs were built for Starsim v{ss.__version__}'
+author = 'Starsim Collective'
 
 # The short X.Y version
 version = ss.__version__
@@ -82,7 +83,8 @@ html_theme_options = {
     "navbar_end": ["theme-switcher", "navbar-icon-links"],
     "secondary_sidebar_items": ["navbar-side"],
     "header_links_before_dropdown": 5,
-    "footer_end": ["footer"],
+    "footer_start": ["copyright", "footer_start"],
+    "footer_end": ["theme-version", "footer_end"],
 }
 html_sidebars = {
     "**": ["sidebar-nav-bs", "page-toc"],
