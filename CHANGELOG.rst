@@ -2,11 +2,9 @@
 What's new
 ==========
 
-All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
+.. currentmodule:: starsim
 
-.. contents:: **Contents**
-   :local:
-   :depth: 1
+All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
 Version 0.2.8 (2024-03-13)
