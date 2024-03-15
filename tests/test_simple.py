@@ -15,6 +15,12 @@ sc.options(interactive=False) # Assume not running interactively
 ss.options(multirng=False)
 
 
+def test_demo():
+    """ Test Starsim's demo run """
+    sim = ss.demo()
+    return sim
+
+
 def test_default():
     """ Create, run, and plot a sim with default settings """
     sim = ss.Sim(n_agents=n_agents).run()
@@ -148,6 +154,7 @@ if __name__ == '__main__':
     sc.options(interactive=do_plot)
     T = sc.timer()
     
+    s0 = test_demo()
     s1 = test_default()
     s2 = test_simple()
     s3a, s3b = test_sir_epi()
