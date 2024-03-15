@@ -17,7 +17,9 @@ To install, clone this repository, then run ``pip install -e .`` (don't forget t
 Usage and documentation
 -----------------------
 
-Documentation is not yet available. Usage examples are available in the ``tests`` folder.
+Documentation is available at https://docs.starsim.org. 
+
+Usage examples are available in the ``tests`` folder.
 
 
 Contributing
