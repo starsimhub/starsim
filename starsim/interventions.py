@@ -129,33 +129,23 @@ class CampaignDelivery(Intervention):
     Base class for any intervention that uses campaign delivery; handles interpolation of input years.
     """
 
-    def __init__(self, years, interpolate=None, prob=None, annual_prob=True, *args, **kwargs):
+    def __init__(self, years, interpolate=None, prob=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.years = sc.promotetoarray(years)
         self.interpolate = True if interpolate is None else interpolate
         self.prob = sc.promotetoarray(prob)
-        self.annual_prob = annual_prob
         return
 
     def initialize(self, sim):
         # Decide whether to apply the intervention at every timepoint throughout the year, or just once.
-        if self.interpolate:
-            self.timepoints = ss.true(np.isin(np.floor(sim.yearvec), np.floor(self.years)))
-        else:
-            self.timepoints = ss.true(np.isin(sim.yearvec, self.years))
+        self.timepoints = sc.findnearest(sim.yearvec, self.years)
 
-        # Get the probability input into a format compatible with timepoints
-        if len(self.prob) == len(self.years) and self.interpolate:
-            self.prob = sc.smoothinterp(np.arange(len(self.timepoints)), np.arange(len(self.years)), self.prob,
-                                        smoothness=0)
-        elif len(self.prob) == 1:
+        if len(self.prob) == 1:
             self.prob = np.array([self.prob[0]] * len(self.timepoints))
-        else:
+
+        if len(self.prob) != len(self.years):
             errormsg = f'Length of years incompatible with length of probabilities: {len(self.years)} vs {len(self.prob)}'
             raise ValueError(errormsg)
-
-        # Lastly, adjust the annual probability by the sim's timestep, if it's an annual probability
-        if self.annual_prob: self.prob = 1 - (1 - self.prob) ** sim.dt
 
         return
 
@@ -357,10 +347,12 @@ class BaseTreatment(Intervention):
         self.eligibility = eligibility
         self._parse_product(product)
         self.coverage_dist = ss.bernoulli(p=0)  # Placeholder
+        return
 
     def initialize(self, sim):
         Intervention.initialize(self, sim)
         self.outcomes = {k: np.array([], dtype=int) for k in ['unsuccessful', 'successful']} # Store outcomes on each timestep
+        return
 
     def get_accept_inds(self, sim):
         """
@@ -461,6 +453,8 @@ class BaseVaccination(Intervention):
         self.vaccinated = ss.State('vaccinated', bool, False)
         self.n_doses = ss.State('doses', int, 0)
         self.ti_vaccinated = ss.State('ti_vaccinated', int, ss.INT_NAN)
+        self.coverage_dist = ss.bernoulli(p=0)  # Placeholder
+        return
 
     def apply(self, sim):
         """

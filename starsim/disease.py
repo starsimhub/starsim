@@ -232,7 +232,11 @@ class Infection(Disease):
 
     def _check_betas(self, sim):
         """ Check that there's a network for each beta keys """
+        # Convert keys to lower case
+        self.pars.beta = {k.lower(): v for k, v in self.pars.beta.items()}
+
         betapars = self.pars.beta
+
         betamap = sc.objdict()
         netkeys = list(sim.networks.keys())
         for bkey in betapars.keys():
