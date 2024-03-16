@@ -189,10 +189,12 @@ class UIDArray(NDArrayOperatorsMixin):
                 raise e
 
     def __setitem__(self, key, value):
-        # nb. the use of .__array__() calls is to access the array interface and thereby treat both np.ndarray and ArrayView instances
-        # in the same way without needing an additional type check. This is also why the UIDArray.dtype property is defined. Noting
-        # that for a State, the uid_map is a dynamic view attached to the People, but after an indexing operation, it will be a bare
-        # UIDArray that has an ordinary numpy array as the uid_map
+        """
+        nb. the use of .__array__() calls is to access the array interface and thereby treat both np.ndarray and ArrayView instances
+        in the same way without needing an additional type check. This is also why the UIDArray.dtype property is defined. Noting
+        that for a State, the uid_map is a dynamic view attached to the People, but after an indexing operation, it will be a bare
+        UIDArray that has an ordinary numpy array as the uid_map
+        """
         try:
             if isinstance(key, (int, np.integer)):
                 return self.values.__setitem__(self._uid_map[key], value)
@@ -318,50 +320,53 @@ class ArrayView(NDArrayOperatorsMixin):
 
     @property
     def _s(self):
-        # Return the size of the underlying array (maximum number of agents that can be stored without reallocation)
+        """ Return the size of the underlying array (maximum number of agents that can be stored without reallocation) """
         return len(self._data)
 
     @property
     def dtype(self):
-        # The specified dtype and the underlying array dtype can be different. For instance, the user might pass in
-        # ArrayView(dtype=int) but the underlying array's dtype will be np.dtype('int32'). This distinction is important
-        # because the numpy dtype has attributes like 'kind' that the input dtype may not have. We need the ArrayView's
-        # dtype to match that of the underlying array so that it can be more seamlessly exchanged with direct numpy arrays
-        # Therefore, we retain the original dtype in ArrayView._dtype() and use
+        """
+        The specified dtype and the underlying array dtype can be different. For instance, the user might pass in
+        ArrayView(dtype=int) but the underlying array's dtype will be np.dtype('int32'). This distinction is important
+        because the numpy dtype has attributes like 'kind' that the input dtype may not have. We need the ArrayView's
+        dtype to match that of the underlying array so that it can be more seamlessly exchanged with direct numpy arrays
+        Therefore, we retain the original dtype in ArrayView._dtype() and use
+        """
         return self._data.dtype
 
     def __len__(self):
-        # Return the number of active elements
+        """ Return the number of active elements """
         return self.n
 
     def __repr__(self):
-        # Print out the numpy view directly
+        """ Print out the numpy view directly """
         return self._view.__repr__()
 
     def grow(self, n):
-        # If the total number of agents exceeds the array size, extend the underlying arrays
+        """ If the total number of agents exceeds the array size, extend the underlying arrays """
         if self.n + n > self._s:
             n_new = max(n, int(self._s / 2))  # Minimum 50% growth
             self._data = np.concatenate([self._data, np.full(n_new, dtype=self.dtype, fill_value=self.default)], axis=0)
         self.n += n  # Increase the count of the number of agents by `n` (the requested number of new agents)
         self._map_arrays()
+        return
 
     def _trim(self, inds):
-        # Keep only specified indices
+        """ Keep only specified indices """
         # Note that these are indices, not UIDs!
         n = len(inds)
         self._data[:n] = self._data[inds]
         self._data[n:self.n] = self.default
         self.n = n
         self._map_arrays()
-
+        return
 
     def __getstate__(self):
-        # When pickling, skip storing the `._view` attribute, which should be re-linked after unpickling
+        """ When pickling, skip storing the `._view` attribute, which should be re-linked after unpickling """
         return {k:getattr(self, k) for k in self.__slots__ if k != '_view'}
 
     def __setstate__(self, state):
-        # Re-map arrays after unpickling so that `.view` is a reference to the correct array in-memory
+        """ Re-map arrays after unpickling so that `.view` is a reference to the correct array in-memory """
         for k,v in state.items():
             setattr(self, k, v)
         self._map_arrays()

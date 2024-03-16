@@ -48,6 +48,8 @@ class Dists(sc.prettyobj):
         if base_seed:
             self.base_seed = base_seed
         self.find_dists(obj)
+        for trace,dist in self.dists.values():
+            dist.initialize(trace=trace, )
         self.initialized = True
         return
     
@@ -57,6 +59,11 @@ class Dists(sc.prettyobj):
         
         In practice, the object is usually a Sim. This function returns a 
         """
+        tree = sc.iterobj(obj)
+        for trace,val in tree.items():
+            if isinstance(val, Dist):
+                self.dists[str(trace)] = val
+        return self.dists
     
     def add(self, dist, check_repeats=True):
         """
@@ -146,13 +153,14 @@ class Dist(sc.prettyobj):
       slots between 1*N and 5*N, where N is sim.pars['n_agents'].
     """
     
-    def __init__(self, dist=None, name=None, offset=None, **kwargs):
+    def __init__(self, dist=None, name=None, seed=None, offset=None, **kwargs):
         """
         Create a random number generator
         
         Args:
             dist (str): the name of the (default) distribution to draw random numbers from, or a SciPy distribution
             name (str): the unique name of this distribution, e.g. "coin_flip" (in practice, usually generated automatically)
+            seed (int): if supplied, the seed to use for this distribution
             offset (int): the seed offset; will be automatically assigned (based on hashing the name) if None
             kwargs (dict): (default) parameters of the distribution
             
@@ -164,13 +172,13 @@ class Dist(sc.prettyobj):
         self.dist = dist
         self.name = name
         self.kwds = sc.objdict(kwargs)
+        self.seed = seed if seed else 0 # Usually determined once added to the container
         self.offset = offset
         
         if dist is None:
             errormsg = 'You must supply the name of a distribution, or a SciPy distribution'
             raise ValueError(errormsg)
             
-        self.seed = None # Will be determined once added to the container
         self.rng = None # The actual RNG generator for generating random numbers
         self.ready = True
         self.initialized = False
@@ -190,37 +198,49 @@ class Dist(sc.prettyobj):
         except:
             return None
         
-    def initialize(self, path=None):
+    def initialize(self, trace=None, seed=0):
         """ Calculate the starting seed and create the RNG """
         
         if self.offset is None: # Obtain the seed offset by hashing the path to this distribution
-            name = path or self.name
-            self.offset = str2int(name)
-        self.seed = self.offset # Initialize these to be the same # TODO: is this needed?
+            unique_name = trace or self.name
+            self.offset = str2int(unique_name)
+        self.seed = self.offset + (seed or self.seed)
         
         # Create the actual RNG
         self.rng = np.random.default_rng(seed=self.seed)
         self.init_state = self.bitgen.state # Store the initial state
+        self.validate_dist()
         
-        # Initialize the distribution, if not a string
+        # Finalize
+        self.ready = True
+        self.initialized = True
+        return
+    
+    def validate_dist(self):
+        """ Ensure the supplied dist is valid, and initialize it if needed """
+        
+        # Handle special cases for strings
         if isinstance(self.dist, str):
             if self.dist == 'bernoulli': # Special case for a Bernoulli distribution: a binomial distribution with n=1
                 self.dist = 'binomial' # TODO: check performance; Covasim uses np.random.random(len(prob_arr)) < prob_arr
                 self.kwds['n'] = 1
             if self.dist == 'lognormal':
                 self.kwds.mean, self.kwds.sigma = lognormal_params(self.kwds.pop('loc'), self.kwds.pop('scale'))
+            try:
+                self.dist = getattr(self.rng, self.dist) # Replace the string with the actual distribution
+            except Exception as E:
+                errormsg = f'Could not interpret "{self.dist}", are you sure this is a valid NumPy distribution?'
+                raise ValueError(errormsg) from E
+        
+        # Initialize the distribution, if not a string
         else:
             if callable(self.dist):
                 self.dist = self.dist(**self.kwds)
-            if hasattr(self.dist, 'random_state'):
+            if hasattr(self.dist, 'random_state'): # For SciPy distributions
                 self.dist.random_state = self.rng # Override the default random state with the correct one
             else:
                 errormsg = f'Unknown distribution type {type(self.dist)}: must be string or scipy.stats distribution'
                 raise TypeError(errormsg)
-        
-        # Finalize
-        self.ready = True
-        self.initialized = True
         return
 
     def reset(self):
@@ -231,23 +251,17 @@ class Dist(sc.prettyobj):
 
     def step(self, ti):
         """ Advance to time ti step by jumping """
-        self.reset() # First reset back to the initial state
+        self.reset() # First reset back to the initial state # TODO: needed?
         self.bitgen.state = self.bitgen.jumped(jumps=ti).state # Now take ti jumps
         return self.bitgen.state
     
     def rvs(self, size=1, **kwargs):
         """ Main method for getting random numbers """
+        if not np.isscalar(size):
+            print('WARNING, not random number safe yet!')
+            size = len(size)
         kwds = sc.mergedicts(dict(size=size), self.kwds, kwargs)
-        if isinstance(self.dist, str):
-            dist = getattr(self.rng, self.dist)
-            rvs = dist(**kwds)
-        else:
-            if not np.isscalar(size):
-                print('WARNING, not random number safe yet!')
-                size = len(size)
-            rvs = self.dist.rvs(size=size, **kwargs) # TODO: CHECK!!!!!
-        if ss.options.multirng:
-            self.ready = False # Needs to reset before being called again
+        rvs = self.dist.rvs(**kwds)
         return rvs
 
     def filter(self, size, **kwargs):
