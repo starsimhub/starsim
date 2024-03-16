@@ -6,114 +6,86 @@ Test the RNG object from random.py
 import numpy as np
 import sciris as sc
 import starsim as ss
-import pytest
 
 
-@pytest.fixture
-def rng(request, slots=5, base_seed=1, name='Test', **kwargs):
-    return make_rng(slots, base_seed, name, **kwargs)
-
-
-def make_rng(slots=5, base_seed=1, name='Test', **kwargs):
-    rngs = ss.Dists()
-    rngs.initialize(base_seed=base_seed)
-    rng = ss.Dist('random', name, **kwargs)
-    rng.initialize(container=rngs, slots=slots)
-    return rng
+def make_dist(seed=1, name='test', **kwargs):
+    """ Make a default distribution for testing """
+    dist = ss.Dist(dist='random', name=name, seed=seed, **kwargs)
+    dist.initialize()
+    return dist
 
 
 # %% Define the tests
-def test_random(rng, n=5):
+def test_random(n=5):
     """ Simple random draw """
-    sc.heading('test_random: Testing simple random draw from a RNG object')
-    draws = rng.rvs(n)
+    sc.heading('Testing simple random draw from a RNG object')
+    
+    dist = make_dist()
+    draws = dist(n)
     print(f'Sampled {n} random draws', draws)
     assert len(draws) == n
     return draws
 
 
-# def test_SingleRNG_using_np_singleton(rng, n=5):
-#     """ Make sure the SingleRNG is using the numpy.random singleton """
-#     if ss.options.multirng:
-#         pytest.skip('Skipping multirng mode')
-#     sc.heading('test_singleton_rng: Testing RNG object')
-
-#     np.random.seed(0)
-#     draws_np = np.random.rand(n)
-#     np.random.seed(0)
-#     draws_SingleRNG = rng.random(n)
-#     assert np.array_equal(draws_np, draws_SingleRNG)
-#     return draws_np, draws_SingleRNG
-
-
-def test_reset(rng, n=5):
+def test_reset(n=5):
     """ Sample, reset, sample """
-    sc.heading('test_reset: Testing sample, reset, sample')
-
-    draws1 = rng.rvs(n)
-    print(f'Random sample of size {n} returned {draws1}')
-
-    print('Reset')
-    rng.reset()
-
-    draws2 = rng.rvs(n)
-    print(f'After reset, random sample of size {n} returned {draws2}')
-
+    sc.heading('Testing sample, reset, sample')
+    
+    # Make dist and draw twice
+    dist = make_dist()
+    draws1 = dist(n)
+    dist.reset()
+    draws2 = dist(n)
+    
+    # Print and test results
+    print(f'Random sample of size {n} returned:\n{draws1}')
+    print(f'After reset, random sample of size {n} returned:\n{draws2}')
     assert np.array_equal(draws1, draws2)
 
     return draws1, draws2
 
 
-def test_step(rng, n=5):
-    """ Sample, step, sample """
-    sc.heading('test_step: Testing sample, step, sample')
-
-    draws1 = rng.rvs(n)
-    print(f'Random sample of size {n} returned {draws1}')
-
-    print('Reset')
-    rng.step(1)
-
-    draws2 = rng.rvs(n)
-    print(f'After reset, random sample of size {n} returned {draws2}')
-
+def test_jump(n=5):
+    """ Sample, jump, sample """
+    sc.heading('Testing sample, jump, sample')
+    
+    dist = make_dist()
+    draws1 = dist(n)
+    dist.jump()
+    draws2 = dist(n)
+    
+    print(f'Random sample of size {n} returned:\n{draws1}')
+    print(f'After jump, random sample of size {n} returned:\n{draws2}')
     assert not np.array_equal(draws1, draws2)
+    
     return draws1, draws2
 
 
 def test_seed(n=5):
     """ Changing seeds """
-    sc.heading('test_seed: Testing sample with seeds 0 and 1')
+    sc.heading('Testing sample with seeds 0 and 1')
 
-    rng0 = make_rng(n, base_seed=0)
-    draws0 = rng0.uniform(size=n)
-    print(f'Random sample of size {n} for rng0 with base_seed 0 returned {draws0}')
-
-    rng1 = make_rng(n, base_seed=1)
-    draws1 = rng1.uniform(size=n)
-    print(f'Random sample of size {n} for rng1 with base_seed 1 returned {draws1}')
-
+    dist0 = make_dist(seed=0)
+    dist1 = make_dist(seed=1)
+    draws0 = dist0(n)
+    draws1 = dist1(n)
+    
+    print(f'Random sample of size {n} for dist0 with seed=0 returned:\n{draws0}')
+    print(f'Random sample of size {n} for dist1 with seed=1 returned:\n{draws1}')
     assert not np.array_equal(draws0, draws1)
+    
     return draws0, draws1
 
 
 # %% Run as a script
 if __name__ == '__main__':
-    # Start timing
-    T = sc.tic()
 
-    n=5
-    rng = make_rng()
+    n = 5
+    T = sc.timer()
 
-    for multirng in [True, False]:
-        ss.options(multirng=multirng)
-        sc.heading('Testing with multirng set to', multirng)
+    o1 = test_random(n)
+    o2 = test_reset(n)
+    o3 = test_jump(n)
+    o4 = test_seed(n)
 
-        # Run tests - some will only pass if multirng is True
-        test_random(rng, n)
-        test_reset(rng, n)
-        test_step(rng, n)
-        test_seed(n)
-
-    sc.toc(T)
-    print('Done.')
+    T.toc()

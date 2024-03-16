@@ -1,9 +1,12 @@
+"""
+Define random-number-safe distributions.
+"""
+
 import hashlib
 import numpy as np
 import sciris as sc
-import starsim as ss
 
-__all__ = ['Dists', 'Dist']
+__all__ = ['find_dists', 'Dists', 'Dist']
 
 
 def str2int(string, modulo=1e8):
@@ -33,25 +36,38 @@ def lognormal_params(mean, stdev):
     return under_mean, under_std
 
 
+def find_dists(obj):
+    """ Find all Dist objects in a parent object """
+    out = sc.objdict()
+    tree = sc.iterobj(obj)
+    for trace,val in tree.items():
+        if isinstance(val, Dist):
+            out[str(trace)] = val
+    return out
+
+
 class Dists(sc.prettyobj):
     """ Class for managing a collection of Dist objects """
 
     def __init__(self, obj=None, base_seed=None):
         self.obj = obj
-        self.dists = ss.ndict()
-        self.used_offsets = set()
+        self.dists = None
         self.base_seed = base_seed
-        self.current_seed = None
         self.initialized = False
         if self.obj is not None:
             self.initialize()
         return
 
     def initialize(self, obj=None, base_seed=None):
+        """
+        Set the base seed, find and initialize all distributions in an object
+        
+        In practice, the object is usually a Sim, but can be anything.
+        """
         if base_seed:
             self.base_seed = base_seed
         obj = obj if obj else self.obj
-        self.find_dists(obj)
+        self.dists = find_dists(obj)
         for trace,dist in self.dists.items():
             dist.initialize(trace=trace, seed=base_seed)
         self.initialized = True
@@ -63,10 +79,7 @@ class Dists(sc.prettyobj):
         
         In practice, the object is usually a Sim. This function returns a 
         """
-        tree = sc.iterobj(obj)
-        for trace,val in tree.items():
-            if isinstance(val, Dist):
-                self.dists[str(trace)] = val
+        self.dists = find_dists(obj)
         return self.dists
 
     def jump(self, delta=1, ti=None):
@@ -232,8 +245,10 @@ class Dist(sc.prettyobj):
     
     def set_offset(self, trace=None, seed=0):
         """ Obtain the seed offset by hashing the path to this distribution """
-        unique_name = trace or self.name
+        unique_name = trace or self.trace or self.name
         if unique_name:
+            if not self.name:
+                self.name = unique_name
             self.trace = unique_name
             self.offset = str2int(unique_name) # Key step: hash the path to the distribution
         else:
