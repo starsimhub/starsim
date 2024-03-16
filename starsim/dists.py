@@ -1,10 +1,9 @@
 import hashlib
-from copy import deepcopy
 import numpy as np
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Dists', 'Dist', 'RNGs', 'RNG']
+__all__ = ['Dists', 'Dist']
 
 
 def str2int(string, modulo=1e8):
@@ -29,10 +28,18 @@ class Dists(sc.prettyobj):
         self.initialized = False
         return
 
-    def initialize(self, base_seed):
+    def initialize(self, base_seed=0):
         self.base_seed = base_seed
         self.initialized = True
         return
+    
+    def find_dists(self, obj):
+        """
+        Find all distributions in an object
+        
+        In practice, the object is usually a Sim. This function returns a 
+        """
+        
     
     def add(self, dist, check_repeats=True):
         """
@@ -122,7 +129,7 @@ class Dist(sc.prettyobj):
       slots between 1*N and 5*N, where N is sim.pars['n_agents'].
     """
     
-    def __init__(self, dist='random', name=None, offset=None, **kwargs):
+    def __init__(self, dist=None, name=None, offset=None, **kwargs):
         """
         Create a random number generator
         
@@ -140,13 +147,12 @@ class Dist(sc.prettyobj):
         self.dist = dist
         self.name = name
         self.kwds = kwargs
-
-        # Get the offset
-        if offset is None: # Obtain the seed offset by hashing the class name
-            self.offset = str2int(self.name)
-        else: # Use user-provided offset (unlikely)
-            self.offset = offset
-
+        self.offset = offset
+        
+        if dist is None:
+            errormsg = 'You must supply the name of a distribution, or a SciPy distribution'
+            raise ValueError(errormsg)
+            
         self.seed = None # Will be determined once added to the container
         self.rng = None # The actual RNG generator for generating random numbers
         self.ready = True
@@ -167,31 +173,24 @@ class Dist(sc.prettyobj):
         except:
             return None
         
-    def initialize(self, sim=None, container=None, slots=None):
+    def initialize(self, path=None):
         """ Calculate the starting seed and create the RNG """
         
-        if sim: # TODO: can probably remove
-            container = sim.dists
-            slots = sim.people.slot
+        if self.offset is None: # Obtain the seed offset by hashing the path to this distribution
+            name = path or self.name
+            self.offset = str2int(name)
+        self.seed = self.offset # Initialize these to be the same # TODO: is this needed?
         
-        # Set the seed, usually from within a container
-        if container is not None:
-            self.seed = container.add(self) # base_seed + offset
-        else: # Enable use of Dist without a container
-            self.seed = self.offset
-
-        # Set up the slots (corresponding to agents)
-        if isinstance(slots, int): # Handle edge case in which the user wants n sequential slots, as used in testing
-            self.slots = np.arange(slots)
-        else:
-            self.slots = slots # E.g. sim.people.slots (instead of using uid as the slots directly)
-
         # Create the actual RNG
         self.rng = np.random.default_rng(seed=self.seed)
         self.init_state = self.bitgen.state # Store the initial state
         
         # Initialize the distribution, if not a string
-        if not isinstance(self.dist, str):
+        if isinstance(self.dist, str):
+            if self.dist == 'bernoulli': # Special case for a Bernoulli distribution: a binomial distribution with n=1
+                self.dist = 'binomial' # TODO: check performance; Covasim uses np.random.random(len(prob_arr)) < prob_arr
+                self.kwds['n'] = 1
+        else:
             if callable(self.dist):
                 self.dist = self.dist(**self.kwds)
             if hasattr(self.dist, 'random_state'):
@@ -237,7 +236,22 @@ class Dist(sc.prettyobj):
 
 
 
-# TODO: define custom distributions like ss.lognormal
+#%% Specific distributions
+
+# Add common distributions so they can be imported directly
+__all__ += ['random', 'uniform', 'normal', 'lognormal', 'expon', 'poisson', 'randint', 'weibull', 'bernoulli']
+
+def random(*args, **kwargs):    return Dist(dist='random', *args, **kwargs)
+def uniform(*args, **kwargs):   return Dist(dist='uniform', *args, **kwargs)
+def normal(*args, **kwargs):    return Dist(dist='normal', *args, **kwargs)
+def lognormal(*args, **kwargs): return Dist(dist='lognormal', *args, **kwargs)
+def expon(*args, **kwargs):     return Dist(dist='exponential', *args, **kwargs)
+def poisson(*args, **kwargs):   return Dist(dist='poisson', *args, **kwargs)
+def randint(*args, **kwargs):   return Dist(dist='integer', *args, **kwargs)
+def weibull(*args, **kwargs):   return Dist(dist='weibull', *args, **kwargs)
+def bernoulli(*args, **kwargs): return Dist(dist='bernoulli', *args, **kwargs)
+
+
 
 
 #%% Dist exceptions
