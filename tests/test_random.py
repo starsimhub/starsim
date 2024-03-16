@@ -7,6 +7,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
+n = 5 # Number of samples to draw
 
 def make_dist(seed=1, name='test', **kwargs):
     """ Make a default distribution for testing """
@@ -16,7 +17,7 @@ def make_dist(seed=1, name='test', **kwargs):
 
 
 # %% Define the tests
-def test_random(n=5):
+def test_random(n=n):
     """ Simple random draw """
     sc.heading('Testing simple random draw from a RNG object')
     
@@ -27,7 +28,7 @@ def test_random(n=5):
     return draws
 
 
-def test_reset(n=5):
+def test_reset(n=n):
     """ Sample, reset, sample """
     sc.heading('Testing sample, reset, sample')
     
@@ -45,7 +46,7 @@ def test_reset(n=5):
     return draws1, draws2
 
 
-def test_jump(n=5):
+def test_jump(n=n):
     """ Sample, jump, sample """
     sc.heading('Testing sample, jump, sample')
     
@@ -61,7 +62,7 @@ def test_jump(n=5):
     return draws1, draws2
 
 
-def test_seed(n=5):
+def test_seed(n=n):
     """ Changing seeds """
     sc.heading('Testing sample with seeds 0 and 1')
 
@@ -80,7 +81,6 @@ def test_seed(n=5):
 # %% Run as a script
 if __name__ == '__main__':
 
-    n = 5
     T = sc.timer()
 
     o1 = test_random(n)
