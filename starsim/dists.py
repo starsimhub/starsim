@@ -36,22 +36,26 @@ def lognormal_params(mean, stdev):
 class Dists(sc.prettyobj):
     """ Class for managing a collection of Dist objects """
 
-    def __init__(self, base_seed=None):
+    def __init__(self, obj=None, base_seed=None):
+        self.obj = obj
         self.dists = ss.ndict()
         self.used_offsets = set()
         self.base_seed = base_seed
         self.current_seed = None
         self.initialized = False
+        if self.obj is not None:
+            self.initialize()
         return
 
     def initialize(self, obj=None, base_seed=None):
         if base_seed:
             self.base_seed = base_seed
+        obj = obj if obj else self.obj
         self.find_dists(obj)
-        for trace,dist in self.dists.values():
+        for trace,dist in self.dists.items():
             dist.initialize(trace=trace, seed=base_seed)
         self.initialized = True
-        return
+        return self
     
     def find_dists(self, obj):
         """
@@ -65,11 +69,11 @@ class Dists(sc.prettyobj):
                 self.dists[str(trace)] = val
         return self.dists
 
-    def step(self, ti):
-        """ Step each RNG forward, for each sim timestep """
+    def jump(self, delta=1, ti=None):
+        """ Advance all RNGs, e.g. to timestep ti, by jumping """
         out = sc.autolist()
         for dist in self.dists.values():
-            out += dist.step(ti)
+            out += dist.jump(delta=delta, ti=ti)
         return out
 
     def reset(self):
@@ -94,7 +98,7 @@ class Dist(sc.prettyobj):
 
     >>> import starsim as ss
     >>> import numpy as np
-    >>> dist = ss.Dist('Test') # The hashed name determines the seed offset.
+    >>> dist = ss.Dist('random', name='test') # The hashed name determines the seed offset.
     >>> dist.initialize(slots=5) # In practice, slots will be sim.people.slots. When scalar (for testing), an np.arange will be used.
     >>> uids = np.array([1,4])
     >>> dist.random(uids)
@@ -149,7 +153,7 @@ class Dist(sc.prettyobj):
         """
         self.dist = dist
         self.name = name
-        self.kwds = sc.objdict(kwargs)
+        self.kwds = sc.dictobj(kwargs)
         self.seed = seed # Usually determined once added to the container
         self.offset = offset
         self.strict = strict
@@ -171,7 +175,7 @@ class Dist(sc.prettyobj):
     
     def __repr__(self):
         """ Custom display to show state of object """
-        string = f'ss.Dist({self.dist}, kwds={self.kwds})'
+        string = f'ss.Dist("{self.trace}", dist={self.dist}, kwds={dict(self.kwds)})'
         return string
     
     def disp(self):
@@ -181,13 +185,13 @@ class Dist(sc.prettyobj):
     def disp_state(self):
         """ Show the state of the object """
         s = sc.autolist()
-        s += '  dist = {self.dist}'
-        s += '  kwds = {self.kwds}'
-        s += ' trace = {self.trace}'
-        s += '   ind = {self.ind}'
-        s += 'offset = {self.offset}'
-        s += '  seed = {self.seed}'
-        s += ' ready = {self.ready}'
+        s += f'  dist = {self.dist}'
+        s += f'  kwds = {self.kwds}'
+        s += f' trace = {self.trace}'
+        s += f'   ind = {self.ind}'
+        s += f'offset = {self.offset}'
+        s += f'  seed = {self.seed}'
+        s += f' ready = {self.ready}'
         string = sc.newlinejoin(s)
         print(string)
         return
@@ -247,7 +251,6 @@ class Dist(sc.prettyobj):
     
     def make_dist(self):
         """ Ensure the supplied dist is valid, and initialize it if needed """
-        
         dist = self.dist
         self._dist = None # The processed distribution
         self._kwds = sc.dcp(self.kwds) # The actual keywords
@@ -259,20 +262,22 @@ class Dist(sc.prettyobj):
                 self._kwds['n'] = 1
             elif dist == 'lognormal': # Convert parameters for a lognormal
                 self._kwds.mean, self._kwds.sigma = lognormal_params(self._kwds.pop('loc'), self._kwds.pop('scale'))
-            elif dist == 'delta': # Special case, predefine the distribution here
-                self._dist = lambda size: np.full(size, fill_value=self._kwds['v'])
                 
-            if self._dist is None: # Should always be True except for delta
-                try:
+            try:
+                if dist == 'delta': # Special case, predefine the distribution here
+                    self._dist = lambda size, v: np.full(size, fill_value=v)
+                else:
                     self._dist = getattr(self.rng, dist) # Replace the string with the actual distribution
-                except Exception as E:
-                    errormsg = f'Could not interpret "{dist}", are you sure this is a valid distribution? (i.e., an attribute of np.random.default_rng())'
-                    raise ValueError(errormsg) from E
+            except Exception as E:
+                errormsg = f'Could not interpret "{dist}", are you sure this is a valid distribution? (i.e., an attribute of np.random.default_rng())'
+                raise ValueError(errormsg) from E
         
         # It's not a string, so assume it's a SciPy distribution
         else:
             if callable(dist):
                 self._dist = dist(**self._kwds) # Create the frozen distribution
+            else:
+                self._dist = dist # Assume it already is a frozen distribution
                 
             if hasattr(self._dist, 'random_state'): # For SciPy distributions
                 self._dist.random_state = self.rng # Override the default random state with the correct one
@@ -288,11 +293,12 @@ class Dist(sc.prettyobj):
         return self.bitgen.state
 
     def jump(self, delta=1, ti=None):
-        """ Advance to the RNG, e.g. to timestep ti, by jumping """
+        """ Advance the RNG, e.g. to timestep ti, by jumping """
         jumps = ti if ti else self.ind + delta
         self.ind = jumps
         self.reset() # First reset back to the initial state (used in case of different numbers of calls)
-        self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take ti jumps
+        if jumps: # Seems to randomize state if jumps=0
+            self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take ti jumps
         return self.bitgen.state
     
     def rvs(self, size=1):
@@ -314,7 +320,7 @@ class Dist(sc.prettyobj):
         return rvs
     
     def urvs(self, uids):
-        """ Like rvs(), but get based on a list of unique identifiers (or slots) instead """
+        """ Like rvs(), but get based on a list of unique identifiers (UIDs or slots) instead """
         maxval = uids.max()
         rvs = self.rvs(size=maxval)
         return rvs[uids]
@@ -327,7 +333,7 @@ class Dist(sc.prettyobj):
 #%% Specific distributions
 
 # Add common distributions so they can be imported directly
-dist_list = ['random', 'uniform', 'normal', 'lognormal', 'expon', 'poisson', 'randint', 'weibull', 'delta', 'bernoulli']
+dist_list = ['random', 'uniform', 'normal', 'lognormal', 'expon', 'poisson', 'weibull', 'delta', 'randint', 'bernoulli']
 __all__ += dist_list
 
 def random(**kwargs):
@@ -349,8 +355,8 @@ def poisson(lam=1.0, **kwargs):
     return Dist(dist='poisson', lam=lam, **kwargs)
 
 def randint(low=None, high=None, **kwargs):
-    if low is None and high is None: # TODO: ugly, but gets the default of acting like a Bernoulli trial with no input
-        low = 1
+    if low is None and high is None: # Ugly, but gets the default of acting like a Bernoulli trial with no input
+        low = 2 # Note that the endpoint is excluded, so this is [0,1]
     return Dist(dist='integers', low=low, high=high, **kwargs)
 
 def weibull(a=1.0, **kwargs):
@@ -361,7 +367,6 @@ def delta(v=0, **kwargs):
 
 def bernoulli(p=0.5, **kwargs):
     return Dist(dist='bernoulli', p=p, **kwargs)
-
 
 
 
@@ -379,7 +384,7 @@ class DistNotInitialized(RuntimeError):
 class DistNotReady(RuntimeError):
     "Raised when a random generator is called without being ready."
     def __init__(self, dist):
-        msg = f'The Dist "{dist}" is not ready. This is likely caused by calling a distribution multiple times in a single step.'
+        msg = f'{dist} is not ready. This is likely caused by calling a distribution multiple times in a single step. Call dist.jump() to reset.'
         super().__init__(msg)
 
 # class SeedRepeatException(ValueError):
