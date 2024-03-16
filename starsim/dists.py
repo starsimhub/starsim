@@ -42,7 +42,8 @@ def find_dists(obj):
     tree = sc.iterobj(obj)
     for trace,val in tree.items():
         if isinstance(val, Dist):
-            out[str(trace)] = val
+            key = str(trace)
+            out[key] = val
     return out
 
 
@@ -320,6 +321,8 @@ class Dist(sc.prettyobj):
         """ Main method for getting random variables """
         
         # Check for readiness
+        if not self.initialized:
+            raise DistNotInitialized(self)
         if not self.ready and self.strict:
             raise DistNotReady(self)
             
@@ -388,28 +391,13 @@ def bernoulli(p=0.5, **kwargs):
 #%% Dist exceptions
 
 class DistNotInitialized(RuntimeError):
-    "Raised when a random number generator or a RNGContainer object is called when not initialized."
-    def __init__(self, obj_name=None):
-        if obj_name is None: 
-            msg = 'An RNG is being used without proper initialization; please initialize first'
-        else:
-            msg = f'The RNG "{obj_name}" is being used prior to initialization.'
+    """ Raised when a random number generator or a RNGContainer object is called when not initialized. """
+    def __init__(self, dist):
+        msg = f'{dist} has not been initialized; please call dist.initialize()'
         super().__init__(msg)
 
 class DistNotReady(RuntimeError):
-    "Raised when a random generator is called without being ready."
+    """ Raised when a random generator is called without being ready. """
     def __init__(self, dist):
         msg = f'{dist} is not ready. This is likely caused by calling a distribution multiple times in a single step. Call dist.jump() to reset.'
         super().__init__(msg)
-
-# class SeedRepeatException(ValueError):
-#     "Raised when two random number generators have the same seed."
-#     def __init__(self, rng_name, seed_offset):
-#         msg = f'Requested seed offset {seed_offset} for the random number generator named {rng_name} has already been used.'
-#         super().__init__(msg)
-
-# class RepeatNameException(ValueError):
-#     "Raised when adding a random number generator to a RNGContainer when the rng name has already been used."
-#     def __init__(self, rng_name):
-#         msg = f'A random number generator with name {rng_name} has already been added.'
-#         super().__init__(msg)

@@ -4,6 +4,7 @@ Test Dist and Dists
 
 import numpy as np
 import sciris as sc
+import scipy.stats as sps
 import starsim as ss
 import pylab as pl
 import pytest
@@ -77,8 +78,6 @@ def test_dists(n=n, do_plot=False):
             rvs = sc.objdict()
             for key,dist in dists.dists.items():
                 rvs[str(dist)] = dist(n)
-                with pytest.raises(ss.dists.DistNotReady):
-                    dist(n) # Check that we can't call an already-used distribution
                 dist.jump() # Reset
             testvals[i,j] = rvs[0][283] # Pick one of the random values and store it
     
@@ -95,6 +94,45 @@ def test_dists(n=n, do_plot=False):
     return dists
 
 
+def test_scipy():
+    """ Test that SciPy distributions also work """
+    n = 5
+    dist1 = ss.Dist(dist=sps.expon, name='scipy', scale=2).initialize() # Version 1: callable
+    dist2 = ss.Dist(dist=sps.expon(scale=2), name='scipy').initialize() # Version 2: frozen
+    rvs1 = dist1(n)
+    rvs2 = dist2(n)
+    assert np.array_equal(rvs1, rvs2)
+    return rvs1, rvs2
+
+
+def test_exceptions():
+    """ Check that exceptions are being appropriately raised """
+    sc.heading('Testing exceptions and strict')
+    
+    # Create a strict distribution
+    dist = ss.random()
+    with pytest.raises(ss.dists.DistNotReady):
+        dist(n) # Check that we can't call an uninitialized
+    
+    # Initialize and check we can't call repeatedly
+    dist.initialize()
+    rvs = dist(n)
+    with pytest.raises(ss.dists.DistNotReady):
+        dist(n) # Check that we can't call an already-used distribution
+    
+    # Check that we can with a non-strict Dist
+    dist2 = ss.random(strict=False)
+    rvs2 = sc.autolist()
+    for i in range(2):
+        rvs2 += dist(n) # We should be able to call multiple times with no problem
+    
+    assert np.array_equal(rvs, rvs2[0])
+    assert not np.array_equal(rvs2[0], rvs2[1])
+    
+    return dist, dist2
+    
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -105,5 +143,7 @@ if __name__ == '__main__':
     o1 = test_dist()
     o2 = test_custom_dists(do_plot=do_plot)
     o3 = test_dists(do_plot=do_plot)
+    o4 = test_scipy()
+    o5 = test_exceptions()
     
     T.toc()
