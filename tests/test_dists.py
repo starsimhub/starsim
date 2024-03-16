@@ -6,6 +6,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 import pylab as pl
+import pytest
 
 n = 1_000_000
 sc.options(interactive=False)
@@ -31,6 +32,7 @@ def test_dist(n=n):
     rvs = dist(n)
     assert 0 < rvs.min() < 1
     return rvs
+
 
 def test_custom_dists(n=n, do_plot=False):
     """ Test all custom dists """
@@ -59,18 +61,26 @@ def test_custom_dists(n=n, do_plot=False):
 def test_dists(n=n, do_plot=False):
     """ Test the Dists container """
     testvals = np.zeros((2,2))
+
+    # Create the objects twice
     for i in range(2):
+        
+        # Create a complex object containing various distributions
         obj = sc.prettyobj()
         obj.a = sc.objdict()
         obj.a.mylist = [ss.random(), ss.Dist('uniform', low=2, high=3)]
         obj.b = dict(d3=ss.weibull(a=2), d4=ss.delta(v=0.3))
         dists = ss.Dists(obj)
+        
+        # Call each distribution twice
         for j in range(2):
             rvs = sc.objdict()
             for key,dist in dists.dists.items():
                 rvs[str(dist)] = dist(n)
+                with pytest.raises(ss.dists.DistNotReady):
+                    dist(n) # Check that we can't call an already-used distribution
                 dist.jump() # Reset
-            testvals[i,j] = rvs[0][283] # Pick one of the random values
+            testvals[i,j] = rvs[0][283] # Pick one of the random values and store it
     
     # Check that results are as expected
     assert np.all(testvals[0,:] == testvals[1,:]) # Newly initialized objects should match
@@ -83,6 +93,7 @@ def test_dists(n=n, do_plot=False):
     o.dists = dists
     o.rvs = rvs
     return dists
+
 
 # %% Run as a script
 if __name__ == '__main__':
