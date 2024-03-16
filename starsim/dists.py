@@ -17,19 +17,37 @@ def str2int(string, modulo=1e8):
     return int(hashlib.sha256(string.encode('utf-8')).hexdigest(), 16) % int(modulo)
 
 
+def lognormal_params(mean, stdev):
+    """
+    Lognormal distributions can be specified in terms of the mean and standard
+    deviation of the lognormal distribution, or the underlying normal distribution.
+    This function converts the parameters from the lognormal distribution to the
+    parameters of the underlying distribution, which are the form expected by NumPy's
+    and SciPy's lognorm() distributions.
+    """
+    std2 = stdev**2
+    mean2 = mean**2
+    under_mean = np.sqrt(np.log(std2/mean2 + 1))
+    mu = np.log(mean2 / np.sqrt(std2+mean2))
+    under_std = np.exp(mu)
+    return under_mean, under_std
+
+
 class Dists(sc.prettyobj):
     """ Class for managing a collection of Dist objects """
 
-    def __init__(self):
+    def __init__(self, base_seed=None):
         self.dists = ss.ndict()
         self.used_offsets = set()
-        self.base_seed = None
+        self.base_seed = base_seed
         self.current_seed = None
         self.initialized = False
         return
 
-    def initialize(self, base_seed=0):
-        self.base_seed = base_seed
+    def initialize(self, obj=None, base_seed=None):
+        if base_seed:
+            self.base_seed = base_seed
+        self.find_dists(obj)
         self.initialized = True
         return
     
@@ -39,7 +57,6 @@ class Dists(sc.prettyobj):
         
         In practice, the object is usually a Sim. This function returns a 
         """
-        
     
     def add(self, dist, check_repeats=True):
         """
@@ -146,7 +163,7 @@ class Dist(sc.prettyobj):
         """
         self.dist = dist
         self.name = name
-        self.kwds = kwargs
+        self.kwds = sc.objdict(kwargs)
         self.offset = offset
         
         if dist is None:
@@ -190,6 +207,8 @@ class Dist(sc.prettyobj):
             if self.dist == 'bernoulli': # Special case for a Bernoulli distribution: a binomial distribution with n=1
                 self.dist = 'binomial' # TODO: check performance; Covasim uses np.random.random(len(prob_arr)) < prob_arr
                 self.kwds['n'] = 1
+            if self.dist == 'lognormal':
+                self.kwds.mean, self.kwds.sigma = lognormal_params(self.kwds.pop('loc'), self.kwds.pop('scale'))
         else:
             if callable(self.dist):
                 self.dist = self.dist(**self.kwds)
@@ -241,15 +260,34 @@ class Dist(sc.prettyobj):
 # Add common distributions so they can be imported directly
 __all__ += ['random', 'uniform', 'normal', 'lognormal', 'expon', 'poisson', 'randint', 'weibull', 'bernoulli']
 
-def random(*args, **kwargs):    return Dist(dist='random', *args, **kwargs)
-def uniform(*args, **kwargs):   return Dist(dist='uniform', *args, **kwargs)
-def normal(*args, **kwargs):    return Dist(dist='normal', *args, **kwargs)
-def lognormal(*args, **kwargs): return Dist(dist='lognormal', *args, **kwargs)
-def expon(*args, **kwargs):     return Dist(dist='exponential', *args, **kwargs)
-def poisson(*args, **kwargs):   return Dist(dist='poisson', *args, **kwargs)
-def randint(*args, **kwargs):   return Dist(dist='integer', *args, **kwargs)
-def weibull(*args, **kwargs):   return Dist(dist='weibull', *args, **kwargs)
-def bernoulli(*args, **kwargs): return Dist(dist='bernoulli', *args, **kwargs)
+def random(**kwargs):
+    return Dist(dist='random', **kwargs)
+
+def uniform(low=0.0, high=1.0, **kwargs):
+    return Dist(dist='uniform', low=low, high=high, **kwargs)
+
+def normal(loc=0.0, scale=1.0, **kwargs):
+    return Dist(dist='normal', loc=loc, scale=scale, **kwargs)
+
+def lognormal(loc=1.0, scale=1.0, **kwargs):
+    return Dist(dist='lognormal', loc=loc, scale=scale, **kwargs)
+
+def expon(scale=1.0, **kwargs):
+    return Dist(dist='exponential', scale=scale, **kwargs)
+
+def poisson(lam=1.0, **kwargs):
+    return Dist(dist='poisson', lam=lam, **kwargs)
+
+def randint(low=None, high=None, **kwargs):
+    if low is None and high is None: # TODO: ugly, but gets the default of acting like a Bernoulli trial with no input
+        low = 1
+    return Dist(dist='integers', low=low, high=high, **kwargs)
+
+def weibull(a=1.0, **kwargs):
+    return Dist(dist='weibull', a=a, **kwargs)
+
+def bernoulli(p=0.5, **kwargs):
+    return Dist(dist='bernoulli', p=p, **kwargs)
 
 
 
