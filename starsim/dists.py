@@ -49,7 +49,7 @@ class Dists(sc.prettyobj):
             self.base_seed = base_seed
         self.find_dists(obj)
         for trace,dist in self.dists.values():
-            dist.initialize(trace=trace, )
+            dist.initialize(trace=trace, seed=base_seed)
         self.initialized = True
         return
     
@@ -64,29 +64,6 @@ class Dists(sc.prettyobj):
             if isinstance(val, Dist):
                 self.dists[str(trace)] = val
         return self.dists
-    
-    def add(self, dist, check_repeats=True):
-        """
-        Keep track of a new Dist
-        
-        Can request an offset, will check for overlap
-        Otherwise, return value will be used as the seed offset for this rng
-        """
-        if not self.initialized:
-            raise NotInitializedException()
-
-        if dist.name in self.dists:
-            raise RepeatNameException(dist.name)
-
-        if check_repeats:
-            if dist.offset in self.used_offsets:
-                raise SeedRepeatException(dist.name, dist.offset)
-            self.used_offsets.add(dist.offset)
-
-        self.dists.append(dist)
-        self.current_seed = self.base_seed + dist.offset # Add in the base seed
-
-        return self.current_seed
 
     def step(self, ti):
         """ Step each RNG forward, for each sim timestep """
@@ -173,7 +150,7 @@ class Dist(sc.prettyobj):
         self.dist = dist
         self.name = name
         self.kwds = sc.objdict(kwargs)
-        self.seed = seed if seed else 0 # Usually determined once added to the container
+        self.seed = seed # Usually determined once added to the container
         self.offset = offset
         self.strict = strict
         
@@ -181,12 +158,38 @@ class Dist(sc.prettyobj):
             errormsg = 'You must supply the name of a distribution, or a SciPy distribution'
             raise ValueError(errormsg)
             
+        # Internal state
         self.rng = None # The actual RNG generator for generating random numbers
+        self.trace = None # The path of this object within the parent
+        self.ind = 0 # The index of the RNG (usually updated on each timestep)
         self.is_scipy = False # Need a flag because rvs logic is different
         self.ready = True
         self.initialized = False
         if not strict:
             self.initialize()
+        return
+    
+    def __repr__(self):
+        """ Custom display to show state of object """
+        string = f'ss.Dist({self.dist}, kwds={self.kwds})'
+        return string
+    
+    def disp(self):
+        """ Return full display of object """
+        return sc.pr(self)
+    
+    def disp_state(self):
+        """ Show the state of the object """
+        s = sc.autolist()
+        s += '  dist = {self.dist}'
+        s += '  kwds = {self.kwds}'
+        s += ' trace = {self.trace}'
+        s += '   ind = {self.ind}'
+        s += 'offset = {self.offset}'
+        s += '  seed = {self.seed}'
+        s += ' ready = {self.ready}'
+        string = sc.newlinejoin(s)
+        print(string)
         return
     
     def __getattr__(self, attr):
@@ -210,13 +213,8 @@ class Dist(sc.prettyobj):
     def initialize(self, trace=None, seed=0):
         """ Calculate the starting seed and create the RNG """
         
-        if self.offset is None: # Obtain the seed offset by hashing the path to this distribution
-            unique_name = trace or self.name
-            if unique_name:
-                self.offset = str2int(unique_name)
-            else:
-                self.offset = 0
-        self.seed = self.offset + (seed or self.seed)
+        # Calculate the offset (starting seed)
+        self.set_offset(trace, seed)
         
         # Create the actual RNG
         self.rng = np.random.default_rng(seed=self.seed)
@@ -227,6 +225,17 @@ class Dist(sc.prettyobj):
         self.ready = True
         self.initialized = True
         return self
+    
+    def set_offset(self, trace=None, seed=0):
+        """ Obtain the seed offset by hashing the path to this distribution """
+        unique_name = trace or self.name
+        if unique_name:
+            self.trace = unique_name
+            self.offset = str2int(unique_name) # Key step: hash the path to the distribution
+        else:
+            self.offset = self.offset or 0
+        self.seed = self.offset + (seed or self.seed or 0)
+        return
     
     def set(self, dist=None, **kwargs):
         """ Set (change) the distribution type, or one or more parameters of the distribution """
@@ -278,10 +287,12 @@ class Dist(sc.prettyobj):
         self.ready = True
         return self.bitgen.state
 
-    def step(self, ti):
-        """ Advance to time ti step by jumping """
+    def jump(self, delta=1, ti=None):
+        """ Advance to the RNG, e.g. to timestep ti, by jumping """
+        jumps = ti if ti else self.ind + delta
+        self.ind = jumps
         self.reset() # First reset back to the initial state (used in case of different numbers of calls)
-        self.bitgen.state = self.bitgen.jumped(jumps=ti).state # Now take ti jumps
+        self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take ti jumps
         return self.bitgen.state
     
     def rvs(self, size=1):
@@ -316,7 +327,8 @@ class Dist(sc.prettyobj):
 #%% Specific distributions
 
 # Add common distributions so they can be imported directly
-__all__ += ['random', 'uniform', 'normal', 'lognormal', 'expon', 'poisson', 'randint', 'weibull', 'delta', 'bernoulli']
+dist_list = ['random', 'uniform', 'normal', 'lognormal', 'expon', 'poisson', 'randint', 'weibull', 'delta', 'bernoulli']
+__all__ += dist_list
 
 def random(**kwargs):
     return Dist(dist='random', **kwargs)
