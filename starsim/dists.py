@@ -153,7 +153,7 @@ class Dist(sc.prettyobj):
       slots between 1*N and 5*N, where N is sim.pars['n_agents'].
     """
     
-    def __init__(self, dist=None, name=None, seed=None, offset=None, **kwargs):
+    def __init__(self, dist=None, name=None, seed=None, offset=None, strict=True, **kwargs):
         """
         Create a random number generator
         
@@ -162,6 +162,7 @@ class Dist(sc.prettyobj):
             name (str): the unique name of this distribution, e.g. "coin_flip" (in practice, usually generated automatically)
             seed (int): if supplied, the seed to use for this distribution
             offset (int): the seed offset; will be automatically assigned (based on hashing the name) if None
+            strict (bool): if True, require initialization and invalidate after each call to rvs()
             kwargs (dict): (default) parameters of the distribution
             
         **Examples**::
@@ -174,14 +175,18 @@ class Dist(sc.prettyobj):
         self.kwds = sc.objdict(kwargs)
         self.seed = seed if seed else 0 # Usually determined once added to the container
         self.offset = offset
+        self.strict = strict
         
         if dist is None:
             errormsg = 'You must supply the name of a distribution, or a SciPy distribution'
             raise ValueError(errormsg)
             
         self.rng = None # The actual RNG generator for generating random numbers
+        self.is_scipy = False # Need a flag because rvs logic is different
         self.ready = True
         self.initialized = False
+        if not strict:
+            self.initialize()
         return
     
     def __getattr__(self, attr):
@@ -190,6 +195,10 @@ class Dist(sc.prettyobj):
             return self.__getattribute__(attr)
         else:
             return getattr(self.rng, attr)
+        
+    def __call__(self, size=1):
+        """ Alias to self.rvs() """
+        return self.rvs(size=size)
         
     @property
     def bitgen(self):
@@ -203,43 +212,63 @@ class Dist(sc.prettyobj):
         
         if self.offset is None: # Obtain the seed offset by hashing the path to this distribution
             unique_name = trace or self.name
-            self.offset = str2int(unique_name)
+            if unique_name:
+                self.offset = str2int(unique_name)
+            else:
+                self.offset = 0
         self.seed = self.offset + (seed or self.seed)
         
         # Create the actual RNG
         self.rng = np.random.default_rng(seed=self.seed)
         self.init_state = self.bitgen.state # Store the initial state
-        self.validate_dist()
+        self.make_dist() # Convert the inputs into an actual validated distribution
         
         # Finalize
         self.ready = True
         self.initialized = True
+        return self
+    
+    def set(self, dist=None, **kwargs):
+        """ Set (change) the distribution type, or one or more parameters of the distribution """
+        if dist:
+            self.dist = dist
+        self.kwds = sc.mergedicts(self.kwds, kwargs)
+        self.make_dist()
         return
     
-    def validate_dist(self):
+    def make_dist(self):
         """ Ensure the supplied dist is valid, and initialize it if needed """
         
-        # Handle special cases for strings
-        if isinstance(self.dist, str):
-            if self.dist == 'bernoulli': # Special case for a Bernoulli distribution: a binomial distribution with n=1
-                self.dist = 'binomial' # TODO: check performance; Covasim uses np.random.random(len(prob_arr)) < prob_arr
-                self.kwds['n'] = 1
-            if self.dist == 'lognormal':
-                self.kwds.mean, self.kwds.sigma = lognormal_params(self.kwds.pop('loc'), self.kwds.pop('scale'))
-            try:
-                self.dist = getattr(self.rng, self.dist) # Replace the string with the actual distribution
-            except Exception as E:
-                errormsg = f'Could not interpret "{self.dist}", are you sure this is a valid NumPy distribution?'
-                raise ValueError(errormsg) from E
+        dist = self.dist
+        self._dist = None # The processed distribution
+        self._kwds = sc.dcp(self.kwds) # The actual keywords
         
-        # Initialize the distribution, if not a string
+        # Handle special cases for strings
+        if isinstance(dist, str):
+            if dist == 'bernoulli': # Special case for a Bernoulli distribution: a binomial distribution with n=1
+                dist = 'binomial' # TODO: check performance; Covasim uses np.random.random(len(prob_arr)) < prob_arr
+                self._kwds['n'] = 1
+            elif dist == 'lognormal': # Convert parameters for a lognormal
+                self._kwds.mean, self._kwds.sigma = lognormal_params(self._kwds.pop('loc'), self._kwds.pop('scale'))
+            elif dist == 'delta': # Special case, predefine the distribution here
+                self._dist = lambda size: np.full(size, fill_value=self._kwds['v'])
+                
+            if self._dist is None: # Should always be True except for delta
+                try:
+                    self._dist = getattr(self.rng, dist) # Replace the string with the actual distribution
+                except Exception as E:
+                    errormsg = f'Could not interpret "{dist}", are you sure this is a valid distribution? (i.e., an attribute of np.random.default_rng())'
+                    raise ValueError(errormsg) from E
+        
+        # It's not a string, so assume it's a SciPy distribution
         else:
-            if callable(self.dist):
-                self.dist = self.dist(**self.kwds)
-            if hasattr(self.dist, 'random_state'): # For SciPy distributions
-                self.dist.random_state = self.rng # Override the default random state with the correct one
+            if callable(dist):
+                self._dist = dist(**self._kwds) # Create the frozen distribution
+                
+            if hasattr(self._dist, 'random_state'): # For SciPy distributions
+                self._dist.random_state = self.rng # Override the default random state with the correct one
             else:
-                errormsg = f'Unknown distribution type {type(self.dist)}: must be string or scipy.stats distribution'
+                errormsg = f'Unknown distribution {type(dist)}: must be string or scipy.stats distribution, or another distribution with a random_state attribute'
                 raise TypeError(errormsg)
         return
 
@@ -251,18 +280,33 @@ class Dist(sc.prettyobj):
 
     def step(self, ti):
         """ Advance to time ti step by jumping """
-        self.reset() # First reset back to the initial state # TODO: needed?
+        self.reset() # First reset back to the initial state (used in case of different numbers of calls)
         self.bitgen.state = self.bitgen.jumped(jumps=ti).state # Now take ti jumps
         return self.bitgen.state
     
-    def rvs(self, size=1, **kwargs):
-        """ Main method for getting random numbers """
-        if not np.isscalar(size):
-            print('WARNING, not random number safe yet!')
-            size = len(size)
-        kwds = sc.mergedicts(dict(size=size), self.kwds, kwargs)
-        rvs = self.dist.rvs(**kwds)
+    def rvs(self, size=1):
+        """ Main method for getting random variables """
+        
+        # Check for readiness
+        if not self.ready and self.strict:
+            raise DistNotReady(self)
+            
+        # Actually get the random numbers
+        if self.is_scipy:
+            rvs = self._dist.rvs(size=size) 
+        else:
+            rvs = self._dist(size=size, **self._kwds) # Actually get the random numbers
+        
+        # Tidy up
+        if self.strict:
+            self.ready = False
         return rvs
+    
+    def urvs(self, uids):
+        """ Like rvs(), but get based on a list of unique identifiers (or slots) instead """
+        maxval = uids.max()
+        rvs = self.rvs(size=maxval)
+        return rvs[uids]
 
     def filter(self, size, **kwargs):
         return size[self.rvs(size, **kwargs)]
@@ -272,7 +316,7 @@ class Dist(sc.prettyobj):
 #%% Specific distributions
 
 # Add common distributions so they can be imported directly
-__all__ += ['random', 'uniform', 'normal', 'lognormal', 'expon', 'poisson', 'randint', 'weibull', 'bernoulli']
+__all__ += ['random', 'uniform', 'normal', 'lognormal', 'expon', 'poisson', 'randint', 'weibull', 'delta', 'bernoulli']
 
 def random(**kwargs):
     return Dist(dist='random', **kwargs)
@@ -300,6 +344,9 @@ def randint(low=None, high=None, **kwargs):
 def weibull(a=1.0, **kwargs):
     return Dist(dist='weibull', a=a, **kwargs)
 
+def delta(v=0, **kwargs):
+    return Dist(dist='delta', v=v, **kwargs)
+
 def bernoulli(p=0.5, **kwargs):
     return Dist(dist='bernoulli', p=p, **kwargs)
 
@@ -308,7 +355,7 @@ def bernoulli(p=0.5, **kwargs):
 
 #%% Dist exceptions
 
-class NotInitializedException(RuntimeError):
+class DistNotInitialized(RuntimeError):
     "Raised when a random number generator or a RNGContainer object is called when not initialized."
     def __init__(self, obj_name=None):
         if obj_name is None: 
@@ -317,20 +364,20 @@ class NotInitializedException(RuntimeError):
             msg = f'The RNG "{obj_name}" is being used prior to initialization.'
         super().__init__(msg)
 
-class NotReadyException(RuntimeError):
+class DistNotReady(RuntimeError):
     "Raised when a random generator is called without being ready."
-    def __init__(self, rng_name):
-        msg = f'The random generator named "{rng_name}" was not ready when called. This error is likely caused by calling a distribution or underlying MultiRNG generator two or more times in a single step.'
+    def __init__(self, dist):
+        msg = f'The Dist "{dist}" is not ready. This is likely caused by calling a distribution multiple times in a single step.'
         super().__init__(msg)
 
-class SeedRepeatException(ValueError):
-    "Raised when two random number generators have the same seed."
-    def __init__(self, rng_name, seed_offset):
-        msg = f'Requested seed offset {seed_offset} for the random number generator named {rng_name} has already been used.'
-        super().__init__(msg)
+# class SeedRepeatException(ValueError):
+#     "Raised when two random number generators have the same seed."
+#     def __init__(self, rng_name, seed_offset):
+#         msg = f'Requested seed offset {seed_offset} for the random number generator named {rng_name} has already been used.'
+#         super().__init__(msg)
 
-class RepeatNameException(ValueError):
-    "Raised when adding a random number generator to a RNGContainer when the rng name has already been used."
-    def __init__(self, rng_name):
-        msg = f'A random number generator with name {rng_name} has already been added.'
-        super().__init__(msg)
+# class RepeatNameException(ValueError):
+#     "Raised when adding a random number generator to a RNGContainer when the rng name has already been used."
+#     def __init__(self, rng_name):
+#         msg = f'A random number generator with name {rng_name} has already been added.'
+#         super().__init__(msg)
