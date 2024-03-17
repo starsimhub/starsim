@@ -7,7 +7,7 @@ import sciris as sc
 import numpy as np
 
 
-__all__ = ['Product', 'dx', 'tx', 'vx']
+__all__ = ['Product', 'Dx', 'Tx', 'Vx']
 
 
 class Product(ss.Module):
@@ -18,7 +18,7 @@ class Product(ss.Module):
         raise NotImplementedError
 
 
-class dx(Product):
+class Dx(Product):
     """
     Generic class for diagnostics 
     """
@@ -36,7 +36,8 @@ class dx(Product):
 
         # Create placehold for multinomial sampling
         n_results = len(self.hierarchy)
-        self.result_dist = ss.rv_discrete(values=(np.arange(n_results), 1/n_results*np.ones(n_results)))
+        self.result_dist = ss.choice(a=n_results)
+        return
 
     @property
     def default_value(self):
@@ -79,7 +80,7 @@ class dx(Product):
         return output
 
 
-class tx(Product):
+class Tx(Product):
     """
     Treatment products change fundamental properties about People, including their prognoses and infectiousness.
     """
@@ -137,7 +138,7 @@ class tx(Product):
         return output
 
 
-class vx(Product):
+class Vx(Product):
     """ Vaccine product """
     def __init__(self, diseases=None, pars=None, par_dists=None, *args, **kwargs):
         pars = ss.omerge({}, pars)

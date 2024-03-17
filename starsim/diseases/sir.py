@@ -92,7 +92,7 @@ class SIR(ss.Infection):
 __all__ += ['sir_vaccine']
 
 
-class sir_vaccine(ss.vx):
+class sir_vaccine(ss.Vx):
     """
     Create a vaccine product that changes susceptible people to recovered (i.e., perfect immunity)
     """
