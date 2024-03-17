@@ -371,9 +371,6 @@ class Dist(sc.prettyobj):
                     resized = np.zeros(size, dtype=val.dtype)
                     resized[uids] = val[:len(uids)]
                     val = resized
-                if len(val) != size: # TODO: handle multidimensional?
-                    errormsg = f'Shape mismatch: dist parameter has length {len(val)}, but {size} elements are needed'
-                    raise ValueError(errormsg)
             kwds[key] = val # Replace 
         return kwds
     

@@ -212,8 +212,9 @@ class People(BasePeople):
             return dist
 
         if sc.checktype(age_data, pd.DataFrame):
-            age_bins = np.append(age_data['age'].values, age_data['age'].values[-1] + 1)
+            age_bins = age_data['age'].values
             age_props = age_data['value'].values
+            age_props /= age_props.sum()
             return ss.choice(a=age_bins, p=age_props)
 
 

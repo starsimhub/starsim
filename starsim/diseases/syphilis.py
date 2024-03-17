@@ -123,10 +123,9 @@ class Syphilis(ss.Infection):
             self.primary[secondary_from_primary] = False
             self.set_secondary_prognoses(sim, ss.true(secondary_from_primary))
 
-        if ss.options.multirng:
-            # Hack to reset the MultiRNGs in set_secondary_prognoses so that they can be called again in this timestep. TODO: Refactor
-            self.pars.p_latent_temp.jump(sim.ti+1)
-            self.pars.dur_secondary.jump(sim.ti+1)
+        # Hack to reset the MultiRNGs in set_secondary_prognoses so that they can be called again in this timestep. TODO: Refactor
+        self.pars.p_latent_temp.jump(sim.ti+1)
+        self.pars.dur_secondary.jump(sim.ti+1)
 
         # Secondary reactivation from latent
         secondary_from_latent = self.latent_temp & (self.ti_secondary <= sim.ti)

@@ -30,8 +30,8 @@ def make_syph_sim(dt=1, n_agents=500):
     # Marital
     mf = ss.MFNet(
         pars = dict(
-            duration = ss.lognorm_mean(mean=1/24, stdev=0.5),
-            acts = ss.lognorm_mean(mean=80, stdev=30),
+            duration = ss.lognorm_o(mean=1/24, stdev=0.5),
+            acts = ss.lognorm_o(mean=80, stdev=30),
         )
     )
     maternal = ss.MaternalNet()
