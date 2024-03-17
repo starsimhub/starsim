@@ -305,10 +305,7 @@ class Dist(sc.prettyobj):
         # Handle strings, including special cases
         if isinstance(dist, str):
             # Handle special cases
-            if dist == 'bernoulli': # Special case for a Bernoulli distribution: a binomial distribution with n=1
-                dist = 'binomial' # TODO: check performance; Covasim uses np.random.random(len(prob_arr)) < prob_arr
-                self._kwds['n'] = 1
-            elif dist == 'lognorm_o': # Convert parameters for a lognormal
+            if dist == 'lognorm_o': # Convert parameters for a lognormal
                 self._kwds.mean, self._kwds.sigma = lognorm_convert(self._kwds.pop('mean'), self._kwds.pop('stdev'))
                 dist = 'lognormal'
             elif dist == 'lognorm_u':
@@ -317,7 +314,9 @@ class Dist(sc.prettyobj):
                 dist = 'lognormal' # For the underlying distribution
             
             # Create the actual distribution
-            if dist == 'delta': # Special case, predefine the distribution here
+            if dist == 'bernoulli': # Special case, predefine the distribution here
+                self._dist = lambda size, p: self.rng.random(size) < p
+            elif dist == 'delta': # Special case, predefine the distribution here
                 self._dist = lambda size, v: np.full(size, fill_value=v)
             else:
                 try:
