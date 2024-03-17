@@ -63,22 +63,24 @@ def test_callable(n):
     """ Test callable parameters """
     sc.heading('Testing a uniform distribution with callable parameters')
     
-    fake_sim = sc.prettyobj()
-    fake_sim.uids = np.arange(10)
-    fake_sim.ages = np.random.uniform(0, 90)
+    # Define a fake people object
+    np.random.seed(1) # Since not random number safe here!
+    people = sc.prettyobj()
+    people.n = 10
+    people.uid = np.arange(people.n)
+    people.age = np.random.uniform(0, 90, size=people.n)
 
     # Define a parameter as a lambda function
-    loc = lambda sim: sim.people.age
+    loc = lambda people, uids: people.age[uids]
     scale = 1
-    spsdist = sps.uniform(loc=loc, scale=1)
-    d = ss.Dist(spsdist).initialize(context=fake_sim)
+    d = ss.normal(loc=loc).initialize(context=people)
 
-    uids = np.array([1, 3, 9])
+    uids = np.array([1, 3, 7, 9])
     draws = d.urvs(uids)
-    print(f'Input ages were: {fake_sim.age[uids]}')
+    print(f'Input ages were: {people.age[uids]}')
     print(f'Output samples were: {draws}')
 
-    meandiff = np.abs(fake_sim.age[uids] - draws).mean()
+    meandiff = np.abs(people.age[uids] - draws).mean()
     assert meandiff < scale
     return d
 
@@ -87,18 +89,17 @@ def test_array(n):
     """ Test array parameters """
     sc.heading('Testing uniform with a array parameters')
 
-    uids  = np.array([1, 3])
-    loc   = np.array([1, 100]) # Low
-    scale = np.array([2, 25]) # Width
+    uids = np.array([1, 3])
+    low  = np.array([1, 100]) # Low
+    high = np.array([3, 125]) # High
 
-    spsdist = sps.uniform(loc=loc, scale=scale)
-    d = ss.Dist(dist=spsdist).initialize()
+    d = ss.uniform(low=low, high=high).initialize()
     draws = d.urvs(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
     assert len(draws) == len(uids)
     for i in range(len(uids)):
-        assert loc[i] < draws[i] < loc[i] + scale[i], 'Invalid value'
+        assert low[i] < draws[i] < low[i] + high[i], 'Invalid value'
     return draws
 
 
@@ -143,7 +144,7 @@ if __name__ == '__main__':
 
     o1 = test_basic()
     o2 = test_scalar(n)
-    # o3 = test_callable(n)
+    o3 = test_callable(n)
     o4 = test_array(n)
     # o5 = test_repeat_slot()
 

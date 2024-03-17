@@ -337,28 +337,20 @@ class Dist(sc.prettyobj):
     
     def process_kwds(self, size, uids=None):
         """ Handle array and callable keyword arguments """
-        # Loop over parameters (keywords) and modify any that are callable or arrays of the wrong shape
-        kwds = dict()
-        for key,val in self._kwds.items():
+        kwds = dict() # Loop over parameters (keywords) and modify any that are callable or arrays of the wrong shape
+        for key,val in self._kwds.items(): 
             if callable(val): # If the parameter is callable, then call it
-                val = val(self.context, uids or size)
-                if self.method == 'frozen':
-                    errormsg = 'Cannot use callable parameters with frozen distributions; use Numpy instead'
-                    raise NotImplementedError(errormsg)
+                size_par = uids if uids is not None else size
+                val = val(self.context, size_par)
             if np.iterable(val): # If it's iterable, check the size and pad with zeros if it's the wrong shape
                 if uids is not None and (len(val) == len(uids)):
-                    val.resize(size) # Append zeros; slightly faster than creating a new array
-                    val[uids] = val[:len(uids)]
-                    if self.method == 'frozen':
-                        errormsg = 'Cannot use UID-indexed parameters with frozen distributions; use Numpy instead'
-                        raise NotImplementedError(errormsg)
+                    resized = np.zeros(size, dtype=val.dtype)
+                    resized[uids] = val[:len(uids)]
+                    val = resized
                 if len(val) != size: # TODO: handle multidimensional?
                     errormsg = f'Shape mismatch: dist parameter has length {len(val)}, but {size} elements are needed'
                     raise ValueError(errormsg)
             kwds[key] = val # Replace 
-        
-        print(size, uids, kwds)
-        
         return kwds
     
     def rvs(self, size=1, uids=None):
