@@ -372,7 +372,6 @@ class ArrayView(NDArrayOperatorsMixin):
         self._map_arrays()
         return
 
-
     def _map_arrays(self):
         """
         Set main simulation attributes to be views of the underlying data
@@ -387,6 +386,13 @@ class ArrayView(NDArrayOperatorsMixin):
 
     def __setitem__(self, key, value):
         self._view.__setitem__(key, value)
+        
+    def __getattr__(self, attr):
+        """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
+        if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
+            return self.__getattribute__(attr)
+        else:
+            return getattr(self._view, attr)
 
     @property
     def __array_interface__(self):
@@ -444,7 +450,7 @@ class State(UIDArray):
 
     def _new_vals(self, uids):
         if isinstance(self.default, ss.Dist):
-            new_vals = self.default.rvs(uids)
+            new_vals = self.default.urvs(uids)
         elif callable(self.default):
             new_vals = self.default(len(uids))
         else:
@@ -476,6 +482,10 @@ class State(UIDArray):
 
         people = sim.people
         assert people.initialized, 'People must be initialized before initializing states'
+        
+        # Connect any distributions in the default to RNGs in the Sim
+        if isinstance(self.default, ss.Dist):
+            self.default.initialize(context=sim)
 
         # Establish connection with the People object
         people.register_state(self)
