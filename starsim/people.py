@@ -152,6 +152,7 @@ class BasePeople(sc.prettyobj):
         state['_states'] =  {id(v):v for v in state['_states'].values()}
         self.__dict__ = state
 
+
 class People(BasePeople):
     """
     A class to perform all the operations on the people
@@ -185,7 +186,7 @@ class People(BasePeople):
         # Handle states
         states = [
             ss.State('age', float, np.nan), # NaN until conceived
-            ss.State('female', bool, ss.bernoulli(p=0.5)),
+            ss.State('female', bool, ss.bernoulli(p=0.5, strict=False)), # TODO: figure out how to initialize this properly
             ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
             ss.State('alive', bool, True),  # Time index for death
             ss.State('scale', float, 1.0),

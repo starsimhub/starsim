@@ -106,7 +106,7 @@ class Sim(sc.prettyobj):
         self.init_analyzers()
 
         # Perform post-initialization validation
-        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed + 2)  # TEMP # TODO
+        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed + 2)  # TEMP # TODO Should not be here!!!
         self.validate_post_init()
 
         # Reset the random seed to the default run seed, so that if the simulation is run with
