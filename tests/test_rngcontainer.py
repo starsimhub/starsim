@@ -6,10 +6,8 @@ Test the RNGs object from random.py
 import numpy as np
 import sciris as sc
 import starsim as ss
-import scipy.stats as sps
-import pytest
 
-n = 5
+n = 5 # Default number of samples
 
 def make_dist(name='test', **kwargs):
     """ Make a default Dist for testing """
@@ -65,7 +63,6 @@ def test_jump(n=n):
     """ Sample, jump, sample """
     sc.heading('Testing sample, jump, sample')
     dists = make_dists()
-    
     distlist = dists.dists.values()
 
     # Jump via the contianer
@@ -84,48 +81,27 @@ def test_jump(n=n):
     return before, after
 
 
-def test_samplingorder(rng_container, dists, n=5):
+def test_order(n=n):
     """ Ensure sampling from one RNG doesn't affect another """
-    sc.heading('test_samplingorder: Testing from multiple random number generators to test if sampling order matters')
+    sc.heading('Testing from multiple random number generators to test if sampling order matters')
+    dists = make_dists()
+    d0, d1 = dists.dists.values()
 
-    uids = np.arange(0,n,2) # every other to make it interesting
+    # Sample d0, d1
+    before = d0(n)
+    _ = d1(n)
+    
+    dists.reset()
+    
+    # Sample d1, d0
+    _ = d1(n)
+    after = d0(n)
 
-    d0, d1 = dists
-    if ss.options.multirng:
-        d0.rng.initialize(rng_container, slots=n)
-        d1.rng.initialize(rng_container, slots=n)
+    print(f'When sampling rng0 before rng1: {before}')
+    print(f'When sampling rng0 after rng1: {after}')
+    assert np.array_equal(before, after)
 
-    s_before = d0.rvs(uids)
-    _ = d1.rvs(uids)
-
-    rng_container.reset()
-
-    _ = d1.rvs(uids)
-    s_after = d0.rvs(uids)
-
-    print(f'When sampling rng0 before rng1:', s_before)
-    print('Reset')
-    print(f'When sampling rng0 after rng1:', s_after)
-
-    if ss.options.multirng:
-        assert np.array_equal(s_before, s_after)
-    else:
-        assert not np.array_equal(s_before, s_after)
-
-    return s_before, s_after
-
-
-def test_repeatname(rng_container, n=5):
-    """ Test two random number generators with the same name """
-    sc.heading('test_repeatname: Testing if two random number generators with the same name are allowed')
-
-    rng0 = ss.RNG('test')
-    rng0.initialize(rng_container, slots=n)
-
-    rng1 = ss.RNG('test')
-    with pytest.raises(RepeatNameException):
-        rng1.initialize(rng_container, slots=n)
-    return rng0, rng1
+    return before, after
 
 
 # %% Run as a script
@@ -136,5 +112,6 @@ if __name__ == '__main__':
     o1 = test_seed()
     o2 = test_reset(n)
     o3 = test_jump(n)
+    o4 = test_order(n)
 
     T.toc()

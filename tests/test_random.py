@@ -7,7 +7,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-n = 5 # Number of samples to draw
+n = 5 # Default number of samples
 
 def make_dist(seed=1, name='test', **kwargs):
     """ Make a default distribution for testing """

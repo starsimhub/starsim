@@ -9,8 +9,8 @@ import starsim as ss
 import pylab as pl
 import pytest
 
-n = 1_000_000
-m = 5
+n = 1_000_000 # For testing statistical properties and performance of distributions
+m = 5 # For just testing that drawing works
 sc.options(interactive=False)
 
 
@@ -148,7 +148,6 @@ def test_exceptions(m=m):
     
     return dist, dist2
     
-
 
 # %% Run as a script
 if __name__ == '__main__':
