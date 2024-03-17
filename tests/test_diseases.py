@@ -29,10 +29,10 @@ def test_sir():
     sir.pars.beta = {'random': 0.1}
 
     # You can also change the parameters of the default lognormal distribution directly
-    # sir.pars['dur_inf'].kwds['loc'] = 5
+    sir.pars.dur_inf.kwds.loc = 5
 
     # Or use a function, here a lambda that makes the mean for each agent equal to their age divided by 10
-    sir.pars.dur_inf.kwds['loc'] = lambda self, sim, uids: sim.people.age[uids] / 10
+    sir.pars.dur_inf.kwds.loc = lambda self, sim, uids: sim.people.age[uids] / 10
 
     sim = ss.Sim(people=ppl, diseases=sir, networks=networks)
     sim.run()
