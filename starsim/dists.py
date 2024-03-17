@@ -60,7 +60,7 @@ class Dists(sc.prettyobj):
             self.initialize()
         return
 
-    def initialize(self, obj=None, base_seed=None, context=None):
+    def initialize(self, obj=None, base_seed=None, context=None, force=False):
         """
         Set the base seed, find and initialize all distributions in an object
         
@@ -75,7 +75,8 @@ class Dists(sc.prettyobj):
             raise ValueError(errormsg)
         self.dists = find_dists(obj)
         for trace,dist in self.dists.items():
-            dist.initialize(trace=trace, seed=base_seed, context=context)
+            if not dist.initialized or force:
+                dist.initialize(trace=trace, seed=base_seed, context=context)
         self.check_seeds()
         self.initialized = True
         return self
