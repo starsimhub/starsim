@@ -51,7 +51,7 @@ def find_dists(obj, verbose=False):
     return out
 
 
-class Dists(sc.prettyobj):
+class Dists:
     """ Class for managing a collection of Dist objects """
 
     def __init__(self, obj=None, base_seed=None, sim=None):
