@@ -34,6 +34,7 @@ def test_people():
 
 
 def test_networks():
+    sc.heading('Testing networks')
 
     # Make completely abstract layers
     n_edges = 10_000

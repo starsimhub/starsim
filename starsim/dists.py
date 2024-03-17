@@ -202,6 +202,7 @@ class Dist(sc.prettyobj):
         self.rng = None # The actual RNG generator for generating random numbers
         self.trace = None # The path of this object within the parent
         self.ind = 0 # The index of the RNG (usually updated on each timestep)
+        self.called = 0 # The number of times the distribution has been called
         self.method = 'numpy' # Flag whether the method to call the distribution is 'numpy' (default), 'scipy', or 'frozen'
         self.ready = True
         self.initialized = False
@@ -224,9 +225,10 @@ class Dist(sc.prettyobj):
         s += f'  dist = {self.dist}'
         s += f'  kwds = {self.kwds}'
         s += f' trace = {self.trace}'
-        s += f'   ind = {self.ind}'
         s += f'offset = {self.offset}'
         s += f'  seed = {self.seed}'
+        s += f'   ind = {self.ind}'
+        s += f'called = {self.called}'
         s += f' ready = {self.ready}'
         string = sc.newlinejoin(s)
         print(string)
@@ -379,6 +381,7 @@ class Dist(sc.prettyobj):
             raise ValueError(f'Unknown method: {self.method}') # Should not happen
         
         # Tidy up
+        self.called += 1
         if self.strict:
             self.ready = False
         if uids is not None:

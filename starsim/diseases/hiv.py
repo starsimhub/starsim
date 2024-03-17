@@ -44,7 +44,9 @@ class HIV(ss.Infection):
     @staticmethod
     def make_death_prob(module, sim, uids):
         p = module.pars
-        return sim.dt * module.death_prob_data / (p.cd4_min - p.cd4_max)**2 *  (module.cd4[uids] - p.cd4_max)**2
+        out = sim.dt * module.death_prob_data / (p.cd4_min - p.cd4_max)**2 *  (module.cd4[uids] - p.cd4_max)**2
+        out = np.array(out)
+        return out
 
     def update_pre(self, sim):
         """ Update CD4 """
