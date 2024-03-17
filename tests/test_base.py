@@ -89,14 +89,14 @@ def test_microsim():
 
 def test_ppl_construction():
 
-    def init_debut(self, sim, uids):
+    def init_debut(module, sim, uids):
         # Test setting the mean debut age by sex, 16 for men and 21 for women.
         loc = np.full(len(uids), 16)
         loc[sim.people.female[uids]] = 21
         return loc
 
     mf_pars = {
-        'debut': sps.norm(loc=init_debut, scale=2),  # Age of debut can vary by using callable parameter values
+        'debut': ss.normal(loc=init_debut, scale=2),  # Age of debut can vary by using callable parameter values
     }
     sim_pars = {'networks': [ss.MFNet(mf_pars)], 'n_agents': 100}
     gon_pars = {'beta': {'mf': [0.08, 0.04]}, 'p_death': 0.2}
