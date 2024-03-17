@@ -141,7 +141,8 @@ def test_module_adding():
     deaths = ss.Deaths(pars={'death_rate': 10})
     demographics = [births, deaths]
     with pytest.raises(Exception): # CK: should be ValueError, but that fails for now, and this is OK
-        sim = ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=10, death_rate=10).run()
+        ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=10, death_rate=10).run()
+    return demographics
 
 
 if __name__ == '__main__':
