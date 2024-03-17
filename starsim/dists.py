@@ -370,6 +370,10 @@ class Dist(sc.prettyobj):
             raise DistNotInitializedError(self)
         if not self.ready and self.strict:
             raise DistNotReadyError(self)
+        
+        # Shortcut if nothing to return
+        if size == 0:
+            return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
             
         # Actually get the random numbers
         kwds = self.process_kwds(size, uids)
@@ -393,6 +397,8 @@ class Dist(sc.prettyobj):
     
     def urvs(self, uids):
         """ Like rvs(), but get based on a list of unique identifiers (UIDs or slots) instead """
+        if not len(uids):
+            return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
         maxval = uids.max() + 1 # Since UIDs are inclusive
         urvs = self.rvs(size=maxval, uids=uids)
         return urvs
