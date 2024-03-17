@@ -36,12 +36,12 @@ class Ebola(SIR):
         )
 
         par_dists = ss.omergeleft(par_dists,
-            dur_exp2symp    = ss.lognormal,
-            dur_symp2sev    = ss.lognormal,
-            dur_sev2dead    = ss.lognormal,
-            dur_dead2buried = ss.lognormal,
-            dur_symp2rec    = ss.lognormal,
-            dur_sev2rec     = ss.lognormal,
+            dur_exp2symp    = ss.lognorm_o,
+            dur_symp2sev    = ss.lognorm_o,
+            dur_sev2dead    = ss.lognorm_o,
+            dur_dead2buried = ss.lognorm_o,
+            dur_symp2rec    = ss.lognorm_o,
+            dur_sev2rec     = ss.lognorm_o,
             p_sev           = ss.bernoulli,
             p_death         = ss.bernoulli,
             p_safe_bury     = ss.bernoulli,
