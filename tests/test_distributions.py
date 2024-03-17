@@ -65,22 +65,22 @@ def test_callable(n=n):
     
     # Define a fake people object
     np.random.seed(1) # Since not random number safe here!
-    people = sc.prettyobj()
-    people.n = 10
-    people.uid = np.arange(people.n)
-    people.age = np.random.uniform(0, 90, size=people.n)
+    sim = sc.prettyobj()
+    sim.n = 10
+    sim.uid = np.arange(sim.n)
+    sim.age = np.random.uniform(0, 90, size=sim.n)
 
     # Define a parameter as a lambda function
-    loc = lambda people, uids: people.age[uids]
+    loc = lambda module, sim, uids: sim.age[uids]
     scale = 1
-    d = ss.normal(loc=loc).initialize(context=people)
+    d = ss.normal(loc=loc).initialize(sim=sim)
 
     uids = np.array([1, 3, 7, 9])
     draws = d.urvs(uids)
-    print(f'Input ages were: {people.age[uids]}')
+    print(f'Input ages were: {sim.age[uids]}')
     print(f'Output samples were: {draws}')
 
-    meandiff = np.abs(people.age[uids] - draws).mean()
+    meandiff = np.abs(sim.age[uids] - draws).mean()
     assert meandiff < scale
     return d
 
@@ -110,12 +110,13 @@ def test_repeat_slot():
     # Initialize parameters
     slots = np.array([4,2,3,2,2,3])
     n = len(slots)
+    uids = np.arange(n)
     low = np.arange(n)
     high = low + 1
 
     # Draw values
     d = ss.uniform(low=low, high=high).initialize()
-    draws = d.urvs(slots)
+    draws = d.urvs(uids)
     
     # Print and test
     print(f'Uniform sample for slots {slots} returned {draws}')

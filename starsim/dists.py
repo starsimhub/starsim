@@ -307,7 +307,7 @@ class Dist(sc.prettyobj):
                 self._kwds['n'] = 1
             elif dist == 'lognormal': # Convert parameters for a lognormal
                 self._kwds.mean, self._kwds.sigma = lognormal_params(self._kwds.pop('loc'), self._kwds.pop('scale'))
-            elif dist == 'lognorm_u':
+            elif dist == 'lognormalu':
                 dist = 'lognormal' # For the underlying distribution
             
             if dist == 'delta': # Special case, predefine the distribution here
