@@ -460,7 +460,7 @@ class Sim(sc.prettyobj):
             raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
 
         # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
-        self.dists.step(self.ti + 1)  # +1 offset because ti=0 is used on initialization
+        self.dists.jump(self.ti + 1)  # +1 offset because ti=0 is used on initialization
 
         # Clean up dead agents, if removing agents is enabled
         if self.pars.remove_dead and (self.ti % self.pars.remove_dead == 0):
