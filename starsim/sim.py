@@ -14,7 +14,7 @@ import pylab as pl
 __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims']
 
 
-@nb.njit(cache=True)
+@nb.njit(cache=True) # TODO: check if needed
 def set_numba_seed(value):
     # Needed to ensure reproducibility when using random calls in numba, e.g. RandomNetwork
     # Note, these random numbers are not currently common-random-number safe
@@ -105,7 +105,7 @@ class Sim(sc.prettyobj):
         set_numba_seed(self.pars.rand_seed)
 
         # Initialize the core sim components
-        self.dists.initialize(self.pars.rand_seed + 2)  # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rngs
+        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed + 2)  # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rngs
         self.init_people(reset=reset, **kwargs)  # Create all the people (the heaviest step)
 
         # Initialize plug-ins

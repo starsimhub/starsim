@@ -47,7 +47,7 @@ class Syphilis(ss.Infection):
             # Adult syphilis natural history, all specified in years
             dur_exposed = ss.lognormal(mean=1 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_primary = ss.lognormal(mean=1.5 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_secondary = ss.norm(loc=3.6 / 12, scale=1.5 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_secondary = ss.normal(loc=3.6 / 12, scale=1.5 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_latent_temp = ss.lognormal(mean=1, stdev=6 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_latent_long = ss.lognormal(mean=20, stdev=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_latent_temp = ss.bernoulli(p=0.25),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
