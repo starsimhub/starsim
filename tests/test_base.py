@@ -7,7 +7,6 @@ import sciris as sc
 import numpy as np
 import starsim as ss
 import matplotlib.pyplot as plt
-import scipy.stats as sps
 
 do_plot = True
 sc.options(interactive=False) # Assume not running interactively

@@ -5,6 +5,7 @@ Define random-number-safe distributions.
 import hashlib
 import numpy as np
 import sciris as sc
+import pylab as pl
 
 __all__ = ['find_dists', 'Dists', 'Dist']
 
@@ -223,7 +224,7 @@ class Dist(sc.prettyobj):
         """ Return full display of object """
         return sc.pr(self)
     
-    def disp_state(self):
+    def show_state(self):
         """ Show the state of the object """
         s = sc.autolist()
         s += f'  dist = {self.dist}'
@@ -234,6 +235,7 @@ class Dist(sc.prettyobj):
         s += f'   ind = {self.ind}'
         s += f'called = {self.called}'
         s += f' ready = {self.ready}'
+        s += f' state = {self.state}'
         string = sc.newlinejoin(s)
         print(string)
         return
@@ -337,9 +339,13 @@ class Dist(sc.prettyobj):
                 raise TypeError(errormsg)
         return
 
-    def reset(self):
+    def state(self):
+        """ Get the current state """
+        return self.bitgen.state
+
+    def reset(self, state=None):
         """ Restore initial state """
-        self.bitgen.state = self.init_state
+        self.bitgen.state = state if state else self.init_state
         self.ready = True
         return self.bitgen.state
 
@@ -418,6 +424,17 @@ class Dist(sc.prettyobj):
 
     def filter(self, uids, **kwargs):
         return uids[self.urvs(uids, **kwargs).astype(bool)] # TODO: tidy up
+    
+    def plot_hist(self, size=1000, bins=None, fig_kw=None, hist_kw=None):
+        """ Plot the current state of the RNG as a histogram """
+        fig = pl.figure(**sc.mergedicts(fig_kw))
+        rvs = self.rvs(size) # TODO: reset the state
+        pl.hist(rvs, bins=bins, **sc.mergedicts(hist_kw))
+        pl.title(str(self))
+        pl.xlabel('Value')
+        pl.ylabel(f'Count ({size} total)')
+        return fig
+        
 
 
 
