@@ -73,8 +73,8 @@ class Dists:
         """
         if base_seed:
             self.base_seed = base_seed
-        sim = sim if sim else self.sim
-        obj = obj if obj else self.obj
+        sim = sim if (sim is not None) else self.sim
+        obj = obj if (obj is not None) else self.obj
         if obj is None:
             errormsg = 'Must supply a container that contains one or more Dist objects'
             raise ValueError(errormsg)
@@ -270,8 +270,8 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.make_dist() # Convert the inputs into an actual validated distribution
         
         # Finalize
-        self.module = module if module else self.module
-        self.sim = sim if sim else self.sim
+        self.module = module if (module is not None) else self.module
+        self.sim = sim if (sim is not None) else self.sim
         self.ready = True
         self.initialized = True
         return self
@@ -345,13 +345,13 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
 
     def reset(self, state=None):
         """ Restore initial state """
-        self.bitgen.state = state if state else self.init_state
+        self.bitgen.state = state if (state is not None) else self.init_state
         self.ready = True
         return self.bitgen.state
 
     def jump(self, delta=1, to=None):
         """ Advance the RNG, e.g. to timestep "to", by jumping """
-        jumps = to if to else self.ind + delta
+        jumps = to if (to is not None) else self.ind + delta
         self.ind = jumps
         self.reset() # First reset back to the initial state (used in case of different numbers of calls)
         if jumps: # Seems to randomize state if jumps=0
