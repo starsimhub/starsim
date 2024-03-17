@@ -77,14 +77,14 @@ class Measles(SIR):
         p = self.pars
 
         # Determine when exposed become infected
-        self.ti_infected[uids] = sim.ti + p.dur_exp.rvs(uids)
+        self.ti_infected[uids] = sim.ti + p.dur_exp.urvs(uids)
 
         # Sample duration of infection, being careful to only sample from the
         # distribution once per timestep.
-        dur_inf = p.dur_inf.rvs(uids)
+        dur_inf = p.dur_inf.urvs(uids)
 
         # Determine who dies and who recovers and when
-        will_die = p.p_death.rvs(uids)
+        will_die = p.p_death.urvs(uids)
         dead_uids = uids[will_die]
         rec_uids = uids[~will_die]
         self.ti_dead[dead_uids] = self.ti_infected[dead_uids] + dur_inf[will_die]

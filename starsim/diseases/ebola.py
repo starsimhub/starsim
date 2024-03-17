@@ -117,7 +117,7 @@ class Ebola(SIR):
         p = self.pars
 
         # Determine when exposed become infected
-        self.ti_infected[uids] = sim.ti + p.dur_exp2symp.rvs(uids)
+        self.ti_infected[uids] = sim.ti + p.dur_exp2symp.urvs(uids)
 
         # Determine who progresses to sever and when
         sev_uids = p.p_sev.filter(uids)

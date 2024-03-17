@@ -147,7 +147,7 @@ class Cholera(ss.Infection):
         p = self.pars
 
         # Determine when exposed become infected
-        self.ti_infected[uids] = sim.ti + p.dur_exp2inf.rvs(uids)
+        self.ti_infected[uids] = sim.ti + p.dur_exp2inf.urvs(uids)
 
         # Determine who becomes symptomatic and when
         symp_uids = p.p_symp.filter(uids)
