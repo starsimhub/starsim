@@ -51,16 +51,6 @@ def find_dists(obj, verbose=False):
     return out
 
 
-def bernoulli_func(p, size=1):
-    """ Define a Bernoulli function """
-    return np.full(size=size, fill_value=v)
-
-
-def delta_func(v, size=1):
-    """ Define a delta distribution """
-    return np.full(size=size, fill_value=v)
-
-
 class Dists:
     """ Class for managing a collection of Dist objects """
 
@@ -318,7 +308,7 @@ class Dist(sc.prettyobj):
             if dist == 'bernoulli': # Special case for a Bernoulli distribution: a binomial distribution with n=1
                 dist = 'binomial' # TODO: check performance; Covasim uses np.random.random(len(prob_arr)) < prob_arr
                 self._kwds['n'] = 1
-            if dist == 'lognorm_o': # Convert parameters for a lognormal
+            elif dist == 'lognorm_o': # Convert parameters for a lognormal
                 self._kwds.mean, self._kwds.sigma = lognorm_convert(self._kwds.pop('mean'), self._kwds.pop('stdev'))
                 dist = 'lognormal'
             elif dist == 'lognorm_u':
@@ -327,10 +317,8 @@ class Dist(sc.prettyobj):
                 dist = 'lognormal' # For the underlying distribution
             
             # Create the actual distribution
-            if dist == 'bernoulli':
-                self._dist = bernoulli_func
-            elif dist == 'delta': # Special case, predefine the distribution here
-                self._dist = delta_func
+            if dist == 'delta': # Special case, predefine the distribution here
+                self._dist = lambda size, v: np.full(size, fill_value=v)
             else:
                 try:
                     self._dist = getattr(self.rng, dist) # Main use case; replace the string with the actual distribution
