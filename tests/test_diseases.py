@@ -111,6 +111,6 @@ def test_multidisease():
 if __name__ == '__main__':
     sc.options(interactive=do_plot)
     sim1 = test_sir()
-    # sim2 = test_ncd()
-    # sims = test_gavi()
-    # sim = test_multidisease()
+    sim2 = test_ncd()
+    sims = test_gavi()
+    sim = test_multidisease()

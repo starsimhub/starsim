@@ -155,13 +155,13 @@ class Cholera(ss.Infection):
 
         # Determine who dies and when
         dead_uids = p.p_death.filter(symp_uids)
-        self.ti_dead[dead_uids] = self.ti_symptomatic[dead_uids] + p.dur_symp2dead.rvs(dead_uids)
+        self.ti_dead[dead_uids] = self.ti_symptomatic[dead_uids] + p.dur_symp2dead.urvs(dead_uids)
         symp_rev_uids = np.setdiff1d(symp_uids, dead_uids)
         asymp_uids = np.setdiff1d(uids, symp_uids)
 
         # Determine when agents recover
-        self.ti_recovered[symp_rev_uids] = self.ti_exposed[symp_rev_uids] + p.dur_symp2rec.rvs(symp_rev_uids)
-        self.ti_recovered[asymp_uids] = self.ti_exposed[asymp_uids] + p.dur_asymp2rec.rvs(asymp_uids)
+        self.ti_recovered[symp_rev_uids] = self.ti_exposed[symp_rev_uids] + p.dur_symp2rec.urvs(symp_rev_uids)
+        self.ti_recovered[asymp_uids] = self.ti_exposed[asymp_uids] + p.dur_asymp2rec.urvs(asymp_uids)
 
         return
 

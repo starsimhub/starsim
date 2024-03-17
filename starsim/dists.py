@@ -309,9 +309,11 @@ class Dist(sc.prettyobj):
                 dist = 'binomial' # TODO: check performance; Covasim uses np.random.random(len(prob_arr)) < prob_arr
                 self._kwds['n'] = 1
             elif dist == 'lognorm_o': # Convert parameters for a lognormal
-                self._kwds.mean, self._kwds.sigma = lognorm_convert(self._kwds.pop('loc'), self._kwds.pop('scale'))
+                self._kwds.mean, self._kwds.sigma = lognorm_convert(self._kwds.pop('mean'), self._kwds.pop('stdev'))
                 dist = 'lognormal'
             elif dist == 'lognorm_u':
+                self._kwds.mean = self._kwds.pop('loc') # Rename parameters
+                self._kwds.sigma = self._kwds.pop('scale')
                 dist = 'lognormal' # For the underlying distribution
             
             # Create the actual distribution
@@ -380,6 +382,9 @@ class Dist(sc.prettyobj):
             raise DistNotReadyError(self)
         
         # Shortcut if nothing to return
+        if not np.isscalar(size):
+            errormsg = f'Expecting a scalar size, not {size}; multidimensional output not supported and for UIDs, use urvs() instead'
+            raise ValueError(errormsg)
         if size == 0:
             return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
             
@@ -433,11 +438,11 @@ def uniform(low=0.0, high=1.0, **kwargs):
 def normal(loc=0.0, scale=1.0, **kwargs):
     return Dist(dist='normal', loc=loc, scale=scale, **kwargs)
 
-def lognorm_o(loc=1.0, scale=1.0, **kwargs):
-    return Dist(dist='lognorm_o', loc=loc, scale=scale, **kwargs)
+def lognorm_o(mean=1.0, stdev=1.0, **kwargs):
+    return Dist(dist='lognorm_o', mean=mean, stdev=stdev, **kwargs)
 
-def lognorm_u(mean=0.0, sigma=1.0, **kwargs):
-    return Dist(dist='lognorm_u', mean=mean, sigma=sigma, **kwargs)
+def lognorm_u(loc=0.0, scale=1.0, **kwargs):
+    return Dist(dist='lognorm_u', loc=loc, scale=scale, **kwargs)
 
 def expon(scale=1.0, **kwargs):
     return Dist(dist='exponential', scale=scale, **kwargs)

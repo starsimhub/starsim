@@ -637,7 +637,7 @@ class MSMNet(SexualNetwork, DynamicNetwork):
         # Participation
         self.participant[people.female] = False
         pr = self.pars.rel_part_rates
-        dist = ss.bernoulli.rvs(p=pr, size=len(uids))
+        dist = ss.bernoulli(pr).rvs(size=len(uids)) # TODO: not RNG safe
         self.participant[uids] = dist
 
         # Debut
@@ -1048,7 +1048,7 @@ class MF_MSM(NetworkConnector):
         remaining_pr = max(mf_pr*len(uids)-len(bi_uids), 0)/len(mf_excl_set)
 
         # Don't love the following new syntax:
-        mf_excl_uids = mf_excl_set[ss.uniform.rvs(size=len(mf_excl_set)) < remaining_pr]
+        mf_excl_uids = mf_excl_set[ss.random().rvs(size=len(mf_excl_set)) < remaining_pr] # TODO: not RNG safe and yes ugly!
 
         mf.participant[bi_uids] = True
         mf.participant[mf_excl_uids] = True
