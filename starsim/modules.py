@@ -66,11 +66,14 @@ class Module(sc.prettyobj):
                 except Exception as E:
                     errormsg = f'"{par_dist}" is not a valid distribution name; valid distributions are: {sc.newlinejoin(ss.dists.dist_list)}'
                     raise ValueError(errormsg) from E
+            
             if callable(par_dist):
-                pdist = par_dist(*args, **kwargs)
-            else: # TODO: unclear if this is needed/would work
-                pdist = ss.Dist(dist=par_dist, *args, **kwargs)
-            self.pars[key] = pdist
+                par_dist = par_dist(*args, **kwargs)
+            
+            if not isinstance(par_dist, ss.Dist):
+                par_dist = ss.Dist(dist=par_dist, *args, **kwargs)
+            
+            self.pars[key] = par_dist
         
         # Initialize everything
         for key,val in list(self.pars.items()) + list(self.__dict__.items()):
