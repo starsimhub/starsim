@@ -121,7 +121,7 @@ class Dists:
         return out
 
 
-class Dist(sc.prettyobj):
+class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     """
     Class for tracking one random number generator associated with one distribution,
     i.e. one decision per timestep.

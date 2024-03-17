@@ -85,7 +85,7 @@ class Module(sc.prettyobj):
             if isinstance(value, rv_frozen):
                 setattr(self, key, ss.Dist(value))
         
-        # Initialize everything
+        # Initialize everything # TODO: shouldn't be needed, should be able to recurse more
         for key,val in list(self.pars.items()) + list(self.__dict__.items()):
             if isinstance(val, ss.Dist):
                 val.initialize(module=self, sim=sim) # Actually a dist
