@@ -9,71 +9,29 @@ import starsim as ss
 import scipy.stats as sps
 import pytest
 
-n = 10
+n = 5
 
 def make_dist(name='test', **kwargs):
-    """ Make a default distribution for testing """
+    """ Make a default Dist for testing """
     dist = ss.random(name=name, **kwargs).initialize()
     return dist
 
+def make_dists(**kwargs):
+    """ Make a Dists object with two distributions in it """
+    distlist = [make_dist(), make_dist()]
+    dists = ss.Dists(distlist)
+    dists.initialize()
+    return dists
+
 
 # %% Define the tests
-
-# @pytest.fixture
-# def rng_container():
-#     rng_container = ss.RNGs()
-#     rng_container.initialize(base_seed=10)
-#     return rng_container
-
-# @pytest.fixture
-# def rngs():
-#     return [ss.RNG('rng0'), ss.RNG('rng1')]
-
-# @pytest.fixture
-# def dists():
-#     names = ['rng1', 'rng2']
-#     dists = []
-#     for rng_name in names:
-#         d = ss.ScipyDistribution(sps.uniform(), rng=rng_name)
-#         dists.append(d)
-#     return dists
-
-
-# def test_rng(rng_container, rngs, n=5):
-#     """ Simple sample from rng """
-#     sc.heading('test_rng: Testing RNGs object')
-
-#     rng0 = rngs[0]
-#     rng0.initialize(rng_container, slots=n)
-
-#     draws = rng0.random(n)
-#     print(f'Created seed and sampled: {draws}')
-
-#     assert len(draws) == n
-#     return draws
-
-
-def test_urvs(n=n):
-    """ Simple sample from distribution by UID """
-    sc.heading('Testing UID sample')
-    
-    dist = make_dist()
-    uids = np.arange(0, n, 2) # every other to make it interesting
-    draws = dist.urvs(uids)
-    print(f'Created seed and sampled: {draws}')
-
-    assert len(draws) == len(uids)
-    return draws
-
 
 def test_seed():
     """ Test assignment of seeds """
     sc.heading('Testing assignment of seeds')
     
     # Create and initialize two distributions
-    distlist = [make_dist(), make_dist()]
-    dists = ss.Dists(distlist)
-    dists.initialize()
+    dists = make_dists()
     dist0, dist1 = dists.dists.values()
 
     print(f'Dists dist0 and dist1 were assigned seeds {dist0.seed} and {dist1.seed}, respectively')
@@ -81,73 +39,49 @@ def test_seed():
     return dist0, dist1
 
 
-def test_reset(rng_container, dists, n=5):
+def test_reset(n=n):
     """ Sample, reset, sample """
-    sc.heading('test_reset: Testing sample, reset, sample')
+    sc.heading('Testing sample, reset, sample')
+    dists = make_dists()
+    distlist = dists.dists.values()
 
-    d0 = dists[0]
-    if ss.options.multirng:
-        d0.rng.initialize(rng_container, slots=n)
+    # Reset via the container, but only 
+    before = sc.autolist()
+    after = sc.autolist()
+    for dist in distlist:
+        before += list(dist(n))
+    dists.reset() # Return to step 0
+    for dist in distlist:
+        after += list(dist(n))
 
-    uids = np.arange(0,n,2) # every other to make it interesting
-    s_before = d0.rvs(uids)
-    rng_container.reset() # Return to step 0
-    s_after = d0.rvs(uids)
-
-    print(f'Initial sample', s_before)
-    print('Reset')
-    print(f'After reset sample', s_after)
-
-    if ss.options.multirng:
-        assert np.array_equal(s_after, s_before)
-    else:
-        assert not np.array_equal(s_after, s_before)
-    return s_before, s_after
+    print(f'Initial sample:\n{before}')
+    print(f'After reset sample:\n{after}')
+    assert np.array_equal(before, after)
+    
+    return before, after
 
 
-def test_step(rng_container, dists, n=5):
-    """ Sample, step, sample """
-    sc.heading('test_step: Testing sample, step, sample')
+def test_jump(n=n):
+    """ Sample, jump, sample """
+    sc.heading('Testing sample, jump, sample')
+    dists = make_dists()
+    
+    distlist = dists.dists.values()
 
-    d0 = dists[0]
-    if ss.options.multirng:
-        d0.rng.initialize(rng_container, slots=n)
+    # Jump via the contianer
+    before = sc.autolist()
+    after = sc.autolist()
+    for dist in distlist:
+        before += list(dist(n))
+    dists.jump(to=10) # Jump to 10th step
+    for dist in distlist:
+        after += list(dist(n))
 
-    uids = np.arange(0,n,2) # every other to make it interesting
-    s_before = d0.rvs(uids)
-    rng_container.step(10) # 10 steps
-    s_after = d0.rvs(uids)
-
-    print(f'Initial sample', s_before)
-    print('Step')
-    print(f'Subsequent sample', s_after)
-
-    assert not np.array_equal(s_after, s_before)
-    return s_before, s_after
-
-
-# def test_initialize(rngs, n=5):
-#     """ Sample without initializing, should raise exception """
-#     sc.heading('test_initialize: Testing without initializing, should raise exception.')
-#     rng_container = ss.RNGs()
-#     #rng_container.initialize(base_seed=3) # Do not initialize
-
-#     with pytest.raises(NotInitializedException):
-#         rngs[0].initialize(rng_container, slots=n)
-#     return rngs[0]
-
-
-# def test_seedrepeat(rng_container, n=5):
-#     """ Two random number generators with the same seed, should raise exception """
-#     sc.heading('test_seedrepeat: Testing two random number generators with the same seed, should raise exception.')
-
-#     rng0 = ss.RNG('rng0', seed_offset=0)
-#     rng0.initialize(rng_container, slots=n)
-
-#     with pytest.raises(SeedRepeatException):
-#         rng1 = ss.RNG('rng1', seed_offset=0)
-#         rng1.initialize(rng_container, slots=n)
-#     return rng0, rng1
+    print(f'Initial sample:\n{before}')
+    print(f'After jump sample:\n{after}')
+    assert not np.array_equal(before, after)
+    
+    return before, after
 
 
 def test_samplingorder(rng_container, dists, n=5):
@@ -199,7 +133,8 @@ if __name__ == '__main__':
 
     T = sc.timer()
 
-    o1 = test_urvs(n)
-    l2 = test_seed()
+    o1 = test_seed()
+    o2 = test_reset(n)
+    o3 = test_jump(n)
 
     T.toc()

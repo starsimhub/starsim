@@ -78,6 +78,25 @@ def test_seed(n=n):
     return draws0, draws1
 
 
+def test_urvs(n=n):
+    """ Simple sample from distribution by UID """
+    sc.heading('Testing UID sample')
+    
+    dist = make_dist()
+    uids = np.arange(0, n, 2) # every other to make it interesting
+    draws = dist.urvs(uids)
+    print(f'Created seed and sampled: {draws}')
+    assert len(draws) == len(uids)
+    
+    # Draws without UIDs should match the first element only
+    dist2 = make_dist()
+    draws2 = dist2.rvs(len(uids))
+    assert draws[0] == draws2[0]
+    assert not np.array_equal(draws, draws2)
+    
+    return draws
+
+
 # %% Run as a script
 if __name__ == '__main__':
 
@@ -87,5 +106,6 @@ if __name__ == '__main__':
     o2 = test_reset(n)
     o3 = test_jump(n)
     o4 = test_seed(n)
+    o5 = test_urvs(n)
 
     T.toc()

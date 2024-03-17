@@ -95,11 +95,11 @@ class Dists(sc.prettyobj):
                 checked[seed] = dist
         return
 
-    def jump(self, delta=1, ti=None):
-        """ Advance all RNGs, e.g. to timestep ti, by jumping """
+    def jump(self, delta=1, to=None):
+        """ Advance all RNGs, e.g. to timestep "to", by jumping """
         out = sc.autolist()
         for dist in self.dists.values():
-            out += dist.jump(delta=delta, ti=ti)
+            out += dist.jump(delta=delta, to=to)
         return out
 
     def reset(self):
@@ -321,13 +321,13 @@ class Dist(sc.prettyobj):
         self.ready = True
         return self.bitgen.state
 
-    def jump(self, delta=1, ti=None):
-        """ Advance the RNG, e.g. to timestep ti, by jumping """
-        jumps = ti if ti else self.ind + delta
+    def jump(self, delta=1, to=None):
+        """ Advance the RNG, e.g. to timestep "to", by jumping """
+        jumps = to if to else self.ind + delta
         self.ind = jumps
         self.reset() # First reset back to the initial state (used in case of different numbers of calls)
         if jumps: # Seems to randomize state if jumps=0
-            self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take ti jumps
+            self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
         return self.bitgen.state
     
     def rvs(self, size=1):
