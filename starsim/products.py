@@ -67,7 +67,7 @@ class dx(Product):
                 self.result_dist.pk = probs  # Overwrite distribution probabilities
 
                 # Sort people into one of the possible result states and then update their overall results
-                this_result = self.result_dist.rvs(these_uids)-these_uids
+                this_result = self.result_dist.urvs(these_uids)-these_uids
                 row_inds = results.uids.isin(these_uids)
                 results.loc[row_inds, 'result'] = np.minimum(this_result, results.loc[row_inds, 'result'])
 

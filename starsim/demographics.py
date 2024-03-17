@@ -224,7 +224,7 @@ class Deaths(BaseDemographics):
         """ Select people to die """
         alive_uids = ss.true(sim.people.alive)
         death_prob = self.make_death_prob_fn(sim, alive_uids)
-        died = self.pars.death_dist.rvs(alive_uids) < death_prob
+        died = self.pars.death_dist.urvs(alive_uids) < death_prob
         death_uids = alive_uids[died]
         sim.people.request_death(death_uids)
         return len(death_uids)
@@ -407,7 +407,7 @@ class Pregnancy(BaseDemographics):
         inds_to_choose_from = ss.true(denom_conds)
         
         fert_prob = self.make_fertility_prob_fn(sim, inds_to_choose_from)
-        conceive = self.pars.fertility_dist.rvs(inds_to_choose_from) < fert_prob
+        conceive = self.pars.fertility_dist.urvs(inds_to_choose_from) < fert_prob
         conceive_uids = inds_to_choose_from[conceive]
         # conceive_uids = self.pars.fertility_rate.filter(inds_to_choose_from)
 
@@ -423,13 +423,13 @@ class Pregnancy(BaseDemographics):
         if n_unborn_agents > 0:
 
             # Choose slots for the unborn agents
-            new_slots = self.choose_slots.rvs(conceive_uids)
+            new_slots = self.choose_slots.urvs(conceive_uids)
 
             # Grow the arrays and set properties for the unborn agents
             new_uids = sim.people.grow(len(new_slots))
             sim.people.age[new_uids] = -self.pars.dur_pregnancy
             sim.people.slot[new_uids] = new_slots  # Before sampling female_dist
-            sim.people.female[new_uids] = self.pars.sex_ratio.rvs(new_uids)
+            sim.people.female[new_uids] = self.pars.sex_ratio.urvs(new_uids)
 
             # Add connections to any vertical transmission layers
             # Placeholder code to be moved / refactored. The maternal network may need to be
@@ -456,7 +456,7 @@ class Pregnancy(BaseDemographics):
 
         # Outcomes for pregnancies
         dur = np.full(len(uids), sim.ti + self.pars.dur_pregnancy / sim.dt)
-        dead = self.pars.maternal_death_rate.rvs(uids)
+        dead = self.pars.maternal_death_rate.urvs(uids)
         self.ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
         dur_post_partum = np.full(len(uids), dur + self.pars.dur_postpartum / sim.dt)
         self.ti_postpartum[uids] = dur_post_partum
