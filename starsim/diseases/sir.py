@@ -42,7 +42,6 @@ class SIR(ss.Infection):
     def update_pre(self, sim):
         # Progress infectious -> recovered
         recovered = ss.true(self.infected & (self.ti_recovered <= sim.ti))
-
         self.infected[recovered] = False
         self.recovered[recovered] = True
 
