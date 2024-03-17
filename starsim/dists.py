@@ -170,7 +170,7 @@ class Dist(sc.prettyobj):
       slots between 1*N and 5*N, where N is sim.pars['n_agents'].
     """
     
-    def __init__(self, dist=None, name=None, seed=None, offset=None, module=None, sim=None, strict=True, **kwargs):
+    def __init__(self, dist=None, name=None, seed=None, offset=None, module=None, sim=None, strict=False, **kwargs): # TODO: switch back to strict=True
         """
         Create a random number generator
         

@@ -20,7 +20,7 @@ class Cholera(ss.Infection):
         pars = ss.omergeleft(pars,
             # Natural history parameters, all specified in days
             dur_exp2inf = ss.lognorm_o(mean=2.772, stdev=4.737),  # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
-            dur_asymp2rec = ss.uniform(loc=1, scale=10),    # From WHO cholera fact sheet, asymptomatic individuals shed bacteria for 1-10 days (https://www.who.int/news-room/fact-sheets/detail/cholera)
+            dur_asymp2rec = ss.uniform(low=1, high=10),    # From WHO cholera fact sheet, asymptomatic individuals shed bacteria for 1-10 days (https://www.who.int/news-room/fact-sheets/detail/cholera)
             dur_symp2rec = ss.lognorm_o(mean=5, stdev=1.8),    # According to Fung most modelling studies assume 5 days of symptoms (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3926264/), but found a range of 2.9-14 days. Distribution approximately fit to these values
             dur_symp2dead = ss.lognorm_o(mean=1, stdev=0.5),   # There does not appear to be differences in timing/duration of mild vs severe disease, but death from severe disease happens rapidly https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5767916/
             p_death = 0.005,   # Probability of death is typically less than 1% when treated
@@ -177,7 +177,7 @@ class Cholera(ss.Infection):
         # Make new cases via indirect transmission
         p_transmit = r.env_conc[sim.ti] * p.beta_env
         p.p_env_transmit.kwds['p'] = p_transmit
-        new_cases = p.p_env_transmit.filter(self.susceptible)
+        new_cases = p.p_env_transmit.filter(sim.people.uid[self.susceptible]) # TODO: make syntax nicer
         if new_cases.any():
             self.set_prognoses(sim, new_cases, source_uids=None)
         return
