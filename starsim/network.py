@@ -484,7 +484,7 @@ class RandomNet(DynamicNetwork):
         """
 
         if isinstance(self.pars.n_contacts, ss.Dist):
-            number_of_contacts = self.pars.n_contacts.urvs(people.alive)  # or people.uid?
+            number_of_contacts = self.pars.n_contacts.urvs(people.uid[people.alive])  # or people.uid?
         else:
             number_of_contacts = np.full(len(people), self.pars.n_contacts)
 

@@ -307,6 +307,8 @@ class Dist(sc.prettyobj):
                 self._kwds['n'] = 1
             elif dist == 'lognormal': # Convert parameters for a lognormal
                 self._kwds.mean, self._kwds.sigma = lognormal_params(self._kwds.pop('loc'), self._kwds.pop('scale'))
+            elif dist == 'lognorm_u':
+                dist = 'lognormal' # For the underlying distribution
             
             if dist == 'delta': # Special case, predefine the distribution here
                 self._dist = lambda size, v: np.full(size, fill_value=v)
@@ -350,7 +352,8 @@ class Dist(sc.prettyobj):
         for key,val in self._kwds.items(): 
             if callable(val): # If the parameter is callable, then call it
                 size_par = uids if uids is not None else size
-                val = val(self.module, self.sim, size_par)
+                out = val(self.module, self.sim, size_par)
+                val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
             if np.iterable(val): # If it's iterable, check the size and pad with zeros if it's the wrong shape
                 if uids is not None and (len(val) == len(uids)):
                     resized = np.zeros(size, dtype=val.dtype)
@@ -397,6 +400,7 @@ class Dist(sc.prettyobj):
     
     def urvs(self, uids):
         """ Like rvs(), but get based on a list of unique identifiers (UIDs or slots) instead """
+        uids = np.asarray(uids)
         if not len(uids):
             return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
         maxval = uids.max() + 1 # Since UIDs are inclusive
@@ -411,7 +415,8 @@ class Dist(sc.prettyobj):
 #%% Specific distributions
 
 # Add common distributions so they can be imported directly
-dist_list = ['random', 'uniform', 'normal', 'lognormal', 'expon', 'poisson', 'weibull', 'delta', 'randint', 'bernoulli']
+dist_list = ['random', 'uniform', 'normal', 'lognormal', 'lognormalu', 'expon',
+             'poisson', 'weibull', 'delta', 'randint', 'bernoulli']
 __all__ += dist_list
 
 def random(**kwargs):
@@ -425,6 +430,9 @@ def normal(loc=0.0, scale=1.0, **kwargs):
 
 def lognormal(loc=1.0, scale=1.0, **kwargs):
     return Dist(dist='lognormal', loc=loc, scale=scale, **kwargs)
+
+def lognormalu(mean=0.0, sigma=1.0, **kwargs):
+    return Dist(dist='lognormalu', mean=mean, sigma=sigma, **kwargs)
 
 def expon(scale=1.0, **kwargs):
     return Dist(dist='exponential', scale=scale, **kwargs)
