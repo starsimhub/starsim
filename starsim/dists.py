@@ -60,7 +60,7 @@ class Dists(sc.prettyobj):
             self.initialize()
         return
 
-    def initialize(self, obj=None, base_seed=None, context=None, force=False):
+    def initialize(self, obj=None, base_seed=None, context=None, force=True):
         """
         Set the base seed, find and initialize all distributions in an object
         
@@ -268,6 +268,7 @@ class Dist(sc.prettyobj):
     def set_offset(self, trace=None, seed=0):
         """ Obtain the seed offset by hashing the path to this distribution """
         unique_name = trace or self.trace or self.name
+        
         if unique_name:
             if not self.name:
                 self.name = unique_name
