@@ -688,7 +688,7 @@ class EmbeddingNet(MFNet):
         
         """
         pars = ss.omerge({
-            'embedding_func': ss.norm(loc=self.embedding_loc, scale=2),
+            'embedding_func': ss.normal(loc=self.embedding_loc, scale=2),
             'male_shift': 5,
         }, pars)
         super().__init__(pars, **kwargs)
