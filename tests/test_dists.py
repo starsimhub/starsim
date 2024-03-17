@@ -10,7 +10,9 @@ import pylab as pl
 import pytest
 
 n = 1_000_000
+m = 5
 sc.options(interactive=False)
+
 
 def plot_rvs(rvs, times=None, nrows=None):
     fig = pl.figure(figsize=(12,12))
@@ -26,17 +28,21 @@ def plot_rvs(rvs, times=None, nrows=None):
 
 
 # %% Define the tests
-def test_dist(n=n):
+def test_dist(m=m):
     """ Test the Dist class """
+    sc.heading('Testing the basic Dist call')
     dist = ss.Dist('random', 'test')
     dist.initialize()
-    rvs = dist(n)
-    assert 0 < rvs.min() < 1
+    rvs = dist(m)
+    print(rvs)
+    assert 0 < rvs.min() < 1, 'Values should be between 0 and 1'
     return rvs
 
 
 def test_custom_dists(n=n, do_plot=False):
     """ Test all custom dists """
+    sc.heading('Testing all custom distributions')
+    
     o = sc.objdict()
     dists = sc.objdict()
     rvs = sc.objdict()
@@ -49,6 +55,7 @@ def test_custom_dists(n=n, do_plot=False):
         sc.tic()
         rvs[name] = dist.rvs(n)
         times[name] = sc.toc(name, unit='ms', output='message')
+        print(f'{name:10s}: mean = {rvs[name].mean():n}')
     
     if do_plot:
         plot_rvs(rvs, times=times, nrows=5)
@@ -61,6 +68,7 @@ def test_custom_dists(n=n, do_plot=False):
 
 def test_dists(n=n, do_plot=False):
     """ Test the Dists container """
+    sc.heading('Testing Dists container')
     testvals = np.zeros((2,2))
 
     # Create the objects twice
@@ -82,8 +90,9 @@ def test_dists(n=n, do_plot=False):
             testvals[i,j] = rvs[0][283] # Pick one of the random values and store it
     
     # Check that results are as expected
-    assert np.all(testvals[0,:] == testvals[1,:]) # Newly initialized objects should match
-    assert np.all(testvals[:,0] != testvals[:,1]) # After jumping values should be different
+    print(testvals)
+    assert np.all(testvals[0,:] == testvals[1,:]), 'Newly initialized objects should match'
+    assert np.all(testvals[:,0] != testvals[:,1]), 'After jumping, values should be different'
             
     if do_plot:
         plot_rvs(rvs)
@@ -94,40 +103,48 @@ def test_dists(n=n, do_plot=False):
     return dists
 
 
-def test_scipy():
+def test_scipy(m=m):
     """ Test that SciPy distributions also work """
-    n = 5
+    sc.heading('Testing SciPy distributions')
+    
+    # Make SciPy distributions in two different ways
     dist1 = ss.Dist(dist=sps.expon, name='scipy', scale=2).initialize() # Version 1: callable
     dist2 = ss.Dist(dist=sps.expon(scale=2), name='scipy').initialize() # Version 2: frozen
-    rvs1 = dist1(n)
-    rvs2 = dist2(n)
-    assert np.array_equal(rvs1, rvs2)
-    return rvs1, rvs2
+    rvs1 = dist1(m)
+    rvs2 = dist2(m)
+    
+    # Check that they match
+    print(rvs1)
+    assert np.array_equal(rvs1, rvs2), 'Arrays should match'
+    
+    return dist1, dist2
 
 
-def test_exceptions():
+def test_exceptions(m=m):
     """ Check that exceptions are being appropriately raised """
     sc.heading('Testing exceptions and strict')
     
     # Create a strict distribution
     dist = ss.random()
-    with pytest.raises(ss.dists.DistNotReady):
-        dist(n) # Check that we can't call an uninitialized
+    with pytest.raises(ss.dists.DistNotInitializedError):
+        dist(m) # Check that we can't call an uninitialized
     
     # Initialize and check we can't call repeatedly
     dist.initialize()
-    rvs = dist(n)
-    with pytest.raises(ss.dists.DistNotReady):
-        dist(n) # Check that we can't call an already-used distribution
+    rvs = dist(m)
+    with pytest.raises(ss.dists.DistNotReadyError):
+        dist(m) # Check that we can't call an already-used distribution
     
     # Check that we can with a non-strict Dist
     dist2 = ss.random(strict=False)
     rvs2 = sc.autolist()
     for i in range(2):
-        rvs2 += dist(n) # We should be able to call multiple times with no problem
+        rvs2 += dist2(m) # We should be able to call multiple times with no problem
     
-    assert np.array_equal(rvs, rvs2[0])
-    assert not np.array_equal(rvs2[0], rvs2[1])
+    print(rvs)
+    print(rvs2)
+    assert np.array_equal(rvs, rvs2[0]), 'Separate dists should match'
+    assert not np.array_equal(rvs2[0], rvs2[1]), 'Multiple calls to the same dist should not match'
     
     return dist, dist2
     

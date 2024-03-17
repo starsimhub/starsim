@@ -33,21 +33,21 @@ def dists():
     return dists
 
 
-def test_rng(rng_container, rngs, n=5):
-    """ Simple sample from rng """
-    sc.heading('test_rng: Testing RNGs object')
+# def test_rng(rng_container, rngs, n=5):
+#     """ Simple sample from rng """
+#     sc.heading('test_rng: Testing RNGs object')
 
-    rng0 = rngs[0]
-    rng0.initialize(rng_container, slots=n)
+#     rng0 = rngs[0]
+#     rng0.initialize(rng_container, slots=n)
 
-    draws = rng0.random(n)
-    print(f'Created seed and sampled: {draws}')
+#     draws = rng0.random(n)
+#     print(f'Created seed and sampled: {draws}')
 
-    assert len(draws) == n
-    return draws
+#     assert len(draws) == n
+#     return draws
 
 
-def test_dists(rng_container, dists, n=5):
+def test_urvs(rng_container, dists, n=5):
     """ Simple sample from distribution """
     sc.heading('test_dists: Testing RNGs object')
 
@@ -125,28 +125,28 @@ def test_step(rng_container, dists, n=5):
     return s_before, s_after
 
 
-def test_initialize(rngs, n=5):
-    """ Sample without initializing, should raise exception """
-    sc.heading('test_initialize: Testing without initializing, should raise exception.')
-    rng_container = ss.RNGs()
-    #rng_container.initialize(base_seed=3) # Do not initialize
+# def test_initialize(rngs, n=5):
+#     """ Sample without initializing, should raise exception """
+#     sc.heading('test_initialize: Testing without initializing, should raise exception.')
+#     rng_container = ss.RNGs()
+#     #rng_container.initialize(base_seed=3) # Do not initialize
 
-    with pytest.raises(NotInitializedException):
-        rngs[0].initialize(rng_container, slots=n)
-    return rngs[0]
+#     with pytest.raises(NotInitializedException):
+#         rngs[0].initialize(rng_container, slots=n)
+#     return rngs[0]
 
 
-def test_seedrepeat(rng_container, n=5):
-    """ Two random number generators with the same seed, should raise exception """
-    sc.heading('test_seedrepeat: Testing two random number generators with the same seed, should raise exception.')
+# def test_seedrepeat(rng_container, n=5):
+#     """ Two random number generators with the same seed, should raise exception """
+#     sc.heading('test_seedrepeat: Testing two random number generators with the same seed, should raise exception.')
 
-    rng0 = ss.RNG('rng0', seed_offset=0)
-    rng0.initialize(rng_container, slots=n)
+#     rng0 = ss.RNG('rng0', seed_offset=0)
+#     rng0.initialize(rng_container, slots=n)
 
-    with pytest.raises(SeedRepeatException):
-        rng1 = ss.RNG('rng1', seed_offset=0)
-        rng1.initialize(rng_container, slots=n)
-    return rng0, rng1
+#     with pytest.raises(SeedRepeatException):
+#         rng1 = ss.RNG('rng1', seed_offset=0)
+#         rng1.initialize(rng_container, slots=n)
+#     return rng0, rng1
 
 
 def test_samplingorder(rng_container, dists, n=5):

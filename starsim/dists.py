@@ -71,6 +71,7 @@ class Dists(sc.prettyobj):
         self.dists = find_dists(obj)
         for trace,dist in self.dists.items():
             dist.initialize(trace=trace, seed=base_seed)
+        self.check_seeds()
         self.initialized = True
         return self
     
@@ -82,6 +83,17 @@ class Dists(sc.prettyobj):
         """
         self.dists = find_dists(obj)
         return self.dists
+    
+    def check_seeds(self):
+        """ Check that no two distributions share the same seed """
+        checked = dict()
+        for trace,dist in self.dists.items():
+            seed = dist.seed
+            if seed in checked.keys():
+                raise DistSeedRepeatError(checked[seed], dist)
+            else:
+                checked[seed] = dist
+        return
 
     def jump(self, delta=1, ti=None):
         """ Advance all RNGs, e.g. to timestep ti, by jumping """
@@ -290,6 +302,7 @@ class Dist(sc.prettyobj):
         
         # It's not a string, so assume it's a SciPy distribution
         else:
+            self.is_scipy = True
             if callable(dist):
                 self._dist = dist(**self._kwds) # Create the frozen distribution
             else:
@@ -322,9 +335,9 @@ class Dist(sc.prettyobj):
         
         # Check for readiness
         if not self.initialized:
-            raise DistNotInitialized(self)
+            raise DistNotInitializedError(self)
         if not self.ready and self.strict:
-            raise DistNotReady(self)
+            raise DistNotReadyError(self)
             
         # Actually get the random numbers
         if self.is_scipy:
@@ -390,14 +403,20 @@ def bernoulli(p=0.5, **kwargs):
 
 #%% Dist exceptions
 
-class DistNotInitialized(RuntimeError):
-    """ Raised when a random number generator or a RNGContainer object is called when not initialized. """
+class DistNotInitializedError(RuntimeError):
+    """ Raised when Dist object is called when not initialized. """
     def __init__(self, dist):
         msg = f'{dist} has not been initialized; please call dist.initialize()'
         super().__init__(msg)
 
-class DistNotReady(RuntimeError):
-    """ Raised when a random generator is called without being ready. """
+class DistNotReadyError(RuntimeError):
+    """ Raised when a Dist object is called without being ready. """
     def __init__(self, dist):
         msg = f'{dist} is not ready. This is likely caused by calling a distribution multiple times in a single step. Call dist.jump() to reset.'
+        super().__init__(msg)
+        
+class DistSeedRepeatError(RuntimeError):
+    """ Raised when a Dist object shares a seed with another """
+    def __init__(self, dist1, dist2):
+        msg = f'A common seed was found between {dist1} and {dist2}. This is likely caused by incorrect initialization of the parent Dists object.'
         super().__init__(msg)
