@@ -22,7 +22,7 @@ class Gonorrhea(ss.Infection):
 
         # Parameters
         pars = ss.omergeleft(pars,
-            dur_inf_in_days = ss.lognorm_o(s=0.6, scale=10),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
+            dur_inf_in_days = ss.lognorm_o(mean=10, stdev=0.6),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
             p_symp = 0.5,  # Share of infections that are symptomatic. Placeholder value
             p_clear = 0.2,  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
             init_prev = 0.1,

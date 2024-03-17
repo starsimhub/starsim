@@ -427,16 +427,14 @@ class Dist(sc.prettyobj):
     
     def plot_hist(self, size=1000, bins=None, fig_kw=None, hist_kw=None):
         """ Plot the current state of the RNG as a histogram """
-        fig = pl.figure(**sc.mergedicts(fig_kw))
+        pl.figure(**sc.mergedicts(fig_kw))
         rvs = self.rvs(size) # TODO: reset the state
         pl.hist(rvs, bins=bins, **sc.mergedicts(hist_kw))
         pl.title(str(self))
         pl.xlabel('Value')
         pl.ylabel(f'Count ({size} total)')
-        return fig
+        return rvs
         
-
-
 
 #%% Specific distributions
 
