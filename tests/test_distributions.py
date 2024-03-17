@@ -136,10 +136,10 @@ if __name__ == '__main__':
     
     T = sc.timer()
 
-    # o1 = test_basic()
-    # o2 = test_scalar(n)
-    # o3 = test_callable(n)
-    # o4 = test_array(n)
+    o1 = test_basic()
+    o2 = test_scalar(n)
+    o3 = test_callable(n)
+    o4 = test_array(n)
     o5 = test_repeat_slot()
 
     T.toc()
