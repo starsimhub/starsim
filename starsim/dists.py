@@ -337,6 +337,7 @@ class Dist(sc.prettyobj):
     
     def process_kwds(self, size, uids=None):
         """ Handle array and callable keyword arguments """
+        # Loop over parameters (keywords) and modify any that are callable or arrays of the wrong shape
         kwds = dict()
         for key,val in self._kwds.items():
             if callable(val): # If the parameter is callable, then call it
@@ -345,7 +346,7 @@ class Dist(sc.prettyobj):
                     errormsg = 'Cannot use callable parameters with frozen distributions; use Numpy instead'
                     raise NotImplementedError(errormsg)
             if np.iterable(val): # If it's iterable, check the size and pad with zeros if it's the wrong shape
-                if uids and (len(val) == len(uids)):
+                if uids is not None and (len(val) == len(uids)):
                     val.resize(size) # Append zeros; slightly faster than creating a new array
                     val[uids] = val[:len(uids)]
                     if self.method == 'frozen':
@@ -355,6 +356,9 @@ class Dist(sc.prettyobj):
                     errormsg = f'Shape mismatch: dist parameter has length {len(val)}, but {size} elements are needed'
                     raise ValueError(errormsg)
             kwds[key] = val # Replace 
+        
+        print(size, uids, kwds)
+        
         return kwds
     
     def rvs(self, size=1, uids=None):
@@ -368,12 +372,19 @@ class Dist(sc.prettyobj):
             
         # Actually get the random numbers
         kwds = self.process_kwds(size, uids)
-        rvs = self._dist(size=size, **kwds) # Actually get the random numbers
+        if self.method == 'numpy':
+            rvs = self._dist(size=size, **kwds)
+        elif self.method == 'scipy':
+            rvs = self._dist.rvs(size=size, **kwds)
+        elif self.method == 'frozen': 
+            rvs = self._dist.rvs(size=size) # Frozen distributions don't take keyword arguments
+        else:
+            raise ValueError(f'Unknown method: {self.method}') # Should not happen
         
         # Tidy up
         if self.strict:
             self.ready = False
-        if uids:
+        if uids is not None:
             rvs = rvs[uids]
             
         return rvs
