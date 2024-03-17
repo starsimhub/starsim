@@ -40,65 +40,66 @@ def test_basic():
     return d
 
 
-def test_uniform_scalar(n):
-    """ Create a uniform distribution """
-    sc.heading('test_uniform_scalar: Testing uniform with scalar parameters')
+def test_scalar(n):
+    """ Test a basic scalar distribution """
+    sc.heading('Testing basic uniform distribution with scalar parameters')
 
-    rng = ss.RNG('Uniform')
-    rng.initialize(container=None, slots=n)
-    dist = sps.uniform(loc=1, scale=4)
-    dist.random_state = rng
-    d = ss.ScipyDistribution(dist)
+    loc = 1
+    scale = 4
+    spsdist = sps.uniform(loc=loc, scale=scale)
+    d = ss.Dist(spsdist).initialize()
 
-    uids = np.array([1,3])
-    draws = d.rvs(uids)
+    uids = np.array([1,3,5,9])
+    draws = d.urvs(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
-    assert len(draws) == len(uids)
+    assert len(draws) == len(uids), 'Incorrect number of draws'
+    assert (draws.min() > loc) and (draws.max() < loc + scale), 'Values are out of bounds'
+    
     return d
 
 
-def test_uniform_callable(n):
-    """ Create a uniform distribution """
-    sc.heading('test_uniform_callable: Testing uniform with callable parameters')
+def test_callable(n):
+    """ Test callable parameters """
+    sc.heading('Testing a uniform distribution with callable parameters')
+    
+    fake_sim = sc.prettyobj()
+    fake_sim.uids = np.arange(10)
+    fake_sim.ages = np.random.uniform(0, 90)
 
-    sim = ss.Sim().initialize()
-
+    # Define a parameter as a lambda function
     loc = lambda self, sim, uids: sim.people.age[uids] # Low
-    scale = 1 # Width, could also be a lambda
-    dist = sps.uniform(loc=loc, scale=scale)
+    scale = 1
+    spsdist = sps.uniform(loc=loc, scale=1)
+    d = ss.Dist(spsdist).initialize()
+    # d.initialize(fake_sim)
 
-    d = ss.ScipyDistribution(dist, 'Uniform')
-    d.initialize(sim, context=None)
+    uids = np.array([1, 3, 9])
+    draws = d.urvs(uids)
+    print(f'Input ages were: {fake_sim.age[uids]}')
+    print(f'Output samples were: {draws}')
 
-    uids = np.array([1,3])
-    draws = d.rvs(uids)
-    print(sim.people.age[uids])
-    print(f'Uniform sample for uids {uids} returned {draws}')
-
-    assert len(draws) == len(uids)
-    return draws
+    meandiff = np.abs(fake_sim.age[uids] - draws).mean()
+    assert meandiff < scale
+    return d
 
 
-def test_uniform_array(n):
-    """ Create a uniform distribution """
-    sc.heading('test_uniform: Testing uniform with a array parameters')
+def test_array(n):
+    """ Test array parameters """
+    sc.heading('Testing uniform with a array parameters')
 
-    rng = ss.RNG('Uniform')
-    rng.initialize(container=None, slots=n)
-
-    uids = np.array([1, 3])
-    loc = np.array([1, 100]) # Low
+    uids  = np.array([1, 3])
+    loc   = np.array([1, 100]) # Low
     scale = np.array([2, 25]) # Width
 
-    dist = sps.uniform(loc=loc, scale=scale)
-    dist.random_state = rng
-
-    d = ss.ScipyDistribution(dist)
-    draws = d.rvs(uids)
+    spsdist = sps.uniform(loc=loc, scale=scale)
+    d = ss.Dist(dist=spsdist).initialize()
+    draws = d.urvs(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
     assert len(draws) == len(uids)
+    for i in range(len(uids)):
+        assert loc[i] < draws[i] < loc[i] + scale[i], 'Invalid value'
     return draws
 
 
@@ -142,9 +143,9 @@ if __name__ == '__main__':
     T = sc.timer()
 
     o1 = test_basic()
-    # test_uniform_scalar(n)
-    # test_uniform_scalar_str(n)
-    # test_uniform_callable(n)
-    # test_uniform_array(n)
+    o2 = test_scalar(n)
+    o3 = test_callable(n)
+    # o4 = test_array(n)
+    # o5 = test_repeat_slot()
 
     T.toc()
