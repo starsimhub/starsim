@@ -352,7 +352,7 @@ class Dist(sc.prettyobj):
     
     def urvs(self, uids):
         """ Like rvs(), but get based on a list of unique identifiers (UIDs or slots) instead """
-        maxval = uids.max()
+        maxval = uids.max() + 1 # Since UIDs are inclusive
         rvs = self.rvs(size=maxval)
         return rvs[uids]
 

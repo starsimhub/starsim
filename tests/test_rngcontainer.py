@@ -6,31 +6,37 @@ Test the RNGs object from random.py
 import numpy as np
 import sciris as sc
 import starsim as ss
-from starsim.random import NotInitializedException, SeedRepeatException, RepeatNameException
 import scipy.stats as sps
 import pytest
+
+n = 10
+
+def make_dist(name='test', **kwargs):
+    """ Make a default distribution for testing """
+    dist = ss.random(name=name, **kwargs).initialize()
+    return dist
 
 
 # %% Define the tests
 
-@pytest.fixture
-def rng_container():
-    rng_container = ss.RNGs()
-    rng_container.initialize(base_seed=10)
-    return rng_container
+# @pytest.fixture
+# def rng_container():
+#     rng_container = ss.RNGs()
+#     rng_container.initialize(base_seed=10)
+#     return rng_container
 
-@pytest.fixture
-def rngs():
-    return [ss.RNG('rng0'), ss.RNG('rng1')]
+# @pytest.fixture
+# def rngs():
+#     return [ss.RNG('rng0'), ss.RNG('rng1')]
 
-@pytest.fixture
-def dists():
-    names = ['rng1', 'rng2']
-    dists = []
-    for rng_name in names:
-        d = ss.ScipyDistribution(sps.uniform(), rng=rng_name)
-        dists.append(d)
-    return dists
+# @pytest.fixture
+# def dists():
+#     names = ['rng1', 'rng2']
+#     dists = []
+#     for rng_name in names:
+#         d = ss.ScipyDistribution(sps.uniform(), rng=rng_name)
+#         dists.append(d)
+#     return dists
 
 
 # def test_rng(rng_container, rngs, n=5):
@@ -47,37 +53,32 @@ def dists():
 #     return draws
 
 
-def test_urvs(rng_container, dists, n=5):
-    """ Simple sample from distribution """
-    sc.heading('test_dists: Testing RNGs object')
-
-    d0 = dists[0]
-    if isinstance(d0.rng, ss.RNG):
-        d0.rng.initialize(rng_container, slots=n)
-
-    uids = np.arange(0,n,2) # every other to make it interesting
-    draws = d0.rvs(uids)
+def test_urvs(n=n):
+    """ Simple sample from distribution by UID """
+    sc.heading('Testing UID sample')
+    
+    dist = make_dist()
+    uids = np.arange(0, n, 2) # every other to make it interesting
+    draws = dist.urvs(uids)
     print(f'Created seed and sampled: {draws}')
 
     assert len(draws) == len(uids)
     return draws
 
 
-def test_seed(rng_container, rngs, n=5):
+def test_seed():
     """ Test assignment of seeds """
-    if not ss.options.multirng:
-        pytest.skip('Seed assignment is only for multirng.')
+    sc.heading('Testing assignment of seeds')
+    
+    # Create and initialize two distributions
+    distlist = [make_dist(), make_dist()]
+    dists = ss.Dists(distlist)
+    dists.initialize()
+    dist0, dist1 = dists.dists.values()
 
-    sc.heading('test_seed: Testing assignment of seeds')
-
-    rng0, rng1 = rngs
-    rng0.initialize(rng_container, slots=n)
-    rng1.initialize(rng_container, slots=n)
-
-    print(f'Random generators rng0 and rng1 were assigned seeds {rng0.seed} and {rng1.seed}, respectively')
-
-    assert rng1.seed != rng0.seed
-    return rng0, rng1
+    print(f'Dists dist0 and dist1 were assigned seeds {dist0.seed} and {dist1.seed}, respectively')
+    assert dist0.seed != dist1.seed
+    return dist0, dist1
 
 
 def test_reset(rng_container, dists, n=5):
@@ -191,3 +192,14 @@ def test_repeatname(rng_container, n=5):
     with pytest.raises(RepeatNameException):
         rng1.initialize(rng_container, slots=n)
     return rng0, rng1
+
+
+# %% Run as a script
+if __name__ == '__main__':
+
+    T = sc.timer()
+
+    o1 = test_urvs(n)
+    l2 = test_seed()
+
+    T.toc()
