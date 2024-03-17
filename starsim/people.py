@@ -212,9 +212,9 @@ class People(BasePeople):
             return dist
 
         if sc.checktype(age_data, pd.DataFrame):
-            bb = np.append(age_data['age'].values, age_data['age'].values[-1] + 1)
-            vv = age_data['value'].values
-            return ss.ScipyHistogram((vv, bb), density=False, rng='Age distribution') # TODO: reimplement
+            age_bins = np.append(age_data['age'].values, age_data['age'].values[-1] + 1)
+            age_props = age_data['value'].values
+            return ss.choice(a=age_bins, p=age_props)
 
 
     def initialize(self, sim):
