@@ -4,6 +4,7 @@ General module class -- base class for diseases, interventions, etc.
 
 import sciris as sc
 import starsim as ss
+from scipy.stats._distn_infrastructure import rv_frozen
 
 __all__ = ['Module']
 
@@ -74,6 +75,15 @@ class Module(sc.prettyobj):
                 par_dist = ss.Dist(dist=par_dist, *args, **kwargs)
             
             self.pars[key] = par_dist
+
+        # Initialize distributions in pars # TODO: refactor
+        for key, value in self.pars.items():
+            if isinstance(value, rv_frozen):
+                self.pars[key] = ss.Dist(value)
+
+        for key, value in self.__dict__.items():
+            if isinstance(value, rv_frozen):
+                setattr(self, key, ss.Dist(value))
         
         # Initialize everything
         for key,val in list(self.pars.items()) + list(self.__dict__.items()):
