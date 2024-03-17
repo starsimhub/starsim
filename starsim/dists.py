@@ -315,7 +315,7 @@ class Dist(sc.prettyobj):
             
             # Create the actual distribution
             if dist == 'bernoulli': # Special case, predefine the distribution here
-                self._dist = lambda size, p: self.rng.random(size) < p
+                self._dist = lambda size, p: self.rng.random(size) < p # 3x faster than using rng.binomial(1, p, size)
             elif dist == 'delta': # Special case, predefine the distribution here
                 self._dist = lambda size, v: np.full(size, fill_value=v)
             else:
