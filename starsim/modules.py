@@ -47,54 +47,22 @@ class Module(sc.prettyobj):
         # First, convert any scalar pars to distributions if required
         for key in self.par_dists.keys():
             par = self.pars[key]
-            if isinstance(par, rv_frozen):
+            if isinstance(par, ss.Dist):
                 continue
 
-            par_dist = self.par_dists[key]
-
-            # If it's a lognormal distribution, initialize assuming the par is the desired mean
-            if par_dist.name == 'lognorm':
-                if sc.isiterable(par):
-                    if isinstance(par, dict):
-                        mu = par['mu']
-                        stdev = par['stdev']
-                    elif isinstance(par, list):
-                        mu = par[0]
-                        stdev = par[1]
-                elif sc.isnumber(par):
-                    mu = par
-                    stdev = 1
-
-                s, scale = ss.lognorm_params(mu, stdev)  # Assume stdev of 1
-                self.pars[key] = self.par_dists[key](s=s, scale=scale)
-
-            # Otherwise, figure out the required arguments and assume the user is trying to set them
+            # Handle arguments
+            args = ()
+            kwargs = {}
+            if isinstance(par, dict):
+                kwargs = par
+            elif isinstance(par, (tuple, list)):
+                args = par
             else:
-                rqrd_args = [x for x, p in signature(par_dist._parse_args).parameters.items() if p.default == _empty]
-                if len(rqrd_args) != 0:
-                    par_dist_arg = rqrd_args[0]
-                else:
-                    par_dist_arg = 'loc'
-                self.pars[key] = self.par_dists[key](**{par_dist_arg: par})
+                args = [par]
 
-        # Initialize distributions in pars
-        for key, value in self.pars.items():
-            if isinstance(value, rv_frozen):
-                print('PAR', key)
-                self.pars[key] = ss.Dist(value, f'{self.name}_{self.label}_{key}')
-            
-            elif isinstance(value, ss.Dist):
-                self.pars[key].initialize(sim)
-
-        for key, value in self.__dict__.items():
-            if isinstance(value, rv_frozen):
-                print('ATTR', key)
-                setattr(self, key, ss.Dist(value, f'{self.name}_{self.label}_{key}'))
-                getattr(self, key).initialize(sim)
-
-            elif isinstance(value, ss.Dist):
-                print('DIST YAYY', key)
-                value.initialize(sim)
+            # Make the distribution
+            par_dist = self.par_dists[key]
+            self.pars[key] = ss.Dist(dist=par_dist, *args, **kwargs)
 
         # Connect the states to the sim
         # Will use random numbers, so do after distribution initialization

@@ -247,29 +247,6 @@ def set_seed(seed=None):
     return
 
 
-# %% Helper functions related to distributions
-__all__ += ['lognorm_params', 'lognorm_mean']
-
-
-def lognorm_params(mean, stdev):
-    """
-    Returns the shape and scale parameters for scipy's parameterization of the
-    lognormal distribution which will give the specified mean and stdev
-    """
-    s = np.sqrt(np.log(stdev ** 2 / mean ** 2 + 1))
-    mu = np.log(mean ** 2 / np.sqrt(stdev ** 2 + mean ** 2))
-    scale = np.exp(mu)
-    return s, scale
-
-
-def lognorm_mean(mean, stdev):
-    """
-    Wrapper for scipy lognorm but using mean and stdev
-    """
-    s, scale = lognorm_params(mean, stdev)
-    return ss.lognorm(s=s, scale=scale)
-
-
 # %% Simple array operations
 
 __all__ += ['true', 'false', 'defined', 'undefined']
