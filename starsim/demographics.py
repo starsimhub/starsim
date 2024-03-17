@@ -9,6 +9,7 @@ import pandas as pd
 
 __all__ = ['BaseDemographics', 'Births', 'Deaths', 'Pregnancy']
 
+
 class BaseDemographics(ss.Module):
     # A demographic module typically handles births/deaths/migration and takes
     # place at the start of the timestep, before networks are updated and before
@@ -26,6 +27,7 @@ class BaseDemographics(ss.Module):
         # Note that for demographic modules, any result updates should be
         # carried out inside this function
         pass
+
 
 class Births(BaseDemographics):
     def __init__(self, pars=None, metadata=None, **kwargs):
@@ -283,12 +285,11 @@ class Pregnancy(BaseDemographics):
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.fertility_rate_data = self.standardize_fertility_data()
-        # self.pars.fertility_rate = self.make_fertility_prob_fn
+        self.pars.fertility_rate = self.make_fertility_prob_fn
         self.pars.fertility_dist = 1 # TODO: refactor
 
         return
 
-    # TODO: refactor
     def make_fertility_prob_fn(module, sim, uids):
         """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
 
