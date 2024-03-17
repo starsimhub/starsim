@@ -199,7 +199,7 @@ class Dist(sc.prettyobj):
         self.rng = None # The actual RNG generator for generating random numbers
         self.trace = None # The path of this object within the parent
         self.ind = 0 # The index of the RNG (usually updated on each timestep)
-        self.is_scipy = False # Need a flag because rvs logic is different
+        self.method = 'numpy' # Flag whether the method to call the distribution is 'numpy' (default), 'scipy', or 'frozen'
         self.ready = True
         self.initialized = False
         if not strict:
@@ -287,36 +287,33 @@ class Dist(sc.prettyobj):
     
     def make_dist(self):
         """ Ensure the supplied dist is valid, and initialize it if needed """
-        dist = self.dist
-        self._dist = None # The processed distribution
-        self._kwds = sc.dcp(self.kwds) # The actual keywords
+        dist = self.dist # The name of the distribution (a string, usually)
+        self._dist = None # The actual distribution function
+        self._kwds = sc.dcp(self.kwds) # The actual keywords; modified below for special cases
         
-        # Handle special cases for strings
+        # Handle strings, including special cases
         if isinstance(dist, str):
             if dist == 'bernoulli': # Special case for a Bernoulli distribution: a binomial distribution with n=1
                 dist = 'binomial' # TODO: check performance; Covasim uses np.random.random(len(prob_arr)) < prob_arr
                 self._kwds['n'] = 1
             elif dist == 'lognormal': # Convert parameters for a lognormal
                 self._kwds.mean, self._kwds.sigma = lognormal_params(self._kwds.pop('loc'), self._kwds.pop('scale'))
-                
-            try:
-                if dist == 'delta': # Special case, predefine the distribution here
-                    self._dist = lambda size, v: np.full(size, fill_value=v)
-                else:
-                    self._dist = getattr(self.rng, dist) # Replace the string with the actual distribution
-            except Exception as E:
-                errormsg = f'Could not interpret "{dist}", are you sure this is a valid distribution? (i.e., an attribute of np.random.default_rng())'
-                raise ValueError(errormsg) from E
+            
+            if dist == 'delta': # Special case, predefine the distribution here
+                self._dist = lambda size, v: np.full(size, fill_value=v)
+            else:
+                try:
+                    self._dist = getattr(self.rng, dist) # Main use case; replace the string with the actual distribution
+                except Exception as E:
+                    errormsg = f'Could not interpret "{dist}", are you sure this is a valid distribution? (i.e., an attribute of np.random.default_rng())'
+                    raise ValueError(errormsg) from E
         
         # It's not a string, so assume it's a SciPy distribution
         else:
-            self.is_scipy = True
-            if callable(dist):
-                self._dist = dist(**self._kwds) # Create the frozen distribution
-            else:
-                self._dist = dist # Assume it already is a frozen distribution
+            self._dist = dist # Use directly
+            self.method = 'scipy' if callable(dist) else 'frozen' # Need to handle regular and frozen distributions differently
                 
-            if hasattr(self._dist, 'random_state'): # For SciPy distributions
+            if hasattr(self._dist, 'random_state'): # For SciPy distributions # TODO: Check if safe with non-frozen (probably not?)
                 self._dist.random_state = self.rng # Override the default random state with the correct one
             else:
                 errormsg = f'Unknown distribution {type(dist)}: must be string or scipy.stats distribution, or another distribution with a random_state attribute'
@@ -344,10 +341,16 @@ class Dist(sc.prettyobj):
         for key,val in self._kwds.items():
             if callable(val): # If the parameter is callable, then call it
                 val = val(self.context, uids or size)
+                if self.method == 'frozen':
+                    errormsg = 'Cannot use callable parameters with frozen distributions; use Numpy instead'
+                    raise NotImplementedError(errormsg)
             if np.iterable(val): # If it's iterable, check the size and pad with zeros if it's the wrong shape
                 if uids and (len(val) == len(uids)):
                     val.resize(size) # Append zeros; slightly faster than creating a new array
                     val[uids] = val[:len(uids)]
+                    if self.method == 'frozen':
+                        errormsg = 'Cannot use UID-indexed parameters with frozen distributions; use Numpy instead'
+                        raise NotImplementedError(errormsg)
                 if len(val) != size: # TODO: handle multidimensional?
                     errormsg = f'Shape mismatch: dist parameter has length {len(val)}, but {size} elements are needed'
                     raise ValueError(errormsg)
@@ -364,11 +367,8 @@ class Dist(sc.prettyobj):
             raise DistNotReadyError(self)
             
         # Actually get the random numbers
-        if self.is_scipy:
-            rvs = self._dist.rvs(size=size) 
-        else:
-            kwds = self.process_kwds(size, uids)
-            rvs = self._dist(size=size, **kwds) # Actually get the random numbers
+        kwds = self.process_kwds(size, uids)
+        rvs = self._dist(size=size, **kwds) # Actually get the random numbers
         
         # Tidy up
         if self.strict:
