@@ -483,7 +483,7 @@ class RandomNet(DynamicNetwork):
         Generate contacts
         """
 
-        if isinstance(self.pars.n_contacts, (ss.Dist, ss.ScipyDistribution)):
+        if isinstance(self.pars.n_contacts, ss.Dist):
             number_of_contacts = self.pars.n_contacts.rvs(people.alive)  # or people.uid?
         else:
             number_of_contacts = np.full(len(people), self.pars.n_contacts)
@@ -493,7 +493,7 @@ class RandomNet(DynamicNetwork):
         p1, p2 = self.get_contacts(people.uid.__array__(), number_of_contacts)
         beta = np.ones(len(p1), dtype=ss_float_)
 
-        if isinstance(self.pars.dur, (ss.Dist, ss.ScipyDistribution)):
+        if isinstance(self.pars.dur, ss.Dist):
             dur = self.pars.dur.rvs(p1)
         else:
             dur = np.full(len(p1), self.pars.dur)

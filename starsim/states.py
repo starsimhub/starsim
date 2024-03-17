@@ -415,7 +415,7 @@ class State(UIDArray):
             default (any): Specify default value for new agents. This can be
             - A scalar with the same dtype (or castable to the same dtype) as the State
             - A callable, with a single argument for the number of values to produce
-            - An ``ss.ScipyDistribution`` instance
+            - A ``ss.Dist`` instance
             label (str): The human-readable name for the state
             coerce (bool): Whether to ensure the the data is one of the supported data types
         """
@@ -443,7 +443,7 @@ class State(UIDArray):
             return UIDArray.__repr__(self)
 
     def _new_vals(self, uids):
-        if isinstance(self.default, (ss.Dist, ss.ScipyDistribution)):
+        if isinstance(self.default, ss.Dist):
             new_vals = self.default.rvs(uids)
         elif callable(self.default):
             new_vals = self.default(len(uids))
@@ -459,7 +459,7 @@ class State(UIDArray):
         specifically, `People.initialize()` and `Module.initialize()`. Initialization of a State object
         involves two processes:
 
-        - Converting any distribution objects to a ScipyDistribution instance and linking it to RNGs stored in a `Sim`
+        - Converting any distribution objects to a Dist instance and linking it to RNGs stored in a `Sim`
         - Establishing a bidirectional connection with a `People` object for the purpose of UID indexing and resizing
 
         Since State objects can be stored in `People` or in a `Module` and the collection of all states in a `Sim` should
@@ -476,11 +476,6 @@ class State(UIDArray):
 
         people = sim.people
         assert people.initialized, 'People must be initialized before initializing states'
-
-        # Connect any distributions in the default to RNGs in the Sim
-        if isinstance(self.default, rv_frozen):
-            self.default = ss.ScipyDistribution(self.default, f'{self.__class__.__name__}_{self.label}')
-            self.default.initialize(sim, self)
 
         # Establish connection with the People object
         people.register_state(self)

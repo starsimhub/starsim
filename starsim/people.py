@@ -207,13 +207,13 @@ class People(BasePeople):
     def get_age_dist(age_data):
         """ Return an age distribution based on provided data """
         if age_data is None:
-            dist = ss.uniform(loc=0, scale=100)  # loc and width
-            return ss.ScipyDistribution(dist, 'Age distribution')
+            dist = ss.uniform(low=0, high=100, name='Age distribution')
+            return dist
 
         if sc.checktype(age_data, pd.DataFrame):
             bb = np.append(age_data['age'].values, age_data['age'].values[-1] + 1)
             vv = age_data['value'].values
-            return ss.ScipyHistogram((vv, bb), density=False, rng='Age distribution')
+            return ss.ScipyHistogram((vv, bb), density=False, rng='Age distribution') # TODO: reimplement
 
 
     def initialize(self, sim):
