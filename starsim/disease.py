@@ -280,7 +280,7 @@ class Infection(Disease):
                 p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
 
                 for rng in [self.rng_source, self.rng_acquisition]: # Reset the random states
-                    rng.random_state.step(sim.ti+i)
+                    rng.jump(sim.ti+i)
                 slots_s = people.slot[src] # Slots for the possible source
                 slots_t = people.slot[trg] # Slots for the possible target
                 rvs_s = self.rng_source.rvs(size=np.max(slots_s) + 1)[slots_s]
