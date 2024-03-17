@@ -4,10 +4,8 @@ Run tests of disease models
 
 # %% Imports and settings
 import starsim as ss
-import matplotlib.pyplot as plt
-import scipy.stats as sps
 import sciris as sc
-
+import matplotlib.pyplot as plt
 
 test_run = True
 n_agents = [10_000, 2_000][test_run]
@@ -18,12 +16,12 @@ sc.options(interactive=False) # Assume not running interactively
 def test_sir():
     ppl = ss.People(n_agents)
     network_pars = {
-        'n_contacts': sps.poisson(mu=4), # Contacts Poisson distributed with a mean of 4
+        'n_contacts': ss.poisson(4), # Contacts Poisson distributed with a mean of 4
     }
     networks = ss.RandomNet(pars=network_pars)
 
     sir_pars = {
-        'dur_inf': sps.norm(loc=10),  # Override the default distribution
+        'dur_inf': ss.normal(loc=10),  # Override the default distribution
     }
     sir = ss.SIR(sir_pars)
 
@@ -103,7 +101,7 @@ def test_multidisease():
 
     sir1.pars.beta = {'randomnet': 0.1}
     sir2.pars.beta = {'randomnet': 0.2}
-    networks = ss.RandomNet(pars=dict(n_contacts=sps.poisson(mu=4)))
+    networks = ss.RandomNet(pars=dict(n_contacts=ss.poisson(4)))
 
     sim = ss.Sim(people=ppl, diseases=[sir1, sir2], networks=networks)
     sim.run()
