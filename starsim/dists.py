@@ -438,10 +438,12 @@ class Dist(sc.prettyobj):
 
 #%% Specific distributions
 
-# Add common distributions so they can be imported directly
+# Add common distributions so they can be imported directly; assigned to a variable since used in help messages
 dist_list = ['random', 'uniform', 'normal', 'lognorm_o', 'lognorm_u', 'expon',
-             'poisson', 'weibull', 'delta', 'randint', 'bernoulli']
+             'poisson', 'weibull', 'delta', 'randint', 'bernoulli', 'choice']
 __all__ += dist_list
+
+# TODO: write docstrings
 
 def random(**kwargs):
     return Dist(dist='random', **kwargs)
@@ -452,7 +454,7 @@ def uniform(low=0.0, high=1.0, **kwargs):
 def normal(loc=0.0, scale=1.0, **kwargs):
     return Dist(dist='normal', loc=loc, scale=scale, **kwargs)
 
-def lognorm_o(mean=1.0, stdev=1.0, **kwargs):
+def lognorm_o(mean=1.0, stdev=1.0, **kwargs): # TODO: decide if we want to rename "lognorm"
     return Dist(dist='lognorm_o', mean=mean, stdev=stdev, **kwargs)
 
 def lognorm_u(loc=0.0, scale=1.0, **kwargs):
@@ -477,6 +479,9 @@ def delta(v=0, **kwargs):
 
 def bernoulli(p=0.5, **kwargs):
     return Dist(dist='bernoulli', p=p, **kwargs)
+
+def choice(a=2, p=None, **kwargs):
+    return Dist(dist='choice', a=a, p=p, **kwargs)
 
 
 

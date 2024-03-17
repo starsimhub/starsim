@@ -61,8 +61,8 @@ class Syphilis(ss.Infection):
             #   3: Live birth without syphilis-related complications
             # Source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5973824/)
             birth_outcomes=sc.objdict(
-                active = ss.rv_discrete(values=([0, 1, 2, 3, 4], [0.125, 0.125, 0.20, 0.35, 0.200])),
-                latent = ss.rv_discrete(values=([0, 1, 2, 3, 4], [0.050, 0.075, 0.10, 0.05, 0.725])),
+                active = ss.choice(a=5, p=np.array([0.125, 0.125, 0.20, 0.35, 0.200])), # Probabilities of active by birth outcome
+                latent = ss.choice(a=5, p=np.array([0.050, 0.075, 0.10, 0.05, 0.725])), # Probabilities of latent
             ),
             birth_outcome_keys=['miscarriage', 'nnd', 'stillborn', 'congenital'],
 
