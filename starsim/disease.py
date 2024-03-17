@@ -188,10 +188,8 @@ class Infection(Disease):
             ss.State('ti_infected', int, ss.INT_NAN),
         )
 
-        if ss.options.multirng:
-            # Used only in _make_new_cases_multirng
-            self.rng_acquisition = ss.uniform()
-            self.rng_source = ss.uniform()
+        self.rng_acquisition = ss.random()
+        self.rng_source = ss.random()
 
         return
 

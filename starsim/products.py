@@ -115,9 +115,8 @@ class tx(Product):
                     # Determine whether treatment is successful
                     self.efficacy_dist.kwds['p'] = thisdf.efficacy.values[0]
 
-                    if ss.options.multirng:
                     # HACK to reset the efficacy_dist as it is called multiple times per timestep. TODO: Refactor
-                        self.efficacy_dist.random_state.step(sim.ti+1)
+                    self.efficacy_dist.jump(sim.ti+1)
                     eff_treat_inds = self.efficacy_dist.filter(these_uids)
 
                     post_tx_state_name = thisdf.post_state.values[0]
