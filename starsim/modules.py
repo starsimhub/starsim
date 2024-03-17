@@ -4,11 +4,9 @@ General module class -- base class for diseases, interventions, etc.
 
 import sciris as sc
 import starsim as ss
-from scipy.stats._distn_infrastructure import rv_frozen
-from inspect import signature, _empty
-
 
 __all__ = ['Module']
+
 
 class Module(sc.prettyobj):
 
@@ -72,8 +70,12 @@ class Module(sc.prettyobj):
                 pdist = par_dist(*args, **kwargs)
             else: # TODO: unclear if this is needed/would work
                 pdist = ss.Dist(dist=par_dist, *args, **kwargs)
-            pdist.initialize(context=sim)
             self.pars[key] = pdist
+        
+        # Initialize everything
+        for key,val in list(self.pars.items()) + list(self.__dict__.items()):
+            if isinstance(val, ss.Dist):
+                pdist.initialize(context=sim)
 
         # Connect the states to the sim
         # Will use random numbers, so do after distribution initialization
