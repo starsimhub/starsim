@@ -30,9 +30,15 @@ def lognormal_params(mean, stdev):
     """
     std2 = stdev**2
     mean2 = mean**2
-    under_mean = np.sqrt(np.log(std2/mean2 + 1))
-    mu = np.log(mean2 / np.sqrt(std2+mean2))
-    under_std = np.exp(mu)
+    opt = 2
+    if opt == 1:
+        under_mean = np.sqrt(np.log(std2/mean2 + 1))
+        mu = np.log(mean2 / np.sqrt(std2+mean2))
+        under_std = np.exp(mu)
+    if opt == 2:
+        under_std = np.sqrt(np.log(std2/mean2 + 1)) # Computes sigma for the underlying normal distribution
+        under_mean  = np.log(mean2 / np.sqrt(std2 + mean2)) # Computes the mean of the underlying normal distribution
+    
     return under_mean, under_std
 
 
@@ -305,9 +311,10 @@ class Dist(sc.prettyobj):
             if dist == 'bernoulli': # Special case for a Bernoulli distribution: a binomial distribution with n=1
                 dist = 'binomial' # TODO: check performance; Covasim uses np.random.random(len(prob_arr)) < prob_arr
                 self._kwds['n'] = 1
-            elif dist == 'lognormal': # Convert parameters for a lognormal
+            elif dist == 'lognorm_s': # Convert parameters for a lognormal
                 self._kwds.mean, self._kwds.sigma = lognormal_params(self._kwds.pop('loc'), self._kwds.pop('scale'))
-            elif dist == 'lognormalu':
+                dist = 'lognormal'
+            elif dist == 'lognorm_u':
                 dist = 'lognormal' # For the underlying distribution
             
             if dist == 'delta': # Special case, predefine the distribution here
@@ -415,7 +422,7 @@ class Dist(sc.prettyobj):
 #%% Specific distributions
 
 # Add common distributions so they can be imported directly
-dist_list = ['random', 'uniform', 'normal', 'lognormal', 'lognormalu', 'expon',
+dist_list = ['random', 'uniform', 'normal', 'lognorm_s', 'lognorm_u', 'expon',
              'poisson', 'weibull', 'delta', 'randint', 'bernoulli']
 __all__ += dist_list
 
@@ -428,11 +435,11 @@ def uniform(low=0.0, high=1.0, **kwargs):
 def normal(loc=0.0, scale=1.0, **kwargs):
     return Dist(dist='normal', loc=loc, scale=scale, **kwargs)
 
-def lognormal(loc=1.0, scale=1.0, **kwargs):
-    return Dist(dist='lognormal', loc=loc, scale=scale, **kwargs)
+def lognorm_s(loc=1.0, scale=1.0, **kwargs):
+    return Dist(dist='lognorm_s', loc=loc, scale=scale, **kwargs)
 
-def lognormalu(mean=0.0, sigma=1.0, **kwargs):
-    return Dist(dist='lognormalu', mean=mean, sigma=sigma, **kwargs)
+def lognorm_u(mean=0.0, sigma=1.0, **kwargs):
+    return Dist(dist='lognorm_u', mean=mean, sigma=sigma, **kwargs)
 
 def expon(scale=1.0, **kwargs):
     return Dist(dist='exponential', scale=scale, **kwargs)
