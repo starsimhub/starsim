@@ -575,7 +575,7 @@ class MFNet(SexualNetwork, DynamicNetwork):
         beta = np.ones_like(p1)
 
         # Figure out durations and acts
-        if ss.options.multirng and (len(p1) == len(np.unique(p1))):
+        if (len(p1) == len(np.unique(p1))):
             # No duplicates and user has enabled multirng, so use slotting based on p1
             dur_vals = self.pars.duration.rvs(p1)
             act_vals = self.pars.acts.rvs(p1)
@@ -652,8 +652,8 @@ class MSMNet(SexualNetwork, DynamicNetwork):
         p2 = available_m[n_pairs:n_pairs*2]
 
         # Figure out durations
-        if ss.options.multirng and (len(p1) == len(np.unique(p1))):
-            # No duplicates and user has enabled multirng, so use slotting based on p1
+        if (len(p1) == len(np.unique(p1))):
+            # No duplicates, so use slotting based on p1
             dur = self.pars.duration.rvs(p1)
             act_vals = self.pars.acts.rvs(p1)
         else:

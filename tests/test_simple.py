@@ -12,8 +12,6 @@ n_agents = 1_000
 do_plot = True
 sc.options(interactive=False) # Assume not running interactively
 
-ss.options(multirng=False)
-
 
 def test_demo():
     """ Test Starsim's demo run """

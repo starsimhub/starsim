@@ -23,9 +23,6 @@ def get_outputs(p_death):
     return outputs
 
 def test_samples():
-    if ss.options.multirng:
-        # Not necessary to run with both single and multi RNG
-        pytest.skip('Skipping multirng mode as not necessary to test with both single and multi RNGs')
     outputs = get_outputs(0.2)
     resultsdir = tempdir/'samples_results'
     resultsdir.mkdir(exist_ok=True)
@@ -33,8 +30,6 @@ def test_samples():
     return s
 
 def test_dataset():
-    if ss.options.multirng:
-        pytest.skip('Skipping multirng mode as not necessary to test with both single and multi RNGs')
     resultsdir = tempdir / 'dataset_results'
     resultsdir.mkdir(exist_ok=True)
     for p_death in [0.25, 0.5]:
