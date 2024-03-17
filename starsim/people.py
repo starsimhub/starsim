@@ -229,7 +229,7 @@ class People(BasePeople):
         self.slot.initialize(sim)
         self.slot[:] = self.uid
 
-        self.age_data_dist.initialize(context=sim)
+        self.age_data_dist.initialize(module=self, sim=sim)
 
         # Initialize states
         # Age is handled separately because the default value for new agents is NaN until they are concieved/born whereas

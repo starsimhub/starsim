@@ -485,7 +485,7 @@ class State(UIDArray):
         
         # Connect any distributions in the default to RNGs in the Sim
         if isinstance(self.default, ss.Dist):
-            self.default.initialize(context=sim)
+            self.default.initialize(module=self, sim=sim)
 
         # Establish connection with the People object
         people.register_state(self)

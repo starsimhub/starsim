@@ -75,7 +75,7 @@ class Module(sc.prettyobj):
         # Initialize everything
         for key,val in list(self.pars.items()) + list(self.__dict__.items()):
             if isinstance(val, ss.Dist):
-                val.initialize(context=sim)
+                val.initialize(module=self, sim=sim) # Actually a dist
 
         # Connect the states to the sim
         # Will use random numbers, so do after distribution initialization

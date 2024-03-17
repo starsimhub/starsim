@@ -50,17 +50,17 @@ def find_dists(obj):
 class Dists(sc.prettyobj):
     """ Class for managing a collection of Dist objects """
 
-    def __init__(self, obj=None, base_seed=None, context=None):
+    def __init__(self, obj=None, base_seed=None, sim=None):
         self.obj = obj
         self.dists = None
         self.base_seed = base_seed
-        self.context = context
+        self.sim = sim
         self.initialized = False
         if self.obj is not None:
             self.initialize()
         return
 
-    def initialize(self, obj=None, base_seed=None, context=None, force=True):
+    def initialize(self, obj=None, base_seed=None, sim=None, force=True):
         """
         Set the base seed, find and initialize all distributions in an object
         
@@ -68,7 +68,7 @@ class Dists(sc.prettyobj):
         """
         if base_seed:
             self.base_seed = base_seed
-        context = context if context else self.context
+        sim = sim if sim else self.sim
         obj = obj if obj else self.obj
         if obj is None:
             errormsg = 'Must supply a container that contains one or more Dist objects'
@@ -76,7 +76,7 @@ class Dists(sc.prettyobj):
         self.dists = find_dists(obj)
         for trace,dist in self.dists.items():
             if not dist.initialized or force:
-                dist.initialize(trace=trace, seed=base_seed, context=context)
+                dist.initialize(trace=trace, seed=base_seed, sim=sim)
         self.check_seeds()
         self.initialized = True
         return self
@@ -166,7 +166,7 @@ class Dist(sc.prettyobj):
       slots between 1*N and 5*N, where N is sim.pars['n_agents'].
     """
     
-    def __init__(self, dist=None, name=None, seed=None, offset=None, context=None, strict=True, **kwargs):
+    def __init__(self, dist=None, name=None, seed=None, offset=None, module=None, sim=None, strict=True, **kwargs):
         """
         Create a random number generator
         
@@ -175,7 +175,8 @@ class Dist(sc.prettyobj):
             name (str): the unique name of this distribution, e.g. "coin_flip" (in practice, usually generated automatically)
             seed (int): if supplied, the seed to use for this distribution
             offset (int): the seed offset; will be automatically assigned (based on hashing the name) if None
-            context (any): if provided, used when supplying lambda-function arguments as parameters (e.g., a People or Sim object)
+            module (ss.Module): if provided, used when supplying lambda-function arguments as parameters
+            sim (ss.Sim): if provided, used when supplying lambda-function arguments as parameters
             strict (bool): if True, require initialization and invalidate after each call to rvs()
             kwargs (dict): (default) parameters of the distribution
             
@@ -189,7 +190,8 @@ class Dist(sc.prettyobj):
         self.kwds = sc.dictobj(kwargs)
         self.seed = seed # Usually determined once added to the container
         self.offset = offset
-        self.context = context
+        self.module = module
+        self.sim = sim
         self.strict = strict
         
         if dist is None:
@@ -248,7 +250,7 @@ class Dist(sc.prettyobj):
         except:
             return None
         
-    def initialize(self, trace=None, seed=0, context=None):
+    def initialize(self, trace=None, seed=0, module=None, sim=None):
         """ Calculate the starting seed and create the RNG """
         
         # Calculate the offset (starting seed)
@@ -260,7 +262,8 @@ class Dist(sc.prettyobj):
         self.make_dist() # Convert the inputs into an actual validated distribution
         
         # Finalize
-        self.context = context if context else self.context
+        self.module = module if module else self.module
+        self.sim = sim if sim else self.sim
         self.ready = True
         self.initialized = True
         return self
@@ -343,7 +346,7 @@ class Dist(sc.prettyobj):
         for key,val in self._kwds.items(): 
             if callable(val): # If the parameter is callable, then call it
                 size_par = uids if uids is not None else size
-                val = val(self.context, size_par)
+                val = val(self.module, self.sim, size_par)
             if np.iterable(val): # If it's iterable, check the size and pad with zeros if it's the wrong shape
                 if uids is not None and (len(val) == len(uids)):
                     resized = np.zeros(size, dtype=val.dtype)

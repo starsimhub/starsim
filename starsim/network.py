@@ -695,9 +695,9 @@ class EmbeddingNet(MFNet):
         return
 
     @staticmethod
-    def embedding_loc(self, sim, uids):
+    def embedding_loc(module, sim, uids):
         loc = sim.people.age[uids].values
-        loc[sim.people.female[uids]] += self.pars.male_shift  # Shift females so they will be paired with older men
+        loc[sim.people.female[uids]] += module.pars.male_shift  # Shift females so they will be paired with older men
         return loc
 
     def add_pairs(self, people, ti=None):
