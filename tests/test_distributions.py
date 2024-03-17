@@ -68,11 +68,10 @@ def test_callable(n):
     fake_sim.ages = np.random.uniform(0, 90)
 
     # Define a parameter as a lambda function
-    loc = lambda self, sim, uids: sim.people.age[uids] # Low
+    loc = lambda sim: sim.people.age
     scale = 1
     spsdist = sps.uniform(loc=loc, scale=1)
-    d = ss.Dist(spsdist).initialize()
-    # d.initialize(fake_sim)
+    d = ss.Dist(spsdist).initialize(context=fake_sim)
 
     uids = np.array([1, 3, 9])
     draws = d.urvs(uids)
@@ -144,8 +143,8 @@ if __name__ == '__main__':
 
     o1 = test_basic()
     o2 = test_scalar(n)
-    o3 = test_callable(n)
-    # o4 = test_array(n)
+    # o3 = test_callable(n)
+    o4 = test_array(n)
     # o5 = test_repeat_slot()
 
     T.toc()

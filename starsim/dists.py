@@ -50,16 +50,17 @@ def find_dists(obj):
 class Dists(sc.prettyobj):
     """ Class for managing a collection of Dist objects """
 
-    def __init__(self, obj=None, base_seed=None):
+    def __init__(self, obj=None, base_seed=None, context=None):
         self.obj = obj
         self.dists = None
         self.base_seed = base_seed
+        self.context = context
         self.initialized = False
         if self.obj is not None:
             self.initialize()
         return
 
-    def initialize(self, obj=None, base_seed=None):
+    def initialize(self, obj=None, base_seed=None, context=None):
         """
         Set the base seed, find and initialize all distributions in an object
         
@@ -67,10 +68,14 @@ class Dists(sc.prettyobj):
         """
         if base_seed:
             self.base_seed = base_seed
+        context = context if context else self.context
         obj = obj if obj else self.obj
+        if obj is None:
+            errormsg = 'Must supply a container that contains one or more Dist objects'
+            raise ValueError(errormsg)
         self.dists = find_dists(obj)
         for trace,dist in self.dists.items():
-            dist.initialize(trace=trace, seed=base_seed)
+            dist.initialize(trace=trace, seed=base_seed, context=context)
         self.check_seeds()
         self.initialized = True
         return self
@@ -160,7 +165,7 @@ class Dist(sc.prettyobj):
       slots between 1*N and 5*N, where N is sim.pars['n_agents'].
     """
     
-    def __init__(self, dist=None, name=None, seed=None, offset=None, strict=True, **kwargs):
+    def __init__(self, dist=None, name=None, seed=None, offset=None, context=None, strict=True, **kwargs):
         """
         Create a random number generator
         
@@ -169,6 +174,7 @@ class Dist(sc.prettyobj):
             name (str): the unique name of this distribution, e.g. "coin_flip" (in practice, usually generated automatically)
             seed (int): if supplied, the seed to use for this distribution
             offset (int): the seed offset; will be automatically assigned (based on hashing the name) if None
+            context (any): if provided, used when supplying lambda-function arguments as parameters (e.g., a People or Sim object)
             strict (bool): if True, require initialization and invalidate after each call to rvs()
             kwargs (dict): (default) parameters of the distribution
             
@@ -182,6 +188,7 @@ class Dist(sc.prettyobj):
         self.kwds = sc.dictobj(kwargs)
         self.seed = seed # Usually determined once added to the container
         self.offset = offset
+        self.context = context
         self.strict = strict
         
         if dist is None:
@@ -240,7 +247,7 @@ class Dist(sc.prettyobj):
         except:
             return None
         
-    def initialize(self, trace=None, seed=0):
+    def initialize(self, trace=None, seed=0, context=None):
         """ Calculate the starting seed and create the RNG """
         
         # Calculate the offset (starting seed)
@@ -252,6 +259,7 @@ class Dist(sc.prettyobj):
         self.make_dist() # Convert the inputs into an actual validated distribution
         
         # Finalize
+        self.context = context if context else self.context
         self.ready = True
         self.initialized = True
         return self
@@ -330,7 +338,23 @@ class Dist(sc.prettyobj):
             self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
         return self.bitgen.state
     
-    def rvs(self, size=1):
+    def process_kwds(self, size, uids=None):
+        """ Handle array and callable keyword arguments """
+        kwds = dict()
+        for key,val in self._kwds.items():
+            if callable(val): # If the parameter is callable, then call it
+                val = val(self.context, uids or size)
+            if np.iterable(val): # If it's iterable, check the size and pad with zeros if it's the wrong shape
+                if uids and (len(val) == len(uids)):
+                    val.resize(size) # Append zeros; slightly faster than creating a new array
+                    val[uids] = val[:len(uids)]
+                if len(val) != size: # TODO: handle multidimensional?
+                    errormsg = f'Shape mismatch: dist parameter has length {len(val)}, but {size} elements are needed'
+                    raise ValueError(errormsg)
+            kwds[key] = val # Replace 
+        return kwds
+    
+    def rvs(self, size=1, uids=None):
         """ Main method for getting random variables """
         
         # Check for readiness
@@ -343,18 +367,22 @@ class Dist(sc.prettyobj):
         if self.is_scipy:
             rvs = self._dist.rvs(size=size) 
         else:
-            rvs = self._dist(size=size, **self._kwds) # Actually get the random numbers
+            kwds = self.process_kwds(size, uids)
+            rvs = self._dist(size=size, **kwds) # Actually get the random numbers
         
         # Tidy up
         if self.strict:
             self.ready = False
+        if uids:
+            rvs = rvs[uids]
+            
         return rvs
     
     def urvs(self, uids):
         """ Like rvs(), but get based on a list of unique identifiers (UIDs or slots) instead """
         maxval = uids.max() + 1 # Since UIDs are inclusive
-        rvs = self.rvs(size=maxval)
-        return rvs[uids]
+        urvs = self.rvs(size=maxval, uids=uids)
+        return urvs
 
     def filter(self, size, **kwargs):
         return size[self.rvs(size, **kwargs)]
