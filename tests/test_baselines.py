@@ -79,10 +79,6 @@ def save_baseline():
 def test_baseline():
     ''' Compare the current default sim against the saved baseline '''
     
-    # Do not run with multi-RNG
-    if ss.options.multirng:
-        return
-
     # Load existing baseline
     baseline = sc.loadjson(baseline_filename)
     old = baseline['summary']
@@ -100,10 +96,6 @@ def test_baseline():
 def test_benchmark(do_save=do_save, repeats=1, verbose=True):
     ''' Compare benchmark performance '''
     
-    # Do not run with multi-RNG
-    if ss.options.multirng:
-        return
-
     if verbose: print('Running benchmark...')
     try:
         previous = sc.loadjson(benchmark_filename)
