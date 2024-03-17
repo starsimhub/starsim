@@ -49,7 +49,7 @@ class Sim(sc.prettyobj):
         self.analyzers = ss.ndict(analyzers, type=ss.Analyzer)
 
         # Initialize the random number generator container
-        self.dists = ss.Dists()
+        self.dists = ss.Dists(obj=self)
 
         return
 
@@ -106,6 +106,7 @@ class Sim(sc.prettyobj):
         self.init_analyzers()
 
         # Perform post-initialization validation
+        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed + 2)  # TEMP # TODO
         self.validate_post_init()
 
         # Reset the random seed to the default run seed, so that if the simulation is run with

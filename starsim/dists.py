@@ -36,14 +36,16 @@ def lognormal_params(mean, stdev):
     return under_mean, under_std
 
 
-def find_dists(obj):
+def find_dists(obj, verbose=False):
     """ Find all Dist objects in a parent object """
     out = sc.objdict()
     tree = sc.iterobj(obj)
+    if verbose: print(f'Found {len(tree)} objects')
     for trace,val in tree.items():
         if isinstance(val, Dist):
             key = str(trace)
             out[key] = val
+            if verbose: print(f'  {key} is a dist ({len(out)})')
     return out
 
 
