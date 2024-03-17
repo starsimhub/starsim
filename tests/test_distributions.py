@@ -40,7 +40,7 @@ def test_basic():
     return d
 
 
-def test_scalar(n):
+def test_scalar(n=n):
     """ Test a basic scalar distribution """
     sc.heading('Testing basic uniform distribution with scalar parameters')
 
@@ -59,7 +59,7 @@ def test_scalar(n):
     return d
 
 
-def test_callable(n):
+def test_callable(n=n):
     """ Test callable parameters """
     sc.heading('Testing a uniform distribution with callable parameters')
     
@@ -85,7 +85,7 @@ def test_callable(n):
     return d
 
 
-def test_array(n):
+def test_array(n=n):
     """ Test array parameters """
     sc.heading('Testing uniform with a array parameters')
 
