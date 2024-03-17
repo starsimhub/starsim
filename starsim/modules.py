@@ -62,7 +62,18 @@ class Module(sc.prettyobj):
 
             # Make the distribution
             par_dist = self.par_dists[key]
-            self.pars[key] = ss.Dist(dist=par_dist, *args, **kwargs)
+            if isinstance(par_dist, str):
+                try:
+                    par_dist = getattr(ss.dists, par_dist)
+                except Exception as E:
+                    errormsg = f'"{par_dist}" is not a valid distribution name; valid distributions are: {sc.newlinejoin(ss.dists.dist_list)}'
+                    raise ValueError(errormsg) from E
+            if callable(par_dist):
+                pdist = par_dist(*args, **kwargs)
+            else: # TODO: unclear if this is needed/would work
+                pdist = ss.Dist(dist=par_dist, *args, **kwargs)
+            pdist.initialize(context=sim)
+            self.pars[key] = pdist
 
         # Connect the states to the sim
         # Will use random numbers, so do after distribution initialization

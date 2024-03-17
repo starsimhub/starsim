@@ -389,8 +389,8 @@ class Dist(sc.prettyobj):
         urvs = self.rvs(size=maxval, uids=uids)
         return urvs
 
-    def filter(self, size, **kwargs):
-        return size[self.rvs(size, **kwargs)]
+    def filter(self, uids, **kwargs):
+        return uids[self.urvs(uids, **kwargs)]
 
 
 
