@@ -105,34 +105,28 @@ def test_array(n):
 
 def test_repeat_slot():
     """ Test behavior of repeated slots """
-    sc.heading('test_repeat_slot: Test behavior of repeated slots')
+    sc.heading('Test behavior of repeated slots')
 
-    rng = ss.RNG('Uniform')
-    slots = ss.UIDArray(values=np.array([4,2,3,2,2,3]), uid=np.arange(6))
+    # Initialize parameters
+    slots = np.array([4,2,3,2,2,3])
     n = len(slots)
-    rng.initialize(container=None, slots=slots)
+    low = np.arange(n)
+    high = low + 1
 
-    uids = np.arange(n)
-    loc = np.arange(n) # Low
-    scale = 1 # Width
-
-    dist = sps.uniform(loc=loc, scale=scale)
-    dist.random_state = rng
-
-    d = ss.ScipyDistribution(dist)
-    draws = d.rvs(uids)
-    print(f'Uniform sample for uids {uids} returned {draws}')
-
-    assert len(draws) == len(uids)
+    # Draw values
+    d = ss.uniform(low=low, high=high).initialize()
+    draws = d.urvs(slots)
+    
+    # Print and test
+    print(f'Uniform sample for slots {slots} returned {draws}')
+    assert len(draws) == len(slots)
 
     unique_slots = np.unique(slots)
     for s in unique_slots:
         inds = np.where(slots==s)[0]
         frac, integ = np.modf(draws[inds])
-        assert np.allclose(integ, loc[inds]) # Integral part should match the loc
-        if ss.options.multirng:
-            # Same random numbers, so should be same fractional part
-            assert np.allclose(frac, frac[0])
+        assert np.allclose(integ, low[inds]), 'Integral part should match the low parameter'
+        assert np.allclose(frac, frac[0]), 'Same random numbers, so should be same fractional part'
     return draws
 
 
@@ -142,10 +136,10 @@ if __name__ == '__main__':
     
     T = sc.timer()
 
-    o1 = test_basic()
-    o2 = test_scalar(n)
-    o3 = test_callable(n)
-    o4 = test_array(n)
-    # o5 = test_repeat_slot()
+    # o1 = test_basic()
+    # o2 = test_scalar(n)
+    # o3 = test_callable(n)
+    # o4 = test_array(n)
+    o5 = test_repeat_slot()
 
     T.toc()
