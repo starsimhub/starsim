@@ -6,6 +6,7 @@ import hashlib
 import numpy as np
 import sciris as sc
 import pylab as pl
+from starsim import sc_nested as scn # Temporary fix
 
 __all__ = ['find_dists', 'Dists', 'Dist']
 
@@ -42,7 +43,7 @@ def lognorm_convert(mean, stdev):
 def find_dists(obj, verbose=False):
     """ Find all Dist objects in a parent object """
     out = sc.objdict()
-    tree = sc.iterobj(obj)
+    tree = scn.IterObj(obj).iterate() # Temporary copy of sc.iterobj(obj) until Sciris 3.1.5 is released
     if verbose: print(f'Found {len(tree)} objects')
     for trace,val in tree.items():
         if isinstance(val, Dist):
@@ -169,6 +170,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     * The maximum slot is now determined by a new configure parameter named
       "slot_scale". A value of 5 will mean that new agents will be assigned
       slots between 1*N and 5*N, where N is sim.pars['n_agents'].
+      
     """
     
     def __init__(self, dist=None, name=None, seed=None, offset=None, module=None, sim=None, strict=False, **kwargs): # TODO: switch back to strict=True

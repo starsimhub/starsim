@@ -88,7 +88,7 @@ def test_baseline():
     new.run()
 
     # Compute the comparison
-    ss.diff_sims(old, new, full=True, die=True)
+    ss.diff_sims(old, new, die=True)
 
     return new
 
