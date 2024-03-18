@@ -7,6 +7,14 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 0.2.10 (2024-03-18)
+--------------------------
+- SIR duration of infection now accounts for dt
+- Reworked sir_vaccine to modify rel_sus instead of moving agents from susceptible to recovered.
+- n_years no longer necessarily an integer
+- *GitHub info*: PR `389 <https://github.com/amath-idm/stisim/pull/389>`_
+
+
 Version 0.2.9 (2024-03-18)
 --------------------------
 - Renames and extends the multirng option in settings, now called 'rng', which set how random numbers are handled in Starsim with three options:
