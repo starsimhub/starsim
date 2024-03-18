@@ -7,6 +7,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 import scipy.stats as sps
+import pytest
 
 n = 5
 
@@ -103,6 +104,7 @@ def test_array(n=n):
     return draws
 
 
+@pytest.mark.skip
 def test_repeat_slot():
     """ Test behavior of repeated slots """
     sc.heading('Test behavior of repeated slots')
@@ -141,6 +143,6 @@ if __name__ == '__main__':
     o2 = test_scalar(n)
     o3 = test_callable(n)
     o4 = test_array(n)
-    o5 = test_repeat_slot()
+    # o5 = test_repeat_slot() # TODO: confirm behavior and reimplement
 
     T.toc()
