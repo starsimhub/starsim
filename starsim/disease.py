@@ -229,12 +229,13 @@ class Infection(Disease):
         return
 
     def _check_betas(self, sim):
-        """ Check that there's a network for each beta keys """
-        if isinstance(self.pars.beta, dict): # Ensure keys are lowercase # TODO: check if needed
+        """ Check that there's a network for each beta key """
+        # Ensure keys are lowercase
+        if isinstance(self.pars.beta, dict): # TODO: check if needed
             self.pars.beta = {k.lower(): v for k, v in self.pars.beta.items()}
 
+        # Create a mapping between beta and networks, and populate it
         betapars = self.pars.beta
-
         betamap = sc.objdict()
         netkeys = list(sim.networks.keys())
         if netkeys: # Skip if no networks
