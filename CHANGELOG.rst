@@ -10,6 +10,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 Version 0.2.9 (2024-03-18)
 --------------------------
 - Renames and extends the multirng option in settings, now called 'rng', which set how random numbers are handled in Starsim with three options:
+
     - "centralized" uses the centralized numpy random number generator for all distributions.
     - "single" uses a separate (SingleRNG) random number generator for each distribution.
     - "multi" uses a separate (MultiRNG) random number generator for each distribution.
