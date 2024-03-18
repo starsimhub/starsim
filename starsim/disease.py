@@ -286,6 +286,7 @@ class Infection(Disease):
                 rvs_s = self.rng_source.rvs(size=np.max(slots_s) + 1)[slots_s]
                 rvs_t = self.rng_acquisition.rvs(size=np.max(slots_t) + 1)[slots_t]
                 rvs = np.remainder(rvs_s + rvs_t, 1) # Generate a new random number based on the two other random numbers
+                print(sim.label, sim.ti, len(rvs), rvs.mean())
                 new_cases_bool = rvs < p_transmit
                 new_cases.append(trg[new_cases_bool])
                 sources.append(src[new_cases_bool])

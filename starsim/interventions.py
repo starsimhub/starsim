@@ -14,7 +14,7 @@ class Analyzer(ss.Module):
         return self.apply(*args, **kwargs)
 
     def update_results(self, sim):
-        raise NotImplementedError
+        pass
 
 
 class Intervention(ss.Module):

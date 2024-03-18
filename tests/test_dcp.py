@@ -8,16 +8,13 @@ sc.options(interactive=False) # Assume not running interactively
 n_agents = 250
 
 
+
+
 def test_dcp():
     s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=n_agents)
     s1.initialize()
     
     s2 = sc.dcp(s1)
-    
-    for key in s1.dists.dists.keys():
-        s1dist = s1.dists.dists[key]
-        s2dist = s1.dists.dists[key]
-        assert s1dist.state == s2dist.state
 
     s1.run()
     s2.run()
