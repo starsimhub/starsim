@@ -250,7 +250,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     def __call__(self, size=1):
         """ Alias to self.rvs() """
         return self.rvs(size=size)
-        
+
     @property
     def bitgen(self):
         try:
@@ -350,7 +350,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.ready = True
         return self.bitgen.state
 
-    def jump(self, delta=1, to=None):
+    def jump(self, to=None, delta=1):
         """ Advance the RNG, e.g. to timestep "to", by jumping """
         jumps = to if (to is not None) else self.ind + delta
         self.ind = jumps
