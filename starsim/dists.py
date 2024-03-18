@@ -341,7 +341,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
                 out = val(self.module, self.sim, size_par)
                 val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
             if np.iterable(val): # If it's iterable, check the size and pad with zeros if it's the wrong shape
-                if uids is not None and (len(val) == len(uids)):
+                if uids is not None and (len(val) == len(uids)) and self.dist != 'choice': # TODO: fix, problem from when there happen to be uid entries, but it's not slots
                     resized = np.zeros(size, dtype=val.dtype)
                     resized[uids] = val[:len(uids)]
                     val = resized
