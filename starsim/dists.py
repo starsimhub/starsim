@@ -227,7 +227,35 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             return self.rng.bit_generator
         except:
             return None
-        
+    
+    @property
+    def state(self):
+        """ Get the current state """
+        try:
+            return self.bitgen.state
+        except:
+            return None
+    
+    def get_state(self):
+        """ Return a copy of the state """
+        return self.state.copy()
+
+    def reset(self, state=None):
+        """ Restore initial state """
+        state = state if (state is not None) else self.init_state
+        self.rng.bit_generator.state.update(state)
+        self.ready = True
+        return self.bitgen.state
+
+    def jump(self, to=None, delta=1):
+        """ Advance the RNG, e.g. to timestep "to", by jumping """
+        jumps = to if (to is not None) else self.ind + delta
+        self.ind = jumps
+        self.reset() # First reset back to the initial state (used in case of different numbers of calls)
+        if jumps: # Seems to randomize state if jumps=0
+            self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
+        return self.bitgen.state
+    
     def initialize(self, trace=None, seed=0, module=None, sim=None):
         """ Calculate the starting seed and create the RNG """
         
@@ -236,7 +264,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         
         # Create the actual RNG
         self.rng = np.random.default_rng(seed=self.seed)
-        self.init_state = self.bitgen.state # Store the initial state
+        self.init_state = sc.dcp(self.bitgen.state) # Store the initial state
         
         # Finalize
         self.module = module if (module is not None) else self.module
@@ -246,9 +274,8 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         return self
     
     def set_offset(self, trace=None, seed=0):
-        """ Obtain the seed offset by hashing the path to this distribution """
+        """ Obtain the seed offset by hashing the path to this distribution; called automatically """
         unique_name = trace or self.trace or self.name
-        
         if unique_name:
             if not self.name:
                 self.name = unique_name
@@ -264,17 +291,17 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         if dist:
             self.dist = dist
         self.kwds = sc.mergedicts(self.kwds, kwargs)
-        self.make_dist()
         return
     
     def make_dist(self, size, uids=None):
-        """ Ensure the supplied dist is valid, and initialize it if needed """
+        """ Ensure the supplied dist and parameters are valid, and initialize them; called automatically """
         dist = self.dist # The name of the distribution (a string, usually)
         kwds = self.kwds.copy() # The actual keywords; shallow copy, modified below for special cases
         
-        # Handle strings, including special cases
+        # Main use case: handle strings, including special cases
         if isinstance(dist, str):
-            # Handle special cases
+            
+            # Handle lognormal distributions
             if dist == 'lognorm_o': # Convert parameters for a lognormal
                 kwds['mean'], kwds['sigma'] = lognorm_convert(kwds.pop('mean'), kwds.pop('stdev'))
                 dist = 'lognormal'
@@ -283,19 +310,19 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
                 kwds['sigma'] = kwds.pop('scale')
                 dist = 'lognormal' # For the underlying distribution
             
-            # Create the actual distribution
+            # Create the actual distribution -- first the special cases of Bernoulli and delta
             if dist == 'bernoulli': # Special case, predefine the distribution here
                 dist = lambda p, size: self.rng.random(size) < p # 3x faster than using rng.binomial(1, p, size)
             elif dist == 'delta': # Special case, predefine the distribution here
                 dist = lambda v, size: np.full(size, fill_value=v)
-            else: # It's still a string
+            else: # It's still a string, so try getting the function from the generator
                 try:
-                    dist = getattr(self.rng, dist) # Main use case; replace the string with the actual distribution
+                    dist = getattr(self.rng, dist) # Main use case: replace the string with the actual distribution
                 except Exception as E:
                     errormsg = f'Could not interpret "{dist}", are you sure this is a valid distribution? (i.e., an attribute of np.random.default_rng())'
                     raise ValueError(errormsg) from E
         
-        # It's not a string, so assume it's a SciPy distribution
+        # It wasn't a string, so assume it's a SciPy distribution
         else:
             self.method = 'scipy' if callable(dist) else 'frozen' # Need to handle regular and frozen distributions differently
             if hasattr(dist, 'random_state'): # For SciPy distributions # TODO: Check if safe with non-frozen (probably not?)
@@ -304,40 +331,24 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
                 errormsg = f'Unknown distribution {type(dist)}: must be string or scipy.stats distribution, or another distribution with a random_state attribute'
                 raise TypeError(errormsg)
         
-        # Process keywords
-        for key,val in kwds.items(): 
-            if callable(val): # If the parameter is callable, then call it
+        # Now that we have the dist function, process the keywords for callable and array inputs
+        for key,val in kwds.items():
+            
+            # If the parameter is callable, then call it
+            if callable(val): 
                 size_par = uids if uids is not None else size
                 out = val(self.module, self.sim, size_par)
                 val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
-            if np.iterable(val): # If it's iterable, check the size and pad with zeros if it's the wrong shape
-                if uids is not None and (len(val) == len(uids)) and self.dist != 'choice': # TODO: fix, problem from when there happen to be uid entries, but it's not slots
-                    resized = np.zeros(size, dtype=val.dtype)
-                    resized[uids] = val[:len(uids)]
-                    val = resized
-            kwds[key] = val # Replace 
+                kwds[val] = val
+            
+            # If it's iterable, check the size and pad with zeros if it's the wrong shape
+            if np.iterable(val) and uids is not None and (len(val) == len(uids)) and self.dist != 'choice':
+                resized = np.zeros(size, dtype=val.dtype) # TODO: fix, problem from when there happen to be uid entries, but it's not slots
+                resized[uids] = val[:len(uids)] # TODO: check if slicing is ok here
+                val = resized
+                kwds[key] = val # Replace 
             
         return dist, kwds
-
-    @property
-    def state(self):
-        """ Get the current state """
-        return self.bitgen.state
-
-    def reset(self, state=None):
-        """ Restore initial state """
-        self.bitgen.state = state if (state is not None) else self.init_state
-        self.ready = True
-        return self.bitgen.state
-
-    def jump(self, to=None, delta=1):
-        """ Advance the RNG, e.g. to timestep "to", by jumping """
-        jumps = to if (to is not None) else self.ind + delta
-        self.ind = jumps
-        self.reset() # First reset back to the initial state (used in case of different numbers of calls)
-        if jumps: # Seems to randomize state if jumps=0
-            self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
-        return self.bitgen.state
     
     def rvs(self, size=1, uids=None):
         """ Main method for getting random variables """
@@ -387,12 +398,15 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         return urvs
 
     def filter(self, uids, **kwargs):
+        """ Filter UIDs by a binomial array """
         return uids[self.urvs(uids, **kwargs).astype(bool)] # TODO: tidy up
     
     def plot_hist(self, size=1000, bins=None, fig_kw=None, hist_kw=None):
         """ Plot the current state of the RNG as a histogram """
         pl.figure(**sc.mergedicts(fig_kw))
-        rvs = self.rvs(size) # TODO: reset the state
+        state = self.get_state()
+        rvs = self.rvs(size)
+        self.reset(state=state) # As if nothing ever happened
         pl.hist(rvs, bins=bins, **sc.mergedicts(hist_kw))
         pl.title(str(self))
         pl.xlabel('Value')
