@@ -67,8 +67,8 @@ class SIR(ss.Infection):
         will_die = p.p_death.urvs(uids)
         dead_uids = uids[will_die]
         rec_uids = uids[~will_die]
-        self.ti_dead[dead_uids] = sim.ti + dur_inf[will_die]
-        self.ti_recovered[rec_uids] = sim.ti + dur_inf[~will_die]
+        self.ti_dead[dead_uids] = sim.ti + dur_inf[will_die] / sim.dt # Consider rand round, but not CRN safe
+        self.ti_recovered[rec_uids] = sim.ti + dur_inf[~will_die] / sim.dt
 
         return
 
@@ -101,17 +101,10 @@ class sir_vaccine(ss.Vx):
             'efficacy': 0.9,
         }, pars)
 
-        par_dists = ss.omerge({
-            'efficacy': ss.bernoulli
-        }, par_dists)
-
-        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+        super().__init__(pars=pars, *args, **kwargs)
 
         return
 
     def administer(self, people, uids):
-        eff_vacc_uids = self.pars.efficacy.filter(uids)
-        people.sir.susceptible[eff_vacc_uids] = False
-        people.sir.recovered[eff_vacc_uids] = True
+        people.sir.rel_sus[uids] *= 1-self.pars.efficacy
         return
-
