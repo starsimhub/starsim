@@ -7,6 +7,27 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 0.3.0 (2024-03-17)
+--------------------------
+
+New RNGs & distributions
+~~~~~~~~~~~~~~~~~~~~~~~~
+- Replaces ``ss.SingleRNG()``, ``ss.MultiRNG()``, ``ss.ScipyDistribution()``, and ``ss.ScipyHistogram()`` with a single ``ss.Dist()`` class. The ``starsim.random`` and ``starsim.distributions`` submodules have been removed, and ``starsim.dists`` has been added.
+- The ``ss.Dist`` class uses ``np.random.default_rng()`` rather than ``scipy.stats`` by default, although a ``scipy.stats`` distribution can be supplied as an alternative. This is up to 4x faster (including, critically, for Bernoulli distributions).
+- Also removes ``ss.options.multirng`` (the new version is equivalent to it being always on).
+- Removes duplicate logic for transmission (``make_new_cases()``)
+- Adds new custom distributions such as ``ss.choice()`` and ``ss.delta()``.
+- These distributions can be called directly, e.g. ``dist = ss.weibull(a=2); dist(5)`` will return 5 random variates from a Weibull distribution.
+- Instead of being manually initialized based on the name, the ``Sim`` object is parsed and all distributions will be initialized with a unique identifier based on their place in the object (e.g. ``sim.diseases.sir.pars.dur_inf``), which is used to set their unique seed.
+
+
+Other changes
+~~~~~~~~~~~~~
+- This PR also fixes bugs with lognormal parameters, and makes it explicit whether the parameters are for the *underlying* normal distribution (``ss.lognorm_u()``, the Numpy/SciPy default, equivalent to ``ss.lognorm_mean()`` previously) or the "overlying" lognormal distribution (``ss.lognorm_o()``, equivalent to ``ss.lognorm()`` previously).
+- Renames ``ss.dx``, ``ss.tx``, ``ss.vx`` to``ss.Dx``, ``ss.Tx``, ``ss.Vx``.
+- *GitHub info*: PR `392 <https://github.com/amath-idm/stisim/pull/392>`_
+
+
 Version 0.2.8 (2024-03-13)
 --------------------------
 - Add ``ss.demo()`` to quickly create a default simulation.

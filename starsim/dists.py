@@ -87,15 +87,6 @@ class Dists:
         self.initialized = True
         return self
     
-    def find_dists(self, obj):
-        """
-        Find all distributions in an object
-        
-        In practice, the object is usually a Sim. This function returns a 
-        """
-        self.dists = find_dists(obj)
-        return self.dists
-    
     def check_seeds(self):
         """ Check that no two distributions share the same seed """
         checked = dict()
@@ -107,11 +98,11 @@ class Dists:
                 checked[seed] = dist
         return
 
-    def jump(self, delta=1, to=None):
+    def jump(self, to=None, delta=1):
         """ Advance all RNGs, e.g. to timestep "to", by jumping """
         out = sc.autolist()
         for dist in self.dists.values():
-            out += dist.jump(delta=delta, to=to)
+            out += dist.jump(to=to, delta=delta)
         return out
 
     def reset(self):
@@ -126,54 +117,31 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     """
     Class for tracking one random number generator associated with one distribution,
     i.e. one decision per timestep.
-
-    The main use case is to sample random numbers from various distributions
-    that are specific to each agent (per decision and timestep) so as to enable
-    variance reduction between simulations through the use of common random
-    numbers. For example, the user might create a random number generator called
-    rng and ultimately ask for randomly distributed random numbers for agents
-    with UIDs 1 and 4:
-
-    >>> import starsim as ss
-    >>> import numpy as np
-    >>> dist = ss.Dist('random', name='test') # The hashed name determines the seed offset.
-    >>> dist.initialize(slots=5) # In practice, slots will be sim.people.slots. When scalar (for testing), an np.arange will be used.
-    >>> uids = np.array([1,4])
-    >>> dist.random(uids)
-    array([0.88110549, 0.86915719])
-
-    In theory, what this is doing is drawing 5 random numbers and returning the
-    draws at positions 1 and 4.
-
-    In practice, using UIDs as "slots" (the indices into the larger draw) falls
-    apart when new agents are born.  The issue is that one simulation might have
-    more births than another, so an agent born in one simulation may not
-    get the same UID as that same agent in a comparison simulation.
     
-    The solution applied here is for each agent to have a property called "slot"
-    that is precisely the index used when selecting from an array of random
-    numbers.  When new agents are born, the mother uses her UID to sample a
-    random integer for the newborn that is used as the "slot".  With this
-    approach, newborns will be identical between two different simulations,
-    unless an intervention mechanistically drove a change.
-
-    The slot-based approach is not without challenges.
-    * Two newborn agents may received the same "slot," and thus will receive the
-      same random draws.
-    * The chance of overlapping slots can be reduced by
-      allowing mothers to choose from a larger number of possible slots (say up
-      to one-million). However, as slots are used as indices, the number of
-      random variables drawn for each query must number the maximum slot. So if
-      one agent has a slot of 1M, then 1M random numbers will be drawn,
-      consuming more time than would be necessary if the maximum slot was
-      smaller.
-    * The maximum slot is now determined by a new configure parameter named
-      "slot_scale". A value of 5 will mean that new agents will be assigned
-      slots between 1*N and 5*N, where N is sim.pars['n_agents'].
-      
+    Args:
+        dist (str/dist): the type of distribution to use; can be any attribute of ``np.random.default_rng()``, or any distribution from ``scipy.stats``
+        name (str): the name for this distribution
+        seed (int): the user-chosen random seed (e.g. 3)
+        offset (int): usually calculated on initialization; the unique identifier of this distribution
+        strict (bool): whether to prevent multiple draws without resetting
+        module (Module): usually calculated on initialization; the module to use for lambda functions
+        sim (Sim): usually calculated on initialization; the sim to use for lambda functions
+        kwargs (dict): the parameters of the distribution to be called
+    
+    **Examples**::
+        
+        # Create and use a simple distribution
+        dist = ss.Dist('random')
+        dist(5)
+        
+        # Create a more complex distribution
+        ss.Dist('lognorm_o', seed=3, mean=2, stdev=5).rvs(5)
+        
+        # Draw using UIDs rather than a fixed size
+        uids = np.array([1,2,4,9])
+        ss.Dist('bernoulli', p=0.5).urvs(uids)
     """
-    
-    def __init__(self, dist=None, name=None, seed=None, offset=None, module=None, sim=None, strict=False, **kwargs): # TODO: switch back to strict=True
+    def __init__(self, dist=None, name=None, seed=None, offset=None, strict=False, module=None, sim=None, **kwargs): # TODO: switch back to strict=True
         """
         Create a random number generator
         
