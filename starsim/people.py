@@ -186,7 +186,7 @@ class People(BasePeople):
         # Handle states
         states = [
             ss.State('age', float, np.nan), # NaN until conceived
-            ss.State('female', bool, ss.bernoulli(p=0.5, strict=False)), # TODO: figure out how to initialize this properly
+            ss.State('female', bool, ss.bernoulli(p=0.5)),
             ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
             ss.State('alive', bool, True),  # Time index for death
             ss.State('scale', float, 1.0),
