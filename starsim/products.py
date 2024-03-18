@@ -149,7 +149,3 @@ class Vx(Product):
     def administer(self, people, uids):
         """ Apply the vaccine to the requested uids. """
         pass
-
-
-
-

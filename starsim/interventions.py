@@ -8,16 +8,36 @@ import numpy as np
 
 __all__ = ['Analyzer', 'Intervention']
 
+
 class Analyzer(ss.Module):
+    """
+    Base class for analyzers. Analyzers are used to provide more detailed information 
+    about a simulation than is available by default -- for example, pulling states 
+    out of sim.people on a particular timestep before they get updated on the next step.
+    
+    To retrieve a particular analyzer from a sim, use sim.get_analyzer().
+    """
 
     def __call__(self, *args, **kwargs):
         return self.apply(*args, **kwargs)
+    
+    def initialize(self, sim):
+        return super().initialize(sim)
+    
+    def apply(self, sim):
+        pass
 
     def update_results(self, sim):
         pass
+    
+    def finalize(self, sim):
+        return super().finalize(sim)
 
 
 class Intervention(ss.Module):
+    """
+    Base class for interventions.
+    """
 
     def __init__(self, eligibility=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -26,6 +46,15 @@ class Intervention(ss.Module):
 
     def __call__(self, *args, **kwargs):
         return self.apply(*args, **kwargs)
+    
+    def initialize(self, sim):
+        return super().initialize(sim)
+    
+    def apply(self, sim, *args, **kwargs):
+        raise NotImplementedError
+
+    def finalize(self, sim):
+        return super().finalize(sim)
 
     def _parse_product(self, product):
         """
@@ -52,12 +81,6 @@ class Intervention(ss.Module):
         else:
             is_eligible = sim.people.alive  # Probably not required
         return is_eligible
-
-    def apply(self, sim, *args, **kwargs):
-        raise NotImplementedError
-
-    def finalize(self, sim):
-        super().finalize(sim)
 
 
 # %% Template classes for routine and campaign delivery
@@ -129,33 +152,23 @@ class CampaignDelivery(Intervention):
     Base class for any intervention that uses campaign delivery; handles interpolation of input years.
     """
 
-    def __init__(self, years, interpolate=None, prob=None, annual_prob=True, *args, **kwargs):
+    def __init__(self, years, interpolate=None, prob=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.years = sc.promotetoarray(years)
         self.interpolate = True if interpolate is None else interpolate
         self.prob = sc.promotetoarray(prob)
-        self.annual_prob = annual_prob
         return
 
     def initialize(self, sim):
         # Decide whether to apply the intervention at every timepoint throughout the year, or just once.
-        if self.interpolate:
-            self.timepoints = ss.true(np.isin(np.floor(sim.yearvec), np.floor(self.years)))
-        else:
-            self.timepoints = ss.true(np.isin(sim.yearvec, self.years))
+        self.timepoints = sc.findnearest(sim.yearvec, self.years)
 
-        # Get the probability input into a format compatible with timepoints
-        if len(self.prob) == len(self.years) and self.interpolate:
-            self.prob = sc.smoothinterp(np.arange(len(self.timepoints)), np.arange(len(self.years)), self.prob,
-                                        smoothness=0)
-        elif len(self.prob) == 1:
+        if len(self.prob) == 1:
             self.prob = np.array([self.prob[0]] * len(self.timepoints))
-        else:
+
+        if len(self.prob) != len(self.years):
             errormsg = f'Length of years incompatible with length of probabilities: {len(self.years)} vs {len(self.prob)}'
             raise ValueError(errormsg)
-
-        # Lastly, adjust the annual probability by the sim's timestep, if it's an annual probability
-        if self.annual_prob: self.prob = 1 - (1 - self.prob) ** sim.dt
 
         return
 
@@ -198,7 +211,7 @@ class BaseTest(Intervention):
         ti = sc.findinds(self.timepoints, sim.ti)[0]
         prob = self.prob[ti]  # Get the proportion of people who will be tested this timestep
         is_eligible = self.check_eligibility(sim)  # Check eligibility
-        self.coverage_dist.kwds['p'] = prob
+        self.coverage_dist.set(p=prob)
         accept_uids = self.coverage_dist.filter(ss.true(is_eligible))
         if len(accept_uids):
             self.outcomes = self.product.administer(sim, accept_uids)  # Actually administer the diagnostic
@@ -267,10 +280,12 @@ class routine_screening(BaseScreening, RoutineDelivery):
                  years=None, start_year=None, end_year=None, **kwargs):
         BaseScreening.__init__(self, product=product, eligibility=eligibility, **kwargs)
         RoutineDelivery.__init__(self, prob=prob, start_year=start_year, end_year=end_year, years=years)
+        return
 
     def initialize(self, sim):
         RoutineDelivery.initialize(self, sim)  # Initialize this first, as it ensures that prob is interpolated properly
         BaseScreening.initialize(self, sim)  # Initialize this next
+        return
 
 
 class campaign_screening(BaseScreening, CampaignDelivery):
@@ -288,10 +303,12 @@ class campaign_screening(BaseScreening, CampaignDelivery):
                  prob=None, years=None, interpolate=None, **kwargs):
         BaseScreening.__init__(self, product=product, sex=sex, eligibility=eligibility, **kwargs)
         CampaignDelivery.__init__(self, prob=prob, years=years, interpolate=interpolate)
+        return
 
     def initialize(self, sim):
         CampaignDelivery.initialize(self, sim)
         BaseScreening.initialize(self, sim)  # Initialize this next
+        return
 
 
 class routine_triage(BaseTriage, RoutineDelivery):
@@ -310,10 +327,12 @@ class routine_triage(BaseTriage, RoutineDelivery):
         BaseTriage.__init__(self, product=product, eligibility=eligibility, **kwargs)
         RoutineDelivery.__init__(self, prob=prob, start_year=start_year, end_year=end_year, years=years,
                                  annual_prob=annual_prob)
+        return
 
     def initialize(self, sim):
         RoutineDelivery.initialize(self, sim)  # Initialize this first, as it ensures that prob is interpolated properly
         BaseTriage.initialize(self, sim)  # Initialize this next
+        return
 
 
 class campaign_triage(BaseTriage, CampaignDelivery):
@@ -331,10 +350,12 @@ class campaign_triage(BaseTriage, CampaignDelivery):
                  prob=None, years=None, interpolate=None, annual_prob=None, **kwargs):
         BaseTriage.__init__(self, product=product, sex=sex, eligibility=eligibility, **kwargs)
         CampaignDelivery.__init__(self, prob=prob, years=years, interpolate=interpolate, annual_prob=annual_prob)
+        return
 
     def initialize(self, sim):
         CampaignDelivery.initialize(self, sim)
         BaseTriage.initialize(self, sim)
+        return
 
 
 #%% Treatment interventions
@@ -357,10 +378,12 @@ class BaseTreatment(Intervention):
         self.eligibility = eligibility
         self._parse_product(product)
         self.coverage_dist = ss.bernoulli(p=0)  # Placeholder
+        return
 
     def initialize(self, sim):
         Intervention.initialize(self, sim)
         self.outcomes = {k: np.array([], dtype=int) for k in ['unsuccessful', 'successful']} # Store outcomes on each timestep
+        return
 
     def get_accept_inds(self, sim):
         """
@@ -411,6 +434,7 @@ class treat_num(BaseTreatment):
         """
         accept_inds = self.get_accept_inds(sim)
         if len(accept_inds): self.queue += accept_inds.tolist()
+        return
 
     def get_candidates(self, sim):
         """
@@ -461,6 +485,8 @@ class BaseVaccination(Intervention):
         self.vaccinated = ss.State('vaccinated', bool, False)
         self.n_doses = ss.State('doses', int, 0)
         self.ti_vaccinated = ss.State('ti_vaccinated', int, ss.INT_NAN)
+        self.coverage_dist = ss.bernoulli(p=0)  # Placeholder
+        return
 
     def apply(self, sim):
         """
@@ -497,10 +523,12 @@ class routine_vx(BaseVaccination, RoutineDelivery):
 
         BaseVaccination.__init__(self, product=product, eligibility=eligibility, **kwargs)
         RoutineDelivery.__init__(self, prob=prob, start_year=start_year, end_year=end_year, years=years)
+        return
 
     def initialize(self, sim):
         RoutineDelivery.initialize(self, sim)  # Initialize this first, as it ensures that prob is interpolated properly
         BaseVaccination.initialize(self, sim)  # Initialize this next
+        return
 
 
 class campaign_vx(BaseVaccination, CampaignDelivery):
@@ -514,9 +542,11 @@ class campaign_vx(BaseVaccination, CampaignDelivery):
 
         BaseVaccination.__init__(self, product=product, eligibility=eligibility, **kwargs)
         CampaignDelivery.__init__(self, prob=prob, years=years, interpolate=interpolate)
+        return
 
     def initialize(self, sim):
         CampaignDelivery.initialize(self, sim) # Initialize this first, as it ensures that prob is interpolated properly
         BaseVaccination.initialize(self, sim) # Initialize this next
+        return
 
 

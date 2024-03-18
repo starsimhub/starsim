@@ -27,6 +27,23 @@ Other changes
 - Removed ``set_numba_seed()`` as a duplicate of ``set_seed()``.
 - *GitHub info*: PR `392 <https://github.com/amath-idm/stisim/pull/392>`_
 
+Version 0.2.10 (2024-03-18)
+---------------------------
+- SIR duration of infection now accounts for dt
+- Reworked sir_vaccine to modify rel_sus instead of moving agents from susceptible to recovered.
+- n_years no longer necessarily an integer
+- *GitHub info*: PR `389 <https://github.com/amath-idm/stisim/pull/389>`_
+
+
+Version 0.2.9 (2024-03-18)
+--------------------------
+- Renames and extends the multirng option in settings, now called 'rng', which set how random numbers are handled in Starsim with three options:
+
+    - "centralized" uses the centralized numpy random number generator for all distributions.
+    - "single" uses a separate (SingleRNG) random number generator for each distribution.
+    - "multi" uses a separate (MultiRNG) random number generator for each distribution.
+- *GitHub info*: PR `349 <https://github.com/amath-idm/stisim/pull/349>`_
+
 
 Version 0.2.8 (2024-03-13)
 --------------------------
