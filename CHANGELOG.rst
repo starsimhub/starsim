@@ -8,7 +8,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 
 Version 0.2.10 (2024-03-18)
---------------------------
+---------------------------
 - SIR duration of infection now accounts for dt
 - Reworked sir_vaccine to modify rel_sus instead of moving agents from susceptible to recovered.
 - n_years no longer necessarily an integer
