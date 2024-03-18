@@ -4,24 +4,25 @@
 
 import os
 import sys
-import starsim as cv
+import sciris as sc
+import starsim as ss
 
 # Set environment
-os.environ['SPHINX_BUILD'] = 'True' # This is used so cv.options.set('jupyter') doesn't reset the Matplotlib renderer
+os.environ['SPHINX_BUILD'] = 'True' # This is used so ss.options.set('jupyter') doesn't reset the Matplotlib renderer
 on_rtd = os.environ.get('READTHEDOCS') == 'True'
 
 
 # -- Project information -----------------------------------------------------
 
 project = 'Starsim'
-copyright = f'2020 - 2023, Bill & Melinda Gates Foundation. All rights reserved.\nThese docs were built for Starsim version {cv.__version__}.\n'
-author = 'Institute for Disease Modeling'
+copyright = f'2023 - {sc.now().year}, Bill & Melinda Gates Foundation. All rights reserved. These docs were built for Starsim v{ss.__version__}'
+author = 'Starsim Collective'
 
 # The short X.Y version
-version = cv.__version__
+version = ss.__version__
 
 # The full version, including alpha/beta/rc tags
-release = cv.__version__
+release = ss.__version__
 
 
 # -- General configuration ---------------------------------------------------
@@ -75,18 +76,20 @@ html_theme_options = {
         {"name": "Web", "url": "https://starsim.org", "icon": "fas fa-home"},
         {
             "name": "GitHub",
-            "url": "https://github.com/institutefordiseasemodeling/starsim",
+            "url": "https://github.com/starsimhub/starsim",
             "icon": "fab fa-github-square",
         },
     ],
     "navbar_end": ["theme-switcher", "navbar-icon-links"],
     "secondary_sidebar_items": ["navbar-side"],
     "header_links_before_dropdown": 5,
+    "footer_start": ["copyright", "footer_start"],
+    "footer_end": ["theme-version", "footer_end"],
 }
 html_sidebars = {
     "**": ["sidebar-nav-bs", "page-toc"],
 }
-html_logo = "images/IDM_white.png"
+html_logo = "images/idm-logo-transparent.png"
 html_favicon = "images/favicon.ico"
 html_static_path = ['_static']
 html_baseurl = "https://docs.idmod.org/projects/starsim/en/latest"

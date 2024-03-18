@@ -319,8 +319,8 @@ class Infection(Disease):
                 bvec.append(b[nzi])
 
                 beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=people.dt, uids=nzi)
-                trans_arr = rel_trans[a[nzi]].__array__()
-                sus_arr = rel_sus[b[nzi]].__array__()
+                trans_arr = rel_trans[a[nzi]]
+                sus_arr = rel_sus[b[nzi]]
                 new_pvec = trans_arr * sus_arr * beta_per_dt
                 pvec.append(new_pvec)
 

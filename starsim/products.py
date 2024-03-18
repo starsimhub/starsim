@@ -45,7 +45,9 @@ class dx(Product):
     def administer(self, sim, uids, return_format='dict'):
         """
         Administer a testing product.
+        
         Returns:
+
              if return_format=='array': an array of length len(inds) with integer entries that map each person to one of the result_states
              if return_format=='dict': a dictionary keyed by result_states with values containing the indices of people classified into this state
         """

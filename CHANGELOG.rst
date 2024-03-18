@@ -2,11 +2,21 @@
 What's new
 ==========
 
+.. currentmodule:: starsim
+
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
-.. contents:: **Contents**
-   :local:
-   :depth: 1
+
+Version 0.2.8 (2024-03-13)
+--------------------------
+- Add ``ss.demo()`` to quickly create a default simulation.
+- *GitHub info*: PR `380 <https://github.com/amath-idm/stisim/pull/380>`_
+
+
+Version 0.2.7 (2024-03-09)
+--------------------------
+- Update ``StaticNet`` with defaults and correct argument passing
+- *GitHub info*: PR `339 <https://github.com/amath-idm/stisim/pull/339>`_
 
 
 Version 0.2.6 (2024-02-29)
