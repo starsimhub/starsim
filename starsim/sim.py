@@ -1102,7 +1102,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         if die:
             raise ValueError(mismatchmsg)
         elif output:
-            return mismatchmsg
+            return df
         else:
             print(mismatchmsg)
     else:
