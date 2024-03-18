@@ -251,6 +251,23 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         """ Alias to self.rvs() """
         return self.rvs(size=size)
 
+    def __deepcopy__(self, memo):
+        from copy import deepcopy
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            if k == 'rng':
+                setattr(result, k, np.random.default_rng())
+            elif k in ['sim', 'module']:
+                setattr(result, k, v)
+            else:
+                setattr(result, k, deepcopy(v, memo))
+
+        result.rng.bit_generator.state = self.rng.bit_generator.state
+        return result
+
+
     @property
     def bitgen(self):
         try:
