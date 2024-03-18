@@ -339,6 +339,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
                 raise TypeError(errormsg)
         return
 
+    @property
     def state(self):
         """ Get the current state """
         return self.bitgen.state
