@@ -230,25 +230,26 @@ class Infection(Disease):
 
     def _check_betas(self, sim):
         """ Check that there's a network for each beta keys """
-        # Convert keys to lower case
-        self.pars.beta = {k.lower(): v for k, v in self.pars.beta.items()}
+        if isinstance(self.pars.beta, dict): # Ensure keys are lowercase # TODO: check if needed
+            self.pars.beta = {k.lower(): v for k, v in self.pars.beta.items()}
 
         betapars = self.pars.beta
 
         betamap = sc.objdict()
         netkeys = list(sim.networks.keys())
-        for bkey in betapars.keys():
-            orig_bkey = bkey[:]
-            if bkey in netkeys: # TODO: CK: could tidy up logic
-                betamap[bkey] = betapars[orig_bkey]
-            else:
-                if 'net' not in bkey:
-                    bkey += 'net'  # Add 'net' suffix if not already there
-                if bkey in netkeys:
+        if netkeys: # Skip if no networks
+            for bkey in betapars.keys():
+                orig_bkey = bkey[:]
+                if bkey in netkeys: # TODO: CK: could tidy up logic
                     betamap[bkey] = betapars[orig_bkey]
                 else:
-                    errormsg = f'No network for beta parameter "{bkey}"; your beta should match network keys:\n{sc.newlinejoin(netkeys)}'
-                    raise ValueError(errormsg)
+                    if 'net' not in bkey:
+                        bkey += 'net'  # Add 'net' suffix if not already there
+                    if bkey in netkeys:
+                        betamap[bkey] = betapars[orig_bkey]
+                    else:
+                        errormsg = f'No network for beta parameter "{bkey}"; your beta should match network keys:\n{sc.newlinejoin(netkeys)}'
+                        raise ValueError(errormsg)
         return betamap
 
     def make_new_cases(self, sim):
