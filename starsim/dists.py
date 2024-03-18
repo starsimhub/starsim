@@ -397,7 +397,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         urvs = self.rvs(size=maxval, uids=uids)
         return urvs
 
-    def filter(self, uids, **kwargs):
+    def filter(self, uids, **kwargs): # TODO: should this only be valid for Bernoulli distribution types?
         """ Filter UIDs by a binomial array """
         return uids[self.urvs(uids, **kwargs).astype(bool)] # TODO: tidy up
     
