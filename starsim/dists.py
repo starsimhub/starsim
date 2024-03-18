@@ -337,12 +337,14 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
                 self._dist = lambda size, p: self.rng.random(size) < p # 3x faster than using rng.binomial(1, p, size)
             elif dist == 'delta': # Special case, predefine the distribution here
                 self._dist = lambda size, v: np.full(size, fill_value=v)
-            else:
-                try:
-                    self._dist = getattr(self.rng, dist) # Main use case; replace the string with the actual distribution
-                except Exception as E:
-                    errormsg = f'Could not interpret "{dist}", are you sure this is a valid distribution? (i.e., an attribute of np.random.default_rng())'
-                    raise ValueError(errormsg) from E
+            
+            self._dist = dist
+            # else:
+            #     try:
+            #         self._dist = getattr(self.rng, dist) # Main use case; replace the string with the actual distribution
+            #     except Exception as E:
+            #         errormsg = f'Could not interpret "{dist}", are you sure this is a valid distribution? (i.e., an attribute of np.random.default_rng())'
+            #         raise ValueError(errormsg) from E
         
         # It's not a string, so assume it's a SciPy distribution
         else:
@@ -410,12 +412,15 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             
         # Actually get the random numbers
         kwds = self.process_kwds(size, uids)
+        dist = self._dist # Pull out here for further processing
         if self.method == 'numpy':
-            rvs = self._dist(size=size, **kwds)
+            if isinstance(dist, str): # Main use case: get the distribution
+                dist = getattr(self.rng, dist)
+            rvs = dist(size=size, **kwds)
         elif self.method == 'scipy':
-            rvs = self._dist.rvs(size=size, **kwds)
+            rvs = dist.rvs(size=size, **kwds)
         elif self.method == 'frozen': 
-            rvs = self._dist.rvs(size=size) # Frozen distributions don't take keyword arguments
+            rvs = dist.rvs(size=size) # Frozen distributions don't take keyword arguments
         else:
             raise ValueError(f'Unknown method: {self.method}') # Should not happen
         
