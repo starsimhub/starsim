@@ -164,7 +164,7 @@ class Sim(sc.prettyobj):
 
         # Handle end and n_years
         if self.pars.end:
-            self.pars.n_years = int(self.pars.end - self.pars.start)
+            self.pars.n_years = self.pars.end - self.pars.start
             if self.pars.n_years <= 0:
                 errormsg = f"Number of years must be >0, but you supplied start={str(self.pars.start)} and " \
                            f"end={str(self.pars.end)}, which gives n_years={self.pars.n_years}"
@@ -189,8 +189,7 @@ class Sim(sc.prettyobj):
         """
         Construct vectors things that keep track of time
         """
-        self.yearvec = sc.inclusiverange(start=self.pars.start, stop=self.pars.end + 1 - self.pars.dt,
-                                         step=self.pars.dt)  # Includes all the timepoints in the last year
+        self.yearvec = np.arange(start=self.pars.start, stop=self.pars.end + 1, step=self.pars.dt)  # Includes all the timepoints in the last year
         self.npts = len(self.yearvec)
         self.tivec = np.arange(self.npts)
         return
