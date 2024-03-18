@@ -421,44 +421,80 @@ dist_list = ['random', 'uniform', 'normal', 'lognorm_o', 'lognorm_u', 'expon',
              'poisson', 'weibull', 'delta', 'randint', 'bernoulli', 'choice']
 __all__ += dist_list
 
-# TODO: write docstrings
 
 def random(**kwargs):
+    """ Random distribution, values on interval (0,1) """
     return Dist(dist='random', **kwargs)
 
 def uniform(low=0.0, high=1.0, **kwargs):
+    """ Uniform distribution, values on interval (low, high) """
     return Dist(dist='uniform', low=low, high=high, **kwargs)
 
 def normal(loc=0.0, scale=1.0, **kwargs):
+    """ Normal distribution, with mean=loc and stdev=scale """
     return Dist(dist='normal', loc=loc, scale=scale, **kwargs)
 
-def lognorm_o(mean=1.0, stdev=1.0, **kwargs): # TODO: decide if we want to rename "lognorm"
+def lognorm_o(mean=1.0, stdev=1.0, **kwargs):
+    """
+    Lognormal distribution, parameterized in terms of the "overlying" (lognormal)
+    distribution, with mean=mean and stdev=stdev (see lognorm_u for comparison).
+    
+    **Example**::
+        
+        ss.lognorm_o(mean=2, stdev=1).rvs(1000).mean() # Should be close to 2
+    """
     return Dist(dist='lognorm_o', mean=mean, stdev=stdev, **kwargs)
 
 def lognorm_u(loc=0.0, scale=1.0, **kwargs):
+    """
+    Lognormal distribution, parameterized in terms of the "underlying" (normal)
+    distribution, with mean=loc and stdev=scale (see lognorm_o for comparison).
+    
+    **Example**::
+        
+        ss.lognorm_u(loc=2, scale=1).rvs(1000).mean() # Should be roughly 10
+    """
     return Dist(dist='lognorm_u', loc=loc, scale=scale, **kwargs)
 
 def expon(scale=1.0, **kwargs):
+    """ Exponential distribution """
     return Dist(dist='exponential', scale=scale, **kwargs)
 
 def poisson(lam=1.0, **kwargs):
+    """ Poisson distribution """
     return Dist(dist='poisson', lam=lam, **kwargs)
 
 def randint(low=None, high=None, **kwargs):
+    """ Random integers, values on the interval [low, high-1] (i.e. "high" is excluded) """
     if low is None and high is None: # Ugly, but gets the default of acting like a Bernoulli trial with no input
         low = 2 # Note that the endpoint is excluded, so this is [0,1]
     return Dist(dist='integers', low=low, high=high, **kwargs)
 
 def weibull(a=1.0, **kwargs):
+    """ Weibull distribution (note: there is no scale parameter) """
     return Dist(dist='weibull', a=a, **kwargs)
 
 def delta(v=0, **kwargs):
+    """ Delta distribution: equivalent to np.full() """
     return Dist(dist='delta', v=v, **kwargs)
 
 def bernoulli(p=0.5, **kwargs):
+    """ Bernoulli distribution: return True or False with the specified probability (which can be an array) """
     return Dist(dist='bernoulli', p=p, **kwargs)
 
 def choice(a=2, p=None, **kwargs):
+    """
+    Random choice between discrete options
+    
+    **Examples**::
+        
+        # Simulate 10 die rolls
+        ss.choice(6)(10) + 1 
+        
+        # Choose between specified options each with a specified probability (must sum to 1)
+        ss.choice(a=[30, 70], p=[0.3, 0.7])(10)
+    
+    """
     return Dist(dist='choice', a=a, p=p, **kwargs)
 
 
