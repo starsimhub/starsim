@@ -994,7 +994,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         sim2 (sim/dict): ditto
         skip_key_diffs (bool): whether to skip keys that don't match between sims
         skip (list): a list of values to skip
-        full (bool): whether to use the full summary (else, brief)
+        full (bool): whether to print out all values (not just those that differ)
         output (bool): whether to return the output as a string (otherwise print)
         die (bool): whether to raise an exception if the sims don't match
         require_run (bool): require that the simulations have been run
@@ -1031,12 +1031,15 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     # Compare values
     valmatchmsg = ''
     mismatches = {}
+    n_mismatch = 0
     skip = sc.tolist(skip)
     for key in sim2.keys():  # To ensure order
         if key in sim1_keys and key not in skip:  # If a key is missing, don't count it as a mismatch
             sim1_val = sim1[key] if key in sim1 else 'not present'
             sim2_val = sim2[key] if key in sim2 else 'not present'
-            if not np.isclose(sim1_val, sim2_val, equal_nan=True) or full:
+            mm = not np.isclose(sim1_val, sim2_val, equal_nan=True)
+            n_mismatch += mm
+            if mm or full:
                 mismatches[key] = {'sim1': sim1_val, 'sim2': sim2_val}
 
     if len(mismatches):
@@ -1099,7 +1102,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     # Raise an error if mismatches were found
     mismatchmsg = keymatchmsg + valmatchmsg
     if mismatchmsg:  # pragma: no cover
-        if die:
+        if die and n_mismatch: # To catch full=True case
             raise ValueError(mismatchmsg)
         elif output:
             return df
