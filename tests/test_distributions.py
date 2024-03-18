@@ -1,5 +1,5 @@
 """
-Test SciPy distributions from distributions.py
+Test SciPy distributions
 """
 
 # %% Imports and settings

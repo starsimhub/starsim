@@ -20,11 +20,11 @@ New RNGs & distributions
 - These distributions can be called directly, e.g. ``dist = ss.weibull(a=2); dist(5)`` will return 5 random variates from a Weibull distribution.
 - Instead of being manually initialized based on the name, the ``Sim`` object is parsed and all distributions will be initialized with a unique identifier based on their place in the object (e.g. ``sim.diseases.sir.pars.dur_inf``), which is used to set their unique seed.
 
-
 Other changes
 ~~~~~~~~~~~~~
 - This PR also fixes bugs with lognormal parameters, and makes it explicit whether the parameters are for the *underlying* normal distribution (``ss.lognorm_u()``, the Numpy/SciPy default, equivalent to ``ss.lognorm_mean()`` previously) or the "overlying" lognormal distribution (``ss.lognorm_o()``, equivalent to ``ss.lognorm()`` previously).
 - Renames ``ss.dx``, ``ss.tx``, ``ss.vx`` to``ss.Dx``, ``ss.Tx``, ``ss.Vx``.
+- Removed ``set_numba_seed()`` as a duplicate of ``set_seed()``.
 - *GitHub info*: PR `392 <https://github.com/amath-idm/stisim/pull/392>`_
 
 
