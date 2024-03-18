@@ -251,21 +251,21 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         """ Alias to self.rvs() """
         return self.rvs(size=size)
 
-    def __deepcopy__(self, memo):
-        from copy import deepcopy
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memo[id(self)] = result
-        for k, v in self.__dict__.items():
-            if k == 'rng':
-                setattr(result, k, np.random.default_rng(seed=self.seed))
-            elif k in ['sim', 'module']:
-                setattr(result, k, v)
-            else:
-                setattr(result, k, deepcopy(v, memo))
+    # def __deepcopy__(self, memo):
+    #     from copy import deepcopy
+    #     cls = self.__class__
+    #     result = cls.__new__(cls)
+    #     memo[id(self)] = result
+    #     for k, v in self.__dict__.items():
+    #         if k == 'rng':
+    #             setattr(result, k, np.random.default_rng(seed=self.seed))
+    #         elif k in ['sim', 'module']:
+    #             setattr(result, k, v)
+    #         else:
+    #             setattr(result, k, deepcopy(v, memo))
 
-        result.rng.bit_generator.state = self.rng.bit_generator.state
-        return result
+    #     result.rng.bit_generator.state = self.rng.bit_generator.state
+    #     return result
 
 
     @property
@@ -284,7 +284,6 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         # Create the actual RNG
         self.rng = np.random.default_rng(seed=self.seed)
         self.init_state = self.bitgen.state # Store the initial state
-        self.make_dist() # Convert the inputs into an actual validated distribution
         
         # Finalize
         self.module = module if (module is not None) else self.module
@@ -315,48 +314,57 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.make_dist()
         return
     
-    def make_dist(self):
+    def make_dist(self, size, uids=None):
         """ Ensure the supplied dist is valid, and initialize it if needed """
         dist = self.dist # The name of the distribution (a string, usually)
-        self._dist = None # The actual distribution function
-        self._kwds = sc.dcp(self.kwds) # The actual keywords; modified below for special cases
+        kwds = self.kwds.copy() # The actual keywords; shallow copy, modified below for special cases
         
         # Handle strings, including special cases
         if isinstance(dist, str):
             # Handle special cases
             if dist == 'lognorm_o': # Convert parameters for a lognormal
-                self._kwds.mean, self._kwds.sigma = lognorm_convert(self._kwds.pop('mean'), self._kwds.pop('stdev'))
+                kwds['mean'], kwds['sigma'] = lognorm_convert(kwds.pop('mean'), kwds.pop('stdev'))
                 dist = 'lognormal'
             elif dist == 'lognorm_u':
-                self._kwds.mean = self._kwds.pop('loc') # Rename parameters
-                self._kwds.sigma = self._kwds.pop('scale')
+                kwds['mean'] = kwds.pop('loc') # Rename parameters
+                kwds['sigma'] = kwds.pop('scale')
                 dist = 'lognormal' # For the underlying distribution
             
             # Create the actual distribution
             if dist == 'bernoulli': # Special case, predefine the distribution here
-                self._dist = lambda size, p: self.rng.random(size) < p # 3x faster than using rng.binomial(1, p, size)
+                dist = lambda p, size: self.rng.random(size) < p # 3x faster than using rng.binomial(1, p, size)
             elif dist == 'delta': # Special case, predefine the distribution here
-                self._dist = lambda size, v: np.full(size, fill_value=v)
-            
-            self._dist = dist
-            # else:
-            #     try:
-            #         self._dist = getattr(self.rng, dist) # Main use case; replace the string with the actual distribution
-            #     except Exception as E:
-            #         errormsg = f'Could not interpret "{dist}", are you sure this is a valid distribution? (i.e., an attribute of np.random.default_rng())'
-            #         raise ValueError(errormsg) from E
+                dist = lambda v, size: np.full(size, fill_value=v)
+            else: # It's still a string
+                try:
+                    dist = getattr(self.rng, dist) # Main use case; replace the string with the actual distribution
+                except Exception as E:
+                    errormsg = f'Could not interpret "{dist}", are you sure this is a valid distribution? (i.e., an attribute of np.random.default_rng())'
+                    raise ValueError(errormsg) from E
         
         # It's not a string, so assume it's a SciPy distribution
         else:
-            self._dist = dist # Use directly
             self.method = 'scipy' if callable(dist) else 'frozen' # Need to handle regular and frozen distributions differently
-                
-            if hasattr(self._dist, 'random_state'): # For SciPy distributions # TODO: Check if safe with non-frozen (probably not?)
-                self._dist.random_state = self.rng # Override the default random state with the correct one
+            if hasattr(dist, 'random_state'): # For SciPy distributions # TODO: Check if safe with non-frozen (probably not?)
+                dist.random_state = self.rng # Override the default random state with the correct one
             else:
                 errormsg = f'Unknown distribution {type(dist)}: must be string or scipy.stats distribution, or another distribution with a random_state attribute'
                 raise TypeError(errormsg)
-        return
+        
+        # Process keywords
+        for key,val in kwds.items(): 
+            if callable(val): # If the parameter is callable, then call it
+                size_par = uids if uids is not None else size
+                out = val(self.module, self.sim, size_par)
+                val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
+            if np.iterable(val): # If it's iterable, check the size and pad with zeros if it's the wrong shape
+                if uids is not None and (len(val) == len(uids)):
+                    resized = np.zeros(size, dtype=val.dtype)
+                    resized[uids] = val[:len(uids)]
+                    val = resized
+            kwds[key] = val # Replace 
+            
+        return dist, kwds
 
     @property
     def state(self):
@@ -378,22 +386,6 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
         return self.bitgen.state
     
-    def process_kwds(self, size, uids=None):
-        """ Handle array and callable keyword arguments """
-        kwds = dict() # Loop over parameters (keywords) and modify any that are callable or arrays of the wrong shape
-        for key,val in self._kwds.items(): 
-            if callable(val): # If the parameter is callable, then call it
-                size_par = uids if uids is not None else size
-                out = val(self.module, self.sim, size_par)
-                val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
-            if np.iterable(val): # If it's iterable, check the size and pad with zeros if it's the wrong shape
-                if uids is not None and (len(val) == len(uids)):
-                    resized = np.zeros(size, dtype=val.dtype)
-                    resized[uids] = val[:len(uids)]
-                    val = resized
-            kwds[key] = val # Replace 
-        return kwds
-    
     def rvs(self, size=1, uids=None):
         """ Main method for getting random variables """
         
@@ -411,8 +403,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
             
         # Actually get the random numbers
-        kwds = self.process_kwds(size, uids)
-        dist = self._dist # Pull out here for further processing
+        dist, kwds = self.make_dist(size, uids)
         if self.method == 'numpy':
             if isinstance(dist, str): # Main use case: get the distribution
                 dist = getattr(self.rng, dist)
