@@ -243,7 +243,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     def reset(self, state=None):
         """ Restore initial state """
         state = state if (state is not None) else self.init_state
-        self.rng.bit_generator.state.update(state)
+        self.rng.bit_generator.state = state.copy()
         self.ready = True
         return self.bitgen.state
 
@@ -339,7 +339,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
                 size_par = uids if uids is not None else size
                 out = val(self.module, self.sim, size_par)
                 val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
-                kwds[val] = val
+                kwds[key] = val
             
             # If it's iterable, check the size and pad with zeros if it's the wrong shape
             if np.iterable(val) and uids is not None and (len(val) == len(uids)) and self.dist != 'choice':
