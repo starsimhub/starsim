@@ -9,6 +9,7 @@ import starsim as ss
 from starsim.random import RNG
 import scipy.stats as sps
 from starsim.distributions import ScipyDistribution
+from starsim.states import UIDArray
 import pytest
 import matplotlib.pyplot as plt
 
@@ -127,7 +128,7 @@ def test_repeat_slot():
     sc.heading('test_repeat_slot: Test behavior of repeated slots')
 
     rng = ss.MultiRNG('Uniform')
-    slots = np.array([4,2,3,2,2,3])
+    slots = UIDArray(values=np.array([4,2,3,2,2,3]), uid=np.arange(6))
     n = len(slots)
     rng.initialize(container=None, slots=slots)
 

@@ -6,7 +6,7 @@ import sciris as sc
 import starsim as ss
 from scipy.stats._distn_infrastructure import rv_frozen
 from inspect import signature, _empty
-import numpy as np
+
 
 __all__ = ['Module']
 

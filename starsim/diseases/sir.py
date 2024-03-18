@@ -34,10 +34,7 @@ class SIR(ss.Infection):
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
 
         self.add_states(
-            ss.State('susceptible', bool, True),
-            ss.State('infected', bool, False),
             ss.State('recovered', bool, False),
-            ss.State('ti_infected', int, ss.INT_NAN),
             ss.State('ti_recovered', int, ss.INT_NAN),
             ss.State('ti_dead', int, ss.INT_NAN),
         )

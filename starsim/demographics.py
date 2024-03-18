@@ -252,7 +252,6 @@ class Pregnancy(BaseDemographics):
             ss.State('ti_delivery', int, ss.INT_NAN),  # Time of delivery
             ss.State('ti_postpartum', int, ss.INT_NAN),  # Time postpartum ends
             ss.State('ti_dead', int, ss.INT_NAN),  # Maternal mortality
-            ss.State('conception_probs', float, 0),
         )
 
         self.pars = ss.omergeleft(self.pars,
