@@ -18,7 +18,8 @@ def test_dcp():
     s2.run()
     s1.plot()
     s2.plot()
-
+    
+    ss.diff_sims(s1, s2, full=True)
     assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
 
     return s1, s2

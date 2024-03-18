@@ -1036,11 +1036,11 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         if key in sim1_keys and key not in skip:  # If a key is missing, don't count it as a mismatch
             sim1_val = sim1[key] if key in sim1 else 'not present'
             sim2_val = sim2[key] if key in sim2 else 'not present'
-            if not np.isclose(sim1_val, sim2_val, equal_nan=True):
+            if not np.isclose(sim1_val, sim2_val, equal_nan=True) or full:
                 mismatches[key] = {'sim1': sim1_val, 'sim2': sim2_val}
 
     if len(mismatches):
-        valmatchmsg = '\nThe following values differ between the two simulations:\n'
+        valmatchmsg = '\nThe following values differ between the two simulations:\n' if not full else ''
         df = sc.dataframe.from_dict(mismatches).transpose()
         diff = []
         ratio = []
@@ -1062,12 +1062,16 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
                     change_char = '↑'
                 elif new < old:
                     change_char = '↓'
+                elif new == old:
+                    change_char = '='
                 else:
                     errormsg = f'Could not determine relationship between sim1={old} and sim2={new}'
                     raise ValueError(errormsg)
 
                 # Set how many repeats it should have
                 repeats = 1
+                if abs_ratio == 0:
+                    repeats = 0
                 if abs_ratio >= 1.1:
                     repeats = 2
                 if abs_ratio >= 2:
