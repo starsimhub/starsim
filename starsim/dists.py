@@ -258,7 +258,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         memo[id(self)] = result
         for k, v in self.__dict__.items():
             if k == 'rng':
-                setattr(result, k, np.random.default_rng())
+                setattr(result, k, np.random.default_rng(seed=self.seed))
             elif k in ['sim', 'module']:
                 setattr(result, k, v)
             else:
