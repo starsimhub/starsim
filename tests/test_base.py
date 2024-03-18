@@ -8,7 +8,6 @@ import numpy as np
 import starsim as ss
 import matplotlib.pyplot as plt
 
-do_plot = True
 sc.options(interactive=False) # Assume not running interactively
 
 # %% Define the tests
@@ -60,7 +59,7 @@ def test_networks():
     return nw1, nw2, nw3
 
 
-def test_microsim():
+def test_microsim(do_plot=False):
     sc.heading('Test making people and providing them to a sim')
 
     # Make HIV module
@@ -79,9 +78,10 @@ def test_microsim():
     sim.initialize()
     sim.run()
 
-    plt.figure()
-    plt.plot(sim.tivec, sim.results.hiv.n_infected)
-    plt.title('HIV number of infections')
+    if do_plot:
+        plt.figure()
+        plt.plot(sim.tivec, sim.results.hiv.n_infected)
+        plt.title('HIV number of infections')
 
     return sim
 
@@ -114,6 +114,7 @@ def test_ppl_construction():
 
 # %% Run as a script
 if __name__ == '__main__':
+    do_plot = True
     sc.options(interactive=do_plot)
 
     # Start timing
@@ -122,7 +123,7 @@ if __name__ == '__main__':
     # Run tests
     ppl = test_people()
     nw1, nw2, nw3 = test_networks()
-    sim1 = test_microsim()
+    sim1 = test_microsim(do_plot)
     sim2 = test_ppl_construction()
 
     sc.toc(T)

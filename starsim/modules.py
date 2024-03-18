@@ -9,7 +9,7 @@ from scipy.stats._distn_infrastructure import rv_frozen
 __all__ = ['Module']
 
 
-class Module(sc.prettyobj):
+class Module:#(sc.prettyobj): # TODO: replace with sc.qprettyobj
 
     def __init__(self, pars=None, par_dists=None, name=None, label=None, requires=None, **kwargs):
         self.pars = ss.omerge(pars, kwargs)
@@ -21,6 +21,14 @@ class Module(sc.prettyobj):
         self.initialized = False
         self.finalized = False
         return
+    
+    def disp(self, output=False):
+        """ Display the full object """
+        out = sc.prepr(self)
+        if not output:
+            print(out)
+        else:
+            return out
 
     def check_requires(self, sim):
         """ Check that the module's requirements (of other modules) are met """
