@@ -19,7 +19,8 @@ def make_rng(slots=5, base_seed=1, name='Test', **kwargs):
     rng_container = ss.RNGContainer()
     rng_container.initialize(base_seed=base_seed)
     rng = ss.RNG(name, **kwargs)
-    rng.initialize(rng_container, slots=slots)
+    if ss.options.rng in ['single', 'multi']:
+        rng.initialize(rng_container, slots=slots)
     return rng
 
 
@@ -35,8 +36,8 @@ def test_random(rng, n=5):
 
 def test_SingleRNG_using_np_singleton(rng, n=5):
     """ Make sure the SingleRNG is using the numpy.random singleton """
-    if ss.options.multirng:
-        pytest.skip('Skipping multirng mode')
+    if ss.options.rng != 'centralized':
+        pytest.skip('This test is only for the centralized rng.')
     sc.heading('test_singleton_rng: Testing RNG object')
 
     np.random.seed(0)
@@ -49,6 +50,8 @@ def test_SingleRNG_using_np_singleton(rng, n=5):
 
 def test_reset(rng, n=5):
     """ Sample, reset, sample """
+    if ss.options.rng not in ['single', 'multi']:
+        pytest.skip('Reset is only for SingleRNG and MultiRNG.')
     sc.heading('test_reset: Testing sample, reset, sample')
 
     draws1 = rng.random(n)
@@ -69,6 +72,8 @@ def test_reset(rng, n=5):
 
 def test_step(rng, n=5):
     """ Sample, step, sample """
+    if ss.options.rng not in ['single', 'multi']:
+        pytest.skip('Step only for SingleRNG and MultiRNG.')
     sc.heading('test_step: Testing sample, step, sample')
 
     draws1 = rng.random(n)

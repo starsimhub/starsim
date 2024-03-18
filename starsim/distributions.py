@@ -177,15 +177,25 @@ class ScipyDistribution():
     def set_rng(rng, gen):
         # Handle random generators
         ret = gen.random_state # Default
-        if options.multirng and rng and (gen.random_state == np.random.mtrand._rand):
-            # MultiRNG, rng not none, and the current "random_state" is the
-            # numpy global singleton... so let's override
-            if isinstance(rng, str):
-                ret = MultiRNG(rng) # Crate a new generator with the user-provided string
-            elif isinstance(rng, np.random.Generator):
-                ret = rng
-            else:
-                raise Exception(f'The rng must be a string or a np.random.Generator instead of {type(rng)}')
+        if gen.random_state == np.random.mtrand._rand and rng:
+            if options.rng=='multi':
+                # MultiRNG, rng not none, and the current "random_state" is the
+                # numpy global singleton... so let's override
+                if isinstance(rng, str):
+                    ret = MultiRNG(rng) # Crate a new generator with the user-provided string
+                elif isinstance(rng, np.random.Generator):
+                    ret = rng
+                else:
+                    raise Exception(f'The rng must be a string or a np.random.Generator instead of {type(rng)}')
+            elif options.rng=='single':
+                # SingleRNG, rng not none, and the current "random_state" is the
+                # numpy global singleton... so let's override
+                if isinstance(rng, str):
+                    ret = SingleRNG(rng) # Crate a new generator with the user-provided string
+                elif isinstance(rng, np.random.Generator):
+                    ret = rng
+                else:
+                    raise Exception(f'The rng must be a string or a np.random.Generator instead of {type(rng)}')
         return ret
 
     def initialize(self, sim, context):
@@ -264,16 +274,27 @@ class ScipyHistogram(rv_histogram):
     def set_rng(self, rng):
         # Handle random generators
         ret = self.random_state # Default
-        if options.multirng and rng and (self.random_state == np.random.mtrand._rand):
-            # MultiRNG, rng not none, and the current "random_state" is the
-            # numpy global singleton... so let's override
-            if isinstance(rng, str):
-                ret = MultiRNG(rng) # Crate a new generator with the user-provided string
-            elif isinstance(rng, np.random.Generator):
-                ret = rng
-            else:
-                raise Exception(f'The rng must be a string or a np.random.Generator instead of {type(rng)}')
+        if self.random_state == np.random.mtrand._rand and rng:
+            if options.rng=='multi':
+                # MultiRNG, rng not none, and the current "random_state" is the
+                # numpy global singleton... so let's override
+                if isinstance(rng, str):
+                    ret = MultiRNG(rng) # Crate a new generator with the user-provided string
+                elif isinstance(rng, np.random.Generator):
+                    ret = rng
+                else:
+                    raise Exception(f'The rng must be a string or a np.random.Generator instead of {type(rng)}')
+            elif options.rng=='single':
+                # SingleRNG, rng not none, and the current "random_state" is the
+                # numpy global singleton... so let's override
+                if isinstance(rng, str):
+                    ret = SingleRNG(rng) # Crate a new generator with the user-provided string
+                elif isinstance(rng, np.random.Generator):
+                    ret = rng
+                else:
+                    raise Exception(f'The rng must be a string or a np.random.Generator instead of {type(rng)}')
         return ret
+
 
     def rvs(self, *args, **kwargs):
         """

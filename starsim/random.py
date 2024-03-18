@@ -98,14 +98,85 @@ def RNG(*args, **kwargs):
     Returns:
     Numpy RandomState singleton or a MultiRNG: Instance of a random number generator
     """
-    if ss.options.multirng:
-        rng = MultiRNG(*args, **kwargs)
-    else:
-        rng = SingleRNG(*args, **kwargs)
-    return rng
+    if ss.options.rng == 'multi':
+        return MultiRNG(*args, **kwargs)
+    elif ss.options.rng == 'single':
+        return SingleRNG(*args, **kwargs)
+    
+    # Centralized
+    return np.random.mtrand._rand
 
+class SingleRNG(np.random.Generator):
+    """
+    Enable a single random number generator stream per distribution without the complexity of MultiRNG.
+    Used with options.rng = 'single'
+    """
+    
+    def __init__(self, name, seed_offset=None, **kwargs):
+        """
+        Create a random number generator
 
-class MultiRNG(np.random.Generator):
+        seed_offset will be automatically assigned (based on hashing the name) if None
+        
+        name: a name for this random number generator, like "coin_flip"
+        """
+
+        self.name = name
+        self.kwargs = kwargs
+
+        if seed_offset is None:
+            # Obtain the seed offset by hashing the class name. Don't use python's hash because it is randomized.
+            self.seed_offset = int(hashlib.sha256(self.name.encode('utf-8')).hexdigest(), 16) % 10**8
+        else:
+            # Use user-provided seed_offset (unlikely)
+            self.seed_offset = seed_offset
+
+        self.initialized = False
+        return
+
+    def initialize(self, container, slots=None):
+        if self.initialized:
+            return
+
+        if container is not None:
+            self.seed = container.add(self) # base_seed + seed_offset
+        else:
+            # Enable use of SingleRNG without a container
+            self.seed = self.seed_offset
+
+        if 'bit_generator' not in self.kwargs:
+            self.kwargs['bit_generator'] = np.random.PCG64DXSM(seed=self.seed)
+        super().__init__(**self.kwargs)
+
+        self.initialized = True
+        return
+
+    def reset(self):
+        pass
+
+    def step(self, ti):
+        pass
+
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            setattr(result, k, deepcopy(v, memo))
+
+        #'bit_generator' kwarg has changed
+        super(SingleRNG, result).__init__(**result.kwargs)
+
+        # and so has the _init_state
+        result._init_state = result.bit_generator.state # Store the initial state
+
+        self.seed = None # Will be determined once added to the RNG Container
+        result.initialized = True
+        result.ready = True
+
+        return result
+
+class MultiRNG(SingleRNG):
     """
     Class for tracking one random number generators associated with one decision per timestep.
 
@@ -163,8 +234,7 @@ class MultiRNG(np.random.Generator):
         name: a name for this random number generator, like "coin_flip"
         """
 
-        self.name = name
-        self.kwargs = kwargs
+        super().__init__(name, seed_offset, **kwargs)
 
         if seed_offset is None:
             # Obtain the seed offset by hashing the class name. Don't use python's hash because it is randomized.
@@ -174,19 +244,11 @@ class MultiRNG(np.random.Generator):
             self.seed_offset = seed_offset
 
         self.seed = None # Will be determined once added to the RNG Container
-        self.initialized = False
         self.ready = True
         return
 
     def initialize(self, container, slots):
-        if self.initialized:
-            return
-
-        if container is not None:
-            self.seed = container.add(self) # base_seed + seed_offset
-        else:
-            # Enable use of MultiRNG without a container
-            self.seed = self.seed_offset
+        super().initialize(container, slots)
 
         if isinstance(slots, int):
             # Handle edge case in which the user wants n sequential slots, as used in testing.
@@ -194,13 +256,8 @@ class MultiRNG(np.random.Generator):
         else:
             self.slots = slots # E.g. sim.people.slots (instead of using uid as the slots directly)
 
-        if 'bit_generator' not in self.kwargs:
-            self.kwargs['bit_generator'] = np.random.PCG64DXSM(seed=self.seed)
-        super().__init__(**self.kwargs)
-
         self._init_state = self.bit_generator.state # Store the initial state
 
-        self.initialized = True
         self.ready = True
         return
 
@@ -220,63 +277,3 @@ class MultiRNG(np.random.Generator):
         # jumped returns a new bit_generator, use directly instead of setting state?
         self.bit_generator.state = self.bit_generator.jumped(jumps=ti).state
         return
-
-    def __deepcopy__(self, memo):
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memo[id(self)] = result
-        for k, v in self.__dict__.items():
-            setattr(result, k, deepcopy(v, memo))
-
-        #'bit_generator' kwarg has changed
-        super(MultiRNG, result).__init__(**result.kwargs)
-
-        return result
-
-
-class SingleRNG(np.random.Generator):
-    """
-    Dummy class that mirrors MultiRNG but provides the numpy singleton rng instead
-    """
-    
-    def __init__(self, name, seed_offset=None, **kwargs):
-        """
-        Create a random number generator
-
-        seed_offset will be automatically assigned (based on hashing the name) if None
-        
-        name: a name for this random number generator, like "coin_flip"
-        """
-
-        self.name = name
-        self.kwargs = kwargs
-
-        if seed_offset is None:
-            # Obtain the seed offset by hashing the class name. Don't use python's hash because it is randomized.
-            self.seed_offset = int(hashlib.sha256(self.name.encode('utf-8')).hexdigest(), 16) % 10**8
-        else:
-            # Use user-provided seed_offset (unlikely)
-            self.seed_offset = seed_offset
-
-        self.initialized = False
-        return
-
-    def initialize(self, container, slots=None):
-        if self.initialized:
-            return
-
-        if container is not None:
-            container.add(self) # base_seed + seed_offset
-
-        if 'bit_generator' not in self.kwargs:
-            self.kwargs['bit_generator'] = np.random.mtrand._rand._bit_generator
-        super().__init__(**self.kwargs)
-
-        self.initialized = True
-        return
-
-    def reset(self):
-        pass
-
-    def step(self, ti):
-        pass

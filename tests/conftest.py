@@ -4,12 +4,9 @@ import starsim as ss
 import pytest
 
 # Run all tests with both single and multi RNG streams
-@pytest.fixture(params=['single','multi'], autouse=True)
+@pytest.fixture(params=['centralized', 'single', 'multi'], autouse=True)
 def set_rng_type(request):
-    original_rng_type = ss.options.multirng
-    if request.param == 'single':
-        ss.options.multirng = False
-    else:
-        ss.options.multirng = True
+    original_rng_type = ss.options.rng
+    ss.options.rng = request.param
     yield
-    ss.options.multirng = original_rng_type
+    ss.options.rng = original_rng_type
