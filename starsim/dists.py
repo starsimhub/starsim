@@ -6,7 +6,6 @@ import hashlib
 import numpy as np
 import sciris as sc
 import pylab as pl
-from starsim import sc_nested as scn # Temporary fix
 
 __all__ = ['find_dists', 'Dists', 'Dist']
 
@@ -43,7 +42,7 @@ def lognorm_convert(mean, stdev):
 def find_dists(obj, verbose=False):
     """ Find all Dist objects in a parent object """
     out = sc.objdict()
-    tree = scn.IterObj(obj).iterate() # Temporary copy of sc.iterobj(obj) until Sciris 3.1.5 is released
+    tree = sc.iterobj(obj) # Temporary copy of sc.iterobj(obj) until Sciris 3.1.5 is released
     if verbose: print(f'Found {len(tree)} objects')
     for trace,val in tree.items():
         if isinstance(val, Dist):

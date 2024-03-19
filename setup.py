@@ -41,7 +41,7 @@ setup(
         'numpy',
         'scipy',
         'pandas>=2.0.0',
-        'sciris>=3.1.0',
+        'sciris>=3.1.5',
         'matplotlib',
         'numba',
         'networkx',
