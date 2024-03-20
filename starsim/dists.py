@@ -272,7 +272,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         if self.slots is None:
             if slots is None:
                 if self.sim is not None and hasattr(self.sim, 'people') and hasattr(self.sim.people, 'slot'):
-                    slots = self.sim.people.slots
+                    slots = self.sim.people.slot
             self.slots = slots 
         self.ready = True
         self.initialized = True
