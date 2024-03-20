@@ -166,6 +166,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.offset = offset
         self.module = module
         self.sim = sim
+        self.slots = None # Created on initialization with a sim
         self.strict = strict
         
         if dist is None:
@@ -268,6 +269,8 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         # Finalize
         self.module = module if (module is not None) else self.module
         self.sim = sim if (sim is not None) else self.sim
+        if self.sim is not None:
+            self.slots = self.sim.people.slot # Link to slots
         self.ready = True
         self.initialized = True
         return self
@@ -392,6 +395,8 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         uids = np.asarray(uids)
         if not len(uids):
             return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
+        if self.slots is not None: # Use slots if available
+            uids = self.slots[uids]
         maxval = uids.max() + 1 # Since UIDs are inclusive
         urvs = self.rvs(size=maxval, uids=uids)
         return urvs
