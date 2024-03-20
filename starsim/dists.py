@@ -256,7 +256,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
         return self.bitgen.state
     
-    def initialize(self, trace=None, seed=0, module=None, sim=None):
+    def initialize(self, trace=None, seed=0, module=None, sim=None, slots=None):
         """ Calculate the starting seed and create the RNG """
         
         # Calculate the offset (starting seed)
@@ -269,8 +269,11 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         # Finalize
         self.module = module if (module is not None) else self.module
         self.sim = sim if (sim is not None) else self.sim
-        if self.sim is not None and hasattr(self.sim, 'people') and hasattr(self.sim.people, 'slot'):
-            self.slots = self.sim.people.slot # Link to slots
+        if self.slots is None:
+            if slots is None:
+                if self.sim is not None and hasattr(self.sim, 'people') and hasattr(self.sim.people, 'slot'):
+                    slots = self.sim.people.slots
+            self.slots = slots 
         self.ready = True
         self.initialized = True
         return self
