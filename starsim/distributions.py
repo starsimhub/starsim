@@ -6,7 +6,7 @@ import numpy as np
 import sciris as sc
 import pylab as pl
 
-__all__ = ['find_dists', 'Dists', 'Dist']
+__all__ = ['find_dists', 'dist_list', 'Dists', 'Dist']
 
 
 def str2int(string, modulo=10_000_000):
@@ -114,6 +114,8 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     """
     Class for tracking one random number generator associated with one distribution,
     i.e. one decision per timestep.
+    
+    See ss.dist_list for a full list of supported distributions.
     
     Args:
         dist (str/dist): the type of distribution to use; can be any attribute of ``np.random.default_rng()``, or any distribution from ``scipy.stats``
