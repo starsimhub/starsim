@@ -87,7 +87,7 @@ class Gonorrhea(ss.Infection):
 
         # Set natural clearance
         clear_uids = self.pars.p_clear.filter(target_uids)
-        dur = sim.ti + self.pars['dur_inf_in_days'].urvs(clear_uids)/365/sim.pars.dt # Convert from days to years and then adjust for dt
+        dur = sim.ti + self.pars.dur_inf_in_days.urvs(clear_uids)/365/sim.dt # Convert from days to years and then adjust for dt
         self.ti_clearance[clear_uids] = dur
 
         return
