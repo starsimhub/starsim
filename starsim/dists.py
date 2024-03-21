@@ -2,7 +2,6 @@
 Define random-number-safe distributions.
 """
 
-import hashlib
 import numpy as np
 import sciris as sc
 import pylab as pl
@@ -10,15 +9,14 @@ import pylab as pl
 __all__ = ['find_dists', 'Dists', 'Dist']
 
 
-def str2int(string, modulo=1e8):
+def str2int(string, modulo=10_000_000):
     """
-    Convert a string to an int via hashing
+    Convert a string to an int
     
-    Cannot use Python's built-in hash() since it's randomized for strings. While
-    hashlib is slower, this function is only used at initialization, so makes no
-    appreciable difference to runtime.
+    Cannot use Python's built-in hash() since it's randomized for strings, but
+    this is almost as fast (and 5x faster than hashlib).
     """
-    return int(hashlib.sha256(string.encode('utf-8')).hexdigest(), 16) % int(modulo)
+    return int.from_bytes(string.encode()) % modulo
 
 
 def lognorm_convert(mean, stdev):
