@@ -18,9 +18,9 @@ class Measles(SIR):
 
         pars = ss.omergeleft(pars,
             # Natural history parameters, all specified in days
-            dur_exp = 8,       # (days) - source: US CDC
-            dur_inf = 11,      # (days) - source: US CDC
-            p_death = 0.005,   # Probability of death
+            dur_exp = 8 / 365,  # (years) - source: US CDC
+            dur_inf = 11 / 365, # (years) - source: US CDC
+            p_death = 0.005,    # Probability of death
 
             # Initial conditions and beta
             init_prev = 0.005,
