@@ -15,7 +15,7 @@ This page lists Starsim's full API, including all functions and classes.
    starsim.connectors
    starsim.demographics
    starsim.disease
-   starsim.dists
+   starsim.distributions
    starsim.interventions
    starsim.modules
    starsim.network

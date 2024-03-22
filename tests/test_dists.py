@@ -47,7 +47,7 @@ def test_custom_dists(n=n, do_plot=False):
     dists = sc.objdict()
     rvs = sc.objdict()
     times = sc.objdict()
-    for name in ss.dists.dist_list:
+    for name in ss.dist_list:
         func = getattr(ss, name)
         dist = func(name='test')
         dist.initialize()

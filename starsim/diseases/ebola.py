@@ -113,25 +113,25 @@ class Ebola(SIR):
         p = self.pars
 
         # Determine when exposed become infected
-        self.ti_infected[uids] = sim.ti + p.dur_exp2symp.urvs(uids)
+        self.ti_infected[uids] = sim.ti + p.dur_exp2symp.urvs(uids) / sim.dt
 
         # Determine who progresses to sever and when
         sev_uids = p.p_sev.filter(uids)
-        self.ti_severe[sev_uids] = self.ti_infected[sev_uids] + p.dur_symp2sev.urvs(sev_uids)
+        self.ti_severe[sev_uids] = self.ti_infected[sev_uids] + p.dur_symp2sev.urvs(sev_uids) / sim.dt
 
         # Determine who dies and who recovers and when
         dead_uids = p.p_death.filter(sev_uids)
-        self.ti_dead[dead_uids] = self.ti_severe[dead_uids] + p.dur_sev2dead.urvs(dead_uids)
+        self.ti_dead[dead_uids] = self.ti_severe[dead_uids] + p.dur_sev2dead.urvs(dead_uids) / sim.dt
         rec_sev_uids = np.setdiff1d(sev_uids, dead_uids)
-        self.ti_recovered[rec_sev_uids] = self.ti_severe[rec_sev_uids] + p.dur_sev2rec.urvs(rec_sev_uids)
+        self.ti_recovered[rec_sev_uids] = self.ti_severe[rec_sev_uids] + p.dur_sev2rec.urvs(rec_sev_uids) / sim.dt
         rec_symp_uids = np.setdiff1d(uids, sev_uids)
-        self.ti_recovered[rec_symp_uids] = self.ti_infected[rec_symp_uids] + p.dur_symp2rec.urvs(rec_symp_uids)
+        self.ti_recovered[rec_symp_uids] = self.ti_infected[rec_symp_uids] + p.dur_symp2rec.urvs(rec_symp_uids) / sim.dt
 
         # Determine time of burial - either immediate (safe burials) or after a delay (unsafe)
         safe_buried = p.p_safe_bury.filter(dead_uids)
         unsafe_buried = np.setdiff1d(dead_uids, safe_buried)
         self.ti_buried[safe_buried] = self.ti_dead[safe_buried]
-        self.ti_buried[unsafe_buried] = self.ti_dead[unsafe_buried] + p.dur_dead2buried.urvs(unsafe_buried)
+        self.ti_buried[unsafe_buried] = self.ti_dead[unsafe_buried] + p.dur_dead2buried.urvs(unsafe_buried) / sim.dt
 
         return
 
