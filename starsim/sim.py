@@ -239,91 +239,19 @@ class Sim(sc.prettyobj):
         self.people.init_results(self)
         return self
 
-    def convert_plugins(self, plugin_class, plugin_name=None):
-        """
-        Common logic for converting plug-ins to a standard format
-        Used for networks, demographics, diseases, connectors, analyzers, and interventions
-        Args:
-            plugin: class
-        """
-
-        if plugin_name is None: plugin_name = plugin_class.__name__.lower()
-
-        # Get lower-case names of all subclasses
-        known_plugins = {n.__name__.lower():n for n in ss.all_subclasses(plugin_class)}
-        if plugin_name == 'networks': # Allow "msm" or "msmnet"
-            known_plugins.update({k.removesuffix('net'):v for k,v in known_plugins.items()})
-
-        # Figure out if it's in the sim pars or provided directly
-        attr_plugins = getattr(self, plugin_name)  # Get any plugins that have been provided directly
-
-        # See if they've been provided in the pars dict
-        if self.pars.get(plugin_name):
-
-            par_plug = self.pars[plugin_name]
-
-            # String: convert to ndict
-            if isinstance(par_plug, str):
-                plugins = ss.ndict(dict(name=par_plug))
-
-            # List or dict: convert to ndict
-            elif sc.isiterable(par_plug) and len(par_plug):
-                if isinstance(par_plug, dict) and 'type' in par_plug and 'name' not in par_plug:
-                    par_plug['name'] = par_plug['type'] # TODO: simplify/remove this
-                plugins = ss.ndict(par_plug)
-
-        else:  # Not provided directly or in pars
-            plugins = {}
-
-        # Check that we don't have two copies
-        for attr_key in attr_plugins.keys():
-            if plugins.get(attr_key):
-                errormsg = f'Sim was created with {attr_key} module, cannot create another through the pars dict.'
-                raise ValueError(errormsg)
-
-        plugins = sc.mergedicts(plugins, attr_plugins)
-
-        # Process
-        processed_plugins = sc.autolist()
-        for plugin in plugins.values():
-
-            if not isinstance(plugin, plugin_class):
-
-                if isinstance(plugin, dict):
-                    ptype = (plugin.get('type') or plugin.get('name') or '').lower()
-                    name = plugin.get('name') or ptype
-                    if ptype in known_plugins:
-                        # Make an instance of the requested plugin
-                        plugin_pars = {k: v for k, v in plugin.items() if k not in ['type', 'name']}
-                        pclass = known_plugins[ptype]
-                        plugin = pclass(name=name, pars=plugin_pars) # TODO: does this handle par_dists, etc?
-                    else:
-                        errormsg = (f'Could not convert {plugin} to an instance of class {plugin_name}.'
-                                    f'Try specifying it directly rather than as a dictionary.')
-                        raise ValueError(errormsg)
-                else:
-                    errormsg = (
-                        f'{plugin_name.capitalize()} must be provided as either class instances or dictionaries with a '
-                        f'"name" key corresponding to one of these known subclasses: {known_plugins}.')
-                    raise ValueError(errormsg)
-
-            processed_plugins += plugin
-
-        return processed_plugins
-
     def init_demographics(self):
         """ Initialize demographics """
 
         # Demographics can be provided via sim.demographics or sim.pars - this methods reconciles them
-        demographics = self.convert_plugins(ss.BaseDemographics, plugin_name='demographics')
+        demographics = self.demographics.values()
 
         # We also allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
         if self.pars.birth_rate is not None:
             births = ss.Births(pars={'birth_rate': self.pars.birth_rate})
-            demographics += births
+            demographics.append(births)
         if self.pars.death_rate is not None:
             background_deaths = ss.Deaths(pars={'death_rate': self.pars.death_rate})
-            demographics += background_deaths
+            demographics.append(background_deaths)
 
         # Iterate over demographic modules and initialize them
         for dem_mod in demographics:
@@ -352,8 +280,8 @@ class Sim(sc.prettyobj):
     def init_diseases(self):
         """ Initialize diseases """
 
-        # Diseases can be provided in sim.demographics or sim.pars
-        diseases = self.convert_plugins(ss.Disease, plugin_name='diseases')
+        # Diseases can be provided in sim.diseases or sim.pars.diseases
+        diseases = self.diseases.values()
 
         # Interate over diseases and initialize them
         for disease in diseases:
@@ -378,7 +306,7 @@ class Sim(sc.prettyobj):
     def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
 
-        processed_networks = self.convert_plugins(ss.Network, plugin_name='networks')
+        processed_networks = self.networks.values()
 
         # Now store the networks in a Networks object, which also allows for connectors between networks
         if not isinstance(processed_networks, ss.Networks):
@@ -390,7 +318,7 @@ class Sim(sc.prettyobj):
     def init_interventions(self):
         """ Initialize and validate the interventions """
 
-        interventions = self.convert_plugins(ss.Intervention, plugin_name='interventions')
+        interventions = self.interventions.values()
 
         # Translate the intervention specs into actual interventions
         for i, intervention in enumerate(interventions):
@@ -968,7 +896,7 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
         ss.demo() # Run, plot, and show results
         ss.demo(diseases='hiv', networks='mf') # Run with different defaults
     """
-    kw = sc.mergedicts(dict(pars=dict(diseases='sir', networks='random')), kwargs)
+    kw = sc.mergedicts(dict(diseases=ss.SIR(), networks=ss.RandomNet()), kwargs)
     sim = Sim(**kw)
     if run:
         sc.heading('Running demo:')

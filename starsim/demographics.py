@@ -147,10 +147,6 @@ class Deaths(BaseDemographics):
             units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
 
-        self.par_dists = ss.omergeleft(par_dists,
-            death_rate = ss.bernoulli
-        )
-
         # Process metadata. Defaults here are the labels used by UN data
         self.metadata = ss.omergeleft(metadata,
             data_cols = dict(year='Time', sex='Sex', age='AgeGrpStart', value='mx'),
@@ -160,7 +156,7 @@ class Deaths(BaseDemographics):
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.death_rate_data = self.standardize_death_data()
-        self.pars.death_rate = self.make_death_prob_fn
+        self.pars.death_rate = ss.bernoulli(self.make_death_prob_fn)
 
         return
 
@@ -267,11 +263,8 @@ class Pregnancy(BaseDemographics):
             units = 1e-3,          # Assumes fertility rates are per 1000. If using percentages, switch this to 1
         )
 
-        self.par_dists = ss.omergeleft(par_dists,
-            fertility_rate = ss.bernoulli,
-            maternal_death_rate = ss.bernoulli,
-            sex_ratio = ss.bernoulli
-        )
+        self.pars.maternal_death_rate = ss.bernoulli(self.pars.maternal_death_rate)
+        self.pars.sex_ratio = ss.bernoulli(self.pars.sex_ratio)
 
         # Process metadata. Defaults here are the labels used by UN data
         self.metadata = ss.omergeleft(metadata,
@@ -283,7 +276,7 @@ class Pregnancy(BaseDemographics):
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.fertility_rate_data = self.standardize_fertility_data()
-        self.pars.fertility_rate = self.make_fertility_prob_fn
+        self.pars.fertility_rate = ss.bernoulli(p=self.make_fertility_prob_fn)
 
         return
 

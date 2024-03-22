@@ -26,28 +26,30 @@ def test_default():
     return sim
 
 
-def make_sim_pars():
-    pars = dict(
-        n_agents = n_agents,
-        birth_rate = 20,
-        death_rate = 15,
-        networks = dict(
-            type = 'randomnet',
-            n_contacts = 4,
-        ),
-        diseases = dict(
-            type = 'sir',
-            dur_inf = 10,
-            beta = 0.1,
-        )
-    )
-    return pars
+def make_sim(par=None, val=None, label=None):
+    # Build a simulation
+    n_contacts = 4
+    sir_pars = dict(beta=0.1, dur_inf=ss.lognorm_o(mean=10, stdev=1))
+
+    if par == 'n_contacts':
+        n_contact = val
+    else:
+        sir_pars = ss.omergeleft(sir_pars, dict(par=val))
+
+    label = f'{par} {val}' if par and val and (not label) else 'None'
+
+    pop = ss.People(n_agents=n_agents) 
+    demog = [ss.Births(birth_rate=20), ss.Deaths(death_rate=15)]
+    nets = ss.RandomNet(n_contacts=n_contacts)
+    sir = ss.SIR(pars=sir_pars)
+
+    sim = ss.Sim(people=pop, demographics=demog, networks=nets, diseases=sir, label=label)
+    return sim
 
 
 def test_simple():
     """ Create, run, and plot a sim by passing a parameters dictionary """
-    pars = make_sim_pars()
-    sim = ss.Sim(pars)
+    sim = make_sim()
     sim.run()
     sim.plot()
     return sim
@@ -58,11 +60,11 @@ def test_sir_epi():
 
     # Define the parameters to vary
     par_effects = dict(
-        beta=[0.01, 0.99],
-        n_contacts=[1, 20],
-        init_prev=[0.1, 0.9],
-        dur_inf=[1, 8],
-        p_death=[.01, .1],
+        init_prev = [0.1, 0.9],
+        beta = [0.01, 0.99],
+        n_contacts = [1, 20],
+        dur_inf = [ss.lognorm_o(mean=1, stdev=1), ss.lognorm_o(mean=8, stdev=1)],
+        p_death = [.01, .1],
     )
 
     # Loop over each of the above parameters and make sure they affect the epi dynamics in the expected ways
@@ -71,19 +73,12 @@ def test_sir_epi():
         hi = par_val[1]
 
         # Make baseline pars
-        pars0 = make_sim_pars()
-        pars1 = make_sim_pars()
-
-        if par != 'n_contacts':
-            pars0['diseases'] = sc.mergedicts(pars0['diseases'], {par: lo})
-            pars1['diseases'] = sc.mergedicts(pars1['diseases'], {par: hi})
-        else:
-            pars0['networks'] = sc.mergedicts(pars0['networks'], {par: lo})
-            pars1['networks'] = sc.mergedicts(pars1['networks'], {par: hi})
+        s0 = make_sim({par:par_val[0]})
+        s1 = make_sim({par:par_val[1]})
 
         # Run the simulations and pull out the results
-        s0 = ss.Sim(pars0, label=f'{par} {par_val[0]}').run()
-        s1 = ss.Sim(pars1, label=f'{par} {par_val[1]}').run()
+        s0.run()
+        s1.run()
 
         # Check results
         if par == 'p_death':
@@ -104,13 +99,13 @@ def test_sir_epi():
 def test_simple_vax(do_plot=False):
     """ Create and run a sim with vaccination """
     ss.set_seed(1)
-    pars = make_sim_pars()
-    sim_base = ss.Sim(pars=pars)
+    sim_base = make_sim()
     sim_base.run()
 
     my_vax = ss.sir_vaccine(pars=dict(efficacy=0.5))
     intv = ss.routine_vx(start_year=2015, prob=0.2, product=my_vax)
-    sim_intv = ss.Sim(pars=pars, interventions=intv)
+    sim_intv = make_sim()
+    sim_intv.interventions += [intv]
     sim_intv.run()
 
     # Check plots
@@ -131,7 +126,8 @@ def test_components():
     """ Create, run, and plot a sim by assembling components """
     people = ss.People(n_agents=n_agents)
     network = ss.RandomNet(pars=dict(n_contacts=4))
-    sir = ss.SIR(pars=dict(dur_inf=10, beta=0.1))
+    sir = ss.SIR(pars=dict(beta=0.1))
+    sir.pars.dur_inf['mean'] = 10
     sim = ss.Sim(diseases=sir, people=people, networks=network)
     sim.run()
     sim.plot()
@@ -140,8 +136,7 @@ def test_components():
 
 def test_parallel():
     """ Test running two identical sims in parallel """
-    pars = make_sim_pars()
-    sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars, label='Sim2')])
+    sims = ss.MultiSim([make_sim(label='Sim1'), make_sim(label='Sim2')])
     sims.run(keep_people=True)
     s1, s2 = sims.sims
     assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)

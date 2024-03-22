@@ -11,7 +11,7 @@ n_agents = 250
 
 
 def test_dcp():
-    s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=n_agents)
+    s1 = ss.Sim(pars=dict(n_agents=n_agents), diseases=ss.SIR(), networks=ss.EmbeddingNet())
     s1.initialize()
     
     s2 = sc.dcp(s1)
@@ -28,7 +28,7 @@ def test_dcp():
 
 
 def test_dcp_until():
-    s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=n_agents)
+    s1 = ss.Sim(pars=dict(n_agents=n_agents), diseases=ss.SIR(), networks=ss.EmbeddingNet())
     s1.initialize()
 
     s1.run(until=5)

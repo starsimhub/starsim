@@ -162,7 +162,8 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.dist = dist
         self.name = name
         self.kwds = sc.dictobj(kwargs)
-        self.seed = seed # Usually determined once added to the container
+        self._seed = seed # Usually determined once added to the container
+        self.seed = None
         self.offset = offset
         self.module = module
         self.sim = sim
@@ -208,6 +209,13 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         s += f' state = {self.state}'
         string = sc.newlinejoin(s)
         print(string)
+        return
+
+    def __setitem__(self, key, value):
+        if key not in self.kwds:
+            raise Exception(f'Cannot set {key} for distribution of type {self.dist}.')
+        # Set a parameter value
+        self.kwds[key] = value
         return
     
     def __getattr__(self, attr):
@@ -288,7 +296,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             self.offset = str2int(unique_name) # Key step: hash the path to the distribution
         else:
             self.offset = self.offset or 0
-        self.seed = self.offset + (seed or self.seed or 0)
+        self.seed = self.offset + (seed or self._seed or 0)
         return
     
     def set(self, dist=None, **kwargs):
@@ -317,7 +325,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             
             # Create the actual distribution -- first the special cases of Bernoulli and delta
             if dist == 'bernoulli': # Special case, predefine the distribution here
-                dist = lambda p, size: self.rng.random(size) < p # 3x faster than using rng.binomial(1, p, size)
+                dist = lambda p, size, self=self: self.rng.random(size) < p # 3x faster than using rng.binomial(1, p, size)
             elif dist == 'delta': # Special case, predefine the distribution here
                 dist = lambda v, size: np.full(size, fill_value=v)
             else: # It's still a string, so try getting the function from the generator
@@ -342,7 +350,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             # If the parameter is callable, then call it
             if callable(val): 
                 size_par = uids if uids is not None else size
-                out = val(self.module, self.sim, size_par)
+                out = val(self.module, self.sim, size_par) # DJK, this needs to be UIDs, not slots!
                 val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
                 kwds[key] = val
             

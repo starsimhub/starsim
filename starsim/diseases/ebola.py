@@ -42,11 +42,10 @@ class Ebola(SIR):
             dur_dead2buried = ss.lognorm_o,
             dur_symp2rec    = ss.lognorm_o,
             dur_sev2rec     = ss.lognorm_o,
-            p_sev           = ss.bernoulli,
-            p_death         = ss.bernoulli,
-            p_safe_bury     = ss.bernoulli,
-            init_prev       = ss.bernoulli,
         )
+
+        pars.p_sev       = ss.bernoulli(pars.p_sev)
+        pars.p_safe_bury = ss.bernoulli(pars.p_safe_bury)
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
 
@@ -56,14 +55,11 @@ class Ebola(SIR):
             # SIR are added automatically, here we add E
             ss.State('exposed', bool, False),
             ss.State('severe', bool, False),
-            ss.State('recovered', bool, False),
             ss.State('buried', bool, False),
     
             # Timepoint states
             ss.State('ti_exposed', float, np.nan),
             ss.State('ti_severe', float, np.nan),
-            ss.State('ti_recovered', float, np.nan),
-            ss.State('ti_dead', float, np.nan),
             ss.State('ti_buried', float, np.nan),
         )
 

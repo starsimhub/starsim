@@ -523,10 +523,11 @@ class MFNet(SexualNetwork, DynamicNetwork):
 
         par_dists = ss.omergeleft(par_dists,
             duration      = ss.lognorm_o,
-            participation = ss.bernoulli,
             debut         = ss.normal,
             acts          = ss.poisson,
         )
+
+        pars.participation = ss.bernoulli(pars.participation)
 
         DynamicNetwork.__init__(self, key_dict=key_dict, **kwargs)
         SexualNetwork.__init__(self, pars, key_dict=key_dict, **kwargs)
@@ -610,11 +611,11 @@ class MSMNet(SexualNetwork, DynamicNetwork):
 
     def __init__(self, pars=None, key_dict=None, **kwargs):
         pars = ss.omergeleft(pars,
-            duration_dist = ss.lognorm_o(mean=15, stdev=15),
-            participation_dist = ss.bernoulli(p=0.1),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
-            debut_dist = ss.normal(loc=16, scale=2),
-            acts = ss.lognorm_o(mean=80, stdev=20),
-            rel_part_rates = 1.0,
+            duration_dist       = ss.lognorm_o(mean=15, stdev=15),
+            participation_dist  = ss.bernoulli(p=0.1),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
+            debut_dist          = ss.normal(loc=16, scale=2),
+            acts                = ss.lognorm_o(mean=80, stdev=20),
+            rel_part_rates      = 1.0,
         )
         DynamicNetwork.__init__(self, key_dict, **kwargs)
         SexualNetwork.__init__(self, pars, key_dict)
@@ -789,12 +790,12 @@ class HPVNet(MFNet):
 
         self.par_dists = ss.omergeleft(par_dists,
             duration      = ss.lognorm,
-            participation = ss.bernoulli,
             debut         = ss.norm,
             acts          = ss.lognorm,
-            cross_layer   = ss.bernoulli,
-            concurrency   = ss.bernoulli,
         )
+
+        self.pars.cross_layer   = ss.bernoulli(self.pars.cross_layer)
+        self.pars.concurrency   = ss.bernoulli(self.pars.concurrency)
 
         key_dict = dict(
             acts = ss_float_,

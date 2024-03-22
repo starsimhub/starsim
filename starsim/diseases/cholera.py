@@ -36,7 +36,6 @@ class Cholera(ss.Infection):
             half_sat_rate = 1000000,   # Infectious dose in water sufficient to produce infection in 50% of  exposed, from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
             shedding_rate = 10,    # Rate at which infectious people shed bacteria to the environment (per day), from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
             decay_rate = 0.033,    # Rate at which bacteria in the environment dies (per day), from Chao et al. and Mukandavire et al. citing https://pubmed.ncbi.nlm.nih.gov/8882180/
-            p_env_transmit = 0,    # Probability of environmental transmission - filled out later
         )
 
         par_dists = ss.omergeleft(par_dists,
@@ -44,11 +43,11 @@ class Cholera(ss.Infection):
             dur_asymp2rec  = ss.uniform,
             dur_symp2rec   = ss.lognorm_o,
             dur_symp2dead  = ss.lognorm_o,
-            init_prev      = ss.bernoulli,
-            p_death        = ss.bernoulli,
-            p_symp         = ss.bernoulli,
-            p_env_transmit = ss.bernoulli,
         )
+
+        pars.p_death        = ss.bernoulli(pars.p_death)
+        pars.p_symp         = ss.bernoulli(pars.p_symp)
+        pars.p_env_transmit = ss.bernoulli(0) # Probability of environmental transmission - filled out later
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
 

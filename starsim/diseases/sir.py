@@ -16,21 +16,17 @@ class SIR(ss.Infection):
     results.
     """
 
-    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
+    def __init__(self, pars=None, *args, **kwargs):
         pars = ss.omergeleft(pars,
-            dur_inf = 6,
+            dur_inf = ss.lognorm_o(mean=6, stdev=1),
             init_prev = 0.01,
             p_death = 0.01,
             beta = 0.5,
         )
 
-        par_dists = ss.omergeleft(par_dists,
-            dur_inf   = ss.lognorm_o,
-            init_prev = ss.bernoulli,
-            p_death   = ss.bernoulli,
-        )
+        pars.p_death = ss.bernoulli(p=pars.p_death)
 
-        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+        super().__init__(pars=pars, *args, **kwargs)
 
         self.add_states(
             ss.State('recovered', bool, False),

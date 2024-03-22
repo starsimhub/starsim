@@ -27,18 +27,13 @@ class HIV(ss.Infection):
             init_prev = 0.05,
             eff_condoms = 0.7,
             art_efficacy = 0.96,
-            death_prob = 0.05,
+            p_death = 0.05,
         )
 
-        par_dists = ss.omergeleft(par_dists,
-            init_prev  = ss.bernoulli,
-            death_prob = ss.bernoulli,
-        )
+        self.death_prob_data = sc.dcp(pars.p_death)
+        pars.p_death = ss.bernoulli(p=self.make_death_prob)
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
-        self.death_prob_data = sc.dcp(self.pars.death_prob)
-        self.pars.death_prob = self.make_death_prob
-
         return
 
     @staticmethod
@@ -56,7 +51,7 @@ class HIV(ss.Infection):
         self.rel_trans[sim.people.alive & self.infected & self.on_art] = 1 - self.pars['art_efficacy']
 
         can_die = ss.true(sim.people.alive & sim.people.hiv.infected)
-        hiv_deaths = self.pars.death_prob.filter(can_die)
+        hiv_deaths = self.pars.p_death.filter(can_die)
         
         sim.people.request_death(hiv_deaths)
         self.ti_dead[hiv_deaths] = sim.ti

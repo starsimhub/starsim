@@ -21,7 +21,7 @@ def test_sir():
     networks = ss.RandomNet(pars=network_pars)
 
     sir_pars = {
-        'dur_inf': ss.normal(loc=10),  # Override the default distribution
+        'dur_inf': ss.expon(scale=5),  # Override the default distribution
     }
     sir = ss.SIR(sir_pars)
 
@@ -29,10 +29,11 @@ def test_sir():
     sir.pars.beta = {'random': 0.1}
 
     # You can also change the parameters of the default lognormal distribution directly
-    sir.pars.dur_inf.kwds.loc = 5
+    #sir.pars.dur_inf.kwds.loc = 5
+    sir.pars.dur_inf['scale'] = 6
 
     # Or use a function, here a lambda that makes the mean for each agent equal to their age divided by 10
-    sir.pars.dur_inf.kwds.loc = lambda self, sim, uids: sim.people.age[uids] / 10
+    sir.pars.dur_inf['scale'] = lambda self, sim, uids: sim.people.age[uids] / 10
 
     sim = ss.Sim(people=ppl, diseases=sir, networks=networks)
     sim.run()
@@ -82,13 +83,13 @@ def test_ncd():
 
 def test_gavi():
     sims = sc.autolist()
-    for disease in ['cholera', 'measles', 'ebola']:
+    for disease in [ss.Cholera, ss.Measles, ss.Ebola]:
         pars = dict(
-            diseases = disease,
-            n_agents = n_agents,
-            networks = 'random',
+            diseases = disease(),
+            pars = dict(n_agents = n_agents),
+            networks = ss.RandomNet(),
         )
-        sim = ss.Sim(pars)
+        sim = ss.Sim(**pars)
         sim.run()
         sims += sim
     return sims

@@ -12,7 +12,7 @@ import pandas as pd
 # %% Helper functions
 
 # What functions are externally visible -- note, this gets populated in each section below
-__all__ = ['ndict', 'omerge', 'omergeleft', 'warn', 'unique', 'find_contacts', 'get_subclasses', 'all_subclasses']
+__all__ = ['ndict', 'omerge', 'omergeleft', 'warn', 'unique', 'find_contacts', 'get_subclasses', 'all_subclasses', 'sodict']
 
 
 class ndict(sc.objdict):
@@ -123,11 +123,19 @@ class ndict(sc.objdict):
             self.append(dict2)
         return self
 
+class sodict(sc.sc_odict.objdict):
+    def __setitem__(self, key, value):
+        if key in self.keys() and isinstance(self[key], ss.Dist) and self[key].dist == 'bernoulli':
+            if isinstance(value, ss.Dist) and value.dist != 'bernoulli':
+                raise Exception('Must be bernoulli!')
+            value = ss.bernoulli(value)
+        super().__setitem__(key, value)
+        return value
+
 
 def omerge(*args, **kwargs):
     """ Merge things into an objdict, using standard order """
-    return sc.objdict(sc.mergedicts(*args, **kwargs))
-
+    return sodict(sc.mergedicts(*args, **kwargs))
 
 def omergeleft(*args, **kwargs):
     """ Merge things into an odict, using opposite order to allow defaults to be supplied second """
@@ -140,7 +148,7 @@ def omergeleft(*args, **kwargs):
     else:
         errormsg = 'Expecting either two arguments, or one argument and kwargs; for any other arrangement, use ss.omerge()'
         raise ValueError(errormsg)
-    return sc.objdict(sc.mergedicts(default, new))
+    return sodict(sc.mergedicts(default, new))
 
 
 def warn(msg, category=None, verbose=None, die=None):

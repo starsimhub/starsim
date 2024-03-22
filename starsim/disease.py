@@ -15,8 +15,16 @@ __all__ = ['Disease', 'Infection', 'InfectionLog']
 class Disease(ss.Module):
     """ Base module class for diseases """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, pars, *args, **kwargs):
+
+        pars = ss.omergeleft(pars,
+            # Initial conditions
+            init_prev = 0.005,
+        )
+
+        pars.init_prev = ss.bernoulli(pars.init_prev)
+
+        super().__init__(pars, *args, **kwargs)
         self.results = ss.Results(self.name)
         self.log = InfectionLog()  # See below for definition
         return
@@ -71,15 +79,19 @@ class Disease(ss.Module):
 
     def set_initial_states(self, sim):
         """
-        Set initial values for states
-
-        This could involve passing in a full set of initial conditions,
+        Set initial values for states. This could involve passing in a full set of initial conditions,
         or using init_prev, or other. Note that this is different to initialization of the State objects
         i.e., creating their dynamic array, linking them to a People instance. That should have already
-        taken place by the time this method is called. This method is about supplying initial values
-        for the states (e.g., seeding initial infections)
+        taken place by the time this method is called.
         """
-        pass
+        if self.pars.init_prev is None:
+            return
+
+        alive_uids = ss.true(sim.people.alive)  # Maybe just sim.people.uid?
+        initial_cases = self.pars.init_prev.filter(alive_uids)
+        self.set_prognoses(sim, initial_cases)  # TODO: sentinel value to indicate seeds?
+        return
+
 
     def init_results(self, sim):
         """
@@ -200,21 +212,6 @@ class Infection(Disease):
         Transmission comes from infectious people; prevalence estimates may include infected people who don't transmit
         """
         return self.infected
-
-    def set_initial_states(self, sim):
-        """
-        Set initial values for states. This could involve passing in a full set of initial conditions,
-        or using init_prev, or other. Note that this is different to initialization of the State objects
-        i.e., creating their dynamic array, linking them to a People instance. That should have already
-        taken place by the time this method is called.
-        """
-        if self.pars.init_prev is None:
-            return
-
-        alive_uids = ss.true(sim.people.alive)  # Maybe just sim.people.uid?
-        initial_cases = self.pars.init_prev.filter(alive_uids)
-        self.set_prognoses(sim, initial_cases)  # TODO: sentinel value to indicate seeds?
-        return
 
     def init_results(self, sim):
         """
