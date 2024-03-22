@@ -10,7 +10,7 @@ __all__ = ['HIV', 'ART', 'CD4_analyzer']
 
 class HIV(ss.Infection):
 
-    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
+    def __init__(self, pars=None, *args, **kwargs):
 
         # States
         self.add_states(
@@ -33,7 +33,7 @@ class HIV(ss.Infection):
         self.death_prob_data = sc.dcp(pars.p_death)
         pars.p_death = ss.bernoulli(p=self.make_death_prob)
 
-        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+        super().__init__(pars=pars, *args, **kwargs)
         return
 
     @staticmethod

@@ -9,7 +9,7 @@ __all__ = ['Gonorrhea']
 
 class Gonorrhea(ss.Infection):
 
-    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
+    def __init__(self, pars=None, *args, **kwargs):
 
         # States additional to the default disease states (see base class)
         # Additional states dependent on parameter values, e.g. self.p_symp?
@@ -28,14 +28,10 @@ class Gonorrhea(ss.Infection):
             init_prev = 0.1,
         )
 
-        par_dists = ss.omergeleft(par_dists,
-            dur_inf_in_days = ss.lognorm_o,
-        )
-
         pars.p_symp  = ss.bernoulli(pars.p_symp)
         pars.p_clear = ss.bernoulli(pars.p_clear)
 
-        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+        super().__init__(pars=pars, *args, **kwargs)
         return
 
     def init_results(self, sim):

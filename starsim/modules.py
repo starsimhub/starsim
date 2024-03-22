@@ -10,9 +10,8 @@ __all__ = ['Module']
 
 class Module:#(sc.prettyobj): # TODO: replace with sc.qprettyobj
 
-    def __init__(self, pars=None, par_dists=None, name=None, label=None, requires=None, **kwargs):
+    def __init__(self, pars=None, name=None, label=None, requires=None, **kwargs):
         self.pars = ss.omerge(pars, kwargs)
-        self.par_dists = ss.omerge(par_dists)
         self.name = name if (name is not None) else self.__class__.__name__.lower() # Default name is the class name
         self.label = label if (label is not None) else self.name
         self.requires = sc.mergelists(requires)
@@ -49,39 +48,6 @@ class Module:#(sc.prettyobj): # TODO: replace with sc.qprettyobj
         This method is called once, as part of initializing a Sim
         """
         self.check_requires(sim)
-
-        # First, convert any scalar pars to distributions if required
-        for key in self.par_dists.keys():
-            par = self.pars[key]
-            if isinstance(par, ss.Dist):
-                continue
-
-            # Handle arguments
-            args = ()
-            kwargs = {}
-            if isinstance(par, dict):
-                kwargs = par
-            elif isinstance(par, (tuple, list)):
-                args = par
-            else:
-                args = [par]
-
-            # Make the distribution
-            par_dist = self.par_dists[key]
-            if isinstance(par_dist, str):
-                try:
-                    par_dist = getattr(ss.dists, par_dist)
-                except Exception as E:
-                    errormsg = f'"{par_dist}" is not a valid distribution name; valid distributions are: {sc.newlinejoin(ss.dists.dist_list)}'
-                    raise ValueError(errormsg) from E
-            
-            if callable(par_dist):
-                par_dist = par_dist(*args, **kwargs)
-            
-            if not isinstance(par_dist, ss.Dist):
-                par_dist = ss.Dist(dist=par_dist, *args, **kwargs)
-            
-            self.pars[key] = par_dist
 
         # Initialize distributions in pars # TODO: refactor
         for key, value in self.pars.items():

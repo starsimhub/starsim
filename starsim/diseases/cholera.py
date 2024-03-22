@@ -14,7 +14,7 @@ class Cholera(ss.Infection):
     """
     Cholera
     """
-    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
+    def __init__(self, pars=None, *args, **kwargs):
         """ Initialize with parameters """
 
         pars = ss.omergeleft(pars,
@@ -38,18 +38,11 @@ class Cholera(ss.Infection):
             decay_rate = 0.033,    # Rate at which bacteria in the environment dies (per day), from Chao et al. and Mukandavire et al. citing https://pubmed.ncbi.nlm.nih.gov/8882180/
         )
 
-        par_dists = ss.omergeleft(par_dists,
-            dur_exp2inf    = ss.lognorm_o,
-            dur_asymp2rec  = ss.uniform,
-            dur_symp2rec   = ss.lognorm_o,
-            dur_symp2dead  = ss.lognorm_o,
-        )
-
         pars.p_death        = ss.bernoulli(pars.p_death)
         pars.p_symp         = ss.bernoulli(pars.p_symp)
         pars.p_env_transmit = ss.bernoulli(0) # Probability of environmental transmission - filled out later
 
-        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+        super().__init__(pars=pars, *args, **kwargs)
 
         # Boolean states
         

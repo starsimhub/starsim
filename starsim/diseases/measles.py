@@ -13,7 +13,7 @@ __all__ = ['Measles']
 
 class Measles(SIR):
 
-    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
+    def __init__(self, pars=None, *args, **kwargs):
         """ Initialize with parameters """
 
         pars = ss.omergeleft(pars,
@@ -27,7 +27,7 @@ class Measles(SIR):
             beta = None,
         )
 
-        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+        super().__init__(pars=pars, *args, **kwargs)
 
         # SIR are added automatically, here we add E
         self.add_states(

@@ -422,11 +422,11 @@ class StaticNet(Network):
 class RandomNet(DynamicNetwork):
     """ Random connectivity between agents """
 
-    def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
+    def __init__(self, pars=None, key_dict=None, **kwargs):
         """ Initialize """
         pars = ss.omerge({
-            'n_contacts': 10,  # Distribution or int. If int, interpreted as the mean of the dist listed in par_dists
-            'dur': 1,
+            'n_contacts': ss.poisson(10),
+            'dur': ss.delta(1),
         }, pars)
 
         DynamicNetwork.__init__(self, pars=pars, key_dict=key_dict, **kwargs)
@@ -512,27 +512,19 @@ class MFNet(SexualNetwork, DynamicNetwork):
     relationship durations.
     """
 
-    def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
+    def __init__(self, pars=None, key_dict=None, **kwargs):
         pars = ss.omergeleft(pars,
-            duration = 15,  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+            duration = ss.lognorm_o(mean=15, stdev=1), # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             participation = 0.9,  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
-            debut = 16,  # Age of debut can vary by using callable parameter values
-            acts = 80,
+            debut = ss.normal(loc=16, scale=1), # Age of debut can vary by using callable parameter values
+            acts = ss.poisson(lam=80),
             rel_part_rates = 1.0,
-        )
-
-        par_dists = ss.omergeleft(par_dists,
-            duration      = ss.lognorm_o,
-            debut         = ss.normal,
-            acts          = ss.poisson,
         )
 
         pars.participation = ss.bernoulli(pars.participation)
 
         DynamicNetwork.__init__(self, key_dict=key_dict, **kwargs)
         SexualNetwork.__init__(self, pars, key_dict=key_dict, **kwargs)
-
-        self.par_dists = par_dists
 
         return
 
@@ -775,23 +767,12 @@ class MaternalNet(Network):
 
 
 class HPVNet(MFNet):
-    def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
+    def __init__(self, pars=None, key_dict=None, **kwargs):
         pars = ss.omergeleft(pars,
-            duration = 15,
-            participation = 0.9,
-            debut = 16,
-            acts = 80,
-            rel_part_rates = 1.0,
             cross_layer = 0.05,
             concurrency = 0.05,
             condoms = 0.2,
             mixing = None,
-        )
-
-        self.par_dists = ss.omergeleft(par_dists,
-            duration      = ss.lognorm,
-            debut         = ss.norm,
-            acts          = ss.lognorm,
         )
 
         self.pars.cross_layer   = ss.bernoulli(self.pars.cross_layer)

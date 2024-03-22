@@ -13,20 +13,20 @@ __all__ = ['Ebola']
 
 class Ebola(SIR):
 
-    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
+    def __init__(self, pars=None, *args, **kwargs):
         """ Initialize with parameters """
 
         pars = ss.omergeleft(pars,
             # Natural history parameters, all specified in days
-            dur_exp2symp = 12.7, # Add source
-            dur_symp2sev =    6, # Add source
-            dur_sev2dead =  1.5, # Add source
-            dur_dead2buried = 2, # Add source
-            dur_symp2rec =   10, # Add source
-            dur_sev2rec =  10.4, # Add source
-            p_sev =         0.7, # Add source
-            p_death =      0.55, # Add source
-            p_safe_bury =  0.25, # Probability of a safe burial - should be linked to diagnoses
+            dur_exp2symp    = ss.lognorm_o(mean=12.7, stdev=1), # Add source
+            dur_symp2sev    = ss.lognorm_o(mean=6, stdev=1),    # Add source
+            dur_sev2dead    = ss.lognorm_o(mean=1.5, stdev=1),  # Add source
+            dur_dead2buried = ss.lognorm_o(mean=2, stdev=1),    # Add source
+            dur_symp2rec    = ss.lognorm_o(mean=10, stdev=1),   # Add source
+            dur_sev2rec     = ss.lognorm_o(mean=10.4, stdev=1), # Add source
+            p_sev           = 0.7,  # Add source
+            p_death         = 0.55, # Add source
+            p_safe_bury     = 0.25, # Probability of a safe burial - should be linked to diagnoses
 
             # Initial conditions and beta
             init_prev = 0.005,
@@ -35,19 +35,10 @@ class Ebola(SIR):
             unburied_factor = 2.1,
         )
 
-        par_dists = ss.omergeleft(par_dists,
-            dur_exp2symp    = ss.lognorm_o,
-            dur_symp2sev    = ss.lognorm_o,
-            dur_sev2dead    = ss.lognorm_o,
-            dur_dead2buried = ss.lognorm_o,
-            dur_symp2rec    = ss.lognorm_o,
-            dur_sev2rec     = ss.lognorm_o,
-        )
-
         pars.p_sev       = ss.bernoulli(pars.p_sev)
         pars.p_safe_bury = ss.bernoulli(pars.p_safe_bury)
 
-        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+        super().__init__(pars=pars, *args, **kwargs)
 
         # Boolean states
         

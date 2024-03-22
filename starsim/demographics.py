@@ -109,7 +109,7 @@ class Births(BaseDemographics):
 
 
 class Deaths(BaseDemographics):
-    def __init__(self, pars=None, par_dists=None, metadata=None, **kwargs):
+    def __init__(self, pars=None, metadata=None, **kwargs):
         """
         Configure disease-independent "background" deaths.
 
@@ -132,8 +132,6 @@ class Deaths(BaseDemographics):
                 rel_death: constant used to scale all death rates
                 death_rate: float, dict, or pandas dataframe/series containing mortality data
                 units: units for death rates (see in-line comment on par dict below)
-
-            par_dists: dict
 
             metadata: data about the data contained within the data input.
                 "data_cols" is is a dictionary mapping standard keys, like "year" to the
@@ -238,7 +236,7 @@ class Deaths(BaseDemographics):
 
 class Pregnancy(BaseDemographics):
 
-    def __init__(self, pars=None, par_dists=None, metadata=None, **kwargs):
+    def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__(pars, **kwargs)
 
         # Other, e.g. postpartum, on contraception...

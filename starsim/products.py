@@ -140,10 +140,9 @@ class Tx(Product):
 
 class Vx(Product):
     """ Vaccine product """
-    def __init__(self, diseases=None, pars=None, par_dists=None, *args, **kwargs):
+    def __init__(self, diseases=None, pars=None, *args, **kwargs):
         pars = ss.omerge({}, pars)
-        par_dists = ss.omerge({}, par_dists)
-        super().__init__(pars, par_dists, *args, **kwargs)
+        super().__init__(pars, *args, **kwargs)
         self.diseases = sc.tolist(diseases)
 
     def administer(self, people, uids):
