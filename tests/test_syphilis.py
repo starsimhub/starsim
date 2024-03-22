@@ -7,6 +7,7 @@ import numpy as np
 import starsim as ss
 import pandas as pd
 import matplotlib.pyplot as plt
+import pytest
 
 quick_run = True
 
