@@ -355,8 +355,13 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             
         return dist, kwds
     
-    def rvs(self, size=1, uids=None):
-        """ Main method for getting random variables """
+    def rvs(self, n=1):
+        """
+        Get random variables
+        
+        Args:
+            n (int/tuple/arr): if an int or tuple, return this many random variables; if an array, treat as UIDs
+        """
         
         # Check for readiness
         if not self.initialized:
@@ -365,14 +370,20 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             raise DistNotReadyError(self)
         
         # Shortcut if nothing to return
-        if not np.isscalar(size):
+        if np.isscalar(n) or isinstance(n, tuple):  # If passing a non-scalar size, interpret as dimension rather than UIDs iff a tuple
+            size = n
+            uids = None
+        else:
+            uids = np.asarray(n)
+            size = None
+                
             errormsg = f'Expecting a scalar size, not {size}; multidimensional output not supported and for UIDs, use urvs() instead'
             raise ValueError(errormsg)
         if size == 0:
             return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
             
         # Actually get the random numbers
-        dist, kwds = self.make_dist(size, uids)
+        dist, kwds = self.make_dist(n, uids)
         if self.method == 'numpy':
             if isinstance(dist, str): # Main use case: get the distribution
                 dist = getattr(self.rng, dist)
