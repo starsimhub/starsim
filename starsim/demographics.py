@@ -308,9 +308,9 @@ class Pregnancy(BaseDemographics):
 
             # Process age data
             age_bins = df[age_label].unique()
-            age_bins = np.append(age_bins, 1000)
+            age_bins = np.append(age_bins, age_bins[-1]+1) # WARNING: Assumes one year age bins! TODO: More robust handling.
             age_inds = np.digitize(sim.people.age[uids], age_bins) - 1
-            age_inds[age_inds >= len(age_bins)-2] = -1  # This ensures women outside the data range will get a value of 0
+            age_inds[age_inds == len(age_bins)-1] = -1  # This ensures women outside the data range will get a value of 0
 
             # Adjust rates: rates are based on the entire population, but we need to remove
             # anyone already pregnant and then inflate the rates for the remainder
