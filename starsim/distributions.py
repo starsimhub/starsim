@@ -178,7 +178,7 @@ class ScipyDistribution():
                                 pars_slots[repeat_slot_u] = kwargs_pname # Take first instance of each
                                 kwargs[pname] = pars_slots
 
-                        vals = self.rvs_fix_bernoulli(*args, **kwargs)
+                        vals = self.rvs_crn(*args, **kwargs)
                         repeat_slot_vals[cur_inds] = vals[repeat_slot_u]
                         todo_inds = np.where(np.isnan(repeat_slot_vals))[0]
 
