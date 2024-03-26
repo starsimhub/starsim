@@ -33,11 +33,11 @@ class ScipyDistribution():
                 self.context = context
                 return
 
-            def rvs_fix_bernoulli(self, *args, **kwargs):
-                # Bernoulli/binomial hack
-                # 0 in binomial (bernoulli) doesn't call rand, which throws off CRN!
+            def rvs_crn(self, *args, **kwargs):
+                # Bernoulli/binomial and Poisson workarounds
+                # p=0 in binomial (bernoulli) and lam=0 in Poisson do not use random numbers, which throws off CRN
                 # Solution 1: Replace 0 with eps
-                # Solution 2: Replace p where 0 with any non-zero value (e.g. eps), then revert vals back to 0
+                # Solution 2: Replace p (lam) where 0 with any non-zero value (e.g. eps), then revert vals back to 0
                 # --> Solution here is BOTH 1 and 2
                 if options.multirng and isinstance(self, bernoulli_gen) and ('p' in kwargs) and not np.isscalar(kwargs['p']):
                     inds = np.where(kwargs['p']==0)[0]
@@ -46,7 +46,16 @@ class ScipyDistribution():
                     # Actually sample the random values
                     vals = super().rvs(*args, **kwargs)
 
-                    # Complete the Bernoulli/binomial hack
+                    # Complete the Bernoulli/binomial
+                    vals[inds] = 0
+                elif options.multirng and isinstance(self, poisson_gen) and ('lam' in kwargs) and not np.isscalar(kwargs['lam']):
+                    inds = np.where(kwargs['lam']==0)[0]
+                    kwargs['lam'][inds] = np.finfo(float).eps
+
+                    # Actually sample the random values
+                    vals = super().rvs(*args, **kwargs)
+
+                    # Complete the Poisson fix
                     vals[inds] = 0
                 else:
                     # Straightforward call to rvs
@@ -133,7 +142,7 @@ class ScipyDistribution():
                     raise ss.NotReadyException(self.random_state.name)
 
                 # Get random vals, accounting for inconsistencies in binomial draws
-                vals = self.rvs_fix_bernoulli(*args, **kwargs)
+                vals = self.rvs_crn(*args, **kwargs)
 
                 # Again if multirng, mark the generator as not ready (needs to be jumped)
                 if options.multirng:
