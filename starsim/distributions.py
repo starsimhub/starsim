@@ -11,7 +11,7 @@ from starsim.random import SingleRNG, MultiRNG
 from starsim import options
 from scipy.stats import (bernoulli, expon, lognorm, norm, poisson, randint, rv_discrete, 
                          uniform, rv_histogram, weibull_min)
-from scipy.stats._discrete_distns import bernoulli_gen # TODO: can we remove this?
+from scipy.stats._discrete_distns import bernoulli_gen, poisson_gen # TODO: can we remove this?
 
 
 __all__ = ['ScipyDistribution', 'ScipyHistogram']
