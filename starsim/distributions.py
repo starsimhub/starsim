@@ -4,6 +4,7 @@ Define random-number-safe distributions.
 
 import numpy as np
 import sciris as sc
+import scipy.stats as sps
 import pylab as pl
 
 __all__ = ['find_dists', 'dist_list', 'Dists', 'Dist']
@@ -298,74 +299,81 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.kwds = sc.mergedicts(self.kwds, kwargs)
         return
     
-    def default_rand(self, size):
+    def rand(self, size):
         """ Return default random numbers """
         return self.rng.random(size=size)
     
-    # def make_dist(self, size, uids=None):
-    #     """ Ensure the supplied dist and parameters are valid, and initialize them; called automatically """
-    #     dist = self.dist # The name of the distribution (a string, usually)
-    #     kwds = self.kwds.copy() # The actual keywords; shallow copy, modified below for special cases
+    def make_dist(self, size, uids=None):
+        """ Ensure the supplied dist and parameters are valid, and initialize them; called automatically """
+        dist = self.dist # The name of the distribution (a string, usually)
+        kwds = self.kwds.copy() # The actual keywords; shallow copy, modified below for special cases
         
-    #     # Main use case: handle strings, including special cases
-    #     if isinstance(dist, str):
+        # Main use case: handle strings, including special cases
+        if isinstance(dist, str):
             
-    #         # Handle lognormal distributions
-    #         if dist == 'lognorm_o': # Convert parameters for a lognormal
-    #             kwds['mean'], kwds['sigma'] = lognorm_convert(kwds.pop('mean'), kwds.pop('stdev'))
-    #             dist = 'lognormal'
-    #         elif dist == 'lognorm_u':
-    #             kwds['mean'] = kwds.pop('loc') # Rename parameters
-    #             kwds['sigma'] = kwds.pop('scale')
-    #             dist = 'lognormal' # For the underlying distribution
+            # Handle lognormal distributions
+            if dist == 'lognorm_o': # Convert parameters for a lognormal
+                kwds['mean'], kwds['sigma'] = lognorm_convert(kwds.pop('mean'), kwds.pop('stdev'))
+                dist = 'lognormal'
+            elif dist == 'lognorm_u':
+                kwds['mean'] = kwds.pop('loc') # Rename parameters
+                kwds['sigma'] = kwds.pop('scale')
+                dist = 'lognormal' # For the underlying distribution
             
-    #         # Create the actual distribution -- first the special cases of Bernoulli and delta
-    #         if dist == 'bernoulli': # Special case, predefine the distribution here
-    #             dist = lambda p, size: self.rng.random(size) < p # 3x faster than using rng.binomial(1, p, size)
-    #         elif dist == 'delta': # Special case, predefine the distribution here
-    #             dist = lambda v, size: np.full(size, fill_value=v)
-    #         else: # It's still a string, so try getting the function from the generator
-    #             try:
-    #                 dist = getattr(self.rng, dist) # Main use case: replace the string with the actual distribution
-    #             except Exception as E:
-    #                 errormsg = f'Could not interpret "{dist}", are you sure this is a valid distribution? (i.e., an attribute of np.random.default_rng())'
-    #                 raise ValueError(errormsg) from E
+            # Create the actual distribution -- first the special cases of Bernoulli and delta
+            if dist == 'bernoulli': # Special case, predefine the distribution here
+                dist = lambda p, size: self.rng.random(size) < p # 3x faster than using rng.binomial(1, p, size)
+            elif dist == 'delta': # Special case, predefine the distribution here
+                dist = lambda v, size: np.full(size, fill_value=v)
+            else: # It's still a string, so try getting the function from the generator
+                try:
+                    dist = getattr(self.rng, dist) # Main use case: replace the string with the actual distribution
+                except Exception as E:
+                    errormsg = f'Could not interpret "{dist}", are you sure this is a valid distribution? (i.e., an attribute of np.random.default_rng())'
+                    raise ValueError(errormsg) from E
         
-    #     # It wasn't a string, so assume it's a SciPy distribution
-    #     else:
-    #         self.method = 'scipy' if callable(dist) else 'frozen' # Need to handle regular and frozen distributions differently
-    #         if hasattr(dist, 'random_state'): # For SciPy distributions # TODO: Check if safe with non-frozen (probably not?)
-    #             dist.random_state = self.rng # Override the default random state with the correct one
-    #         else:
-    #             errormsg = f'Unknown distribution {type(dist)}: must be string or scipy.stats distribution, or another distribution with a random_state attribute'
-    #             raise TypeError(errormsg)
+        # It wasn't a string, so assume it's a SciPy distribution
+        else:
+            self.method = 'scipy' if callable(dist) else 'frozen' # Need to handle regular and frozen distributions differently
+            if hasattr(dist, 'random_state'): # For SciPy distributions # TODO: Check if safe with non-frozen (probably not?)
+                dist.random_state = self.rng # Override the default random state with the correct one
+            else:
+                errormsg = f'Unknown distribution {type(dist)}: must be string or scipy.stats distribution, or another distribution with a random_state attribute'
+                raise TypeError(errormsg)
         
-    #     # Now that we have the dist function, process the keywords for callable and array inputs
-    #     for key,val in kwds.items():
+        # Now that we have the dist function, process the keywords for callable and array inputs
+        self.has_array_pars = False
+        for key,val in kwds.items():
             
-    #         # If the parameter is callable, then call it
-    #         if callable(val): 
-    #             size_par = uids if uids is not None else size
-    #             out = val(self.module, self.sim, size_par)
-    #             val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
-    #             kwds[key] = val
+            # If the parameter is callable, then call it
+            if callable(val): 
+                size_par = uids if uids is not None else size
+                out = val(self.module, self.sim, size_par)
+                val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
+                kwds[key] = val
             
-    #         # If it's iterable, check the size and pad with zeros if it's the wrong shape
-    #         if np.iterable(val) and uids is not None and (len(val) == len(uids)) and self.dist != 'choice':
-    #             resized = np.zeros(size, dtype=val.dtype) # TODO: fix, problem from when there happen to be uid entries, but it's not slots
-    #             resized[uids] = val[:len(uids)] # TODO: check if slicing is ok here
-    #             val = resized
-    #             kwds[key] = val # Replace 
+            # If it's iterable, check the size and pad with zeros if it's the wrong shape
+            if np.iterable(val) and uids is not None and (len(val) == len(uids)) and self.dist != 'choice': # TODO: figure out logic
+                self.has_array_pars = True
+            # else:
+            #     array
+            #     resized = np.zeros(size, dtype=val.dtype) # TODO: fix, problem from when there happen to be uid entries, but it's not slots
+            #     resized[uids] = val[:len(uids)] # TODO: check if slicing is ok here
+            #     val = resized
+            #     kwds[key] = val # Replace 
             
-    #     return dist, kwds
+        return dist, kwds
     
-    def rvs(self, n=1):
+    def rvs(self, n=1, size=None): # TODO: fix!!!
         """
         Get random variables
         
         Args:
             n (int/tuple/arr): if an int or tuple, return this many random variables; if an array, treat as UIDs
         """
+        if size is not None:
+            n = size
+            size = None
         
         # Check for readiness
         if not self.initialized:
@@ -373,51 +381,69 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         if not self.ready and self.strict:
             raise DistNotReadyError(self)
         
-        # Shortcut if nothing to return
+        # Figure out size, UIDs, and slots
         if np.isscalar(n) or isinstance(n, tuple):  # If passing a non-scalar size, interpret as dimension rather than UIDs iff a tuple
-            size = n
             uids = None
-            if size == 0:
-                return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
+            slots = None
+            size = n
         else:
             uids = np.asarray(n)
-            size = None
+            slots = np.asarray(self.slots[uids]) # TODO: check if asarray needed
+            size = slots.max() + 1
+        
+        # Check if we can return
+        if size == 0:
+            return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
         
         # Check if any keywords are callable
-        
-            
-        # Actually get the random numbers
         dist, kwds = self.make_dist(n, uids)
-        if self.method == 'numpy':
-            if isinstance(dist, str): # Main use case: get the distribution
-                dist = getattr(self.rng, dist)
-            rvs = dist(size=size, **kwds)
-        elif self.method == 'scipy':
-            rvs = dist.rvs(size=size, **kwds)
-        elif self.method == 'frozen': 
-            rvs = dist.rvs(size=size) # Frozen distributions don't take keyword arguments
+        
+        # Actually get the random numbers
+        if not self.has_array_pars:
+            if self.method == 'numpy':
+                if isinstance(dist, str): # Main use case: get the distribution
+                    dist = getattr(self.rng, dist)
+                rvs = dist(size=size, **kwds)
+            elif self.method == 'scipy':
+                rvs = dist.rvs(size=size, **kwds)
+            elif self.method == 'frozen': 
+                rvs = dist.rvs(size=size) # Frozen distributions don't take keyword arguments
+            else:
+                raise ValueError(f'Unknown method: {self.method}') # Should not happen
+            if slots is not None:
+                rvs = rvs[slots]
         else:
-            raise ValueError(f'Unknown method: {self.method}') # Should not happen
+            rands = self.rand(size)[slots]
+            if self.method == 'numpy':
+                spdist = getattr(sps, dist)(**kwds) # TODO: make it work better
+            elif self.method == 'scipy':
+                spdist = dist(**kwds)
+            elif self.method == 'frozen': 
+                spdist = dist
+            else:
+                raise ValueError(f'Unknown method: {self.method}') # Should not happen
+            
+            rvs = spdist.ppf(rands) # Use the PPF to convert the quantiles to the actual random variates
         
         # Tidy up
         self.called += 1
         if self.strict:
             self.ready = False
-        if uids is not None:
-            rvs = rvs[uids]
+        # if uids is not None:
+        #     rvs = rvs[uids]
             
         return rvs
     
     def urvs(self, uids):
         """ Like rvs(), but get based on a list of unique identifiers (UIDs or slots) instead """
-        uids = np.asarray(uids)
-        if not len(uids):
-            return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
-        if self.slots is not None: # Use slots if available
-            uids = self.slots[uids]
-        maxval = uids.max() + 1 # Since UIDs are inclusive
-        urvs = self.rvs(size=maxval, uids=uids)
-        return urvs
+        return self.rvs(n=uids) # TODO: TEMP
+        # uids = np.asarray(uids)
+        # if not len(uids):
+        #     return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
+        
+        # maxval = uids.max() + 1 # Since UIDs are inclusive
+        # urvs = self.rvs(n=uids)
+        # return urvs
 
     def filter(self, uids, **kwargs): # TODO: should this only be valid for Bernoulli distribution types?
         """ Filter UIDs by a binomial array """
@@ -444,25 +470,32 @@ dist_list = ['random', 'uniform', 'normal', 'lognorm_o', 'lognorm_u', 'expon',
 __all__ += dist_list
 
 
-class random(Dist):
+# class random(Dist):
+#     """ Random distribution, values on interval (0,1) """
+#     def __init__(self, **kwargs):
+#         super().__init__(**kwargs)
+#         return
+    
+#     def _rvs(self, **kwargs):
+#         return self.rng.random(**kwargs)
+
+
+# class uniform(Dist):
+#     """ Uniform distribution, values on interval (low, high) """
+#     def __init__(self, low=0.0, high=1.0, **kwargs):
+#         super().__init__(low=low, high=high, **kwargs)
+#         return
+    
+#     def _rvs(self, **kwargs):
+#         return self.rng.uniform(**kwargs) + self.kwds.low
+
+def random(**kwargs):
     """ Random distribution, values on interval (0,1) """
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        return
-    
-    def _rvs(self, **kwargs):
-        return self.rng.random(**kwargs)
+    return Dist(dist='random', **kwargs)
 
-
-class uniform(Dist):
+def uniform(low=0.0, high=1.0, **kwargs):
     """ Uniform distribution, values on interval (low, high) """
-    def __init__(self, low=0.0, high=1.0, **kwargs):
-        super().__init__(low=low, high=high, **kwargs)
-        return
-    
-    def _rvs(self, **kwargs):
-        return self.rng.uniform(**kwargs) + self.kwds.low
-
+    return Dist(dist='uniform', low=low, high=high, **kwargs)
 
 def normal(loc=0.0, scale=1.0, **kwargs):
     """ Normal distribution, with mean=loc and stdev=scale """
