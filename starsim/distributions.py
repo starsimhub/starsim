@@ -388,6 +388,9 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             size = n
         else:
             uids = np.asarray(n)
+            if self.slots is None:
+                print('TEMP SLOTS')
+                self.slots = np.arange(uids.max() + 1)
             slots = np.asarray(self.slots[uids]) # TODO: check if asarray needed
             size = slots.max() + 1
         
@@ -415,7 +418,9 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         else:
             rands = self.rand(size)[slots]
             if self.method == 'numpy':
-                spdist = getattr(sps, dist)(**kwds) # TODO: make it work better
+                mapping = dict(normal='norm', lognormal='lognorm')
+                dname = mapping[self.dist] if self.dist in mapping else self.dist # TODO: refactor
+                spdist = getattr(sps, dname)(**kwds) # TODO: make it work better, not actually numpy
             elif self.method == 'scipy':
                 spdist = dist(**kwds)
             elif self.method == 'frozen': 

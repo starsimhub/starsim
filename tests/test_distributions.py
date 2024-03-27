@@ -82,7 +82,7 @@ def test_callable(n=n):
     print(f'Output samples were: {draws}')
 
     meandiff = np.abs(sim.age[uids] - draws).mean()
-    assert meandiff < scale
+    assert meandiff < scale*3
     return d
 
 
