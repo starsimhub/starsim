@@ -278,7 +278,7 @@ class Pregnancy(BaseDemographics):
             data_cols = dict(year='Time', age='AgeGrp', value='ASFR'),
         )
 
-        self.choose_slots = ss.randint(low=0, high=1) # Low and high will be reset upon initialization
+        self.choose_slots = ss.randint() # Low and high will be reset upon initialization
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
@@ -344,8 +344,8 @@ class Pregnancy(BaseDemographics):
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.choose_slots.kwds['low'] = sim.pars['n_agents']+1
-        self.choose_slots.kwds['high'] = int(sim.pars['slot_scale']*sim.pars['n_agents'])
+        self.choose_slots.kwds['low'] = sim.pars.n_agents+1 # TODO: or 0?
+        self.choose_slots.kwds['high'] = int(sim.pars.slot_scale*sim.pars.n_agents)
         return
 
     def init_results(self, sim):
