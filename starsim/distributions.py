@@ -404,7 +404,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         # Check if any keywords are callable
         dist, kwds = self.make_dist(n, uids)
         
-        # Actually get the random numbers
+        # Actually get the random numbers # TODO: tidy up!
         if not self.has_array_pars:
             if self.method == 'numpy':
                 if isinstance(dist, str): # Main use case: get the distribution
@@ -423,6 +423,9 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             if self.method == 'numpy':
                 mapping = dict(normal='norm', lognormal='lognorm')
                 dname = mapping[self.dist] if self.dist in mapping else self.dist # TODO: refactor
+                if dname == 'uniform': # TODO: hack to get uniform to work since different args for SciPy
+                    kwds['loc'] = kwds.pop('low')
+                    kwds['scale'] = kwds.pop('high') - kwds['loc']
                 spdist = getattr(sps, dname)(**kwds) # TODO: make it work better, not actually numpy
             elif self.method == 'scipy':
                 spdist = dist(**kwds)
@@ -437,8 +440,6 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.called += 1
         if self.strict:
             self.ready = False
-        # if uids is not None:
-        #     rvs = rvs[uids]
             
         return rvs
     
