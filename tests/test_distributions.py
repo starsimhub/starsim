@@ -18,7 +18,7 @@ def test_basic():
     """ Basic scipy.stats test """
     sc.heading('Test basic scipy.stats usage')
     spsdist = sps.norm(loc=1, scale=1) # Make a distribution
-    d = ss.Dist(dist=spsdist).initialize() # Convert it to Starsim
+    d = ss.Dist(dist=spsdist).initialize(slots=np.arange(n)) # Convert it to Starsim
     sample = d.rvs(1)  # Draw a sample
 
     # Draw some samples
@@ -47,10 +47,11 @@ def test_scalar(n=n):
 
     loc = 1
     scale = 4
-    spsdist = sps.uniform(loc=loc, scale=scale)
-    d = ss.Dist(spsdist).initialize()
-
     uids = np.array([1,3,5,9])
+    
+    spsdist = sps.uniform(loc=loc, scale=scale)
+    d = ss.Dist(spsdist).initialize(slots=np.arange(uids.max()+1))
+    
     draws = d.rvs(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
@@ -68,20 +69,22 @@ def test_callable(n=n):
     np.random.seed(1) # Since not random number safe here!
     sim = sc.prettyobj()
     sim.n = 10
-    sim.uid = np.arange(sim.n)
-    sim.age = np.random.uniform(0, 90, size=sim.n)
+    sim.people = sc.prettyobj()
+    sim.people.uid = np.arange(sim.n)
+    sim.people.slot = np.arange(sim.n)
+    sim.people.age = np.random.uniform(0, 90, size=sim.n)
 
     # Define a parameter as a lambda function
-    loc = lambda module, sim, uids: sim.age[uids]
+    loc = lambda module, sim, uids: sim.people.age[uids]
     scale = 1
     d = ss.normal(loc=loc).initialize(sim=sim)
 
     uids = np.array([1, 3, 7, 9])
     draws = d.rvs(uids)
-    print(f'Input ages were: {sim.age[uids]}')
+    print(f'Input ages were: {sim.people.age[uids]}')
     print(f'Output samples were: {draws}')
 
-    meandiff = np.abs(sim.age[uids] - draws).mean()
+    meandiff = np.abs(sim.people.age[uids] - draws).mean()
     assert meandiff < scale*3
     return d
 
@@ -94,7 +97,7 @@ def test_array(n=n):
     low  = np.array([1, 100]) # Low
     high = np.array([3, 125]) # High
 
-    d = ss.uniform(low=low, high=high).initialize()
+    d = ss.uniform(low=low, high=high).initialize(slots=np.arange(uids.max()+1))
     draws = d.rvs(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 

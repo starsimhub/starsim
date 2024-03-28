@@ -389,9 +389,6 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         else:
             uids = np.asarray(n)
             if len(uids):
-                if self.slots is None:
-                    print('TEMP SLOTS')
-                    self.slots = np.arange(uids.max() + 1)
                 slots = np.asarray(self.slots[uids]) # TODO: check if asarray needed
                 size = slots.max() + 1
             else:

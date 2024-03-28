@@ -82,7 +82,9 @@ def test_rvs(n=n):
     """ Simple sample from distribution by UID """
     sc.heading('Testing UID sample')
     
+    slots = np.arange(n+1)
     dist = make_dist()
+    dist.initialize(slots=slots)
     uids = np.arange(0, n, 2) # every other to make it interesting
     draws = dist.rvs(uids)
     print(f'Created seed and sampled: {draws}')
@@ -90,6 +92,7 @@ def test_rvs(n=n):
     
     # Draws without UIDs should match the first element only
     dist2 = make_dist()
+    dist2.initialize(slots=slots)
     draws2 = dist2.rvs(len(uids))
     assert draws[0] == draws2[0]
     assert not np.array_equal(draws, draws2)
