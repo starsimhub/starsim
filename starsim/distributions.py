@@ -11,7 +11,7 @@ from starsim.random import SingleRNG, MultiRNG
 from starsim import options
 from scipy.stats import (bernoulli, expon, lognorm, norm, poisson, randint, rv_discrete, 
                          uniform, rv_histogram, weibull_min)
-from scipy.stats._discrete_distns import bernoulli_gen # TODO: can we remove this?
+from scipy.stats._discrete_distns import bernoulli_gen, poisson_gen # TODO: can we remove this?
 
 
 __all__ = ['ScipyDistribution', 'ScipyHistogram']
@@ -32,6 +32,36 @@ class ScipyDistribution():
                 self.sim = sim
                 self.context = context
                 return
+
+            def rvs_crn(self, *args, **kwargs):
+                # Bernoulli/binomial and Poisson workarounds
+                # p=0 in binomial (bernoulli) and lam=0 in Poisson do not use random numbers, which throws off CRN
+                # Solution 1: Replace 0 with eps
+                # Solution 2: Replace p (lam) where 0 with any non-zero value (e.g. eps), then revert vals back to 0
+                # --> Solution here is BOTH 1 and 2
+                if options.multirng and isinstance(self, bernoulli_gen) and ('p' in kwargs) and not np.isscalar(kwargs['p']):
+                    inds = np.where(kwargs['p']==0)[0]
+                    kwargs['p'][inds] = np.finfo(float).eps
+
+                    # Actually sample the random values
+                    vals = super().rvs(*args, **kwargs)
+
+                    # Complete the Bernoulli/binomial
+                    vals[inds] = 0
+                elif options.multirng and isinstance(self, poisson_gen) and ('lam' in kwargs) and not np.isscalar(kwargs['lam']):
+                    inds = np.where(kwargs['lam']==0)[0]
+                    kwargs['lam'][inds] = np.finfo(float).eps
+
+                    # Actually sample the random values
+                    vals = super().rvs(*args, **kwargs)
+
+                    # Complete the Poisson fix
+                    vals[inds] = 0
+                else:
+                    # Straightforward call to rvs
+                    vals = super().rvs(*args, **kwargs)
+
+                return vals
 
             def rvs(self, *args, **kwargs):
                 """
@@ -111,8 +141,8 @@ class ScipyDistribution():
                 if options.multirng and not self.random_state.ready:
                     raise ss.NotReadyException(self.random_state.name)
 
-                # Actually sample the random values
-                vals = super().rvs(*args, **kwargs)
+                # Get random vals, accounting for inconsistencies in binomial draws
+                vals = self.rvs_crn(*args, **kwargs)
 
                 # Again if multirng, mark the generator as not ready (needs to be jumped)
                 if options.multirng:
@@ -148,8 +178,7 @@ class ScipyDistribution():
                                 pars_slots[repeat_slot_u] = kwargs_pname # Take first instance of each
                                 kwargs[pname] = pars_slots
 
-                        vals = super().rvs(*args, **kwargs) # Draw again for slot repeat
-                        #assert np.allclose(slots[cur_inds], repeat_slot_u) # TEMP: Check alignment
+                        vals = self.rvs_crn(*args, **kwargs)
                         repeat_slot_vals[cur_inds] = vals[repeat_slot_u]
                         todo_inds = np.where(np.isnan(repeat_slot_vals))[0]
 
