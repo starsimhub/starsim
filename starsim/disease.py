@@ -282,7 +282,7 @@ class Infection(Disease):
                     continue
 
                 # Calculate probability of a->b transmission.
-                beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=people.dt)
+                beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=people.dt) # TODO: should this be sim.dt?
                 p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
 
                 slots_s = people.slot[src] # Slots for the possible source
