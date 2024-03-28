@@ -1,17 +1,17 @@
 {
   "summary": {
-    "n_alive": 9662.104761904762,
-    "new_deaths": 6.866666666666666,
-    "cum_deaths": 706.0,
+    "n_alive": 9658.2,
+    "new_deaths": 7.0095238095238095,
+    "cum_deaths": 729.0,
     "pregnancy_pregnancies": 0.0,
     "pregnancy_births": 0.0,
     "pregnancy_cbr": 0.0,
     "hiv_n_on_art": 0.0,
-    "hiv_n_susceptible": 8879.514285714286,
-    "hiv_n_infected": 782.5904761904762,
-    "hiv_prevalence": 0.08107777762449975,
-    "hiv_new_infections": 14.761904761904763,
-    "hiv_cum_infections": 1546.0,
-    "hiv_new_deaths": 6.866666666666666
+    "hiv_n_susceptible": 8881.942857142858,
+    "hiv_n_infected": 776.2571428571429,
+    "hiv_prevalence": 0.0804201791391088,
+    "hiv_new_infections": 14.638095238095238,
+    "hiv_cum_infections": 1532.0,
+    "hiv_new_deaths": 7.0095238095238095
   }
 }
