@@ -29,7 +29,7 @@ def test_basic():
     # Draw UID samples
     d.reset()
     uids = np.array([0,3,4])
-    samples_uid = d.urvs(uids=uids)
+    samples_uid = d.rvs(uids)
     
     # Print and test
     for s in [sample, samples, samples_uid]:
@@ -51,7 +51,7 @@ def test_scalar(n=n):
     d = ss.Dist(spsdist).initialize()
 
     uids = np.array([1,3,5,9])
-    draws = d.urvs(uids)
+    draws = d.rvs(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
     assert len(draws) == len(uids), 'Incorrect number of draws'
@@ -77,7 +77,7 @@ def test_callable(n=n):
     d = ss.normal(loc=loc).initialize(sim=sim)
 
     uids = np.array([1, 3, 7, 9])
-    draws = d.urvs(uids)
+    draws = d.rvs(uids)
     print(f'Input ages were: {sim.age[uids]}')
     print(f'Output samples were: {draws}')
 
@@ -95,7 +95,7 @@ def test_array(n=n):
     high = np.array([3, 125]) # High
 
     d = ss.uniform(low=low, high=high).initialize()
-    draws = d.urvs(uids)
+    draws = d.rvs(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
     assert len(draws) == len(uids)
@@ -118,7 +118,7 @@ def test_repeat_slot():
 
     # Draw values
     d = ss.uniform(low=low, high=high).initialize()
-    draws = d.urvs(uids)
+    draws = d.rvs(uids)
     
     # Print and test
     print(f'Uniform sample for slots {slots} returned {draws}')

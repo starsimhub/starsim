@@ -78,13 +78,13 @@ def test_seed(n=n):
     return draws0, draws1
 
 
-def test_urvs(n=n):
+def test_rvs(n=n):
     """ Simple sample from distribution by UID """
     sc.heading('Testing UID sample')
     
     dist = make_dist()
     uids = np.arange(0, n, 2) # every other to make it interesting
-    draws = dist.urvs(uids)
+    draws = dist.rvs(uids)
     print(f'Created seed and sampled: {draws}')
     assert len(draws) == len(uids)
     
@@ -106,6 +106,6 @@ if __name__ == '__main__':
     o2 = test_reset(n)
     o3 = test_jump(n)
     o4 = test_seed(n)
-    o5 = test_urvs(n)
+    o5 = test_rvs(n)
 
     T.toc()

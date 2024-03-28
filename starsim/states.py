@@ -450,7 +450,7 @@ class State(UIDArray):
 
     def _new_vals(self, uids):
         if isinstance(self.default, ss.Dist):
-            new_vals = self.default.urvs(uids)
+            new_vals = self.default.rvs(uids)
         elif callable(self.default):
             new_vals = self.default(len(uids))
         else:

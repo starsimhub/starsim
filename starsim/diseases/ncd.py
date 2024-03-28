@@ -48,7 +48,7 @@ class NCD(ss.Disease):
         alive_uids = ss.true(sim.people.alive)
         initial_risk = self.pars['initial_risk'].filter(alive_uids)
         self.at_risk[initial_risk] = True
-        self.ti_affected[initial_risk] = sim.ti + sc.randround(self.pars['dur_risk'].urvs(initial_risk) / sim.dt)
+        self.ti_affected[initial_risk] = sim.ti + sc.randround(self.pars['dur_risk'].rvs(initial_risk) / sim.dt)
         return initial_risk
 
     def update_pre(self, sim):
@@ -61,7 +61,7 @@ class NCD(ss.Disease):
     def make_new_cases(self, sim):
         new_cases = ss.true(self.ti_affected == sim.ti)
         self.affected[new_cases] = True
-        prog_years = self.pars.prognosis.urvs(new_cases)
+        prog_years = self.pars.prognosis.rvs(new_cases)
         self.ti_dead[new_cases] = sim.ti + sc.randround(prog_years / sim.dt)
         super().set_prognoses(sim, new_cases)
         return new_cases

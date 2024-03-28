@@ -139,7 +139,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         
         # Draw using UIDs rather than a fixed size
         uids = np.array([1,2,4,9])
-        ss.Dist('bernoulli', p=0.5).urvs(uids)
+        ss.Dist('bernoulli', p=0.5).rvs(uids)
     """
     def __init__(self, dist=None, name=None, seed=None, offset=None, strict=False, module=None, sim=None, **kwargs): # TODO: switch back to strict=True
         """
@@ -442,21 +442,10 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             self.ready = False
             
         return rvs
-    
-    def urvs(self, uids):
-        """ Like rvs(), but get based on a list of unique identifiers (UIDs or slots) instead """
-        return self.rvs(n=uids) # TODO: TEMP
-        # uids = np.asarray(uids)
-        # if not len(uids):
-        #     return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
-        
-        # maxval = uids.max() + 1 # Since UIDs are inclusive
-        # urvs = self.rvs(n=uids)
-        # return urvs
 
     def filter(self, uids, **kwargs): # TODO: should this only be valid for Bernoulli distribution types?
         """ Filter UIDs by a binomial array """
-        return uids[self.urvs(uids, **kwargs).astype(bool)] # TODO: tidy up
+        return uids[self.rvs(uids, **kwargs).astype(bool)] # TODO: tidy up
     
     def plot_hist(self, size=1000, bins=None, fig_kw=None, hist_kw=None):
         """ Plot the current state of the RNG as a histogram """

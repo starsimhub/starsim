@@ -200,11 +200,11 @@ class Syphilis(ss.Infection):
 
         # Set future dates and probabilities
         # Exposed to primary
-        dur_exposed = self.pars.dur_exposed.urvs(uids)
+        dur_exposed = self.pars.dur_exposed.rvs(uids)
         self.ti_primary[uids] = sim.ti + rr(dur_exposed / sim.dt)
 
         # Primary to secondary
-        dur_primary = self.pars.dur_primary.urvs(uids)
+        dur_primary = self.pars.dur_primary.rvs(uids)
         self.ti_secondary[uids] = self.ti_primary[uids] + rr(dur_primary / sim.dt)
 
         return
@@ -212,10 +212,10 @@ class Syphilis(ss.Infection):
     def set_secondary_prognoses(self, sim, uids):
         """ Set prognoses for people who have just progressed to secondary infection """
 
-        dur_secondary = self.pars.dur_secondary.urvs(uids)
+        dur_secondary = self.pars.dur_secondary.rvs(uids)
 
         # Secondary to latent_temp or latent_long
-        latent_temp = self.pars.p_latent_temp.urvs(uids)
+        latent_temp = self.pars.p_latent_temp.rvs(uids)
         latent_temp_uids = uids[latent_temp]
         latent_long_uids = uids[~latent_temp]
 
@@ -229,20 +229,20 @@ class Syphilis(ss.Infection):
 
     def set_latent_temp_prognoses(self, sim, uids):
         # Primary to secondary
-        dur_latent_temp = self.pars.dur_latent_temp.urvs(uids)
+        dur_latent_temp = self.pars.dur_latent_temp.rvs(uids)
         self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_temp / sim.dt)
         return
 
     def set_latent_long_prognoses(self, sim, uids):
 
-        dur_latent = self.pars.dur_latent_long.urvs(uids)
+        dur_latent = self.pars.dur_latent_long.rvs(uids)
 
         # Primary to secondary
         dur_latent_long = dur_latent
         self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_long / sim.dt)
 
         # Latent_long to tertiary
-        tertiary = self.pars.p_tertiary.urvs(uids)
+        tertiary = self.pars.p_tertiary.rvs(uids)
         tertiary_uids = uids[tertiary]
         self.ti_tertiary[tertiary_uids] = self.ti_latent_long[tertiary_uids] + rr(dur_latent_long[tertiary] / sim.dt)
 
@@ -263,7 +263,7 @@ class Syphilis(ss.Infection):
 
                 # Birth outcomes must be modified to add probability of susceptible birth
                 birth_outcomes = self.pars.birth_outcomes[state]
-                assigned_outcomes = birth_outcomes.urvs(len(uids))-uids  # WHY?? # TODO: TEMP: NOT CRN SAFE
+                assigned_outcomes = birth_outcomes.rvs(len(uids))-uids  # WHY?? # TODO: TEMP: NOT CRN SAFE
                 time_to_birth = -sim.people.age
 
                 # Schedule events
