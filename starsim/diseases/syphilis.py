@@ -263,7 +263,7 @@ class Syphilis(ss.Infection):
 
                 # Birth outcomes must be modified to add probability of susceptible birth
                 birth_outcomes = self.pars.birth_outcomes[state]
-                assigned_outcomes = birth_outcomes.urvs(uids)-uids  # WHY??
+                assigned_outcomes = birth_outcomes.urvs(len(uids))-uids  # WHY?? # TODO: TEMP: NOT CRN SAFE
                 time_to_birth = -sim.people.age
 
                 # Schedule events
