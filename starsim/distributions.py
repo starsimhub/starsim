@@ -355,12 +355,6 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             # If it's iterable, check the size and pad with zeros if it's the wrong shape
             if np.iterable(val) and uids is not None and (len(val) == len(uids)) and self.dist != 'choice': # TODO: figure out logic
                 self.has_array_pars = True
-            # else:
-            #     array
-            #     resized = np.zeros(size, dtype=val.dtype) # TODO: fix, problem from when there happen to be uid entries, but it's not slots
-            #     resized[uids] = val[:len(uids)] # TODO: check if slicing is ok here
-            #     val = resized
-            #     kwds[key] = val # Replace 
             
         return dist, kwds
     
