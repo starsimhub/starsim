@@ -9,7 +9,6 @@ import starsim as ss
 from starsim.settings import INT_NAN
 from starsim.settings import dtypes as sdt
 from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
-from scipy.stats._distn_infrastructure import rv_frozen
 
 
 __all__ = ['check_dtype', 'UIDArray', 'State', 'ArrayView']
