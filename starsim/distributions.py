@@ -17,7 +17,7 @@ def str2int(string, modulo=10_000_000):
     Cannot use Python's built-in hash() since it's randomized for strings, but
     this is almost as fast (and 5x faster than hashlib).
     """
-    return int.from_bytes(string.encode()) % modulo
+    return int.from_bytes(string.encode(), byteorder='big') % modulo
 
 
 def lognorm_convert(mean, stdev):
