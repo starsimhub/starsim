@@ -11,8 +11,7 @@ n = 5 # Default number of samples
 
 def make_dist(seed=1, name='test', **kwargs):
     """ Make a default distribution for testing """
-    dist = ss.Dist(dist='random', name=name, seed=seed, **kwargs)
-    dist.initialize()
+    dist = ss.Dist(distname='random', name=name, seed=seed, **kwargs)
     return dist
 
 

@@ -71,15 +71,16 @@ class Module:#(sc.prettyobj): # TODO: replace with sc.qprettyobj
             par_dist = self.par_dists[key]
             if isinstance(par_dist, str):
                 try:
-                    par_dist = getattr(ss.dists, par_dist)
+                    par_dist = getattr(ss.distributions, par_dist)
                 except Exception as E:
                     errormsg = f'"{par_dist}" is not a valid distribution name; valid distributions are: {sc.newlinejoin(ss.dists.dist_list)}'
                     raise ValueError(errormsg) from E
             
-            if callable(par_dist):
-                par_dist = par_dist(*args, **kwargs)
+            if issubclass(par_dist, ss.Dist): # Main use case
+                par_dist = par_dist(*args, sim=sim, module=self, **kwargs)
             
             if not isinstance(par_dist, ss.Dist):
+                print('Warning, should probably be an ss.Dist already')
                 par_dist = ss.Dist(dist=par_dist, *args, **kwargs)
             
             self.pars[key] = par_dist

@@ -31,7 +31,7 @@ def plot_rvs(rvs, times=None, nrows=None):
 def test_dist(m=m):
     """ Test the Dist class """
     sc.heading('Testing the basic Dist call')
-    dist = ss.Dist('random', 'test')
+    dist = ss.Dist(distname='random', name='test')
     dist.initialize()
     rvs = dist(m)
     print(rvs)
@@ -77,8 +77,8 @@ def test_dists(n=n, do_plot=False):
         # Create a complex object containing various distributions
         obj = sc.prettyobj()
         obj.a = sc.objdict()
-        obj.a.mylist = [ss.random(), ss.Dist('uniform', low=2, high=3)]
-        obj.b = dict(d3=ss.weibull(a=2), d4=ss.delta(v=0.3))
+        obj.a.mylist = [ss.random(), ss.Dist(distname='uniform', low=2, high=3)]
+        obj.b = dict(d3=ss.weibull(c=2), d4=ss.delta(v=0.3))
         dists = ss.Dists(obj)
         
         # Call each distribution twice

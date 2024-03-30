@@ -289,8 +289,8 @@ class Infection(Disease):
                 slots_t = people.slot[trg] # Slots for the possible target
                 # slots = (slots_s + slots_t) % sim.pars.n_agents # CK: faster, but some pairs would get the same draws
                 # rvs = self.rng_source.rvs(size=np.max(slots)+1)[slots]
-                rvs_s = self.rng_source.rvs(size=np.max(slots_s) + 1)[slots_s]
-                rvs_t = self.rng_target.rvs(size=np.max(slots_t) + 1)[slots_t]
+                rvs_s = self.rng_source.rvs(n=np.max(slots_s) + 1)[slots_s]
+                rvs_t = self.rng_target.rvs(n=np.max(slots_t) + 1)[slots_t]
                 
                 # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
                 rvs = rvs_s + rvs_t
