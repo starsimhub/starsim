@@ -5,6 +5,7 @@ Define random-number-safe distributions.
 import numpy as np
 import sciris as sc
 import scipy.stats as sps
+import starsim as ss
 import pylab as pl
 
 __all__ = ['find_dists', 'dist_list', 'Dists', 'Dist']
@@ -18,24 +19,6 @@ def str2int(string, modulo=10_000_000):
     this is almost as fast (and 5x faster than hashlib).
     """
     return int.from_bytes(string.encode(), byteorder='big') % modulo
-
-
-def lognorm_convert(mean, stdev):
-    """
-    Lognormal distributions can be specified in terms of the mean and standard
-    deviation of the "overlying" lognormal distribution, or the "underlying" normal distribution.
-    This function converts the parameters from the lognormal distribution to the
-    parameters of the underlying distribution, which are the form expected by NumPy's
-    and SciPy's lognorm() distributions.
-    """
-    if mean <= 0:
-        errormsg = f'Cannot create a lognorm_o distribution with mean≤0 (mean={mean}); did you mean to use lognorm_u instead?'
-        raise ValueError(errormsg)
-    std2 = stdev**2
-    mean2 = mean**2
-    under_std = np.sqrt(np.log(std2/mean2 + 1)) # Computes stdev for the underlying normal distribution
-    under_mean  = np.log(mean2 / np.sqrt(std2 + mean2)) # Computes the mean of the underlying normal distribution
-    return under_mean, under_std
 
 
 def find_dists(obj, verbose=False):
@@ -148,7 +131,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         
         # Auto-generated 
         self._pars = None # Validated and transformed (if necessary) parameters
-        self._spars = None # If needed, set the scipy.stats parameters
+        self.dynamic_pars = None # Whether or not the distribution has array or callable parameters
         
         # Internal state
         self.rng = None # The actual RNG generator for generating random numbers
@@ -268,6 +251,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             
         # Initialize the distribution and finalize
         self.process_dist()
+        self.process_pars()
         self.ready = True
         self.initialized = True
         return self
@@ -314,15 +298,15 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self._slots = slots
         return size, uids, slots
     
-    # def preprocess_pars(self):
-    #     """ Do any preprocessing on keywords """
-    #     pass
-
     def call_pars(self):
         """ Check if any parameters need to be called to be turned into arrays """
-        size, uids = self._size, self._uids
         
-        self.array_pars = False
+        # Initialize
+        size, uids = self._size, self._uids
+        if self.dynamic_pars != False: # Allow "False" to prevent ever using dynamic pars (used in ss.choice())
+            self.dynamic_pars = None
+        
+        # Check each parameter
         for key,val in self._pars.items():
             
             # If the parameter is callable, then call it
@@ -332,68 +316,32 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
                 val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
                 self._pars[key] = val
             
-            # If it's iterable, check the size and pad with zeros if it's the wrong shape
-            if np.iterable(val) and uids is not None and self.dist != 'choice': # TODO: figure out logic
-                self.array_pars = True
+            # If it's iterable and UIDs are provided, then we need to use array-parameter logic
+            if self.dynamic_pars is None and np.iterable(val) and uids is not None:
+                self.dynamic_pars = True
         return
     
-    def transform_pars(self):
-        """ Perform any necessary transformations on distribution parameters """
-        pass
+    def sync_pars(self):
+        """ Perform any necessary synchronizations or transformations on distribution parameters """
+        self.update_dist_pars()
+        return
     
-    def translate_pars(self):
-        """ Translate keywords from Numpy into Scipy """
-        pass
-    
-    
+    def update_dist_pars(self, pars=None):
+        """ Update SciPy distribution parameters """
+        if self.dist is not None:
+            pars = pars if pars is not None else self._pars
+            self.dist.kwds = pars
+        return
     
     def process_pars(self):
         """ Ensure the supplied dist and parameters are valid, and initialize them; called automatically """
-        # dist = self.dist # The name of the distribution (a string, usually)
         self._pars = self.pars.copy() # The actual keywords; shallow copy, modified below for special cases
         self.call_pars()
-        self.transform_pars()
-        self.translate_pars()
-        # self.preprocess_pars()
-        
-        
-        
-        self._pars = pars
-        
-        # Main use case: handle strings, including special cases
-        if isinstance(dist, str):
-            
-            # Handle lognormal distributions
-            if dist == 'lognorm_o': # Convert parameters for a lognormal
-                pars['mean'], pars['sigma'] = lognorm_convert(pars.pop('mean'), pars.pop('stdev'))
-                dist = 'lognormal'
-            elif dist == 'lognorm_u':
-                pars['mean'] = pars.pop('loc') # Rename parameters
-                pars['sigma'] = pars.pop('scale')
-                dist = 'lognormal' # For the underlying distribution
-            
-            # # Create the actual distribution -- first the special cases of Bernoulli and delta
-            # if dist == 'bernoulli': # Special case, predefine the distribution here
-            #     dist = lambda p, size: 
-
-        
-        # # It wasn't a string, so assume it's a SciPy distribution
-        # else:
-        #     self.method = 'scipy' if callable(dist) else 'frozen' # Need to handle regular and frozen distributions differently
-        #     if hasattr(dist, 'random_state'): # For SciPy distributions # TODO: Check if safe with non-frozen (probably not?)
-        #         dist.random_state = self.rng # Override the default random state with the correct one
-        #     else:
-        #         errormsg = f'Unknown distribution {type(dist)}: must be string or scipy.stats distribution, or another distribution with a random_state attribute'
-        #         raise TypeError(errormsg)
-        
-        # Now that we have the dist function, process the keywords for callable and array inputs
-        
-            
-        return dist, pars
+        self.sync_pars()
+        return
     
-    def rand(self, size=None):
+    def rand(self, size=1):
         """ Simple way to get simple random numbers """
-        if size is None: size = self._size
         return self.rng.random(size)
     
     def make_rvs(self):
@@ -427,51 +375,20 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
         
         # Check if any keywords are callable
-        self.process_pars()
+        if self.dynamic_pars:
+            self.process_pars()
         
         # Store the state
         self.make_history() # Store the pre-call state
         
         # Actually get the random numbers
-        if self.is_array:
+        if self.dynamic_pars:
             rands = self.rand(size)[slots] # Get random values 
             rvs = self.ppf(rands)
         else:
             rvs = self.make_rvs()
             if slots is not None:
                 rvs = rvs[slots]
-        
-        # # Actually get the random numbers # TODO: tidy up!
-        # if not self.has_array_pars:
-        #     if self.method == 'numpy':
-        #         if isinstance(dist, str): # Main use case: get the distribution
-        #             dist = getattr(self.rng, dist)
-        #         rvs = dist(size=size, **pars)
-        #     elif self.method == 'scipy':
-        #         rvs = dist.rvs(size=size, **pars)
-        #     elif self.method == 'frozen': 
-        #         rvs = dist.rvs(size=size) # Frozen distributions don't take keyword arguments
-        #     else:
-        #         raise ValueError(f'Unknown method: {self.method}') # Should not happen
-        #     if slots is not None:
-        #         rvs = rvs[slots]
-        # else:
-        #     rands = self.rand(size)[slots]
-        #     if self.method == 'numpy':
-        #         mapping = dict(normal='norm', lognormal='lognorm')
-        #         dname = mapping[self.dist] if self.dist in mapping else self.dist # TODO: refactor
-        #         if dname == 'uniform': # TODO: hack to get uniform to work since different args for SciPy
-        #             pars['loc'] = pars.pop('low')
-        #             pars['scale'] = pars.pop('high') - pars['loc']
-        #         spdist = getattr(sps, dname)(**pars) # TODO: make it work better, not actually numpy
-        #     elif self.method == 'scipy':
-        #         spdist = dist(**pars)
-        #     elif self.method == 'frozen': 
-        #         spdist = dist
-        #     else:
-        #         raise ValueError(f'Unknown method: {self.method}') # Should not happen
-            
-        #     rvs = spdist.ppf(rands) # Use the PPF to convert the quantiles to the actual random variates
         
         # Tidy up
         self.called += 1
@@ -500,7 +417,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
 #%% Specific distributions
 
 # Add common distributions so they can be imported directly; assigned to a variable since used in help messages
-dist_list = ['random', 'uniform', 'normal', 'lognorm_o', 'lognorm_u', 'expon',
+dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
              'poisson', 'weibull', 'delta', 'randint', 'bernoulli', 'choice']
 __all__ += dist_list
 
@@ -525,14 +442,6 @@ class uniform(Dist):
         super().__init__(low=low, high=high, **kwargs)
         return
     
-    # def translate_pars(self, pars):
-    #     """ Translate keywords from default (numpy) versions into scipy.stats versions """
-    #     self._spars = dict(
-    #         loc = pars.low,
-    #         scale = pars.high - pars.low,
-    #     )
-    #     return
-    
     def make_rvs(self):
         p = self._pars
         rvs = self.rng.uniform(low=p.low, high=p.high, size=self._size)
@@ -556,56 +465,129 @@ class normal(Dist):
         return rvs
 
 
-class lognorm_u(Dist):
+class lognorm_im(Dist):
     """
-    Lognormal distribution, parameterized in terms of the "underlying" (normal)
-    distribution, with mean=loc and stdev=scale (see lognorm_o for comparison).
+    Lognormal distribution, parameterized in terms of the "implicit" (normal)
+    distribution, with mean=loc and stdev=scale (see lognorm_ex for comparison).
     
     Note: the "loc" parameter here does *not* correspond to the mean of the resulting
     random variates!
     
     **Example**::
         
-        ss.lognorm_u(loc=2, scale=1).rvs(1000).mean() # Should be roughly 10
+        ss.lognorm_im(mean=2, sigma=1).rvs(1000).mean() # Should be roughly 10
     """
-    def __init__(self, loc=0.0, scale=1.0, **kwargs):
-        super().__init__(spsdist=sps.lognorm, loc=loc, scale=scale, **kwargs)
+    def __init__(self, mean=0.0, sigma=1.0, **kwargs):
+        super().__init__(dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
+        return
+    
+    def sync_pars(self):
+        """ Translate between NumPy and SciPy parameters """
+        p = self._pars
+        spars = sc.dictobj()
+        spars.s = p.sigma
+        spars.scale = np.exp(p.mean)
+        spars.loc = 0
+        self.update_dist_pars(spars)
         return
     
     def make_rvs(self):
         p = self._pars
-        return self.rng.normal(loc=p.loc, scale=p.scale, size=self._size)
+        rvs = self.rng.lognormal(mean=p.mean, sigma=p.sigma, size=self._size)
+        return rvs
 
 
-def lognorm_o(mean=1.0, stdev=1.0, **kwargs):
+class lognorm_ex(lognorm_im):
     """
-    Lognormal distribution, parameterized in terms of the "overlying" (lognormal)
-    distribution, with mean=mean and stdev=stdev (see lognorm_u for comparison).
+    Lognormal distribution, parameterized in terms of the "explicit" (lognormal)
+    distribution, with mean=mean and stdev=stdev (see lognorm_im for comparison).
     
     **Example**::
         
-        ss.lognorm_o(mean=2, stdev=1).rvs(1000).mean() # Should be close to 2
+        ss.lognorm_ex(mean=2, stdev=1).rvs(1000).mean() # Should be close to 2
     """
-    return Dist(dist='lognorm_o', mean=mean, stdev=stdev, **kwargs)
+    def __init__(self, mean=1.0, stdev=1.0, **kwargs):
+        super().__init__(dist=sps.lognorm, mean=mean, stdev=stdev, **kwargs)
+        return
+    
+    def convert_ex_to_im(self):
+        """
+        Lognormal distributions can be specified in terms of the mean and standard
+        deviation of the "explicit" lognormal distribution, or the "implicit" normal distribution.
+        This function converts the parameters from the lognormal distribution to the
+        parameters of the underlying (implicit) distribution, which are the form expected by NumPy's
+        and SciPy's lognorm() distributions.
+        """
+        p = self._pars
+        mean = p.pop('mean')
+        stdev = p.pop('stdev')
+        if mean <= 0:
+            errormsg = f'Cannot create a lognorm_ex distribution with mean≤0 (mean={mean}); did you mean to use lognorm_im instead?'
+            raise ValueError(errormsg)
+        std2 = stdev**2
+        mean2 = mean**2
+        sigma_im = np.sqrt(np.log(std2/mean2 + 1)) # Computes stdev for the underlying normal distribution
+        mean_im  = np.log(mean2 / np.sqrt(std2 + mean2)) # Computes the mean of the underlying normal distribution
+        p.mean = mean_im
+        p.sigma = sigma_im
+        return mean_im, sigma_im
+    
+    def sync_pars(self):
+        """ Convert from overlying to underlying parameters, then translate to SciPy """
+        self.convert_ex_to_im()
+        super().sync_pars()
+        return
+    
 
-
-def expon(scale=1.0, **kwargs):
+class expon(Dist):
     """ Exponential distribution """
-    return Dist(dist='exponential', scale=scale, **kwargs)
+    def __init__(self, scale=1.0, **kwargs):
+        super().__init__(dist=sps.expon, scale=scale, **kwargs)
+        return
+    
+    def make_rvs(self):
+        rvs = self.rng.exponential(scale=self._pars.scale, size=self._size)
+        return rvs
 
-def poisson(lam=1.0, **kwargs):
-    """ Poisson distribution """
-    return Dist(dist='poisson', lam=lam, **kwargs)
 
-def randint(low=None, high=None, **kwargs):
+class poisson(Dist):
+    """ Exponential distribution """
+    def __init__(self, lam=1.0, **kwargs):
+        super().__init__(dist=sps.poisson, lam=lam, **kwargs)
+        return
+    
+    def sync_pars(self):
+        """ Translate between NumPy and SciPy parameters """
+        spars = dict(mu=self._pars.lam)
+        self.update_dist_pars(spars)
+        return
+    
+    def make_rvs(self):
+        rvs = self.rng.poisson(lam=self._pars.lam, size=self._size)
+        return rvs
+
+
+class randint(Dist):
     """ Random integers, values on the interval [low, high-1] (i.e. "high" is excluded) """
-    if low is None and high is None: # Ugly, but gets the default of acting like a Bernoulli trial with no input
-        low = 2 # Note that the endpoint is excluded, so this is [0,1]
-    return Dist(dist='integers', low=low, high=high, **kwargs)
+    def __init__(self, low=0, high=2,  **kwargs):
+        super().__init__(dist=sps.randint, low=low, high=high **kwargs)
+        return
+    
+    def make_rvs(self):
+        p = self._pars
+        rvs = self.rng.integers(low=p.low, high=p.high, size=self._size)
+        return rvs
 
-def weibull(a=1.0, **kwargs):
-    """ Weibull distribution (note: there is no scale parameter) """
-    return Dist(dist='weibull', a=a, **kwargs)
+
+class weibull(Dist):
+    """ Weibull distribution -- NB, uses SciPy rather than NumPy """
+    def __init__(self, a=1, loc=0, scale=1,  **kwargs):
+        super().__init__(dist=sps.weibull_min, a=a, loc=loc, scale=scale, **kwargs)
+        return
+    
+    def make_rvs(self):
+        rvs = self.dist.rvs(self._size)
+        return rvs
 
 
 class delta(Dist):
@@ -649,7 +631,7 @@ class bernoulli(Dist):
             return uids[bools]
 
 
-def choice(a=2, p=None, **kwargs):
+class choice(Dist):
     """
     Random choice between discrete options
     
@@ -660,10 +642,25 @@ def choice(a=2, p=None, **kwargs):
         
         # Choose between specified options each with a specified probability (must sum to 1)
         ss.choice(a=[30, 70], p=[0.3, 0.7])(10)
-    
     """
-    return Dist(dist='choice', a=a, p=p, **kwargs)
-
+    def __init__(self, a=2, p=None, **kwargs):
+        super().__init__(a=a, p=p, **kwargs)
+        self.dynamic_pars = False # Set to false since array arguments don't imply dynamic pars here
+        return
+    
+    def make_rvs(self):
+        rvs = self.rng.choice(**self._pars, size=self._size)
+        return rvs
+    
+    def ppf(self, rands):
+        """ Shouldn't actually be needed """
+        pars = self._pars
+        if np.isscalar(pars.a):
+            pars.a = np.arange(pars.a)
+        pcum = np.cumsum(pars.p)
+        inds = np.searchsorted(pcum, rands)
+        rvs = pars.a[inds]
+        return rvs
 
 
 #%% Dist exceptions
