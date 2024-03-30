@@ -168,16 +168,16 @@ class Cholera(ss.Infection):
     def make_new_cases(self, sim):
         """ Add indirect transmission """
 
-        p = self.pars
-        r = self.results
+        pars = self.pars
+        res = self.results
 
         # Make new cases via direct transmission
         super().make_new_cases(sim)
 
         # Make new cases via indirect transmission
-        p_transmit = r.env_conc[sim.ti] * p.beta_env
-        p.p_env_transmit.kwds['p'] = p_transmit
-        new_cases = p.p_env_transmit.filter(sim.people.uid[self.susceptible]) # TODO: make syntax nicer
+        p_transmit = res.env_conc[sim.ti] * pars.beta_env
+        pars.p_env_transmit.set(p=p_transmit)
+        new_cases = pars.p_env_transmit.filter(sim.people.uid[self.susceptible]) # TODO: make syntax nicer
         if new_cases.any():
             self.set_prognoses(sim, new_cases, source_uids=None)
         return
