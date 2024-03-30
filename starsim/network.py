@@ -387,6 +387,7 @@ class StaticNet(Network):
                 pars = dict(n_contacts=10)
         self.graph = graph
         self.pars = ss.omerge(pars)
+        self.dist = ss.Dist(distname='StaticNet')
         return
 
     def initialize(self, sim):

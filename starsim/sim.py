@@ -641,6 +641,9 @@ class Sim(sc.prettyobj):
         self.summary = summary
         return summary
     
+    def disp(self):
+        print(self.summary)
+    
     def shrink(self, skip_attrs=None, in_place=True):
         """
         "Shrinks" the simulation by removing the people and other memory-intensive

@@ -118,7 +118,12 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         dist = ss.Dist(sps.norm, loc=3)
         dist.rvs(10) # Return 10 normally distributed random numbers
     """
-    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None, strict=True, auto=True, sim=None, module=None, **kwargs): # TODO: switch back to strict=True
+    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None, 
+                 strict=True, auto=True, sim=None, module=None, debug=False, **kwargs): # TODO: switch back to strict=True
+        # If a string is provided as "dist" but there's no distname, swap the dist and the distname
+        if isinstance(dist, str) and distname is None:
+            distname = dist
+            dist = None
         self.dist = dist # The type of distribution
         self.distname = distname
         self.name = name
@@ -130,6 +135,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.slots = None # Created on initialization with a sim
         self.strict = strict
         self.auto = auto
+        self.debug = debug
         
         # Auto-generated 
         self.rvs_func = None # The default function to call in make_rvs() to generate the random numbers
@@ -159,7 +165,10 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             try:
                 diststr = f'dist={self.dist.name}, '
             except:
-                diststr = f'dist={type(self.dist)}'
+                try: # What is wrong with you, SciPy -- after initialization, it moves here
+                    diststr = f'dist={self.dist.dist.name}, '
+                except:
+                    diststr = f'dist={type(self.dist)}'
         elif self.distname is not None:
             diststr = f'dist={self.distname}, '
         else:
@@ -306,6 +315,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             # Pull out parameters of an already-frozen distribution
             if isinstance(self.dist, sps._distn_infrastructure.rv_frozen):
                 if not self.initialized: # Don't do this more than once
+                    print('MOOSH', self.dist.kwds)
                     self.pars = sc.dictobj(sc.mergedicts(self.pars, self.dist.kwds))
             
             # Convert to a frozen distribution
@@ -450,6 +460,12 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             self.jump()
         elif self.strict:
             self.ready = False
+        if self.debug:
+            simstr = f'on ti={self.sim.ti} ' if self.sim else ''
+            sizestr = f'with size={self._size}, '
+            slotstr = f'Σ(slots)={self._slots.sum()}, ' if self._slots else '<no slots>, '
+            rvstr = f'Σ(rvs)={rvs.sum():0.2f}, |rvs|={rvs.mean():0.4f}'
+            print(f'Debug: dist {self} called {simstr}{sizestr}{slotstr}{rvstr}')
             
         return rvs
 
@@ -530,7 +546,7 @@ class lognorm_im(Dist):
         return spars
     
 
-class lognorm_ex(lognorm_im):
+class lognorm_ex(Dist):
     """
     Lognormal distribution, parameterized in terms of the "explicit" (lognormal)
     distribution, with mean=mean and stdev=stdev (see lognorm_im for comparison).
@@ -540,7 +556,7 @@ class lognorm_ex(lognorm_im):
         ss.lognorm_ex(mean=2, stdev=1).rvs(1000).mean() # Should be close to 2
     """
     def __init__(self, mean=1.0, stdev=1.0, **kwargs):
-        super().__init__(mean=mean, stdev=stdev, **kwargs)
+        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, stdev=stdev, **kwargs)
         return
     
     def convert_ex_to_im(self):
@@ -568,7 +584,7 @@ class lognorm_ex(lognorm_im):
     def sync_pars(self):
         """ Convert from overlying to underlying parameters, then translate to SciPy """
         self.convert_ex_to_im()
-        spars = super().sync_pars()
+        spars = lognorm_im.sync_pars(self) # Borrow sync_pars from lognorm_im
         return spars
     
 
@@ -631,7 +647,7 @@ class bernoulli(Dist):
     Unlike other distributions, Bernoulli distributions have a filter() method,
     which returns elements of the array that return True.
     """
-    def __init__(self, p=5, **kwargs):
+    def __init__(self, p=0.5, **kwargs):
         super().__init__(distname='bernoulli', p=p, **kwargs)
         return
     
