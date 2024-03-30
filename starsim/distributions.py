@@ -113,57 +113,29 @@ class Dists:
 
 class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     """
-    Class for tracking one random number generator associated with one distribution,
+    Base class for tracking one random number generator associated with one distribution,
     i.e. one decision per timestep.
     
     See ss.dist_list for a full list of supported distributions.
     
     Args:
-        dist (str/dist): the type of distribution to use; can be any attribute of ``np.random.default_rng()``, or any distribution from ``scipy.stats``
+        dist (rv_generic): optional; a scipy.stats distribution (frozen or not) to get the ppf from
         name (str): the name for this distribution
         seed (int): the user-chosen random seed (e.g. 3)
-        offset (int): usually calculated on initialization; the unique identifier of this distribution
-        strict (bool): whether to prevent multiple draws without resetting
-        module (Module): usually calculated on initialization; the module to use for lambda functions
-        sim (Sim): usually calculated on initialization; the sim to use for lambda functions
-        kwargs (dict): the parameters of the distribution to be called
-    
+        offset (int): the seed offset; will be automatically assigned (based on hashing the name) if None
+        strict (bool): if True, require initialization and invalidate after each call to rvs()
+        auto (bool): whether to auto-reset the state after each draw
+        sim (Sim): usually determined on initialization; the sim to use as input to callable parameters
+        module (Module): usually determined on initialization; the module to use as input to callable parameters
+        kwargs (dict): parameters of the distribution
+        
     **Examples**::
         
-        # Create and use a simple distribution
-        dist = ss.Dist('random')
-        dist(5)
-        
-        # Create a more complex distribution
-        ss.Dist('lognorm_o', seed=3, mean=2, stdev=5).rvs(5)
-        
-        # Draw using UIDs rather than a fixed size
-        uids = np.array([1,2,4,9])
-        ss.Dist('bernoulli', p=0.5).rvs(uids)
+        dist = ss.Dist(sps.norm, loc=3)
+        dist.rvs(10) # Return 10 normally distributed random numbers
     """
-    def __init__(self, dist=None, name=None, seed=None, offset=None, spsdist=None,
-                 strict=False, auto=True, module=None, sim=None, **kwargs): # TODO: switch back to strict=True
-        """
-        Create a random number generator
-        
-        Args:
-            dist (str): the name of the (default) distribution to draw random numbers from, or a SciPy distribution
-            name (str): the unique name of this distribution, e.g. "coin_flip" (in practice, usually generated automatically)
-            seed (int): if supplied, the seed to use for this distribution
-            offset (int): the seed offset; will be automatically assigned (based on hashing the name) if None
-            spsdist (rv_generic): optional; a scipy.stats distribution (frozen or not) to get the ppf from
-            strict (bool): if True, require initialization and invalidate after each call to rvs()
-            auto (bool): whether to auto-reset the state after each draw
-            module (ss.Module): if provided, used when supplying lambda-function arguments as parameters
-            sim (ss.Sim): if provided, used when supplying lambda-function arguments as parameters
-            kwargs (dict): (default) parameters of the distribution
-            
-        **Examples**::
-            
-            dist = ss.Dist('normal', loc=3)
-            dist.rvs(10) # Return 10 normally distributed random numbers
-        """
-        self.dist = dist # The name of the distribution
+    def __init__(self, dist=None, name=None, seed=None, offset=None, strict=False, auto=True, sim=None, module=None, **kwargs): # TODO: switch back to strict=True
+        self.dist = dist # The type of distribution
         self.name = name
         self.kwds = sc.dictobj(kwargs) # The user-defined kwargs
         self.seed = seed # Usually determined once added to the container
@@ -172,15 +144,11 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.sim = sim
         self.slots = None # Created on initialization with a sim
         self.strict = strict
+        self.auto = auto
         
-        if dist is None:
-            errormsg = 'You must supply the name of a distribution, or a SciPy distribution'
-            raise ValueError(errormsg)
-            
         # Auto-generated 
-        self.spsdist = None # The scipy.stats distribution (used in some cases to get the ppf)
         self._kwds = None # Validated and transformed (if necessary) parameters
-        self._spskwds = None # If needed, set the scipy.stats keywords
+        self._skwds = None # If needed, set the scipy.stats keywords
         
         # Internal state
         self.rng = None # The actual RNG generator for generating random numbers
@@ -188,7 +156,6 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.ind = 0 # The index of the RNG (usually updated on each timestep)
         self.called = 0 # The number of times the distribution has been called
         self.history = [] # Previous states
-        self.method = 'numpy' # Flag whether the method to call the distribution is 'numpy' (default) or 'scipy'
         self.ready = True
         self.initialized = False
         if not strict:
@@ -197,7 +164,9 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     
     def __repr__(self):
         """ Custom display to show state of object """
-        string = f'ss.Dist("{self.trace}", dist={self.dist}, kwds={dict(self.kwds)})'
+        tracestr = '<no trace>' if self.trace is None else "{self.trace}"
+        diststr = '' if self.dist is None else f'dist={self.dist}, '
+        string = f'ss.{self.__class__.__name__}({tracestr}, {diststr}kwds={dict(self.kwds)})'
         return string
     
     def disp(self):
@@ -220,13 +189,6 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         print(string)
         return
     
-    # def __getattr__(self, attr):
-    #     """ Make it behave like a random number generator mostly -- enables things like uniform(), normal(), etc. """
-    #     if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
-    #         return self.__getattribute__(attr)
-    #     else:
-    #         return getattr(self.rng, attr)
-        
     def __call__(self, n=1):
         """ Alias to self.rvs() """
         return self.rvs(n=n)
@@ -282,7 +244,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
         return self.state
     
-    def initialize(self, trace=None, seed=0, module=None, sim=None, slots=None):
+    def initialize(self, trace=None, seed=None, module=None, sim=None, slots=None):
         """ Calculate the starting seed and create the RNG """
         
         # Calculate the offset (starting seed)
@@ -292,22 +254,25 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.rng = np.random.default_rng(seed=self.seed)
         self.make_history()
         
-        # Initialize the distribution
-        self.process_dist()
-        
-        # Finalize
-        self.module = module if (module is not None) else self.module
+        # Handle the sim, module, and slots
         self.sim = sim if (sim is not None) else self.sim
-        if self.slots is None:
-            if slots is None:
-                if self.sim is not None and hasattr(self.sim, 'people') and hasattr(self.sim.people, 'slot'):
-                    slots = self.sim.people.slot
-            self.slots = slots 
+        self.module = module if (module is not None) else self.module
+        if slots is None and self.sim is not None:
+            try:
+                slots = self.sim.people.slot
+            except Exception as E:
+                warnmsg = f'Could not extract slots from sim object, is this an error?\n{E}'
+                ss.warn(warnmsg)
+        if slots is not None:
+            self.slots = slots
+            
+        # Initialize the distribution and finalize
+        self.process_dist()
         self.ready = True
         self.initialized = True
         return self
     
-    def process_seed(self, trace=None, seed=0):
+    def process_seed(self, trace=None, seed=None):
         """ Obtain the seed offset by hashing the path to this distribution; called automatically """
         unique_name = trace or self.trace or self.name
         if unique_name:
@@ -322,17 +287,11 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     
     def process_dist(self):
         """ Ensure the distribution works """
-        if isinstance(self.dist, sps._distn_infrastructure.rv_generic):
-            self.dist = self.dist(**self.kwds) # Convert to a frozen distribution
-            
-        if isinstance(self.dist, sps._distn_infrastructure.rv_frozen):
-            self.method = 'scipy'
-            self.spsdist = self.dist
-        else:
-            self.method = 'numpy'
-            
-        if self.spsdist is not None:
-            self.spsdist.random_state = self.rng # Override the default random state with the correct one
+        if self.dist is not None:
+            if isinstance(self.dist, sps._distn_infrastructure.rv_generic):
+                kwds = self.translate_kwds(self._kwds or self.kwds)
+                self.dist = self.dist(**kwds) # Convert to a frozen distribution
+            self.dist.random_state = self.rng # Override the default random state with the correct one
         return
     
     def process_size(self, n=1):
@@ -355,10 +314,15 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self._slots = slots
         return size, uids, slots
     
+    def preprocess_kwds(self):
+        """ Do any preprocessing on keywords """
+        pass
+    
     def process_kwds(self):
         """ Ensure the supplied dist and parameters are valid, and initialize them; called automatically """
         dist = self.dist # The name of the distribution (a string, usually)
-        kwds = self.kwds.copy() # The actual keywords; shallow copy, modified below for special cases
+        self._kwds = self.kwds.copy() # The actual keywords; shallow copy, modified below for special cases
+        self.preprocess_kwds()
         
         # Main use case: handle strings, including special cases
         if isinstance(dist, str):
@@ -374,24 +338,17 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             
             # Create the actual distribution -- first the special cases of Bernoulli and delta
             if dist == 'bernoulli': # Special case, predefine the distribution here
-                dist = lambda p, size: self.rng.random(size) < p # 3x faster than using rng.binomial(1, p, size)
-            elif dist == 'delta': # Special case, predefine the distribution here
-                dist = lambda v, size: np.full(size, fill_value=v)
-            else: # It's still a string, so try getting the function from the generator
-                try:
-                    dist = getattr(self.rng, dist) # Main use case: replace the string with the actual distribution
-                except Exception as E:
-                    errormsg = f'Could not interpret "{dist}", are you sure this is a valid distribution? (i.e., an attribute of np.random.default_rng())'
-                    raise ValueError(errormsg) from E
+                dist = lambda p, size: 
+
         
-        # It wasn't a string, so assume it's a SciPy distribution
-        else:
-            self.method = 'scipy' if callable(dist) else 'frozen' # Need to handle regular and frozen distributions differently
-            if hasattr(dist, 'random_state'): # For SciPy distributions # TODO: Check if safe with non-frozen (probably not?)
-                dist.random_state = self.rng # Override the default random state with the correct one
-            else:
-                errormsg = f'Unknown distribution {type(dist)}: must be string or scipy.stats distribution, or another distribution with a random_state attribute'
-                raise TypeError(errormsg)
+        # # It wasn't a string, so assume it's a SciPy distribution
+        # else:
+        #     self.method = 'scipy' if callable(dist) else 'frozen' # Need to handle regular and frozen distributions differently
+        #     if hasattr(dist, 'random_state'): # For SciPy distributions # TODO: Check if safe with non-frozen (probably not?)
+        #         dist.random_state = self.rng # Override the default random state with the correct one
+        #     else:
+        #         errormsg = f'Unknown distribution {type(dist)}: must be string or scipy.stats distribution, or another distribution with a random_state attribute'
+        #         raise TypeError(errormsg)
         
         # Now that we have the dist function, process the keywords for callable and array inputs
         self.array_pars = False
@@ -416,20 +373,21 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         return kwds
     
     def rand(self, size=None):
-        """ Simple random numbers """
+        """ Simple way to get simple random numbers """
         if size is None: size = self._size
         return self.rng.random(size)
     
     def make_rvs(self):
         """ Return default random numbers for scalar parameters """
-        rvs = self.spsdist.rvs(self._size)
+        rvs = self.dist.rvs(self._size)
         return rvs
     
     def ppf(self, rands):
         """ Return default random numbers for array parameters """
-        return self.spsdist.ppf(rands)
+        rvs = self.dist.ppf(rands)
+        return rvs
     
-    def rvs(self, n=1):
+    def rvs(self, n=1, reset=False):
         """
         Get random variables
         
@@ -498,23 +456,21 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         
         # Tidy up
         self.called += 1
-        if self.strict:
-            self.ready = False
-        if self.auto: # TODO: check
+        if reset:
+            self.reset(-1)
+        elif self.auto: # TODO: check
             self.jump()
+        elif self.strict:
+            self.ready = False
             
         return rvs
 
-    def filter(self, uids, **kwargs): # TODO: should this only be valid for Bernoulli distribution types?
-        """ Filter UIDs by a binomial array """
-        return uids[self.rvs(uids, **kwargs).astype(bool)] # TODO: tidy up
-    
-    def plot_hist(self, size=1000, bins=None, fig_kw=None, hist_kw=None):
+
+    def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
         """ Plot the current state of the RNG as a histogram """
         pl.figure(**sc.mergedicts(fig_kw))
-        state = self.get_state()
-        rvs = self.rvs(size)
-        self.reset(state=state) # As if nothing ever happened
+        rvs = self.rvs(n)
+        self.reset(-1) # As if nothing ever happened
         pl.hist(rvs, bins=bins, **sc.mergedicts(hist_kw))
         pl.title(str(self))
         pl.xlabel('Value')
@@ -533,11 +489,12 @@ __all__ += dist_list
 class random(Dist):
     """ Random distribution, values on interval (0,1) """
     def __init__(self, **kwargs):
-        super().__init__(dist='random', **kwargs)
+        super().__init__(**kwargs)
         return
     
     def make_rvs(self):
-        return self.rng.random(size=self._size)
+        rvs = self.rng.random(size=self._size)
+        return rvs
     
     def ppf(self, rands):
         return rands
@@ -546,7 +503,7 @@ class random(Dist):
 class uniform(Dist):
     """ Uniform distribution, values on interval (low, high) """
     def __init__(self, low=0.0, high=1.0, **kwargs):
-        super().__init__(dist='uniform', low=low, high=high, **kwargs)
+        super().__init__(low=low, high=high, **kwargs)
         return
     
     # def translate_kwds(self, kwds):
@@ -558,25 +515,32 @@ class uniform(Dist):
     #     return
     
     def make_rvs(self):
-        return self.rng.uniform(**self._kwds, size=self._size)
+        kw = self._kwds
+        rvs = self.rng.uniform(low=kw.low, high=kw.high, size=self._size)
+        return rvs
     
     def ppf(self, rands):
-        low = self.kwds.low
-        high = self.kwds.high
-        return rands * (high - low) + low
+        kw = self._kwds
+        rvs = rands * (kw.high - kw.low) + kw.low
+        return rvs
+
 
 class normal(Dist):
     """ Normal distribution, with mean=loc and stdev=scale """
     def __init__(self, loc=0.0, scale=1.0, **kwargs):
-        super().__init__(dist='normal', spsdist=sps.norm, loc=loc, scale=scale, **kwargs)
+        super().__init__(dist=sps.norm, loc=loc, scale=scale, **kwargs)
         return
     
     def make_rvs(self):
-        return self.rng.normal(**self._kwds, size=self._size)
+        kw = self._kwds
+        rvs = self.rng.normal(loc=kw.loc, scale=kw.scale, size=self._size)
+        return rvs
     
     def ppf(self, rands):
-        self.spsdist.kwds = self._kwds
-        return self.spsdist.ppf(rands)
+        # self.dist.kwds = self._kwds
+        rvs = self.dist.ppf(rands)
+        return rvs
+
 
 class lognorm_u(Dist):
     """
@@ -598,6 +562,7 @@ class lognorm_u(Dist):
         self.spsdist.kwds = self._kwds
         return self.spsdist.ppf(rands)
 
+
 def lognorm_o(mean=1.0, stdev=1.0, **kwargs):
     """
     Lognormal distribution, parameterized in terms of the "overlying" (lognormal)
@@ -609,16 +574,6 @@ def lognorm_o(mean=1.0, stdev=1.0, **kwargs):
     """
     return Dist(dist='lognorm_o', mean=mean, stdev=stdev, **kwargs)
 
-def lognorm_u(loc=0.0, scale=1.0, **kwargs):
-    """
-    Lognormal distribution, parameterized in terms of the "underlying" (normal)
-    distribution, with mean=loc and stdev=scale (see lognorm_o for comparison).
-    
-    **Example**::
-        
-        ss.lognorm_u(loc=2, scale=1).rvs(1000).mean() # Should be roughly 10
-    """
-    return Dist(dist='lognorm_u', loc=loc, scale=scale, **kwargs)
 
 def expon(scale=1.0, **kwargs):
     """ Exponential distribution """
@@ -638,13 +593,49 @@ def weibull(a=1.0, **kwargs):
     """ Weibull distribution (note: there is no scale parameter) """
     return Dist(dist='weibull', a=a, **kwargs)
 
-def delta(v=0, **kwargs):
-    """ Delta distribution: equivalent to np.full() """
-    return Dist(dist='delta', v=v, **kwargs)
 
-def bernoulli(p=0.5, **kwargs):
-    """ Bernoulli distribution: return True or False with the specified probability (which can be an array) """
-    return Dist(dist='bernoulli', p=p, **kwargs)
+class delta(Dist):
+    """ Delta distribution: equivalent to np.full() """
+    def __init__(self, v=0, **kwargs):
+        super().__init__(v=v, **kwargs)
+        return
+    
+    def make_rvs(self):
+        rvs = np.full(self._size, self.v)
+        return rvs
+    
+    def ppf(self, rands): # NB: don't actually need to use random numbers here, but not worth the complexity of avoiding this
+        rvs = np.full(rands.shape, self.v)
+        return rvs
+
+
+class bernoulli(Dist):
+    """
+    Bernoulli distribution: return True or False with the specified probability (which can be an array)
+    
+    Unlike other distributions, Bernoulli distributions have a filter() method,
+    which returns elements of the array that return True.
+    """
+    def __init__(self, p=5, **kwargs):
+        super().__init__(p=p, **kwargs)
+        return
+    
+    def make_rvs(self):
+        rvs = self.rng.random(self._size) < self._kwds.p # 3x faster than using rng.binomial(1, p, size)
+        return rvs
+    
+    def ppf(self, rands):
+        rvs = rands < self._kwds.p
+        return rvs
+    
+    def filter(self, uids, both=False):
+        """ Return UIDs that pass, or optionally return both """
+        bools = self.rvs(uids)
+        if both:
+            return uids[bools], uids[~bools]
+        else:
+            return uids[bools]
+
 
 def choice(a=2, p=None, **kwargs):
     """
