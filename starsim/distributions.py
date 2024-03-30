@@ -103,7 +103,8 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     
     Args:
         dist (rv_generic): optional; a scipy.stats distribution (frozen or not) to get the ppf from
-        name (str): the name for this distribution
+        distname (str): the name for this class of distribution (e.g. "uniform")
+        name (str): the name for this particular distribution (e.g. "age_at_death")
         seed (int): the user-chosen random seed (e.g. 3)
         offset (int): the seed offset; will be automatically assigned (based on hashing the name) if None
         strict (bool): if True, require initialization and invalidate after each call to rvs()
@@ -117,8 +118,9 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         dist = ss.Dist(sps.norm, loc=3)
         dist.rvs(10) # Return 10 normally distributed random numbers
     """
-    def __init__(self, dist=None, name=None, seed=None, offset=None, strict=False, auto=True, sim=None, module=None, **kwargs): # TODO: switch back to strict=True
+    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None, strict=False, auto=True, sim=None, module=None, **kwargs): # TODO: switch back to strict=True
         self.dist = dist # The type of distribution
+        self.distname = distname
         self.name = name
         self.pars = sc.dictobj(kwargs) # The user-defined kwargs
         self.seed = seed # Usually determined once added to the container
@@ -130,6 +132,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.auto = auto
         
         # Auto-generated 
+        self.rvs_func = None # The default function to call in make_rvs() to generate the random numbers
         self._pars = None # Validated and transformed (if necessary) parameters
         self.dynamic_pars = None # Whether or not the distribution has array or callable parameters
         
@@ -148,7 +151,12 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     def __repr__(self):
         """ Custom display to show state of object """
         tracestr = '<no trace>' if self.trace is None else "{self.trace}"
-        diststr = '' if self.dist is None else f'dist={self.dist}, '
+        if self.dist is not None:
+            diststr = f'dist={self.dist}, '
+        elif self.distname is not None:
+            diststr = f'dist={self.distname}, '
+        else:
+            diststr = ''
         string = f'ss.{self.__class__.__name__}({tracestr}, {diststr}pars={dict(self.pars)})'
         return string
     
@@ -271,11 +279,18 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     
     def process_dist(self):
         """ Ensure the distribution works """
+        
+        # Handle a SciPy distribution, if provided
         if self.dist is not None:
             if isinstance(self.dist, sps._distn_infrastructure.rv_generic):
                 pars = self.translate_pars(self._pars or self.pars)
                 self.dist = self.dist(**pars) # Convert to a frozen distribution
             self.dist.random_state = self.rng # Override the default random state with the correct one
+            
+        # Set the default function for getting the rvs
+        if hasattr(self.rng, self.distname): # Don't worry if it doesn't, it's probably being manually overridden
+            self.rvs_func = getattr(self.rng, self.distname) # e.g. self.rng.uniform
+        
         return
     
     def process_size(self, n=1):
@@ -340,13 +355,19 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.sync_pars()
         return
     
-    def rand(self, size=1):
+    def rand(self, size):
         """ Simple way to get simple random numbers """
         return self.rng.random(size)
     
     def make_rvs(self):
         """ Return default random numbers for scalar parameters """
-        rvs = self.dist.rvs(self._size)
+        if self.rvs_func is not None:
+            rvs = self.rvs_func(**self._pars, size=self._size)
+        elif self.dist is not None:
+            rvs = self.dist.rvs(self._size)
+        else:
+            errormsg = 'Could not generate random numbers: no valid NumPy function or SciPy distribution found'
+            raise ValueError(errormsg)
         return rvs
     
     def ppf(self, rands):
@@ -368,7 +389,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             raise DistNotReadyError(self)
         
         # Figure out size, UIDs, and slots
-        size, uids, slots = self.process_size(n)
+        size, slots = self.process_size(n)
         
         # Check if size is 0, then we can return
         if size == 0:
@@ -384,11 +405,11 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         # Actually get the random numbers
         if self.dynamic_pars:
             rands = self.rand(size)[slots] # Get random values 
-            rvs = self.ppf(rands)
+            rvs = self.ppf(rands) # Convert to actual values via the PPF
         else:
-            rvs = self.make_rvs()
-            if slots is not None:
-                rvs = rvs[slots]
+            rvs = self.make_rvs() # Or, just get regular values
+            if self._slots is not None:
+                rvs = rvs[self._slots]
         
         # Tidy up
         self.called += 1
@@ -425,12 +446,8 @@ __all__ += dist_list
 class random(Dist):
     """ Random distribution, values on interval (0,1) """
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(distname='random', **kwargs)
         return
-    
-    def make_rvs(self):
-        rvs = self.rng.random(size=self._size)
-        return rvs
     
     def ppf(self, rands):
         return rands
@@ -439,7 +456,7 @@ class random(Dist):
 class uniform(Dist):
     """ Uniform distribution, values on interval (low, high) """
     def __init__(self, low=0.0, high=1.0, **kwargs):
-        super().__init__(low=low, high=high, **kwargs)
+        super().__init__(distname='uniform', low=low, high=high, **kwargs)
         return
     
     def make_rvs(self):
