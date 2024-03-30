@@ -833,7 +833,7 @@ class HPVNet(MFNet):
 
     def initialize(self, sim):
         super().initialize(sim)
-        return self.add_pairs(sim.people, ti=0)
+        return self.add_pairs(sim.people)
 
     def update_pars(self, pars):
         if pars is not None:
