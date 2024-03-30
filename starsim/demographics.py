@@ -344,8 +344,9 @@ class Pregnancy(BaseDemographics):
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.choose_slots.kwds['low'] = sim.pars.n_agents+1 # TODO: or 0?
-        self.choose_slots.kwds['high'] = int(sim.pars.slot_scale*sim.pars.n_agents)
+        low = sim.pars.n_agents+1 # TODO: or 0?
+        high = int(sim.pars.slot_scale*sim.pars.n_agents)
+        self.choose_slots.set(low=low, high=high)
         return
 
     def init_results(self, sim):
