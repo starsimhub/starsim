@@ -88,16 +88,16 @@ class Module:#(sc.prettyobj): # TODO: replace with sc.qprettyobj
         # Initialize distributions in pars # TODO: refactor
         for key, value in self.pars.items():
             if isinstance(value, rv_frozen):
-                self.pars[key] = ss.Dist(value)
+                self.pars[key] = ss.Dist(dist=value)
 
         for key, value in self.__dict__.items():
             if isinstance(value, rv_frozen):
-                setattr(self, key, ss.Dist(value))
+                setattr(self, key, ss.Dist(dist=value))
         
         # Initialize everything # TODO: shouldn't be needed, should be able to recurse more
         for key,val in list(self.pars.items()) + list(self.__dict__.items()):
             if isinstance(val, ss.Dist):
-                if val.trace is None or val.sim is None:
+                if val.initialized is not True: # Catches False and 'partial'
                     val.initialize(module=self, sim=sim, force=True) # Actually a dist
                 else:
                     print(f'TEMP: tried to reinitialize {val}')

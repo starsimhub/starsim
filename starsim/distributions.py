@@ -21,10 +21,10 @@ def str2int(string, modulo=10_000_000):
     return int.from_bytes(string.encode(), byteorder='big') % modulo
 
 
-def find_dists(obj, verbose=False):
+def find_dists(obj, verbose=True):
     """ Find all Dist objects in a parent object """
     out = sc.objdict()
-    tree = sc.iterobj(obj) # Temporary copy of sc.iterobj(obj) until Sciris 3.1.5 is released
+    tree = sc.iterobj(obj, depthfirst=False)
     if verbose: print(f'Found {len(tree)} objects')
     for trace,val in tree.items():
         if isinstance(val, Dist):

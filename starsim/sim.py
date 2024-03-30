@@ -105,12 +105,12 @@ class Sim(sc.prettyobj):
         self.init_analyzers()
 
         # Perform post-initialization validation
-        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed + 2, force=True)  # TEMP # TODO Should not be here!!!
+        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed, force=True)
         self.validate_post_init()
 
         # Reset the random seed to the default run seed, so that if the simulation is run with
         # reset_seed=False right after initialization, it will still produce the same output
-        ss.set_seed(self.pars.rand_seed + 1)  # Hopefully not used now that we can use multiple random number generators
+        # ss.set_seed(self.pars.rand_seed + 1)  # Hopefully not used now that we can use multiple random number generators
 
         # Final steps
         self.initialized = True
@@ -528,8 +528,8 @@ class Sim(sc.prettyobj):
         if verbose is None:
             verbose = self.pars.verbose
 
-        if reset_seed:
-            ss.set_seed(self.pars.rand_seed + 1)
+        # if reset_seed:
+        #     ss.set_seed(self.pars.rand_seed + 1)
 
         # Check for AlreadyRun errors
         errormsg = None

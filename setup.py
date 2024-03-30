@@ -22,6 +22,7 @@ CLASSIFIERS = [
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
 ]
 
 setup(
@@ -40,7 +41,7 @@ setup(
         'numpy',
         'scipy',
         'pandas>=2.0.0',
-        'sciris>=3.1.5',
+        'sciris>=3.1.6',
         'matplotlib',
         'numba',
         'networkx',
