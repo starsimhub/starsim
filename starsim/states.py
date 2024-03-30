@@ -9,10 +9,9 @@ import starsim as ss
 from starsim.settings import INT_NAN
 from starsim.settings import dtypes as sdt
 from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
-from scipy.stats._distn_infrastructure import rv_frozen
 
 
-__all__ = ['check_dtype', 'State', 'ArrayView']
+__all__ = ['check_dtype', 'UIDArray', 'State', 'ArrayView']
 
 
 def check_dtype(dtype, default=None):
@@ -189,10 +188,12 @@ class UIDArray(NDArrayOperatorsMixin):
                 raise e
 
     def __setitem__(self, key, value):
-        # nb. the use of .__array__() calls is to access the array interface and thereby treat both np.ndarray and ArrayView instances
-        # in the same way without needing an additional type check. This is also why the UIDArray.dtype property is defined. Noting
-        # that for a State, the uid_map is a dynamic view attached to the People, but after an indexing operation, it will be a bare
-        # UIDArray that has an ordinary numpy array as the uid_map
+        """
+        nb. the use of .__array__() calls is to access the array interface and thereby treat both np.ndarray and ArrayView instances
+        in the same way without needing an additional type check. This is also why the UIDArray.dtype property is defined. Noting
+        that for a State, the uid_map is a dynamic view attached to the People, but after an indexing operation, it will be a bare
+        UIDArray that has an ordinary numpy array as the uid_map
+        """
         try:
             if isinstance(key, (int, np.integer)):
                 return self.values.__setitem__(self._uid_map[key], value)
@@ -318,55 +319,57 @@ class ArrayView(NDArrayOperatorsMixin):
 
     @property
     def _s(self):
-        # Return the size of the underlying array (maximum number of agents that can be stored without reallocation)
+        """ Return the size of the underlying array (maximum number of agents that can be stored without reallocation) """
         return len(self._data)
 
     @property
     def dtype(self):
-        # The specified dtype and the underlying array dtype can be different. For instance, the user might pass in
-        # ArrayView(dtype=int) but the underlying array's dtype will be np.dtype('int32'). This distinction is important
-        # because the numpy dtype has attributes like 'kind' that the input dtype may not have. We need the ArrayView's
-        # dtype to match that of the underlying array so that it can be more seamlessly exchanged with direct numpy arrays
-        # Therefore, we retain the original dtype in ArrayView._dtype() and use
+        """
+        The specified dtype and the underlying array dtype can be different. For instance, the user might pass in
+        ArrayView(dtype=int) but the underlying array's dtype will be np.dtype('int32'). This distinction is important
+        because the numpy dtype has attributes like 'kind' that the input dtype may not have. We need the ArrayView's
+        dtype to match that of the underlying array so that it can be more seamlessly exchanged with direct numpy arrays
+        Therefore, we retain the original dtype in ArrayView._dtype() and use
+        """
         return self._data.dtype
 
     def __len__(self):
-        # Return the number of active elements
+        """ Return the number of active elements """
         return self.n
 
     def __repr__(self):
-        # Print out the numpy view directly
+        """ Print out the numpy view directly """
         return self._view.__repr__()
 
     def grow(self, n):
-        # If the total number of agents exceeds the array size, extend the underlying arrays
+        """ If the total number of agents exceeds the array size, extend the underlying arrays """
         if self.n + n > self._s:
             n_new = max(n, int(self._s / 2))  # Minimum 50% growth
             self._data = np.concatenate([self._data, np.full(n_new, dtype=self.dtype, fill_value=self.default)], axis=0)
         self.n += n  # Increase the count of the number of agents by `n` (the requested number of new agents)
         self._map_arrays()
+        return
 
     def _trim(self, inds):
-        # Keep only specified indices
+        """ Keep only specified indices """
         # Note that these are indices, not UIDs!
         n = len(inds)
         self._data[:n] = self._data[inds]
         self._data[n:self.n] = self.default
         self.n = n
         self._map_arrays()
-
+        return
 
     def __getstate__(self):
-        # When pickling, skip storing the `._view` attribute, which should be re-linked after unpickling
+        """ When pickling, skip storing the `._view` attribute, which should be re-linked after unpickling """
         return {k:getattr(self, k) for k in self.__slots__ if k != '_view'}
 
     def __setstate__(self, state):
-        # Re-map arrays after unpickling so that `.view` is a reference to the correct array in-memory
+        """ Re-map arrays after unpickling so that `.view` is a reference to the correct array in-memory """
         for k,v in state.items():
             setattr(self, k, v)
         self._map_arrays()
         return
-
 
     def _map_arrays(self):
         """
@@ -382,6 +385,13 @@ class ArrayView(NDArrayOperatorsMixin):
 
     def __setitem__(self, key, value):
         self._view.__setitem__(key, value)
+        
+    def __getattr__(self, attr):
+        """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
+        if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
+            return self.__getattribute__(attr)
+        else:
+            return getattr(self._view, attr)
 
     @property
     def __array_interface__(self):
@@ -410,7 +420,7 @@ class State(UIDArray):
             default (any): Specify default value for new agents. This can be
             - A scalar with the same dtype (or castable to the same dtype) as the State
             - A callable, with a single argument for the number of values to produce
-            - An ``ss.ScipyDistribution`` instance
+            - A ``ss.Dist`` instance
             label (str): The human-readable name for the state
             coerce (bool): Whether to ensure the the data is one of the supported data types
         """
@@ -438,7 +448,7 @@ class State(UIDArray):
             return UIDArray.__repr__(self)
 
     def _new_vals(self, uids):
-        if isinstance(self.default, ss.ScipyDistribution):
+        if isinstance(self.default, ss.Dist):
             new_vals = self.default.rvs(uids)
         elif callable(self.default):
             new_vals = self.default(len(uids))
@@ -454,7 +464,7 @@ class State(UIDArray):
         specifically, `People.initialize()` and `Module.initialize()`. Initialization of a State object
         involves two processes:
 
-        - Converting any distribution objects to a ScipyDistribution instance and linking it to RNGs stored in a `Sim`
+        - Converting any distribution objects to a Dist instance and linking it to RNGs stored in a `Sim`
         - Establishing a bidirectional connection with a `People` object for the purpose of UID indexing and resizing
 
         Since State objects can be stored in `People` or in a `Module` and the collection of all states in a `Sim` should
@@ -471,11 +481,10 @@ class State(UIDArray):
 
         people = sim.people
         assert people.initialized, 'People must be initialized before initializing states'
-
+        
         # Connect any distributions in the default to RNGs in the Sim
-        if isinstance(self.default, rv_frozen):
-            self.default = ss.ScipyDistribution(self.default, f'{self.__class__.__name__}_{self.label}')
-            self.default.initialize(sim, self)
+        if isinstance(self.default, ss.Dist):
+            self.default.initialize(module=self, sim=sim)
 
         # Establish connection with the People object
         people.register_state(self)

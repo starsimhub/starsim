@@ -152,6 +152,7 @@ class BasePeople(sc.prettyobj):
         state['_states'] =  {id(v):v for v in state['_states'].values()}
         self.__dict__ = state
 
+
 class People(BasePeople):
     """
     A class to perform all the operations on the people
@@ -207,13 +208,14 @@ class People(BasePeople):
     def get_age_dist(age_data):
         """ Return an age distribution based on provided data """
         if age_data is None:
-            dist = ss.uniform(loc=0, scale=100)  # loc and width
-            return ss.ScipyDistribution(dist, 'Age distribution')
+            dist = ss.uniform(low=0, high=100, name='Age distribution')
+            return dist
 
         if sc.checktype(age_data, pd.DataFrame):
-            bb = np.append(age_data['age'].values, age_data['age'].values[-1] + 1)
-            vv = age_data['value'].values
-            return ss.ScipyHistogram((vv, bb), density=False, rng='Age distribution')
+            age_bins = age_data['age'].values
+            age_props = age_data['value'].values
+            age_props /= age_props.sum()
+            return ss.choice(a=age_bins, p=age_props)
 
 
     def initialize(self, sim):
@@ -229,7 +231,7 @@ class People(BasePeople):
         self.slot.initialize(sim)
         self.slot[:] = self.uid
 
-        self.age_data_dist.initialize(sim, self)
+        self.age_data_dist.initialize(module=self, sim=sim)
 
         # Initialize states
         # Age is handled separately because the default value for new agents is NaN until they are concieved/born whereas
@@ -239,7 +241,7 @@ class People(BasePeople):
             state.initialize(sim)
 
         # Assign initial ages based on the current age distribution
-        self.age[:] = self.age_data_dist.rvs(size=self.uid)
+        self.age[:] = self.age_data_dist.rvs(self.uid)
         return
 
     def add_module(self, module, force=False):

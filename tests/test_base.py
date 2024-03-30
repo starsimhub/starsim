@@ -7,9 +7,7 @@ import sciris as sc
 import numpy as np
 import starsim as ss
 import matplotlib.pyplot as plt
-import scipy.stats as sps
 
-do_plot = True
 sc.options(interactive=False) # Assume not running interactively
 
 # %% Define the tests
@@ -34,6 +32,7 @@ def test_people():
 
 
 def test_networks():
+    sc.heading('Testing networks')
 
     # Make completely abstract layers
     n_edges = 10_000
@@ -60,7 +59,7 @@ def test_networks():
     return nw1, nw2, nw3
 
 
-def test_microsim():
+def test_microsim(do_plot=False):
     sc.heading('Test making people and providing them to a sim')
 
     # Make HIV module
@@ -79,23 +78,24 @@ def test_microsim():
     sim.initialize()
     sim.run()
 
-    plt.figure()
-    plt.plot(sim.tivec, sim.results.hiv.n_infected)
-    plt.title('HIV number of infections')
+    if do_plot:
+        plt.figure()
+        plt.plot(sim.tivec, sim.results.hiv.n_infected)
+        plt.title('HIV number of infections')
 
     return sim
 
 
 def test_ppl_construction():
 
-    def init_debut(self, sim, uids):
+    def init_debut(module, sim, uids):
         # Test setting the mean debut age by sex, 16 for men and 21 for women.
         loc = np.full(len(uids), 16)
         loc[sim.people.female[uids]] = 21
         return loc
 
     mf_pars = {
-        'debut': sps.norm(loc=init_debut, scale=2),  # Age of debut can vary by using callable parameter values
+        'debut': ss.normal(loc=init_debut, scale=2),  # Age of debut can vary by using callable parameter values
     }
     sim_pars = {'networks': [ss.MFNet(mf_pars)], 'n_agents': 100}
     gon_pars = {'beta': {'mf': [0.08, 0.04]}, 'p_death': 0.2}
@@ -114,6 +114,7 @@ def test_ppl_construction():
 
 # %% Run as a script
 if __name__ == '__main__':
+    do_plot = True
     sc.options(interactive=do_plot)
 
     # Start timing
@@ -122,7 +123,7 @@ if __name__ == '__main__':
     # Run tests
     ppl = test_people()
     nw1, nw2, nw3 = test_networks()
-    sim1 = test_microsim()
+    sim1 = test_microsim(do_plot)
     sim2 = test_ppl_construction()
 
     sc.toc(T)

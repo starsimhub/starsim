@@ -1,410 +1,687 @@
-""" 
-Distribution support extending scipy with two key functionalities:
-1. Callable parameters
-2. Ability to use MultiRNG for common random number support
+"""
+Define random-number-safe distributions.
 """
 
-from copy import deepcopy
 import numpy as np
+import sciris as sc
+import scipy.stats as sps
 import starsim as ss
-from starsim.random import SingleRNG, MultiRNG
-from starsim import options
-from scipy.stats import (bernoulli, expon, lognorm, norm, poisson, randint, rv_discrete, 
-                         uniform, rv_histogram, weibull_min)
-from scipy.stats._discrete_distns import bernoulli_gen, poisson_gen # TODO: can we remove this?
+import pylab as pl
+
+__all__ = ['find_dists', 'dist_list', 'Dists', 'Dist']
 
 
-__all__ = ['ScipyDistribution', 'ScipyHistogram']
-__all__ += ['bernoulli', 'expon', 'lognorm', 'norm', 'poisson', 'randint', 'rv_discrete', 
-            'uniform', 'weibull_min'] # Add common distributions so they can be imported directly
+def str2int(string, modulo=10_000_000):
+    """
+    Convert a string to an int
+    
+    Cannot use Python's built-in hash() since it's randomized for strings, but
+    this is almost as fast (and 5x faster than hashlib).
+    """
+    return int.from_bytes(string.encode(), byteorder='big') % modulo
 
 
-class ScipyDistribution():
-    def __init__(self, gen, rng=None):
-        self._gen = gen
-        class starsim_gen(type(gen.dist)):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.sim = None
-                return
+def find_dists(obj, verbose=False):
+    """ Find all Dist objects in a parent object """
+    out = sc.objdict()
+    tree = sc.iterobj(obj) # Temporary copy of sc.iterobj(obj) until Sciris 3.1.5 is released
+    if verbose: print(f'Found {len(tree)} objects')
+    for trace,val in tree.items():
+        if isinstance(val, Dist):
+            key = str(trace)
+            out[key] = val
+            if verbose: print(f'  {key} is a dist ({len(out)})')
+    return out
 
-            def initialize(self, sim, context):
-                self.sim = sim
-                self.context = context
-                return
 
-            def rvs_crn(self, *args, **kwargs):
-                # Bernoulli/binomial and Poisson workarounds
-                # p=0 in binomial (bernoulli) and lam=0 in Poisson do not use random numbers, which throws off CRN
-                # Solution 1: Replace 0 with eps
-                # Solution 2: Replace p (lam) where 0 with any non-zero value (e.g. eps), then revert vals back to 0
-                # --> Solution here is BOTH 1 and 2
-                if options.multirng and isinstance(self, bernoulli_gen) and ('p' in kwargs) and not np.isscalar(kwargs['p']):
-                    inds = np.where(kwargs['p']==0)[0]
-                    kwargs['p'][inds] = np.finfo(float).eps
+class Dists:
+    """ Class for managing a collection of Dist objects """
 
-                    # Actually sample the random values
-                    vals = super().rvs(*args, **kwargs)
-
-                    # Complete the Bernoulli/binomial
-                    vals[inds] = 0
-                elif options.multirng and isinstance(self, poisson_gen) and ('lam' in kwargs) and not np.isscalar(kwargs['lam']):
-                    inds = np.where(kwargs['lam']==0)[0]
-                    kwargs['lam'][inds] = np.finfo(float).eps
-
-                    # Actually sample the random values
-                    vals = super().rvs(*args, **kwargs)
-
-                    # Complete the Poisson fix
-                    vals[inds] = 0
-                else:
-                    # Straightforward call to rvs
-                    vals = super().rvs(*args, **kwargs)
-
-                return vals
-
-            def rvs(self, *args, **kwargs):
-                """
-                Return a specified number of samples from the distribution
-                """
-
-                size = kwargs['size']
-                slots = None
-                repeat_slot_flag = False
-                self.repeat_slot_handling = {}
-                # Work out how many samples to draw. If sampling by UID, this depends on the slots assigned to agents.
-                if np.isscalar(size):
-                    if type(size) not in [int, np.int64, np.int32]: # CK: TODO: need to refactor
-                        raise Exception('Input "size" must be an integer')
-                    if size < 0:
-                        raise Exception('Input "size" cannot be negative')
-                    elif size == 0:
-                        return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
-                    else:
-                        n_samples = size
-                elif len(size) == 0:
-                    return np.array([], dtype=int)
-                elif size.dtype == bool:
-                    n_samples = len(size) if options.multirng else size.sum()
-                elif size.dtype in [int, np.int64, np.int32]: # CK: TODO: need to refactor
-                    if not options.multirng:
-                        n_samples = len(size)
-                    else:
-                        try:
-                            slots = self.random_state.slots[size]
-                            max_slot = slots.max()
-                        except AttributeError as e:
-                            if not isinstance(self.random_state, MultiRNG):
-                                raise Exception('With options.multirng and passing agent UIDs to a distribution, the random_state of the distribution must be a MultiRNG.')
-                            else:
-                                if not self.random_state.initialized:
-                                    raise Exception('The MultiRNG instance must be initialized before use.')
-                            raise e
-
-                        if max_slot == ss.INT_NAN:
-                            raise Exception('Attempted to sample from an INT_NAN slot')
-                        n_samples = max_slot + 1
-                else:
-                    raise Exception("Unrecognized input type")
-
-                # Now handle distribution arguments
-                for pname in [p.name for p in self._param_info()]:
-                    if pname in kwargs and callable(kwargs[pname]):
-                        kwargs[pname] = kwargs[pname](self.context, self.sim, size)
-
-                    # Now do slotting if MultiRNG
-                    if options.multirng and (pname in kwargs) and (not np.isscalar(kwargs[pname])) and (len(kwargs[pname]) != n_samples):
-                        # Fill in the blank. The number of UIDs provided is
-                        # hopefully consistent with the length of pars
-                        # provided, but we need to expand out the pars to be
-                        # n_samples in length.
-                        if len(kwargs[pname]) not in [len(size), sum(size)]: # Could handle uid and bool separately? len(size) for uid and sum(size) for bool
-                            raise Exception('When providing an array of parameters, the length of the parameters must match the number of agents for the selected size (uids).')
-                        pars_slots = np.full(n_samples, fill_value=1, dtype=kwargs[pname].dtype) # self.fill_value
-                        if slots is not None:
-                            if len(slots) != len(np.unique(slots)):
-                                # Tricky - repeated slots!
-                                if not repeat_slot_flag:
-                                    repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots, return_index=True, return_inverse=True, return_counts=True)
-                                self.repeat_slot_handling[pname] = kwargs[pname].__array__()  # Save full pars for handling later. Use .__array__() here to provide seamless interoperability with States, UIDArrays, and np.ndarrays
-                                pars_slots[repeat_slot_u] = self.repeat_slot_handling[pname][repeat_slot_ind] # Take first instance of each
-                                repeat_slot_flag = True
-                            else:
-                                pars_slots[slots] = kwargs[pname]
-                        else:
-                            pars_slots[size] = kwargs[pname]
-                        kwargs[pname] = pars_slots
-
-                kwargs['size'] = n_samples
-                
-                # If multirng, make sure the generator is ready to avoid multiple calls without jumping in between
-                if options.multirng and not self.random_state.ready:
-                    raise ss.NotReadyException(self.random_state.name)
-
-                # Get random vals, accounting for inconsistencies in binomial draws
-                vals = self.rvs_crn(*args, **kwargs)
-
-                # Again if multirng, mark the generator as not ready (needs to be jumped)
-                if options.multirng:
-                    self.random_state.ready = False
-
-                if repeat_slot_flag:
-                    # Handle repeated slots
-                    repeat_slot_vals = np.full(len(slots), np.nan)
-                    repeat_slot_vals[repeat_slot_ind] = vals[repeat_slot_u] # Store results
-                    todo_inds = np.where(np.isnan(repeat_slot_vals))[0]
-
-                    if options.verbose > 1 and cnt.max() > 2:
-                        print(f'MultiRNG slots are repeated up to {cnt.max()} times.')
-
-                    #repeat_degree = repeat_slot_cnt.max()
-                    while len(todo_inds):
-                        repeat_slot_u, repeat_slot_ind, inv, cnt = np.unique(slots.values[todo_inds], return_index=True, return_inverse=True, return_counts=True)
-                        cur_inds = todo_inds[repeat_slot_ind] # Absolute positions being filled this pass
-
-                        # Reset RNG, note that ti=0 on initialization and ti+1
-                        # there after, including ti=0. Assuming that repeat
-                        # slots are not encountered during sim initialization.
-                        if self.sim is not None:
-                            self.random_state.step(self.sim.ti+1) 
-                        else:
-                            # Likely from a test? Just reset the random state.
-                            self.random_state.reset()
-
-                        for pname in [p.name for p in self._param_info()]:
-                            if pname in self.repeat_slot_handling:
-                                kwargs_pname = self.repeat_slot_handling[pname][cur_inds]
-                                pars_slots = np.full(n_samples, fill_value=1, dtype=kwargs_pname.dtype) # self.fill_value
-                                pars_slots[repeat_slot_u] = kwargs_pname # Take first instance of each
-                                kwargs[pname] = pars_slots
-
-                        vals = self.rvs_crn(*args, **kwargs)
-                        repeat_slot_vals[cur_inds] = vals[repeat_slot_u]
-                        todo_inds = np.where(np.isnan(repeat_slot_vals))[0]
-
-                    vals = repeat_slot_vals
-                
-                if isinstance(self, bernoulli_gen):
-                    vals = vals.astype(bool)
-
-                # _select:
-                if not options.multirng or repeat_slot_flag:
-                    return vals
-
-                if np.isscalar(size):
-                    return vals
-                elif size.dtype == bool:
-                    return vals[size]
-                else:
-                    return vals[slots] # slots defined above
-
-        rng = self.set_rng(rng, gen)
-        self.gen = starsim_gen(name=gen.dist.name, seed=rng)(**gen.kwds)
+    def __init__(self, obj=None, base_seed=None, sim=None):
+        self.obj = obj
+        self.dists = None
+        self.base_seed = base_seed
+        self.sim = sim
+        self.initialized = False
+        if self.obj is not None:
+            self.initialize()
         return
 
-    @staticmethod
-    def set_rng(rng, gen):
-        # Handle random generators
-        ret = gen.random_state # Default
-        if gen.random_state == np.random.mtrand._rand and rng:
-            if options.rng=='multi':
-                # MultiRNG, rng not none, and the current "random_state" is the
-                # numpy global singleton... so let's override
-                if isinstance(rng, str):
-                    ret = MultiRNG(rng) # Crate a new generator with the user-provided string
-                elif isinstance(rng, np.random.Generator):
-                    ret = rng
-                else:
-                    raise Exception(f'The rng must be a string or a np.random.Generator instead of {type(rng)}')
-            elif options.rng=='single':
-                # SingleRNG, rng not none, and the current "random_state" is the
-                # numpy global singleton... so let's override
-                if isinstance(rng, str):
-                    ret = SingleRNG(rng) # Crate a new generator with the user-provided string
-                elif isinstance(rng, np.random.Generator):
-                    ret = rng
-                else:
-                    raise Exception(f'The rng must be a string or a np.random.Generator instead of {type(rng)}')
-        return ret
+    def initialize(self, obj=None, base_seed=None, sim=None, force=True):
+        """
+        Set the base seed, find and initialize all distributions in an object
+        
+        In practice, the object is usually a Sim, but can be anything.
+        """
+        if base_seed:
+            self.base_seed = base_seed
+        sim = sim if (sim is not None) else self.sim
+        obj = obj if (obj is not None) else self.obj
+        if obj is None:
+            errormsg = 'Must supply a container that contains one or more Dist objects'
+            raise ValueError(errormsg)
+        self.dists = find_dists(obj)
+        for trace,dist in self.dists.items():
+            if not dist.initialized or force:
+                dist.initialize(trace=trace, seed=base_seed, sim=sim)
+        self.check_seeds()
+        self.initialized = True
+        return self
+    
+    def check_seeds(self):
+        """ Check that no two distributions share the same seed """
+        checked = dict()
+        for trace,dist in self.dists.items():
+            seed = dist.seed
+            if seed in checked.keys():
+                raise DistSeedRepeatError(checked[seed], dist)
+            else:
+                checked[seed] = dist
+        return
 
-    def initialize(self, sim, context):
-        # Passing sim and context here allow callables to receive "self" and sim pointers
-        self.gen.dist.initialize(sim, context)
-        if isinstance(self.rng, (SingleRNG, MultiRNG)):
-            self.rng.initialize(sim.rng_container, sim.people.slot)
+    def jump(self, to=None, delta=1):
+        """ Advance all RNGs, e.g. to timestep "to", by jumping """
+        out = sc.autolist()
+        for dist in self.dists.values():
+            out += dist.jump(to=to, delta=delta)
+        return out
+
+    def reset(self):
+        """ Reset each RNG """
+        out = sc.autolist()
+        for dist in self.dists.values():
+            out += dist.reset()
+        return out
+
+
+class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
+    """
+    Base class for tracking one random number generator associated with one distribution,
+    i.e. one decision per timestep.
+    
+    See ss.dist_list for a full list of supported distributions.
+    
+    Args:
+        dist (rv_generic): optional; a scipy.stats distribution (frozen or not) to get the ppf from
+        distname (str): the name for this class of distribution (e.g. "uniform")
+        name (str): the name for this particular distribution (e.g. "age_at_death")
+        seed (int): the user-chosen random seed (e.g. 3)
+        offset (int): the seed offset; will be automatically assigned (based on hashing the name) if None
+        strict (bool): if True, require initialization and invalidate after each call to rvs()
+        auto (bool): whether to auto-reset the state after each draw
+        sim (Sim): usually determined on initialization; the sim to use as input to callable parameters
+        module (Module): usually determined on initialization; the module to use as input to callable parameters
+        kwargs (dict): parameters of the distribution
+        
+    **Examples**::
+        
+        dist = ss.Dist(sps.norm, loc=3)
+        dist.rvs(10) # Return 10 normally distributed random numbers
+    """
+    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None, strict=False, auto=False, sim=None, module=None, **kwargs): # TODO: switch back to strict=True
+        self.dist = dist # The type of distribution
+        self.distname = distname
+        self.name = name
+        self.pars = sc.dictobj(kwargs) # The user-defined kwargs
+        self.seed = seed # Usually determined once added to the container
+        self.offset = offset
+        self.module = module
+        self.sim = sim
+        self.slots = None # Created on initialization with a sim
+        self.strict = strict
+        self.auto = auto
+        
+        # Auto-generated 
+        self.rvs_func = None # The default function to call in make_rvs() to generate the random numbers
+        self.dynamic_pars = None # Whether or not the distribution has array or callable parameters
+        self._pars = None # Validated and transformed (if necessary) parameters
+        self._n = None # Internal variable to keep track of "n" argument (usually size)
+        self._size = None # Internal variable to keep track of actual number of random variates asked for
+        self._uids = None # Internal variable to track currently-in-use UIDs
+        self._slots = None # Internal variable to track currently-in-use slots
+        
+        # History and random state
+        self.rng = None # The actual RNG generator for generating random numbers
+        self.trace = None # The path of this object within the parent
+        self.ind = 0 # The index of the RNG (usually updated on each timestep)
+        self.called = 0 # The number of times the distribution has been called
+        self.history = [] # Previous states
+        self.ready = True
+        self.initialized = False
+        if not strict: # Otherwise, wait for a sim
+            self.initialize()
+        return
+    
+    def __repr__(self):
+        """ Custom display to show state of object """
+        tracestr = '<no trace>' if self.trace is None else f"{self.trace}"
+        if self.dist is not None:
+            diststr = f'dist={self.dist}, '
+        elif self.distname is not None:
+            diststr = f'dist={self.distname}, '
+        else:
+            diststr = ''
+        string = f'ss.{self.__class__.__name__}({tracestr}, {diststr}pars={dict(self.pars)})'
+        return string
+    
+    def disp(self):
+        """ Return full display of object """
+        return sc.pr(self)
+    
+    def show_state(self):
+        """ Show the state of the object """
+        s = sc.autolist()
+        s += f'  dist = {self.dist}'
+        s += f'  pars = {self.pars}'
+        s += f' trace = {self.trace}'
+        s += f'offset = {self.offset}'
+        s += f'  seed = {self.seed}'
+        s += f'   ind = {self.ind}'
+        s += f'called = {self.called}'
+        s += f' ready = {self.ready}'
+        s += f' state = {self.state}'
+        string = sc.newlinejoin(s)
+        print(string)
+        return
+    
+    def __call__(self, n=1):
+        """ Alias to self.rvs() """
+        return self.rvs(n=n)
+    
+    def set(self, dist=None, **kwargs):
+        """ Set (change) the distribution type, or one or more parameters of the distribution """
+        if dist:
+            self.dist = dist
+            self.process_dist()
+        if kwargs:
+            self.pars.update(kwargs)
+            self.process_pars(call=False)
         return
 
     @property
-    def rng(self):
-        return self.dist.random_state
+    def bitgen(self):
+        try:
+            return self.rng.bit_generator
+        except:
+            return None
+    
+    @property
+    def state(self):
+        """ Get the current state """
+        try:
+            return self.bitgen.state
+        except:
+            return None
+    
+    def get_state(self):
+        """ Return a copy of the state """
+        return self.state.copy()
+    
+    def make_history(self, reset=False):
+        """ Store the current state in history """
+        if reset:
+            self.history = []
+        self.history.append(self.get_state()) # Store the initial state
+        return
 
-    def __copy__(self):
-        cls = self.__class__
-        result = cls.__new__(cls)
-        result.__dict__.update(self.__dict__)
-        return result
+    def reset(self, state=0):
+        """ Restore state: use 0 for initial, -1 for most recent """
+        if not isinstance(state, dict):
+            state = self.history[state]
+        self.rng.bit_generator.state = state.copy()
+        self.ready = True
+        return self.state
 
-    def __deepcopy__(self, memo):
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memo[id(self)] = result
-        for k, v in self.__dict__.items():
-            setattr(result, k, deepcopy(v, memo))
-
-        if self.gen.random_state == np.random.mtrand._rand:
-            # The gen is using the centralized numpy random number generator
-            # If we copy over the state, we'll get _separate_ random number generators
-            # for each distribution which do not draw from the _centralized_ generator
-            # in the new instance.
-            # Not clear what to do, I suppose keep as centralized?
-            result.gen.random_state = np.random.mtrand._rand
-
-        return result
-
-    def __getstate__(self):
-        dct = self.__dict__.copy()
-        dct.pop('gen')
-        return dct
-
-    def __setstate__(self, state):
-        self.__init__(state['_gen'])
+    def jump(self, to=None, delta=1):
+        """ Advance the RNG, e.g. to timestep "to", by jumping """
+        jumps = to if (to is not None) else self.ind + delta
+        self.ind = jumps
+        self.reset() # First reset back to the initial state (used in case of different numbers of calls)
+        if jumps: # Seems to randomize state if jumps=0
+            self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
+        return self.state
+    
+    def initialize(self, trace=None, seed=None, module=None, sim=None, slots=None):
+        """ Calculate the starting seed and create the RNG """
+        
+        # Calculate the offset (starting seed)
+        self.process_seed(trace, seed)
+        
+        # Create the actual RNG
+        self.rng = np.random.default_rng(seed=self.seed)
+        self.make_history(reset=True)
+        
+        # Handle the sim, module, and slots
+        self.sim = sim if (sim is not None) else self.sim
+        self.module = module if (module is not None) else self.module
+        if slots is None and self.sim is not None:
+            try:
+                slots = self.sim.people.slot
+            except Exception as E:
+                warnmsg = f'Could not extract slots from sim object, is this an error?\n{E}'
+                ss.warn(warnmsg)
+        if slots is not None:
+            self.slots = slots
+            
+        # Initialize the distribution and finalize
+        self.process_dist()
+        self.process_pars(call=False)
+        self.ready = True
+        self.initialized = True
+        return self
+    
+    def process_seed(self, trace=None, seed=None):
+        """ Obtain the seed offset by hashing the path to this distribution; called automatically """
+        unique_name = trace or self.trace or self.name
+        if unique_name:
+            if not self.name:
+                self.name = unique_name
+            self.trace = unique_name
+            self.offset = str2int(unique_name) # Key step: hash the path to the distribution
+        else:
+            self.offset = self.offset or 0
+        self.seed = self.offset + (seed or self.seed or 0)
         return
     
-    def __getattr__(self, attr):
-        # Returns wrapped generator.(attr) if not a property
-        if attr in ['__await__']:
-            return None
-        try:
-            return self.__getattribute__(attr)
-        except Exception:
-            try:
-                return getattr(self.gen, attr) # .dist?
-            except Exception:
-                errormsg = f'"{attr}" is not a member of this class or the underlying scipy stats class'
-                raise Exception(errormsg)
-
-    def filter(self, size, **kwargs):
-        return size[self.gen.rvs(size, **kwargs)]
-
-
-class ScipyHistogram(rv_histogram):
-    def __init__(self, *args, rng=None, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.random_state = self.set_rng(rng)
-        return
-
-    def initialize(self, sim, context):
-        # Note: context not used here, but maintained for consistency with ScipyDistribution
-        # Passing sim and context here allow callables to receive "self" and sim pointers
-        if isinstance(self.random_state, (SingleRNG, MultiRNG)):
-            self.random_state.initialize(sim.rng_container, sim.people.slot)
-        return
-
-    def set_rng(self, rng):
-        # Handle random generators
-        ret = self.random_state # Default
-        if self.random_state == np.random.mtrand._rand and rng:
-            if options.rng=='multi':
-                # MultiRNG, rng not none, and the current "random_state" is the
-                # numpy global singleton... so let's override
-                if isinstance(rng, str):
-                    ret = MultiRNG(rng) # Crate a new generator with the user-provided string
-                elif isinstance(rng, np.random.Generator):
-                    ret = rng
-                else:
-                    raise Exception(f'The rng must be a string or a np.random.Generator instead of {type(rng)}')
-            elif options.rng=='single':
-                # SingleRNG, rng not none, and the current "random_state" is the
-                # numpy global singleton... so let's override
-                if isinstance(rng, str):
-                    ret = SingleRNG(rng) # Crate a new generator with the user-provided string
-                elif isinstance(rng, np.random.Generator):
-                    ret = rng
-                else:
-                    raise Exception(f'The rng must be a string or a np.random.Generator instead of {type(rng)}')
-        return ret
-
-
-    def rvs(self, *args, **kwargs):
-        """
-        Return a specified number of samples from the distribution
-        """
-
-        size = kwargs['size']
-        slots = None
-        # Work out how many samples to draw. If sampling by UID, this depends on the slots assigned to agents.
-        if np.isscalar(size):
-            if not isinstance(size, int):
-                raise Exception('Input "size" must be an integer')
-            if size < 0:
-                raise Exception('Input "size" cannot be negative')
-            elif size == 0:
-                return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
-            else:
-                n_samples = size
-        elif len(size) == 0:
-            return np.array([], dtype=int)
-        elif size.dtype == bool:
-            n_samples = len(size) if options.multirng else size.sum()
-        elif size.dtype in [int, np.int64, np.int32]: # CK: TODO -- need to refactor
-            if not options.multirng:
-                n_samples = len(size)
-            else:
-                try:
-                    slots = self.random_state.slots[size]
-                    max_slot = slots.max()
-                except AttributeError as e:
-                    if not isinstance(self.random_state, MultiRNG):
-                        raise Exception('With options.multirng and passing agent UIDs to a distribution, the random_state of the distribution must be a MultiRNG.')
-                    else:
-                        if not self.random_state.initialized:
-                            raise Exception('The MultiRNG instance must be initialized before use.')
-                    raise e
-
-                if max_slot == ss.INT_NAN:
-                    raise Exception('Attempted to sample from an INT_NAN slot')
-                n_samples = max_slot + 1
-        else:
-            raise Exception("Unrecognized input type")
-
-        kwargs['size'] = n_samples
-        vals = super().rvs(*args, **kwargs)
+    def process_dist(self):
+        """ Ensure the distribution works """
         
-        # _select:
-        if not options.multirng:
-            return vals
-
-        if np.isscalar(size):
-            return vals
-        elif size.dtype == bool:
-            return vals[size]
+        # Handle a SciPy distribution, if provided
+        if self.dist is not None:
+            
+            # Pull out parameters of an already-frozen distribution
+            if isinstance(self.dist, sps._distn_infrastructure.rv_frozen):
+                if not self.initialized: # Don't do this more than once
+                    self.pars = sc.dictobj(sc.mergedicts(self.pars, self.dist.kwds))
+            
+            # Convert to a frozen distribution
+            if isinstance(self.dist, sps._distn_infrastructure.rv_generic):
+                spars = self.process_pars(call=False)
+                self.dist = self.dist(**spars) 
+                
+            # Override the default random state with the correct one
+            self.dist.random_state = self.rng 
+            
+        # Set the default function for getting the rvs
+        if self.distname is not None and hasattr(self.rng, self.distname): # Don't worry if it doesn't, it's probably being manually overridden
+            self.rvs_func = getattr(self.rng, self.distname) # e.g. self.rng.uniform
+        
+        return
+    
+    def process_size(self, n=1):
+        """ Handle an input of either size or UIDs and calculate size, UIDs, and slots """
+        if np.isscalar(n) or isinstance(n, tuple):  # If passing a non-scalar size, interpret as dimension rather than UIDs iff a tuple
+            uids = None
+            slots = None
+            size = n
         else:
-            return vals[slots] # slots defined above
+            uids = np.asarray(n)
+            if len(uids):
+                slots = self.slots[uids]
+                size = slots.max() + 1
+            else:
+                slots = np.array([])
+                size = 0
+        
+        self._n = n
+        self._size = size
+        self._uids = uids
+        self._slots = slots
+        return size, slots
+    
+    def process_pars(self, call=True):
+        """ Ensure the supplied dist and parameters are valid, and initialize them; called automatically """
+        self._pars = sc.cp(self.pars) # The actual keywords; shallow copy, modified below for special cases
+        if call:
+            self.call_pars()
+        spars = self.sync_pars()
+        return spars
+    
+    def call_pars(self):
+        """ Check if any parameters need to be called to be turned into arrays """
+        
+        # Initialize
+        size, uids = self._size, self._uids
+        if self.dynamic_pars != False: # Allow "False" to prevent ever using dynamic pars (used in ss.choice())
+            self.dynamic_pars = None
+        
+        # Check each parameter
+        for key,val in self._pars.items():
+            
+            # If the parameter is callable, then call it
+            if callable(val): 
+                size_par = uids if uids is not None else size
+                out = val(self.module, self.sim, size_par) # TODO: swap order to sim, module, size?
+                val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
+                self._pars[key] = val
+            
+            # If it's iterable and UIDs are provided, then we need to use array-parameter logic
+            if self.dynamic_pars is None and np.iterable(val) and uids is not None:
+                self.dynamic_pars = True
+        return
+    
+    def sync_pars(self):
+        """ Perform any necessary synchronizations or transformations on distribution parameters """
+        self.update_dist_pars()
+        return self._pars
+    
+    def update_dist_pars(self, pars=None):
+        """ Update SciPy distribution parameters """
+        if self.dist is not None:
+            pars = pars if pars is not None else self._pars
+            self.dist.kwds = pars
+        return
+    
+    def rand(self, size):
+        """ Simple way to get simple random numbers """
+        return self.rng.random(size)
+    
+    def make_rvs(self):
+        """ Return default random numbers for scalar parameters """
+        if self.rvs_func is not None:
+            rvs = self.rvs_func(**self._pars, size=self._size)
+        elif self.dist is not None:
+            rvs = self.dist.rvs(self._size)
+        else:
+            errormsg = 'Could not generate random numbers: no valid NumPy function or SciPy distribution found'
+            raise ValueError(errormsg)
+        return rvs
+    
+    def ppf(self, rands):
+        """ Return default random numbers for array parameters """
+        rvs = self.dist.ppf(rands)
+        return rvs
+    
+    def rvs(self, n=1, reset=False):
+        """
+        Get random variables
+        
+        Args:
+            n (int/tuple/arr): if an int or tuple, return this many random variables; if an array, treat as UIDs
+        """
+        # Check for readiness
+        if not self.initialized:
+            raise DistNotInitializedError(self)
+        if not self.ready and self.strict:
+            raise DistNotReadyError(self)
+        
+        # Figure out size, UIDs, and slots
+        size, slots = self.process_size(n)
+        
+        # Check if size is 0, then we can return
+        if size == 0:
+            return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
+        
+        # Store the state
+        self.make_history() # Store the pre-call state
+        
+        # Check if any keywords are callable -- parameters shouldn't need to be reprocessed otherwise
+        if True: # self.dynamic_pars: # TODO: fix!!!!
+            self.process_pars()
+        
+        # Actually get the random numbers
+        if self.dynamic_pars:
+            rands = self.rand(size)[slots] # Get random values 
+            rvs = self.ppf(rands) # Convert to actual values via the PPF
+        else:
+            rvs = self.make_rvs() # Or, just get regular values
+            if self._slots is not None:
+                rvs = rvs[self._slots]
+        
+        # Tidy up
+        self.called += 1
+        if reset:
+            self.reset(-1)
+        elif self.auto: # TODO: check
+            self.jump()
+        elif self.strict:
+            self.ready = False
+            
+        return rvs
 
-'''
-from scipy.stats import bernoulli
-class rate(ScipyDistribution):
-    """
-    Exponentially distributed, accounts for dt.
-    Assumes the rate is constant over each dt interval.
-    """
-    def __init__(self, p, rng=None):
-        dist = bernoulli(p=p)
-        super().__init__(dist, rng)
-        self.rate = rate
-        self.dt = None
+
+    def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
+        """ Plot the current state of the RNG as a histogram """
+        pl.figure(**sc.mergedicts(fig_kw))
+        rvs = self.rvs(n)
+        self.reset(-1) # As if nothing ever happened
+        pl.hist(rvs, bins=bins, **sc.mergedicts(hist_kw))
+        pl.title(str(self))
+        pl.xlabel('Value')
+        pl.ylabel(f'Count ({n} total)')
+        return rvs
+        
+
+#%% Specific distributions
+
+# Add common distributions so they can be imported directly; assigned to a variable since used in help messages
+dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
+             'poisson', 'weibull', 'delta', 'randint', 'bernoulli', 'choice']
+__all__ += dist_list
+
+
+class random(Dist):
+    """ Random distribution, values on interval (0,1) """
+    def __init__(self, **kwargs):
+        super().__init__(distname='random', **kwargs)
+        return
+    
+    def ppf(self, rands):
+        return rands
+
+
+class uniform(Dist):
+    """ Uniform distribution, values on interval (low, high) """
+    def __init__(self, low=0.0, high=1.0, **kwargs):
+        super().__init__(distname='uniform', low=low, high=high, **kwargs)
+        return
+    
+    def ppf(self, rands):
+        p = self._pars
+        rvs = rands * (p.high - p.low) + p.low
+        return rvs
+
+
+class normal(Dist):
+    """ Normal distribution, with mean=loc and stdev=scale """
+    def __init__(self, loc=0.0, scale=1.0, **kwargs):
+        super().__init__(distname='normal', dist=sps.norm, loc=loc, scale=scale, **kwargs)
         return
 
-    def initialize(self, sim, rng):
-        self.dt = sim.dt
-        self.rng = self.set_rng(rng, self.gen)
-        super().initialize(sim)
+
+class lognorm_im(Dist):
+    """
+    Lognormal distribution, parameterized in terms of the "implicit" (normal)
+    distribution, with mean=loc and stdev=scale (see lognorm_ex for comparison).
+    
+    Note: the "loc" parameter here does *not* correspond to the mean of the resulting
+    random variates!
+    
+    **Example**::
+        
+        ss.lognorm_im(mean=2, sigma=1).rvs(1000).mean() # Should be roughly 10
+    """
+    def __init__(self, mean=0.0, sigma=1.0, **kwargs):
+        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
+        return
+    
+    def sync_pars(self):
+        """ Translate between NumPy and SciPy parameters """
+        p = self._pars
+        spars = sc.dictobj()
+        spars.s = p.sigma
+        spars.scale = np.exp(p.mean)
+        spars.loc = 0
+        self.update_dist_pars(spars)
+        return spars
+    
+
+class lognorm_ex(lognorm_im):
+    """
+    Lognormal distribution, parameterized in terms of the "explicit" (lognormal)
+    distribution, with mean=mean and stdev=stdev (see lognorm_im for comparison).
+    
+    **Example**::
+        
+        ss.lognorm_ex(mean=2, stdev=1).rvs(1000).mean() # Should be close to 2
+    """
+    def __init__(self, mean=1.0, stdev=1.0, **kwargs):
+        super().__init__(mean=mean, stdev=stdev, **kwargs)
+        return
+    
+    def convert_ex_to_im(self):
+        """
+        Lognormal distributions can be specified in terms of the mean and standard
+        deviation of the "explicit" lognormal distribution, or the "implicit" normal distribution.
+        This function converts the parameters from the lognormal distribution to the
+        parameters of the underlying (implicit) distribution, which are the form expected by NumPy's
+        and SciPy's lognorm() distributions.
+        """
+        p = self._pars
+        mean = p.pop('mean')
+        stdev = p.pop('stdev')
+        if mean <= 0:
+            errormsg = f'Cannot create a lognorm_ex distribution with mean≤0 (mean={mean}); did you mean to use lognorm_im instead?'
+            raise ValueError(errormsg)
+        std2 = stdev**2
+        mean2 = mean**2
+        sigma_im = np.sqrt(np.log(std2/mean2 + 1)) # Computes stdev for the underlying normal distribution
+        mean_im  = np.log(mean2 / np.sqrt(std2 + mean2)) # Computes the mean of the underlying normal distribution
+        p.mean = mean_im
+        p.sigma = sigma_im
+        return mean_im, sigma_im
+    
+    def sync_pars(self):
+        """ Convert from overlying to underlying parameters, then translate to SciPy """
+        self.convert_ex_to_im()
+        spars = super().sync_pars()
+        return spars
+    
+
+class expon(Dist):
+    """ Exponential distribution """
+    def __init__(self, scale=1.0, **kwargs):
+        super().__init__(distname='exponential', dist=sps.expon, scale=scale, **kwargs)
         return
 
-    def sample(self, size=None):
-        n_samples, pars = super().sample(size, rate=self.rate)
-        prob = 1 - np.exp(-pars['rate'] * self.dt)
-        vals = self.rng.random(size=n_samples)
-        vals = self._select(vals, size)
-        return vals < prob
-'''
+
+class poisson(Dist):
+    """ Exponential distribution """
+    def __init__(self, lam=1.0, **kwargs):
+        super().__init__(distname='poisson', dist=sps.poisson, lam=lam, **kwargs)
+        return
+    
+    def sync_pars(self):
+        """ Translate between NumPy and SciPy parameters """
+        spars = dict(mu=self._pars.lam)
+        self.update_dist_pars(spars)
+        return spars
+
+
+class randint(Dist):
+    """ Random integers, values on the interval [low, high-1] (i.e. "high" is excluded) """
+    def __init__(self, low=0, high=2,  **kwargs):
+        super().__init__(distname='integers', dist=sps.randint, low=low, high=high, **kwargs)
+        return
+    
+
+class weibull(Dist):
+    """ Weibull distribution -- NB, uses SciPy rather than NumPy """
+    def __init__(self, c=1, loc=0, scale=1,  **kwargs):
+        super().__init__(distname='weibull', dist=sps.weibull_min, c=c, loc=loc, scale=scale, **kwargs)
+        return
+    
+    def make_rvs(self):
+        """ Use SciPy rather than NumPy to include the scale parameter """
+        rvs = self.dist.rvs(self._size)
+        return rvs
+
+
+class delta(Dist):
+    """ Delta distribution: equivalent to np.full() """
+    def __init__(self, v=0, **kwargs):
+        super().__init__(distname='delta', v=v, **kwargs)
+        return
+    
+    def make_rvs(self):
+        return np.full(self._size, self._pars.v)
+    
+    def ppf(self, rands): # NB: don't actually need to use random numbers here, but not worth the complexity of avoiding this
+        return np.full(rands.shape, self._pars.v)
+
+
+class bernoulli(Dist):
+    """
+    Bernoulli distribution: return True or False with the specified probability (which can be an array)
+    
+    Unlike other distributions, Bernoulli distributions have a filter() method,
+    which returns elements of the array that return True.
+    """
+    def __init__(self, p=5, **kwargs):
+        super().__init__(distname='bernoulli', p=p, **kwargs)
+        return
+    
+    def make_rvs(self):
+        rvs = self.rng.random(self._size) < self._pars.p # 3x faster than using rng.binomial(1, p, size)
+        return rvs
+    
+    def ppf(self, rands):
+        rvs = rands < self._pars.p
+        return rvs
+    
+    def filter(self, uids, both=False):
+        """ Return UIDs that correspond to True, or optionally return both True and False """
+        bools = self.rvs(uids)
+        if both:
+            return uids[bools], uids[~bools]
+        else:
+            return uids[bools]
+
+
+class choice(Dist):
+    """
+    Random choice between discrete options
+    
+    **Examples**::
+        
+        # Simulate 10 die rolls
+        ss.choice(6)(10) + 1 
+        
+        # Choose between specified options each with a specified probability (must sum to 1)
+        ss.choice(a=[30, 70], p=[0.3, 0.7])(10)
+    """
+    def __init__(self, a=2, p=None, **kwargs):
+        super().__init__(distname='choice', a=a, p=p, **kwargs)
+        self.dynamic_pars = False # Set to false since array arguments don't imply dynamic pars here
+        return
+    
+    def ppf(self, rands):
+        """ Shouldn't actually be needed since dynamic pars not supported """
+        pars = self._pars
+        if np.isscalar(pars.a):
+            pars.a = np.arange(pars.a)
+        pcum = np.cumsum(pars.p)
+        inds = np.searchsorted(pcum, rands)
+        rvs = pars.a[inds]
+        return rvs
+
+
+#%% Dist exceptions
+
+class DistNotInitializedError(RuntimeError):
+    """ Raised when Dist object is called when not initialized. """
+    def __init__(self, dist):
+        msg = f'{dist} has not been initialized; please call dist.initialize()'
+        super().__init__(msg)
+
+class DistNotReadyError(RuntimeError):
+    """ Raised when a Dist object is called without being ready. """
+    def __init__(self, dist):
+        msg = f'{dist} is not ready. This is likely caused by calling a distribution multiple times in a single step. Call dist.jump() to reset.'
+        super().__init__(msg)
+        
+class DistSeedRepeatError(RuntimeError):
+    """ Raised when a Dist object shares a seed with another """
+    def __init__(self, dist1, dist2):
+        msg = f'A common seed was found between {dist1} and {dist2}. This is likely caused by incorrect initialization of the parent Dists object.'
+        super().__init__(msg)

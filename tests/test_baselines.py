@@ -6,7 +6,6 @@ the baseline results.
 import numpy as np
 import sciris as sc
 import starsim as ss
-import pytest
 
 do_plot = True
 do_save = False
@@ -80,10 +79,6 @@ def save_baseline():
 def test_baseline():
     ''' Compare the current default sim against the saved baseline '''
     
-    # Do not run with multi-RNG
-    if ss.options.rng != 'single':
-        pytest.skip('This test is only for the single rng.')
-
     # Load existing baseline
     baseline = sc.loadjson(baseline_filename)
     old = baseline['summary']
@@ -93,7 +88,7 @@ def test_baseline():
     new.run()
 
     # Compute the comparison
-    ss.diff_sims(old, new, full=True, die=True)
+    ss.diff_sims(old, new, die=True)
 
     return new
 
@@ -101,10 +96,6 @@ def test_baseline():
 def test_benchmark(do_save=do_save, repeats=1, verbose=True):
     ''' Compare benchmark performance '''
     
-    # Do not run with multi-RNG
-    if ss.options.multirng:
-        return
-
     if verbose: print('Running benchmark...')
     try:
         previous = sc.loadjson(benchmark_filename)

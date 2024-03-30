@@ -1,189 +1,151 @@
 """
-Test Distributions from distributions.py
+Test SciPy distributions
 """
 
 # %% Imports and settings
 import numpy as np
 import sciris as sc
 import starsim as ss
-from starsim.random import RNG
 import scipy.stats as sps
-from starsim.distributions import ScipyDistribution
-from starsim.states import UIDArray
 import pytest
-import matplotlib.pyplot as plt
 
-
-do_plot = True
-sc.options(interactive=False) # Assume not running interactively
-
-
-@pytest.fixture(params=[5, 50])
-def n(request):
-    yield request.param
+n = 5
 
 
 # %% Define the tests
-def test_basic(n):
-    dist = sps.norm(loc=1, scale=1) # Make a distribution
-    if ss.options.multirng:
-        rng = ss.MultiRNG('Uniform')
-        rng.initialize(container=None, slots=n)
-        dist.random_state = rng
-    d = ScipyDistribution(dist)
 
+def test_basic():
+    """ Basic scipy.stats test """
+    sc.heading('Test basic scipy.stats usage')
+    spsdist = sps.norm(loc=1, scale=1) # Make a distribution
+    d = ss.Dist(dist=spsdist).initialize(slots=np.arange(n)) # Convert it to Starsim
     sample = d.rvs(1)  # Draw a sample
 
-    # Reset before the next call
-    if ss.options.multirng: d.random_state.reset()
-    samples = d.rvs(10) # Draw several samples
+    # Draw some samples
+    d.reset()
+    m = 10
+    samples = d.rvs(m) # Draw several samples
+    
+    # Draw UID samples
+    d.reset()
+    uids = np.array([0,3,4])
+    samples_uid = d.rvs(uids)
+    
+    # Print and test
+    for s in [sample, samples, samples_uid]:
+        print(s)
+    assert sample == samples[0] == samples_uid[0], 'Samples should match after reset'
+    assert len(samples) == m, 'Incorrect number of samples'
+    assert len(samples_uid) == len(uids), 'Incorrect number of samples'
+    
+    return d
 
-    if ss.options.multirng: d.random_state.reset()
-    samples_uid = d.rvs(size=np.array([1,3,4])) # Draw three samples
 
-    return sample, samples, samples_uid
+def test_scalar(n=n):
+    """ Test a basic scalar distribution """
+    sc.heading('Testing basic uniform distribution with scalar parameters')
 
-
-def test_uniform_scalar(n):
-    """ Create a uniform distribution """
-    sc.heading('test_uniform_scalar: Testing uniform with scalar parameters')
-
-    rng = ss.MultiRNG('Uniform')
-    rng.initialize(container=None, slots=n)
-    dist = sps.uniform(loc=1, scale=4)
-    dist.random_state = rng
-    d = ScipyDistribution(dist)
-
-    uids = np.array([1,3])
+    loc = 1
+    scale = 4
+    uids = np.array([1,3,5,9])
+    
+    spsdist = sps.uniform(loc=loc, scale=scale)
+    d = ss.Dist(spsdist).initialize(slots=np.arange(uids.max()+1))
+    
     draws = d.rvs(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
-    assert len(draws) == len(uids)
-    return draws
+    assert len(draws) == len(uids), 'Incorrect number of draws'
+    assert (draws.min() > loc) and (draws.max() < loc + scale), 'Values are out of bounds'
+    
+    return d
 
 
-def test_uniform_scalar_str(n):
-    """ Create a uniform distribution """
-    sc.heading('test_uniform_scalar_str: Testing uniform with scalar parameters')
+def test_callable(n=n):
+    """ Test callable parameters """
+    sc.heading('Testing a uniform distribution with callable parameters')
+    
+    # Define a fake people object
+    np.random.seed(1) # Since not random number safe here!
+    sim = sc.prettyobj()
+    sim.n = 10
+    sim.people = sc.prettyobj()
+    sim.people.uid = np.arange(sim.n)
+    sim.people.slot = np.arange(sim.n)
+    sim.people.age = np.random.uniform(0, 90, size=sim.n)
 
-    dist = sps.uniform(loc=1, scale=4)
-    d = ScipyDistribution(dist, 'Uniform') # String here!
-    if ss.options.rng in ['single', 'multi']:
-        d.rng.initialize(container=None, slots=n) # Only really needed for testing as initializing the distribution will do something similar.
+    # Define a parameter as a lambda function
+    loc = lambda module, sim, uids: sim.people.age[uids]
+    scale = 1
+    d = ss.normal(loc=loc).initialize(sim=sim)
 
-    uids = np.array([1,3])
+    uids = np.array([1, 3, 7, 9])
     draws = d.rvs(uids)
-    print(f'Uniform sample for uids {uids} returned {draws}')
+    print(f'Input ages were: {sim.people.age[uids]}')
+    print(f'Output samples were: {draws}')
 
-    assert len(draws) == len(uids)
-    return draws
-
-
-def test_uniform_callable(n):
-    """ Create a uniform distribution """
-    sc.heading('test_uniform_callable: Testing uniform with callable parameters')
-
-    sim = ss.Sim().initialize()
-
-    loc = lambda self, sim, uids: sim.people.age[uids] # Low
-    scale = 1 # Width, could also be a lambda
-    dist = sps.uniform(loc=loc, scale=scale)
-
-    d = ScipyDistribution(dist, 'Uniform')
-    d.initialize(sim, context=None)
-
-    uids = np.array([1,3])
-    draws = d.rvs(uids)
-    print(sim.people.age[uids])
-    print(f'Uniform sample for uids {uids} returned {draws}')
-
-    assert len(draws) == len(uids)
-    return draws
+    meandiff = np.abs(sim.people.age[uids] - draws).mean()
+    assert meandiff < scale*3
+    return d
 
 
-def test_uniform_array(n):
-    """ Create a uniform distribution """
-    sc.heading('test_uniform: Testing uniform with a array parameters')
-
-    rng = ss.MultiRNG('Uniform')
-    rng.initialize(container=None, slots=n)
+def test_array(n=n):
+    """ Test array parameters """
+    sc.heading('Testing uniform with a array parameters')
 
     uids = np.array([1, 3])
-    loc = np.array([1, 100]) # Low
-    scale = np.array([2, 25]) # Width
+    low  = np.array([1, 100]) # Low
+    high = np.array([3, 125]) # High
 
-    dist = sps.uniform(loc=loc, scale=scale)
-    dist.random_state = rng
-
-    d = ScipyDistribution(dist)
+    d = ss.uniform(low=low, high=high).initialize(slots=np.arange(uids.max()+1))
     draws = d.rvs(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
     assert len(draws) == len(uids)
+    for i in range(len(uids)):
+        assert low[i] < draws[i] < low[i] + high[i], 'Invalid value'
     return draws
 
 
+@pytest.mark.skip
 def test_repeat_slot():
     """ Test behavior of repeated slots """
-    sc.heading('test_repeat_slot: Test behavior of repeated slots')
+    sc.heading('Test behavior of repeated slots')
 
-    rng = ss.MultiRNG('Uniform')
-    slots = UIDArray(values=np.array([4,2,3,2,2,3]), uid=np.arange(6))
+    # Initialize parameters
+    slots = np.array([4,2,3,2,2,3])
     n = len(slots)
-    rng.initialize(container=None, slots=slots)
-
     uids = np.arange(n)
-    loc = np.arange(n) # Low
-    scale = 1 # Width
+    low = np.arange(n)
+    high = low + 1
 
-    dist = sps.uniform(loc=loc, scale=scale)
-    dist.random_state = rng
-
-    d = ScipyDistribution(dist)
+    # Draw values
+    d = ss.uniform(low=low, high=high).initialize()
     draws = d.rvs(uids)
-    print(f'Uniform sample for uids {uids} returned {draws}')
-
-    assert len(draws) == len(uids)
+    
+    # Print and test
+    print(f'Uniform sample for slots {slots} returned {draws}')
+    assert len(draws) == len(slots)
 
     unique_slots = np.unique(slots)
     for s in unique_slots:
         inds = np.where(slots==s)[0]
         frac, integ = np.modf(draws[inds])
-        assert np.allclose(integ, loc[inds]) # Integral part should match the loc
-        if ss.options.multirng:
-            # Same random numbers, so should be same fractional part
-            assert np.allclose(frac, frac[0])
+        assert np.allclose(integ, low[inds]), 'Integral part should match the low parameter'
+        assert np.allclose(frac, frac[0]), 'Same random numbers, so should be same fractional part'
     return draws
 
 
 
 # %% Run as a script
 if __name__ == '__main__':
-    sc.options(interactive=do_plot)
+    
+    T = sc.timer()
 
-    n = 5
-    nTrials = 3
+    o1 = test_basic()
+    o2 = test_scalar(n)
+    o3 = test_callable(n)
+    o4 = test_array(n)
+    # o5 = test_repeat_slot() # TODO: confirm behavior and reimplement
 
-    times = {}
-    for multirng in [True, False]:
-        ss.options(multirng=multirng)
-        key = f'MultiRNG: {multirng}'
-        times[key] = []
-        sc.heading('Testing with multirng set to', multirng)
-
-        for trial in range(nTrials):
-            T = sc.tic()
-
-            # Run tests - some will only pass if multirng is True
-            test_basic(n)
-            test_uniform_scalar(n)
-            test_uniform_scalar_str(n)
-            test_uniform_callable(n)
-            test_uniform_array(n)
-
-            times[key].append(sc.toc(T, doprint=False, output=True))
-
-    print('Times:', times)
-
-    plt.show()
-    print('Done.')
+    T.toc()

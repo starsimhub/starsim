@@ -45,11 +45,11 @@ class Syphilis(ss.Infection):
         # Parameters
         default_pars = dict(
             # Adult syphilis natural history, all specified in years
-            dur_exposed = ss.lognorm_mean(mean=1 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_primary = ss.lognorm_mean(mean=1.5 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_secondary = ss.norm(loc=3.6 / 12, scale=1.5 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_temp = ss.lognorm_mean(mean=1, stdev=6 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_long = ss.lognorm_mean(mean=20, stdev=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_exposed = ss.lognorm_ex(mean=1 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_primary = ss.lognorm_ex(mean=1.5 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_secondary = ss.normal(loc=3.6 / 12, scale=1.5 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_temp = ss.lognorm_ex(mean=1, stdev=6 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_long = ss.lognorm_ex(mean=20, stdev=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_latent_temp = ss.bernoulli(p=0.25),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_tertiary = ss.bernoulli(p=0.35),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
 
@@ -61,8 +61,8 @@ class Syphilis(ss.Infection):
             #   3: Live birth without syphilis-related complications
             # Source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5973824/)
             birth_outcomes=sc.objdict(
-                active = ss.rv_discrete(values=([0, 1, 2, 3, 4], [0.125, 0.125, 0.20, 0.35, 0.200])),
-                latent = ss.rv_discrete(values=([0, 1, 2, 3, 4], [0.050, 0.075, 0.10, 0.05, 0.725])),
+                active = ss.choice(a=5, p=np.array([0.125, 0.125, 0.20, 0.35, 0.200])), # Probabilities of active by birth outcome
+                latent = ss.choice(a=5, p=np.array([0.050, 0.075, 0.10, 0.05, 0.725])), # Probabilities of latent
             ),
             birth_outcome_keys=['miscarriage', 'nnd', 'stillborn', 'congenital'],
 
@@ -123,10 +123,9 @@ class Syphilis(ss.Infection):
             self.primary[secondary_from_primary] = False
             self.set_secondary_prognoses(sim, ss.true(secondary_from_primary))
 
-        if ss.options.multirng:
-            # Hack to reset the MultiRNGs in set_secondary_prognoses so that they can be called again in this timestep. TODO: Refactor
-            self.pars.p_latent_temp.random_state.step(sim.ti+1)
-            self.pars.dur_secondary.random_state.step(sim.ti+1)
+        # Hack to reset the MultiRNGs in set_secondary_prognoses so that they can be called again in this timestep. TODO: Refactor
+        self.pars.p_latent_temp.jump(sim.ti+1)
+        self.pars.dur_secondary.jump(sim.ti+1)
 
         # Secondary reactivation from latent
         secondary_from_latent = self.latent_temp & (self.ti_secondary <= sim.ti)
@@ -264,7 +263,7 @@ class Syphilis(ss.Infection):
 
                 # Birth outcomes must be modified to add probability of susceptible birth
                 birth_outcomes = self.pars.birth_outcomes[state]
-                assigned_outcomes = birth_outcomes.rvs(uids)-uids  # WHY??
+                assigned_outcomes = birth_outcomes.rvs(len(uids))-uids  # WHY?? # TODO: TEMP: NOT CRN SAFE
                 time_to_birth = -sim.people.age
 
                 # Schedule events
@@ -280,40 +279,36 @@ class Syphilis(ss.Infection):
 
 
 # %% Syphilis-related interventions
+
+__all__ += ['syph_screening', 'syph_treatment']
+
 datafiles = sc.objdict()
 for key in ['dx', 'tx', 'vx']:
     datafiles[key] = sc.thispath() / f'../data/products/syph_{key}.csv' # CK: may want to make this more robust if we keep using it
 
-__all__ += ['syph_dx', 'syph_tx', 'syph_screening', 'syph_treatment']
 
-
-def syph_dx(prod_name=None):
+def load_syph_dx():
     """
     Create default diagnostic products
     """
-    dfdx = sc.dataframe.read_csv(datafiles.dx)
+    df = sc.dataframe.read_csv(datafiles.dx)
+    hierarchy = ['positive', 'inadequate', 'negative']
     dxprods = dict(
-        rpr=ss.dx(dfdx[dfdx.name == 'rpr'], hierarchy=['positive', 'inadequate', 'negative']),
-        rst=ss.dx(dfdx[dfdx.name == 'rst'], hierarchy=['positive', 'inadequate', 'negative']),
+        rpr = ss.Dx(df[df.name == 'rpr'], hierarchy=hierarchy),
+        rst = ss.Dx(df[df.name == 'rst'], hierarchy=hierarchy),
     )
-    if prod_name is not None:
-        return dxprods[prod_name]
-    else:
-        return dxprods
+    return dxprods
 
 
-def syph_tx(prod_name=None):
+def load_syph_tx():
     """
     Create default treatment products
     """
-    dftx = sc.dataframe.read_csv(datafiles.tx)  # Read in dataframe with parameters
+    df = sc.dataframe.read_csv(datafiles.tx)  # Read in dataframe with parameters
     txprods = dict()
-    for name in dftx.name.unique():
-        txprods[name] = ss.tx(dftx[dftx.name == name])
-    if prod_name is not None:
-        return txprods[prod_name]
-    else:
-        return txprods
+    for name in df.name.unique():
+        txprods[name] = ss.Tx(df[df.name == name])
+    return txprods
 
 
 class syph_screening(ss.routine_screening):
@@ -324,12 +319,12 @@ class syph_screening(ss.routine_screening):
         return
 
     def _parse_product_str(self, product):
-        try:
-            product = syph_dx(prod_name=product)
-        except:
-            errormsg = f'Could not find product {product} in the standard list.'
+        products = load_syph_dx()
+        if product not in products:
+            errormsg = f'Could not find diagnostic product {product} in the standard list ({sc.strjoin(products.keys())})'
             raise ValueError(errormsg)
-        return product
+        else:
+            return products[product]
 
     def check_eligibility(self, sim):
         """
@@ -359,12 +354,12 @@ class syph_treatment(ss.treat_num):
         return
 
     def _parse_product_str(self, product):
-        try:
-            product = syph_tx(prod_name=product)
-        except:
-            errormsg = f'Could not find product {product} in the standard list.'
+        products = load_syph_tx()
+        if product not in products:
+            errormsg = f'Could not find treatment product {product} in the standard list ({sc.strjoin(products.keys())})'
             raise ValueError(errormsg)
-        return product
+        else:
+            return products[product]
 
     def initialize(self, sim):
         super().initialize(sim)

@@ -2,7 +2,6 @@
 Define example disease modules
 """
 
-import numpy as np
 import pylab as pl
 import starsim as ss
 
@@ -26,7 +25,7 @@ class SIR(ss.Infection):
         )
 
         par_dists = ss.omergeleft(par_dists,
-            dur_inf   = ss.lognorm,
+            dur_inf   = ss.lognorm_ex,
             init_prev = ss.bernoulli,
             p_death   = ss.bernoulli,
         )
@@ -43,7 +42,6 @@ class SIR(ss.Infection):
     def update_pre(self, sim):
         # Progress infectious -> recovered
         recovered = ss.true(self.infected & (self.ti_recovered <= sim.ti))
-
         self.infected[recovered] = False
         self.recovered[recovered] = True
 
@@ -94,7 +92,7 @@ class SIR(ss.Infection):
 __all__ += ['sir_vaccine']
 
 
-class sir_vaccine(ss.vx):
+class sir_vaccine(ss.Vx):
     """
     Create a vaccine product that changes susceptible people to recovered (i.e., perfect immunity)
     """

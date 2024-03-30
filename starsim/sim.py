@@ -7,19 +7,9 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 import itertools
-import numba as nb
 import pylab as pl
 
-
 __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims']
-
-
-@nb.njit(cache=True)
-def set_numba_seed(value):
-    # Needed to ensure reproducibility when using random calls in numba, e.g. RandomNetwork
-    # Note, these random numbers are not currently common-random-number safe
-    np.random.seed(value)
-    return
 
 
 class Sim(sc.prettyobj):
@@ -59,7 +49,7 @@ class Sim(sc.prettyobj):
         self.analyzers = ss.ndict(analyzers, type=ss.Analyzer)
 
         # Initialize the random number generator container
-        self.rng_container = ss.RNGContainer()
+        self.dists = ss.Dists(obj=self)
 
         return
 
@@ -102,10 +92,9 @@ class Sim(sc.prettyobj):
         self.validate_dt()
         self.init_time_vecs()  # Initialize time vecs
         ss.set_seed(self.pars.rand_seed)  # Reset the random seed before the population is created
-        set_numba_seed(self.pars.rand_seed)
 
         # Initialize the core sim components
-        self.rng_container.initialize(self.pars.rand_seed + 2)  # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rng_container
+        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed + 2)  # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rngs
         self.init_people(reset=reset, **kwargs)  # Create all the people (the heaviest step)
 
         # Initialize plug-ins
@@ -117,6 +106,7 @@ class Sim(sc.prettyobj):
         self.init_analyzers()
 
         # Perform post-initialization validation
+        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed + 2)  # TEMP # TODO Should not be here!!!
         self.validate_post_init()
 
         # Reset the random seed to the default run seed, so that if the simulation is run with
@@ -470,7 +460,7 @@ class Sim(sc.prettyobj):
             raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
 
         # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
-        self.rng_container.step(self.ti + 1)  # +1 offset because ti=0 is used on initialization
+        self.dists.jump(to=self.ti+1)  # +1 offset because ti=0 is used on initialization
 
         # Clean up dead agents, if removing agents is enabled
         if self.pars.remove_dead and (self.ti % self.pars.remove_dead == 0):
@@ -1003,7 +993,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         sim2 (sim/dict): ditto
         skip_key_diffs (bool): whether to skip keys that don't match between sims
         skip (list): a list of values to skip
-        full (bool): whether to use the full summary (else, brief)
+        full (bool): whether to print out all values (not just those that differ)
         output (bool): whether to return the output as a string (otherwise print)
         die (bool): whether to raise an exception if the sims don't match
         require_run (bool): require that the simulations have been run
@@ -1040,16 +1030,19 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     # Compare values
     valmatchmsg = ''
     mismatches = {}
+    n_mismatch = 0
     skip = sc.tolist(skip)
     for key in sim2.keys():  # To ensure order
         if key in sim1_keys and key not in skip:  # If a key is missing, don't count it as a mismatch
             sim1_val = sim1[key] if key in sim1 else 'not present'
             sim2_val = sim2[key] if key in sim2 else 'not present'
-            if not np.isclose(sim1_val, sim2_val, equal_nan=True):
+            mm = not np.isclose(sim1_val, sim2_val, equal_nan=True)
+            n_mismatch += mm
+            if mm or full:
                 mismatches[key] = {'sim1': sim1_val, 'sim2': sim2_val}
 
     if len(mismatches):
-        valmatchmsg = '\nThe following values differ between the two simulations:\n'
+        valmatchmsg = '\nThe following values differ between the two simulations:\n' if not full else ''
         df = sc.dataframe.from_dict(mismatches).transpose()
         diff = []
         ratio = []
@@ -1071,12 +1064,16 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
                     change_char = '↑'
                 elif new < old:
                     change_char = '↓'
+                elif new == old:
+                    change_char = '='
                 else:
                     errormsg = f'Could not determine relationship between sim1={old} and sim2={new}'
                     raise ValueError(errormsg)
 
                 # Set how many repeats it should have
                 repeats = 1
+                if abs_ratio == 0:
+                    repeats = 0
                 if abs_ratio >= 1.1:
                     repeats = 2
                 if abs_ratio >= 2:
@@ -1104,10 +1101,10 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     # Raise an error if mismatches were found
     mismatchmsg = keymatchmsg + valmatchmsg
     if mismatchmsg:  # pragma: no cover
-        if die:
+        if die and n_mismatch: # To catch full=True case
             raise ValueError(mismatchmsg)
         elif output:
-            return mismatchmsg
+            return df
         else:
             print(mismatchmsg)
     else:

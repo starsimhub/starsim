@@ -7,7 +7,7 @@ import sciris as sc
 import numpy as np
 
 
-__all__ = ['Product', 'dx', 'tx', 'vx']
+__all__ = ['Product', 'Dx', 'Tx', 'Vx']
 
 
 class Product(ss.Module):
@@ -18,7 +18,7 @@ class Product(ss.Module):
         raise NotImplementedError
 
 
-class dx(Product):
+class Dx(Product):
     """
     Generic class for diagnostics 
     """
@@ -36,7 +36,8 @@ class dx(Product):
 
         # Create placehold for multinomial sampling
         n_results = len(self.hierarchy)
-        self.result_dist = ss.rv_discrete(values=(np.arange(n_results), 1/n_results*np.ones(n_results)))
+        self.result_dist = ss.choice(a=n_results)
+        return
 
     @property
     def default_value(self):
@@ -67,7 +68,7 @@ class dx(Product):
                 self.result_dist.pk = probs  # Overwrite distribution probabilities
 
                 # Sort people into one of the possible result states and then update their overall results
-                this_result = self.result_dist.rvs(these_uids)-these_uids
+                this_result = self.result_dist.rvs(these_uids)-these_uids # TODO: check!
                 row_inds = results.uids.isin(these_uids)
                 results.loc[row_inds, 'result'] = np.minimum(this_result, results.loc[row_inds, 'result'])
 
@@ -79,7 +80,7 @@ class dx(Product):
         return output
 
 
-class tx(Product):
+class Tx(Product):
     """
     Treatment products change fundamental properties about People, including their prognoses and infectiousness.
     """
@@ -113,11 +114,10 @@ class tx(Product):
                     thisdf = self.df[df_filter]  # apply filter to get the results for this state & genotype
 
                     # Determine whether treatment is successful
-                    self.efficacy_dist.kwds['p'] = thisdf.efficacy.values[0]
+                    self.efficacy_dist.set(p=thisdf.efficacy.values[0])
 
-                    if ss.options.multirng:
                     # HACK to reset the efficacy_dist as it is called multiple times per timestep. TODO: Refactor
-                        self.efficacy_dist.random_state.step(sim.ti+1)
+                    self.efficacy_dist.jump(sim.ti+1)
                     eff_treat_inds = self.efficacy_dist.filter(these_uids)
 
                     post_tx_state_name = thisdf.post_state.values[0]
@@ -138,7 +138,7 @@ class tx(Product):
         return output
 
 
-class vx(Product):
+class Vx(Product):
     """ Vaccine product """
     def __init__(self, diseases=None, pars=None, par_dists=None, *args, **kwargs):
         pars = ss.omerge({}, pars)

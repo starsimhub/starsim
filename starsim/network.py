@@ -483,8 +483,8 @@ class RandomNet(DynamicNetwork):
         Generate contacts
         """
 
-        if isinstance(self.pars.n_contacts, ss.ScipyDistribution):
-            number_of_contacts = self.pars.n_contacts.rvs(people.alive)  # or people.uid?
+        if isinstance(self.pars.n_contacts, ss.Dist):
+            number_of_contacts = self.pars.n_contacts.rvs(people.uid[people.alive])  # or people.uid?
         else:
             number_of_contacts = np.full(len(people), self.pars.n_contacts)
 
@@ -493,7 +493,7 @@ class RandomNet(DynamicNetwork):
         p1, p2 = self.get_contacts(people.uid.__array__(), number_of_contacts)
         beta = np.ones(len(p1), dtype=ss_float_)
 
-        if isinstance(self.pars.dur, ss.ScipyDistribution):
+        if isinstance(self.pars.dur, ss.Dist):
             dur = self.pars.dur.rvs(p1)
         else:
             dur = np.full(len(p1), self.pars.dur)
@@ -522,9 +522,9 @@ class MFNet(SexualNetwork, DynamicNetwork):
         )
 
         par_dists = ss.omergeleft(par_dists,
-            duration      = ss.lognorm,
+            duration      = ss.lognorm_ex,
             participation = ss.bernoulli,
-            debut         = ss.norm,
+            debut         = ss.normal,
             acts          = ss.poisson,
         )
 
@@ -575,7 +575,7 @@ class MFNet(SexualNetwork, DynamicNetwork):
         beta = np.ones_like(p1)
 
         # Figure out durations and acts
-        if ss.options.multirng and (len(p1) == len(np.unique(p1))):
+        if (len(p1) == len(np.unique(p1))):
             # No duplicates and user has enabled multirng, so use slotting based on p1
             dur_vals = self.pars.duration.rvs(p1)
             act_vals = self.pars.acts.rvs(p1)
@@ -610,10 +610,10 @@ class MSMNet(SexualNetwork, DynamicNetwork):
 
     def __init__(self, pars=None, key_dict=None, **kwargs):
         pars = ss.omergeleft(pars,
-            duration_dist = ss.lognorm_mean(mean=15, stdev=15),
+            duration_dist = ss.lognorm_ex(mean=15, stdev=15),
             participation_dist = ss.bernoulli(p=0.1),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
-            debut_dist = ss.norm(loc=16, scale=2),
-            acts = ss.lognorm_mean(mean=80, stdev=20),
+            debut_dist = ss.normal(loc=16, scale=2),
+            acts = ss.lognorm_ex(mean=80, stdev=20),
             rel_part_rates = 1.0,
         )
         DynamicNetwork.__init__(self, key_dict, **kwargs)
@@ -637,7 +637,7 @@ class MSMNet(SexualNetwork, DynamicNetwork):
         # Participation
         self.participant[people.female] = False
         pr = self.pars.rel_part_rates
-        dist = ss.bernoulli.rvs(p=pr, size=len(uids))
+        dist = ss.bernoulli(pr).rvs(size=len(uids)) # TODO: not RNG safe
         self.participant[uids] = dist
 
         # Debut
@@ -652,8 +652,8 @@ class MSMNet(SexualNetwork, DynamicNetwork):
         p2 = available_m[n_pairs:n_pairs*2]
 
         # Figure out durations
-        if ss.options.multirng and (len(p1) == len(np.unique(p1))):
-            # No duplicates and user has enabled multirng, so use slotting based on p1
+        if (len(p1) == len(np.unique(p1))):
+            # No duplicates, so use slotting based on p1
             dur = self.pars.duration.rvs(p1)
             act_vals = self.pars.acts.rvs(p1)
         else:
@@ -688,16 +688,16 @@ class EmbeddingNet(MFNet):
         
         """
         pars = ss.omerge({
-            'embedding_func': ss.norm(loc=self.embedding_loc, scale=2),
+            'embedding_func': ss.normal(loc=self.embedding_loc, scale=2),
             'male_shift': 5,
         }, pars)
         super().__init__(pars, **kwargs)
         return
 
     @staticmethod
-    def embedding_loc(self, sim, uids):
+    def embedding_loc(module, sim, uids):
         loc = sim.people.age[uids].values
-        loc[sim.people.female[uids]] += self.pars.male_shift  # Shift females so they will be paired with older men
+        loc[sim.people.female[uids]] += module.pars.male_shift  # Shift females so they will be paired with older men
         return loc
 
     def add_pairs(self, people, ti=None):
@@ -1048,7 +1048,7 @@ class MF_MSM(NetworkConnector):
         remaining_pr = max(mf_pr*len(uids)-len(bi_uids), 0)/len(mf_excl_set)
 
         # Don't love the following new syntax:
-        mf_excl_uids = mf_excl_set[ss.uniform.rvs(size=len(mf_excl_set)) < remaining_pr]
+        mf_excl_uids = mf_excl_set[ss.random().rvs(size=len(mf_excl_set)) < remaining_pr] # TODO: not RNG safe and yes ugly!
 
         mf.participant[bi_uids] = True
         mf.participant[mf_excl_uids] = True

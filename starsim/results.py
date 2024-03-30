@@ -20,7 +20,7 @@ class Result(np.ndarray):
         return arr
     
     def __repr__(self):
-        modulestr = f'{self.module}.' if self.module else ''
+        modulestr = f'{self.module}.' if (self.module is not None) else ''
         cls_name = self.__class__.__name__
         arrstr = super().__repr__().removeprefix(cls_name)
         out = f'{cls_name}({modulestr}{self.name}):\narray{arrstr}'

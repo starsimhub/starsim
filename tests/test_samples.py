@@ -1,5 +1,8 @@
+"""
+Test the Samples class
+"""
+
 import starsim as ss
-import pytest
 
 testdir = ss.root/'tests'
 tempdir = testdir/'temp'
@@ -9,9 +12,9 @@ def get_outputs(p_death):
     outputs = []
     for i in range(3):
         ppl = ss.People(1000)
-        ppl.networks = ss.ndict(ss.RandomNet(n_contacts=ss.poisson(5)))
+        network = ss.RandomNet(n_contacts=ss.poisson(5))
         sir = ss.SIR(pars={'p_death':p_death})
-        sim = ss.Sim(people=ppl, diseases=sir, rand_seed=0, n_years=5)
+        sim = ss.Sim(people=ppl, networks=network, diseases=sir, rand_seed=0, n_years=5)
         sim.run(verbose=0)
         df = sim.export_df()
         summary = {}
@@ -23,9 +26,6 @@ def get_outputs(p_death):
     return outputs
 
 def test_samples():
-    if ss.options.multirng:
-        # Not necessary to run with both single and multi RNG
-        pytest.skip('Skipping multirng mode as not necessary to test with both single and multi RNGs')
     outputs = get_outputs(0.2)
     resultsdir = tempdir/'samples_results'
     resultsdir.mkdir(exist_ok=True)
@@ -33,8 +33,6 @@ def test_samples():
     return s
 
 def test_dataset():
-    if ss.options.multirng:
-        pytest.skip('Skipping multirng mode as not necessary to test with both single and multi RNGs')
     resultsdir = tempdir / 'dataset_results'
     resultsdir.mkdir(exist_ok=True)
     for p_death in [0.25, 0.5]:

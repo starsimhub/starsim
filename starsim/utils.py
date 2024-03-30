@@ -77,7 +77,7 @@ class ndict(sc.objdict):
         if overwrite is None: overwrite = self._overwrite
         if key in self:
             if not overwrite:
-                typestr = ' "{self._type"}' if self._type else ''
+                typestr = f' "{self._type}"' if self._type else ''
                 errormsg = f'Cannot add object "{key}" since already present in ndict{typestr} with keys:\n{sc.newlinejoin(self.keys())}'
                 raise ValueError(errormsg)
             else:
@@ -217,7 +217,6 @@ def all_subclasses(cls):
 
 __all__ += ['set_seed']
 
-
 def set_seed(seed=None):
     '''
     Reset the random seed -- complicated because of Numba, which requires special
@@ -245,29 +244,6 @@ def set_seed(seed=None):
     set_seed_numba(seed)
 
     return
-
-
-# %% Helper functions related to distributions
-__all__ += ['lognorm_params', 'lognorm_mean']
-
-
-def lognorm_params(mean, stdev):
-    """
-    Returns the shape and scale parameters for scipy's parameterization of the
-    lognormal distribution which will give the specified mean and stdev
-    """
-    s = np.sqrt(np.log(stdev ** 2 / mean ** 2 + 1))
-    mu = np.log(mean ** 2 / np.sqrt(stdev ** 2 + mean ** 2))
-    scale = np.exp(mu)
-    return s, scale
-
-
-def lognorm_mean(mean, stdev):
-    """
-    Wrapper for scipy lognorm but using mean and stdev
-    """
-    s, scale = lognorm_params(mean, stdev)
-    return ss.lognorm(s=s, scale=scale)
 
 
 # %% Simple array operations

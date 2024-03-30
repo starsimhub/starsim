@@ -9,6 +9,7 @@ import pandas as pd
 
 __all__ = ['BaseDemographics', 'Births', 'Deaths', 'Pregnancy']
 
+
 class BaseDemographics(ss.Module):
     # A demographic module typically handles births/deaths/migration and takes
     # place at the start of the timestep, before networks are updated and before
@@ -26,6 +27,7 @@ class BaseDemographics(ss.Module):
         # Note that for demographic modules, any result updates should be
         # carried out inside this function
         pass
+
 
 class Births(BaseDemographics):
     def __init__(self, pars=None, metadata=None, **kwargs):
@@ -237,6 +239,7 @@ class Deaths(BaseDemographics):
         self.results['cmr'] = 1/self.pars.units*np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
         return
 
+
 class Pregnancy(BaseDemographics):
 
     def __init__(self, pars=None, par_dists=None, metadata=None, **kwargs):
@@ -275,7 +278,7 @@ class Pregnancy(BaseDemographics):
             data_cols = dict(year='Time', age='AgeGrp', value='ASFR'),
         )
 
-        self.choose_slots = ss.randint(low=0, high=1) # Low and high will be reset upon initialization
+        self.choose_slots = ss.randint() # Low and high will be reset upon initialization
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
@@ -341,8 +344,9 @@ class Pregnancy(BaseDemographics):
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.choose_slots.kwds['low'] = sim.pars['n_agents']+1
-        self.choose_slots.kwds['high'] = int(sim.pars['slot_scale']*sim.pars['n_agents'])
+        low = sim.pars.n_agents+1 # TODO: or 0?
+        high = int(sim.pars.slot_scale*sim.pars.n_agents)
+        self.choose_slots.set(low=low, high=high)
         return
 
     def init_results(self, sim):

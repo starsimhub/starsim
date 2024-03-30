@@ -19,7 +19,6 @@ CLASSIFIERS = [
     "Programming Language :: Python",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Development Status :: 5 - Production/Stable",
-    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -37,11 +36,11 @@ setup(
     classifiers=CLASSIFIERS,
     packages=find_packages(),
     include_package_data=True,
-    install_requires=[
+    install_requires=[ # NB: remember to update __init__.py if these requirements change
         'numpy',
         'scipy',
         'pandas>=2.0.0',
-        'sciris>=3.1.0',
+        'sciris>=3.1.5',
         'matplotlib',
         'numba',
         'networkx',

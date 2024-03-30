@@ -9,7 +9,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 quick_run = True
-ss.options['multirng']=False
+
+
 def make_syph_sim(dt=1, n_agents=500):
     """ Make a sim with syphilis - used by several subsequent tests """
     syph = ss.Syphilis()
@@ -29,8 +30,8 @@ def make_syph_sim(dt=1, n_agents=500):
     # Marital
     mf = ss.MFNet(
         pars = dict(
-            duration = ss.lognorm_mean(mean=1/24, stdev=0.5),
-            acts = ss.lognorm_mean(mean=80, stdev=30),
+            duration = ss.lognorm_ex(mean=1/24, stdev=0.5),
+            acts = ss.lognorm_ex(mean=80, stdev=30),
         )
     )
     maternal = ss.MaternalNet()

@@ -6,122 +6,108 @@ Test the RNG object from random.py
 import numpy as np
 import sciris as sc
 import starsim as ss
-from starsim.random import RNG
-import pytest
 
+n = 5 # Default number of samples
 
-@pytest.fixture
-def rng(request, slots=5, base_seed=1, name='Test', **kwargs):
-    return make_rng(slots, base_seed, name, **kwargs)
-
-
-def make_rng(slots=5, base_seed=1, name='Test', **kwargs):
-    rng_container = ss.RNGContainer()
-    rng_container.initialize(base_seed=base_seed)
-    rng = ss.RNG(name, **kwargs)
-    if ss.options.rng in ['single', 'multi']:
-        rng.initialize(rng_container, slots=slots)
-    return rng
+def make_dist(seed=1, name='test', **kwargs):
+    """ Make a default distribution for testing """
+    dist = ss.Dist(distname='random', name=name, seed=seed, **kwargs)
+    return dist
 
 
 # %% Define the tests
-def test_random(rng, n=5):
+def test_random(n=n):
     """ Simple random draw """
-    sc.heading('test_random: Testing simple random draw from a RNG object')
-    draws = rng.random(n)
+    sc.heading('Testing simple random draw from a RNG object')
+    
+    dist = make_dist()
+    draws = dist(n)
     print(f'Sampled {n} random draws', draws)
     assert len(draws) == n
     return draws
 
 
-def test_SingleRNG_using_np_singleton(rng, n=5):
-    """ Make sure the SingleRNG is using the numpy.random singleton """
-    if ss.options.rng != 'centralized':
-        pytest.skip('This test is only for the centralized rng.')
-    sc.heading('test_singleton_rng: Testing RNG object')
-
-    np.random.seed(0)
-    draws_np = np.random.rand(n)
-    np.random.seed(0)
-    draws_SingleRNG = rng.random(n)
-    assert np.array_equal(draws_np, draws_SingleRNG)
-    return draws_np, draws_SingleRNG
-
-
-def test_reset(rng, n=5):
+def test_reset(n=n):
     """ Sample, reset, sample """
-    if ss.options.rng not in ['single', 'multi']:
-        pytest.skip('Reset is only for SingleRNG and MultiRNG.')
-    sc.heading('test_reset: Testing sample, reset, sample')
+    sc.heading('Testing sample, reset, sample')
+    
+    # Make dist and draw twice
+    dist = make_dist()
+    draws1 = dist(n)
+    dist.reset()
+    draws2 = dist(n)
+    
+    # Print and test results
+    print(f'Random sample of size {n} returned:\n{draws1}')
+    print(f'After reset, random sample of size {n} returned:\n{draws2}')
+    assert np.array_equal(draws1, draws2)
 
-    draws1 = rng.random(n)
-    print(f'Random sample of size {n} returned {draws1}')
-
-    print('Reset')
-    rng.reset()
-
-    draws2 = rng.random(n)
-    print(f'After reset, random sample of size {n} returned {draws2}')
-
-    if isinstance(rng, ss.MultiRNG):
-        assert np.array_equal(draws1, draws2)
-    else:
-        assert not np.array_equal(draws1, draws2)
     return draws1, draws2
 
 
-def test_step(rng, n=5):
-    """ Sample, step, sample """
-    if ss.options.rng not in ['single', 'multi']:
-        pytest.skip('Step only for SingleRNG and MultiRNG.')
-    sc.heading('test_step: Testing sample, step, sample')
-
-    draws1 = rng.random(n)
-    print(f'Random sample of size {n} returned {draws1}')
-
-    print('Reset')
-    rng.step(1)
-
-    draws2 = rng.random(n)
-    print(f'After reset, random sample of size {n} returned {draws2}')
-
+def test_jump(n=n):
+    """ Sample, jump, sample """
+    sc.heading('Testing sample, jump, sample')
+    
+    dist = make_dist()
+    draws1 = dist(n)
+    dist.jump()
+    draws2 = dist(n)
+    
+    print(f'Random sample of size {n} returned:\n{draws1}')
+    print(f'After jump, random sample of size {n} returned:\n{draws2}')
     assert not np.array_equal(draws1, draws2)
+    
     return draws1, draws2
 
 
-def test_seed(n=5):
+def test_seed(n=n):
     """ Changing seeds """
-    sc.heading('test_seed: Testing sample with seeds 0 and 1')
+    sc.heading('Testing sample with seeds 0 and 1')
 
-    rng0 = make_rng(n, base_seed=0)
-    draws0 = rng0.uniform(size=n)
-    print(f'Random sample of size {n} for rng0 with base_seed 0 returned {draws0}')
-
-    rng1 = make_rng(n, base_seed=1)
-    draws1 = rng1.uniform(size=n)
-    print(f'Random sample of size {n} for rng1 with base_seed 1 returned {draws1}')
-
+    dist0 = make_dist(seed=0)
+    dist1 = make_dist(seed=1)
+    draws0 = dist0(n)
+    draws1 = dist1(n)
+    
+    print(f'Random sample of size {n} for dist0 with seed=0 returned:\n{draws0}')
+    print(f'Random sample of size {n} for dist1 with seed=1 returned:\n{draws1}')
     assert not np.array_equal(draws0, draws1)
+    
     return draws0, draws1
+
+
+def test_rvs(n=n):
+    """ Simple sample from distribution by UID """
+    sc.heading('Testing UID sample')
+    
+    slots = np.arange(n+1)
+    dist = make_dist()
+    dist.initialize(slots=slots)
+    uids = np.arange(0, n, 2) # every other to make it interesting
+    draws = dist.rvs(uids)
+    print(f'Created seed and sampled: {draws}')
+    assert len(draws) == len(uids)
+    
+    # Draws without UIDs should match the first element only
+    dist2 = make_dist()
+    dist2.initialize(slots=slots)
+    draws2 = dist2.rvs(len(uids))
+    assert draws[0] == draws2[0]
+    assert not np.array_equal(draws, draws2)
+    
+    return draws
 
 
 # %% Run as a script
 if __name__ == '__main__':
-    # Start timing
-    T = sc.tic()
 
-    n=5
-    rng = make_rng()
+    T = sc.timer()
 
-    for multirng in [True, False]:
-        ss.options(multirng=multirng)
-        sc.heading('Testing with multirng set to', multirng)
+    o1 = test_random(n)
+    o2 = test_reset(n)
+    o3 = test_jump(n)
+    o4 = test_seed(n)
+    o5 = test_rvs(n)
 
-        # Run tests - some will only pass if multirng is True
-        test_random(rng, n)
-        test_reset(rng, n)
-        test_step(rng, n)
-        test_seed(n)
-
-    sc.toc(T)
-    print('Done.')
+    T.toc()

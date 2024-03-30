@@ -22,14 +22,14 @@ class Gonorrhea(ss.Infection):
 
         # Parameters
         pars = ss.omergeleft(pars,
-            dur_inf_in_days = ss.lognorm(s=0.6, scale=10),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
+            dur_inf_in_days = ss.lognorm_ex(mean=10, stdev=0.6),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
             p_symp = 0.5,  # Share of infections that are symptomatic. Placeholder value
             p_clear = 0.2,  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
             init_prev = 0.1,
         )
 
         par_dists = ss.omergeleft(par_dists,
-            dur_inf_in_days = ss.lognorm,
+            dur_inf_in_days = ss.lognorm_ex,
             p_symp          = ss.bernoulli,
             p_clear         = ss.bernoulli,
             init_prev       = ss.bernoulli,
@@ -87,7 +87,7 @@ class Gonorrhea(ss.Infection):
 
         # Set natural clearance
         clear_uids = self.pars.p_clear.filter(target_uids)
-        dur = sim.ti + self.pars['dur_inf_in_days'].rvs(clear_uids)/365/sim.dt # Convert from days to years and then adjust for dt
+        dur = sim.ti + self.pars.dur_inf_in_days.rvs(clear_uids)/365/sim.dt # Convert from days to years and then adjust for dt
         self.ti_clearance[clear_uids] = dur
 
         return

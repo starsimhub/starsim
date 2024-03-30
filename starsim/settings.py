@@ -65,9 +65,6 @@ class Options(sc.objdict):
         optdesc = sc.objdict()  # Help for the options
         options = sc.objdict()  # The options
 
-        optdesc.rng = 'Set how random numbers are handled in Starsim with three options: 1) "centralized" uses the centralized numpy random number generator for all distributions. 2) "single" uses a separate (SingleRNG) random number generator for each distribution. 3) "multi" uses a separate (MultiRNG) random number generator for each distribution. In comparing two simulations, the "single" option may be slightly better than the "centralized" option without any real disadvantages. Only "multi" can achieve full common random number (CRN) coherence, but is more computationally expensive and only produces CRN results when using CRN-safe code. The default value is "single".'
-        options.rng = ['centralized', 'single', 'multi'][1]
-
         optdesc.verbose = 'Set default level of verbosity (i.e. logging detail): e.g., 0.1 is an update every 10 simulated timesteps.'
         options.verbose = float(os.getenv('STARSIM_VERBOSE', 0.1))
 
@@ -214,9 +211,6 @@ class Options(sc.objdict):
             raise ValueError(errormsg)
         return
 
-    @property
-    def multirng(self):
-        return self['rng'] == 'multi'
 
 # Create the options on module load
 options = Options()
