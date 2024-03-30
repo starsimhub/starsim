@@ -118,7 +118,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         dist = ss.Dist(sps.norm, loc=3)
         dist.rvs(10) # Return 10 normally distributed random numbers
     """
-    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None, strict=False, auto=True, sim=None, module=None, **kwargs): # TODO: switch back to strict=True
+    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None, strict=False, auto=False, sim=None, module=None, **kwargs): # TODO: switch back to strict=True
         self.dist = dist # The type of distribution
         self.distname = distname
         self.name = name
@@ -133,10 +133,14 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         
         # Auto-generated 
         self.rvs_func = None # The default function to call in make_rvs() to generate the random numbers
-        self._pars = None # Validated and transformed (if necessary) parameters
         self.dynamic_pars = None # Whether or not the distribution has array or callable parameters
+        self._pars = None # Validated and transformed (if necessary) parameters
+        self._n = None # Internal variable to keep track of "n" argument (usually size)
+        self._size = None # Internal variable to keep track of actual number of random variates asked for
+        self._uids = None # Internal variable to track currently-in-use UIDs
+        self._slots = None # Internal variable to track currently-in-use slots
         
-        # Internal state
+        # History and random state
         self.rng = None # The actual RNG generator for generating random numbers
         self.trace = None # The path of this object within the parent
         self.ind = 0 # The index of the RNG (usually updated on each timestep)
@@ -144,7 +148,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.history = [] # Previous states
         self.ready = True
         self.initialized = False
-        if not strict:
+        if not strict: # Otherwise, wait for a sim
             self.initialize()
         return
     
@@ -283,12 +287,12 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         # Handle a SciPy distribution, if provided
         if self.dist is not None:
             if isinstance(self.dist, sps._distn_infrastructure.rv_generic):
-                pars = self.translate_pars(self._pars or self.pars)
-                self.dist = self.dist(**pars) # Convert to a frozen distribution
+                spars = self.process_pars()
+                self.dist = self.dist(**spars) # Convert to a frozen distribution
             self.dist.random_state = self.rng # Override the default random state with the correct one
             
         # Set the default function for getting the rvs
-        if hasattr(self.rng, self.distname): # Don't worry if it doesn't, it's probably being manually overridden
+        if self.distname is not None and hasattr(self.rng, self.distname): # Don't worry if it doesn't, it's probably being manually overridden
             self.rvs_func = getattr(self.rng, self.distname) # e.g. self.rng.uniform
         
         return
@@ -311,7 +315,14 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self._size = size
         self._uids = uids
         self._slots = slots
-        return size, uids, slots
+        return size, slots
+    
+    def process_pars(self):
+        """ Ensure the supplied dist and parameters are valid, and initialize them; called automatically """
+        self._pars = self.pars.copy() # The actual keywords; shallow copy, modified below for special cases
+        self.call_pars()
+        spars = self.sync_pars()
+        return spars
     
     def call_pars(self):
         """ Check if any parameters need to be called to be turned into arrays """
@@ -339,20 +350,13 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     def sync_pars(self):
         """ Perform any necessary synchronizations or transformations on distribution parameters """
         self.update_dist_pars()
-        return
+        return self._pars
     
     def update_dist_pars(self, pars=None):
         """ Update SciPy distribution parameters """
         if self.dist is not None:
             pars = pars if pars is not None else self._pars
             self.dist.kwds = pars
-        return
-    
-    def process_pars(self):
-        """ Ensure the supplied dist and parameters are valid, and initialize them; called automatically """
-        self._pars = self.pars.copy() # The actual keywords; shallow copy, modified below for special cases
-        self.call_pars()
-        self.sync_pars()
         return
     
     def rand(self, size):
@@ -395,12 +399,12 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         if size == 0:
             return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
         
-        # Check if any keywords are callable
-        if self.dynamic_pars:
-            self.process_pars()
-        
         # Store the state
         self.make_history() # Store the pre-call state
+        
+        # Check if any keywords are callable -- parameters shouldn't need to be reprocessed otherwise
+        if self.dynamic_pars:
+            self.process_pars()
         
         # Actually get the random numbers
         if self.dynamic_pars:
@@ -459,11 +463,6 @@ class uniform(Dist):
         super().__init__(distname='uniform', low=low, high=high, **kwargs)
         return
     
-    def make_rvs(self):
-        p = self._pars
-        rvs = self.rng.uniform(low=p.low, high=p.high, size=self._size)
-        return rvs
-    
     def ppf(self, rands):
         p = self._pars
         rvs = rands * (p.high - p.low) + p.low
@@ -473,13 +472,8 @@ class uniform(Dist):
 class normal(Dist):
     """ Normal distribution, with mean=loc and stdev=scale """
     def __init__(self, loc=0.0, scale=1.0, **kwargs):
-        super().__init__(dist=sps.norm, loc=loc, scale=scale, **kwargs)
+        super().__init__(distname='normal', dist=sps.norm, loc=loc, scale=scale, **kwargs)
         return
-    
-    def make_rvs(self):
-        p = self._pars
-        rvs = self.rng.normal(loc=p.loc, scale=p.scale, size=self._size)
-        return rvs
 
 
 class lognorm_im(Dist):
@@ -495,7 +489,7 @@ class lognorm_im(Dist):
         ss.lognorm_im(mean=2, sigma=1).rvs(1000).mean() # Should be roughly 10
     """
     def __init__(self, mean=0.0, sigma=1.0, **kwargs):
-        super().__init__(dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
+        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
         return
     
     def sync_pars(self):
@@ -506,13 +500,8 @@ class lognorm_im(Dist):
         spars.scale = np.exp(p.mean)
         spars.loc = 0
         self.update_dist_pars(spars)
-        return
+        return spars
     
-    def make_rvs(self):
-        p = self._pars
-        rvs = self.rng.lognormal(mean=p.mean, sigma=p.sigma, size=self._size)
-        return rvs
-
 
 class lognorm_ex(lognorm_im):
     """
@@ -524,7 +513,7 @@ class lognorm_ex(lognorm_im):
         ss.lognorm_ex(mean=2, stdev=1).rvs(1000).mean() # Should be close to 2
     """
     def __init__(self, mean=1.0, stdev=1.0, **kwargs):
-        super().__init__(dist=sps.lognorm, mean=mean, stdev=stdev, **kwargs)
+        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, stdev=stdev, **kwargs)
         return
     
     def convert_ex_to_im(self):
@@ -552,57 +541,45 @@ class lognorm_ex(lognorm_im):
     def sync_pars(self):
         """ Convert from overlying to underlying parameters, then translate to SciPy """
         self.convert_ex_to_im()
-        super().sync_pars()
-        return
+        spars = super().sync_pars()
+        return spars
     
 
 class expon(Dist):
     """ Exponential distribution """
     def __init__(self, scale=1.0, **kwargs):
-        super().__init__(dist=sps.expon, scale=scale, **kwargs)
+        super().__init__(distname='exponential', dist=sps.expon, scale=scale, **kwargs)
         return
-    
-    def make_rvs(self):
-        rvs = self.rng.exponential(scale=self._pars.scale, size=self._size)
-        return rvs
 
 
 class poisson(Dist):
     """ Exponential distribution """
     def __init__(self, lam=1.0, **kwargs):
-        super().__init__(dist=sps.poisson, lam=lam, **kwargs)
+        super().__init__(distname='poisson', dist=sps.poisson, lam=lam, **kwargs)
         return
     
     def sync_pars(self):
         """ Translate between NumPy and SciPy parameters """
         spars = dict(mu=self._pars.lam)
         self.update_dist_pars(spars)
-        return
-    
-    def make_rvs(self):
-        rvs = self.rng.poisson(lam=self._pars.lam, size=self._size)
-        return rvs
+        return spars
 
 
 class randint(Dist):
     """ Random integers, values on the interval [low, high-1] (i.e. "high" is excluded) """
     def __init__(self, low=0, high=2,  **kwargs):
-        super().__init__(dist=sps.randint, low=low, high=high **kwargs)
+        super().__init__(distname='integers', dist=sps.randint, low=low, high=high **kwargs)
         return
     
-    def make_rvs(self):
-        p = self._pars
-        rvs = self.rng.integers(low=p.low, high=p.high, size=self._size)
-        return rvs
-
 
 class weibull(Dist):
     """ Weibull distribution -- NB, uses SciPy rather than NumPy """
     def __init__(self, a=1, loc=0, scale=1,  **kwargs):
-        super().__init__(dist=sps.weibull_min, a=a, loc=loc, scale=scale, **kwargs)
+        super().__init__(distname='weibull', dist=sps.weibull_min, a=a, loc=loc, scale=scale, **kwargs)
         return
     
     def make_rvs(self):
+        """ Use SciPy rather than NumPy to include the scale parameter """
         rvs = self.dist.rvs(self._size)
         return rvs
 
@@ -610,7 +587,7 @@ class weibull(Dist):
 class delta(Dist):
     """ Delta distribution: equivalent to np.full() """
     def __init__(self, v=0, **kwargs):
-        super().__init__(v=v, **kwargs)
+        super().__init__(distname='delta', v=v, **kwargs)
         return
     
     def make_rvs(self):
@@ -628,7 +605,7 @@ class bernoulli(Dist):
     which returns elements of the array that return True.
     """
     def __init__(self, p=5, **kwargs):
-        super().__init__(p=p, **kwargs)
+        super().__init__(distname='bernoulli', p=p, **kwargs)
         return
     
     def make_rvs(self):
@@ -661,16 +638,12 @@ class choice(Dist):
         ss.choice(a=[30, 70], p=[0.3, 0.7])(10)
     """
     def __init__(self, a=2, p=None, **kwargs):
-        super().__init__(a=a, p=p, **kwargs)
+        super().__init__(distname='choice', a=a, p=p, **kwargs)
         self.dynamic_pars = False # Set to false since array arguments don't imply dynamic pars here
         return
     
-    def make_rvs(self):
-        rvs = self.rng.choice(**self._pars, size=self._size)
-        return rvs
-    
     def ppf(self, rands):
-        """ Shouldn't actually be needed """
+        """ Shouldn't actually be needed since dynamic pars not supported """
         pars = self._pars
         if np.isscalar(pars.a):
             pars.a = np.arange(pars.a)
