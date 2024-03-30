@@ -179,7 +179,7 @@ class Sim(sc.prettyobj):
         """
         Construct vectors things that keep track of time
         """
-        self.yearvec = np.arange(start=self.pars.start, stop=self.pars.end + 1, step=self.pars.dt)  # Includes all the timepoints in the last year
+        self.yearvec = np.arange(start=self.pars.start, stop=self.pars.end + self.pars.dt, step=self.pars.dt)
         self.npts = len(self.yearvec)
         self.tivec = np.arange(self.npts)
         return

@@ -278,7 +278,7 @@ class Pregnancy(BaseDemographics):
             data_cols = dict(year='Time', age='AgeGrp', value='ASFR'),
         )
 
-        self.choose_slots = ss.randint(low=0, high=1) # Low and high will be reset upon initialization
+        self.choose_slots = ss.randint() # Low and high will be reset upon initialization
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
@@ -311,9 +311,9 @@ class Pregnancy(BaseDemographics):
 
             # Process age data
             age_bins = df[age_label].unique()
-            age_bins = np.append(age_bins, 50)
+            age_bins = np.append(age_bins, age_bins[-1]+1) # WARNING: Assumes one year age bins! TODO: More robust handling.
             age_inds = np.digitize(sim.people.age[uids], age_bins) - 1
-            age_inds[age_inds >= max(age_inds)] = -1  # This ensures women outside the data range will get a value of 0
+            age_inds[age_inds == len(age_bins)-1] = -1  # This ensures women outside the data range will get a value of 0
 
             # Adjust rates: rates are based on the entire population, but we need to remove
             # anyone already pregnant and then inflate the rates for the remainder
@@ -344,8 +344,9 @@ class Pregnancy(BaseDemographics):
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.choose_slots.kwds['low'] = sim.pars['n_agents']+1
-        self.choose_slots.kwds['high'] = int(sim.pars['slot_scale']*sim.pars['n_agents'])
+        low = sim.pars.n_agents+1 # TODO: or 0?
+        high = int(sim.pars.slot_scale*sim.pars.n_agents)
+        self.choose_slots.set(low=low, high=high)
         return
 
     def init_results(self, sim):
@@ -418,13 +419,13 @@ class Pregnancy(BaseDemographics):
         if n_unborn_agents > 0:
 
             # Choose slots for the unborn agents
-            new_slots = self.choose_slots.urvs(conceive_uids)
+            new_slots = self.choose_slots.rvs(conceive_uids)
 
             # Grow the arrays and set properties for the unborn agents
             new_uids = sim.people.grow(len(new_slots))
             sim.people.age[new_uids] = -self.pars.dur_pregnancy
             sim.people.slot[new_uids] = new_slots  # Before sampling female_dist
-            sim.people.female[new_uids] = self.pars.sex_ratio.urvs(new_uids)
+            sim.people.female[new_uids] = self.pars.sex_ratio.rvs(new_uids)
 
             # Add connections to any vertical transmission layers
             # Placeholder code to be moved / refactored. The maternal network may need to be
@@ -451,7 +452,7 @@ class Pregnancy(BaseDemographics):
 
         # Outcomes for pregnancies
         dur = np.full(len(uids), sim.ti + self.pars.dur_pregnancy / sim.dt)
-        dead = self.pars.maternal_death_rate.urvs(uids)
+        dead = self.pars.maternal_death_rate.rvs(uids)
         self.ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
         dur_post_partum = np.full(len(uids), dur + self.pars.dur_postpartum / sim.dt)
         self.ti_postpartum[uids] = dur_post_partum

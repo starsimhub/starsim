@@ -13,7 +13,7 @@
   "dt": 0.2,
   "dt_demog": 1.0,
   "rand_seed": 2,
-  "slot_scale": 5,
+  "slot_scale": 2,
   "verbose": 0,
   "demographics": {},
   "diseases": {},

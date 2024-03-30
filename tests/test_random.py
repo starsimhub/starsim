@@ -11,8 +11,7 @@ n = 5 # Default number of samples
 
 def make_dist(seed=1, name='test', **kwargs):
     """ Make a default distribution for testing """
-    dist = ss.Dist(dist='random', name=name, seed=seed, **kwargs)
-    dist.initialize()
+    dist = ss.Dist(distname='random', name=name, seed=seed, **kwargs)
     return dist
 
 
@@ -78,18 +77,21 @@ def test_seed(n=n):
     return draws0, draws1
 
 
-def test_urvs(n=n):
+def test_rvs(n=n):
     """ Simple sample from distribution by UID """
     sc.heading('Testing UID sample')
     
+    slots = np.arange(n+1)
     dist = make_dist()
+    dist.initialize(slots=slots)
     uids = np.arange(0, n, 2) # every other to make it interesting
-    draws = dist.urvs(uids)
+    draws = dist.rvs(uids)
     print(f'Created seed and sampled: {draws}')
     assert len(draws) == len(uids)
     
     # Draws without UIDs should match the first element only
     dist2 = make_dist()
+    dist2.initialize(slots=slots)
     draws2 = dist2.rvs(len(uids))
     assert draws[0] == draws2[0]
     assert not np.array_equal(draws, draws2)
@@ -106,6 +108,6 @@ if __name__ == '__main__':
     o2 = test_reset(n)
     o3 = test_jump(n)
     o4 = test_seed(n)
-    o5 = test_urvs(n)
+    o5 = test_rvs(n)
 
     T.toc()

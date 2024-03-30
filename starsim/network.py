@@ -484,7 +484,7 @@ class RandomNet(DynamicNetwork):
         """
 
         if isinstance(self.pars.n_contacts, ss.Dist):
-            number_of_contacts = self.pars.n_contacts.urvs(people.uid[people.alive])  # or people.uid?
+            number_of_contacts = self.pars.n_contacts.rvs(people.uid[people.alive])  # or people.uid?
         else:
             number_of_contacts = np.full(len(people), self.pars.n_contacts)
 
@@ -494,7 +494,7 @@ class RandomNet(DynamicNetwork):
         beta = np.ones(len(p1), dtype=ss_float_)
 
         if isinstance(self.pars.dur, ss.Dist):
-            dur = self.pars.dur.urvs(p1)
+            dur = self.pars.dur.rvs(p1)
         else:
             dur = np.full(len(p1), self.pars.dur)
 
@@ -522,7 +522,7 @@ class MFNet(SexualNetwork, DynamicNetwork):
         )
 
         par_dists = ss.omergeleft(par_dists,
-            duration      = ss.lognorm_o,
+            duration      = ss.lognorm_ex,
             participation = ss.bernoulli,
             debut         = ss.normal,
             acts          = ss.poisson,
@@ -550,13 +550,13 @@ class MFNet(SexualNetwork, DynamicNetwork):
         # Set people who will participate in the network at some point
         if upper_age is None: uids = people.uid
         else: uids = people.uid[(people.age < upper_age)]
-        self.participant[uids] = self.pars.participation.urvs(uids)
+        self.participant[uids] = self.pars.participation.rvs(uids)
 
     def set_debut(self, people, upper_age=None):
         # Set debut age
         if upper_age is None: uids = people.uid
         else: uids = people.uid[(people.age < upper_age)]
-        self.debut[uids] = self.pars.debut.urvs(uids)
+        self.debut[uids] = self.pars.debut.rvs(uids)
         return
 
     def add_pairs(self, people, ti=None):
@@ -577,16 +577,16 @@ class MFNet(SexualNetwork, DynamicNetwork):
         # Figure out durations and acts
         if (len(p1) == len(np.unique(p1))):
             # No duplicates and user has enabled multirng, so use slotting based on p1
-            dur_vals = self.pars.duration.urvs(p1)
-            act_vals = self.pars.acts.urvs(p1)
+            dur_vals = self.pars.duration.rvs(p1)
+            act_vals = self.pars.acts.rvs(p1)
         else:
             # If multirng is enabled, we're here because some individuals in p1
             # are starting multiple relationships on this timestep. If using
             # slotted draws, as above, repeated relationships will get the same
             # duration and act rates, which is scientifically undesirable.
             # Instead, we fall back to a not-CRN safe approach:
-            dur_vals = self.pars.duration.urvs(len(p1))  # Just use len(p1) to say how many draws are needed
-            act_vals = self.pars.acts.urvs(len(p1))
+            dur_vals = self.pars.duration.rvs(len(p1))  # Just use len(p1) to say how many draws are needed
+            act_vals = self.pars.acts.rvs(len(p1))
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
@@ -610,10 +610,10 @@ class MSMNet(SexualNetwork, DynamicNetwork):
 
     def __init__(self, pars=None, key_dict=None, **kwargs):
         pars = ss.omergeleft(pars,
-            duration_dist = ss.lognorm_o(mean=15, stdev=15),
+            duration_dist = ss.lognorm_ex(mean=15, stdev=15),
             participation_dist = ss.bernoulli(p=0.1),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             debut_dist = ss.normal(loc=16, scale=2),
-            acts = ss.lognorm_o(mean=80, stdev=20),
+            acts = ss.lognorm_ex(mean=80, stdev=20),
             rel_part_rates = 1.0,
         )
         DynamicNetwork.__init__(self, key_dict, **kwargs)
@@ -654,11 +654,11 @@ class MSMNet(SexualNetwork, DynamicNetwork):
         # Figure out durations
         if (len(p1) == len(np.unique(p1))):
             # No duplicates, so use slotting based on p1
-            dur = self.pars.duration.urvs(p1)
-            act_vals = self.pars.acts.urvs(p1)
+            dur = self.pars.duration.rvs(p1)
+            act_vals = self.pars.acts.rvs(p1)
         else:
-            dur = self.pars.duration.urvs(len(p1)) # Just use len(p1) to say how many draws are needed
-            act_vals = self.pars.acts.urvs(len(p1))
+            dur = self.pars.duration.rvs(len(p1)) # Just use len(p1) to say how many draws are needed
+            act_vals = self.pars.acts.rvs(len(p1))
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
@@ -710,7 +710,7 @@ class EmbeddingNet(MFNet):
             return 0
 
         available = np.concatenate((available_m, available_f))
-        loc = self.pars.embedding_func.urvs(available)
+        loc = self.pars.embedding_func.rvs(available)
         loc_f = loc[people.female[available]]
         loc_m = loc[~people.female[available]]
 
@@ -725,8 +725,8 @@ class EmbeddingNet(MFNet):
 
         # Figure out durations
         p1 = available_m[ind_m]
-        dur_vals = self.pars.duration.urvs(p1)
-        act_vals = self.pars.acts.urvs(p1)
+        dur_vals = self.pars.duration.rvs(p1)
+        act_vals = self.pars.acts.rvs(p1)
 
         self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
         self.contacts.p2 = np.concatenate([self.contacts.p2, available_f[ind_f]])
@@ -876,7 +876,7 @@ class HPVNet(MFNet):
 
         # Set people who will participate in the network at some point
         can_participate = ss.true(self.active(people) * underpartnered)
-        self.participant[uids] = self.pars.participation_dist.urvs(can_participate)
+        self.participant[uids] = self.pars.participation_dist.rvs(can_participate)
         return
 
     def add_pairs(self, people, ti=0):

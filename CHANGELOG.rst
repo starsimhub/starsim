@@ -7,7 +7,7 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
-Version 0.3.0 (2024-03-17)
+Version 0.3.0 (2024-03-30)
 --------------------------
 
 New RNGs & distributions
@@ -17,12 +17,12 @@ New RNGs & distributions
 - Also removes ``ss.options.multirng`` (the new version is equivalent to it being always on).
 - Removes duplicate logic for transmission (``make_new_cases()``)
 - Adds new custom distributions such as ``ss.choice()`` and ``ss.delta()``.
-- These distributions can be called directly, e.g. ``dist = ss.weibull(a=2); dist(5)`` will return 5 random variates from a Weibull distribution.
+- These distributions can be called directly, e.g. ``dist = ss.weibull(c=2); dist(5)`` will return 5 random variates from a Weibull distribution.
 - Instead of being manually initialized based on the name, the ``Sim`` object is parsed and all distributions will be initialized with a unique identifier based on their place in the object (e.g. ``sim.diseases.sir.pars.dur_inf``), which is used to set their unique seed.
 
 Other changes
 ~~~~~~~~~~~~~
-- This PR also fixes bugs with lognormal parameters, and makes it explicit whether the parameters are for the *underlying* normal distribution (``ss.lognorm_u()``, the Numpy/SciPy default, equivalent to ``ss.lognorm_mean()`` previously) or the "overlying" lognormal distribution (``ss.lognorm_o()``, equivalent to ``ss.lognorm()`` previously).
+- This PR also fixes bugs with lognormal parameters, and makes it clear whether the parameters are for the *implicit* normal distribution (``ss.lognorm_im()``, the NumPy/SciPy default, equivalent to ``ss.lognorm_mean()`` previously) or the "explicit" lognormal distribution (``ss.lognorm_ex()``, equivalent to ``ss.lognorm()`` previously).
 - Renames ``ss.dx``, ``ss.tx``, ``ss.vx`` to``ss.Dx``, ``ss.Tx``, ``ss.Vx``.
 - Removed ``set_numba_seed()`` as a duplicate of ``set_seed()``.
 - *GitHub info*: PR `392 <https://github.com/amath-idm/stisim/pull/392>`_

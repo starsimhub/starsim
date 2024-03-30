@@ -241,7 +241,7 @@ class People(BasePeople):
             state.initialize(sim)
 
         # Assign initial ages based on the current age distribution
-        self.age[:] = self.age_data_dist.urvs(self.uid)
+        self.age[:] = self.age_data_dist.rvs(self.uid)
         return
 
     def add_module(self, module, force=False):

@@ -25,7 +25,7 @@ class SIR(ss.Infection):
         )
 
         par_dists = ss.omergeleft(par_dists,
-            dur_inf   = ss.lognorm_o,
+            dur_inf   = ss.lognorm_ex,
             init_prev = ss.bernoulli,
             p_death   = ss.bernoulli,
         )
@@ -61,10 +61,10 @@ class SIR(ss.Infection):
 
         # Sample duration of infection, being careful to only sample from the
         # distribution once per timestep.
-        dur_inf = p.dur_inf.urvs(uids)
+        dur_inf = p.dur_inf.rvs(uids)
 
         # Determine who dies and who recovers and when
-        will_die = p.p_death.urvs(uids)
+        will_die = p.p_death.rvs(uids)
         dead_uids = uids[will_die]
         rec_uids = uids[~will_die]
         self.ti_dead[dead_uids] = sim.ti + dur_inf[will_die] / sim.dt # Consider rand round, but not CRN safe

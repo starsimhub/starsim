@@ -68,7 +68,7 @@ class Dx(Product):
                 self.result_dist.pk = probs  # Overwrite distribution probabilities
 
                 # Sort people into one of the possible result states and then update their overall results
-                this_result = self.result_dist.urvs(these_uids)-these_uids
+                this_result = self.result_dist.rvs(these_uids)-these_uids # TODO: check!
                 row_inds = results.uids.isin(these_uids)
                 results.loc[row_inds, 'result'] = np.minimum(this_result, results.loc[row_inds, 'result'])
 
@@ -114,7 +114,7 @@ class Tx(Product):
                     thisdf = self.df[df_filter]  # apply filter to get the results for this state & genotype
 
                     # Determine whether treatment is successful
-                    self.efficacy_dist.kwds['p'] = thisdf.efficacy.values[0]
+                    self.efficacy_dist.set(p=thisdf.efficacy.values[0])
 
                     # HACK to reset the efficacy_dist as it is called multiple times per timestep. TODO: Refactor
                     self.efficacy_dist.jump(sim.ti+1)

@@ -392,7 +392,7 @@ class BaseTreatment(Intervention):
         accept_uids = np.array([], dtype=int)
         eligible_uids = self.check_eligibility(sim)  # Apply eligiblity
         if len(eligible_uids):
-            self.coverage_dist.kwds['p'] = self.prob[0]
+            self.coverage_dist.set(p=self.prob[0])
             accept_uids = self.coverage_dist.filter(eligible_uids)
         return accept_uids
 
@@ -498,7 +498,7 @@ class BaseVaccination(Intervention):
             ti = sc.findinds(self.timepoints, sim.ti)[0]
             prob = self.prob[ti]  # Get the proportion of people who will be tested this timestep
             is_eligible = self.check_eligibility(sim)  # Check eligibility
-            self.coverage_dist.kwds['p'] = prob
+            self.coverage_dist.set(p=prob)
             accept_uids = self.coverage_dist.filter(ss.true(is_eligible))
 
             if len(accept_uids):
