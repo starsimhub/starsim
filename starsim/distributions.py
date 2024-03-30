@@ -287,9 +287,10 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         # Handle a SciPy distribution, if provided
         if self.dist is not None:
             
-            # TODO: Pull out parameters of an already-frozen distribution
+            # Pull out parameters of an already-frozen distribution
             if isinstance(self.dist, sps._distn_infrastructure.rv_frozen):
-                pass
+                if not self.initialized: # Don't do this more than once
+                    self.pars = sc.dictobj(sc.mergedicts(self.pars, self.dist.kwds))
             
             # Convert to a frozen distribution
             if isinstance(self.dist, sps._distn_infrastructure.rv_generic):
