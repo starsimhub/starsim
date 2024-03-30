@@ -5,7 +5,6 @@ Define non-communicable disease (NCD) model
 import numpy as np
 import starsim as ss
 import sciris as sc
-import scipy.stats as sps
 
 __all__ = ['NCD']
 
@@ -22,7 +21,7 @@ class NCD(ss.Disease):
             initial_risk = ss.bernoulli(p=0.3), # Initial prevalence of risk factors
             #'affection_rate': ss.rate(p=0.1), # Instantaneous rate of acquisition applied to those at risk (units are acquisitions / year)
             dur_risk = ss.expon(scale=10),
-            prognosis = sps.weibull_min(c=2, scale=5), # Time in years between first becoming affected and death
+            prognosis = ss.weibull(c=2, scale=5), # Time in years between first becoming affected and death
         )
 
         super().__init__(ss.omerge(default_pars, pars))

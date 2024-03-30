@@ -195,7 +195,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             self.process_dist()
         if kwargs:
             self.pars.update(kwargs)
-            self.process_pars()
+            self.process_pars(call=False)
         return
 
     @property
@@ -263,7 +263,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             
         # Initialize the distribution and finalize
         self.process_dist()
-        self.process_pars()
+        self.process_pars(call=False)
         self.ready = True
         self.initialized = True
         return self
@@ -286,10 +286,18 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         
         # Handle a SciPy distribution, if provided
         if self.dist is not None:
+            
+            # TODO: Pull out parameters of an already-frozen distribution
+            if isinstance(self.dist, sps._distn_infrastructure.rv_frozen):
+                pass
+            
+            # Convert to a frozen distribution
             if isinstance(self.dist, sps._distn_infrastructure.rv_generic):
-                spars = self.process_pars()
-                self.dist = self.dist(**spars) # Convert to a frozen distribution
-            self.dist.random_state = self.rng # Override the default random state with the correct one
+                spars = self.process_pars(call=False)
+                self.dist = self.dist(**spars) 
+                
+            # Override the default random state with the correct one
+            self.dist.random_state = self.rng 
             
         # Set the default function for getting the rvs
         if self.distname is not None and hasattr(self.rng, self.distname): # Don't worry if it doesn't, it's probably being manually overridden
@@ -318,10 +326,11 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self._slots = slots
         return size, slots
     
-    def process_pars(self):
+    def process_pars(self, call=True):
         """ Ensure the supplied dist and parameters are valid, and initialize them; called automatically """
         self._pars = sc.cp(self.pars) # The actual keywords; shallow copy, modified below for special cases
-        self.call_pars()
+        if call:
+            self.call_pars()
         spars = self.sync_pars()
         return spars
     
@@ -404,7 +413,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.make_history() # Store the pre-call state
         
         # Check if any keywords are callable -- parameters shouldn't need to be reprocessed otherwise
-        if self.dynamic_pars:
+        if True: # self.dynamic_pars: # TODO: fix!!!!
             self.process_pars()
         
         # Actually get the random numbers

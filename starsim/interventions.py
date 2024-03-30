@@ -498,7 +498,7 @@ class BaseVaccination(Intervention):
             ti = sc.findinds(self.timepoints, sim.ti)[0]
             prob = self.prob[ti]  # Get the proportion of people who will be tested this timestep
             is_eligible = self.check_eligibility(sim)  # Check eligibility
-            self.coverage_dist.kwds['p'] = prob
+            self.coverage_dist.set(p=prob)
             accept_uids = self.coverage_dist.filter(ss.true(is_eligible))
 
             if len(accept_uids):
