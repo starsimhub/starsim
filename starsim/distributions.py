@@ -319,7 +319,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     
     def process_pars(self):
         """ Ensure the supplied dist and parameters are valid, and initialize them; called automatically """
-        self._pars = self.pars.copy() # The actual keywords; shallow copy, modified below for special cases
+        self._pars = sc.cp(self.pars) # The actual keywords; shallow copy, modified below for special cases
         self.call_pars()
         spars = self.sync_pars()
         return spars
@@ -338,7 +338,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             # If the parameter is callable, then call it
             if callable(val): 
                 size_par = uids if uids is not None else size
-                out = val(self.sim, self.module, size_par)
+                out = val(self.module, self.sim, size_par) # TODO: swap order to sim, module, size?
                 val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
                 self._pars[key] = val
             
@@ -513,7 +513,7 @@ class lognorm_ex(lognorm_im):
         ss.lognorm_ex(mean=2, stdev=1).rvs(1000).mean() # Should be close to 2
     """
     def __init__(self, mean=1.0, stdev=1.0, **kwargs):
-        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, stdev=stdev, **kwargs)
+        super().__init__(mean=mean, stdev=stdev, **kwargs)
         return
     
     def convert_ex_to_im(self):
