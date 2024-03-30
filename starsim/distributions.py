@@ -309,6 +309,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
                 slots = self.slots[uids]
                 size = slots.max() + 1
             else:
+                slots = np.array([])
                 size = 0
         
         self._n = n
