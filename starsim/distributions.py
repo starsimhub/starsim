@@ -154,7 +154,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     
     def __repr__(self):
         """ Custom display to show state of object """
-        tracestr = '<no trace>' if self.trace is None else "{self.trace}"
+        tracestr = '<no trace>' if self.trace is None else f"{self.trace}"
         if self.dist is not None:
             diststr = f'dist={self.dist}, '
         elif self.distname is not None:
@@ -217,8 +217,10 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         """ Return a copy of the state """
         return self.state.copy()
     
-    def make_history(self):
+    def make_history(self, reset=False):
         """ Store the current state in history """
+        if reset:
+            self.history = []
         self.history.append(self.get_state()) # Store the initial state
         return
 
@@ -247,7 +249,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         
         # Create the actual RNG
         self.rng = np.random.default_rng(seed=self.seed)
-        self.make_history()
+        self.make_history(reset=True)
         
         # Handle the sim, module, and slots
         self.sim = sim if (sim is not None) else self.sim
