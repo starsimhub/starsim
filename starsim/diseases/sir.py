@@ -25,7 +25,7 @@ class SIR(ss.Infection):
         )
 
         par_dists = ss.omergeleft(par_dists,
-            dur_inf   = ss.lognorm_o,
+            dur_inf   = ss.lognorm_ex,
             init_prev = ss.bernoulli,
             p_death   = ss.bernoulli,
         )

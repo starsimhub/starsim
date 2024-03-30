@@ -522,7 +522,7 @@ class MFNet(SexualNetwork, DynamicNetwork):
         )
 
         par_dists = ss.omergeleft(par_dists,
-            duration      = ss.lognorm_o,
+            duration      = ss.lognorm_ex,
             participation = ss.bernoulli,
             debut         = ss.normal,
             acts          = ss.poisson,
@@ -610,10 +610,10 @@ class MSMNet(SexualNetwork, DynamicNetwork):
 
     def __init__(self, pars=None, key_dict=None, **kwargs):
         pars = ss.omergeleft(pars,
-            duration_dist = ss.lognorm_o(mean=15, stdev=15),
+            duration_dist = ss.lognorm_ex(mean=15, stdev=15),
             participation_dist = ss.bernoulli(p=0.1),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             debut_dist = ss.normal(loc=16, scale=2),
-            acts = ss.lognorm_o(mean=80, stdev=20),
+            acts = ss.lognorm_ex(mean=80, stdev=20),
             rel_part_rates = 1.0,
         )
         DynamicNetwork.__init__(self, key_dict, **kwargs)
