@@ -584,8 +584,8 @@ class randint(Dist):
 
 class weibull(Dist):
     """ Weibull distribution -- NB, uses SciPy rather than NumPy """
-    def __init__(self, a=1, loc=0, scale=1,  **kwargs):
-        super().__init__(distname='weibull', dist=sps.weibull_min, a=a, loc=loc, scale=scale, **kwargs)
+    def __init__(self, c=1, loc=0, scale=1,  **kwargs):
+        super().__init__(distname='weibull', dist=sps.weibull_min, c=c, loc=loc, scale=scale, **kwargs)
         return
     
     def make_rvs(self):
