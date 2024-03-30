@@ -47,7 +47,7 @@ class Dists:
             self.initialize()
         return
 
-    def initialize(self, obj=None, base_seed=None, sim=None, force=True):
+    def initialize(self, obj=None, base_seed=None, sim=None, force=False):
         """
         Set the base seed, find and initialize all distributions in an object
         
@@ -63,7 +63,7 @@ class Dists:
         self.dists = find_dists(obj)
         for trace,dist in self.dists.items():
             if not dist.initialized or force:
-                dist.initialize(trace=trace, seed=base_seed, sim=sim)
+                dist.initialize(trace=trace, seed=base_seed, sim=sim, force=force)
         self.check_seeds()
         self.initialized = True
         return self
@@ -118,7 +118,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         dist = ss.Dist(sps.norm, loc=3)
         dist.rvs(10) # Return 10 normally distributed random numbers
     """
-    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None, strict=False, auto=False, sim=None, module=None, **kwargs): # TODO: switch back to strict=True
+    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None, strict=True, auto=True, sim=None, module=None, **kwargs): # TODO: switch back to strict=True
         self.dist = dist # The type of distribution
         self.distname = distname
         self.name = name
@@ -241,8 +241,15 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
         return self.state
     
-    def initialize(self, trace=None, seed=None, module=None, sim=None, slots=None):
+    def initialize(self, trace=None, seed=None, module=None, sim=None, slots=None, force=False):
         """ Calculate the starting seed and create the RNG """
+        
+        if 'high' in self.pars and self.pars.high == 100:
+            print(f'HIIIIIIII', trace, self.trace, self)
+        
+        if self.initialized and not force:
+            errormsg = f'Distribution {self} is already initialized, use force=True if intentional'
+            raise ValueError(errormsg)
         
         # Calculate the offset (starting seed)
         self.process_seed(trace, seed)
@@ -266,8 +273,11 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         # Initialize the distribution and finalize
         self.process_dist()
         self.process_pars(call=False)
-        self.ready = True
-        self.initialized = True
+        if self.trace is not None and self.sim is not None: # Only reset 
+            self.ready = True
+            self.initialized = True
+        else:
+            ss.warn(f'Dist {self} is only partially initialized: missing a trace or sim')
         return self
     
     def process_seed(self, trace=None, seed=None):

@@ -11,7 +11,7 @@ n = 5 # Default number of samples
 
 def make_dist(name='test', **kwargs):
     """ Make a default Dist for testing """
-    dist = ss.random(name=name, **kwargs).initialize()
+    dist = ss.random(name=name, **kwargs)
     return dist
 
 def make_dists(**kwargs):

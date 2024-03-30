@@ -186,7 +186,7 @@ class People(BasePeople):
         # Handle states
         states = [
             ss.State('age', float, np.nan), # NaN until conceived
-            ss.State('female', bool, ss.bernoulli(p=0.5)),
+            ss.State('female', bool, ss.bernoulli(name='female', p=0.5)),
             ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
             ss.State('alive', bool, True),  # Time index for death
             ss.State('scale', float, 1.0),
@@ -224,14 +224,12 @@ class People(BasePeople):
         if self.initialized:
             return
         else:
-            self.initialized = True
-
+            self.initialized = True # Expected by state.initialize()
+        
         # For People initialization, first initialize slots, then initialize RNGs, then initialize remaining states
         # This is because some states may depend on RNGs being initialized to generate initial values
         self.slot.initialize(sim)
         self.slot[:] = self.uid
-
-        self.age_data_dist.initialize(module=self, sim=sim)
 
         # Initialize states
         # Age is handled separately because the default value for new agents is NaN until they are concieved/born whereas
@@ -241,6 +239,7 @@ class People(BasePeople):
             state.initialize(sim)
 
         # Assign initial ages based on the current age distribution
+        self.age_data_dist.initialize(module=self, sim=sim)
         self.age[:] = self.age_data_dist.rvs(self.uid)
         return
 

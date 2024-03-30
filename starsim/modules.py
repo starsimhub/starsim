@@ -97,7 +97,11 @@ class Module:#(sc.prettyobj): # TODO: replace with sc.qprettyobj
         # Initialize everything # TODO: shouldn't be needed, should be able to recurse more
         for key,val in list(self.pars.items()) + list(self.__dict__.items()):
             if isinstance(val, ss.Dist):
-                val.initialize(module=self, sim=sim) # Actually a dist
+                if not val.initialized:
+                    trace = f'{self.name}_{key}'
+                    val.initialize(trace=trace, module=self, sim=sim, force=True) # Actually a dist
+                else:
+                    print(f'TEMP: tried to reinitialize {val}')
 
         # Connect the states to the sim
         # Will use random numbers, so do after distribution initialization
