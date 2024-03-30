@@ -94,7 +94,6 @@ class Sim(sc.prettyobj):
         ss.set_seed(self.pars.rand_seed)  # Reset the random seed before the population is created
 
         # Initialize the core sim components
-        # self.dists.initialize(obj=self, base_seed=self.pars.rand_seed + 2)  # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rngs
         self.init_people(reset=reset, **kwargs)  # Create all the people (the heaviest step)
 
         # Initialize plug-ins
@@ -106,7 +105,7 @@ class Sim(sc.prettyobj):
         self.init_analyzers()
 
         # Perform post-initialization validation
-        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed + 2, force=False)  # TEMP # TODO Should not be here!!!
+        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed + 2, force=True)  # TEMP # TODO Should not be here!!!
         self.validate_post_init()
 
         # Reset the random seed to the default run seed, so that if the simulation is run with
@@ -447,9 +446,9 @@ class Sim(sc.prettyobj):
         TBC whether we keep this or incorporate the checks into the init methods
         """
         # Make sure that there's a contact network if any diseases are present
-        if self.diseases and not self.networks:
+        if self.diseases and not self.networks: # TODO: handle NCDs?
             warnmsg = f'Warning: simulation has {len(self.diseases)} diseases but no contact network(s).'
-            ss.warn(warnmsg, die=False)
+            ss.warn(warnmsg)
         return
 
     def step(self):
@@ -973,13 +972,13 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
     if run:
         sc.heading('Running demo:')
         sim.run()
-    if summary:
-        sc.heading('Results:')
-        print(sim.summary)
-    if plot:
-        sim.plot()
-    if show:
-        pl.show()
+        if summary:
+            sc.heading('Results:')
+            print(sim.summary)
+            if plot:
+                sim.plot()
+                if show:
+                    pl.show()
     return sim
 
 
