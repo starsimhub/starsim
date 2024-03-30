@@ -137,7 +137,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     def __init__(self, dist=None, name=None, seed=None, offset=None, strict=False, auto=True, sim=None, module=None, **kwargs): # TODO: switch back to strict=True
         self.dist = dist # The type of distribution
         self.name = name
-        self.kwds = sc.dictobj(kwargs) # The user-defined kwargs
+        self.pars = sc.dictobj(kwargs) # The user-defined kwargs
         self.seed = seed # Usually determined once added to the container
         self.offset = offset
         self.module = module
@@ -147,8 +147,8 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.auto = auto
         
         # Auto-generated 
-        self._kwds = None # Validated and transformed (if necessary) parameters
-        self._skwds = None # If needed, set the scipy.stats keywords
+        self._pars = None # Validated and transformed (if necessary) parameters
+        self._spars = None # If needed, set the scipy.stats parameters
         
         # Internal state
         self.rng = None # The actual RNG generator for generating random numbers
@@ -166,7 +166,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         """ Custom display to show state of object """
         tracestr = '<no trace>' if self.trace is None else "{self.trace}"
         diststr = '' if self.dist is None else f'dist={self.dist}, '
-        string = f'ss.{self.__class__.__name__}({tracestr}, {diststr}kwds={dict(self.kwds)})'
+        string = f'ss.{self.__class__.__name__}({tracestr}, {diststr}pars={dict(self.pars)})'
         return string
     
     def disp(self):
@@ -177,7 +177,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         """ Show the state of the object """
         s = sc.autolist()
         s += f'  dist = {self.dist}'
-        s += f'  kwds = {self.kwds}'
+        s += f'  pars = {self.pars}'
         s += f' trace = {self.trace}'
         s += f'offset = {self.offset}'
         s += f'  seed = {self.seed}'
@@ -199,8 +199,8 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             self.dist = dist
             self.process_dist()
         if kwargs:
-            self.kwds.update(kwargs)
-            self.process_kwds()
+            self.pars.update(kwargs)
+            self.process_pars()
         return
 
     @property
@@ -289,8 +289,8 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         """ Ensure the distribution works """
         if self.dist is not None:
             if isinstance(self.dist, sps._distn_infrastructure.rv_generic):
-                kwds = self.translate_kwds(self._kwds or self.kwds)
-                self.dist = self.dist(**kwds) # Convert to a frozen distribution
+                pars = self.translate_pars(self._pars or self.pars)
+                self.dist = self.dist(**pars) # Convert to a frozen distribution
             self.dist.random_state = self.rng # Override the default random state with the correct one
         return
     
@@ -314,31 +314,67 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self._slots = slots
         return size, uids, slots
     
-    def preprocess_kwds(self):
-        """ Do any preprocessing on keywords """
+    # def preprocess_pars(self):
+    #     """ Do any preprocessing on keywords """
+    #     pass
+
+    def call_pars(self):
+        """ Check if any parameters need to be called to be turned into arrays """
+        size, uids = self._size, self._uids
+        
+        self.array_pars = False
+        for key,val in self._pars.items():
+            
+            # If the parameter is callable, then call it
+            if callable(val): 
+                size_par = uids if uids is not None else size
+                out = val(self.sim, self.module, size_par)
+                val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
+                self._pars[key] = val
+            
+            # If it's iterable, check the size and pad with zeros if it's the wrong shape
+            if np.iterable(val) and uids is not None and self.dist != 'choice': # TODO: figure out logic
+                self.array_pars = True
+        return
+    
+    def transform_pars(self):
+        """ Perform any necessary transformations on distribution parameters """
         pass
     
-    def process_kwds(self):
+    def translate_pars(self):
+        """ Translate keywords from Numpy into Scipy """
+        pass
+    
+    
+    
+    def process_pars(self):
         """ Ensure the supplied dist and parameters are valid, and initialize them; called automatically """
-        dist = self.dist # The name of the distribution (a string, usually)
-        self._kwds = self.kwds.copy() # The actual keywords; shallow copy, modified below for special cases
-        self.preprocess_kwds()
+        # dist = self.dist # The name of the distribution (a string, usually)
+        self._pars = self.pars.copy() # The actual keywords; shallow copy, modified below for special cases
+        self.call_pars()
+        self.transform_pars()
+        self.translate_pars()
+        # self.preprocess_pars()
+        
+        
+        
+        self._pars = pars
         
         # Main use case: handle strings, including special cases
         if isinstance(dist, str):
             
             # Handle lognormal distributions
             if dist == 'lognorm_o': # Convert parameters for a lognormal
-                kwds['mean'], kwds['sigma'] = lognorm_convert(kwds.pop('mean'), kwds.pop('stdev'))
+                pars['mean'], pars['sigma'] = lognorm_convert(pars.pop('mean'), pars.pop('stdev'))
                 dist = 'lognormal'
             elif dist == 'lognorm_u':
-                kwds['mean'] = kwds.pop('loc') # Rename parameters
-                kwds['sigma'] = kwds.pop('scale')
+                pars['mean'] = pars.pop('loc') # Rename parameters
+                pars['sigma'] = pars.pop('scale')
                 dist = 'lognormal' # For the underlying distribution
             
-            # Create the actual distribution -- first the special cases of Bernoulli and delta
-            if dist == 'bernoulli': # Special case, predefine the distribution here
-                dist = lambda p, size: 
+            # # Create the actual distribution -- first the special cases of Bernoulli and delta
+            # if dist == 'bernoulli': # Special case, predefine the distribution here
+            #     dist = lambda p, size: 
 
         
         # # It wasn't a string, so assume it's a SciPy distribution
@@ -351,26 +387,9 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         #         raise TypeError(errormsg)
         
         # Now that we have the dist function, process the keywords for callable and array inputs
-        self.array_pars = False
-        for key,val in kwds.items():
-            
-            # If the parameter is callable, then call it
-            if callable(val): 
-                size_par = uids if uids is not None else size
-                out = val(self.module, self.sim, size_par)
-                val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
-                kwds[key] = val
-            
-            # If it's iterable, check the size and pad with zeros if it's the wrong shape
-            if np.iterable(val) and uids is not None and (len(val) == len(uids)) and self.dist != 'choice': # TODO: figure out logic
-                self.array_pars = True
         
-        self._kwds = kwds
             
-        return dist, kwds
-    
-    def translate_kwds(self, kwds):
-        return kwds
+        return dist, pars
     
     def rand(self, size=None):
         """ Simple way to get simple random numbers """
@@ -408,7 +427,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
         
         # Check if any keywords are callable
-        self.process_kwds()
+        self.process_pars()
         
         # Store the state
         self.make_history() # Store the pre-call state
@@ -427,9 +446,9 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         #     if self.method == 'numpy':
         #         if isinstance(dist, str): # Main use case: get the distribution
         #             dist = getattr(self.rng, dist)
-        #         rvs = dist(size=size, **kwds)
+        #         rvs = dist(size=size, **pars)
         #     elif self.method == 'scipy':
-        #         rvs = dist.rvs(size=size, **kwds)
+        #         rvs = dist.rvs(size=size, **pars)
         #     elif self.method == 'frozen': 
         #         rvs = dist.rvs(size=size) # Frozen distributions don't take keyword arguments
         #     else:
@@ -442,11 +461,11 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         #         mapping = dict(normal='norm', lognormal='lognorm')
         #         dname = mapping[self.dist] if self.dist in mapping else self.dist # TODO: refactor
         #         if dname == 'uniform': # TODO: hack to get uniform to work since different args for SciPy
-        #             kwds['loc'] = kwds.pop('low')
-        #             kwds['scale'] = kwds.pop('high') - kwds['loc']
-        #         spdist = getattr(sps, dname)(**kwds) # TODO: make it work better, not actually numpy
+        #             pars['loc'] = pars.pop('low')
+        #             pars['scale'] = pars.pop('high') - pars['loc']
+        #         spdist = getattr(sps, dname)(**pars) # TODO: make it work better, not actually numpy
         #     elif self.method == 'scipy':
-        #         spdist = dist(**kwds)
+        #         spdist = dist(**pars)
         #     elif self.method == 'frozen': 
         #         spdist = dist
         #     else:
@@ -474,7 +493,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         pl.hist(rvs, bins=bins, **sc.mergedicts(hist_kw))
         pl.title(str(self))
         pl.xlabel('Value')
-        pl.ylabel(f'Count ({size} total)')
+        pl.ylabel(f'Count ({n} total)')
         return rvs
         
 
@@ -506,22 +525,22 @@ class uniform(Dist):
         super().__init__(low=low, high=high, **kwargs)
         return
     
-    # def translate_kwds(self, kwds):
+    # def translate_pars(self, pars):
     #     """ Translate keywords from default (numpy) versions into scipy.stats versions """
-    #     self._skwds = dict(
-    #         loc = kwds.low,
-    #         scale = kwds.high - kwds.low,
+    #     self._spars = dict(
+    #         loc = pars.low,
+    #         scale = pars.high - pars.low,
     #     )
     #     return
     
     def make_rvs(self):
-        kw = self._kwds
-        rvs = self.rng.uniform(low=kw.low, high=kw.high, size=self._size)
+        p = self._pars
+        rvs = self.rng.uniform(low=p.low, high=p.high, size=self._size)
         return rvs
     
     def ppf(self, rands):
-        kw = self._kwds
-        rvs = rands * (kw.high - kw.low) + kw.low
+        p = self._pars
+        rvs = rands * (p.high - p.low) + p.low
         return rvs
 
 
@@ -532,13 +551,8 @@ class normal(Dist):
         return
     
     def make_rvs(self):
-        kw = self._kwds
-        rvs = self.rng.normal(loc=kw.loc, scale=kw.scale, size=self._size)
-        return rvs
-    
-    def ppf(self, rands):
-        # self.dist.kwds = self._kwds
-        rvs = self.dist.ppf(rands)
+        p = self._pars
+        rvs = self.rng.normal(loc=p.loc, scale=p.scale, size=self._size)
         return rvs
 
 
@@ -547,20 +561,20 @@ class lognorm_u(Dist):
     Lognormal distribution, parameterized in terms of the "underlying" (normal)
     distribution, with mean=loc and stdev=scale (see lognorm_o for comparison).
     
+    Note: the "loc" parameter here does *not* correspond to the mean of the resulting
+    random variates!
+    
     **Example**::
         
         ss.lognorm_u(loc=2, scale=1).rvs(1000).mean() # Should be roughly 10
     """
     def __init__(self, loc=0.0, scale=1.0, **kwargs):
-        super().__init__(dist='lognorm_u', spsdist=sps.norm, loc=loc, scale=scale, **kwargs)
+        super().__init__(spsdist=sps.lognorm, loc=loc, scale=scale, **kwargs)
         return
     
     def make_rvs(self):
-        return self.rng.normal(**self._kwds, size=self._size)
-    
-    def ppf(self, rands):
-        self.spsdist.kwds = self._kwds
-        return self.spsdist.ppf(rands)
+        p = self._pars
+        return self.rng.normal(loc=p.loc, scale=p.scale, size=self._size)
 
 
 def lognorm_o(mean=1.0, stdev=1.0, **kwargs):
@@ -601,12 +615,10 @@ class delta(Dist):
         return
     
     def make_rvs(self):
-        rvs = np.full(self._size, self.v)
-        return rvs
+        return np.full(self._size, self._pars.v)
     
     def ppf(self, rands): # NB: don't actually need to use random numbers here, but not worth the complexity of avoiding this
-        rvs = np.full(rands.shape, self.v)
-        return rvs
+        return np.full(rands.shape, self._pars.v)
 
 
 class bernoulli(Dist):
@@ -621,15 +633,15 @@ class bernoulli(Dist):
         return
     
     def make_rvs(self):
-        rvs = self.rng.random(self._size) < self._kwds.p # 3x faster than using rng.binomial(1, p, size)
+        rvs = self.rng.random(self._size) < self._pars.p # 3x faster than using rng.binomial(1, p, size)
         return rvs
     
     def ppf(self, rands):
-        rvs = rands < self._kwds.p
+        rvs = rands < self._pars.p
         return rvs
     
     def filter(self, uids, both=False):
-        """ Return UIDs that pass, or optionally return both """
+        """ Return UIDs that correspond to True, or optionally return both True and False """
         bools = self.rvs(uids)
         if both:
             return uids[bools], uids[~bools]
