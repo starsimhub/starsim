@@ -114,7 +114,7 @@ class Tx(Product):
                     thisdf = self.df[df_filter]  # apply filter to get the results for this state & genotype
 
                     # Determine whether treatment is successful
-                    self.efficacy_dist.kwds['p'] = thisdf.efficacy.values[0]
+                    self.efficacy_dist.set(p=thisdf.efficacy.values[0])
 
                     # HACK to reset the efficacy_dist as it is called multiple times per timestep. TODO: Refactor
                     self.efficacy_dist.jump(sim.ti+1)

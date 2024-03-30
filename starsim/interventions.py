@@ -392,7 +392,7 @@ class BaseTreatment(Intervention):
         accept_uids = np.array([], dtype=int)
         eligible_uids = self.check_eligibility(sim)  # Apply eligiblity
         if len(eligible_uids):
-            self.coverage_dist.kwds['p'] = self.prob[0]
+            self.coverage_dist.set(p=self.prob[0])
             accept_uids = self.coverage_dist.filter(eligible_uids)
         return accept_uids
 
