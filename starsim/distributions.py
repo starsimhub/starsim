@@ -568,7 +568,7 @@ class poisson(Dist):
 class randint(Dist):
     """ Random integers, values on the interval [low, high-1] (i.e. "high" is excluded) """
     def __init__(self, low=0, high=2,  **kwargs):
-        super().__init__(distname='integers', dist=sps.randint, low=low, high=high **kwargs)
+        super().__init__(distname='integers', dist=sps.randint, low=low, high=high, **kwargs)
         return
     
 
