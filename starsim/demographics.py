@@ -7,10 +7,10 @@ import starsim as ss
 import sciris as sc
 import pandas as pd
 
-__all__ = ['BaseDemographics', 'Births', 'Deaths', 'Pregnancy']
+__all__ = ['Demographics', 'Births', 'Deaths', 'Pregnancy']
 
 
-class BaseDemographics(ss.Module):
+class Demographics(ss.Module):
     # A demographic module typically handles births/deaths/migration and takes
     # place at the start of the timestep, before networks are updated and before
     # any disease modules are executed
@@ -29,7 +29,7 @@ class BaseDemographics(ss.Module):
         pass
 
 
-class Births(BaseDemographics):
+class Births(Demographics):
     def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__(pars, **kwargs)
 
@@ -108,7 +108,7 @@ class Births(BaseDemographics):
         self.results['cbr'] = 1/self.pars.units*np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
 
 
-class Deaths(BaseDemographics):
+class Deaths(Demographics):
     def __init__(self, pars=None, par_dists=None, metadata=None, **kwargs):
         """
         Configure disease-independent "background" deaths.
@@ -240,7 +240,7 @@ class Deaths(BaseDemographics):
         return
 
 
-class Pregnancy(BaseDemographics):
+class Pregnancy(Demographics):
 
     def __init__(self, pars=None, par_dists=None, metadata=None, **kwargs):
         super().__init__(pars, **kwargs)

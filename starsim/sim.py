@@ -41,7 +41,7 @@ class Sim(sc.prettyobj):
         # Placeholders for plug-ins: demographics, diseases, connectors, analyzers, and interventions
         # Products are not here because they are stored within interventions
         if demographics == True: demographics = [ss.Births(), ss.Deaths()]  # Use default assumptions for demographics
-        self.demographics = ss.ndict(demographics, type=ss.BaseDemographics)
+        self.demographics = ss.ndict(demographics, type=ss.Demographics)
         self.diseases = ss.ndict(diseases, type=ss.Disease)
         self.networks = ss.ndict(networks, type=ss.Network)
         self.connectors = ss.ndict(connectors, type=ss.Connector)
@@ -310,7 +310,7 @@ class Sim(sc.prettyobj):
         """ Initialize demographics """
 
         # Demographics can be provided via sim.demographics or sim.pars - this methods reconciles them
-        demographics = self.convert_plugins(ss.BaseDemographics, plugin_name='demographics')
+        demographics = self.convert_plugins(ss.Demographics, plugin_name='demographics')
 
         # We also allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
         if self.pars.birth_rate is not None:
