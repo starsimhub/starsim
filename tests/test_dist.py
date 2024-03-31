@@ -1,5 +1,5 @@
 """
-Test Dist and Dists
+Test the Dist object from distributions.py
 """
 
 import numpy as np
