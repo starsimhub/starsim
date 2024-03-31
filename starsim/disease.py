@@ -265,7 +265,7 @@ class Infection(Disease):
         people = sim.people
         betamap = self._check_betas(sim)
 
-        for i,nkey,net in sim.networks.enumitems():
+        for nkey,net in sim.networks.items():
             if not len(net):
                 break
 
