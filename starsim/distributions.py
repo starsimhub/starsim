@@ -119,7 +119,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         dist.rvs(10) # Return 10 normally distributed random numbers
     """
     def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None, 
-                 strict=False, auto=False, sim=None, module=None, debug=False, **kwargs): # TODO: switch back to strict=True
+                 strict=True, auto=True, sim=None, module=None, debug=False, **kwargs): # TODO: switch back to strict=True
         # If a string is provided as "dist" but there's no distname, swap the dist and the distname
         if isinstance(dist, str) and distname is None:
             distname = dist
@@ -450,7 +450,9 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         if reset:
             self.reset(-1)
         elif self.auto: # TODO: check
-            self.jump()
+            pass
+            # self.reset()
+            # self.jump()
         elif self.strict:
             self.ready = False
         if self.debug:
