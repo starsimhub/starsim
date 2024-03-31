@@ -14,8 +14,8 @@ quick_run = True
 def make_syph_sim(dt=1, n_agents=500):
     """ Make a sim with syphilis - used by several subsequent tests """
     syph = ss.Syphilis()
-    syph.pars['beta'] = {'mf': [0.25, 0.15], 'maternal': [0.99, 0]}
-    syph.pars['init_prev'] = ss.bernoulli(p=0.1)
+    syph.pars.beta = dict(mf=[0.25, 0.15], maternal=[0.99, 0])
+    syph.pars.init_prev = ss.bernoulli(p=0.1)
 
     # Make demographic modules
     fertility_rates = {'fertility_rate': pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')}
