@@ -344,7 +344,7 @@ class Pregnancy(Demographics):
 
     def initialize(self, sim):
         super().initialize(sim)
-        low = sim.pars.n_agents+1 # TODO: or 0?
+        low = 0 # Was sim.pars.n_agents + 1
         high = int(sim.pars.slot_scale*sim.pars.n_agents)
         self.choose_slots.set(low=low, high=high)
         return

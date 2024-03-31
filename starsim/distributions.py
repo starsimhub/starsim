@@ -102,6 +102,14 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     
     See ss.dist_list for a full list of supported distributions.
     
+    Although it's possible in theory to define a custom distribution (i.e., not
+    one from NumPy or SciPy), in practice this is difficult. The distribution needs
+    to have both a way to return random variables (easy), as well as the probability
+    point function (inverse CDF). In addition, the distribution must be able to
+    take a NumPy RNG as its bit generator. It's easier to just use a default Dist
+    (e.g., ss.random()), and then take its output as input (i.e., quantiles) for 
+    whatever custom distribution you want to create.
+    
     Args:
         dist (rv_generic): optional; a scipy.stats distribution (frozen or not) to get the ppf from
         distname (str): the name for this class of distribution (e.g. "uniform")
