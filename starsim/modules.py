@@ -9,7 +9,7 @@ from scipy.stats._distn_infrastructure import rv_frozen
 __all__ = ['Module']
 
 
-class Module:#(sc.prettyobj): # TODO: replace with sc.qprettyobj
+class Module(sc.quickobj):
 
     def __init__(self, pars=None, par_dists=None, name=None, label=None, requires=None, **kwargs):
         self.pars = ss.omerge(pars, kwargs)

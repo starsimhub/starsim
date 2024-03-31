@@ -11,7 +11,7 @@ import pylab as pl
 __all__ = ['find_dists', 'dist_list', 'Dists', 'Dist']
 
 
-def str2int(string, modulo=10_000_000):
+def str2int(string, modulo=1_000_000):
     """
     Convert a string to an int
     
@@ -24,17 +24,16 @@ def str2int(string, modulo=10_000_000):
 def find_dists(obj, verbose=False):
     """ Find all Dist objects in a parent object """
     out = sc.objdict()
-    tree = sc.iterobj(obj, depthfirst=False)
+    tree = sc.iterobj(obj, depthfirst=False, flatten=True)
     if verbose: print(f'Found {len(tree)} objects')
     for trace,val in tree.items():
         if isinstance(val, Dist):
-            key = str(trace)
-            out[key] = val
-            if verbose: print(f'  {key} is a dist ({len(out)})')
+            out[trace] = val
+            if verbose: print(f'  {trace} is a dist ({len(out)})')
     return out
 
 
-class Dists:
+class Dists(sc.prettyobj):
     """ Class for managing a collection of Dist objects """
 
     def __init__(self, obj=None, *args, base_seed=None, sim=None):
@@ -44,7 +43,7 @@ class Dists:
         self.base_seed = base_seed
         self.sim = sim
         self.initialized = False
-        if self.obj is not None:
+        if self.obj is not None or self.sim is not None:
             self.initialize()
         return
 
@@ -56,10 +55,16 @@ class Dists:
         """
         if base_seed:
             self.base_seed = base_seed
-        sim = sim if (sim is not None) else self.sim
-        obj = obj if (obj is not None) else self.obj
+        sim = sc.ifelse(sim, self.sim)
+        obj = sc.ifelse(obj, self.obj, sim)
+        if sim is None and isinstance(obj, ss.Sim): # Swap obj and sim
+            sim = obj
+            self.sim = obj
+            self.obj = None
+        elif obj is None and sim is not None: # Use the sim as the obj
+            obj = sim
         if obj is None:
-            errormsg = 'Must supply a container that contains one or more Dist objects'
+            errormsg = 'Must supply a container that contains one or more Dist objects, typically the sim'
             raise ValueError(errormsg)
         self.dists = find_dists(obj)
         for trace,dist in self.dists.items():
