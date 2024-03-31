@@ -21,7 +21,7 @@ def str2int(string, modulo=10_000_000):
     return int.from_bytes(string.encode(), byteorder='big') % modulo
 
 
-def find_dists(obj, verbose=True):
+def find_dists(obj, verbose=False):
     """ Find all Dist objects in a parent object """
     out = sc.objdict()
     tree = sc.iterobj(obj, depthfirst=False)
@@ -119,7 +119,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         dist.rvs(10) # Return 10 normally distributed random numbers
     """
     def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None, 
-                 strict=True, auto=True, sim=None, module=None, debug=False, **kwargs): # TODO: switch back to strict=True
+                 strict=False, auto=False, sim=None, module=None, debug=False, **kwargs): # TODO: switch back to strict=True
         # If a string is provided as "dist" but there's no distname, swap the dist and the distname
         if isinstance(dist, str) and distname is None:
             distname = dist
@@ -182,23 +182,16 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     
     def show_state(self, output=False):
         """ Show the state of the object """
-        s = sc.autolist()
-        s += f'{self}'
-        s += f'  pars = {self.pars}'
-        s += f' trace = {self.trace}'
-        s += f'offset = {self.offset}'
-        s += f'  seed = {self.seed}'
-        s += f'   ind = {self.ind}'
-        s += f'called = {self.called}'
-        s += f' ready = {self.ready}'
-        s += f' state = {self.state}'
-        string = sc.newlinejoin(s)
+        keys = ['pars', 'trace', 'offset', 'seed', 'ind', 'called', 'ready', 'state']
+        data = {k:getattr(self,k) for k in keys}
+        s = f'{self}'
+        for k,v in data.items():
+            s += '\n{key:6s} = {v}'
         if output:
-            return string
+            return data
         else:
-            print(string)
+            print(s)
             return
-        
     
     def __call__(self, n=1):
         """ Alias to self.rvs() """
