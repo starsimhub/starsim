@@ -19,7 +19,7 @@ def plot_rvs(rvs, times=None, nrows=None):
     nrows, ncols = sc.getrowscols(len(rvs), nrows=nrows)
     for i,name,r in rvs.enumitems():
         pl.subplot(nrows, ncols, i+1)
-        pl.hist(r)
+        pl.hist(r.astype(float))
         title = times[name] if times else name
         pl.title(title)
         sc.commaticks()
@@ -119,20 +119,20 @@ def test_scipy(m=m):
     
     return dist1, dist2
 
-@pytest.mark.skip
+
 def test_exceptions(m=m):
     """ Check that exceptions are being appropriately raised """
     sc.heading('Testing exceptions and strict')
     
     # Create a strict distribution
-    dist = ss.random()
-    with pytest.raises(ss.dists.DistNotInitializedError):
+    dist = ss.random(strict=True, auto=False)
+    with pytest.raises(ss.distributions.DistNotInitializedError):
         dist(m) # Check that we can't call an uninitialized
     
     # Initialize and check we can't call repeatedly
     dist.initialize()
     rvs = dist(m)
-    with pytest.raises(ss.dists.DistNotReadyError):
+    with pytest.raises(ss.distributions.DistNotReadyError):
         dist(m) # Check that we can't call an already-used distribution
     
     # Check that we can with a non-strict Dist
@@ -149,6 +149,32 @@ def test_exceptions(m=m):
     return dist, dist2
     
 
+def test_reset(m=m):
+    """ Check that reset works as expected """
+    sc.heading('Testing reset')
+    
+    # Create and draw two sets of random numbers
+    dist = ss.random(seed=533).initialize()
+    r1 = dist.rvs(m)
+    r2 = dist.rvs(m)
+    assert all(r1 != r2)
+    
+    # Reset to the most recent state
+    dist.reset(-1)
+    r3 = dist.rvs(m)
+    assert all(r3 == r2)
+    
+    # Reset to the initial state
+    dist.reset(0)
+    r4 = dist.rvs(m)
+    assert all(r4 == r1)
+    
+    for r in [r1, r2, r3, r4]:
+        print(r)
+    
+    return dist
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -160,6 +186,7 @@ if __name__ == '__main__':
     o2 = test_custom_dists(do_plot=do_plot)
     o3 = test_dists(do_plot=do_plot)
     o4 = test_scipy()
-    # o5 = test_exceptions() # TODO: re-enable once strict=True
+    o5 = test_exceptions()
+    o6 = test_reset()
     
     T.toc()

@@ -237,7 +237,24 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         return
 
     def reset(self, state=0):
-        """ Restore state: use 0 for initial, -1 for most recent """
+        """
+        Restore state, allowing the same numbers to be resampled
+        
+        Use 0 for original state, -1 for most recent state.
+        
+        **Example**::
+            
+            dist = ss.random(seed=5).initialize()
+            r1 = dist(5)
+            r2 = dist(5)
+            dist.reset(-1)
+            r3 = dist(5)
+            dist.reset(0)
+            r4 = dist(5)
+            assert all(r1 != r2)
+            assert all(r2 == r3)
+            assert all(r4 == r1)
+        """
         if not isinstance(state, dict):
             state = self.history[state]
         self.rng.bit_generator.state = state.copy()
