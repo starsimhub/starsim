@@ -452,12 +452,9 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         # Tidy up
         self.called += 1
         if reset:
-            pass
-            # self.reset(-1)
+            self.reset(-1)
         elif self.auto: # TODO: check
-            pass
-            # self.reset()
-            # self.jump()
+            self.jump()
         elif self.strict:
             self.ready = False
         if self.debug:
