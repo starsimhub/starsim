@@ -187,10 +187,13 @@ def test_callable(n=n):
     sim.people.slot = np.arange(sim.n)
     sim.people.age = np.random.uniform(0, 90, size=sim.n)
 
-    # Define a parameter as a lambda function
-    loc = lambda module, sim, uids: sim.people.age[uids]
+    # Define a parameter as a function
+    def custom_loc(module, sim, uids):
+        out = sim.people.age[uids]
+        return out
+    
     scale = 1
-    d = ss.normal(loc=loc).initialize(sim=sim)
+    d = ss.normal(loc=custom_loc, scale=scale).initialize(sim=sim)
 
     uids = np.array([1, 3, 7, 9])
     draws = d.rvs(uids)
