@@ -161,19 +161,20 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     def __repr__(self):
         """ Custom display to show state of object """
         tracestr = '<no trace>' if self.trace is None else f"{self.trace}"
-        if self.dist is not None:
-            try:
-                diststr = f'dist={self.dist.name}, '
-            except:
-                try: # What is wrong with you, SciPy -- after initialization, it moves here
-                    diststr = f'dist={self.dist.dist.name}, '
+        classname = self.__class__.__name__
+        diststr = ''
+        if classname == 'Dist':
+            if self.dist is not None:
+                try:
+                    diststr = f'dist={self.dist.name}, '
                 except:
-                    diststr = f'dist={type(self.dist)}'
-        elif self.distname is not None:
-            diststr = f'dist={self.distname}, '
-        else:
-            diststr = ''
-        string = f'ss.{self.__class__.__name__}({tracestr}, {diststr}pars={dict(self.pars)})'
+                    try: # What is wrong with you, SciPy -- after initialization, it moves here
+                        diststr = f'dist={self.dist.dist.name}, '
+                    except:
+                        diststr = f'dist={type(self.dist)}'
+            elif self.distname is not None:
+                diststr = f'dist={self.distname}, '
+        string = f'ss.{classname}({tracestr}, {diststr}pars={dict(self.pars)})'
         return string
     
     def disp(self):
@@ -182,11 +183,11 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     
     def show_state(self, output=False):
         """ Show the state of the object """
-        keys = ['pars', 'trace', 'offset', 'seed', 'ind', 'called', 'ready', 'state']
-        data = {k:getattr(self,k) for k in keys}
+        keys = ['pars', 'trace', 'offset', 'seed', 'ind', 'called', 'ready', 'state_int']
+        data = {key:getattr(self,key) for key in keys}
         s = f'{self}'
-        for k,v in data.items():
-            s += '\n{key:6s} = {v}'
+        for key,val in data.items():
+            s += f'\n{key:9s} = {val}'
         if output:
             return data
         else:
@@ -209,18 +210,20 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
 
     @property
     def bitgen(self):
-        try:
-            return self.rng.bit_generator
-        except:
-            return None
+        try:    return self.rng.bit_generator
+        except: return None
     
     @property
     def state(self):
         """ Get the current state """
-        try:
-            return self.bitgen.state
-        except:
-            return None
+        try:    return self.bitgen.state
+        except: return None
+        
+    @property
+    def state_int(self):
+        """ Get the integer corresponding to the current state """
+        try:    return self.state['state']['state']
+        except: return None
     
     def get_state(self):
         """ Return a copy of the state """
@@ -321,7 +324,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             
         # Set the default function for getting the rvs
         if self.distname is not None and hasattr(self.rng, self.distname): # Don't worry if it doesn't, it's probably being manually overridden
-            self.rvs_func = getattr(self.rng, self.distname) # e.g. self.rng.uniform
+            self.rvs_func = self.distname # e.g. self.rng.uniform
         
         return
     
@@ -396,7 +399,8 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     def make_rvs(self):
         """ Return default random numbers for scalar parameters """
         if self.rvs_func is not None:
-            rvs = self.rvs_func(**self._pars, size=self._size)
+            rvs_func = getattr(self.rng, self.rvs_func) # Can't store this because then it references the wrong RNG after copy
+            rvs = rvs_func(**self._pars, size=self._size)
         elif self.dist is not None:
             rvs = self.dist.rvs(self._size)
         else:
@@ -448,7 +452,8 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         # Tidy up
         self.called += 1
         if reset:
-            self.reset(-1)
+            pass
+            # self.reset(-1)
         elif self.auto: # TODO: check
             pass
             # self.reset()
@@ -460,7 +465,11 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             sizestr = f'with size={self._size}, '
             slotstr = f'Σ(slots)={self._slots.sum()}, ' if self._slots else '<no slots>, '
             rvstr = f'Σ(rvs)={rvs.sum():0.2f}, |rvs|={rvs.mean():0.4f}'
-            print(f'Debug: dist {self} called {simstr}{sizestr}{slotstr}{rvstr}')
+            pre_state = str(self.history[-1]['state']['state'])[-5:]
+            post_state = str(self.state_int)[-5:]
+            statestr = f"state {pre_state}→{post_state}"
+            print(f'Debug: {self} called {simstr}{sizestr}{slotstr}{rvstr}, {statestr}')
+            assert pre_state != post_state
             
         return rvs
 
