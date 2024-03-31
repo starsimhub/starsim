@@ -119,7 +119,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         dist.rvs(10) # Return 10 normally distributed random numbers
     """
     def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None, 
-                 strict=True, auto=True, sim=None, module=None, debug=False, **kwargs): # TODO: switch back to strict=True
+                 strict=True, auto=True, sim=None, module=None, debug=False, **kwargs):
         # If a string is provided as "dist" but there's no distname, swap the dist and the distname
         if isinstance(dist, str) and distname is None:
             distname = dist
@@ -311,7 +311,6 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             # Pull out parameters of an already-frozen distribution
             if isinstance(self.dist, sps._distn_infrastructure.rv_frozen):
                 if not self.initialized: # Don't do this more than once
-                    print('MOOSH', self.dist.kwds)
                     self.pars = sc.dictobj(sc.mergedicts(self.pars, self.dist.kwds))
             
             # Convert to a frozen distribution
@@ -324,7 +323,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             
         # Set the default function for getting the rvs
         if self.distname is not None and hasattr(self.rng, self.distname): # Don't worry if it doesn't, it's probably being manually overridden
-            self.rvs_func = self.distname # e.g. self.rng.uniform
+            self.rvs_func = self.distname # e.g. self.rng.uniform -- can't use the actual function because can become linked to the wrong RNG
         
         return
     
@@ -466,7 +465,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             post_state = str(self.state_int)[-5:]
             statestr = f"state {pre_state}→{post_state}"
             print(f'Debug: {self} called {simstr}{sizestr}{slotstr}{rvstr}, {statestr}')
-            assert pre_state != post_state
+            assert pre_state != post_state # Always an error if the state doesn't change after drawing random numbers
             
         return rvs
 
