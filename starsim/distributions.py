@@ -37,8 +37,10 @@ def find_dists(obj, verbose=False):
 class Dists:
     """ Class for managing a collection of Dist objects """
 
-    def __init__(self, obj=None, base_seed=None, sim=None):
-        self.obj = obj
+    def __init__(self, *args, base_seed=None, sim=None):
+        args = list(args)
+        if len(args) == 1: args = args[0]
+        self.obj = args
         self.dists = None
         self.base_seed = base_seed
         self.sim = sim
