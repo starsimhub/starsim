@@ -94,9 +94,9 @@ class SIS(ss.Infection):
     Example SIS model
 
     This class implements a basic SIS model with states for susceptible,
-    infected/infectious, and back to susceptible based on waning immunity.
+    infected/infectious, and back to susceptible based on waning immunity. There
+    is no death in this case.
     """
-
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
         pars = ss.omergeleft(pars,
             dur_inf = 10,
@@ -148,14 +148,13 @@ class SIS(ss.Infection):
         return
     
     def init_results(self, sim):
-        """
-        Initialize results
-        """
+        """ Initialize results """
         super().init_results(sim)
         self.results += ss.Result(self.name, 'rel_sus', sim.npts, dtype=float)
         return
 
     def update_results(self, sim):
+        """ Store the population immunity (susceptibility) """
         super().update_results(sim)
         self.results['rel_sus'][sim.ti] = self.rel_sus.mean()
         return 

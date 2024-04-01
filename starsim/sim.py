@@ -963,8 +963,8 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
         ss.demo() # Run, plot, and show results
         ss.demo(diseases='hiv', networks='mf') # Run with different defaults
     """
-    kw = sc.mergedicts(dict(pars=dict(diseases='sir', networks='random')), kwargs)
-    sim = Sim(**kw)
+    pars = sc.mergedicts(dict(diseases='sir', networks='random'), kwargs)
+    sim = Sim(pars)
     if run:
         sc.heading('Running demo:')
         sim.run()
