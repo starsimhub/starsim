@@ -6,7 +6,7 @@ Test objects from base.py
 import sciris as sc
 import numpy as np
 import starsim as ss
-import matplotlib.pyplot as plt
+import pylab as pl
 
 sc.options(interactive=False) # Assume not running interactively
 
@@ -79,9 +79,9 @@ def test_microsim(do_plot=False):
     sim.run()
 
     if do_plot:
-        plt.figure()
-        plt.plot(sim.tivec, sim.results.hiv.n_infected)
-        plt.title('HIV number of infections')
+        pl.figure()
+        pl.plot(sim.tivec, sim.results.hiv.n_infected)
+        pl.title('HIV number of infections')
 
     return sim
 
@@ -104,9 +104,9 @@ def test_ppl_construction():
     sim = ss.Sim(pars=sim_pars, diseases=[gon])
     sim.initialize()
     sim.run()
-    plt.figure()
-    plt.plot(sim.tivec, sim.results.gonorrhea.n_infected)
-    plt.title('Number of gonorrhea infections')
+    pl.figure()
+    pl.plot(sim.tivec, sim.results.gonorrhea.n_infected)
+    pl.title('Number of gonorrhea infections')
 
     return sim
 
@@ -127,5 +127,5 @@ if __name__ == '__main__':
     sim2 = test_ppl_construction()
 
     sc.toc(T)
-    plt.show()
+    pl.show()
     print('Done.')
