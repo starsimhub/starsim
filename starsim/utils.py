@@ -63,8 +63,9 @@ class ndict(sc.objdict):
             valid = False
 
         if valid is True:
-            self._check_type(arg)
-            self._check_key(key, overwrite=overwrite)
+            if self._strict:
+                self._check_type(arg)
+                self._check_key(key, overwrite=overwrite)
             self[key] = arg # Actually add to the ndict!
         elif valid is None:
             pass  # Nothing to do

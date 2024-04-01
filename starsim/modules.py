@@ -33,7 +33,7 @@ class Module(sc.quickobj):
     def check_requires(self, sim):
         """ Check that the module's requirements (of other modules) are met """
         errs = sc.autolist()
-        all_names = [m.__class__ for m in sim.modules] + [m.name for m in sim.modules]
+        all_names = [m.__class__ for m in sim.modules] + [m.name for m in sim.modules if hasattr(m, 'name')]
         for req in self.requires:
             if req not in all_names:
                 errs += req

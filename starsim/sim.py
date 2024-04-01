@@ -41,12 +41,12 @@ class Sim(sc.prettyobj):
         # Placeholders for plug-ins: demographics, diseases, connectors, analyzers, and interventions
         # Products are not here because they are stored within interventions
         if demographics == True: demographics = [ss.Births(), ss.Deaths()]  # Use default assumptions for demographics
-        self.demographics = ss.ndict(demographics, type=ss.Demographics)
-        self.diseases = ss.ndict(diseases, type=ss.Disease)
-        self.networks = ss.ndict(networks, type=ss.Network)
-        self.connectors = ss.ndict(connectors, type=ss.Connector)
-        self.interventions = ss.ndict(interventions, type=ss.Intervention)
-        self.analyzers = ss.ndict(analyzers, type=ss.Analyzer)
+        self.demographics  = ss.ndict(demographics, type=ss.Demographics)
+        self.diseases      = ss.ndict(diseases, type=ss.Disease)
+        self.networks      = ss.ndict(networks, type=ss.Network)
+        self.connectors    = ss.ndict(connectors, type=ss.Connector)
+        self.interventions = ss.ndict(interventions, type=ss.Intervention, strict=False) # strict=False since can be a function
+        self.analyzers     = ss.ndict(analyzers, type=ss.Analyzer, strict=False)
 
         # Initialize the random number generator container
         self.dists = ss.Dists(obj=self)
@@ -296,6 +296,8 @@ class Sim(sc.prettyobj):
                         errormsg = (f'Could not convert {plugin} to an instance of class {plugin_name}.'
                                     f'Try specifying it directly rather than as a dictionary.')
                         raise ValueError(errormsg)
+                elif plugin_name in ['analyzers', 'interventions'] and callable(plugin):
+                    pass # This is ok, it's a function instead of an Intervention object
                 else:
                     errormsg = (
                         f'{plugin_name.capitalize()} must be provided as either class instances or dictionaries with a '
@@ -394,11 +396,13 @@ class Sim(sc.prettyobj):
             if isinstance(intervention, ss.Intervention):
                 intervention.initialize(self)
             elif callable(intervention):
-                pass # TODO: check if this fails with a plain function (it should?)
-                # self.interventions += intervention 
+                intv_func = intervention
+                intervention = ss.Intervention(name=f'intervention_func_{i}')
+                intervention.apply = intv_func # Monkey-patch together an intervention from a function
             else:
                 errormsg = f'Intervention {intervention} does not seem to be a valid intervention: must be a function or Intervention subclass'
                 raise TypeError(errormsg)
+            
             if intervention.name not in self.interventions:
                 self.interventions += intervention
 
@@ -414,7 +418,14 @@ class Sim(sc.prettyobj):
                 intervention.product.initialize(self)
 
                 self.people.add_module(intervention.product)
-
+        
+        # TODO: combine this with the code above
+        for k,intervention in self.interventions.items():
+            if not isinstance(intervention, ss.Intervention):
+                intv_func = intervention
+                intervention = ss.Intervention(name=f'intervention_func_{i}')
+                intervention.apply = intv_func # Monkey-patch together an intervention from a function
+                self.interventions[k] = intervention
 
         return
 
@@ -481,7 +492,7 @@ class Sim(sc.prettyobj):
         # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
         # interventions, by running them at this point
         for intervention in self.interventions.values():
-            intervention.apply(self)
+            intervention(self)
 
         # Carry out transmission/new cases
         for disease in self.diseases.values():
@@ -500,7 +511,7 @@ class Sim(sc.prettyobj):
             disease.update_results(self)
 
         for analyzer in self.analyzers.values():
-            analyzer.apply(self)
+            analyzer(self)
 
         # Tidy up
         self.ti += 1
