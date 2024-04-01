@@ -423,7 +423,7 @@ class Sim(sc.prettyobj):
         for k,intervention in self.interventions.items():
             if not isinstance(intervention, ss.Intervention):
                 intv_func = intervention
-                intervention = ss.Intervention(name=f'intervention_func_{i}')
+                intervention = ss.Intervention(name=f'intervention_func_{k}')
                 intervention.apply = intv_func # Monkey-patch together an intervention from a function
                 self.interventions[k] = intervention
 
@@ -441,7 +441,13 @@ class Sim(sc.prettyobj):
                 raise TypeError(errormsg)
             self.analyzers += analyzer  # Add it in
 
-        for analyzer in self.analyzers.values():
+        # TODO: should tidy/remove this code
+        for k,analyzer in self.analyzers.items():
+            if not isinstance(analyzer, ss.Analyzer) and callable(analyzer):
+                ana_func = analyzer
+                analyzer = ss.Analyzer(name=f'analyzer_func_{k}')
+                analyzer.apply = ana_func # Monkey-patch together an intervention from a function
+                self.analyzers[k] = analyzer
             if isinstance(analyzer, ss.Analyzer):
                 analyzer.initialize(self)
 
