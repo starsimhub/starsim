@@ -9,7 +9,11 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 Version 0.3.1 (2024-03-31)
 --------------------------
-- Added SIS model
+- Added SIS model.
+- Fixes distribution initialization.
+- Allows interventions and analyzers to be functions.
+- Tidies up tests.
+- Performance improvements in ``UIDArray`` (~3x faster for large numbers of agents).
 - *GitHub info*: PR `428 <https://github.com/amath-idm/stisim/pull/428>`_
 
 

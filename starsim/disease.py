@@ -294,7 +294,7 @@ class Infection(Disease):
                 new_cases_bool = rvs < p_transmit
                 new_cases.append(trg[new_cases_bool])
                 sources.append(src[new_cases_bool])
-        
+                
         # Tidy up
         if len(new_cases) and len(sources):
             new_cases = np.concatenate(new_cases)
