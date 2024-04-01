@@ -3,5 +3,3 @@
 .. currentmodule:: {{ module }}
 
 .. autofunction:: {{ objname }}
-   :members:
-
