@@ -43,7 +43,7 @@ class Dists(sc.prettyobj):
         self.base_seed = base_seed
         self.sim = sim
         self.initialized = False
-        if self.obj is not None or self.sim is not None:
+        if self.obj is not None:
             self.initialize()
         return
 
@@ -55,14 +55,8 @@ class Dists(sc.prettyobj):
         """
         if base_seed:
             self.base_seed = base_seed
-        sim = sc.ifelse(sim, self.sim)
-        obj = sc.ifelse(obj, self.obj, sim)
-        if sim is None and isinstance(obj, ss.Sim): # Swap obj and sim
-            sim = obj
-            self.sim = obj
-            self.obj = None
-        elif obj is None and sim is not None: # Use the sim as the obj
-            obj = sim
+        sim = sim if (sim is not None) else self.sim
+        obj = obj if (obj is not None) else self.obj
         if obj is None:
             errormsg = 'Must supply a container that contains one or more Dist objects, typically the sim'
             raise ValueError(errormsg)
