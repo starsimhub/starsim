@@ -7,9 +7,9 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
-Version 0.3.1 (2024-03-30)
+Version 0.3.1 (2024-03-31)
 --------------------------
-- TBC
+- Added SIS model
 - *GitHub info*: PR `428 <https://github.com/amath-idm/stisim/pull/428>`_
 
 

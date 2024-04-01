@@ -71,7 +71,7 @@ class HIV(ss.Infection):
         return
 
     def update_results(self, sim):
-        super(HIV, self).update_results(sim)
+        super().update_results(sim)
         self.results['new_deaths'][sim.ti] = np.count_nonzero(self.ti_dead == sim.ti)
         return 
 
