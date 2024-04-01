@@ -387,11 +387,12 @@ class StaticNet(Network):
     def __init__(self, graph=None, pars=None, **kwargs):
         super().__init__(**kwargs)
         self.graph = graph
-        self.pars = ss.omerge(pars)
-        self.dist = ss.Dist(distname='StaticNet')
+        self.pars = ss.omerge(dict(seed=True), pars)
+        self.dist = ss.Dist(distname='StaticNet').initialize()
         return
 
     def initialize(self, sim):
+        self.dist.initialize(sim=sim) # TODO: shouldn't be here!
         n_agents = sim.pars.n_agents
         if self.graph is None:
             self.graph = nx.fast_gnp_random_graph # Fast random (Erdos-Renyi) graph creator
