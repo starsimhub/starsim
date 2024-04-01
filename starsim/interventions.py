@@ -15,6 +15,9 @@ class Analyzer(ss.Module):
     about a simulation than is available by default -- for example, pulling states 
     out of sim.people on a particular timestep before they get updated on the next step.
     
+    The key method of the analyzer is ``apply()``, which is called with the sim
+    on each timestep.
+    
     To retrieve a particular analyzer from a sim, use sim.get_analyzer().
     """
 
@@ -27,9 +30,6 @@ class Analyzer(ss.Module):
     def apply(self, sim):
         pass
 
-    def update_results(self, sim):
-        pass
-    
     def finalize(self, sim):
         return super().finalize(sim)
 
@@ -37,6 +37,9 @@ class Analyzer(ss.Module):
 class Intervention(ss.Module):
     """
     Base class for interventions.
+    
+    The key method of the intervention is ``apply()``, which is called with the sim
+    on each timestep.
     """
 
     def __init__(self, eligibility=None, *args, **kwargs):

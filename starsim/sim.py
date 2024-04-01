@@ -500,7 +500,7 @@ class Sim(sc.prettyobj):
             disease.update_results(self)
 
         for analyzer in self.analyzers.values():
-            analyzer.update_results(self)
+            analyzer.apply(self)
 
         # Tidy up
         self.ti += 1
