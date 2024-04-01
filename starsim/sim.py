@@ -431,9 +431,13 @@ class Sim(sc.prettyobj):
 
     def init_analyzers(self):
         """ Initialize the analyzers """
+        
+        analyzers = self.pars.analyzers
+        if not np.iterable(analyzers):
+            analyzers = sc.tolist(analyzers)
 
         # Interpret analyzers
-        for ai, analyzer in enumerate(sc.tolist(self.pars.analyzers)):
+        for ai, analyzer in enumerate(analyzers):
             if isinstance(analyzer, type) and issubclass(analyzer, ss.Analyzer):
                 analyzer = analyzer()  # Convert from a class to an instance of a class
             if not (isinstance(analyzer, ss.Analyzer) or callable(analyzer)):
