@@ -90,10 +90,13 @@ class UIDArray(NDArrayOperatorsMixin):
         this method also populates the new UID map for use in the subsequently created UIDArray, avoiding the
         need to re-compute it separately.
 
-        :param vals: A 1D np.ndarray containing the values
-        :param key: A 1D np.ndnarray of integers containing the UIDs to query
-        :param uid_map: A 1D np.ndarray of integers mapping UID to array position in ``vals``
-        :return: A tuple of (values, uids, new_uid_map) suitable for passing into the UIDArray constructor
+        Args:
+            vals: A 1D np.ndarray containing the values
+            key: A 1D np.ndnarray of integers containing the UIDs to query
+            uid_map: A 1D np.ndarray of integers mapping UID to array position in ``vals``
+        
+        Returns:
+            A tuple of (values, uids, new_uid_map) suitable for passing into the UIDArray constructor
         """
         out = np.empty(len(key), dtype=vals.dtype)
         new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
@@ -105,6 +108,23 @@ class UIDArray(NDArrayOperatorsMixin):
             out[i] = vals[idx]
             new_uid_map[kv] = i
         return out, key, new_uid_map
+    
+    @staticmethod
+    @nb.njit(cache=True, parallel=True)
+    def _get_vals_uids_par(vals, key, uid_map):
+        """
+        Parallelized version of _get_vals_uids() -- need both because this is much slower for small arrays
+        """
+        len_key = len(key)
+        out = np.empty(len_key, dtype=vals.dtype)
+        new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
+
+        for i in nb.prange(len_key):
+            kv = key[i]
+            idx = uid_map[kv]
+            out[i] = vals[idx]
+            new_uid_map[kv] = i
+        return out, key, new_uid_map
 
     @staticmethod
     @nb.njit(cache=True)
@@ -112,11 +132,11 @@ class UIDArray(NDArrayOperatorsMixin):
         """
         Insert an array of values based on UID
 
-        :param vals: A reference to a 1D np.ndarray in which to insert the values
-        :param key: A 1D np.ndnarray of integers containing the UIDs to add values for
-        :param uid_map:  A 1D np.ndarray of integers mapping UID to array position in ``vals``
-        :param value: A 1D np.ndarray the same length as ``key`` containing values to insert
-        :return:
+        Args:
+            vals: A reference to a 1D np.ndarray in which to insert the values
+            key: A 1D np.ndnarray of integers containing the UIDs to add values for
+            uid_map:  A 1D np.ndarray of integers mapping UID to array position in ``vals``
+            value: A 1D np.ndarray the same length as ``key`` containing values to insert
         """
 
         for i,kv in enumerate(key):
@@ -138,11 +158,11 @@ class UIDArray(NDArrayOperatorsMixin):
         """
         Insert a single value into multiple UIDs
 
-        :param vals: A reference to a 1D np.ndarray in which to insert the values
-        :param key: A 1D np.ndnarray of integers containing the UIDs to add values for
-        :param uid_map:  A 1D np.ndarray of integers mapping UID to array position in ``vals``
-        :param value: A scalar value to insert at every position specified by ``key``
-        :return:
+        Args:
+            vals: A reference to a 1D np.ndarray in which to insert the values
+            key: A 1D np.ndnarray of integers containing the UIDs to add values for
+            uid_map:  A 1D np.ndarray of integers mapping UID to array position in ``vals``
+            value: A scalar value to insert at every position specified by ``key``
         """
         for i,kv in enumerate(key):
             if kv >= len(uid_map):
@@ -155,6 +175,11 @@ class UIDArray(NDArrayOperatorsMixin):
             vals[idx] = value
 
     def __getitem__(self, key):
+        if np.iterable(key) and len(key) > 10_000: # Approximate cutoff for when the overhead becomes worthwhile
+            gvu_func = self._get_vals_uids_par
+        else:
+            gvu_func = self._get_vals_uids
+            
         try:
             if isinstance(key, (int, np.integer)):
                 # Handle getting a single item by UID
@@ -170,7 +195,7 @@ class UIDArray(NDArrayOperatorsMixin):
                     values = self.values[mapped_key]
                 else:
                     # Access items by an array of integers. We do get a decent performance boost from using numba here
-                    values, uids, new_uid_map = self._get_vals_uids(self.values, key.__array__(), self._uid_map.__array__())
+                    values, uids, new_uid_map = gvu_func(self.values, key.__array__(), self._uid_map.__array__())
             elif isinstance(key, slice):
                 if key.start is None and key.stop is None and key.step is None:
                     return sc.dcp(self)
@@ -179,7 +204,7 @@ class UIDArray(NDArrayOperatorsMixin):
             else:
                 # This branch is specifically handling the user passing in a list of integers instead of an array, therefore
                 # we need an additional conversion to an array first using np.fromiter to improve numba performance
-                values, uids, new_uid_map = self._get_vals_uids(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__())
+                values, uids, new_uid_map = gvu_func(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__())
             return UIDArray(values=values, uid=uids, uid_map=new_uid_map)
         except IndexError as e:
             if str(INT_NAN) in str(e):
@@ -189,10 +214,10 @@ class UIDArray(NDArrayOperatorsMixin):
 
     def __setitem__(self, key, value):
         """
-        nb. the use of .__array__() calls is to access the array interface and thereby treat both np.ndarray and ArrayView instances
+        NB: the use of .__array__() calls is to access the array interface and thereby treat both np.ndarray and ArrayView instances
         in the same way without needing an additional type check. This is also why the UIDArray.dtype property is defined. Noting
         that for a State, the uid_map is a dynamic view attached to the People, but after an indexing operation, it will be a bare
-        UIDArray that has an ordinary numpy array as the uid_map
+        UIDArray that has an ordinary numpy array as the uid_map.
         """
         try:
             if isinstance(key, (int, np.integer)):
@@ -472,8 +497,9 @@ class State(UIDArray):
         is inside a `Sim`. Initializing States outside of a `Sim` is not possible because of this RNG dependency, particularly
         because the states in a `People` object cannot be initialized without a `Sim` and therefore it would not be possible to
         have an initialized `People` object outside of a `Sim`.
-
-        :param sim: A `Sim` instance that contains an initialized `People` object
+        
+        Args:
+            sim: A `Sim` instance that contains an initialized `People` object
         """
 
         if self._initialized:
@@ -505,7 +531,8 @@ class State(UIDArray):
 
         This method is normally only called via `People.grow()`.
 
-        :param uids: Numpy array of UIDs for the new agents being added This array should have length n
+        Args:
+            uids: Numpy array of UIDs for the new agents being added This array should have length n
         """
 
         n = len(uids)
