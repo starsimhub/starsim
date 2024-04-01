@@ -2,6 +2,6 @@
 
 .. currentmodule:: {{ module }}
 
-.. autoclass:: {{ objname }}
+.. autofunction:: {{ objname }}
    :members:
 
