@@ -81,7 +81,7 @@ class UIDArray(NDArrayOperatorsMixin):
         return self.values.dtype
 
     @staticmethod
-    # @nb.njit(cache=True)
+    @nb.njit(cache=True)
     def _get_vals_uids(vals, key, uid_map):
         """
         Extract values from a collection of UIDs
@@ -95,20 +95,15 @@ class UIDArray(NDArrayOperatorsMixin):
         :param uid_map: A 1D np.ndarray of integers mapping UID to array position in ``vals``
         :return: A tuple of (values, uids, new_uid_map) suitable for passing into the UIDArray constructor
         """
-        # out = np.empty(len(key), dtype=vals.dtype)
+        out = np.empty(len(key), dtype=vals.dtype)
         new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
-        
-        idxs = uid_map[key]
-        out = vals[idxs]
-        inds = np.arange(len(key))
-        new_uid_map[key] = inds
-    
-        # for i,kv in enumerate(key):
-            # idx = uid_map[kv]
-            # if idx == INT_NAN:
-            #     raise IndexError('UID not present in array')
-            # out[i] = vals[idx]
-            # new_uid_map[kv] = i
+
+        for i,kv in enumerate(key):
+            idx = uid_map[kv]
+            if idx == INT_NAN:
+                raise IndexError('UID not present in array')
+            out[i] = vals[idx]
+            new_uid_map[kv] = i
         return out, key, new_uid_map
 
     @staticmethod
