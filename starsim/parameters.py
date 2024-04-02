@@ -41,7 +41,7 @@ class Parameters(sc.objdict):
         self.dt              = 1.0           # Timestep (in years)
         self.dt_demog        = 1.0           # Timestep for demographic updates (in years)
         self.rand_seed       = 1             # Random seed, if None, don't reset
-        self.slot_scale      = 2             # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents. Choosing a larger value here will reduce the probability of two agents using the same slot (and hence random draws), but increase the number of random numbers that are required.
+        self.slot_scale      = 5             # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents. Choosing a larger value here will reduce the probability of two agents using the same slot (and hence random draws), but increase the number of random numbers that are required.
         self.verbose         = ss.options.verbose # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
 
         # Plug-ins: demographics, diseases, connectors, networks, analyzers, and interventions
