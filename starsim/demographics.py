@@ -422,7 +422,7 @@ class Pregnancy(Demographics):
             new_slots = self.choose_slots.rvs(conceive_uids)
 
             # Grow the arrays and set properties for the unborn agents
-            new_uids = sim.people.grow(len(new_slots))
+            new_uids = sim.people.grow(len(new_slots), new_slots)
             sim.people.age[new_uids] = -self.pars.dur_pregnancy
             sim.people.slot[new_uids] = new_slots  # Before sampling female_dist
             sim.people.female[new_uids] = self.pars.sex_ratio.rvs(new_uids)
