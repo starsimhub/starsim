@@ -100,7 +100,7 @@ class Module(sc.quickobj):
                 if val.initialized is not True: # Catches False and 'partial'
                     val.initialize(module=self, sim=sim, force=True) # Actually a dist
                 else:
-                    print(f'TEMP: tried to reinitialize {val}')
+                    raise RuntimeError(f'Trying to reinitialize {val}, this should not happen')
 
         # Connect the states to the sim
         # Will use random numbers, so do after distribution initialization
