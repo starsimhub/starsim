@@ -104,9 +104,8 @@ class Sim(sc.prettyobj):
         self.init_interventions()
         self.init_analyzers()
 
-        # Perform post-initialization validation
+        # Initialize all distributions now that everything else is in place
         self.dists.initialize(obj=self, base_seed=self.pars.rand_seed, force=True)
-        self.validate_post_init()
 
         # Final steps
         self.initialized = True
@@ -455,17 +454,6 @@ class Sim(sc.prettyobj):
             if isinstance(analyzer, ss.Analyzer):
                 analyzer.initialize(self)
 
-        return
-
-    def validate_post_init(self):
-        """
-        Validate inputs again once everything has been initialized.
-        TBC whether we keep this or incorporate the checks into the init methods
-        """
-        # Make sure that there's a contact network if any diseases are present
-        if self.diseases and not self.networks: # TODO: handle NCDs?
-            warnmsg = f'Warning: simulation has {len(self.diseases)} diseases but no contact network(s).'
-            ss.warn(warnmsg)
         return
 
     def step(self):
