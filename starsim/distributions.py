@@ -428,7 +428,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         elif self.dist is not None:
             rvs = self.dist.rvs(self._size)
         else:
-            errormsg = 'Could not generate random numbers: no valid NumPy function or SciPy distribution found'
+            errormsg = 'Dist.rvs() failed: no valid NumPy/SciPy function found in this Dist. Has it been created and initialized correctly?'
             raise ValueError(errormsg)
         return rvs
     

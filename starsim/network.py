@@ -388,7 +388,7 @@ class StaticNet(Network):
         super().__init__(**kwargs)
         self.graph = graph
         self.pars = ss.omerge(dict(seed=True), pars)
-        self.dist = ss.Dist(distname='StaticNet').initialize()
+        self.dist = ss.Dist(name='StaticNet').initialize()
         return
 
     def initialize(self, sim):
