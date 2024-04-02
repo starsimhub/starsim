@@ -9,7 +9,7 @@ from scipy.stats._distn_infrastructure import rv_frozen
 __all__ = ['Module']
 
 
-class Module:#(sc.prettyobj): # TODO: replace with sc.qprettyobj
+class Module(sc.quickobj):
 
     def __init__(self, pars=None, par_dists=None, name=None, label=None, requires=None, **kwargs):
         self.pars = ss.omerge(pars, kwargs)
@@ -33,7 +33,7 @@ class Module:#(sc.prettyobj): # TODO: replace with sc.qprettyobj
     def check_requires(self, sim):
         """ Check that the module's requirements (of other modules) are met """
         errs = sc.autolist()
-        all_names = [m.__class__ for m in sim.modules] + [m.name for m in sim.modules]
+        all_names = [m.__class__ for m in sim.modules] + [m.name for m in sim.modules if hasattr(m, 'name')]
         for req in self.requires:
             if req not in all_names:
                 errs += req
@@ -88,16 +88,19 @@ class Module:#(sc.prettyobj): # TODO: replace with sc.qprettyobj
         # Initialize distributions in pars # TODO: refactor
         for key, value in self.pars.items():
             if isinstance(value, rv_frozen):
-                self.pars[key] = ss.Dist(value)
+                self.pars[key] = ss.Dist(dist=value)
 
         for key, value in self.__dict__.items():
             if isinstance(value, rv_frozen):
-                setattr(self, key, ss.Dist(value))
+                setattr(self, key, ss.Dist(dist=value))
         
         # Initialize everything # TODO: shouldn't be needed, should be able to recurse more
         for key,val in list(self.pars.items()) + list(self.__dict__.items()):
             if isinstance(val, ss.Dist):
-                val.initialize(module=self, sim=sim) # Actually a dist
+                if val.initialized is not True: # Catches False and 'partial'
+                    val.initialize(module=self, sim=sim, force=True) # Actually a dist
+                else:
+                    raise RuntimeError(f'Trying to reinitialize {val}, this should not happen')
 
         # Connect the states to the sim
         # Will use random numbers, so do after distribution initialization

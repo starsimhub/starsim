@@ -367,33 +367,42 @@ class StaticNet(Network):
     and initialized partnerships only end when one of the partners dies. The networkx graph can be created outside Starsim
     if population size is known. Or the graph can be created by passing a networkx generator function to Starsim.
 
+    If "seed=True" is passed as a parameter, it is replaced with the built-in RNG.
+    The parameter "n" is supplied automatically to be equal to n_agents.
+    
     **Examples**::
 
         # Generate a networkx graph and pass to Starsim
         import networkx as nx
         import starsim as ss
         g = nx.scale_free_graph(n=10000)
-        ss.static(graph=g)
+        ss.StaticNet(graph=g)
 
         # Pass a networkx graph generator to Starsim
-        ss.static(graph=nx.erdos_renyi_graph, p=0.0001)
+        ss.StaticNet(graph=nx.erdos_renyi_graph, p=0.0001, seed=True)
+        
+        # Just create a default graph
     """
 
     def __init__(self, graph=None, pars=None, **kwargs):
         super().__init__(**kwargs)
-        if graph is None:
-            graph = nx.fast_gnp_random_graph # Fast random (Erdos-Renyi) graph creator
-            if not pars:
-                pars = dict(n_contacts=10)
         self.graph = graph
-        self.pars = ss.omerge(pars)
+        self.pars = ss.omerge(dict(seed=True), pars)
+        self.dist = ss.Dist(name='StaticNet').initialize()
         return
 
     def initialize(self, sim):
+        self.dist.initialize(sim=sim) # TODO: shouldn't be here!
         n_agents = sim.pars.n_agents
+        if self.graph is None:
+            self.graph = nx.fast_gnp_random_graph # Fast random (Erdos-Renyi) graph creator
+            if not self.pars:
+                self.pars.n_contacts = 10
+        if 'n_contacts' in self.pars: # Convert from n_contacts to probability
+            self.pars.p = self.pars.pop('n_contacts')/n_agents
+        if 'seed' in self.pars and self.pars.seed is True:
+            self.pars.seed = self.dist.rng
         if callable(self.graph):
-            if 'n_contacts' in self.pars: # Convert from n_contacts to probability
-                self.pars.p = self.pars.pop('n_contacts')/n_agents
             self.graph = self.graph(n=n_agents, **self.pars)
         self.validate_pop(n_agents)
         super().initialize(sim)
@@ -429,7 +438,10 @@ class RandomNet(DynamicNetwork):
             'dur': 1,
         }, pars)
 
-        DynamicNetwork.__init__(self, pars=pars, key_dict=key_dict, **kwargs)
+        super().__init__(pars=pars, key_dict=key_dict, **kwargs)
+        
+        # Default RNG
+        self.dist = ss.Dist(distname='RandomNet')
 
         return
 
@@ -440,7 +452,18 @@ class RandomNet(DynamicNetwork):
 
     @staticmethod
     @nb.njit(cache=True)
-    def get_contacts(inds, number_of_contacts):
+    def get_source(inds, n_contacts):
+        """ Optimized helper function for getting contacts """
+        total_number_of_half_edges = np.sum(n_contacts)
+        count = 0
+        source = np.zeros((total_number_of_half_edges,), dtype=ss_int_)
+        for i, person_id in enumerate(inds):
+            n = n_contacts[i]
+            source[count: count + n] = person_id
+            count += n
+        return source
+    
+    def get_contacts(self, inds, n_contacts):
         """
         Efficiently generate contacts
 
@@ -462,15 +485,9 @@ class RandomNet(DynamicNetwork):
 
         Returns: Two arrays, for source and target
         """
-
-        total_number_of_half_edges = np.sum(number_of_contacts)
-        count = 0
-        source = np.zeros((total_number_of_half_edges,), dtype=ss_int_)
-        for i, person_id in enumerate(inds):
-            n_contacts = number_of_contacts[i]
-            source[count: count + n_contacts] = person_id
-            count += n_contacts
-        target = np.random.permutation(source)
+        source = self.get_source(inds, n_contacts)
+        target = self.dist.rng.permutation(source)
+        self.dist.jump() # Reset the RNG manually # TODO, think if there's a better way
         return source, target
 
     def update(self, people, dt=None):
@@ -479,10 +496,7 @@ class RandomNet(DynamicNetwork):
         return
 
     def add_pairs(self, people):
-        """
-        Generate contacts
-        """
-
+        """ Generate contacts """
         if isinstance(self.pars.n_contacts, ss.Dist):
             number_of_contacts = self.pars.n_contacts.rvs(people.uid[people.alive])  # or people.uid?
         else:
@@ -531,6 +545,7 @@ class MFNet(SexualNetwork, DynamicNetwork):
         DynamicNetwork.__init__(self, key_dict=key_dict, **kwargs)
         SexualNetwork.__init__(self, pars, key_dict=key_dict, **kwargs)
 
+        self.dist = ss.choice(name='MFNet', replace=False) # Set the array later
         self.par_dists = par_dists
 
         return
@@ -566,11 +581,14 @@ class MFNet(SexualNetwork, DynamicNetwork):
         # random.choice is not common-random-number safe, and therefore we do
         # not try to Stream-ify the following draws at this time.
         if len(available_m) <= len(available_f):
+            self.dist.set(a=available_f)
             p1 = available_m
-            p2 = np.random.choice(a=available_f, size=len(p1), replace=False)
+            p2 = self.dist.rvs(n=len(p1)) # TODO: not fully stream safe
         else:
+            self.dist.set(a=available_m)
             p2 = available_f
-            p1 = np.random.choice(a=available_m, size=len(p2), replace=False)
+            p1 = self.dist.rvs(n=len(p2))
+        self.dist.jump() # TODO: think if there's a better way
 
         beta = np.ones_like(p1)
 
@@ -618,6 +636,7 @@ class MSMNet(SexualNetwork, DynamicNetwork):
         )
         DynamicNetwork.__init__(self, key_dict, **kwargs)
         SexualNetwork.__init__(self, pars, key_dict)
+        self.dist = ss.bernoulli(name='MSMNet')
         return
 
     def initialize(self, sim):
@@ -637,8 +656,8 @@ class MSMNet(SexualNetwork, DynamicNetwork):
         # Participation
         self.participant[people.female] = False
         pr = self.pars.rel_part_rates
-        dist = ss.bernoulli(pr).rvs(size=len(uids)) # TODO: not RNG safe
-        self.participant[uids] = dist
+        self.dist.set(p=pr)
+        self.participant[uids] = self.dist.rvs(uids) # Should be CRN safe?
 
         # Debut
         self.debut[uids] = self.pars.debut_dist.rvs(len(uids)) # Just pass len(uids) as this network is not crn safe anyway
@@ -688,7 +707,7 @@ class EmbeddingNet(MFNet):
         
         """
         pars = ss.omerge({
-            'embedding_func': ss.normal(loc=self.embedding_loc, scale=2),
+            'embedding_func': ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
             'male_shift': 5,
         }, pars)
         super().__init__(pars, **kwargs)
@@ -774,6 +793,9 @@ class MaternalNet(Network):
 
 
 class HPVNet(MFNet):
+    """
+    WARNING: not CRN safe!
+    """
     def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
         pars = ss.omergeleft(pars,
             duration = 15,
@@ -812,7 +834,7 @@ class HPVNet(MFNet):
 
     def initialize(self, sim):
         super().initialize(sim)
-        return self.add_pairs(sim.people, ti=0)
+        return self.add_pairs(sim.people)
 
     def update_pars(self, pars):
         if pars is not None:

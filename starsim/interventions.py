@@ -15,6 +15,9 @@ class Analyzer(ss.Module):
     about a simulation than is available by default -- for example, pulling states 
     out of sim.people on a particular timestep before they get updated on the next step.
     
+    The key method of the analyzer is ``apply()``, which is called with the sim
+    on each timestep.
+    
     To retrieve a particular analyzer from a sim, use sim.get_analyzer().
     """
 
@@ -27,9 +30,6 @@ class Analyzer(ss.Module):
     def apply(self, sim):
         pass
 
-    def update_results(self, sim):
-        pass
-    
     def finalize(self, sim):
         return super().finalize(sim)
 
@@ -37,6 +37,9 @@ class Analyzer(ss.Module):
 class Intervention(ss.Module):
     """
     Base class for interventions.
+    
+    The key method of the intervention is ``apply()``, which is called with the sim
+    on each timestep.
     """
 
     def __init__(self, eligibility=None, *args, **kwargs):
@@ -117,7 +120,7 @@ class RoutineDelivery(Intervention):
             self.end_year = self.years[-1]
 
         # More validation
-        if (self.start_year not in sim.yearvec) or (self.end_year not in sim.yearvec):
+        if not(any(np.isclose(self.start_year, sim.yearvec)) and any(np.isclose(self.end_year, sim.yearvec))):
             errormsg = 'Years must be within simulation start and end dates.'
             raise ValueError(errormsg)
 
@@ -125,11 +128,11 @@ class RoutineDelivery(Intervention):
         adj_factor = int(1 / sim.dt) - 1 if sim.dt < 1 else 1
 
         # Determine the timepoints at which the intervention will be applied
-        self.start_point = sc.findinds(sim.yearvec, self.start_year)[0]
-        self.end_point = sc.findinds(sim.yearvec, self.end_year)[0] + adj_factor
-        self.years = sc.inclusiverange(self.start_year, self.end_year)
-        self.timepoints = sc.inclusiverange(self.start_point, self.end_point)
-        self.yearvec = np.arange(self.start_year, self.end_year + adj_factor, sim.dt)
+        self.start_point = sc.findfirst(sim.yearvec, self.start_year)
+        self.end_point   = sc.findfirst(sim.yearvec, self.end_year) + adj_factor
+        self.years       = sc.inclusiverange(self.start_year, self.end_year)
+        self.timepoints  = sc.inclusiverange(self.start_point, self.end_point)
+        self.yearvec     = np.arange(self.start_year, self.end_year + adj_factor, sim.dt)
 
         # Get the probability input into a format compatible with timepoints
         if len(self.years) != len(self.prob):

@@ -7,10 +7,10 @@ import starsim as ss
 import sciris as sc
 import pandas as pd
 
-__all__ = ['BaseDemographics', 'Births', 'Deaths', 'Pregnancy']
+__all__ = ['Demographics', 'Births', 'Deaths', 'Pregnancy']
 
 
-class BaseDemographics(ss.Module):
+class Demographics(ss.Module):
     # A demographic module typically handles births/deaths/migration and takes
     # place at the start of the timestep, before networks are updated and before
     # any disease modules are executed
@@ -29,7 +29,7 @@ class BaseDemographics(ss.Module):
         pass
 
 
-class Births(BaseDemographics):
+class Births(Demographics):
     def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__(pars, **kwargs)
 
@@ -108,7 +108,7 @@ class Births(BaseDemographics):
         self.results['cbr'] = 1/self.pars.units*np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
 
 
-class Deaths(BaseDemographics):
+class Deaths(Demographics):
     def __init__(self, pars=None, par_dists=None, metadata=None, **kwargs):
         """
         Configure disease-independent "background" deaths.
@@ -240,7 +240,7 @@ class Deaths(BaseDemographics):
         return
 
 
-class Pregnancy(BaseDemographics):
+class Pregnancy(Demographics):
 
     def __init__(self, pars=None, par_dists=None, metadata=None, **kwargs):
         super().__init__(pars, **kwargs)
@@ -344,7 +344,7 @@ class Pregnancy(BaseDemographics):
 
     def initialize(self, sim):
         super().initialize(sim)
-        low = sim.pars.n_agents+1 # TODO: or 0?
+        low = sim.pars.n_agents + 1
         high = int(sim.pars.slot_scale*sim.pars.n_agents)
         self.choose_slots.set(low=low, high=high)
         return
@@ -422,7 +422,7 @@ class Pregnancy(BaseDemographics):
             new_slots = self.choose_slots.rvs(conceive_uids)
 
             # Grow the arrays and set properties for the unborn agents
-            new_uids = sim.people.grow(len(new_slots))
+            new_uids = sim.people.grow(len(new_slots), new_slots)
             sim.people.age[new_uids] = -self.pars.dur_pregnancy
             sim.people.slot[new_uids] = new_slots  # Before sampling female_dist
             sim.people.female[new_uids] = self.pars.sex_ratio.rvs(new_uids)

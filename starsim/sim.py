@@ -7,7 +7,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 import itertools
-import pylab as pl
+import matplotlib.pyplot as pl
 
 __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims']
 
@@ -41,12 +41,12 @@ class Sim(sc.prettyobj):
         # Placeholders for plug-ins: demographics, diseases, connectors, analyzers, and interventions
         # Products are not here because they are stored within interventions
         if demographics == True: demographics = [ss.Births(), ss.Deaths()]  # Use default assumptions for demographics
-        self.demographics = ss.ndict(demographics, type=ss.BaseDemographics)
-        self.diseases = ss.ndict(diseases, type=ss.Disease)
-        self.networks = ss.ndict(networks, type=ss.Network)
-        self.connectors = ss.ndict(connectors, type=ss.Connector)
-        self.interventions = ss.ndict(interventions, type=ss.Intervention)
-        self.analyzers = ss.ndict(analyzers, type=ss.Analyzer)
+        self.demographics  = ss.ndict(demographics, type=ss.Demographics)
+        self.diseases      = ss.ndict(diseases, type=ss.Disease)
+        self.networks      = ss.ndict(networks, type=ss.Network)
+        self.connectors    = ss.ndict(connectors, type=ss.Connector)
+        self.interventions = ss.ndict(interventions, type=ss.Intervention, strict=False) # strict=False since can be a function
+        self.analyzers     = ss.ndict(analyzers, type=ss.Analyzer, strict=False)
 
         # Initialize the random number generator container
         self.dists = ss.Dists(obj=self)
@@ -91,10 +91,9 @@ class Sim(sc.prettyobj):
         self.validate_pars()  # Ensure parameters have valid values
         self.validate_dt()
         self.init_time_vecs()  # Initialize time vecs
-        ss.set_seed(self.pars.rand_seed)  # Reset the random seed before the population is created
+        ss.set_seed(self.pars.rand_seed)  # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
 
         # Initialize the core sim components
-        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed + 2)  # +2 ensures that seeds from the above population initialization and the +1-offset below are not reused within the rngs
         self.init_people(reset=reset, **kwargs)  # Create all the people (the heaviest step)
 
         # Initialize plug-ins
@@ -105,13 +104,8 @@ class Sim(sc.prettyobj):
         self.init_interventions()
         self.init_analyzers()
 
-        # Perform post-initialization validation
-        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed + 2)  # TEMP # TODO Should not be here!!!
-        self.validate_post_init()
-
-        # Reset the random seed to the default run seed, so that if the simulation is run with
-        # reset_seed=False right after initialization, it will still produce the same output
-        ss.set_seed(self.pars.rand_seed + 1)  # Hopefully not used now that we can use multiple random number generators
+        # Initialize all distributions now that everything else is in place
+        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed, force=True)
 
         # Final steps
         self.initialized = True
@@ -301,6 +295,8 @@ class Sim(sc.prettyobj):
                         errormsg = (f'Could not convert {plugin} to an instance of class {plugin_name}.'
                                     f'Try specifying it directly rather than as a dictionary.')
                         raise ValueError(errormsg)
+                elif plugin_name in ['analyzers', 'interventions'] and callable(plugin):
+                    pass # This is ok, it's a function instead of an Intervention object
                 else:
                     errormsg = (
                         f'{plugin_name.capitalize()} must be provided as either class instances or dictionaries with a '
@@ -315,7 +311,7 @@ class Sim(sc.prettyobj):
         """ Initialize demographics """
 
         # Demographics can be provided via sim.demographics or sim.pars - this methods reconciles them
-        demographics = self.convert_plugins(ss.BaseDemographics, plugin_name='demographics')
+        demographics = self.convert_plugins(ss.Demographics, plugin_name='demographics')
 
         # We also allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
         if self.pars.birth_rate is not None:
@@ -399,11 +395,13 @@ class Sim(sc.prettyobj):
             if isinstance(intervention, ss.Intervention):
                 intervention.initialize(self)
             elif callable(intervention):
-                pass # TODO: check if this fails with a plain function (it should?)
-                # self.interventions += intervention 
+                intv_func = intervention
+                intervention = ss.Intervention(name=f'intervention_func_{i}')
+                intervention.apply = intv_func # Monkey-patch together an intervention from a function
             else:
                 errormsg = f'Intervention {intervention} does not seem to be a valid intervention: must be a function or Intervention subclass'
                 raise TypeError(errormsg)
+            
             if intervention.name not in self.interventions:
                 self.interventions += intervention
 
@@ -419,15 +417,26 @@ class Sim(sc.prettyobj):
                 intervention.product.initialize(self)
 
                 self.people.add_module(intervention.product)
-
+        
+        # TODO: combine this with the code above
+        for k,intervention in self.interventions.items():
+            if not isinstance(intervention, ss.Intervention):
+                intv_func = intervention
+                intervention = ss.Intervention(name=f'intervention_func_{k}')
+                intervention.apply = intv_func # Monkey-patch together an intervention from a function
+                self.interventions[k] = intervention
 
         return
 
     def init_analyzers(self):
         """ Initialize the analyzers """
+        
+        analyzers = self.pars.analyzers
+        if not np.iterable(analyzers):
+            analyzers = sc.tolist(analyzers)
 
         # Interpret analyzers
-        for ai, analyzer in enumerate(self.pars.analyzers):
+        for ai, analyzer in enumerate(analyzers):
             if isinstance(analyzer, type) and issubclass(analyzer, ss.Analyzer):
                 analyzer = analyzer()  # Convert from a class to an instance of a class
             if not (isinstance(analyzer, ss.Analyzer) or callable(analyzer)):
@@ -435,21 +444,16 @@ class Sim(sc.prettyobj):
                 raise TypeError(errormsg)
             self.analyzers += analyzer  # Add it in
 
-        for analyzer in self.analyzers.values():
+        # TODO: should tidy/remove this code
+        for k,analyzer in self.analyzers.items():
+            if not isinstance(analyzer, ss.Analyzer) and callable(analyzer):
+                ana_func = analyzer
+                analyzer = ss.Analyzer(name=f'analyzer_func_{k}')
+                analyzer.apply = ana_func # Monkey-patch together an intervention from a function
+                self.analyzers[k] = analyzer
             if isinstance(analyzer, ss.Analyzer):
                 analyzer.initialize(self)
 
-        return
-
-    def validate_post_init(self):
-        """
-        Validate inputs again once everything has been initialized.
-        TBC whether we keep this or incorporate the checks into the init methods
-        """
-        # Make sure that there's a contact network if any diseases are present
-        if self.diseases and not self.networks:
-            warnmsg = f'Warning: simulation has {len(self.diseases)} diseases but no contact network(s).'
-            ss.warn(warnmsg, die=False)
         return
 
     def step(self):
@@ -486,7 +490,7 @@ class Sim(sc.prettyobj):
         # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
         # interventions, by running them at this point
         for intervention in self.interventions.values():
-            intervention.apply(self)
+            intervention(self)
 
         # Carry out transmission/new cases
         for disease in self.diseases.values():
@@ -505,7 +509,7 @@ class Sim(sc.prettyobj):
             disease.update_results(self)
 
         for analyzer in self.analyzers.values():
-            analyzer.update_results(self)
+            analyzer(self)
 
         # Tidy up
         self.ti += 1
@@ -517,7 +521,7 @@ class Sim(sc.prettyobj):
 
         return
 
-    def run(self, until=None, reset_seed=True, verbose=None):
+    def run(self, until=None, verbose=None):
         """ Run the model once """
 
         # Initialization steps
@@ -528,9 +532,6 @@ class Sim(sc.prettyobj):
 
         if verbose is None:
             verbose = self.pars.verbose
-
-        if reset_seed:
-            ss.set_seed(self.pars.rand_seed + 1)
 
         # Check for AlreadyRun errors
         errormsg = None
@@ -641,6 +642,9 @@ class Sim(sc.prettyobj):
             summary[key] = entry
         self.summary = summary
         return summary
+    
+    def disp(self):
+        print(self.summary)
     
     def shrink(self, skip_attrs=None, in_place=True):
         """
@@ -968,18 +972,18 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
         ss.demo() # Run, plot, and show results
         ss.demo(diseases='hiv', networks='mf') # Run with different defaults
     """
-    kw = sc.mergedicts(dict(pars=dict(diseases='sir', networks='random')), kwargs)
-    sim = Sim(**kw)
+    pars = sc.mergedicts(dict(diseases='sir', networks='random'), kwargs)
+    sim = Sim(pars)
     if run:
         sc.heading('Running demo:')
         sim.run()
-    if summary:
-        sc.heading('Results:')
-        print(sim.summary)
-    if plot:
-        sim.plot()
-    if show:
-        pl.show()
+        if summary:
+            sc.heading('Results:')
+            print(sim.summary)
+            if plot:
+                sim.plot()
+                if show:
+                    pl.show()
     return sim
 
 

@@ -6,12 +6,12 @@ import numpy as np
 import sciris as sc
 import scipy.stats as sps
 import starsim as ss
-import pylab as pl
+import matplotlib.pyplot as pl
 
 __all__ = ['find_dists', 'dist_list', 'Dists', 'Dist']
 
 
-def str2int(string, modulo=10_000_000):
+def str2int(string, modulo=1_000_000):
     """
     Convert a string to an int
     
@@ -24,20 +24,20 @@ def str2int(string, modulo=10_000_000):
 def find_dists(obj, verbose=False):
     """ Find all Dist objects in a parent object """
     out = sc.objdict()
-    tree = sc.iterobj(obj) # Temporary copy of sc.iterobj(obj) until Sciris 3.1.5 is released
+    tree = sc.iterobj(obj, depthfirst=False, flatten=True)
     if verbose: print(f'Found {len(tree)} objects')
     for trace,val in tree.items():
         if isinstance(val, Dist):
-            key = str(trace)
-            out[key] = val
-            if verbose: print(f'  {key} is a dist ({len(out)})')
+            out[trace] = val
+            if verbose: print(f'  {trace} is a dist ({len(out)})')
     return out
 
 
-class Dists:
+class Dists(sc.prettyobj):
     """ Class for managing a collection of Dist objects """
 
-    def __init__(self, obj=None, base_seed=None, sim=None):
+    def __init__(self, obj=None, *args, base_seed=None, sim=None):
+        if len(args): obj = [obj] + list(args)
         self.obj = obj
         self.dists = None
         self.base_seed = base_seed
@@ -47,7 +47,7 @@ class Dists:
             self.initialize()
         return
 
-    def initialize(self, obj=None, base_seed=None, sim=None, force=True):
+    def initialize(self, obj=None, base_seed=None, sim=None, force=False):
         """
         Set the base seed, find and initialize all distributions in an object
         
@@ -58,12 +58,12 @@ class Dists:
         sim = sim if (sim is not None) else self.sim
         obj = obj if (obj is not None) else self.obj
         if obj is None:
-            errormsg = 'Must supply a container that contains one or more Dist objects'
+            errormsg = 'Must supply a container that contains one or more Dist objects, typically the sim'
             raise ValueError(errormsg)
         self.dists = find_dists(obj)
         for trace,dist in self.dists.items():
             if not dist.initialized or force:
-                dist.initialize(trace=trace, seed=base_seed, sim=sim)
+                dist.initialize(trace=trace, seed=base_seed, sim=sim, force=force)
         self.check_seeds()
         self.initialized = True
         return self
@@ -101,6 +101,14 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     
     See ss.dist_list for a full list of supported distributions.
     
+    Although it's possible in theory to define a custom distribution (i.e., not
+    one from NumPy or SciPy), in practice this is difficult. The distribution needs
+    to have both a way to return random variables (easy), as well as the probability
+    point function (inverse CDF). In addition, the distribution must be able to
+    take a NumPy RNG as its bit generator. It's easier to just use a default Dist
+    (e.g., ss.random()), and then take its output as input (i.e., quantiles) for 
+    whatever custom distribution you want to create.
+    
     Args:
         dist (rv_generic): optional; a scipy.stats distribution (frozen or not) to get the ppf from
         distname (str): the name for this class of distribution (e.g. "uniform")
@@ -118,7 +126,12 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         dist = ss.Dist(sps.norm, loc=3)
         dist.rvs(10) # Return 10 normally distributed random numbers
     """
-    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None, strict=False, auto=False, sim=None, module=None, **kwargs): # TODO: switch back to strict=True
+    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None, 
+                 strict=True, auto=True, sim=None, module=None, debug=False, **kwargs):
+        # If a string is provided as "dist" but there's no distname, swap the dist and the distname
+        if isinstance(dist, str) and distname is None:
+            distname = dist
+            dist = None
         self.dist = dist # The type of distribution
         self.distname = distname
         self.name = name
@@ -130,6 +143,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.slots = None # Created on initialization with a sim
         self.strict = strict
         self.auto = auto
+        self.debug = debug
         
         # Auto-generated 
         self.rvs_func = None # The default function to call in make_rvs() to generate the random numbers
@@ -155,34 +169,38 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     def __repr__(self):
         """ Custom display to show state of object """
         tracestr = '<no trace>' if self.trace is None else f"{self.trace}"
-        if self.dist is not None:
-            diststr = f'dist={self.dist}, '
-        elif self.distname is not None:
-            diststr = f'dist={self.distname}, '
-        else:
-            diststr = ''
-        string = f'ss.{self.__class__.__name__}({tracestr}, {diststr}pars={dict(self.pars)})'
+        classname = self.__class__.__name__
+        diststr = ''
+        if classname == 'Dist':
+            if self.dist is not None:
+                try:
+                    diststr = f'dist={self.dist.name}, '
+                except:
+                    try: # What is wrong with you, SciPy -- after initialization, it moves here
+                        diststr = f'dist={self.dist.dist.name}, '
+                    except:
+                        diststr = f'dist={type(self.dist)}'
+            elif self.distname is not None:
+                diststr = f'dist={self.distname}, '
+        string = f'ss.{classname}({tracestr}, {diststr}pars={dict(self.pars)})'
         return string
     
     def disp(self):
         """ Return full display of object """
         return sc.pr(self)
     
-    def show_state(self):
+    def show_state(self, output=False):
         """ Show the state of the object """
-        s = sc.autolist()
-        s += f'  dist = {self.dist}'
-        s += f'  pars = {self.pars}'
-        s += f' trace = {self.trace}'
-        s += f'offset = {self.offset}'
-        s += f'  seed = {self.seed}'
-        s += f'   ind = {self.ind}'
-        s += f'called = {self.called}'
-        s += f' ready = {self.ready}'
-        s += f' state = {self.state}'
-        string = sc.newlinejoin(s)
-        print(string)
-        return
+        keys = ['pars', 'trace', 'offset', 'seed', 'ind', 'called', 'ready', 'state_int']
+        data = {key:getattr(self,key) for key in keys}
+        s = f'{self}'
+        for key,val in data.items():
+            s += f'\n{key:9s} = {val}'
+        if output:
+            return data
+        else:
+            print(s)
+            return
     
     def __call__(self, n=1):
         """ Alias to self.rvs() """
@@ -200,18 +218,20 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
 
     @property
     def bitgen(self):
-        try:
-            return self.rng.bit_generator
-        except:
-            return None
+        try:    return self.rng.bit_generator
+        except: return None
     
     @property
     def state(self):
         """ Get the current state """
-        try:
-            return self.bitgen.state
-        except:
-            return None
+        try:    return self.bitgen.state
+        except: return None
+        
+    @property
+    def state_int(self):
+        """ Get the integer corresponding to the current state """
+        try:    return self.state['state']['state']
+        except: return None
     
     def get_state(self):
         """ Return a copy of the state """
@@ -225,7 +245,24 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         return
 
     def reset(self, state=0):
-        """ Restore state: use 0 for initial, -1 for most recent """
+        """
+        Restore state, allowing the same numbers to be resampled
+        
+        Use 0 for original state, -1 for most recent state.
+        
+        **Example**::
+            
+            dist = ss.random(seed=5).initialize()
+            r1 = dist(5)
+            r2 = dist(5)
+            dist.reset(-1)
+            r3 = dist(5)
+            dist.reset(0)
+            r4 = dist(5)
+            assert all(r1 != r2)
+            assert all(r2 == r3)
+            assert all(r4 == r1)
+        """
         if not isinstance(state, dict):
             state = self.history[state]
         self.rng.bit_generator.state = state.copy()
@@ -241,8 +278,12 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
         return self.state
     
-    def initialize(self, trace=None, seed=None, module=None, sim=None, slots=None):
+    def initialize(self, trace=None, seed=None, module=None, sim=None, slots=None, force=False):
         """ Calculate the starting seed and create the RNG """
+        
+        if self.initialized is True and not force: # Don't warn if we have a partially initialized distribution
+            msg = f'Distribution {self} is already initialized, use force=True if intentional'
+            ss.warn(msg)
         
         # Calculate the offset (starting seed)
         self.process_seed(trace, seed)
@@ -267,7 +308,10 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.process_dist()
         self.process_pars(call=False)
         self.ready = True
-        self.initialized = True
+        if self.trace is None or self.sim is None or self.slots is None:
+            self.initialized = 'partial' # Initialized enough to produce random numbers, but not fully initialized
+        else:
+            self.initialized = True
         return self
     
     def process_seed(self, trace=None, seed=None):
@@ -304,7 +348,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             
         # Set the default function for getting the rvs
         if self.distname is not None and hasattr(self.rng, self.distname): # Don't worry if it doesn't, it's probably being manually overridden
-            self.rvs_func = getattr(self.rng, self.distname) # e.g. self.rng.uniform
+            self.rvs_func = self.distname # e.g. self.rng.uniform -- can't use the actual function because can become linked to the wrong RNG
         
         return
     
@@ -379,11 +423,12 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     def make_rvs(self):
         """ Return default random numbers for scalar parameters """
         if self.rvs_func is not None:
-            rvs = self.rvs_func(**self._pars, size=self._size)
+            rvs_func = getattr(self.rng, self.rvs_func) # Can't store this because then it references the wrong RNG after copy
+            rvs = rvs_func(**self._pars, size=self._size)
         elif self.dist is not None:
             rvs = self.dist.rvs(self._size)
         else:
-            errormsg = 'Could not generate random numbers: no valid NumPy function or SciPy distribution found'
+            errormsg = 'Dist.rvs() failed: no valid NumPy/SciPy function found in this Dist. Has it been created and initialized correctly?'
             raise ValueError(errormsg)
         return rvs
     
@@ -436,6 +481,16 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             self.jump()
         elif self.strict:
             self.ready = False
+        if self.debug:
+            simstr = f'on ti={self.sim.ti} ' if self.sim else ''
+            sizestr = f'with size={self._size}, '
+            slotstr = f'Σ(slots)={self._slots.sum()}, ' if self._slots else '<no slots>, '
+            rvstr = f'Σ(rvs)={rvs.sum():0.2f}, |rvs|={rvs.mean():0.4f}'
+            pre_state = str(self.history[-1]['state']['state'])[-5:]
+            post_state = str(self.state_int)[-5:]
+            statestr = f"state {pre_state}→{post_state}"
+            print(f'Debug: {self} called {simstr}{sizestr}{slotstr}{rvstr}, {statestr}')
+            assert pre_state != post_state # Always an error if the state doesn't change after drawing random numbers
             
         return rvs
 
@@ -516,7 +571,7 @@ class lognorm_im(Dist):
         return spars
     
 
-class lognorm_ex(lognorm_im):
+class lognorm_ex(Dist):
     """
     Lognormal distribution, parameterized in terms of the "explicit" (lognormal)
     distribution, with mean=mean and stdev=stdev (see lognorm_im for comparison).
@@ -526,7 +581,7 @@ class lognorm_ex(lognorm_im):
         ss.lognorm_ex(mean=2, stdev=1).rvs(1000).mean() # Should be close to 2
     """
     def __init__(self, mean=1.0, stdev=1.0, **kwargs):
-        super().__init__(mean=mean, stdev=stdev, **kwargs)
+        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, stdev=stdev, **kwargs)
         return
     
     def convert_ex_to_im(self):
@@ -554,7 +609,7 @@ class lognorm_ex(lognorm_im):
     def sync_pars(self):
         """ Convert from overlying to underlying parameters, then translate to SciPy """
         self.convert_ex_to_im()
-        spars = super().sync_pars()
+        spars = lognorm_im.sync_pars(self) # Borrow sync_pars from lognorm_im
         return spars
     
 
@@ -617,7 +672,7 @@ class bernoulli(Dist):
     Unlike other distributions, Bernoulli distributions have a filter() method,
     which returns elements of the array that return True.
     """
-    def __init__(self, p=5, **kwargs):
+    def __init__(self, p=0.5, **kwargs):
         super().__init__(distname='bernoulli', p=p, **kwargs)
         return
     

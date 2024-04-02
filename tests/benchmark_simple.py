@@ -1,5 +1,5 @@
 import sciris as sc
-import pylab as pl
+import matplotlib.pyplot as pl
 import starsim as ss
 
 do_plot = False

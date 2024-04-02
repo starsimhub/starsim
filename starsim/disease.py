@@ -183,13 +183,12 @@ class Infection(Disease):
             ss.State('susceptible', bool, True),
             ss.State('infected', bool, False),
             ss.State('rel_sus', float, 1.0),
-            ss.State('rel_sev', float, 1.0),
             ss.State('rel_trans', float, 1.0),
             ss.State('ti_infected', int, ss.INT_NAN),
         )
 
-        self.rng_target = ss.random()
-        self.rng_source = ss.random()
+        self.rng_target = ss.random(name='target')
+        self.rng_source = ss.random(name='source')
 
         return
 
@@ -265,7 +264,7 @@ class Infection(Disease):
         people = sim.people
         betamap = self._check_betas(sim)
 
-        for i,nkey,net in sim.networks.enumitems():
+        for nkey,net in sim.networks.items():
             if not len(net):
                 break
 
@@ -285,14 +284,9 @@ class Infection(Disease):
                 beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=people.dt) # TODO: should this be sim.dt?
                 p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
 
-                slots_s = people.slot[src] # Slots for the possible source
-                slots_t = people.slot[trg] # Slots for the possible target
-                # slots = (slots_s + slots_t) % sim.pars.n_agents # CK: faster, but some pairs would get the same draws
-                # rvs = self.rng_source.rvs(size=np.max(slots)+1)[slots]
-                rvs_s = self.rng_source.rvs(n=np.max(slots_s) + 1)[slots_s]
-                rvs_t = self.rng_target.rvs(n=np.max(slots_t) + 1)[slots_t]
-                
                 # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
+                rvs_s = self.rng_source.rvs(src)
+                rvs_t = self.rng_target.rvs(trg)
                 rvs = rvs_s + rvs_t
                 inds = np.where(rvs>1.0)[0]
                 rvs[inds] -= 1
@@ -300,7 +294,7 @@ class Infection(Disease):
                 new_cases_bool = rvs < p_transmit
                 new_cases.append(trg[new_cases_bool])
                 sources.append(src[new_cases_bool])
-        
+                
         # Tidy up
         if len(new_cases) and len(sources):
             new_cases = np.concatenate(new_cases)

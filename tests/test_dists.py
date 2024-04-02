@@ -1,165 +1,227 @@
 """
-Test Dist and Dists
+Test the Dists object from distributions.py
 """
 
+# %% Imports and settings
 import numpy as np
 import sciris as sc
-import scipy.stats as sps
 import starsim as ss
-import pylab as pl
-import pytest
+import matplotlib.pyplot as pl
 
-n = 1_000_000 # For testing statistical properties and performance of distributions
-m = 5 # For just testing that drawing works
-sc.options(interactive=False)
+n = 5 # Default number of samples
+
+def make_dist(name='test', **kwargs):
+    """ Make a default Dist for testing """
+    dist = ss.random(name=name, **kwargs)
+    return dist
+
+def make_dists(**kwargs):
+    """ Make a Dists object with two distributions in it """
+    distlist = [make_dist(), make_dist()]
+    dists = ss.Dists(distlist)
+    dists.initialize()
+    return dists
 
 
-def plot_rvs(rvs, times=None, nrows=None):
-    fig = pl.figure(figsize=(12,12))
-    nrows, ncols = sc.getrowscols(len(rvs), nrows=nrows)
-    for i,name,r in rvs.enumitems():
-        pl.subplot(nrows, ncols, i+1)
-        pl.hist(r)
-        title = times[name] if times else name
-        pl.title(title)
-        sc.commaticks()
+# %% Define the tests
+
+def test_seed():
+    """ Test assignment of seeds """
+    sc.heading('Testing assignment of seeds')
+    
+    # Create and initialize two distributions
+    dists = make_dists()
+    dist0, dist1 = dists.dists.values()
+
+    print(f'Dists dist0 and dist1 were assigned seeds {dist0.seed} and {dist1.seed}, respectively')
+    assert dist0.seed != dist1.seed
+    return dist0, dist1
+
+
+def test_reset(n=n):
+    """ Sample, reset, sample """
+    sc.heading('Testing sample, reset, sample')
+    dists = make_dists()
+    distlist = dists.dists.values()
+
+    # Reset via the container, but only 
+    before = sc.autolist()
+    after = sc.autolist()
+    for dist in distlist:
+        before += list(dist(n))
+    dists.reset() # Return to step 0
+    for dist in distlist:
+        after += list(dist(n))
+
+    print(f'Initial sample:\n{before}')
+    print(f'After reset sample:\n{after}')
+    assert np.array_equal(before, after)
+    
+    return before, after
+
+
+def test_jump(n=n):
+    """ Sample, jump, sample """
+    sc.heading('Testing sample, jump, sample')
+    dists = make_dists()
+    distlist = dists.dists.values()
+
+    # Jump via the contianer
+    before = sc.autolist()
+    after = sc.autolist()
+    for dist in distlist:
+        before += list(dist(n))
+    dists.jump(to=10) # Jump to 10th step
+    for dist in distlist:
+        after += list(dist(n))
+
+    print(f'Initial sample:\n{before}')
+    print(f'After jump sample:\n{after}')
+    assert not np.array_equal(before, after)
+    
+    return before, after
+
+
+def test_order(n=n):
+    """ Ensure sampling from one RNG doesn't affect another """
+    sc.heading('Testing from multiple random number generators to test if sampling order matters')
+    dists = make_dists()
+    d0, d1 = dists.dists.values()
+
+    # Sample d0, d1
+    before = d0(n)
+    _ = d1(n)
+    
+    dists.reset()
+    
+    # Sample d1, d0
+    _ = d1(n)
+    after = d0(n)
+
+    print(f'When sampling rng0 before rng1: {before}')
+    print(f'When sampling rng0 after rng1: {after}')
+    assert np.array_equal(before, after)
+
+    return before, after
+
+
+# %% Test a minimally different world
+
+class CountInf(ss.Intervention):
+    """ Store every infection state in a timepoints x people array """
+    def initialize(self, sim):
+        n_agents = len(sim.people)
+        self.arr = np.zeros((sim.npts, n_agents))
+        self.n_agents = n_agents
+        return
+    
+    def apply(self, sim):
+        self.arr[sim.ti, :] = np.array(sim.diseases.sir.infected)[:self.n_agents]
+        return
+
+
+class OneMore(ss.Intervention):
+    """ Add one additional agent and infection """
+    def apply(self, sim):
+        if sim.ti == 0:
+            # Create an extra agent
+            preg = ss.Pregnancy(rel_fertility=0) # Ensure no default births
+            preg.initialize(sim)
+            new_uids = np.array([len(sim.people)]) # Hack since make_embryos doesn't return UIDs
+            preg.make_embryos(sim, np.array([0])) # Assign 0th agent to be the "mother"
+            assert len(new_uids) == 1
+            sim.people.age[new_uids] = -100 # Set to a very low number to never reach debut age
+            
+            # Infect that agent
+            sir = sim.diseases.sir
+            sir.set_prognoses(sim, new_uids)
+            sir.ti_recovered[new_uids] = sim.ti + 1 # Reset recovery time to next timestep
+            
+            # Reset the random states
+            p = sir.pars
+            for dist in [p.dur_inf, p.p_death]:
+                dist.jump(sim.ti+1)
+
+        return
+
+
+def plot_infs(s1, s2):
+    """ Compare infection arrays from two sims """
+    a1 = s1.interventions.countinf.arr
+    a2 = s2.interventions.countinf.arr
+    
+    fig = pl.figure()
+    pl.subplot(1,3,1)
+    pl.pcolormesh(a1.T)
+    pl.xlabel('Timestep')
+    pl.ylabel('Person')
+    pl.title('Baseline')
+    
+    pl.subplot(1,3,2)
+    pl.pcolormesh(a2.T)
+    pl.title('OneMore')
+    
+    pl.subplot(1,3,3)
+    pl.pcolormesh(a2.T - a1.T)
+    pl.title('Difference')
+    
     sc.figlayout()
     return fig
 
 
-# %% Define the tests
-def test_dist(m=m):
-    """ Test the Dist class """
-    sc.heading('Testing the basic Dist call')
-    dist = ss.Dist(distname='random', name='test')
-    dist.initialize()
-    rvs = dist(m)
-    print(rvs)
-    assert 0 < rvs.min() < 1, 'Values should be between 0 and 1'
-    return rvs
-
-
-def test_custom_dists(n=n, do_plot=False):
-    """ Test all custom dists """
-    sc.heading('Testing all custom distributions')
+def test_worlds(do_plot=False):
     
-    o = sc.objdict()
-    dists = sc.objdict()
-    rvs = sc.objdict()
-    times = sc.objdict()
-    for name in ss.dist_list:
-        func = getattr(ss, name)
-        dist = func(name='test')
-        dist.initialize()
-        dists[name] = dist
-        sc.tic()
-        rvs[name] = dist.rvs(n)
-        times[name] = sc.toc(name, unit='ms', output='message')
-        print(f'{name:10s}: mean = {rvs[name].mean():n}')
+    res = sc.objdict()
+    
+    pars = dict(
+        start = 2000,
+        end = 2100,
+        n_agents = 200,
+        verbose = 0.05,
+        diseases = dict(
+            type = 'sir',
+            init_prev = 0.1,
+            beta = 1.0,
+            dur_inf = 20,
+            p_death = 0, # Here since analyzer can't handle variable numbers of people
+        ),
+        networks = dict(
+            type = 'embedding',
+            duration = 5, # Must be shorter than dur_inf for SIR transmission to occur
+        ),
+    )
+    s1 = ss.Sim(pars=pars, interventions=CountInf())
+    s2 = ss.Sim(pars=pars, interventions=[CountInf(), OneMore()])
+    
+    s1.run()
+    s2.run()
+    
+    sum1 = s1.summarize()
+    sum2 = s2.summarize()
+    res.sum1 = sum1
+    res.sum2 = sum2
     
     if do_plot:
-        plot_rvs(rvs, times=times, nrows=5)
+        s1.plot()
+        plot_infs(s1, s2)
+        pl.show()
     
-    o.dists = dists
-    o.rvs = rvs
-    o.times = times
-    return o
+    assert len(s2.people) == len(s1.people) + 1
+    assert sum2.sir_cum_infections == sum1.sir_cum_infections + 1
+    assert (s1.interventions.countinf.arr != s2.interventions.countinf.arr).sum() == 0
         
+    return res
 
-def test_dists(n=n, do_plot=False):
-    """ Test the Dists container """
-    sc.heading('Testing Dists container')
-    testvals = np.zeros((2,2))
-
-    # Create the objects twice
-    for i in range(2):
-        
-        # Create a complex object containing various distributions
-        obj = sc.prettyobj()
-        obj.a = sc.objdict()
-        obj.a.mylist = [ss.random(), ss.Dist(distname='uniform', low=2, high=3)]
-        obj.b = dict(d3=ss.weibull(c=2), d4=ss.delta(v=0.3))
-        dists = ss.Dists(obj)
-        
-        # Call each distribution twice
-        for j in range(2):
-            rvs = sc.objdict()
-            for key,dist in dists.dists.items():
-                rvs[str(dist)] = dist(n)
-                dist.jump() # Reset
-            testvals[i,j] = rvs[0][283] # Pick one of the random values and store it
-    
-    # Check that results are as expected
-    print(testvals)
-    assert np.all(testvals[0,:] == testvals[1,:]), 'Newly initialized objects should match'
-    assert np.all(testvals[:,0] != testvals[:,1]), 'After jumping, values should be different'
-            
-    if do_plot:
-        plot_rvs(rvs)
-    
-    o = sc.objdict()
-    o.dists = dists
-    o.rvs = rvs
-    return dists
-
-
-def test_scipy(m=m):
-    """ Test that SciPy distributions also work """
-    sc.heading('Testing SciPy distributions')
-    
-    # Make SciPy distributions in two different ways
-    dist1 = ss.Dist(dist=sps.expon, name='scipy', scale=2).initialize() # Version 1: callable
-    dist2 = ss.Dist(dist=sps.expon(scale=2), name='scipy').initialize() # Version 2: frozen
-    rvs1 = dist1(m)
-    rvs2 = dist2(m)
-    
-    # Check that they match
-    print(rvs1)
-    assert np.array_equal(rvs1, rvs2), 'Arrays should match'
-    
-    return dist1, dist2
-
-@pytest.mark.skip
-def test_exceptions(m=m):
-    """ Check that exceptions are being appropriately raised """
-    sc.heading('Testing exceptions and strict')
-    
-    # Create a strict distribution
-    dist = ss.random()
-    with pytest.raises(ss.dists.DistNotInitializedError):
-        dist(m) # Check that we can't call an uninitialized
-    
-    # Initialize and check we can't call repeatedly
-    dist.initialize()
-    rvs = dist(m)
-    with pytest.raises(ss.dists.DistNotReadyError):
-        dist(m) # Check that we can't call an already-used distribution
-    
-    # Check that we can with a non-strict Dist
-    dist2 = ss.random(strict=False)
-    rvs2 = sc.autolist()
-    for i in range(2):
-        rvs2 += dist2(m) # We should be able to call multiple times with no problem
-    
-    print(rvs)
-    print(rvs2)
-    assert np.array_equal(rvs, rvs2[0]), 'Separate dists should match'
-    assert not np.array_equal(rvs2[0], rvs2[1]), 'Multiple calls to the same dist should not match'
-    
-    return dist, dist2
-    
 
 # %% Run as a script
 if __name__ == '__main__':
-    do_plot = True
-    sc.options(interactive=do_plot)
-    
     T = sc.timer()
-    
-    o1 = test_dist()
-    o2 = test_custom_dists(do_plot=do_plot)
-    o3 = test_dists(do_plot=do_plot)
-    o4 = test_scipy()
-    # o5 = test_exceptions() # TODO: re-enable once strict=True
-    
+    do_plot = True
+
+    o1 = test_seed()
+    o2 = test_reset(n)
+    o3 = test_jump(n)
+    o4 = test_order(n)
+    o5 = test_worlds(do_plot=do_plot)
+
     T.toc()
