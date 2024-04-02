@@ -344,7 +344,7 @@ class Pregnancy(Demographics):
 
     def initialize(self, sim):
         super().initialize(sim)
-        low = 0 # Was sim.pars.n_agents + 1
+        low = sim.pars.n_agents + 1
         high = int(sim.pars.slot_scale*sim.pars.n_agents)
         self.choose_slots.set(low=low, high=high)
         return
@@ -415,11 +415,13 @@ class Pregnancy(Demographics):
 
     def make_embryos(self, sim, conceive_uids):
         """ Add properties for the just-conceived """
+        print('temp', sorted(conceive_uids))
         n_unborn_agents = len(conceive_uids)
         if n_unborn_agents > 0:
 
             # Choose slots for the unborn agents
             new_slots = self.choose_slots.rvs(conceive_uids)
+            print('temp2', sorted(new_slots))
 
             # Grow the arrays and set properties for the unborn agents
             new_uids = sim.people.grow(len(new_slots), new_slots)
