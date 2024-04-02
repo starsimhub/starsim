@@ -7,7 +7,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 import itertools
-import pylab as pl
+import matplotlib.pyplot as pl
 
 __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims']
 

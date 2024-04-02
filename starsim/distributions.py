@@ -6,7 +6,7 @@ import numpy as np
 import sciris as sc
 import scipy.stats as sps
 import starsim as ss
-import pylab as pl
+import matplotlib.pyplot as pl
 
 __all__ = ['find_dists', 'dist_list', 'Dists', 'Dist']
 

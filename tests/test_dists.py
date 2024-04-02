@@ -6,7 +6,7 @@ Test the Dists object from distributions.py
 import numpy as np
 import sciris as sc
 import starsim as ss
-import pylab as pl
+import matplotlib.pyplot as pl
 
 n = 5 # Default number of samples
 

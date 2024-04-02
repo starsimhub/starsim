@@ -6,7 +6,7 @@ Test objects from base.py
 import sciris as sc
 import numpy as np
 import starsim as ss
-import pylab as pl
+import matplotlib.pyplot as pl
 
 sc.options(interactive=False) # Assume not running interactively
 

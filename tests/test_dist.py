@@ -6,7 +6,7 @@ import numpy as np
 import sciris as sc
 import scipy.stats as sps
 import starsim as ss
-import pylab as pl
+import matplotlib.pyplot as pl
 import pytest
 
 n = 1_000_000 # For testing statistical properties and performance of distributions

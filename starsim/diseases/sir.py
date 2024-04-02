@@ -3,7 +3,7 @@ Define SIR and SIS disease modules
 """
 
 import numpy as np
-import pylab as pl
+import matplotlib.pyplot as pl
 import starsim as ss
 
 __all__ = ['SIR', 'SIS']
