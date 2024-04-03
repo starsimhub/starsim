@@ -103,6 +103,7 @@ class SIS(ss.Infection):
             init_prev = 0.01,
             beta = 0.05,
             waning = 0.05,
+            imm_boost = 1.0,
         )
 
         par_dists = ss.omergeleft(par_dists,
@@ -112,6 +113,7 @@ class SIS(ss.Infection):
         
         self.add_states(
             ss.State('ti_recovered', int, ss.INT_NAN),
+            ss.State('immunity', float, 0.0),
         )
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
@@ -126,9 +128,9 @@ class SIS(ss.Infection):
         return
     
     def update_immunity(self, sim):
-        uids = ss.true(self.ti_infected != ss.INT_NAN) # TODO: must be a better way
-        rel_sus = 1 - np.exp((self.ti_infected[uids] - sim.ti)*self.pars.waning*sim.dt)
-        self.rel_sus[uids] = rel_sus
+        uids = ss.true(self.immunity > 0)
+        self.immunity[uids] = (self.immunity[uids])*(1 - self.pars.waning*sim.dt)
+        self.rel_sus[uids] = np.maximum(0, 1 - self.immunity[uids])
         return
 
     def set_prognoses(self, sim, uids, source_uids=None):
@@ -136,11 +138,10 @@ class SIS(ss.Infection):
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = sim.ti
+        self.immunity[uids] += self.pars.imm_boost
 
-        # Sample duration of infection, being careful to only sample from the
-        # distribution once per timestep.
-        p = self.pars
-        dur_inf = p.dur_inf.rvs(uids)
+        # Sample duration of infection
+        dur_inf = self.pars.dur_inf.rvs(uids)
 
         # Determine when people recover
         self.ti_recovered[uids] = sim.ti + dur_inf / sim.dt
