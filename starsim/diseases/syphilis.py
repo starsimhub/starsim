@@ -53,6 +53,16 @@ class Syphilis(ss.Infection):
             p_latent_temp = ss.bernoulli(p=0.25),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_tertiary = ss.bernoulli(p=0.35),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
 
+            # Transmission by stage
+            rel_trans = dict(
+                exposed=1,
+                primary=1,
+                secondary=1,
+                latent_temp=0.05,
+                latent_long=0.05,
+                tertiary=0.05,
+            ),
+
             # Congenital syphilis outcomes
             # Birth outcomes coded as:
             #   0: Neonatal death
@@ -95,7 +105,7 @@ class Syphilis(ss.Infection):
 
     @property
     def infectious(self):
-        """ Infectious - includes latent infections, which can transmit vertically but not sexually """
+        """ Infectious """
         return self.active | self.latent
 
     def init_results(self, sim):
@@ -115,6 +125,7 @@ class Syphilis(ss.Infection):
         primary = self.exposed & (self.ti_primary <= sim.ti)
         self.primary[primary] = True
         self.exposed[primary] = False
+        self.rel_trans[primary] = self.pars.rel_trans['primary']
 
         # Secondary from primary
         secondary_from_primary = self.primary & (self.ti_secondary <= sim.ti)
@@ -122,6 +133,7 @@ class Syphilis(ss.Infection):
             self.secondary[secondary_from_primary] = True
             self.primary[secondary_from_primary] = False
             self.set_secondary_prognoses(sim, ss.true(secondary_from_primary))
+            self.rel_trans[secondary_from_primary] = self.pars.rel_trans['secondary']
 
         # Hack to reset the MultiRNGs in set_secondary_prognoses so that they can be called again in this timestep. TODO: Refactor
         self.pars.p_latent_temp.jump(sim.ti+1)
@@ -133,6 +145,7 @@ class Syphilis(ss.Infection):
             self.secondary[secondary_from_latent] = True
             self.latent_temp[secondary_from_latent] = False
             self.set_secondary_prognoses(sim, ss.true(secondary_from_latent))
+            self.rel_trans[secondary_from_latent] = self.pars.rel_trans['secondary']
 
         # Latent
         latent_temp = self.secondary & (self.ti_latent_temp <= sim.ti)
@@ -140,6 +153,7 @@ class Syphilis(ss.Infection):
             self.latent_temp[latent_temp] = True
             self.secondary[latent_temp] = False
             self.set_latent_temp_prognoses(sim, ss.true(latent_temp))
+            self.rel_trans[latent_temp] = self.pars.rel_trans['latent_temp']
 
         # Latent long
         latent_long = self.secondary & (self.ti_latent_long <= sim.ti)
@@ -147,11 +161,13 @@ class Syphilis(ss.Infection):
             self.latent_long[latent_long] = True
             self.secondary[latent_long] = False
             self.set_latent_long_prognoses(sim, ss.true(latent_long))
+            self.rel_trans[latent_long] = self.pars.rel_trans['latent_long']
 
         # Tertiary
         tertiary = self.latent_long & (self.ti_tertiary <= sim.ti)
         self.tertiary[tertiary] = True
         self.latent_long[tertiary] = False
+        self.rel_trans[tertiary] = self.pars.rel_trans['tertiary']
 
         # Congenital syphilis deaths
         nnd = self.ti_nnd == sim.ti
@@ -175,7 +191,6 @@ class Syphilis(ss.Infection):
         return
 
     def make_new_cases(self, sim):
-        # TODO: for now, still using generic transmission method, but could replace here if needed
         super(Syphilis, self).make_new_cases(sim)
         return
 
