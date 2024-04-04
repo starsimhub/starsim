@@ -44,16 +44,15 @@ class Cholera(ss.Infection):
             dur_asymp2rec  = ss.uniform,
             dur_symp2rec   = ss.lognorm_ex,
             dur_symp2dead  = ss.lognorm_ex,
-            init_prev      = ss.bernoulli,
-            p_death        = ss.bernoulli,
-            p_symp         = ss.bernoulli,
-            p_env_transmit = ss.bernoulli,
         )
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
 
+        self.pars.p_death        = ss.bernoulli(self.pars.p_death)
+        self.pars.p_symp         = ss.bernoulli(self.pars.p_symp)
+        self.pars.p_env_transmit = ss.bernoulli(self.pars.p_env_transmit)
+
         # Boolean states
-        
         self.add_states(
             # Susceptible & infected are added automatically, here we add the rest
             ss.State('exposed', bool, False),

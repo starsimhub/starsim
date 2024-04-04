@@ -177,7 +177,7 @@ class Infection(Disease):
     operate on to capture co-infection
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, pars, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.add_states(
             ss.State('susceptible', bool, True),
@@ -186,6 +186,12 @@ class Infection(Disease):
             ss.State('rel_trans', float, 1.0),
             ss.State('ti_infected', int, ss.INT_NAN),
         )
+
+        self.pars = ss.omergeleft(pars,
+            init_prev = 0,
+        )
+
+        self.pars.init_prev = ss.bernoulli(self.pars.init_prev)
 
         self.rng_target = ss.random(name='target')
         self.rng_source = ss.random(name='source')

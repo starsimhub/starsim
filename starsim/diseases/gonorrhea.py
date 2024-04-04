@@ -30,12 +30,12 @@ class Gonorrhea(ss.Infection):
 
         par_dists = ss.omergeleft(par_dists,
             dur_inf_in_days = ss.lognorm_ex,
-            p_symp          = ss.bernoulli,
-            p_clear         = ss.bernoulli,
-            init_prev       = ss.bernoulli,
         )
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+
+        self.pars.p_symp          = ss.bernoulli(self.pars.p_symp)
+        self.pars.p_clear         = ss.bernoulli(self.pars.p_clear)
         return
 
     def init_results(self, sim):

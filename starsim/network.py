@@ -537,7 +537,6 @@ class MFNet(SexualNetwork, DynamicNetwork):
 
         par_dists = ss.omergeleft(par_dists,
             duration      = ss.lognorm_ex,
-            participation = ss.bernoulli,
             debut         = ss.normal,
             acts          = ss.poisson,
         )
@@ -545,6 +544,7 @@ class MFNet(SexualNetwork, DynamicNetwork):
         DynamicNetwork.__init__(self, key_dict=key_dict, **kwargs)
         SexualNetwork.__init__(self, pars, key_dict=key_dict, **kwargs)
 
+        self.pars.participation = ss.bernoulli(self.pars.participation)
         self.dist = ss.choice(name='MFNet', replace=False) # Set the array later
         self.par_dists = par_dists
 
@@ -811,12 +811,22 @@ class HPVNet(MFNet):
 
         self.par_dists = ss.omergeleft(par_dists,
             duration      = ss.lognorm,
-            participation = ss.bernoulli,
             debut         = ss.norm,
             acts          = ss.lognorm,
-            cross_layer   = ss.bernoulli,
-            concurrency   = ss.bernoulli,
         )
+
+        self.pars.participation = ss.bernoulli(self.pars.participation)
+        self.pars.cross_layer = ss.bernoulli(self.pars.participatiocross_layern)
+        self.pars.concurrency = ss.bernoulli(self.pars.concurrency)
+
+        DynamicNetwork.__init__(self, key_dict=key_dict, **kwargs)
+        SexualNetwork.__init__(self, pars, key_dict=key_dict, **kwargs)
+
+        self.dist = ss.choice(name='MFNet', replace=False) # Set the array later
+
+        return
+
+    def initialize(self, sim):
 
         key_dict = dict(
             acts = ss_float_,

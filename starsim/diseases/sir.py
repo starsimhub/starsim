@@ -27,11 +27,11 @@ class SIR(ss.Infection):
 
         par_dists = ss.omergeleft(par_dists,
             dur_inf   = ss.lognorm_ex,
-            init_prev = ss.bernoulli,
-            p_death   = ss.bernoulli,
         )
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+
+        self.pars.p_death = ss.bernoulli(self.pars.p_death)
 
         self.add_states(
             ss.State('recovered', bool, False),
@@ -108,9 +108,8 @@ class SIS(ss.Infection):
 
         par_dists = ss.omergeleft(par_dists,
             dur_inf   = ss.lognorm_ex,
-            init_prev = ss.bernoulli,
         )
-        
+
         self.add_states(
             ss.State('ti_recovered', int, ss.INT_NAN),
             ss.State('immunity', float, 0.0),

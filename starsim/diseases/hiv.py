@@ -30,14 +30,10 @@ class HIV(ss.Infection):
             death_prob = 0.05,
         )
 
-        par_dists = ss.omergeleft(par_dists,
-            init_prev  = ss.bernoulli,
-            death_prob = ss.bernoulli,
-        )
-
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+
         self.death_prob_data = sc.dcp(self.pars.death_prob)
-        self.pars.death_prob = self.make_death_prob
+        self.pars.death_prob = ss.bernoulli(p=self.make_death_prob)
 
         return
 

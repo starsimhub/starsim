@@ -42,13 +42,12 @@ class Ebola(SIR):
             dur_dead2buried = ss.lognorm_ex,
             dur_symp2rec    = ss.lognorm_ex,
             dur_sev2rec     = ss.lognorm_ex,
-            p_sev           = ss.bernoulli,
-            p_death         = ss.bernoulli,
-            p_safe_bury     = ss.bernoulli,
-            init_prev       = ss.bernoulli,
         )
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+
+        self.pars.p_sev           = ss.bernoulli(self.pars.p_sev)
+        self.pars.p_safe_bury     = ss.bernoulli(self.pars.p_safe_bury)
 
         # Boolean states
         

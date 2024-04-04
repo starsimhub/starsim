@@ -30,8 +30,6 @@ class Measles(SIR):
         par_dists = ss.omergeleft(par_dists,
             dur_exp   = ss.normal,
             dur_inf   = ss.normal,
-            init_prev = ss.bernoulli,
-            p_death   = ss.bernoulli,
         )
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
