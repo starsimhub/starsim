@@ -392,11 +392,10 @@ class StaticNet(Network):
         return
 
     def initialize(self, sim):
-        self.dist.initialize(sim=sim) # TODO: shouldn't be here!
         n_agents = sim.pars.n_agents
         if self.graph is None:
             self.graph = nx.fast_gnp_random_graph # Fast random (Erdos-Renyi) graph creator
-            if not self.pars:
+            if 'p' not in self.pars and 'n_contacts' not in self.pars: # TODO: refactor
                 self.pars.n_contacts = 10
         if 'n_contacts' in self.pars: # Convert from n_contacts to probability
             self.pars.p = self.pars.pop('n_contacts')/n_agents
