@@ -71,9 +71,8 @@ class UIDArray(NDArrayOperatorsMixin):
     def dtype(self):
         return self.values.dtype
 
-
     def __getitem__(self, key):
-        out = UIDArray(values=self.values[key], uid=key)
+        out = UIDArray(values=self.values[key], uid=self.uid[key])
         return out
 
     def __setitem__(self, key, value):
