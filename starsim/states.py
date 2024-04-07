@@ -73,7 +73,7 @@ class UIDArray(NDArrayOperatorsMixin):
 
 
     def __getitem__(self, key):
-        out = UIDArray(values=self.values[key], uid=self.uid[key])
+        out = UIDArray(values=self.values[key], uid=key)
         return out
 
     def __setitem__(self, key, value):
