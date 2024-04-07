@@ -58,8 +58,8 @@ class Syphilis(ss.Infection):
                 exposed=1,
                 primary=1,
                 secondary=1,
-                latent_temp=0.05,
-                latent_long=0.05,
+                latent_temp=0.075,
+                latent_long=0.075,
                 tertiary=0.05,
             ),
 
@@ -95,18 +95,18 @@ class Syphilis(ss.Infection):
 
     @property
     def active(self):
-        """ Active - only active infections can transmit through sexual contact """
+        """ Active infection includes primary and secondary stages """
         return self.primary | self.secondary
 
     @property
     def latent(self):
-        """ Latent """
+        """ Latent infection """
         return self.latent_temp | self.latent_long
 
     @property
     def infectious(self):
         """ Infectious """
-        return self.active | self.latent
+        return self.active | self.latent | self.exposed
 
     def init_results(self, sim):
         """ Initialize results """
@@ -194,17 +194,10 @@ class Syphilis(ss.Infection):
         super(Syphilis, self).make_new_cases(sim)
         return
 
-    def set_prognoses(self, sim, target_uids, source_uids=None):
+    def set_prognoses(self, sim, uids, source_uids=None):
         """
         Set initial prognoses for adults newly infected with syphilis
         """
-
-        # Subset target_uids to only include ones with active infection
-        if source_uids is not None:
-            active_sources = self.active[source_uids].values.nonzero()[-1]
-            uids = target_uids[active_sources]
-        else:
-            uids = target_uids
 
         self.susceptible[uids] = False
         self.ever_exposed[uids] = True
