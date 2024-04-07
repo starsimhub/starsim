@@ -109,12 +109,12 @@ class BasePeople(sc.prettyobj):
 
         # Calculate the *indices* to keep
         keep_uids = self.uid[~np.in1d(self.uid, uids_to_remove)]  # Calculate UIDs to keep
-        keep_inds = self._uid_map[keep_uids]  # Calculate indices to keep
+        # keep_inds = self._uid_map[keep_uids]  # Calculate indices to keep
 
         # Trim the UIDs and states
-        self.uid._trim(keep_inds)
-        for state in self._states.values(): # includes self.slot
-            state._trim(keep_inds)
+        # self.uid._trim(keep_inds)
+        # for state in self._states.values(): # includes self.slot
+        #     state._trim(keep_inds)
 
         # Update the UID map
         self._uid_map[:] = ss.INT_NAN  # Clear out all previously used UIDs

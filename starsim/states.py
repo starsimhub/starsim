@@ -80,137 +80,139 @@ class UIDArray(NDArrayOperatorsMixin):
     def dtype(self):
         return self.values.dtype
 
-    @staticmethod
-    @nb.njit(cache=True)
-    def _get_vals_uids(vals, key, uid_map):
-        """
-        Extract values from a collection of UIDs
+    # @staticmethod
+    # @nb.njit(cache=True)
+    # def _get_vals_uids(vals, key, uid_map):
+    #     """
+    #     Extract values from a collection of UIDs
 
-        This function is used to retrieve values based on UID. As indexing a UIDArray returns a new UIDArray,
-        this method also populates the new UID map for use in the subsequently created UIDArray, avoiding the
-        need to re-compute it separately.
+    #     This function is used to retrieve values based on UID. As indexing a UIDArray returns a new UIDArray,
+    #     this method also populates the new UID map for use in the subsequently created UIDArray, avoiding the
+    #     need to re-compute it separately.
 
-        Args:
-            vals: A 1D np.ndarray containing the values
-            key: A 1D np.ndnarray of integers containing the UIDs to query
-            uid_map: A 1D np.ndarray of integers mapping UID to array position in ``vals``
+    #     Args:
+    #         vals: A 1D np.ndarray containing the values
+    #         key: A 1D np.ndnarray of integers containing the UIDs to query
+    #         uid_map: A 1D np.ndarray of integers mapping UID to array position in ``vals``
         
-        Returns:
-            A tuple of (values, uids, new_uid_map) suitable for passing into the UIDArray constructor
-        """
-        out = np.empty(len(key), dtype=vals.dtype)
-        new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
+    #     Returns:
+    #         A tuple of (values, uids, new_uid_map) suitable for passing into the UIDArray constructor
+    #     """
+    #     out = np.empty(len(key), dtype=vals.dtype)
+    #     new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
 
-        for i,kv in enumerate(key):
-            idx = uid_map[kv]
-            if idx == INT_NAN:
-                raise IndexError('UID not present in array')
-            out[i] = vals[idx]
-            new_uid_map[kv] = i
-        return out, key, new_uid_map
+    #     for i,kv in enumerate(key):
+    #         idx = uid_map[kv]
+    #         if idx == INT_NAN:
+    #             raise IndexError('UID not present in array')
+    #         out[i] = vals[idx]
+    #         new_uid_map[kv] = i
+    #     return out, key, new_uid_map
     
-    @staticmethod
-    @nb.njit(cache=True, parallel=True)
-    def _get_vals_uids_par(vals, key, uid_map):
-        """
-        Parallelized version of _get_vals_uids() -- need both because this is much slower for small arrays
-        """
-        len_key = len(key)
-        out = np.empty(len_key, dtype=vals.dtype)
-        new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
+    # @staticmethod
+    # @nb.njit(cache=True, parallel=True)
+    # def _get_vals_uids_par(vals, key, uid_map):
+    #     """
+    #     Parallelized version of _get_vals_uids() -- need both because this is much slower for small arrays
+    #     """
+    #     len_key = len(key)
+    #     out = np.empty(len_key, dtype=vals.dtype)
+    #     new_uid_map = np.full(uid_map.shape[0], fill_value=INT_NAN, dtype=np.int64)
 
-        for i in nb.prange(len_key):
-            kv = key[i]
-            idx = uid_map[kv]
-            out[i] = vals[idx]
-            new_uid_map[kv] = i
-        return out, key, new_uid_map
+    #     for i in nb.prange(len_key):
+    #         kv = key[i]
+    #         idx = uid_map[kv]
+    #         out[i] = vals[idx]
+    #         new_uid_map[kv] = i
+    #     return out, key, new_uid_map
 
-    @staticmethod
-    @nb.njit(cache=True)
-    def _set_vals_uids_multiple(vals, key, uid_map, value):
-        """
-        Insert an array of values based on UID
+    # @staticmethod
+    # @nb.njit(cache=True)
+    # def _set_vals_uids_multiple(vals, key, uid_map, value):
+    #     """
+    #     Insert an array of values based on UID
 
-        Args:
-            vals: A reference to a 1D np.ndarray in which to insert the values
-            key: A 1D np.ndnarray of integers containing the UIDs to add values for
-            uid_map:  A 1D np.ndarray of integers mapping UID to array position in ``vals``
-            value: A 1D np.ndarray the same length as ``key`` containing values to insert
-        """
+    #     Args:
+    #         vals: A reference to a 1D np.ndarray in which to insert the values
+    #         key: A 1D np.ndnarray of integers containing the UIDs to add values for
+    #         uid_map:  A 1D np.ndarray of integers mapping UID to array position in ``vals``
+    #         value: A 1D np.ndarray the same length as ``key`` containing values to insert
+    #     """
 
-        for i,kv in enumerate(key):
-            if kv >= len(uid_map):
-                errormsg = f'UID not present in array (requested UID ({key[i]}) is larger than the maximum UID in use ({len(uid_map)}))'
-                raise IndexError(errormsg)
-            idx = uid_map[kv]
-            if idx == INT_NAN:
-                raise IndexError('UID not present in array')
-            elif idx >= len(vals):
-                errormsg = f'Attempted to write to a non-existant index ({idx}) - this can happen if attempting to write to new entries that have not yet been allocated via grow()'
-                raise IndexError(errormsg)
-            vals[idx] = value[i]
-        return
+    #     for i,kv in enumerate(key):
+    #         if kv >= len(uid_map):
+    #             errormsg = f'UID not present in array (requested UID ({key[i]}) is larger than the maximum UID in use ({len(uid_map)}))'
+    #             raise IndexError(errormsg)
+    #         idx = uid_map[kv]
+    #         if idx == INT_NAN:
+    #             raise IndexError('UID not present in array')
+    #         elif idx >= len(vals):
+    #             errormsg = f'Attempted to write to a non-existant index ({idx}) - this can happen if attempting to write to new entries that have not yet been allocated via grow()'
+    #             raise IndexError(errormsg)
+    #         vals[idx] = value[i]
+    #     return
 
-    @staticmethod
-    @nb.njit(cache=True)
-    def _set_vals_uids_single(vals, key, uid_map, value):
-        """
-        Insert a single value into multiple UIDs
+    # @staticmethod
+    # @nb.njit(cache=True)
+    # def _set_vals_uids_single(vals, key, uid_map, value):
+    #     """
+    #     Insert a single value into multiple UIDs
 
-        Args:
-            vals: A reference to a 1D np.ndarray in which to insert the values
-            key: A 1D np.ndnarray of integers containing the UIDs to add values for
-            uid_map:  A 1D np.ndarray of integers mapping UID to array position in ``vals``
-            value: A scalar value to insert at every position specified by ``key``
-        """
-        for i,kv in enumerate(key):
-            if kv >= len(uid_map):
-                raise IndexError('UID not present in array (requested UID is larger than the maximum UID in use)')
-            idx = uid_map[kv]
-            if idx == INT_NAN:
-                raise IndexError('UID not present in array')
-            elif idx >= len(vals):
-                raise Exception('Attempted to write to a non-existant index - this can happen if attempting to write to new entries that have not yet been allocated via grow()')
-            vals[idx] = value
+    #     Args:
+    #         vals: A reference to a 1D np.ndarray in which to insert the values
+    #         key: A 1D np.ndnarray of integers containing the UIDs to add values for
+    #         uid_map:  A 1D np.ndarray of integers mapping UID to array position in ``vals``
+    #         value: A scalar value to insert at every position specified by ``key``
+    #     """
+    #     for i,kv in enumerate(key):
+    #         if kv >= len(uid_map):
+    #             raise IndexError('UID not present in array (requested UID is larger than the maximum UID in use)')
+    #         idx = uid_map[kv]
+    #         if idx == INT_NAN:
+    #             raise IndexError('UID not present in array')
+    #         elif idx >= len(vals):
+    #             raise Exception('Attempted to write to a non-existant index - this can happen if attempting to write to new entries that have not yet been allocated via grow()')
+    #         vals[idx] = value
 
     def __getitem__(self, key):
-        if np.iterable(key) and len(key) > 10_000: # Approximate cutoff for when the overhead becomes worthwhile
-            gvu_func = self._get_vals_uids_par
-        else:
-            gvu_func = self._get_vals_uids
+        out = UIDArray(values=self.values[key], uid=self.uid[key], uid_map=self._uid_map[key])
+        return out
+        # if np.iterable(key) and len(key) > 10_000: # Approximate cutoff for when the overhead becomes worthwhile
+        #     gvu_func = self._get_vals_uids_par
+        # else:
+        #     gvu_func = self._get_vals_uids
             
-        try:
-            if isinstance(key, (int, np.integer)):
-                # Handle getting a single item by UID
-                return self.values[self._uid_map[key]]
-            elif isinstance(key, (np.ndarray, UIDArray, ArrayView)):
-                if key.dtype.kind == 'b':
-                    # Handle accessing items with a logical array. Surprisingly, it seems faster to use nonzero() to convert
-                    # it to indices first. Also, the pure Python implementation is difficult to improve upon using numba
-                    mapped_key = key.__array__().nonzero()[0]
-                    uids = self.uid.__array__()[mapped_key]
-                    new_uid_map = np.full(len(self._uid_map), fill_value=INT_NAN, dtype=int)
-                    new_uid_map[uids] = np.arange(len(uids))
-                    values = self.values[mapped_key]
-                else:
-                    # Access items by an array of integers. We do get a decent performance boost from using numba here
-                    values, uids, new_uid_map = gvu_func(self.values, key.__array__(), self._uid_map.__array__())
-            elif isinstance(key, slice):
-                if key.start is None and key.stop is None and key.step is None:
-                    return sc.dcp(self)
-                else:
-                    raise Exception('Slicing not supported - slice the .values attribute by index instead e.g., x.values[0:5], not x[0:5]')
-            else:
-                # This branch is specifically handling the user passing in a list of integers instead of an array, therefore
-                # we need an additional conversion to an array first using np.fromiter to improve numba performance
-                values, uids, new_uid_map = gvu_func(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__())
-            return UIDArray(values=values, uid=uids, uid_map=new_uid_map)
-        except IndexError as e:
-            if str(INT_NAN) in str(e):
-                raise IndexError(f'UID {key} not present in array')
-            else:
-                raise e
+        # try:
+        #     if isinstance(key, (int, np.integer)):
+        #         # Handle getting a single item by UID
+        #         return self.values[self._uid_map[key]]
+        #     elif isinstance(key, (np.ndarray, UIDArray, ArrayView)):
+        #         if key.dtype.kind == 'b':
+        #             # Handle accessing items with a logical array. Surprisingly, it seems faster to use nonzero() to convert
+        #             # it to indices first. Also, the pure Python implementation is difficult to improve upon using numba
+        #             mapped_key = key.__array__().nonzero()[0]
+        #             uids = self.uid.__array__()[mapped_key]
+        #             new_uid_map = np.full(len(self._uid_map), fill_value=INT_NAN, dtype=int)
+        #             new_uid_map[uids] = np.arange(len(uids))
+        #             values = self.values[mapped_key]
+        #         else:
+        #             # Access items by an array of integers. We do get a decent performance boost from using numba here
+        #             values, uids, new_uid_map = gvu_func(self.values, key.__array__(), self._uid_map.__array__())
+        #     elif isinstance(key, slice):
+        #         if key.start is None and key.stop is None and key.step is None:
+        #             return sc.dcp(self)
+        #         else:
+        #             raise Exception('Slicing not supported - slice the .values attribute by index instead e.g., x.values[0:5], not x[0:5]')
+        #     else:
+        #         # This branch is specifically handling the user passing in a list of integers instead of an array, therefore
+        #         # we need an additional conversion to an array first using np.fromiter to improve numba performance
+        #         values, uids, new_uid_map = gvu_func(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__())
+        #     return UIDArray(values=values, uid=uids, uid_map=new_uid_map)
+        # except IndexError as e:
+        #     if str(INT_NAN) in str(e):
+        #         raise IndexError(f'UID {key} not present in array')
+        #     else:
+        #         raise e
 
     def __setitem__(self, key, value):
         """
@@ -219,32 +221,34 @@ class UIDArray(NDArrayOperatorsMixin):
         that for a State, the uid_map is a dynamic view attached to the People, but after an indexing operation, it will be a bare
         UIDArray that has an ordinary numpy array as the uid_map.
         """
-        try:
-            if isinstance(key, (int, np.integer)):
-                return self.values.__setitem__(self._uid_map[key], value)
-            elif isinstance(key, (np.ndarray, UIDArray)):
-                if key.dtype.kind == 'b':
-                    self.values.__setitem__(key.__array__().nonzero()[0], value)
-                else:
-                    if isinstance(value, (np.ndarray, UIDArray)):
-                        return self._set_vals_uids_multiple(self.values, key, self._uid_map.__array__(), value.__array__())
-                    else:
-                        return self._set_vals_uids_single(self.values, key, self._uid_map.__array__(), value)
-            elif isinstance(key, slice):
-                if key.start is None and key.stop is None and key.step is None:
-                    return self.values.__setitem__(key, value)
-                else:
-                    raise Exception('Slicing not supported - slice the .values attribute by index instead e.g., x.values[0:5], not x[0:5]')
-            else:
-                if isinstance(value, (np.ndarray, UIDArray)):
-                    return self._set_vals_uids_multiple(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__(), value.__array__())
-                else:
-                    return self._set_vals_uids_single(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__(), value)
-        except IndexError as e:
-            if str(INT_NAN) in str(e):
-                raise IndexError(f'UID {key} not present in array')
-            else:
-                raise e
+        self.values[key] = value
+        return
+        # try:
+        #     if isinstance(key, (int, np.integer)):
+        #         return self.values.__setitem__(self._uid_map[key], value)
+        #     elif isinstance(key, (np.ndarray, UIDArray)):
+        #         if key.dtype.kind == 'b':
+        #             self.values.__setitem__(key.__array__().nonzero()[0], value)
+        #         else:
+        #             if isinstance(value, (np.ndarray, UIDArray)):
+        #                 return self._set_vals_uids_multiple(self.values, key, self._uid_map.__array__(), value.__array__())
+        #             else:
+        #                 return self._set_vals_uids_single(self.values, key, self._uid_map.__array__(), value)
+        #     elif isinstance(key, slice):
+        #         if key.start is None and key.stop is None and key.step is None:
+        #             return self.values.__setitem__(key, value)
+        #         else:
+        #             raise Exception('Slicing not supported - slice the .values attribute by index instead e.g., x.values[0:5], not x[0:5]')
+        #     else:
+        #         if isinstance(value, (np.ndarray, UIDArray)):
+        #             return self._set_vals_uids_multiple(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__(), value.__array__())
+        #         else:
+        #             return self._set_vals_uids_single(self.values, np.fromiter(key, dtype=int), self._uid_map.__array__(), value)
+        # except IndexError as e:
+        #     if str(INT_NAN) in str(e):
+        #         raise IndexError(f'UID {key} not present in array')
+        #     else:
+        #         raise e
 
     def __getattr__(self, attr):
         """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
@@ -375,15 +379,15 @@ class ArrayView(NDArrayOperatorsMixin):
         self._map_arrays()
         return
 
-    def _trim(self, inds):
-        """ Keep only specified indices """
-        # Note that these are indices, not UIDs!
-        n = len(inds)
-        self._data[:n] = self._data[inds]
-        self._data[n:self.n] = self.default
-        self.n = n
-        self._map_arrays()
-        return
+    # def _trim(self, inds):
+    #     """ Keep only specified indices """
+    #     # Note that these are indices, not UIDs!
+    #     n = len(inds)
+    #     self._data[:n] = self._data[inds]
+    #     self._data[n:self.n] = self.default
+    #     self.n = n
+    #     self._map_arrays()
+    #     return
 
     def __getstate__(self):
         """ When pickling, skip storing the `._view` attribute, which should be re-linked after unpickling """
@@ -541,11 +545,11 @@ class State(UIDArray):
         self._data[-n:] = self._new_vals(uids)
         return
 
-    def _trim(self, inds):
-        # Trim arrays to remove agents - should only be called via `People.remove()`
-        self._data._trim(inds)
-        self.values = self._data._view
-        return
+    # def _trim(self, inds):
+    #     # Trim arrays to remove agents - should only be called via `People.remove()`
+    #     self._data._trim(inds)
+    #     self.values = self._data._view
+    #     return
 
     def __getstate__(self):
         # When pickling, skip storing the `.values` attribute, which should be re-linked after unpickling
