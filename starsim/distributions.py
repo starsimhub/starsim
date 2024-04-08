@@ -218,7 +218,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
 
     @property
     def bitgen(self):
-        try:    return self.rng.bit_generator
+        try:    return self.rng._bit_generator
         except: return None
     
     @property
@@ -265,7 +265,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         """
         if not isinstance(state, dict):
             state = self.history[state]
-        self.rng.bit_generator.state = state.copy()
+        self.rng._bit_generator.state = state.copy()
         self.ready = True
         return self.state
 
@@ -289,7 +289,10 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.process_seed(trace, seed)
         
         # Create the actual RNG
-        self.rng = np.random.default_rng(seed=self.seed)
+        if ss.options._centralized:
+            self.rng = np.random.mtrand._rand
+        else:
+            self.rng = np.random.default_rng(seed=self.seed)
         self.make_history(reset=True)
         
         # Handle the sim, module, and slots

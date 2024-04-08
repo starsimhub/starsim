@@ -77,6 +77,9 @@ class Options(sc.objdict):
         optdesc.precision = 'Set arithmetic precision -- 32-bit by default for efficiency'
         options.precision = int(os.getenv('STARSIM_PRECISION', 64))
 
+        optdesc._centralized = 'If True, revert to centralized random number generation (NOT ADVISED).'
+        options._centralized = False
+
         return optdesc, options
 
     def __call__(self, *args, **kwargs):
