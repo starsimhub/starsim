@@ -451,14 +451,14 @@ class Pregnancy(Demographics):
         self.ti_pregnant[uids] = sim.ti
 
         # Outcomes for pregnancies
-        dur = np.full(len(uids), sim.ti + self.pars.dur_pregnancy / sim.dt)
+        dur_preg = np.full(len(uids), self.pars.dur_pregnancy / sim.dt)
+        dur_postpartum = np.full(len(uids), self.pars.dur_postpartum / sim.dt)
         dead = self.pars.maternal_death_rate.rvs(uids)
-        self.ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
-        dur_post_partum = np.full(len(uids), dur + self.pars.dur_postpartum / sim.dt)
-        self.ti_postpartum[uids] = dur_post_partum
+        self.ti_delivery[uids] = sim.ti + dur_preg # Currently assumes maternal deaths still result in a live baby
+        self.ti_postpartum[uids] = sim.ti + dur_preg + dur_postpartum
 
         if np.any(dead): # NB: 100x faster than np.sum(), 10x faster than np.count_nonzero()
-            self.ti_dead[uids[dead]] = dur[dead]
+            self.ti_dead[uids[dead]] = sim.ti + dur_preg[dead]
         return
 
     def update_results(self, sim):
