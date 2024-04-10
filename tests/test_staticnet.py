@@ -26,7 +26,11 @@ def make_run_sim():
     ss.SIR(pars=dict( dur_inf=10, beta=0.2, init_prev=0.4, p_death=0.2))
     networks=ss.StaticNet(graph=g)
 
+    # Static NetworkX Graph Check that number of nodes (agents) <= population/number of agents
     assert len(edges)<=n_agents, "Error: Please ensure the number of nodes in graph is smaller than population size"
+
+    #Check we don't have more births than pregnancies
+    assert sum(sim.results.pregnancy.births) <= sum(sim.results.pregnancy.pregnancies)
     
     # Make the sim
     sim = ss.Sim(people=ppl, networks=networks, demographics=demographics, diseases=sir)
