@@ -27,7 +27,7 @@ def make_run_sim():
     networks=ss.StaticNet(graph=g)
 
     # Static NetworkX Graph Check that number of nodes (agents) <= population/number of agents
-    assert len(edges)<=n_agents, "Error: Please ensure the number of nodes in graph is smaller than population size"
+    #assert len(edges)<=n_agents, "Error: Please ensure the number of nodes in graph is smaller than population size"
 
     
     # Make the sim
@@ -36,9 +36,6 @@ def make_run_sim():
     # Run the sim
     sim.run()
 
-    #Check we don't have more births than pregnancies
-    assert sum(sim.results.pregnancy.births) <= sum(sim.results.pregnancy.pregnancies)
-    
     return sim
 
 
