@@ -21,10 +21,13 @@ def make_run_sim():
     ss.Deaths(pars={'death_rate': 15})
     ]
 
+    g=nx.erdos_renyi_graph(n=10000, p=0.1, directed=True)
     sir = ss.SIR()
     ss.SIR(pars=dict( dur_inf=10, beta=0.2, init_prev=0.4, p_death=0.2))
-    networks=ss.StaticNet()
+    networks=ss.StaticNet(graph=g)
 
+    assert len(edges)<=n_agents, "Error: Please ensure the number of nodes in graph is smaller than population size"
+    
     # Make the sim
     sim = ss.Sim(people=ppl, networks=networks, demographics=demographics, diseases=sir)
 
