@@ -42,7 +42,6 @@ def make_run_sim(duration,r):
     ss.SIR(pars=dict( dur_inf=duration[r], beta=0.2, init_prev=0.4, p_death=0.2))
     networks=ss.DynamicNetwork()
 
-
     # Make the sim
     sim = ss.Sim(people=ppl, networks=networks, demographics=demographics, diseases=sir)
 
