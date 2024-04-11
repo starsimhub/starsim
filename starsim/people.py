@@ -214,7 +214,7 @@ class People(BasePeople):
         if sc.checktype(age_data, pd.DataFrame):
             age_bins = age_data['age'].values
             age_props = age_data['value'].values
-            age_props /= age_props.sum()
+            age_props = age_props / age_props.sum()
             return ss.choice(a=age_bins, p=age_props)
 
 
