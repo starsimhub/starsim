@@ -386,11 +386,11 @@ class State(UIDArray):
     #     return
 
     def __getstate__(self):
-        # When pickling, skip storing the `.values` attribute, which should be re-linked after unpickling
+        """ When pickling, skip storing the `.values` attribute, which should be re-linked after unpickling """
         return {k:getattr(self, k) for k in self.__slots__ if k != 'values'}
 
     def __setstate__(self, state):
-        # When unpickling, re-link the `.values` attribute
+        """ When unpickling, re-link the `.values` attribute """
         for k,v in state.items():
             setattr(self, k, v)
         self.values = self._data._view
