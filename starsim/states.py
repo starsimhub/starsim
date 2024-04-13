@@ -76,8 +76,8 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         return
     
     def __repr__(self):
-        string = f'<{self.__class__.__name__} "{str(self.name)}", len={len(self)}>\n'
-        string += self.values.__repr__()
+        arr_str = np.array2string(self.values, max_line_width=200)
+        string = f'<{self.__class__.__name__} "{str(self.name)}", len={len(self)}, {arr_str}>'
         return string
     
     def __len__(self):
