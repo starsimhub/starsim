@@ -257,7 +257,7 @@ class Infection(Disease):
         Add new cases of module, through transmission, incidence, etc.
         
         Common-random-number-safe transmission code works by mapping edges onto
-        slots.
+        rngids.
         """
         new_cases = []
         sources = []

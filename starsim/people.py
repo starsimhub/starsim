@@ -31,10 +31,10 @@ class BasePeople(sc.prettyobj):
         self.uid.grow(n)
         self.uid[:] = np.arange(0, n)
 
-        # A slot is a special state managed internally by BasePeople
+        # A rngid is a special state managed internally by BasePeople
         # This is because it needs to be updated separately from any other states, as other states
-        # might have fill_values that depend on the slot
-        self.slot = ss.State('slot', int, ss.intnan)
+        # might have fill_values that depend on the rngid
+        self.rngid = ss.State('rngid', int, ss.intnan)
 
         self.ti = None  # Track simulation time index
         self.dt = np.nan  # Track simulation time step
@@ -68,12 +68,12 @@ class BasePeople(sc.prettyobj):
             raise ValueError(errormsg)
         return
 
-    def grow(self, n, new_slots=None):
+    def grow(self, n, new_rngids=None):
         """
         Increase the number of agents
 
         :param n: Integer number of agents to add
-        :param new_slots: Optionally specify the slots to assign for the new agents. Otherwise, it will default to the new UIDs
+        :param new_rngids: Optionally specify the rngids to assign for the new agents. Otherwise, it will default to the new UIDs
         """
 
         if n == 0:
@@ -91,9 +91,9 @@ class BasePeople(sc.prettyobj):
         self.uid.grow(n)
         self.uid[new_inds] = new_uids
 
-        # We need to grow the slots as well
-        self.slot.grow(new_uids)
-        self.slot[new_uids] = new_slots if new_slots is not None else new_uids
+        # We need to grow the rngids as well
+        self.rngid.grow(new_uids)
+        self.rngid[new_uids] = new_rngids if new_rngids is not None else new_uids
 
         for state in self._states.values():
             state.grow(new_uids)
@@ -113,7 +113,7 @@ class BasePeople(sc.prettyobj):
 
         # Trim the UIDs and states
         # self.uid._trim(keep_inds)
-        # for state in self._states.values(): # includes self.slot
+        # for state in self._states.values(): # includes self.rngid
         #     state._trim(keep_inds)
 
         # Update the UID map
@@ -226,10 +226,10 @@ class People(BasePeople):
         else:
             self.initialized = True # Expected by state.initialize()
         
-        # For People initialization, first initialize slots, then initialize RNGs, then initialize remaining states
+        # For People initialization, first initialize rngids, then initialize RNGs, then initialize remaining states
         # This is because some states may depend on RNGs being initialized to generate initial values
-        self.slot.initialize(sim)
-        self.slot[:] = self.uid
+        self.rngid.initialize(sim)
+        self.rngid[:] = self.uid
 
         # Initialize states
         # Age is handled separately because the default value for new agents is NaN until they are concieved/born whereas

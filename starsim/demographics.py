@@ -278,7 +278,7 @@ class Pregnancy(Demographics):
             data_cols = dict(year='Time', age='AgeGrp', value='ASFR'),
         )
 
-        self.choose_slots = ss.randint() # Low and high will be reset upon initialization
+        self.choose_rngids = ss.randint() # Low and high will be reset upon initialization
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
@@ -345,8 +345,8 @@ class Pregnancy(Demographics):
     def initialize(self, sim):
         super().initialize(sim)
         low = sim.pars.n_agents + 1
-        high = int(sim.pars.slot_scale*sim.pars.n_agents)
-        self.choose_slots.set(low=low, high=high)
+        high = int(sim.pars.rngid_scale*sim.pars.n_agents)
+        self.choose_rngids.set(low=low, high=high)
         return
 
     def init_results(self, sim):
@@ -418,13 +418,13 @@ class Pregnancy(Demographics):
         n_unborn_agents = len(conceive_uids)
         if n_unborn_agents > 0:
 
-            # Choose slots for the unborn agents
-            new_slots = self.choose_slots.rvs(conceive_uids)
+            # Choose rngids for the unborn agents
+            new_rngids = self.choose_rngids.rvs(conceive_uids)
 
             # Grow the arrays and set properties for the unborn agents
-            new_uids = sim.people.grow(len(new_slots), new_slots)
+            new_uids = sim.people.grow(len(new_rngids), new_rngids)
             sim.people.age[new_uids] = -self.pars.dur_pregnancy
-            sim.people.slot[new_uids] = new_slots  # Before sampling female_dist
+            sim.people.rngid[new_uids] = new_rngids  # Before sampling female_dist
             sim.people.female[new_uids] = self.pars.sex_ratio.rvs(new_uids)
 
             # Add connections to any vertical transmission layers
