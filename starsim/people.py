@@ -34,7 +34,7 @@ class BasePeople(sc.prettyobj):
         self.rngid.grow(new_vals=uids)
 
         # User-facing collection of states
-        self.states = ss.ndict(type=ss.State)
+        self.states = ss.ndict(type=ss.Arr)
 
         # We also internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
         # e.g., across modules, but we will never change the size of a State multiple times in the same iteration over
