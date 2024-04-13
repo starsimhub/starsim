@@ -80,18 +80,6 @@ class Arr:
         string += self._arr.__repr__()
         return string
     
-    @property
-    def values(self):
-        return self._arr[self.aliveinds]
-    
-    @property
-    def aliveinds(self):
-        try:
-            return self.people.aliveinds
-        except:
-            print('TEMP: Could not return aliveinds!')
-            return np.arange(len(self._arr))
-    
     def __len__(self):
         try:
             return len(self.aliveinds)
@@ -113,6 +101,25 @@ class Arr:
             
     def __getattr__(self, attr):
         return getattr(self.values, attr)
+    
+    def __gt__(self, other): return self.values > other
+    def __lt__(self, other): return self.values < other
+    def __ge__(self, other): return self.values >= other
+    def __le__(self, other): return self.values <= other
+    def __eq__(self, other): return self.values == other
+    def __ne__(self, other): return self.values != other
+
+    @property
+    def values(self):
+        return self._arr[self.aliveinds]
+    
+    @property
+    def aliveinds(self):
+        try:
+            return self.people.aliveinds
+        except:
+            print('TEMP: Could not return aliveinds!')
+            return np.arange(len(self._arr))
 
     def set_new(self, uids, new_vals=None):
         if new_vals is None: 
@@ -203,24 +210,6 @@ class Arr:
         self.grow(people.uid)
         self.initialized = True
         return
-
-    def __gt__(self, other):
-        return self.values > other
-
-    def __lt__(self, other):
-        return self.values < other
-
-    def __ge__(self, other):
-        return self.values >= other
-
-    def __le__(self, other):
-        return self.values <= other
-
-    def __eq__(self, other):
-        return self.values == other
-
-    def __ne__(self, other):
-        return self.values != other
 
 
 class FloatArr(Arr):

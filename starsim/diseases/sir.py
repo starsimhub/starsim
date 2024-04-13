@@ -122,14 +122,14 @@ class SIS(ss.Infection):
 
     def update_pre(self, sim):
         """ Progress infectious -> recovered """
-        recovered = ss.true(self.infected & (self.ti_recovered <= sim.ti))
+        recovered = sc.findinds(self.infected & (self.ti_recovered <= sim.ti))
         self.infected[recovered] = False
         self.susceptible[recovered] = True
         self.update_immunity(sim)
         return
     
     def update_immunity(self, sim):
-        uids = ss.true(self.immunity > 0)
+        uids = sc.findinds(self.immunity > 0)
         self.immunity[uids] = (self.immunity[uids])*(1 - self.pars.waning*sim.dt)
         self.rel_sus[uids] = np.maximum(0, 1 - self.immunity[uids])
         return
