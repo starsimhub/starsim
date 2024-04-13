@@ -62,7 +62,7 @@ class Measles(SIR):
         # Trigger deaths
         deaths = ss.true(self.ti_dead <= sim.ti)
         if len(deaths):
-            sim.people.request_death(deaths)
+            sim.people.make_zombie(deaths)
         return
 
     def set_prognoses(self, sim, uids, source_uids=None):

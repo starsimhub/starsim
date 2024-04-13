@@ -39,7 +39,7 @@ def check_dtype(dtype, default=None):
 
 class Arr:
 
-    # __slots__ = ('values', 'uid', 'default', 'name', 'label', '_arr', 'values', 'initialized')
+    # __slots__ = ('values', 'uid', 'default', 'name', 'label', '_arr', 'values', 'initialized') # TODO: reinstate for speed later
 
     def __init__(self, name, dtype=None, default=None, nan=None, label=None, coerce=True, skip_init=False):
         """
@@ -223,6 +223,12 @@ class BoolArr(Arr):
     def __init__(self, name, default=None, nan=False, label=None, skip_init=False): # No good NaN equivalent for bool arrays
         super().__init__(name=name, dtype=ss_bool, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
         return
+    
+    def true(self):
+        return np.nonzero(self.values)[0]
+    
+    def false(self):
+        return np.nonzero(~self.values)[0]
     
     
 class IndexArr(IntArr):

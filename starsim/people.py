@@ -98,22 +98,6 @@ class BasePeople(sc.prettyobj):
 
         return new_uids
 
-    def remove(self, uids):
-        """
-        "Remove" agents by updating aliveinds and resetting the agent states to NaN
-
-        Args:
-            uids: An int array containing the UID(s) to remove
-        """
-        # Calculate the indices to keep
-        self.aliveinds = np.setdiff1d(self.aliveinds, uids, assume_unique=True)
-        
-        # Reset the states
-        for state in self._states.values():
-            state.set_nan(uids)
-
-        return
-
     def __getitem__(self, key):
         """
         Allow people['attr'] instead of getattr(people, 'attr')
@@ -283,13 +267,19 @@ class People(BasePeople):
         """
         Remove dead agents
         """
-        uids_to_remove = ss.true(self.dead)
-        if len(uids_to_remove):
-            self.remove(uids_to_remove)
+        uids = self.dead.true()
+        if len(uids):
+            
+            # Calculate the indices to keep
+            self.aliveinds = np.setdiff1d(self.aliveinds, uids, assume_unique=True)
+            
+            # Reset the states
+            for state in self._states.values():
+                state.set_nan(uids)
 
-        # Remove the UIDs from the network too
-        for network in sim.networks.values():
-            network.remove_uids(uids_to_remove)
+            # Remove the UIDs from the networks too
+            for network in sim.networks.values():
+                network.remove_uids(uids) # TODO: only run once every nth timestep
 
         return
 
@@ -309,7 +299,7 @@ class People(BasePeople):
 
         :return:
         """
-        death_uids = ss.true(self.ti_dead <= self.ti)
+        death_uids = sc.findinds(self.ti_dead <= self.ti)
         self.alive[death_uids] = False
         return death_uids
 
@@ -325,7 +315,7 @@ class People(BasePeople):
         return ~self.female
 
     @property
-    def f(self):
+    def f(self): # TODO: remove?
         """ Shorthand for female """
         return self.female
 
@@ -336,20 +326,21 @@ class People(BasePeople):
 
     def init_results(self, sim):
         sim.results += [
-            ss.Result(None, 'n_alive', sim.npts, ss.dtypes.int, scale=True),
+            ss.Result(None, 'n_alive',    sim.npts, ss.dtypes.int, scale=True),
             ss.Result(None, 'new_deaths', sim.npts, ss.dtypes.int, scale=True),
             ss.Result(None, 'cum_deaths', sim.npts, ss.dtypes.int, scale=True),
         ]
         return
 
     def update_results(self, sim):
+        ti = sim.ti
         res = sim.results
-        res.n_alive[self.ti] = np.count_nonzero(self.alive)
-        res.new_deaths[self.ti] = np.count_nonzero(self.ti_dead == self.ti)
-        res.cum_deaths[self.ti] = np.sum(res.new_deaths[:sim.ti])
+        res.n_alive[ti] = np.count_nonzero(self.alive)
+        res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
+        res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
         return
 
-    def request_death(self, uids):
+    def make_zombie(self, uids):
         """
         External-facing function to request an agent die at the current timestep
 
@@ -374,10 +365,5 @@ class People(BasePeople):
         :param uids: Agent IDs to request deaths for
         :return: UIDs of agents that have been scheduled to die on this timestep
         """
-
-        # Only update the time of death for agents that are currently alive. This way modules cannot
-        # modify the time of death for agents that have already died. Noting that if remove_people is
-        # enabled then often such agents would not be present in the simulation anyway
-        uids = ss.true(self.alive[uids])
         self.ti_dead[uids] = self.ti
         return

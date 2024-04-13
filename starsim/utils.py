@@ -249,65 +249,7 @@ def set_seed(seed=None):
 
 # %% Simple array operations
 
-__all__ += ['true', 'false', 'defined', 'undefined']
-
-
-@nb.njit(cache=True)
-def _true(uids, values):
-    """
-    Returns the UIDs for indices where the value evaluates as True
-    """
-    out = np.empty(len(uids), dtype=uids.dtype)
-    j = 0
-    for i in range(len(values)):
-        out[j] = uids[i]
-        if values[i]:
-            j += 1
-    out = out[0:j]
-    return out
-
-
-@nb.njit(cache=True)
-def _false(uids, values):
-    """
-    Returns the UIDs for indices where the value evaluates as False
-    """
-    out = np.empty(len(uids), dtype=uids.dtype)
-    j = 0
-    for i in range(len(values)):
-        out[j] = uids[i]
-        if not values[i]:
-            j += 1
-    out = out[0:j]
-    return out
-
-
-def true(state):
-    """
-    Returns the UIDs of the values of the array that are true
-
-    Args:
-        state (State, UIDArray)
-
-    **Example**::
-
-        inds = ss.true(people.alive) # Returns array of UIDs of alive agents
-    """
-    return _true(state.uid.__array__(), state.__array__())
-
-
-def false(state):
-    """
-    Returns the indices of the values of the array that are false.
-
-    Args:
-        state (State, UIDArray)
-
-    **Example**::
-
-        inds = ss.false(people.alive) # Returns array of UIDs of dead agents
-    """
-    return _false(state.uid.__array__(), state.__array__())
+__all__ += ['defined', 'undefined']
 
 
 def defined(arr):
