@@ -140,7 +140,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.offset = offset
         self.module = module
         self.sim = sim
-        self.rngids = None # Created on initialization with a sim
+        self.slots = None # Created on initialization with a sim
         self.strict = strict
         self.auto = auto
         self.debug = debug
@@ -152,7 +152,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self._n = None # Internal variable to keep track of "n" argument (usually size)
         self._size = None # Internal variable to keep track of actual number of random variates asked for
         self._uids = None # Internal variable to track currently-in-use UIDs
-        self._rngids = None # Internal variable to track currently-in-use rngids
+        self._slots = None # Internal variable to track currently-in-use slots
         
         # History and random state
         self.rng = None # The actual RNG generator for generating random numbers
@@ -278,7 +278,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
         return self.state
     
-    def initialize(self, trace=None, seed=None, module=None, sim=None, rngids=None, force=False):
+    def initialize(self, trace=None, seed=None, module=None, sim=None, slots=None, force=False):
         """ Calculate the starting seed and create the RNG """
         
         if self.initialized is True and not force: # Don't warn if we have a partially initialized distribution
@@ -292,23 +292,23 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.rng = np.random.default_rng(seed=self.seed)
         self.make_history(reset=True)
         
-        # Handle the sim, module, and rngids
+        # Handle the sim, module, and slots
         self.sim = sim if (sim is not None) else self.sim
         self.module = module if (module is not None) else self.module
-        if rngids is None and self.sim is not None:
+        if slots is None and self.sim is not None:
             try:
-                rngids = self.sim.people.rngid
+                slots = self.sim.people.slot
             except Exception as E:
-                warnmsg = f'Could not extract rngids from sim object, is this an error?\n{E}'
+                warnmsg = f'Could not extract slots from sim object, is this an error?\n{E}'
                 ss.warn(warnmsg)
-        if rngids is not None:
-            self.rngids = rngids
+        if slots is not None:
+            self.slots = slots
             
         # Initialize the distribution and finalize
         self.process_dist()
         self.process_pars(call=False)
         self.ready = True
-        if self.trace is None or self.sim is None or self.rngids is None:
+        if self.trace is None or self.sim is None or self.slots is None:
             self.initialized = 'partial' # Initialized enough to produce random numbers, but not fully initialized
         else:
             self.initialized = True
@@ -353,28 +353,28 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         return
     
     def process_size(self, n=1):
-        """ Handle an input of either size or UIDs and calculate size, UIDs, and rngids """
+        """ Handle an input of either size or UIDs and calculate size, UIDs, and slots """
         if np.isscalar(n) or isinstance(n, tuple):  # If passing a non-scalar size, interpret as dimension rather than UIDs iff a tuple
             uids = None
-            rngids = None
+            slots = None
             size = n
         else:
             uids = np.asarray(n)
             if len(uids):
-                rngids = self.rngids[uids]
-                if len(rngids): # Handle case where uids is boolean
-                    size = rngids.max() + 1
+                slots = self.slots[uids]
+                if len(slots): # Handle case where uids is boolean
+                    size = slots.max() + 1
                 else:
                     size = 0
             else:
-                rngids = np.array([])
+                slots = np.array([])
                 size = 0
         
         self._n = n
         self._size = size
         self._uids = uids
-        self._rngids = rngids
-        return size, rngids
+        self._slots = slots
+        return size, slots
     
     def process_pars(self, call=True):
         """ Ensure the supplied dist and parameters are valid, and initialize them; called automatically """
@@ -453,8 +453,8 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         if not self.ready and self.strict:
             raise DistNotReadyError(self)
         
-        # Figure out size, UIDs, and rngids
-        size, rngids = self.process_size(n)
+        # Figure out size, UIDs, and slots
+        size, slots = self.process_size(n)
         
         # Check if size is 0, then we can return
         if size == 0:
@@ -469,12 +469,12 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         
         # Actually get the random numbers
         if self.dynamic_pars:
-            rands = self.rand(size)[rngids] # Get random values 
+            rands = self.rand(size)[slots] # Get random values 
             rvs = self.ppf(rands) # Convert to actual values via the PPF
         else:
             rvs = self.make_rvs() # Or, just get regular values
-            if self._rngids is not None:
-                rvs = rvs[self._rngids]
+            if self._slots is not None:
+                rvs = rvs[self._slots]
         
         # Tidy up
         self.called += 1
@@ -487,12 +487,12 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         if self.debug:
             simstr = f'on ti={self.sim.ti} ' if self.sim else ''
             sizestr = f'with size={self._size}, '
-            rngidstr = f'Σ(rngids)={self._rngids.sum()}, ' if self._rngids else '<no rngids>, '
+            slotstr = f'Σ(slots)={self._slots.sum()}, ' if self._slots else '<no slots>, '
             rvstr = f'Σ(rvs)={rvs.sum():0.2f}, |rvs|={rvs.mean():0.4f}'
             pre_state = str(self.history[-1]['state']['state'])[-5:]
             post_state = str(self.state_int)[-5:]
             statestr = f"state {pre_state}→{post_state}"
-            print(f'Debug: {self} called {simstr}{sizestr}{rngidstr}{rvstr}, {statestr}')
+            print(f'Debug: {self} called {simstr}{sizestr}{slotstr}{rvstr}, {statestr}')
             assert pre_state != post_state # Always an error if the state doesn't change after drawing random numbers
             
         return rvs

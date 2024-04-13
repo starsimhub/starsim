@@ -55,7 +55,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
             nan (any): the value to use to represent NaN (not a number); also used as the default value if not supplied
             label (str): The human-readable name for the state
             coerce (bool): Whether to ensure the the data is one of the supported data types
-            skip_init (bool): Whether to skip initialization with the People object (used for uid and rngid states)
+            skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
         """
         if coerce:
             dtype = check_dtype(dtype, default)

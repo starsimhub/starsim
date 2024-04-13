@@ -593,13 +593,13 @@ class MFNet(SexualNetwork, DynamicNetwork):
 
         # Figure out durations and acts
         if (len(p1) == len(np.unique(p1))):
-            # No duplicates and user has enabled multirng, so use rngidting based on p1
+            # No duplicates and user has enabled multirng, so use slotting based on p1
             dur_vals = self.pars.duration.rvs(p1)
             act_vals = self.pars.acts.rvs(p1)
         else:
             # If multirng is enabled, we're here because some individuals in p1
             # are starting multiple relationships on this timestep. If using
-            # rngidted draws, as above, repeated relationships will get the same
+            # slotted draws, as above, repeated relationships will get the same
             # duration and act rates, which is scientifically undesirable.
             # Instead, we fall back to a not-CRN safe approach:
             dur_vals = self.pars.duration.rvs(len(p1))  # Just use len(p1) to say how many draws are needed
@@ -671,7 +671,7 @@ class MSMNet(SexualNetwork, DynamicNetwork):
 
         # Figure out durations
         if (len(p1) == len(np.unique(p1))):
-            # No duplicates, so use rngidting based on p1
+            # No duplicates, so use slotting based on p1
             dur = self.pars.duration.rvs(p1)
             act_vals = self.pars.acts.rvs(p1)
         else:

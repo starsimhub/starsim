@@ -184,7 +184,7 @@ def test_callable(n=n):
     sim.n = 10
     sim.people = sc.prettyobj()
     sim.people.uid = np.arange(sim.n)
-    sim.people.rngid = np.arange(sim.n)
+    sim.people.slot = np.arange(sim.n)
     sim.people.age = np.random.uniform(0, 90, size=sim.n)
 
     # Define a parameter as a function
@@ -213,7 +213,7 @@ def test_array(n=n):
     low  = np.array([1, 100]) # Low
     high = np.array([3, 125]) # High
 
-    d = ss.uniform(low=low, high=high).initialize(rngids=np.arange(uids.max()+1))
+    d = ss.uniform(low=low, high=high).initialize(slots=np.arange(uids.max()+1))
     draws = d.rvs(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
@@ -223,28 +223,28 @@ def test_array(n=n):
     return draws
 
 
-def test_repeat_rngid():
-    """ Test behavior of repeated rngids """
-    sc.heading('Test behavior of repeated rngids')
+def test_repeat_slot():
+    """ Test behavior of repeated slots """
+    sc.heading('Test behavior of repeated slots')
 
     # Initialize parameters
-    rngids = np.array([4,2,3,2,2,3])
-    n = len(rngids)
+    slots = np.array([4,2,3,2,2,3])
+    n = len(slots)
     uids = np.arange(n)
     low = np.arange(n)
     high = low + 1
 
     # Draw values
-    d = ss.uniform(low=low, high=high).initialize(rngids=rngids)
+    d = ss.uniform(low=low, high=high).initialize(slots=slots)
     draws = d.rvs(uids)
     
     # Print and test
-    print(f'Uniform sample for rngids {rngids} returned {draws}')
-    assert len(draws) == len(rngids)
+    print(f'Uniform sample for slots {slots} returned {draws}')
+    assert len(draws) == len(slots)
 
-    unique_rngids = np.unique(rngids)
-    for s in unique_rngids:
-        inds = np.where(rngids==s)[0]
+    unique_slots = np.unique(slots)
+    for s in unique_slots:
+        inds = np.where(slots==s)[0]
         frac, integ = np.modf(draws[inds])
         assert np.allclose(integ, low[inds]), 'Integral part should match the low parameter'
         assert np.allclose(frac, frac[0]), 'Same random numbers, so should be same fractional part'
@@ -267,6 +267,6 @@ if __name__ == '__main__':
     o6 = test_reset()
     o7 = test_callable()
     o8 = test_array()
-    o9 = test_repeat_rngid()
+    o9 = test_repeat_slot()
     
     T.toc()
