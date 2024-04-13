@@ -23,7 +23,8 @@ class BasePeople(sc.prettyobj):
         n = int(n_agents)
         self.initialized = False
         self.uid = ss.IndexArr('uid')  # This variable tracks all UIDs currently in use
-        self.uid.grow(n)
+        uids = np.arange(n)
+        self.uid.grow(new_vals=uids)
         self.uid._data[:] = np.arange(0, n) # Directly modify the data
         self.aliveinds = self.uid._data.copy() # NB: does not support initializing the model with dead agents!
 
@@ -31,6 +32,7 @@ class BasePeople(sc.prettyobj):
         # This is because it needs to be updated separately from any other states, as other states
         # might have fill_values that depend on the rngid
         self.rngid = ss.IndexArr('rngid')
+        self.rngid.grow(new_vals=uids)
 
         # User-facing collection of states
         self.states = ss.ndict(type=ss.State)
@@ -91,28 +93,25 @@ class BasePeople(sc.prettyobj):
 
         for state in self._states.values():
             state.grow(new_uids)
+            
+        # Finally, update the alive indices
+        self.aliveinds = np.concatenate([self.aliveinds, new_uids], axis=0)
 
         return new_uids
 
-    def remove(self, uids_to_remove):
+    def remove(self, uids):
         """
-        Reduce the number of agents
+        "Remove" agents by updating aliveinds and resetting the agent states to NaN
 
-        :param uids_to_remove: An int/list/array containing the UID(s) to remove
+        Args:
+            uids: An int array containing the UID(s) to remove
         """
-
-        # Calculate the *indices* to keep
-        keep_uids = self.uid[~np.in1d(self.uid, uids_to_remove)]  # Calculate UIDs to keep
-        # keep_inds = self._uid_map[keep_uids]  # Calculate indices to keep
-
-        # Trim the UIDs and states
-        # self.uid._trim(keep_inds)
-        # for state in self._states.values(): # includes self.rngid
-        #     state._trim(keep_inds)
-
-        # Update the UID map
-        self._uid_map[:] = ss.intnan  # Clear out all previously used UIDs
-        self._uid_map[keep_uids] = np.arange(0, len(keep_uids))  # Assign the array indices for all of the current UIDs
+        # Calculate the indices to keep
+        self.aliveinds = np.setdiff1d(self.aliveinds, uids, assume_unique=True)
+        
+        # Reset the states
+        for state in self._states.values():
+            state.set_nan(uids)
 
         return
 
@@ -179,11 +178,11 @@ class People(BasePeople):
 
         # Handle states
         states = [
-            ss.State('age', float, np.nan), # NaN until conceived
-            ss.State('female', bool, ss.bernoulli(name='female', p=0.5)),
-            ss.State('ti_dead', int, ss.intnan),  # Time index for death
-            ss.State('alive', bool, True),  # Time index for death
-            ss.State('scale', float, 1.0),
+            ss.BoolArr('alive', default=True),  # Time index for death
+            ss.BoolArr('female', default=ss.bernoulli(name='female', p=0.5)),
+            ss.FloatArr('age'), # NaN until conceived
+            ss.IntArr('ti_dead'),  # Time index for death
+            ss.FloatArr('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
         ]
         states.extend(sc.promotetolist(extra_states))
 

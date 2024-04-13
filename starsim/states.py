@@ -130,7 +130,7 @@ class Arr:
         self._data[uids] = self.nan
         return
     
-    def grow(self, uids, new_vals=None):
+    def grow(self, uids=None, new_vals=None):
         """
         Add new agents to an Arr
 
@@ -139,16 +139,24 @@ class Arr:
         Args:
             uids: Numpy array of UIDs for the new agents being added
         """
+        if uids is None and new_vals is not None: # Used as a shortcut to avoid needing to supply twice
+            uids = new_vals
         orig_len = self.len_used
         n_new = len(uids)
+        self.len_used += n_new  # Increase the count of the number of agents by `n` (the requested number of new agents)
+        
+        # Physically reshape the arrays, if needed
         if orig_len + n_new > self.len_tot:
             n_grow = max(n_new, self.len_tot//2)  # Minimum 50% growth, since growing arrays is slow
             new_empty = np.empty(n_grow, dtype=self.dtype) # 10x faster than np.zeros()
             self._data = np.concatenate([self._data, new_empty], axis=0)
             self.len_tot = len(self._data)
         
-        self.len_used += n_new  # Increase the count of the number of agents by `n` (the requested number of new agents)
+        # Set new values, and NaN if needed
         self.set_new(uids, new_vals=new_vals) # Assign new default values to those agents
+        if n_grow > n_new: # We added extra space at the end, set to NaN
+            nan_uids = np.arange(self.len_used, self.len_tot)
+            self.set_nan(nan_uids)
         return
 
     def initialize(self, sim):
