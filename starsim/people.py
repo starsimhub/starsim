@@ -20,24 +20,17 @@ class BasePeople(sc.prettyobj):
 
     def __init__(self, n_agents):
 
-        self.initialized = False
-        self._uid_map = ss.ArrayView(int, default=ss.intnan)  # This variable tracks all UIDs ever created
-        self.uid = ss.ArrayView(int, default=ss.intnan)  # This variable tracks all UIDs currently in use
-
         n = int(n_agents)
-
-        self._uid_map.grow(n)
-        self._uid_map[:] = np.arange(0, n)
+        self.initialized = False
+        self.uid = ss.IntArr('uid', skip_init=True)  # This variable tracks all UIDs currently in use
         self.uid.grow(n)
-        self.uid[:] = np.arange(0, n)
+        self.uid._data[:] = np.arange(0, n) # Directly modify the data
+        self.aliveinds = self.uid._data.copy() # NB: does not support initializing the model with dead agents!
 
         # A rngid is a special state managed internally by BasePeople
         # This is because it needs to be updated separately from any other states, as other states
         # might have fill_values that depend on the rngid
-        self.rngid = ss.State('rngid', int, ss.intnan)
-
-        self.ti = None  # Track simulation time index
-        self.dt = np.nan  # Track simulation time step
+        self.rngid = ss.IntArr('rngid', skip_init=True)
 
         # User-facing collection of states
         self.states = ss.ndict(type=ss.State)
@@ -48,10 +41,11 @@ class BasePeople(sc.prettyobj):
         # within the sim, regardless of where they are. In contrast, `People.states` offers a more user-friendly way to access
         # a selection of the states e.g., module states could be added in there, while intervention states might not
         self._states = {}
+        return
 
     def __len__(self):
         """ Length of people """
-        return len(self.uid)
+        return len(self.aliveinds)
 
     def register_state(self, state, die=True):
         """
@@ -68,25 +62,26 @@ class BasePeople(sc.prettyobj):
             raise ValueError(errormsg)
         return
 
-    def grow(self, n, new_rngids=None):
+    def grow(self, n=None, new_rngids=None):
         """
         Increase the number of agents
 
         :param n: Integer number of agents to add
         :param new_rngids: Optionally specify the rngids to assign for the new agents. Otherwise, it will default to the new UIDs
         """
+        
+        if n is None:
+            if new_rngids is None:
+                errormsg = 'Must supply either n or new_rngids'
+                raise ValueError(errormsg)
+            else:
+                n = len(new_rngids)
 
         if n == 0:
             return np.array([], dtype=ss.dtypes.int)
 
-        start_uid = len(self._uid_map)
-        start_idx = len(self.uid)
-
+        start_uid = len(self.uid)
         new_uids = np.arange(start_uid, start_uid + n)
-        new_inds = np.arange(start_idx, start_idx + n)
-
-        self._uid_map.grow(n)
-        self._uid_map[new_uids] = new_inds
 
         self.uid.grow(n)
         self.uid[new_inds] = new_uids
