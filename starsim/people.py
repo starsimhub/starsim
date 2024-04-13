@@ -22,7 +22,7 @@ class BasePeople(sc.prettyobj):
 
         n = int(n_agents)
         self.initialized = False
-        self.uid = ss.IntArr('uid', skip_init=True)  # This variable tracks all UIDs currently in use
+        self.uid = ss.IndexArr('uid')  # This variable tracks all UIDs currently in use
         self.uid.grow(n)
         self.uid._data[:] = np.arange(0, n) # Directly modify the data
         self.aliveinds = self.uid._data.copy() # NB: does not support initializing the model with dead agents!
@@ -30,7 +30,7 @@ class BasePeople(sc.prettyobj):
         # A rngid is a special state managed internally by BasePeople
         # This is because it needs to be updated separately from any other states, as other states
         # might have fill_values that depend on the rngid
-        self.rngid = ss.IntArr('rngid', skip_init=True)
+        self.rngid = ss.IndexArr('rngid')
 
         # User-facing collection of states
         self.states = ss.ndict(type=ss.State)
@@ -80,15 +80,14 @@ class BasePeople(sc.prettyobj):
         if n == 0:
             return np.array([], dtype=ss.dtypes.int)
 
-        start_uid = len(self.uid)
-        new_uids = np.arange(start_uid, start_uid + n)
-
-        self.uid.grow(n)
-        self.uid[new_inds] = new_uids
+        start_uid = self.uid.len_used
+        stop_uid = start_uid + n
+        new_uids = np.arange(start_uid, stop_uid)
+        self.uid.grow(new_uids, new_vals=new_uids)
 
         # We need to grow the rngids as well
-        self.rngid.grow(new_uids)
-        self.rngid[new_uids] = new_rngids if new_rngids is not None else new_uids
+        new_rngids = new_rngids if new_rngids is not None else new_uids
+        self.rngid.grow(new_uids, new_vals=new_rngids)
 
         for state in self._states.values():
             state.grow(new_uids)

@@ -10,7 +10,7 @@ ss_float = ss.dtypes.float
 ss_int   = ss.dtypes.int
 ss_bool  = ss.dtypes.bool
 
-__all__ = ['check_dtype', 'Arr', 'IntArr', 'BoolArr', 'FloatArr']
+__all__ = ['check_dtype', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'IndexArr']
 
 
 def check_dtype(dtype, default=None):
@@ -113,15 +113,16 @@ class Arr:
     def __getattr__(self, attr):
         return getattr(self.values, attr)
 
-    def set_new(self, uids):
-        if isinstance(self.default, ss.Dist):
-            new_vals = self.default.rvs(uids)
-        elif callable(self.default):
-            new_vals = self.default(len(uids))
-        elif self.default is not None:
-            new_vals = self.default
-        else:
-            new_vals = self.nan
+    def set_new(self, uids, new_vals=None):
+        if new_vals is None: 
+            if isinstance(self.default, ss.Dist):
+                new_vals = self.default.rvs(uids)
+            elif callable(self.default):
+                new_vals = self.default(len(uids))
+            elif self.default is not None:
+                new_vals = self.default
+            else:
+                new_vals = self.nan
         self._data[uids] = new_vals
         return new_vals
     
@@ -129,7 +130,7 @@ class Arr:
         self._data[uids] = self.nan
         return
     
-    def grow(self, uids):
+    def grow(self, uids, new_vals=None):
         """
         Add new agents to an Arr
 
@@ -147,7 +148,7 @@ class Arr:
             self.len_tot = len(self._data)
         
         self.len_used += n_new  # Increase the count of the number of agents by `n` (the requested number of new agents)
-        self.set_new(uids) # Assign new default values to those agents
+        self.set_new(uids, new_vals=new_vals) # Assign new default values to those agents
         return
 
     def initialize(self, sim):
@@ -208,4 +209,11 @@ class BoolArr(Arr):
     """ Subclass of Arr with defaults for booleans """
     def __init__(self, name, default=None, nan=False, label=None, skip_init=False): # No good NaN equivalent for bool arrays
         super().__init__(name=name, dtype=ss_bool, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
+        return
+    
+    
+class IndexArr(IntArr):
+    """ A special class of IndexArr used for UIDs and RNG IDs """
+    def __init__(self, name, label=None):
+        super().__init__(name=name, dtype=ss_int, default=None, nan=ss.intnan, label=label, coerce=False, skip_init=True)
         return
