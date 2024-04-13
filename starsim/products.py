@@ -59,7 +59,8 @@ class Dx(Product):
         for disease in self.diseases:
             for state in self.health_states:
                 this_state = getattr(sim.diseases[disease], state)
-                these_uids = ss.true(this_state[uids])
+                this_state = sim.people.remap_uids(this_state) # TODO: figure out how to avoid this!
+                these_uids = uids[ss.true(this_state[uids])]
 
                 # Filter the dataframe to extract test results for people in this state
                 df_filter = (self.df.state == state) & (self.df.disease == disease)
@@ -69,7 +70,7 @@ class Dx(Product):
 
                 # Sort people into one of the possible result states and then update their overall results
                 this_result = self.result_dist.rvs(these_uids)
-                row_inds = results.uids.isin(these_uids)
+                row_inds = sc.findinds(results.uids.isin(these_uids))
                 results.loc[row_inds, 'result'] = np.minimum(this_result, results.loc[row_inds, 'result'])
 
             if return_format == 'dict':

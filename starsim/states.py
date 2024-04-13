@@ -117,7 +117,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         inputs = [x.values if isinstance(x, Arr) else x for x in inputs]
         return getattr(ufunc, method)(*inputs, **kwargs)
-
+    
     def count(self):
         return np.count_nonzero(self.values)
 
