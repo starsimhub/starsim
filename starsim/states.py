@@ -113,6 +113,11 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     def __eq__(self, other): return self.notnan(self.values == other)
     def __ne__(self, other): return self.notnan(self.values != other)
     
+    def __and__(self, other): raise BooleanOperationError(self)
+    def __or__(self, other):  raise BooleanOperationError(self)
+    def __xor__(self, other): raise BooleanOperationError(self)
+    def __invert__(self):     raise BooleanOperationError(self)
+    
     # The mixin class delegates the operations to the corresponding numpy functions
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         inputs = [x.values if isinstance(x, Arr) else x for x in inputs]
@@ -233,6 +238,19 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         return
 
 
+class BooleanOperationError(NotImplementedError):
+    """ Raised when a logical operation is performed on a non-logical array """
+    def __init__(self, arr):
+        msg = f'Logical operations are only valid on Boolean arrays, not {arr.dtype}'
+        super().__init__(msg)
+
+class BooleanNaNError(NotImplementedError):
+    """ Raised when NaN is called on a Boolean array """
+    def __init__(self):
+        msg = 'NaN is not defined for boolean arrays, you do not want to do this!'
+        super().__init__(msg)
+
+
 class FloatArr(Arr):
     """ Subclass of Arr with defaults for floats """
     def __init__(self, name, default=None, nan=np.nan, label=None, skip_init=False):
@@ -247,7 +265,7 @@ class FloatArr(Arr):
         if mask is not None:
             valid = valid*mask
         return valid
-    
+
     
 class IntArr(Arr):
     """ Subclass of Arr with defaults for integers """
@@ -262,11 +280,10 @@ class BoolArr(Arr):
         super().__init__(name=name, dtype=ss_bool, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
         return
     
-    def __and__(self, other):
-        return self.values & other
-    
-    def __invert__(self):
-        return ~self.values
+    def __and__(self, other): return self.values & other
+    def __or__(self, other):  return self.values | other    
+    def __xor__(self, other): return self.values & other
+    def __invert__(self):     return ~self.values
     
     def true(self):
         return np.nonzero(self.values)[0]
@@ -275,13 +292,11 @@ class BoolArr(Arr):
         return np.nonzero(~self.values)[0]
     
     def isnan(self):
-        errormsg = 'NaN is not defined for boolean arrays, you do not want to do this!'
-        raise NotImplementedError(errormsg)
+        raise BooleanNaNError()
 
     def notnan(self, mask=None):
         if mask is None:
-            errormsg = 'NaN is not defined for boolean arrays, you do not want to do this!'
-            raise NotImplementedError(errormsg)
+            raise BooleanNaNError()
         else:
             return mask
 
