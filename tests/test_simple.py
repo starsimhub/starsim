@@ -141,25 +141,25 @@ def test_components(do_plot=do_plot):
     return sim
 
 
-# def test_parallel():
-#     """ Test running two identical sims in parallel """
-#     pars = make_sim_pars()
+def test_parallel():
+    """ Test running two identical sims in parallel """
+    pars = make_sim_pars()
 
-#     # Check that two identical sims match
-#     sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars, label='Sim2')])
-#     sims.run(keep_people=True)
-#     s1, s2 = sims.sims
-#     assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
+    # Check that two identical sims match
+    sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars, label='Sim2')])
+    sims.run(keep_people=True)
+    s1, s2 = sims.sims
+    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
 
-#     # Check that two non-identical sims don't match
-#     pars2 = sc.dcp(pars)
-#     pars2.diseases.beta *= 2
-#     sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars2, label='Sim2')])
-#     sims.run(keep_people=True)
-#     s1, s2 = sims.sims
-#     assert not np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
+    # Check that two non-identical sims don't match
+    pars2 = sc.dcp(pars)
+    pars2.diseases.beta *= 2
+    sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars2, label='Sim2')])
+    sims.run(keep_people=True)
+    s1, s2 = sims.sims
+    assert not np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
 
-#     return s1, s2
+    return s1, s2
 
 
 def test_sis(do_plot=do_plot):
@@ -187,7 +187,7 @@ if __name__ == '__main__':
     s3a, s3b = test_sir_epi()
     s4_base, s4_intv = test_simple_vax(do_plot=do_plot)
     s5 = test_components(do_plot=do_plot)
-    # s6a, s6b = test_parallel()
+    s6a, s6b = test_parallel()
     s7 = test_sis(do_plot=do_plot)
     
     T.toc()

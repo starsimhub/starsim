@@ -100,7 +100,11 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
             self._arr[newkey] = value
             
     def __getattr__(self, attr):
-        return getattr(self.values, attr)
+        """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
+        if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
+            return self.__getattribute__(attr)
+        else:
+            return getattr(self.values, attr)
     
     def __gt__(self, other): return self.notnan(self.values > other)
     def __lt__(self, other): return self.notnan(self.values < other)
