@@ -176,12 +176,12 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
             new_empty = np.empty(n_grow, dtype=self.dtype) # 10x faster than np.zeros()
             self._arr = np.concatenate([self._arr, new_empty], axis=0)
             self.len_tot = len(self._arr)
+            if n_grow > n_new: # We added extra space at the end, set to NaN
+                nan_uids = np.arange(self.len_used, self.len_tot)
+                self.set_nan(nan_uids)
         
         # Set new values, and NaN if needed
         self.set_new(uids, new_vals=new_vals) # Assign new default values to those agents
-        if n_grow > n_new: # We added extra space at the end, set to NaN
-            nan_uids = np.arange(self.len_used, self.len_tot)
-            self.set_nan(nan_uids)
         return
     
     def set_people(self, people):
