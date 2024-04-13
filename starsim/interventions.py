@@ -199,7 +199,7 @@ class BaseTest(Intervention):
         self._parse_product(product)
         self.screened = ss.State('screened', bool, False)
         self.screens = ss.State('screens', int, 0)
-        self.ti_screened = ss.State('ti_screened', int, ss.INT_NAN)
+        self.ti_screened = ss.State('ti_screened', int, ss.intnan)
         return
 
     def initialize(self, sim):
@@ -487,7 +487,7 @@ class BaseVaccination(Intervention):
         self._parse_product(product)
         self.vaccinated = ss.State('vaccinated', bool, False)
         self.n_doses = ss.State('doses', int, 0)
-        self.ti_vaccinated = ss.State('ti_vaccinated', int, ss.INT_NAN)
+        self.ti_vaccinated = ss.State('ti_vaccinated', int, ss.intnan)
         self.coverage_dist = ss.bernoulli(p=0)  # Placeholder
         return
 

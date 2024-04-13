@@ -28,8 +28,8 @@ class NCD(ss.Disease):
         self.add_states(
             ss.State('at_risk', bool, False),
             ss.State('affected', bool, False),
-            ss.State('ti_affected', int, ss.INT_NAN),
-            ss.State('ti_dead', int, ss.INT_NAN),
+            ss.State('ti_affected', int, ss.intnan),
+            ss.State('ti_dead', int, ss.intnan),
         )
         return
 

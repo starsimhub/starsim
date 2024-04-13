@@ -16,7 +16,7 @@ class Gonorrhea(ss.Infection):
         # These might be useful for connectors to target, e.g. if HIV reduces p_clear
         self.add_states(
             ss.State('symptomatic', bool, False),
-            ss.State('ti_clearance', int, ss.INT_NAN),
+            ss.State('ti_clearance', int, ss.intnan),
             ss.State('p_symp', float, 1),
         )
 

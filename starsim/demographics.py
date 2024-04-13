@@ -251,10 +251,10 @@ class Pregnancy(Demographics):
             ss.State('fecund', bool, True),  # Applies to girls and women inside the fertility window
             ss.State('pregnant', bool, False),  # Currently pregnant
             ss.State('postpartum', bool, False),  # Currently post-partum
-            ss.State('ti_pregnant', int, ss.INT_NAN),  # Time pregnancy begins
-            ss.State('ti_delivery', int, ss.INT_NAN),  # Time of delivery
-            ss.State('ti_postpartum', int, ss.INT_NAN),  # Time postpartum ends
-            ss.State('ti_dead', int, ss.INT_NAN),  # Maternal mortality
+            ss.State('ti_pregnant', int, ss.intnan),  # Time pregnancy begins
+            ss.State('ti_delivery', int, ss.intnan),  # Time of delivery
+            ss.State('ti_postpartum', int, ss.intnan),  # Time postpartum ends
+            ss.State('ti_dead', int, ss.intnan),  # Maternal mortality
         )
 
         self.pars = ss.omergeleft(self.pars,

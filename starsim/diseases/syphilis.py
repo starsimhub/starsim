@@ -29,17 +29,17 @@ class Syphilis(ss.Infection):
             ss.State('congenital', bool, False),
     
             # Timestep of state changes
-            ss.State('ti_exposed', int, ss.INT_NAN),
-            ss.State('ti_primary', int, ss.INT_NAN),
-            ss.State('ti_secondary', int, ss.INT_NAN),
-            ss.State('ti_latent_temp', int, ss.INT_NAN),
-            ss.State('ti_latent_long', int, ss.INT_NAN),
-            ss.State('ti_tertiary', int, ss.INT_NAN),
-            ss.State('ti_immune', int, ss.INT_NAN),
-            ss.State('ti_miscarriage', int, ss.INT_NAN),
-            ss.State('ti_nnd', int, ss.INT_NAN),
-            ss.State('ti_stillborn', int, ss.INT_NAN),
-            ss.State('ti_congenital', int, ss.INT_NAN),
+            ss.State('ti_exposed', int, ss.intnan),
+            ss.State('ti_primary', int, ss.intnan),
+            ss.State('ti_secondary', int, ss.intnan),
+            ss.State('ti_latent_temp', int, ss.intnan),
+            ss.State('ti_latent_long', int, ss.intnan),
+            ss.State('ti_tertiary', int, ss.intnan),
+            ss.State('ti_immune', int, ss.intnan),
+            ss.State('ti_miscarriage', int, ss.intnan),
+            ss.State('ti_nnd', int, ss.intnan),
+            ss.State('ti_stillborn', int, ss.intnan),
+            ss.State('ti_congenital', int, ss.intnan),
         )
 
         # Parameters

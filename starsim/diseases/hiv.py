@@ -15,9 +15,9 @@ class HIV(ss.Infection):
         # States
         self.add_states(
             ss.State('on_art', bool, False),
-            ss.State('ti_art', int, ss.INT_NAN),
+            ss.State('ti_art', int, ss.intnan),
             ss.State('cd4', float, 500),
-            ss.State('ti_dead', int, ss.INT_NAN), # Time of HIV-cause death
+            ss.State('ti_dead', int, ss.intnan), # Time of HIV-cause death
         )
 
         pars = ss.omergeleft(pars,

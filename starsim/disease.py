@@ -184,7 +184,7 @@ class Infection(Disease):
             ss.State('infected', bool, False),
             ss.State('rel_sus', float, 1.0),
             ss.State('rel_trans', float, 1.0),
-            ss.State('ti_infected', int, ss.INT_NAN),
+            ss.State('ti_infected', int, ss.intnan),
         )
 
         self.rng_target = ss.random(name='target')
