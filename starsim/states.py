@@ -102,16 +102,16 @@ class Arr:
     def __getattr__(self, attr):
         return getattr(self.values, attr)
     
-    def __gt__(self, other): return self.values > other
-    def __lt__(self, other): return self.values < other
-    def __ge__(self, other): return self.values >= other
-    def __le__(self, other): return self.values <= other
-    def __eq__(self, other): return self.values == other
-    def __ne__(self, other): return self.values != other
+    def __gt__(self, other): return self.notnan(self.values > other)
+    def __lt__(self, other): return self.notnan(self.values < other)
+    def __ge__(self, other): return self.notnan(self.values >= other)
+    def __le__(self, other): return self.notnan(self.values <= other)
+    def __eq__(self, other): return self.notnan(self.values == other)
+    def __ne__(self, other): return self.notnan(self.values != other)
 
     @property
     def values(self):
-        return self._arr[self.aliveinds]
+        return self._arr[self.aliveinds] # TODO: think about if this makes sense for uids
     
     @property
     def aliveinds(self):
@@ -120,6 +120,15 @@ class Arr:
         except:
             print('TEMP: Could not return aliveinds!')
             return np.arange(len(self._arr))
+        
+    def isnan(self):
+        return self.values == self.nan
+
+    def notnan(self, mask=None):
+        valid = self.values != self.nan
+        if mask is not None:
+            valid = valid*mask
+        return valid
 
     def set_new(self, uids, new_vals=None):
         if new_vals is None: 
@@ -217,6 +226,15 @@ class FloatArr(Arr):
     def __init__(self, name, default=None, nan=np.nan, label=None, skip_init=False):
         super().__init__(name=name, dtype=ss_float, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
         return
+    
+    def isnan(self):
+        return np.isnan(self.values)
+
+    def notnan(self, mask=None):
+        valid = ~np.isnan(self.values)
+        if mask is not None:
+            valid = valid*mask
+        return valid
     
     
 class IntArr(Arr):
