@@ -272,7 +272,7 @@ class ArrayView(NDArrayOperatorsMixin):
 
 class State(UIDArray):
 
-    __slots__ = ('values', 'uid', 'default', 'name', 'label', '_data', 'values', '_initialized')
+    __slots__ = ('values', 'uid', 'default', 'name', 'label', '_data', 'values', 'initialized')
 
     def __init__(self, name, dtype=None, default=None, label=None, coerce=True):
         """
@@ -302,11 +302,11 @@ class State(UIDArray):
         self.label = label or name
         self._data = ArrayView(dtype=dtype)
         self.values = self._data._view
-        self._initialized = False
+        self.initialized = False
         return
 
     def __repr__(self):
-        if not self._initialized:
+        if not self.initialized:
             return f'<State {self.name} (uninitialized)>'
         else:
             return UIDArray.__repr__(self)
@@ -341,7 +341,7 @@ class State(UIDArray):
             sim: A `Sim` instance that contains an initialized `People` object
         """
 
-        if self._initialized:
+        if self.initialized:
             return
 
         people = sim.people
@@ -360,7 +360,7 @@ class State(UIDArray):
         self._data[:len(self.uid)] = self._new_vals(self.uid)
         self.values = self._data._view
 
-        self._initialized = True
+        self.initialized = True
         return
 
     def grow(self, uids):
