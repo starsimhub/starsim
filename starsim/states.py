@@ -278,9 +278,12 @@ class BoolArr(Arr):
         errormsg = 'NaN is not defined for boolean arrays, you do not want to do this!'
         raise NotImplementedError(errormsg)
 
-    def notnan(self):
-        errormsg = 'NaN is not defined for boolean arrays, you do not want to do this!'
-        raise NotImplementedError(errormsg)    
+    def notnan(self, mask=None):
+        if mask is None:
+            errormsg = 'NaN is not defined for boolean arrays, you do not want to do this!'
+            raise NotImplementedError(errormsg)
+        else:
+            return mask
 
     
 class IndexArr(IntArr):
