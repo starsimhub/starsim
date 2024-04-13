@@ -26,10 +26,10 @@ class NCD(ss.Disease):
 
         super().__init__(ss.omerge(default_pars, pars))
         self.add_states(
-            ss.State('at_risk', bool, False),
-            ss.State('affected', bool, False),
-            ss.State('ti_affected', int, ss.intnan),
-            ss.State('ti_dead', int, ss.intnan),
+            ss.BoolArr('at_risk'),
+            ss.BoolArr('affected'),
+            ss.IntArr('ti_affected'),
+            ss.IntArr('ti_dead'),
         )
         return
 

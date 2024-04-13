@@ -4,7 +4,6 @@ Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi
 Original version by @alina-muellenmeister, @domdelport, and @RomeshA
 """
 
-import numpy as np
 import starsim as ss
 from starsim.diseases.sir import SIR
 
@@ -38,8 +37,8 @@ class Measles(SIR):
 
         # SIR are added automatically, here we add E
         self.add_states(
-            ss.State('exposed', bool, False),
-            ss.State('ti_exposed', float, np.nan),
+            ss.BoolArr('exposed'),
+            ss.IntArr('ti_exposed'),
         )
 
         return

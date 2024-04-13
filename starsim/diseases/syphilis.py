@@ -16,30 +16,28 @@ class Syphilis(ss.Infection):
 
         self.add_states(
             # Adult syphilis states
-            ss.State('exposed', bool, False),  # AKA incubating. Free of symptoms, not transmissible
-            ss.State('primary', bool, False),  # Primary chancres
-            ss.State('secondary', bool, False),  # Inclusive of those who may still have primary chancres
-            ss.State('latent_temp', bool, False),  # Relapses to secondary (~1y)
-            ss.State('latent_long', bool, False),  # Can progress to tertiary or remain here
-            ss.State('tertiary', bool, False),  # Includes complications (cardio/neuro/disfigurement)
-            ss.State('immune', bool, False),  # After effective treatment people may acquire temp immunity
-            ss.State('ever_exposed', bool, False),  # Anyone ever exposed - stays true after treatment
-    
-            # Congenital syphilis states
-            ss.State('congenital', bool, False),
+            ss.BoolArr('exposed'),  # AKA incubating. Free of symptoms, not transmissible
+            ss.BoolArr('primary'),  # Primary chancres
+            ss.BoolArr('secondary'),  # Inclusive of those who may still have primary chancres
+            ss.BoolArr('latent_temp'),  # Relapses to secondary (~1y)
+            ss.BoolArr('latent_long'),  # Can progress to tertiary or remain here
+            ss.BoolArr('tertiary'),  # Includes complications (cardio/neuro/disfigurement)
+            ss.BoolArr('immune'),  # After effective treatment people may acquire temp immunity
+            ss.BoolArr('ever_exposed'),  # Anyone ever exposed - stays true after treatment
+            ss.BoolArr('congenital'),  # Congenital syphilis states
     
             # Timestep of state changes
-            ss.State('ti_exposed', int, ss.intnan),
-            ss.State('ti_primary', int, ss.intnan),
-            ss.State('ti_secondary', int, ss.intnan),
-            ss.State('ti_latent_temp', int, ss.intnan),
-            ss.State('ti_latent_long', int, ss.intnan),
-            ss.State('ti_tertiary', int, ss.intnan),
-            ss.State('ti_immune', int, ss.intnan),
-            ss.State('ti_miscarriage', int, ss.intnan),
-            ss.State('ti_nnd', int, ss.intnan),
-            ss.State('ti_stillborn', int, ss.intnan),
-            ss.State('ti_congenital', int, ss.intnan),
+            ss.IntArr('ti_exposed'),
+            ss.IntArr('ti_primary'),
+            ss.IntArr('ti_secondary'),
+            ss.IntArr('ti_latent_temp'),
+            ss.IntArr('ti_latent_long'),
+            ss.IntArr('ti_tertiary'),
+            ss.IntArr('ti_immune'),
+            ss.IntArr('ti_miscarriage'),
+            ss.IntArr('ti_nnd'),
+            ss.IntArr('ti_stillborn'),
+            ss.IntArr('ti_congenital'),
         )
 
         # Parameters

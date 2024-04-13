@@ -34,9 +34,9 @@ class SIR(ss.Infection):
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
 
         self.add_states(
-            ss.State('recovered', bool, False),
-            ss.State('ti_recovered', int, ss.intnan),
-            ss.State('ti_dead', int, ss.intnan),
+            ss.BoolArr('recovered'),
+            ss.IntArr('ti_recovered'),
+            ss.IntArr('ti_dead'),
         )
         return
 
@@ -112,8 +112,8 @@ class SIS(ss.Infection):
         )
         
         self.add_states(
-            ss.State('ti_recovered', int, ss.intnan),
-            ss.State('immunity', float, 0.0),
+            ss.IntArr('ti_recovered'),
+            ss.FloatArr('immunity', default=0.0),
         )
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
