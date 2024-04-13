@@ -274,6 +274,14 @@ class BoolArr(Arr):
     def false(self):
         return np.nonzero(~self.values)[0]
     
+    def isnan(self):
+        errormsg = 'NaN is not defined for boolean arrays, you do not want to do this!'
+        raise NotImplementedError(errormsg)
+
+    def notnan(self):
+        errormsg = 'NaN is not defined for boolean arrays, you do not want to do this!'
+        raise NotImplementedError(errormsg)    
+
     
 class IndexArr(IntArr):
     """ A special class of IndexArr used for UIDs and RNG IDs """
