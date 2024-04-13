@@ -158,6 +158,12 @@ class Arr:
             nan_uids = np.arange(self.len_used, self.len_tot)
             self.set_nan(nan_uids)
         return
+    
+    def set_people(self, people):
+        """ Reset the people object associated with this state """
+        assert people.initialized, 'People must be initialized before initializing states'
+        self.people = people
+        return
 
     def initialize(self, sim):
         """
@@ -179,22 +185,21 @@ class Arr:
         Args:
             sim: A `Sim` instance that contains an initialized `People` object
         """
+        # Skip if already initialized
         if self.initialized:
             return
 
+        # Establish connection with the People object
         people = sim.people
-        assert people.initialized, 'People must be initialized before initializing states'
+        self.set_people(people)
+        people.register_state(self)
         
         # Connect any distributions in the default to RNGs in the Sim
         if isinstance(self.default, ss.Dist):
             self.default.initialize(module=self, sim=sim)
 
-        # Establish connection with the People object
-        people.register_state(self)
-        self.people = people
-
         # Populate initial values
-        self.grow(len(people))
+        self.grow(people.uid)
         self.initialized = True
         return
 

@@ -25,8 +25,7 @@ class BasePeople(sc.prettyobj):
         self.uid = ss.IndexArr('uid')  # This variable tracks all UIDs currently in use
         uids = np.arange(n)
         self.uid.grow(new_vals=uids)
-        self.uid._data[:] = np.arange(0, n) # Directly modify the data
-        self.aliveinds = self.uid._data.copy() # NB: does not support initializing the model with dead agents!
+        self.aliveinds = uids # NB: does not support initializing the model with dead agents!
 
         # A rngid is a special state managed internally by BasePeople
         # This is because it needs to be updated separately from any other states, as other states
@@ -210,7 +209,6 @@ class People(BasePeople):
             age_props = age_props / age_props.sum()
             return ss.choice(a=age_bins, p=age_props)
 
-
     def initialize(self, sim):
         """ Initialization """
 
@@ -221,8 +219,8 @@ class People(BasePeople):
         
         # For People initialization, first initialize rngids, then initialize RNGs, then initialize remaining states
         # This is because some states may depend on RNGs being initialized to generate initial values
-        self.rngid.initialize(sim)
-        self.rngid[:] = self.uid
+        self.uid.set_people(sim.people)
+        self.rngid.set_people(sim.people)
 
         # Initialize states
         # Age is handled separately because the default value for new agents is NaN until they are concieved/born whereas
