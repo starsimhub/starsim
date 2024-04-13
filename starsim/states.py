@@ -65,6 +65,7 @@ class Arr:
         self.label = label or name
         self.default = default
         self.nan = nan
+        self.dtype = dtype
         
         # Properties that are initialized later
         self._arr = np.empty(0, dtype=dtype)
@@ -75,7 +76,7 @@ class Arr:
         return
     
     def __repr__(self):
-        string = f'<{self.__class__.__name__} {str(self.name)}, len={len(self)}>\n'
+        string = f'<{self.__class__.__name__} "{str(self.name)}", len={len(self)}>\n'
         string += self._arr.__repr__()
         return string
     
@@ -203,6 +204,24 @@ class Arr:
         self.initialized = True
         return
 
+    def __gt__(self, other):
+        return self.values > other
+
+    def __lt__(self, other):
+        return self.values < other
+
+    def __ge__(self, other):
+        return self.values >= other
+
+    def __le__(self, other):
+        return self.values <= other
+
+    def __eq__(self, other):
+        return self.values == other
+
+    def __ne__(self, other):
+        return self.values != other
+
 
 class FloatArr(Arr):
     """ Subclass of Arr with defaults for floats """
@@ -223,6 +242,12 @@ class BoolArr(Arr):
     def __init__(self, name, default=None, nan=False, label=None, skip_init=False): # No good NaN equivalent for bool arrays
         super().__init__(name=name, dtype=ss_bool, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
         return
+    
+    def __and__(self, other):
+        return self.values & other
+    
+    def __invert__(self):
+        return ~self.values
     
     def true(self):
         return np.nonzero(self.values)[0]

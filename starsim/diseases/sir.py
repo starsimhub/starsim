@@ -2,6 +2,7 @@
 Define SIR and SIS disease modules
 """
 
+import sciris as sc
 import numpy as np
 import matplotlib.pyplot as pl
 import starsim as ss
@@ -42,12 +43,12 @@ class SIR(ss.Infection):
 
     def update_pre(self, sim):
         # Progress infectious -> recovered
-        recovered = ss.true(self.infected & (self.ti_recovered <= sim.ti))
+        recovered = sc.findinds(self.infected & (self.ti_recovered <= sim.ti))
         self.infected[recovered] = False
         self.recovered[recovered] = True
 
         # Trigger deaths
-        deaths = ss.true(self.ti_dead <= sim.ti)
+        deaths = sc.findinds(self.ti_dead <= sim.ti) # TODO: find a better way to implement
         if len(deaths):
             sim.people.make_zombie(deaths)
         return

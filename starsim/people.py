@@ -267,7 +267,7 @@ class People(BasePeople):
         """
         Remove dead agents
         """
-        uids = self.dead.true()
+        uids = self.alive.false()
         if len(uids):
             
             # Calculate the indices to keep

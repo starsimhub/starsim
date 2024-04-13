@@ -142,7 +142,7 @@ class Module(sc.quickobj):
                 state = arg
                 
             if check:
-                assert isinstance(state, ss.State), f'Could not add {state}: not a State object'
+                assert isinstance(state, ss.Arr), f'Could not add {state}: not an Arr object'
                 
             setattr(self, state.name, state)
         return
@@ -158,7 +158,7 @@ class Module(sc.quickobj):
         due to supporting features like multiple genotypes) then the Module should
         overload this attribute to ensure that all states appear in here.
         """
-        return [x for x in self.__dict__.values() if isinstance(x, ss.State)]
+        return [x for x in self.__dict__.values() if isinstance(x, ss.Arr)]
 
     @property
     def statesdict(self):
