@@ -350,7 +350,7 @@ class People(BasePeople):
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
         return
 
-    def make_zombie(self, uids):
+    def request_death(self, uids):
         """
         External-facing function to request an agent die at the current timestep
 

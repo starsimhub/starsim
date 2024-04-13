@@ -52,7 +52,7 @@ class NCD(ss.Disease):
 
     def update_pre(self, sim):
         deaths = ss.true(self.ti_dead == sim.ti)
-        sim.people.make_zombie(deaths)
+        sim.people.request_death(deaths)
         self.log.add_data(deaths, died=True)
         self.results.new_deaths[sim.ti] = len(deaths) # Log deaths attributable to this module
         return

@@ -50,7 +50,7 @@ class SIR(ss.Infection):
         # Trigger deaths
         deaths = sc.findinds(self.ti_dead <= sim.ti) # TODO: find a better way to implement
         if len(deaths):
-            sim.people.make_zombie(deaths)
+            sim.people.request_death(deaths)
         return
 
     def set_prognoses(self, sim, uids, source_uids=None):

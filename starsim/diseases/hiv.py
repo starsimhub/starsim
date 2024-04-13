@@ -58,7 +58,7 @@ class HIV(ss.Infection):
         can_die = ss.true(sim.people.alive & sim.people.hiv.infected)
         hiv_deaths = self.pars.death_prob.filter(can_die)
         
-        sim.people.make_zombie(hiv_deaths)
+        sim.people.request_death(hiv_deaths)
         self.ti_dead[hiv_deaths] = sim.ti
         return
 
