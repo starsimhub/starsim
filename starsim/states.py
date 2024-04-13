@@ -234,5 +234,5 @@ class BoolArr(Arr):
 class IndexArr(IntArr):
     """ A special class of IndexArr used for UIDs and RNG IDs """
     def __init__(self, name, label=None):
-        super().__init__(name=name, dtype=ss_int, default=None, nan=ss.intnan, label=label, coerce=False, skip_init=True)
+        super().__init__(name=name, label=label, skip_init=True)
         return
