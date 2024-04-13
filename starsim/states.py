@@ -75,7 +75,7 @@ class Arr:
         return
     
     def __repr__(self):
-        string = f'<State {str(self.name)}, dtype={self.dtype}, len={len(self)}>\n'
+        string = f'<{self.__class__.__name__} {str(self.name)}, len={len(self)}>\n'
         string += self._arr.__repr__()
         return string
     

@@ -197,9 +197,9 @@ class BaseTest(Intervention):
         self.prob = sc.promotetoarray(prob)
         self.eligibility = eligibility
         self._parse_product(product)
-        self.screened = ss.State('screened', bool, False)
-        self.screens = ss.State('screens', int, 0)
-        self.ti_screened = ss.State('ti_screened', int, ss.intnan)
+        self.screened = ss.BoolArr('screened')
+        self.screens = ss.IntArr('screens', default=0)
+        self.ti_screened = ss.IntArr('ti_screened')
         return
 
     def initialize(self, sim):
@@ -485,9 +485,9 @@ class BaseVaccination(Intervention):
         self.prob = sc.promotetoarray(prob)
         self.label = label
         self._parse_product(product)
-        self.vaccinated = ss.State('vaccinated', bool, False)
-        self.n_doses = ss.State('doses', int, 0)
-        self.ti_vaccinated = ss.State('ti_vaccinated', int, ss.intnan)
+        self.vaccinated = ss.BoolArr('vaccinated')
+        self.n_doses = ss.IntArr('doses', default=0)
+        self.ti_vaccinated = ss.IntArr('ti_vaccinated')
         self.coverage_dist = ss.bernoulli(p=0)  # Placeholder
         return
 

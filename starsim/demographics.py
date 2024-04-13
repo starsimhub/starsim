@@ -247,14 +247,14 @@ class Pregnancy(Demographics):
 
         # Other, e.g. postpartum, on contraception...
         self.add_states(
-            ss.State('infertile', bool, False),  # Applies to girls and women outside the fertility window
-            ss.State('fecund', bool, True),  # Applies to girls and women inside the fertility window
-            ss.State('pregnant', bool, False),  # Currently pregnant
-            ss.State('postpartum', bool, False),  # Currently post-partum
-            ss.State('ti_pregnant', int, ss.intnan),  # Time pregnancy begins
-            ss.State('ti_delivery', int, ss.intnan),  # Time of delivery
-            ss.State('ti_postpartum', int, ss.intnan),  # Time postpartum ends
-            ss.State('ti_dead', int, ss.intnan),  # Maternal mortality
+            ss.BoolArr('infertile'),  # Applies to girls and women outside the fertility window
+            ss.BoolArr('fecund', default=True),  # Applies to girls and women inside the fertility window
+            ss.BoolArr('pregnant'),  # Currently pregnant
+            ss.BoolArr('postpartum'),  # Currently post-partum
+            ss.IntArr('ti_pregnant'),  # Time pregnancy begins
+            ss.IntArr('ti_delivery'),  # Time of delivery
+            ss.IntArr('ti_postpartum'),  # Time postpartum ends
+            ss.IntArr('ti_dead'),  # Maternal mortality
         )
 
         self.pars = ss.omergeleft(self.pars,

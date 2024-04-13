@@ -74,7 +74,7 @@ class Disease(ss.Module):
         Set initial values for states
 
         This could involve passing in a full set of initial conditions,
-        or using init_prev, or other. Note that this is different to initialization of the State objects
+        or using init_prev, or other. Note that this is different to initialization of the Arr objects
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called. This method is about supplying initial values
         for the states (e.g., seeding initial infections)
@@ -180,11 +180,11 @@ class Infection(Disease):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.add_states(
-            ss.State('susceptible', bool, True),
-            ss.State('infected', bool, False),
-            ss.State('rel_sus', float, 1.0),
-            ss.State('rel_trans', float, 1.0),
-            ss.State('ti_infected', int, ss.intnan),
+            ss.BoolArr('susceptible', default=True),
+            ss.BoolArr('infected'),
+            ss.FloatArr('rel_sus', default=1.0),
+            ss.FloatArr('rel_trans', default=1.0),
+            ss.IntArr('ti_infected'),
         )
 
         self.rng_target = ss.random(name='target')
@@ -203,14 +203,14 @@ class Infection(Disease):
     def set_initial_states(self, sim):
         """
         Set initial values for states. This could involve passing in a full set of initial conditions,
-        or using init_prev, or other. Note that this is different to initialization of the State objects
+        or using init_prev, or other. Note that this is different to initialization of the Arr objects
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
         if self.pars.init_prev is None:
             return
 
-        alive_uids = ss.true(sim.people.alive)  # Maybe just sim.people.uid?
+        alive_uids = sim.people.alive.true()  # Maybe just sim.people.uid?
         initial_cases = self.pars.init_prev.filter(alive_uids)
         self.set_prognoses(sim, initial_cases)  # TODO: sentinel value to indicate seeds?
         return
@@ -310,7 +310,7 @@ class Infection(Disease):
 
     def _set_cases(self, sim, target_uids, source_uids=None):
         congenital = sim.people.age[target_uids] <= 0
-        if len(ss.true(congenital)) > 0:
+        if np.count_nonzero(congenital):
             src_c = source_uids[congenital] if source_uids is not None else None
             self.set_congenital(sim, target_uids[congenital], src_c)
         src_p = source_uids[~congenital] if source_uids is not None else None

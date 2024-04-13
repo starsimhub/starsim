@@ -85,7 +85,7 @@ class Network(ss.Module):
             self.initialized = True
 
         # Define states using placeholder values
-        self.participant = ss.State('participant', bool, default=False)
+        self.participant = ss.BoolArr('participant')
         return
     
     @property
@@ -337,7 +337,7 @@ class SexualNetwork(Network):
     def __init__(self, pars=None, key_dict=None, **kwargs):
         key_dict = ss.omerge({'acts': ss_int_}, key_dict)
         super().__init__(pars, key_dict=key_dict, **kwargs)
-        self.debut = ss.State('debut', float, default=0)
+        self.debut = ss.FloatArr('debut', default=0)
         return
 
     def active(self, people):
