@@ -262,7 +262,7 @@ class Syphilis(ss.Infection):
         # Determine outcomes
         for state in ['active', 'latent']:
 
-            source_state_inds = getattr(self, state)[source_uids].values.nonzero()[-1]
+            source_state_inds = getattr(self, state)[source_uids].nonzero()[0]
             uids = target_uids[source_state_inds]
 
             if len(uids) > 0:
@@ -270,7 +270,7 @@ class Syphilis(ss.Infection):
                 # Birth outcomes must be modified to add probability of susceptible birth
                 birth_outcomes = self.pars.birth_outcomes[state]
                 assigned_outcomes = birth_outcomes.rvs(len(uids))
-                time_to_birth = -sim.people.age
+                time_to_birth = -sim.people.age._arr # TODO: make nicer
 
                 # Schedule events
                 for oi, outcome in enumerate(self.pars.birth_outcome_keys):
@@ -278,7 +278,7 @@ class Syphilis(ss.Infection):
                     if len(o_uids) > 0:
                         ti_outcome = f'ti_{outcome}'
                         vals = getattr(self, ti_outcome)
-                        vals[o_uids] = sim.ti + rr(time_to_birth[o_uids].values / sim.dt)
+                        vals[o_uids] = sim.ti + rr(time_to_birth[o_uids] / sim.dt)
                         setattr(self, ti_outcome, vals)
 
         return
