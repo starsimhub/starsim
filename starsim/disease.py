@@ -271,7 +271,9 @@ class Infection(Disease):
             nbetas = betamap[nkey]
             contacts = net.contacts
             rel_trans = self.infectious * self.rel_trans
-            rel_sus = self.susceptible * self.rel_sus
+            rel_sus   = self.susceptible * self.rel_sus
+            rel_trans = people.remap_uids(rel_trans)
+            rel_sus   = people.remap_uids(rel_sus)
             p1p2b0 = [contacts.p1, contacts.p2, nbetas[0]]
             p2p1b1 = [contacts.p2, contacts.p1, nbetas[1]]
             for src, trg, beta in [p1p2b0, p2p1b1]:

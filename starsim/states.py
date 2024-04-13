@@ -37,7 +37,7 @@ def check_dtype(dtype, default=None):
     return dtype
 
 
-class Arr:
+class Arr(np.lib.mixins.NDArrayOperatorsMixin):
 
     # __slots__ = ('values', 'uid', 'default', 'name', 'label', '_arr', 'values', 'initialized') # TODO: reinstate for speed later
 
@@ -108,6 +108,11 @@ class Arr:
     def __le__(self, other): return self.notnan(self.values <= other)
     def __eq__(self, other): return self.notnan(self.values == other)
     def __ne__(self, other): return self.notnan(self.values != other)
+    
+    # The mixin class delegates the operations to the corresponding numpy functions
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        inputs = [x.values if isinstance(x, Arr) else x for x in inputs]
+        return getattr(ufunc, method)(*inputs, **kwargs)
 
     @property
     def values(self):

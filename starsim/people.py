@@ -25,7 +25,7 @@ class BasePeople(sc.prettyobj):
         self.uid = ss.IndexArr('uid')  # This variable tracks all UIDs currently in use
         uids = np.arange(n)
         self.uid.grow(new_vals=uids)
-        self.aliveinds = uids # NB: does not support initializing the model with dead agents!
+        self.aliveinds = uids.copy() # NB: does not support initializing the model with dead agents!
 
         # A rngid is a special state managed internally by BasePeople
         # This is because it needs to be updated separately from any other states, as other states
@@ -47,6 +47,16 @@ class BasePeople(sc.prettyobj):
     def __len__(self):
         """ Length of people """
         return len(self.aliveinds)
+    
+    @property
+    def n_uids(self):
+        return self.uid.len_used
+    
+    def remap_uids(self, arr):
+        """ Map from sparse to full representation """
+        new = np.empty(self.n_uids, arr.dtype)
+        new[self.aliveinds] = arr
+        return new
 
     def register_state(self, state, die=True):
         """
