@@ -114,6 +114,9 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         inputs = [x.values if isinstance(x, Arr) else x for x in inputs]
         return getattr(ufunc, method)(*inputs, **kwargs)
 
+    def count(self):
+        return np.count_nonzero(self.values)
+
     @property
     def values(self):
         return self._arr[self.aliveinds] # TODO: think about if this makes sense for uids

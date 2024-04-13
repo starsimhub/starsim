@@ -20,8 +20,11 @@ def test_people():
     del ppl
 
     # Possible to initialize people with extra states, e.g. a geolocation
+    def geo_func(n):
+        locs = [1,2,3]
+        return np.random.choice(locs, n)
     extra_states = [
-        ss.State('geolocation', int, lambda n: np.random.choice([1,2,3],n)),
+        ss.IntArr('geolocation', default=geo_func),
     ]
     ppl = ss.People(100, extra_states=extra_states)
 
