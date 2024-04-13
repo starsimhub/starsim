@@ -39,7 +39,7 @@ def check_dtype(dtype, default=None):
 
 class Arr:
 
-    # __slots__ = ('values', 'uid', 'default', 'name', 'label', '_data', 'values', 'initialized')
+    # __slots__ = ('values', 'uid', 'default', 'name', 'label', '_arr', 'values', 'initialized')
 
     def __init__(self, name, dtype=None, default=None, nan=None, label=None, coerce=True, skip_init=False):
         """
@@ -67,7 +67,7 @@ class Arr:
         self.nan = nan
         
         # Properties that are initialized later
-        self._data = np.empty(0, dtype=dtype)
+        self._arr = np.empty(0, dtype=dtype)
         self.people = None
         self.len_used = 0
         self.len_tot = 0
@@ -76,12 +76,12 @@ class Arr:
     
     def __repr__(self):
         string = f'<State {str(self.name)}, dtype={self.dtype}, len={len(self)}>\n'
-        string += self._data.__repr__()
+        string += self._arr.__repr__()
         return string
     
     @property
     def values(self):
-        return self._data[self.aliveinds]
+        return self._arr[self.aliveinds]
     
     @property
     def aliveinds(self):
@@ -89,26 +89,26 @@ class Arr:
             return self.people.aliveinds
         except:
             print('TEMP: Could not return aliveinds!')
-            return np.arange(len(self._data))
+            return np.arange(len(self._arr))
     
     def __len__(self):
         try:
             return len(self.aliveinds)
         except:
-            return len(self._data)
+            return len(self._arr)
     
     def __getitem__(self, key):
         if isinstance(key, np.ndarray) and key.dtype == ss_int: # Check that it's (likely) UIDs
-            return self._data[key]
+            return self._arr[key]
         else:
             return self.values[key]
     
     def __setitem__(self, key, value):
         if isinstance(key, np.ndarray) and key.dtype == ss_int:
-            self._data[key] = value
+            self._arr[key] = value
         else:
             newkey = self.aliveinds[key]
-            self._data[newkey] = value
+            self._arr[newkey] = value
             
     def __getattr__(self, attr):
         return getattr(self.values, attr)
@@ -123,11 +123,11 @@ class Arr:
                 new_vals = self.default
             else:
                 new_vals = self.nan
-        self._data[uids] = new_vals
+        self._arr[uids] = new_vals
         return new_vals
     
     def set_nan(self, uids):
-        self._data[uids] = self.nan
+        self._arr[uids] = self.nan
         return
     
     def grow(self, uids=None, new_vals=None):
@@ -149,8 +149,8 @@ class Arr:
         if orig_len + n_new > self.len_tot:
             n_grow = max(n_new, self.len_tot//2)  # Minimum 50% growth, since growing arrays is slow
             new_empty = np.empty(n_grow, dtype=self.dtype) # 10x faster than np.zeros()
-            self._data = np.concatenate([self._data, new_empty], axis=0)
-            self.len_tot = len(self._data)
+            self._arr = np.concatenate([self._arr, new_empty], axis=0)
+            self.len_tot = len(self._arr)
         
         # Set new values, and NaN if needed
         self.set_new(uids, new_vals=new_vals) # Assign new default values to those agents
