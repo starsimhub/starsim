@@ -10,7 +10,7 @@ ss_float = ss.dtypes.float
 ss_int   = ss.dtypes.int
 ss_bool  = ss.dtypes.bool
 
-__all__ = ['check_dtype', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'IndexArr']
+__all__ = ['check_dtype', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'IndexArr', 'uids']
 
 
 def check_dtype(dtype, default=None):
@@ -87,7 +87,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
             return len(self._arr)
     
     def __getitem__(self, key):
-        if isinstance(key, np.ndarray) and key.dtype == ss_int: # Check that it's (likely) UIDs
+        if isinstance(key, uids): # Check that it's UIDs
             return self._arr[key]
         else:
             return self.values[key]
@@ -299,10 +299,26 @@ class BoolArr(Arr):
             raise BooleanNaNError()
         else:
             return mask
-
+    
     
 class IndexArr(IntArr):
     """ A special class of IndexArr used for UIDs and RNG IDs """
     def __init__(self, name, label=None):
         super().__init__(name=name, label=label, skip_init=True)
+        self._arr = uids(self._arr)
         return
+    
+    def grow(self, uids=None, new_vals=None):
+        super().grow(uids=uids, new_vals=new_vals)
+        self._arr = uids(self._arr)
+        return
+    
+    
+class uids(np.ndarray):
+    """ Special class to keep track of UIDs: just a wrapped NumPy array """
+    def __new__(cls, arr):
+        return np.asarray(arr).view(cls)
+    
+    def cat(self, other):
+        """ Equivalent to np.concatenate(), but return correct type """
+        return np.concatenate([self, other]).view(self.__class__)

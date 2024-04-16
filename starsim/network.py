@@ -86,6 +86,7 @@ class Network(ss.Module):
 
         # Define states using placeholder values
         self.participant = ss.BoolArr('participant')
+        self.validate_uids()
         return
     
     @property
@@ -147,6 +148,16 @@ class Network(ss.Module):
         states that depend on other states.
         """
         pass
+    
+    def validate_uids(self):
+        """ Ensure that p1, p2 are both UID arrays """
+        contacts = self.contacts
+        for key in ['p1', 'p2']:
+            if key in contacts:
+                arr = contacts[key]
+                if not isinstance(arr, ss.uids):
+                    self.contacts[key] = ss.uids(arr)
+        return
 
     def validate(self, force=True):
         """
@@ -166,6 +177,7 @@ class Network(ss.Module):
             if n != actual_n:
                 errormsg = f'Expecting length {n} for network key "{key}"; got {actual_n}'  # Report length mismatches
                 raise TypeError(errormsg)
+        self.validate_uids()
         return
 
     def get_inds(self, inds, remove=False):
@@ -180,6 +192,7 @@ class Network(ss.Module):
             output[key] = self.contacts[key][inds]  # Copy to the output object
             if remove:
                 self.contacts[key] = np.delete(self.contacts[key], inds)  # Remove from the original
+                self.validate_uids()
         return output
 
     def pop_inds(self, inds):
@@ -193,20 +206,23 @@ class Network(ss.Module):
         popped_inds = self.get_inds(inds, remove=True)
         return popped_inds
 
-    def append(self, contacts):
+    def append(self, contacts=None, **kwargs):
         """
         Append contacts to the current network.
 
         Args:
             contacts (dict): a dictionary of arrays with keys p1,p2,beta, as returned from network.pop_inds()
         """
+        contacts = sc.mergedicts(contacts, kwargs)
         for key in self.meta_keys():
-            new_arr = contacts[key]
-            n_curr = len(self.contacts[key])  # Current number of contacts
-            n_new = len(new_arr)  # New contacts to add
-            n_total = n_curr + n_new  # New size
-            self.contacts[key] = np.resize(self.contacts[key], n_total)  # Resize to make room, preserving dtype
-            self.contacts[key][n_curr:] = new_arr  # Copy contacts into the network
+            curr_arr = self.contacts[key]
+            try:
+                new_arr = contacts[key]
+            except KeyError:
+                errormsg = f'Cannot append contacts since required key "{key}" is missing'
+                raise KeyError(errormsg)
+            self.contacts[key] = np.concatenate([curr_arr, new_arr])  # Resize to make room, preserving dtype
+        self.validate_uids()
         return
 
     def to_dict(self):
@@ -421,9 +437,8 @@ class StaticNet(Network):
             p1, p2 = edge
             p1s.append(p1)
             p2s.append(p2)
-        self.contacts.p1 = np.concatenate([self.contacts.p1, p1s])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, p2s])
-        self.contacts.beta = np.concatenate([self.contacts.beta, np.ones_like(p1s)])
+        contacts = dict(p1=p1s, p2=p2s, beta=np.ones_like(p1s))
+        self.append(contacts)
         return
 
 
@@ -510,12 +525,8 @@ class RandomNet(DynamicNetwork):
             dur = self.pars.dur.rvs(p1)
         else:
             dur = np.full(len(p1), self.pars.dur)
-
-        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
-        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
-
+        
+        self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return
 
 
@@ -605,11 +616,7 @@ class MFNet(SexualNetwork, DynamicNetwork):
             dur_vals = self.pars.duration.rvs(len(p1))  # Just use len(p1) to say how many draws are needed
             act_vals = self.pars.acts.rvs(len(p1))
 
-        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
-        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
-        self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
+        self.append(p1=p1, p2=p2, beta=beta, dur=dur_vals, acts=act_vals)
 
         return len(p1)
 
@@ -683,6 +690,9 @@ class MSMNet(SexualNetwork, DynamicNetwork):
         self.contacts.beta = np.concatenate([self.contacts.beta, np.ones_like(p1)])
         self.contacts.dur = np.concatenate([self.contacts.dur, dur])
         self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
+        
+        self.append(p1=p1, p2=p2, beta=np.ones_like(p1), dur=dur, acts=act_vals)
+        
         return len(p1)
 
     def update(self, people, dt=None):

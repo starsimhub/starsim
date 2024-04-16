@@ -23,7 +23,7 @@ class BasePeople(sc.prettyobj):
         n = int(n_agents)
         self.initialized = False
         self.uid = ss.IndexArr('uid')  # This variable tracks all UIDs currently in use
-        uids = np.arange(n)
+        uids = ss.UID(np.arange(n))
         self.uid.grow(new_vals=uids)
         self.aliveinds = uids.copy() # NB: does not support initializing the model with dead agents!
 
@@ -42,6 +42,7 @@ class BasePeople(sc.prettyobj):
         # within the sim, regardless of where they are. In contrast, `People.states` offers a more user-friendly way to access
         # a selection of the states e.g., module states could be added in there, while intervention states might not
         self._states = {}
+        
         return
 
     def __len__(self):
