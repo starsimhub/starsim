@@ -151,12 +151,6 @@ class Ebola(SIR):
             self.statesdict[state][uids] = False
         return
 
-    # def make_new_cases(self, sim):
-    #     self.rel_trans[self.infectious] = 1
-    #     self.rel_trans[self.severe] = self.pars['sev_factor']
-    #
-    #     # Unburied UIDs
-    #     unburied_uids = ss.true((self.ti_dead <= sim.ti) & (self.ti_buried > sim.ti))
-    #     self.rel_trans[unburied_uids] = self.pars['unburied_factor']
-    #     super().make_new_cases(sim)
-    #     return
+    def make_new_cases(self, sim):
+        super().make_new_cases(sim)
+        return
