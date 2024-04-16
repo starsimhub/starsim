@@ -14,6 +14,13 @@ Version 0.4.0 (2024-04-13)
 - *GitHub info*: PR `456 <https://github.com/starsimhub/starsim/pull/456>`_
 
 
+Version 0.3.3 (2024-04-16)
+--------------------------
+- Changed Ebola model transmission logic.
+- Fixed bug with module names not being preserved with multiple initialization.
+- *GitHub info*: PR `463 <https://github.com/starsimhub/starsim/pull/463>`_
+
+
 Version 0.3.2 (2024-04-08)
 --------------------------
 - Change to syphilis model to permit latent transmission.

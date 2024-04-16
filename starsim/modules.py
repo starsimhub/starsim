@@ -14,8 +14,8 @@ class Module(sc.quickobj):
     def __init__(self, pars=None, par_dists=None, name=None, label=None, requires=None, **kwargs):
         self.pars = ss.omerge(pars, kwargs)
         self.par_dists = ss.omerge(par_dists)
-        self.name = name if (name is not None) else self.__class__.__name__.lower() # Default name is the class name
-        self.label = label if (label is not None) else self.name
+        self.name = sc.ifelse(name, getattr(self, 'name', self.__class__.__name__.lower())) # Default name is the class name
+        self.label = sc.ifelse(label, getattr(self, 'label', self.name))
         self.requires = sc.mergelists(requires)
         self.results = ss.Results(self.name)
         self.initialized = False
