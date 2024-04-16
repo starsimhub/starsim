@@ -192,8 +192,6 @@ class Cholera(ss.Infection):
         super().update_results(sim)
         res = self.results
         ti = sim.ti
-        res.prevalence[ti]     = res.n_infected[ti] / np.count_nonzero(sim.people.alive)
-        res.new_infections[ti] = np.count_nonzero(self.ti_infected == ti)
-        res.cum_infections[ti] = np.sum(res.new_infections[:ti+1])
-        res.cum_deaths[ti]     = np.sum(res.new_deaths[:ti+1])
+        res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
+        res.cum_deaths[ti] = np.sum(res.new_deaths[:ti+1])
         return
