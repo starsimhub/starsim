@@ -150,7 +150,3 @@ class Ebola(SIR):
         for state in ['susceptible', 'exposed', 'infected', 'severe', 'recovered']:
             self.statesdict[state][uids] = False
         return
-
-    def make_new_cases(self, sim):
-        super().make_new_cases(sim)
-        return
