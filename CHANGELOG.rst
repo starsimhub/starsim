@@ -7,6 +7,13 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 0.3.3 (2024-04-16)
+--------------------------
+- Changed Ebola model transmission logic.
+- Fixed bug with module names not being preserved with multiple initialization.
+- *GitHub info*: PR `463 <https://github.com/starsimhub/starsim/pull/463>`_
+
+
 Version 0.3.2 (2024-04-08)
 --------------------------
 - Change to syphilis model to permit latent transmission.
