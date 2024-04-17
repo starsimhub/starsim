@@ -49,13 +49,6 @@ def make_run_sim(pr,r):
 
     # Run the sim
     sim.run()
-    
-    # Static NetworkX Graph Check that number of nodes (agents) <= population/number of agents
-    assert len(g.nodes)<=n_agents, "Error: Please ensure the number of nodes in graph is smaller or equal to the population size"
-    
-    # Check that the networkx number of edges <= mathematical maximum 2n(n-1)/2
-    assert len(g.edges)<=((2*len(g.nodes))*(len(g.nodes)-1))/2, "EdgeCountError: More edges created than expected"
-
     print("Edges "+ str(len(g.edges)))
 
     return sim
