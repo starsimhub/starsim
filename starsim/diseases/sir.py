@@ -47,7 +47,7 @@ class SIR(ss.Infection):
         self.recovered[recovered] = True
 
         # Trigger deaths
-        deaths = ss.true(self.ti_dead <= sim.year)
+        deaths = ss.true(self.ti_dead <= sim.ti)
         if len(deaths):
             sim.people.request_death(deaths)
         return
