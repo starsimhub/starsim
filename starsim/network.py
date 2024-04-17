@@ -434,7 +434,7 @@ class RandomNet(DynamicNetwork):
         """ Initialize """
         pars = ss.omerge({
             'n_contacts': 10,  # Distribution or int. If int, interpreted as the mean of the dist listed in par_dists
-            'dur': 1,
+            'dur': 0,
         }, pars)
 
         super().__init__(pars=pars, key_dict=key_dict, **kwargs)
