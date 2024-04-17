@@ -10,9 +10,6 @@ import numpy as np
 import pandas as pd 
 
 
-# Define the parameters
-#ss.options(multirng=True) #MultiRNG
-
 repeats = 10
 n_agents = 1_000
 
