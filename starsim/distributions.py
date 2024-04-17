@@ -82,6 +82,11 @@ class Dists(sc.prettyobj):
     def jump(self, to=None, delta=1):
         """ Advance all RNGs, e.g. to timestep "to", by jumping """
         out = sc.autolist()
+
+        # Do not jump if centralized
+        if ss.options._centralized:
+            return out
+
         for dist in self.dists.values():
             out += dist.jump(to=to, delta=delta)
         return out
@@ -218,7 +223,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
 
     @property
     def bitgen(self):
-        try:    return self.rng.bit_generator
+        try:    return self.rng._bit_generator
         except: return None
     
     @property
@@ -265,12 +270,17 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         """
         if not isinstance(state, dict):
             state = self.history[state]
-        self.rng.bit_generator.state = state.copy()
+        self.rng._bit_generator.state = state.copy()
         self.ready = True
         return self.state
 
     def jump(self, to=None, delta=1):
         """ Advance the RNG, e.g. to timestep "to", by jumping """
+        
+        # Do not jump if centralized
+        if ss.options._centralized:
+            return self.state
+
         jumps = to if (to is not None) else self.ind + delta
         self.ind = jumps
         self.reset() # First reset back to the initial state (used in case of different numbers of calls)
@@ -289,7 +299,10 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.process_seed(trace, seed)
         
         # Create the actual RNG
-        self.rng = np.random.default_rng(seed=self.seed)
+        if ss.options._centralized:
+            self.rng = np.random.mtrand._rand # If _centralized, return the centralized numpy random number instance
+        else:
+            self.rng = np.random.default_rng(seed=self.seed)
         self.make_history(reset=True)
         
         # Handle the sim, module, and slots
@@ -450,7 +463,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         # Check for readiness
         if not self.initialized:
             raise DistNotInitializedError(self)
-        if not self.ready and self.strict:
+        if not self.ready and self.strict and not ss.options._centralized:
             raise DistNotReadyError(self)
         
         # Figure out size, UIDs, and slots
