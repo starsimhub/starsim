@@ -10,9 +10,6 @@ import numpy as np
 import pandas as pd 
 
 
-# Define the parameters
-#ss.options(multirng=True) #MultiRNG
-
 repeats = 10
 n_agents = 1_000
 
@@ -49,7 +46,6 @@ def make_run_sim(pr,r):
 
     # Run the sim
     sim.run()
-    print("Edges "+ str(len(g.edges)))
 
     return sim
 
@@ -68,4 +64,5 @@ if __name__ == '__main__':
     cpr.stop()
     df=cpr.to_df()
     df.to_csv('StaticNet Test Profile.csv')
-    print("Run "+str(repeats)+" Mem "+str(sc.memload()))rint("RAM "+str(repeats)+" "+str(sc.checkram()))
+    print("Run "+str(repeats)+" Mem "+str(sc.memload()))
+    print("RAM "+str(repeats)+" "+str(sc.checkram()))
