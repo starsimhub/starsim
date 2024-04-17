@@ -346,7 +346,7 @@ class campaign_triage(BaseTriage, CampaignDelivery):
     **Examples**:
         # Example: In 2030, triage all positive screens into confirmatory testing
         screened_pos = lambda sim: sim.get_intervention('screening').outcomes['positive']
-        triage1 = hpv.campaign_triage(product=my_triage, eligibility=screen_pos, prob=0.9, years=2030)
+        triage1 = ss.campaign_triage(product=my_triage, eligibility=screen_pos, prob=0.9, years=2030)
     """
 
     def __init__(self, product=None, sex=None, eligibility=None,

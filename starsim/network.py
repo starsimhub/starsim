@@ -358,7 +358,7 @@ class SexualNetwork(Network):
 
 
 # %% Specific instances of networks
-__all__ += ['StaticNet', 'RandomNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet', 'HPVNet']
+__all__ += ['StaticNet', 'RandomNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet']
 
 
 class StaticNet(Network):

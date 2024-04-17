@@ -50,12 +50,6 @@ def test_networks():
     nw3.initialize(sim)
     nw3.add_pairs(mother_inds=[1, 2, 3], unborn_inds=[100, 101, 102], dur=[1, 1, 1])
 
-    # HPV NETWORK - NOT FUNCTIONAL
-    # nw3 = ss.hpv_network()
-    # nw3.initialize(sim)
-    # sim.people.networks.update(sim.people)  # Update by providing a timestep & current time index
-
-
     return nw1, nw2, nw3
 
 
