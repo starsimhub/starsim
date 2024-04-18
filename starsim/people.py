@@ -8,9 +8,11 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 
+
 __all__ = ['BasePeople', 'People']
 
 # %% Main people class
+
 class BasePeople(sc.prettyobj):
     """
     A class to handle all the boilerplate for people -- everything interesting 
@@ -48,6 +50,7 @@ class BasePeople(sc.prettyobj):
         # within the sim, regardless of where they are. In contrast, `People.states` offers a more user-friendly way to access
         # a selection of the states e.g., module states could be added in there, while intervention states might not
         self._states = {}
+        return
 
     def __len__(self):
         """ Length of people """
@@ -151,6 +154,8 @@ class BasePeople(sc.prettyobj):
         """
         state['_states'] =  {id(v):v for v in state['_states'].values()}
         self.__dict__ = state
+        
+        return
 
 
 class People(BasePeople):
@@ -321,7 +326,6 @@ class People(BasePeople):
         death_uids = ss.true(self.ti_dead <= self.ti)
         self.alive[death_uids] = False
         return death_uids
-
 
     @property
     def dead(self):
