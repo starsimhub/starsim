@@ -5,6 +5,7 @@ Define default gonorrhea disease module and related interventions
 import numpy as np
 import starsim as ss
 
+
 __all__ = ['Gonorrhea']
 
 class Gonorrhea(ss.Infection):
