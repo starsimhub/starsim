@@ -58,6 +58,7 @@ class Births(Demographics):
             br_val = self.pars.birth_rate[self.metadata.data_cols['cbr']]
             all_birth_rates = np.interp(sim.yearvec, br_year, br_val)
             self.pars.birth_rate = all_birth_rates
+        return
 
     def standardize_birth_data(self):
         """ Standardize/validate birth rates - handled in an external file due to shared functionality """
@@ -101,11 +102,13 @@ class Births(Demographics):
 
     def update_results(self, n_new, sim):
         self.results['new'][sim.ti] = n_new
+        return
 
     def finalize(self, sim):
         super().finalize(sim)
         self.results['cumulative'] = np.cumsum(self.results['new'])
         self.results['cbr'] = 1/self.pars.units*np.divide(self.results['new'] / sim.dt, sim.results['n_alive'], where=sim.results['n_alive']>0)
+        return
 
 
 class Deaths(Demographics):
@@ -469,3 +472,4 @@ class Pregnancy(Demographics):
     def finalize(self, sim):
         super().finalize(sim)
         self.results['cbr'] = 1/self.pars.units * np.divide(self.results['births'] / sim.dt, sim.results['n_alive'], where=sim.results['n_alive']>0)
+        return
