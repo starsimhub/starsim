@@ -119,6 +119,8 @@ class Cholera(ss.Infection):
         # Update today's environmental prevalence
         self.calc_environmental_prev(sim)
 
+        return
+
     def calc_environmental_prev(self, sim):
         """
         Calculate environmental prevalence
@@ -135,6 +137,8 @@ class Cholera(ss.Infection):
 
         r.env_prev[sim.ti] = new_bacteria + old_bacteria
         r.env_conc[sim.ti] = r.env_prev[sim.ti] / (r.env_prev[sim.ti] + p.half_sat_rate)
+
+        return
 
     def set_prognoses(self, sim, uids, source_uids=None):
         """ Set prognoses for those who get infected """
