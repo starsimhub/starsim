@@ -129,7 +129,6 @@ def omerge(*args, **kwargs):
     """ Merge things into an objdict, using standard order """
     return sc.objdict(sc.mergedicts(*args, **kwargs))
 
-
 def omergeleft(*args, **kwargs):
     """ Merge things into an odict, using opposite order to allow defaults to be supplied second """
     if len(args) == 1 and len(kwargs):
@@ -142,7 +141,6 @@ def omergeleft(*args, **kwargs):
         errormsg = 'Expecting either two arguments, or one argument and kwargs; for any other arrangement, use ss.omerge()'
         raise ValueError(errormsg)
     return sc.objdict(sc.mergedicts(default, new))
-
 
 def warn(msg, category=None, verbose=None, die=None):
     """ Helper function to handle warnings -- shortcut to warnings.warn """
@@ -173,7 +171,6 @@ def warn(msg, category=None, verbose=None, die=None):
 
     return
 
-
 def unique(arr):
     """
     Find the unique elements and counts in an array.
@@ -184,7 +181,6 @@ def unique(arr):
     unique = np.flatnonzero(counts)
     counts = counts[unique]
     return unique, counts
-
 
 def find_contacts(p1, p2, inds):  # pragma: no cover
     """
@@ -202,7 +198,6 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
         if p2[i] in inds:
             pairing_partners.add(p1[i])
     return pairing_partners
-
 
 def get_subclasses(cls):
     for subclass in cls.__subclasses__():
@@ -246,11 +241,9 @@ def set_seed(seed=None):
 
     return
 
-
 # %% Simple array operations
 
 __all__ += ['true', 'false', 'defined', 'undefined']
-
 
 @nb.njit(cache=True)
 def _true(uids, values):
@@ -266,7 +259,6 @@ def _true(uids, values):
     out = out[0:j]
     return out
 
-
 @nb.njit(cache=True)
 def _false(uids, values):
     """
@@ -281,7 +273,6 @@ def _false(uids, values):
     out = out[0:j]
     return out
 
-
 def true(state):
     """
     Returns the UIDs of the values of the array that are true
@@ -294,7 +285,6 @@ def true(state):
         inds = ss.true(people.alive) # Returns array of UIDs of alive agents
     """
     return _true(state.uid.__array__(), state.__array__())
-
 
 def false(state):
     """
@@ -309,7 +299,6 @@ def false(state):
     """
     return _false(state.uid.__array__(), state.__array__())
 
-
 def defined(arr):
     """
     Returns the indices of the values of the array that are not-nan.
@@ -322,7 +311,6 @@ def defined(arr):
         inds = ss.defined(np.array([1,np.nan,0,np.nan,1,0,1]))
     """
     return (~np.isnan(arr)).nonzero()[-1]
-
 
 def undefined(arr):
     """
@@ -337,11 +325,9 @@ def undefined(arr):
     """
     return np.isnan(arr).nonzero()[-1]
 
-
 # %% Data cleaning and processing
 
 __all__ += ['standardize_data']
-
 
 def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
     """
