@@ -9,10 +9,11 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 Version 0.3.4 (2024-04-18)
 --------------------------
-- Default duration of edges in `randomnet` changed from 1 to 0; this does not matter if `dt=1`, but does matter with smaller `dt` values.
-- `new_deaths` now counted for cholera.
-- Crude birth and death rates now take `dt` into account.
-- The ability to use a centralized random number generator has been restored via `ss.options(_centralized=True)`; this option not advised, but can be used for testing.
+- Default duration of edges in ``ss.RandomNet`` changed from 1 to 0; this does not matter if ``dt=1``, but does matter with smaller ``dt`` values.
+- Removed ``ss.HPVNet``.
+- ``new_deaths`` now counted for cholera.
+- Crude birth and death rates now take ``dt`` into account.
+- The ability to use a centralized random number generator has been restored via ``ss.options(_centralized=True)``; this option not advised, but can be used for testing.
 - *GitHub info*: PR `473 <https://github.com/starsimhub/starsim/pull/473>`_
 
 
