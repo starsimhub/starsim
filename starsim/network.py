@@ -14,9 +14,9 @@ import scipy.spatial as spsp
 ss_float_ = ss.dtypes.float
 ss_int_ = ss.dtypes.int
 
+
 # Specify all externally visible functions this file defines; see also more definitions below
 __all__ = ['Network', 'Networks', 'DynamicNetwork', 'SexualNetwork']
-
 
 # %% General network classes
 
@@ -285,6 +285,8 @@ class Network(ss.Module):
         for k in self.meta_keys():
             self.contacts[k] = self.contacts[k][keep]
 
+        return
+
     def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
         if uids is None: uids = Ellipsis
         return self.contacts.beta[uids] * disease_beta * dt
@@ -358,8 +360,8 @@ class SexualNetwork(Network):
 
 
 # %% Specific instances of networks
-__all__ += ['StaticNet', 'RandomNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet']
 
+__all__ += ['StaticNet', 'RandomNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet']
 
 class StaticNet(Network):
     """
@@ -559,12 +561,14 @@ class MFNet(SexualNetwork, DynamicNetwork):
         """ Set network states including age of entry into network and participation rates """
         self.set_debut(people, upper_age=upper_age)
         self.set_participation(people, upper_age=upper_age)
+        return
 
     def set_participation(self, people, upper_age=None):
         # Set people who will participate in the network at some point
         if upper_age is None: uids = people.uid
         else: uids = people.uid[(people.age < upper_age)]
         self.participant[uids] = self.pars.participation.rvs(uids)
+        return
 
     def set_debut(self, people, upper_age=None):
         # Set debut age
@@ -792,6 +796,7 @@ class MaternalNet(Network):
 
 
 # %% Network connectors
+
 __all__ += ['NetworkConnector', 'MF_MSM']
 
 class NetworkConnector(ss.Module):
@@ -865,5 +870,3 @@ class MF_MSM(NetworkConnector):
     def update(self, people):
         self.set_participation(people, upper_age=people.dt)
         return
-
-
