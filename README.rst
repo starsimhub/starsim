@@ -11,7 +11,9 @@ The framework is appropriate for simulating one or more sexually transmitted inf
 Installation
 ------------
 
-To install, clone this repository, then run ``pip install -e .`` (don't forget the dot!) in this folder to install ``starsim`` and its dependencies. This will make ``starsim`` available on the Python path.
+Starsim is most easily installed via PyPI: ``pip install starsim``.
+
+Starsim can also be installed locally. To do this, clone first this repository, then run ``pip install -e .`` (don't forget the dot at the end!).
 
 
 Usage and documentation
