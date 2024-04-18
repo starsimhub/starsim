@@ -7,6 +7,7 @@ import sciris as sc
 from sciris import randround as rr # Since used frequently
 import starsim as ss
 
+
 __all__ = ['Syphilis']
 
 class Syphilis(ss.Infection):
@@ -378,5 +379,3 @@ class syph_treatment(ss.treat_num):
         treat_inds = super().apply(sim)
         sim.people.syphilis.infected[treat_inds] = False
         self.results['n_tx'][sim.ti] += len(treat_inds)
-
-

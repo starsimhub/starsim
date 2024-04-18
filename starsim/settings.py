@@ -9,7 +9,6 @@ import os
 import numpy as np
 import sciris as sc
 
-
 __all__ = ['INT_NAN', 'dtypes', 'options']
 
 INT_NAN = 2147483647 # From np.iinfo(np.int32).max: value to use to flag invalid content (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
@@ -21,6 +20,7 @@ dtypes = sc.objdict(
     float = np.float64,
     result_float = np.float64,
 )
+
 
 # Not public to avoid confusion with ss.options
 class Options(sc.objdict):

@@ -55,7 +55,7 @@ class Intervention(ss.Module):
     
     def apply(self, sim, *args, **kwargs):
         raise NotImplementedError
-
+        
     def finalize(self, sim):
         return super().finalize(sim)
 
@@ -87,6 +87,7 @@ class Intervention(ss.Module):
 
 
 # %% Template classes for routine and campaign delivery
+
 __all__ += ['RoutineDelivery', 'CampaignDelivery']
 
 class RoutineDelivery(Intervention):
@@ -177,9 +178,9 @@ class CampaignDelivery(Intervention):
 
 
 # %% Screening and triage
+
 __all__ += ['BaseTest', 'BaseScreening', 'routine_screening', 'campaign_screening', 'BaseTriage', 'routine_triage',
             'campaign_triage']
-
 
 class BaseTest(Intervention):
     """
@@ -362,8 +363,8 @@ class campaign_triage(BaseTriage, CampaignDelivery):
 
 
 #%% Treatment interventions
-__all__ += ['BaseTreatment', 'treat_num']
 
+__all__ += ['BaseTreatment', 'treat_num']
 
 class BaseTreatment(Intervention):
     """
@@ -462,12 +463,9 @@ class treat_num(BaseTreatment):
         return treat_inds
 
 
-
 #%% Vaccination
 
-
 __all__ += ['BaseVaccination', 'routine_vx', 'campaign_vx']
-
 
 class BaseVaccination(Intervention):
     """
@@ -551,5 +549,3 @@ class campaign_vx(BaseVaccination, CampaignDelivery):
         CampaignDelivery.initialize(self, sim) # Initialize this first, as it ensures that prob is interpolated properly
         BaseVaccination.initialize(self, sim) # Initialize this next
         return
-
-

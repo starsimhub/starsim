@@ -10,7 +10,6 @@ import matplotlib.pyplot as pl
 
 __all__ = ['find_dists', 'dist_list', 'Dists', 'Dist']
 
-
 def str2int(string, modulo=1_000_000):
     """
     Convert a string to an int
@@ -19,7 +18,6 @@ def str2int(string, modulo=1_000_000):
     this is almost as fast (and 5x faster than hashlib).
     """
     return int.from_bytes(string.encode(), byteorder='big') % modulo
-
 
 def find_dists(obj, verbose=False):
     """ Find all Dist objects in a parent object """
@@ -744,15 +742,20 @@ class DistNotInitializedError(RuntimeError):
     def __init__(self, dist):
         msg = f'{dist} has not been initialized; please call dist.initialize()'
         super().__init__(msg)
+        return
+
 
 class DistNotReadyError(RuntimeError):
     """ Raised when a Dist object is called without being ready. """
     def __init__(self, dist):
         msg = f'{dist} is not ready. This is likely caused by calling a distribution multiple times in a single step. Call dist.jump() to reset.'
         super().__init__(msg)
-        
+        return
+
+
 class DistSeedRepeatError(RuntimeError):
     """ Raised when a Dist object shares a seed with another """
     def __init__(self, dist1, dist2):
         msg = f'A common seed was found between {dist1} and {dist2}. This is likely caused by incorrect initialization of the parent Dists object.'
         super().__init__(msg)
+        return

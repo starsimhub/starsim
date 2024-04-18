@@ -377,8 +377,11 @@ class InfectionLog(nx.MultiDiGraph):
                                       key=itemgetter(2, 0))  # itemgetter twice as fast as lambda apparently
             self[source][target][key].update(**kwargs)
 
+        return
+
     def append(self, source, target, t, **kwargs):
         self.add_edge(source, target, key=t, **kwargs)
+        return
 
     @property
     def line_list(self):

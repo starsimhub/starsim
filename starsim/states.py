@@ -10,9 +10,7 @@ from starsim.settings import INT_NAN
 from starsim.settings import dtypes as sdt
 from numpy.lib.mixins import NDArrayOperatorsMixin  # Inherit from this to automatically gain operators like +, -, ==, <, etc.
 
-
 __all__ = ['check_dtype', 'UIDArray', 'State', 'ArrayView']
-
 
 def check_dtype(dtype, default=None):
     """ Check that the supplied dtype is one of the supported options """
@@ -404,12 +402,14 @@ class ArrayView(NDArrayOperatorsMixin):
         (regardless of whether or not the underlying arrays have been resized)
         """
         self._view = self._data[:self.n]
+        return
 
     def __getitem__(self, key):
         return self._view.__getitem__(key)
 
     def __setitem__(self, key, value):
         self._view.__setitem__(key, value)
+        return
         
     def __getattr__(self, attr):
         """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
