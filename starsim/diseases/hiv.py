@@ -6,6 +6,7 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
+
 __all__ = ['HIV', 'ART', 'CD4_analyzer']
 
 class HIV(ss.Infection):
