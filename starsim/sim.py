@@ -370,6 +370,7 @@ class Sim(sc.prettyobj):
     def init_connectors(self):
         for connector in self.connectors.values():
             connector.initialize(self)
+        return
 
     def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
@@ -645,6 +646,7 @@ class Sim(sc.prettyobj):
     
     def disp(self):
         print(self.summary)
+        return
     
     def shrink(self, skip_attrs=None, in_place=True):
         """
