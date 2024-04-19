@@ -6,6 +6,7 @@ import numpy as np
 import starsim as ss
 import sciris as sc
 
+
 __all__ = ['NCD']
 
 class NCD(ss.Disease):

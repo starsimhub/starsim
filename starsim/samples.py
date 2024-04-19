@@ -11,6 +11,7 @@ import io
 import zipfile
 import sciris as sc
 
+
 __all__ = ['Dataset', 'Samples']
 
 class Dataset:
@@ -92,6 +93,7 @@ class Dataset:
 identifiers_file = 'identifiers.txt'
 summary_file = 'summary.csv'
 
+
 class Samples:
     """
     Stores CSV outputs and summary dataframes
@@ -143,6 +145,8 @@ class Samples:
         if preload:
             self.preload()
 
+        return
+        
     def copy(self):
         """
         Shallow copy - shared cache, copied summary

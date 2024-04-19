@@ -394,11 +394,10 @@ Alternatively, to run without multiprocessing, set parallel=False.
             sims.append(sim)
 
     return sims
-
-
+                  
 def parallel(*args, **kwargs):
     """
-    A shortcut to ``hpv.MultiSim()``, allowing the quick running of multiple simulations
+    A shortcut to ``ss.MultiSim()``, allowing the quick running of multiple simulations
     at once.
 
     Args:
@@ -417,4 +416,3 @@ def parallel(*args, **kwargs):
     """
     sims = sc.mergelists(*args)
     return MultiSim(sims=sims).run(**kwargs)
-

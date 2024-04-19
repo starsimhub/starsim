@@ -58,6 +58,7 @@ class Births(Demographics):
             br_val = self.pars.birth_rate[self.metadata.data_cols['cbr']]
             all_birth_rates = np.interp(sim.yearvec, br_year, br_val)
             self.pars.birth_rate = all_birth_rates
+        return
 
     def standardize_birth_data(self):
         """ Standardize/validate birth rates - handled in an external file due to shared functionality """
@@ -101,11 +102,13 @@ class Births(Demographics):
 
     def update_results(self, n_new, sim):
         self.results['new'][sim.ti] = n_new
+        return
 
     def finalize(self, sim):
         super().finalize(sim)
         self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['cbr'] = 1/self.pars.units*np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
+        self.results['cbr'] = 1/self.pars.units*np.divide(self.results['new'] / sim.dt, sim.results['n_alive'], where=sim.results['n_alive']>0)
+        return
 
 
 class Deaths(Demographics):
@@ -236,7 +239,7 @@ class Deaths(Demographics):
     def finalize(self, sim):
         super().finalize(sim)
         self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['cmr'] = 1/self.pars.units*np.divide(self.results['new'], sim.results['n_alive'], where=sim.results['n_alive']>0)
+        self.results['cmr'] = 1/self.pars.units*np.divide(self.results['new'] / sim.dt, sim.results['n_alive'], where=sim.results['n_alive']>0)
         return
 
 
@@ -451,14 +454,14 @@ class Pregnancy(Demographics):
         self.ti_pregnant[uids] = sim.ti
 
         # Outcomes for pregnancies
-        dur = np.full(len(uids), sim.ti + self.pars.dur_pregnancy / sim.dt)
+        dur_preg = np.full(len(uids), self.pars.dur_pregnancy / sim.dt)
+        dur_postpartum = np.full(len(uids), self.pars.dur_postpartum / sim.dt)
         dead = self.pars.maternal_death_rate.rvs(uids)
-        self.ti_delivery[uids] = dur  # Currently assumes maternal deaths still result in a live baby
-        dur_post_partum = np.full(len(uids), dur + self.pars.dur_postpartum / sim.dt)
-        self.ti_postpartum[uids] = dur_post_partum
+        self.ti_delivery[uids] = sim.ti + dur_preg # Currently assumes maternal deaths still result in a live baby
+        self.ti_postpartum[uids] = sim.ti + dur_preg + dur_postpartum
 
         if np.any(dead): # NB: 100x faster than np.sum(), 10x faster than np.count_nonzero()
-            self.ti_dead[uids[dead]] = dur[dead]
+            self.ti_dead[uids[dead]] = sim.ti + dur_preg[dead]
         return
 
     def update_results(self, sim):
@@ -468,4 +471,5 @@ class Pregnancy(Demographics):
 
     def finalize(self, sim):
         super().finalize(sim)
-        self.results['cbr'] = 1/self.pars.units * np.divide(self.results['births'], sim.results['n_alive'], where=sim.results['n_alive']>0)
+        self.results['cbr'] = 1/self.pars.units * np.divide(self.results['births'] / sim.dt, sim.results['n_alive'], where=sim.results['n_alive']>0)
+        return

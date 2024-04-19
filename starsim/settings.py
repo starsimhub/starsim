@@ -9,7 +9,6 @@ import os
 import numpy as np
 import sciris as sc
 
-
 __all__ = ['intnan', 'dtypes', 'options']
 
 intnan = -32767 # From np.iinfo(np.int16).max: value to use to flag invalid content (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
@@ -21,6 +20,7 @@ dtypes = sc.objdict(
     float = np.float64,
     result_float = np.float64,
 )
+
 
 # Not public to avoid confusion with ss.options
 class Options(sc.objdict):
@@ -76,6 +76,9 @@ class Options(sc.objdict):
 
         optdesc.precision = 'Set arithmetic precision -- 32-bit by default for efficiency'
         options.precision = int(os.getenv('STARSIM_PRECISION', 64))
+
+        optdesc._centralized = 'If True, revert to centralized random number generation (NOT ADVISED).'
+        options._centralized = False
 
         return optdesc, options
 

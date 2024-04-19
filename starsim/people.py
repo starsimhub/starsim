@@ -8,9 +8,11 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 
+
 __all__ = ['BasePeople', 'People']
 
 # %% Main people class
+
 class BasePeople(sc.prettyobj):
     """
     A class to handle all the boilerplate for people -- everything interesting 
@@ -138,6 +140,8 @@ class BasePeople(sc.prettyobj):
         """
         state['_states'] =  {id(v):v for v in state['_states'].values()}
         self.__dict__ = state
+        
+        return
 
 
 class People(BasePeople):
@@ -313,7 +317,6 @@ class People(BasePeople):
         death_uids = sc.findinds(self.ti_dead <= self.ti)
         self.alive[death_uids] = False
         return death_uids
-
 
     @property
     def dead(self):

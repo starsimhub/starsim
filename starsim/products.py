@@ -146,6 +146,7 @@ class Vx(Product):
         par_dists = ss.omerge({}, par_dists)
         super().__init__(pars, par_dists, *args, **kwargs)
         self.diseases = sc.tolist(diseases)
+        return
 
     def administer(self, people, uids):
         """ Apply the vaccine to the requested uids. """

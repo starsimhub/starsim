@@ -5,6 +5,7 @@ Set parameters
 import sciris as sc
 import starsim as ss
 
+
 __all__ = ['Parameters', 'make_pars']
 
 class Parameters(sc.objdict):

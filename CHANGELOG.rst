@@ -7,11 +7,21 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
-Version 0.4.0 (2024-04-13)
+Version 0.4.0 (2024-04-20)
 --------------------------
 - Replace ``UIDArray``, ``ArrayView``, and ``State`` with ``Arr``.
 - Dead agents are no longer removed.
 - *GitHub info*: PR `456 <https://github.com/starsimhub/starsim/pull/456>`_
+
+
+Version 0.3.4 (2024-04-18)
+--------------------------
+- Default duration of edges in ``ss.RandomNet`` changed from 1 to 0; this does not matter if ``dt=1``, but does matter with smaller ``dt`` values.
+- Removed ``ss.HPVNet``.
+- ``new_deaths`` now counted for cholera.
+- Crude birth and death rates now take ``dt`` into account.
+- The ability to use a centralized random number generator has been restored via ``ss.options(_centralized=True)``; this option not advised, but can be used for testing.
+- *GitHub info*: PR `473 <https://github.com/starsimhub/starsim/pull/473>`_
 
 
 Version 0.3.3 (2024-04-16)

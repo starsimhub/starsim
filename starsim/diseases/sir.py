@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as pl
 import starsim as ss
 
+
 __all__ = ['SIR', 'SIS']
 
 class SIR(ss.Infection):
@@ -171,8 +172,8 @@ class SIS(ss.Infection):
 
 
 # %% Interventions
-__all__ += ['sir_vaccine']
 
+__all__ += ['sir_vaccine']
 
 class sir_vaccine(ss.Vx):
     """
