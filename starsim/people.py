@@ -107,7 +107,7 @@ class BasePeople(sc.prettyobj):
             state.grow(new_uids)
             
         # Finally, update the alive indices
-        self.aliveinds = np.concatenate([self.aliveinds, new_uids], axis=0)
+        self.aliveinds = self.aliveinds.concat(new_uids)
 
         return new_uids
 
@@ -286,7 +286,7 @@ class People(BasePeople):
         if len(uids):
             
             # Calculate the indices to keep
-            self.aliveinds = np.setdiff1d(self.aliveinds, uids, assume_unique=True)
+            self.aliveinds = self.aliveinds.remove(uids)
             
             # Reset the states
             for state in self._states.values():

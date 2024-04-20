@@ -130,7 +130,7 @@ class SIS(ss.Infection):
         return
     
     def update_immunity(self, sim):
-        uids = sc.findinds(self.immunity > 0)
+        uids = sim.people.aliveinds[(self.immunity > 0)] # TODO: find better way
         self.immunity[uids] = (self.immunity[uids])*(1 - self.pars.waning*sim.dt)
         self.rel_sus[uids] = np.maximum(0, 1 - self.immunity[uids])
         return

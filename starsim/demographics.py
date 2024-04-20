@@ -227,7 +227,7 @@ class Deaths(Demographics):
 
     def apply_deaths(self, sim):
         """ Select people to die """
-        alive_uids = ss.true(sim.people.alive)
+        alive_uids = sim.people.alive.true()
         death_uids = self.pars.death_rate.filter(alive_uids)
         sim.people.request_death(death_uids)
         return len(death_uids)

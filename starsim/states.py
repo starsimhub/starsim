@@ -291,10 +291,10 @@ class BoolArr(Arr):
     def __invert__(self):     return ~self.values
     
     def true(self):
-        return np.nonzero(self.values)[0]
+        return self.aliveinds[np.nonzero(self.values)[0]] # TODO: think if can be simplified
     
     def false(self):
-        return np.nonzero(~self.values)[0]
+        return self.aliveinds[np.nonzero(~self.values)[0]]
     
     def isnan(self):
         raise BooleanNaNError()
@@ -324,7 +324,7 @@ class uids(np.ndarray):
     def __new__(cls, arr):
         return np.asarray(arr).view(cls)
     
-    def merge(self, other): # TODO: why can't they both be called cat()?
+    def concat(self, other): # TODO: why can't they both be called cat()?
         """ Equivalent to np.concatenate(), but return correct type """
         return np.concatenate([self, other]).view(self.__class__)
     
@@ -333,3 +333,6 @@ class uids(np.ndarray):
         """ Equivalent to np.concatenate(), but return correct type """
         arrs = args[0] if len(args) == 1 else args
         return np.concatenate(arrs).view(cls)
+    
+    def remove(self, other):
+        return np.setdiff1d(self, other, assume_unique=True).view(self.__class__)

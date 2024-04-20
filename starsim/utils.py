@@ -249,14 +249,14 @@ def set_seed(seed=None):
 
 # %% Simple array operations
 
-__all__ += ['true', 'defined', 'undefined']
+__all__ += ['defined', 'undefined']
 
 
-def true(arr):
-    """
-    TODO: remove! Should replace with BoolArr.true()
-    """
-    return np.nonzero(arr)[0]
+# def true(arr):
+#     """
+#     TODO: remove! Should replace with BoolArr.true()
+#     """
+#     return np.nonzero(arr)[0]
 
 
 def defined(arr):
