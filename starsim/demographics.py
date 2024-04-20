@@ -230,7 +230,6 @@ class Deaths(Demographics):
         """ Select people to die """
         alive_uids = sim.people.alive.true()
         death_uids = self.pars.death_rate.filter(alive_uids)
-        print('ohmi', len(alive_uids), len(death_uids), self.pars.death_rate)
         sim.people.request_death(death_uids)
         return len(death_uids)
 
