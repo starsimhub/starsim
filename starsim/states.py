@@ -91,7 +91,8 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         if isinstance(key, uids): # Check that it's UIDs
             return self._arr[key]
         elif isinstance(key, np.ndarray) and key.dtype == np.int64:
-            raise Exception
+            errormsg = f'Indexing an Arr ({self.name}) by an int array ({key}) is not allowed. Use ss.uids()` instead.'
+            raise Exception(errormsg)
         else:
             return self.values[key]
     
@@ -328,7 +329,7 @@ class uids(np.ndarray):
         return np.concatenate([self, other]).view(self.__class__)
     
     @classmethod
-    def cat(cls, args):
+    def cat(cls, *args):
         """ Equivalent to np.concatenate(), but return correct type """
-        arrs = sc.mergelists(args)
+        arrs = args[0] if len(args) == 1 else args
         return np.concatenate(arrs).view(cls)

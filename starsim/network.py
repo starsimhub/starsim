@@ -129,12 +129,12 @@ class Network(ss.Module):
 
         Returns: True if person index appears in any interactions
         """
-        return (item in self.contacts.p1) or (item in self.contacts.p2)
+        return (item in self.contacts.p1) or (item in self.contacts.p2) # TODO: chek if (item in self.members) is faster
 
     @property
     def members(self):
         """ Return sorted array of all members """
-        return np.unique([self.contacts.p1, self.contacts.p2])
+        return np.unique([self.contacts.p1, self.contacts.p2]).view(ss.uids)
 
     def meta_keys(self):
         """ Return the keys for the network's meta information """
@@ -689,12 +689,6 @@ class MSMNet(SexualNetwork, DynamicNetwork):
             dur = self.pars.duration.rvs(len(p1)) # Just use len(p1) to say how many draws are needed
             act_vals = self.pars.acts.rvs(len(p1))
 
-        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
-        self.contacts.beta = np.concatenate([self.contacts.beta, np.ones_like(p1)])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
-        self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
-        
         self.append(p1=p1, p2=p2, beta=np.ones_like(p1), dur=dur, acts=act_vals)
         
         return len(p1)
@@ -741,7 +735,7 @@ class EmbeddingNet(MFNet):
                 print('No pairs to add')
             return 0
 
-        available = np.concatenate((available_m, available_f))
+        available = ss.uids.cat(available_m, available_f)
         loc = self.pars.embedding_func.rvs(available)
         if np.isnan(loc).sum():
             raise Exception('WARNING, should not happen!')
@@ -752,22 +746,17 @@ class EmbeddingNet(MFNet):
         dist_mat = spsp.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
 
         ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
-        # loc_f[ind_f[0]] is close to loc_m[ind_m[0]]
 
         n_pairs = len(ind_f)
 
-        beta = np.ones(n_pairs)
-
-        # Figure out durations
+        # Finalize pairs
         p1 = available_m[ind_m]
+        p2 = available_f[ind_f]
+        beta = np.ones(n_pairs) # TODO: fix
         dur_vals = self.pars.duration.rvs(p1)
         act_vals = self.pars.acts.rvs(p1)
 
-        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, available_f[ind_f]])
-        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
-        self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
+        self.append(p1=p1, p2=p2, beta=beta, dur=dur_vals, acts=act_vals)
         return len(beta)
 
 
@@ -800,12 +789,10 @@ class MaternalNet(Network):
         """
         Add connections between pregnant women and their as-yet-unborn babies
         """
-        beta = np.ones_like(mother_inds)
-        self.contacts.p1 = np.concatenate([self.contacts.p1, mother_inds])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, unborn_inds])
-        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
-        return len(mother_inds)
+        n = len(mother_inds)
+        beta = np.ones(n)
+        self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur)
+        return n
 
 
 # %% Network connectors
