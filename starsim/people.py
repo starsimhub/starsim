@@ -25,7 +25,7 @@ class BasePeople(sc.prettyobj):
         n = int(n_agents)
         self.initialized = False
         self.uid = ss.IndexArr('uid')  # This variable tracks all UIDs currently in use
-        uids = ss.UID(np.arange(n))
+        uids = ss.uids(np.arange(n))
         self.uid.grow(new_vals=uids)
         self.aliveinds = uids.copy() # NB: does not support initializing the model with dead agents!
 

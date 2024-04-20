@@ -164,19 +164,20 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         self._arr[uids] = self.nan
         return
     
-    def grow(self, uids=None, new_vals=None):
+    def grow(self, new_uids=None, new_vals=None):
         """
         Add new agents to an Arr
 
         This method is normally only called via `People.grow()`.
 
         Args:
-            uids: Numpy array of UIDs for the new agents being added
+            new_uids: Numpy array of UIDs for the new agents being added
+            new_vals: If provided, assign these state values to the new UIDs
         """
-        if uids is None and new_vals is not None: # Used as a shortcut to avoid needing to supply twice
-            uids = new_vals
+        if new_uids is None and new_vals is not None: # Used as a shortcut to avoid needing to supply twice
+            new_uids = new_vals
         orig_len = self.len_used
-        n_new = len(uids)
+        n_new = len(new_uids)
         self.len_used += n_new  # Increase the count of the number of agents by `n` (the requested number of new agents)
         
         # Physically reshape the arrays, if needed
@@ -190,7 +191,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
                 self.set_nan(nan_uids)
         
         # Set new values, and NaN if needed
-        self.set_new(uids, new_vals=new_vals) # Assign new default values to those agents
+        self.set_new(new_uids, new_vals=new_vals) # Assign new default values to those agents
         return
     
     def set_people(self, people):
@@ -308,8 +309,8 @@ class IndexArr(IntArr):
         self._arr = uids(self._arr)
         return
     
-    def grow(self, uids=None, new_vals=None):
-        super().grow(uids=uids, new_vals=new_vals)
+    def grow(self, new_uids=None, new_vals=None):
+        super().grow(new_uids=new_uids, new_vals=new_vals)
         self._arr = uids(self._arr)
         return
     
