@@ -285,16 +285,16 @@ class People(BasePeople):
         uids = self.alive.false()
         if len(uids):
             
-            # Calculate the indices to keep
-            self.aliveinds = self.aliveinds.remove(uids)
-            
             # Reset the states
             for state in self._states.values():
                 state.set_nan(uids)
-
+            
             # Remove the UIDs from the networks too
             for network in sim.networks.values():
                 network.remove_uids(uids) # TODO: only run once every nth timestep
+                
+            # Calculate the indices to keep
+            self.aliveinds = self.aliveinds.remove(uids)
 
         return
 
@@ -314,7 +314,7 @@ class People(BasePeople):
 
         :return:
         """
-        death_uids = sc.findinds(self.ti_dead <= self.ti)
+        death_uids = self.aliveinds[self.ti_dead <= self.ti]
         self.alive[death_uids] = False
         return death_uids
 
