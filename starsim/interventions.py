@@ -414,7 +414,7 @@ class BaseTreatment(Intervention):
         # Get indices of who will get treated
         treat_candidates = self.get_candidates(sim)  # NB, this needs to be implemented by derived classes
         still_eligible = self.check_eligibility(sim)
-        treat_uids = np.intersect1d(treat_candidates, still_eligible)
+        treat_uids = treat_candidates.intersect(still_eligible)
         if len(treat_uids):
             self.outcomes = self.product.administer(sim, treat_uids)
         return treat_uids
@@ -451,7 +451,7 @@ class treat_num(BaseTreatment):
                 treat_candidates = self.queue[:]
             else:
                 treat_candidates = self.queue[:self.max_capacity]
-        return sc.promotetoarray(treat_candidates)
+        return ss.uids(treat_candidates) # TODO: Check
 
     def apply(self, sim):
         """

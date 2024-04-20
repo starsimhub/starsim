@@ -333,15 +333,18 @@ class uids(np.ndarray):
     def __new__(cls, arr):
         return np.asarray(arr).view(cls)
     
-    def concat(self, other): # TODO: why can't they both be called cat()?
+    def concat(self, other, **kw): # TODO: why can't they both be called cat()?
         """ Equivalent to np.concatenate(), but return correct type """
-        return np.concatenate([self, other]).view(self.__class__)
+        return np.concatenate([self, other], **kw).view(self.__class__)
     
     @classmethod
-    def cat(cls, *args):
+    def cat(cls, *args, **kw):
         """ Equivalent to np.concatenate(), but return correct type """
         arrs = args[0] if len(args) == 1 else args
-        return np.concatenate(arrs).view(cls)
+        return np.concatenate(arrs, **kw).view(cls)
     
-    def remove(self, other):
-        return np.setdiff1d(self, other, assume_unique=True).view(self.__class__)
+    def remove(self, other, **kw):
+        return np.setdiff1d(self, other, assume_unique=True, **kw).view(self.__class__)
+    
+    def intersect(self, other, **kw):
+        return np.intersect1d(self, other, assume_unique=True, **kw).view(self.__class__)
