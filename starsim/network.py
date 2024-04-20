@@ -360,7 +360,9 @@ class SexualNetwork(Network):
 
     def active(self, people):
         # Exclude people who are not alive
-        return self.participant & (people.age > self.debut) & people.alive
+        valid_age = people.age > self.debut
+        active = self.participant & valid_age & people.alive
+        return active
 
     def available(self, people, sex):
         # Currently assumes unpartnered people are available
@@ -368,7 +370,11 @@ class SexualNetwork(Network):
         # This property could also be overwritten by a NetworkConnector
         # which could incorporate information about membership in other
         # contact networks
-        return np.setdiff1d(ss.true(people[sex] & self.active(people)), self.members) # ss.true instead of people.uid[]?
+        right_sex = people[sex]
+        is_active = self.active(people)
+        is_available = (right_sex & is_active).true()
+        still_available = is_available.remove(self.members)
+        return still_available
 
     def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
         if uids is None: uids = Ellipsis
