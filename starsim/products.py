@@ -59,8 +59,9 @@ class Dx(Product):
         for disease in self.diseases:
             for state in self.health_states:
                 this_state = getattr(sim.diseases[disease], state)
-                remap_state = sim.people.remap_uids(this_state) # TODO: figure out how to avoid this!
-                these_uids = sim.people.aliveinds[remap_state[uids]] # TODO: fix!!!
+                # remap_state = sim.people.remap_uids(this_state) # TODO: figure out how to avoid this!
+                alive_uids = sim.people.aliveinds[this_state] # TODO: fix!!!
+                these_uids = ss.uids(alive_uids[np.in1d(alive_uids, uids, assume_unique=True)]) # TODO: fix
                 # these_uids = uids[true_uids]
 
                 # Filter the dataframe to extract test results for people in this state
