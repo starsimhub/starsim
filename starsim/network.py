@@ -372,7 +372,7 @@ class SexualNetwork(Network):
         # contact networks
         right_sex = people[sex]
         is_active = self.active(people)
-        is_available = (right_sex & is_active).true()
+        is_available = people.aliveinds[right_sex & is_active] # TODO: refactor
         still_available = is_available.remove(self.members)
         return still_available
 
