@@ -49,17 +49,18 @@ class Measles(SIR):
 
     def update_pre(self, sim):
         # Progress exposed -> infected
-        infected = ss.true(self.exposed & (self.ti_infected <= sim.ti))
+        aliveinds = sim.people.aliveinds # TODO: refactor
+        infected = aliveinds[self.exposed & (self.ti_infected <= sim.ti)]
         self.exposed[infected] = False
         self.infected[infected] = True
 
         # Progress infected -> recovered
-        recovered = ss.true(self.infected & (self.ti_recovered <= sim.ti))
+        recovered = aliveinds[self.infected & (self.ti_recovered <= sim.ti)]
         self.infected[recovered] = False
         self.recovered[recovered] = True
 
         # Trigger deaths
-        deaths = ss.true(self.ti_dead <= sim.ti)
+        deaths = aliveinds[self.ti_dead <= sim.ti]
         if len(deaths):
             sim.people.request_death(deaths)
         return

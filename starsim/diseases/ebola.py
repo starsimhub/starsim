@@ -74,33 +74,35 @@ class Ebola(SIR):
         return self.infected | self.exposed
 
     def update_pre(self, sim):
+        
+        aliveinds = sim.people.aliveinds # TODO: fix
 
         # Progress exposed -> infected
-        infected = ss.true(self.exposed & (self.ti_infected <= sim.ti))
+        infected = aliveinds[self.exposed & (self.ti_infected <= sim.ti)]
         self.exposed[infected] = False
         self.infected[infected] = True
 
         # Progress infectious -> severe
-        severe = ss.true(self.infected & (self.ti_severe <= sim.ti))
+        severe = aliveinds[self.infected & (self.ti_severe <= sim.ti)]
         self.severe[severe] = True
 
         # Progress infected -> recovered
-        recovered = ss.true(self.infected & (self.ti_recovered <= sim.ti))
+        recovered = aliveinds[self.infected & (self.ti_recovered <= sim.ti)]
         self.infected[recovered] = False
         self.recovered[recovered] = True
 
         # Progress severe -> recovered
-        recovered_sev = ss.true(self.severe & (self.ti_recovered <= sim.ti))
+        recovered_sev = aliveinds[self.severe & (self.ti_recovered <= sim.ti)]
         self.severe[recovered_sev] = False
         self.recovered[recovered_sev] = True
 
         # Trigger deaths
-        deaths = ss.true(self.ti_dead <= sim.ti)
+        deaths = aliveinds[self.ti_dead <= sim.ti]
         if len(deaths):
             sim.people.request_death(deaths)
 
         # Progress dead -> buried
-        buried = ss.true(self.ti_buried <= sim.ti)
+        buried = aliveinds[self.ti_buried <= sim.ti]
         self.buried[buried] = True
         
         return
@@ -140,7 +142,7 @@ class Ebola(SIR):
         # Change rel_trans values
         self.rel_trans[self.infectious] = 1
         self.rel_trans[self.severe] = self.pars['sev_factor']  # Change for severe
-        unburied_uids = ss.true((self.ti_dead <= sim.ti) & (self.ti_buried > sim.ti))
+        unburied_uids = sim.people.aliveinds[(self.ti_dead <= sim.ti) & (self.ti_buried > sim.ti)] # TODO: fix
         self.rel_trans[unburied_uids] = self.pars['unburied_factor']  # Change for unburied
 
         return

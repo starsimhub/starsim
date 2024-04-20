@@ -95,24 +95,25 @@ class Cholera(ss.Infection):
         Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/cholera.py
         Original version by Dom Delport
         """
+        aliveinds = sim.people.aliveinds # TODO: refactor
 
         # Progress exposed -> infected
-        infected = ss.true(self.exposed & (self.ti_infected <= sim.ti))
+        infected = aliveinds[self.exposed & (self.ti_infected <= sim.ti)] # TODO: fix
         self.infected[infected] = True
 
         # Progress infected -> symptomatic
-        symptomatic = ss.true(self.infected & (self.ti_symptomatic <= sim.ti))
+        symptomatic = aliveinds[self.infected & (self.ti_symptomatic <= sim.ti)]
         self.symptomatic[symptomatic] = True
 
         # Progress symptomatic -> recovered
-        recovered = ss.true(self.infectious & (self.ti_recovered <= sim.ti))
+        recovered = aliveinds[self.infectious & (self.ti_recovered <= sim.ti)]
+        self.exposed[recovered] = False
         self.infected[recovered] = False
-        self.infectious[recovered] = False
         self.symptomatic[recovered] = False
         self.recovered[recovered] = True
 
         # Trigger deaths
-        deaths = ss.true(self.ti_dead <= sim.ti)
+        deaths = aliveinds[self.ti_dead <= sim.ti]
         if len(deaths):
             sim.people.request_death(deaths)
 
@@ -128,8 +129,8 @@ class Cholera(ss.Infection):
         p = self.pars
         r = self.results
 
-        n_symptomatic = len(ss.true(self.symptomatic))
-        n_asymptomatic = len(ss.true(self.asymptomatic))
+        n_symptomatic = self.symptomatic.sum()
+        n_asymptomatic = self.asymptomatic.sum()
         old_prev = self.results.env_prev[sim.ti-1]
 
         new_bacteria = p.shedding_rate * (n_symptomatic + p.asymp_trans * n_asymptomatic)

@@ -45,21 +45,21 @@ class NCD(ss.Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        alive_uids = ss.true(sim.people.alive)
+        alive_uids = sim.people.alive.true()
         initial_risk = self.pars['initial_risk'].filter(alive_uids)
         self.at_risk[initial_risk] = True
         self.ti_affected[initial_risk] = sim.ti + sc.randround(self.pars['dur_risk'].rvs(initial_risk) / sim.dt)
         return initial_risk
 
     def update_pre(self, sim):
-        deaths = ss.true(self.ti_dead == sim.ti)
+        deaths = sim.people.aliveinds[self.ti_dead == sim.ti] # TODO: fix
         sim.people.request_death(deaths)
         self.log.add_data(deaths, died=True)
         self.results.new_deaths[sim.ti] = len(deaths) # Log deaths attributable to this module
         return
 
     def make_new_cases(self, sim):
-        new_cases = ss.true(self.ti_affected == sim.ti)
+        new_cases = sim.people.aliveinds[self.ti_affected == sim.ti] # TODO: fix
         self.affected[new_cases] = True
         prog_years = self.pars.prognosis.rvs(new_cases)
         self.ti_dead[new_cases] = sim.ti + sc.randround(prog_years / sim.dt)
