@@ -128,10 +128,11 @@ class Syphilis(ss.Infection):
 
         # Secondary from primary
         secondary_from_primary = self.primary & (self.ti_secondary <= sim.ti)
-        if len(ss.true(secondary_from_primary)) > 0:
+        secondary_from_primary_uids = sim.people.aliveinds[secondary_from_primary] # TODO: fix!
+        if len(secondary_from_primary_uids) > 0:
             self.secondary[secondary_from_primary] = True
             self.primary[secondary_from_primary] = False
-            self.set_secondary_prognoses(sim, ss.true(secondary_from_primary))
+            self.set_secondary_prognoses(sim, secondary_from_primary_uids)
             self.rel_trans[secondary_from_primary] = self.pars.rel_trans['secondary']
 
         # Hack to reset the MultiRNGs in set_secondary_prognoses so that they can be called again in this timestep. TODO: Refactor
@@ -140,26 +141,29 @@ class Syphilis(ss.Infection):
 
         # Secondary reactivation from latent
         secondary_from_latent = self.latent_temp & (self.ti_secondary <= sim.ti)
-        if len(ss.true(secondary_from_latent)) > 0:
+        secondary_from_latent_uids = sim.people.aliveinds[secondary_from_latent] # TODO: fix!
+        if len(secondary_from_latent_uids) > 0:
             self.secondary[secondary_from_latent] = True
             self.latent_temp[secondary_from_latent] = False
-            self.set_secondary_prognoses(sim, ss.true(secondary_from_latent))
+            self.set_secondary_prognoses(sim, secondary_from_latent_uids)
             self.rel_trans[secondary_from_latent] = self.pars.rel_trans['secondary']
 
         # Latent
         latent_temp = self.secondary & (self.ti_latent_temp <= sim.ti)
-        if len(ss.true(latent_temp)) > 0:
+        latent_temp_uids = sim.people.aliveinds[latent_temp] # TODO: fix!
+        if len(latent_temp_uids) > 0:
             self.latent_temp[latent_temp] = True
             self.secondary[latent_temp] = False
-            self.set_latent_temp_prognoses(sim, ss.true(latent_temp))
+            self.set_latent_temp_prognoses(sim, latent_temp_uids)
             self.rel_trans[latent_temp] = self.pars.rel_trans['latent_temp']
 
         # Latent long
         latent_long = self.secondary & (self.ti_latent_long <= sim.ti)
-        if len(ss.true(latent_long)) > 0:
+        latent_long_uids = sim.people.aliveinds[latent_long] # TODO: fix!
+        if len(latent_long_uids) > 0:
             self.latent_long[latent_long] = True
             self.secondary[latent_long] = False
-            self.set_latent_long_prognoses(sim, ss.true(latent_long))
+            self.set_latent_long_prognoses(sim, latent_long_uids)
             self.rel_trans[latent_long] = self.pars.rel_trans['latent_long']
 
         # Tertiary
