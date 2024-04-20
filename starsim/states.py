@@ -2,6 +2,7 @@
 Define array-handling classes, including agent states
 """
 
+import sciris as sc
 import numpy as np
 import starsim as ss
 
@@ -89,6 +90,8 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     def __getitem__(self, key):
         if isinstance(key, uids): # Check that it's UIDs
             return self._arr[key]
+        elif isinstance(key, np.ndarray) and key.dtype == np.int64:
+            raise Exception
         else:
             return self.values[key]
     
@@ -320,6 +323,12 @@ class uids(np.ndarray):
     def __new__(cls, arr):
         return np.asarray(arr).view(cls)
     
-    def cat(self, other):
+    def merge(self, other): # TODO: why can't they both be called cat()?
         """ Equivalent to np.concatenate(), but return correct type """
         return np.concatenate([self, other]).view(self.__class__)
+    
+    @classmethod
+    def cat(cls, args):
+        """ Equivalent to np.concatenate(), but return correct type """
+        arrs = sc.mergelists(args)
+        return np.concatenate(arrs).view(cls)
