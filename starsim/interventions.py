@@ -216,7 +216,8 @@ class BaseTest(Intervention):
         prob = self.prob[ti]  # Get the proportion of people who will be tested this timestep
         is_eligible = self.check_eligibility(sim)  # Check eligibility
         self.coverage_dist.set(p=prob)
-        accept_uids = self.coverage_dist.filter(ss.true(is_eligible))
+        eligible_uids = sim.people.aliveinds[is_eligible] # TODO: fix
+        accept_uids = self.coverage_dist.filter(eligible_uids)
         if len(accept_uids):
             self.outcomes = self.product.administer(sim, accept_uids)  # Actually administer the diagnostic
         return accept_uids

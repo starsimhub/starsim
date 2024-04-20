@@ -59,8 +59,9 @@ class Dx(Product):
         for disease in self.diseases:
             for state in self.health_states:
                 this_state = getattr(sim.diseases[disease], state)
-                this_state = sim.people.remap_uids(this_state) # TODO: figure out how to avoid this!
-                these_uids = uids[ss.true(this_state[uids])]
+                remap_state = sim.people.remap_uids(this_state) # TODO: figure out how to avoid this!
+                these_uids = sim.people.aliveinds[remap_state[uids]] # TODO: fix!!!
+                # these_uids = uids[true_uids]
 
                 # Filter the dataframe to extract test results for people in this state
                 df_filter = (self.df.state == state) & (self.df.disease == disease)

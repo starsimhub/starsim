@@ -109,6 +109,15 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
             return self.__getattribute__(attr)
         else:
             return getattr(self.values, attr)
+        
+    def dup(self, arr=None):
+        """ Duplicate, optionally resetting the array """
+        return arr
+        # new = object.__new__(self.__class__) # Create a new Arr instance
+        # new.__dict__ = self.__dict__.copy() # Copy pointers
+        # if arr is not None:
+        #     new._arr = arr
+        # return new
     
     def __gt__(self, other): return self.notnan(self.values > other)
     def __lt__(self, other): return self.notnan(self.values < other)
@@ -285,10 +294,10 @@ class BoolArr(Arr):
         super().__init__(name=name, dtype=ss_bool, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
         return
     
-    def __and__(self, other): return self.values & other
-    def __or__(self, other):  return self.values | other    
-    def __xor__(self, other): return self.values & other
-    def __invert__(self):     return ~self.values
+    def __and__(self, other): return self.dup(self.values & other)
+    def __or__(self, other):  return self.dup(self.values | other)
+    def __xor__(self, other): return self.dup(self.values ^ other)
+    def __invert__(self):     return self.dup(~self.values)
     
     def true(self):
         return self.aliveinds[np.nonzero(self.values)[0]] # TODO: think if can be simplified

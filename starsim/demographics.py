@@ -195,8 +195,9 @@ class Deaths(Demographics):
 
             # Initialize
             death_rate_df = pd.Series(index=uids)
-            death_rate_df[uids[sim.people.female[uids]]] = f_arr[age_inds[sim.people.female[uids]]] # TODO: avoid double indexing
-            death_rate_df[uids[sim.people.male[uids]]] = m_arr[age_inds[sim.people.male[uids]]]
+            fem = sim.people.female
+            death_rate_df[uids[fem[uids]]] = f_arr[age_inds[fem[uids]]] # TODO: avoid double indexing
+            death_rate_df[uids[~fem[uids]]] = m_arr[age_inds[~fem[uids]]] # TODO: fix male
             death_rate_df[uids[sim.people.age[uids] < 0]] = 0  # Don't use background death rates for unborn babies
 
             death_rate = death_rate_df.values
