@@ -44,12 +44,13 @@ class SIR(ss.Infection):
 
     def update_pre(self, sim):
         # Progress infectious -> recovered
-        recovered = sc.findinds(self.infected & (self.ti_recovered <= sim.ti))
+        aliveinds = sim.people.aliveinds
+        recovered = aliveinds[self.infected & (self.ti_recovered <= sim.ti)]
         self.infected[recovered] = False
         self.recovered[recovered] = True
 
         # Trigger deaths
-        deaths = sc.findinds(self.ti_dead <= sim.ti) # TODO: find a better way to implement
+        deaths = aliveinds[self.ti_dead <= sim.ti] # TODO: find a better way to implement
         if len(deaths):
             sim.people.request_death(deaths)
         return
@@ -123,7 +124,8 @@ class SIS(ss.Infection):
 
     def update_pre(self, sim):
         """ Progress infectious -> recovered """
-        recovered = sc.findinds(self.infected & (self.ti_recovered <= sim.ti))
+        aliveinds = sim.people.aliveinds # TODO: fix
+        recovered = aliveinds[self.infected & (self.ti_recovered <= sim.ti)]
         self.infected[recovered] = False
         self.susceptible[recovered] = True
         self.update_immunity(sim)
