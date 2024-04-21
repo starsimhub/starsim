@@ -582,15 +582,15 @@ class MFNet(SexualNetwork, DynamicNetwork):
 
     def set_participation(self, people, upper_age=None):
         # Set people who will participate in the network at some point
-        if upper_age is None: uids = people.uid
-        else: uids = people.uid[(people.age < upper_age)]
+        if upper_age is None: uids = people.aliveinds
+        else: uids = people.aliveinds[(people.age < upper_age)]
         self.participant[uids] = self.pars.participation.rvs(uids)
         return
 
     def set_debut(self, people, upper_age=None):
         # Set debut age
-        if upper_age is None: uids = people.uid
-        else: uids = people.uid[(people.age < upper_age)]
+        if upper_age is None: uids = people.aliveinds
+        else: uids = people.aliveinds[(people.age < upper_age)]
         self.debut[uids] = self.pars.debut.rvs(uids)
         return
 
