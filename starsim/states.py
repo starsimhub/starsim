@@ -2,7 +2,6 @@
 Define array-handling classes, including agent states
 """
 
-import sciris as sc
 import numpy as np
 import starsim as ss
 
@@ -40,7 +39,7 @@ def check_dtype(dtype, default=None):
 
 class Arr(np.lib.mixins.NDArrayOperatorsMixin):
 
-    # __slots__ = ('values', 'uid', 'default', 'name', 'label', '_arr', 'values', 'initialized') # TODO: reinstate for speed later
+    # __slots__ = ('values', 'uid', 'default', 'name', 'label', 'raw', 'values', 'initialized') # TODO: reinstate for speed later
 
     def __init__(self, name, dtype=None, default=None, nan=None, label=None, coerce=True, skip_init=False):
         """
@@ -69,7 +68,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         self.dtype = dtype
         
         # Properties that are initialized later
-        self._arr = np.empty(0, dtype=dtype)
+        self.raw = np.empty(0, dtype=dtype)
         self.people = None
         self.len_used = 0
         self.len_tot = 0
@@ -85,11 +84,11 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         try:
             return len(self.aliveinds)
         except:
-            return len(self._arr)
+            return len(self.raw)
     
     def __getitem__(self, key):
         if isinstance(key, uids): # Check that it's UIDs
-            return self._arr[key]
+            return self.raw[key]
         elif isinstance(key, np.ndarray) and key.dtype == np.int64:
             errormsg = f'Indexing an Arr ({self.name}) by an int array ({key}) is not allowed. Use ss.uids()` instead.'
             raise Exception(errormsg)
@@ -98,10 +97,10 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     
     def __setitem__(self, key, value):
         if isinstance(key, np.ndarray) and key.dtype == ss_int:
-            self._arr[key] = value
+            self.raw[key] = value
         else:
             newkey = self.aliveinds[key]
-            self._arr[newkey] = value
+            self.raw[newkey] = value
             
     def __getattr__(self, attr):
         """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
@@ -116,7 +115,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         # new = object.__new__(self.__class__) # Create a new Arr instance
         # new.__dict__ = self.__dict__.copy() # Copy pointers
         # if arr is not None:
-        #     new._arr = arr
+        #     new.raw = arr
         # return new
     
     def __gt__(self, other): return self.notnan(self.values > other)
@@ -132,7 +131,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     def __invert__(self):     raise BooleanOperationError(self)
     
     # The mixin class delegates the operations to the corresponding numpy functions
-    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+    def _raway_ufunc__(self, ufunc, method, *inputs, **kwargs):
         inputs = [x.values if isinstance(x, Arr) else x for x in inputs]
         return getattr(ufunc, method)(*inputs, **kwargs)
     
@@ -141,7 +140,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
 
     @property
     def values(self):
-        return self._arr[self.aliveinds] # TODO: think about if this makes sense for uids
+        return self.raw[self.aliveinds] # TODO: think about if this makes sense for uids
     
     @property
     def aliveinds(self):
@@ -149,7 +148,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
             return self.people.aliveinds
         except:
             print('TEMP: Could not return aliveinds!')
-            return np.arange(len(self._arr))
+            return np.arange(len(self.raw))
         
     def isnan(self):
         return self.values == self.nan
@@ -170,11 +169,11 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
                 new_vals = self.default
             else:
                 new_vals = self.nan
-        self._arr[uids] = new_vals
+        self.raw[uids] = new_vals
         return new_vals
     
     def set_nan(self, uids):
-        self._arr[uids] = self.nan
+        self.raw[uids] = self.nan
         return
     
     def grow(self, new_uids=None, new_vals=None):
@@ -197,8 +196,8 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         if orig_len + n_new > self.len_tot:
             n_grow = max(n_new, self.len_tot//2)  # Minimum 50% growth, since growing arrays is slow
             new_empty = np.empty(n_grow, dtype=self.dtype) # 10x faster than np.zeros()
-            self._arr = np.concatenate([self._arr, new_empty], axis=0)
-            self.len_tot = len(self._arr)
+            self.raw = np.concatenate([self.raw, new_empty], axis=0)
+            self.len_tot = len(self.raw)
             if n_grow > n_new: # We added extra space at the end, set to NaN
                 nan_uids = np.arange(self.len_used, self.len_tot)
                 self.set_nan(nan_uids)
@@ -319,12 +318,12 @@ class IndexArr(IntArr):
     """ A special class of IndexArr used for UIDs and RNG IDs """
     def __init__(self, name, label=None):
         super().__init__(name=name, label=label, skip_init=True)
-        self._arr = uids(self._arr)
+        self.raw = uids(self.raw)
         return
     
     def grow(self, new_uids=None, new_vals=None):
         super().grow(new_uids=new_uids, new_vals=new_vals)
-        self._arr = uids(self._arr)
+        self.raw = uids(self.raw)
         return
     
     

@@ -275,7 +275,7 @@ class Syphilis(ss.Infection):
                 # Birth outcomes must be modified to add probability of susceptible birth
                 birth_outcomes = self.pars.birth_outcomes[state]
                 assigned_outcomes = birth_outcomes.rvs(len(uids))
-                time_to_birth = -sim.people.age._arr # TODO: make nicer
+                time_to_birth = -sim.people.age.raw # TODO: make nicer
 
                 # Schedule events
                 for oi, outcome in enumerate(self.pars.birth_outcome_keys):
