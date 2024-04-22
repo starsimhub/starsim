@@ -27,7 +27,7 @@ class BasePeople(sc.prettyobj):
         self.uid = ss.IndexArr('uid')  # This variable tracks all UIDs currently in use
         uids = ss.uids(np.arange(n))
         self.uid.grow(new_vals=uids)
-        self.aliveinds = uids.copy() # NB: does not support initializing the model with dead agents!
+        self.auids = uids.copy() # NB: does not support initializing the model with dead agents!
 
         # A slot is a special state managed internally by BasePeople
         # This is because it needs to be updated separately from any other states, as other states
@@ -49,7 +49,7 @@ class BasePeople(sc.prettyobj):
 
     def __len__(self):
         """ Length of people """
-        return len(self.aliveinds)
+        return len(self.auids)
     
     @property
     def n_uids(self):
@@ -58,7 +58,7 @@ class BasePeople(sc.prettyobj):
     def remap_uids(self, arr):
         """ Map from sparse to full representation """
         new = np.empty(self.n_uids, arr.dtype)
-        new[self.aliveinds] = arr
+        new[self.auids] = arr
         return new
 
     def register_state(self, state, die=True):
@@ -107,7 +107,7 @@ class BasePeople(sc.prettyobj):
             state.grow(new_uids)
             
         # Finally, update the alive indices
-        self.aliveinds = self.aliveinds.concat(new_uids)
+        self.auids = self.auids.concat(new_uids)
 
         return new_uids
 
@@ -294,7 +294,7 @@ class People(BasePeople):
                 network.remove_uids(uids) # TODO: only run once every nth timestep
                 
             # Calculate the indices to keep
-            self.aliveinds = self.aliveinds.remove(uids)
+            self.auids = self.auids.remove(uids)
 
         return
 
@@ -314,7 +314,7 @@ class People(BasePeople):
 
         :return:
         """
-        death_uids = self.aliveinds[self.ti_dead <= self.ti]
+        death_uids = self.auids[self.ti_dead <= self.ti]
         self.alive[death_uids] = False
         return death_uids
 

@@ -69,6 +69,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         
         # Properties that are initialized later
         self.raw = np.empty(0, dtype=dtype)
+        self._uids = uids()
         self.people = None
         self.len_used = 0
         self.len_tot = 0
@@ -82,25 +83,25 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     
     def __len__(self):
         try:
-            return len(self.aliveinds)
+            return len(self.uids)
         except:
             return len(self.raw)
     
     def __getitem__(self, key):
-        if isinstance(key, uids): # Check that it's UIDs
+        if isinstance(key, uids): # Check that it's UIDs # TODO: think about slice, list, etc
             return self.raw[key]
         elif isinstance(key, np.ndarray) and key.dtype == np.int64:
-            errormsg = f'Indexing an Arr ({self.name}) by an int array ({key}) is not allowed. Use ss.uids()` instead.'
+            errormsg = f'Directly indexing an Arr ({self.name}) by an int array ({key}) is ambiguous. Use ss.uids() instead, or index Arr.raw or Arr.values.'
             raise Exception(errormsg)
         else:
             return self.values[key]
     
     def __setitem__(self, key, value):
-        if isinstance(key, np.ndarray) and key.dtype == ss_int:
+        if isinstance(key, (int, uids, slice)):
             self.raw[key] = value
         else:
-            newkey = self.aliveinds[key]
-            self.raw[newkey] = value
+            errormsg = f'Arr ({self.name}) must be set via integer, slice, or ss.uids(); ({key}) is not allowed.'
+            raise Exception(errormsg)
             
     def __getattr__(self, attr):
         """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
@@ -109,21 +110,12 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         else:
             return getattr(self.values, attr)
         
-    def dup(self, arr=None):
-        """ Duplicate, optionally resetting the array """
-        return arr
-        # new = object.__new__(self.__class__) # Create a new Arr instance
-        # new.__dict__ = self.__dict__.copy() # Copy pointers
-        # if arr is not None:
-        #     new.raw = arr
-        # return new
-    
-    def __gt__(self, other): return self.notnan(self.values > other)
-    def __lt__(self, other): return self.notnan(self.values < other)
-    def __ge__(self, other): return self.notnan(self.values >= other)
-    def __le__(self, other): return self.notnan(self.values <= other)
-    def __eq__(self, other): return self.notnan(self.values == other)
-    def __ne__(self, other): return self.notnan(self.values != other)
+    def __gt__(self, other): return BoolArr.make(self, self.notnan(self.values > other))
+    def __lt__(self, other): return BoolArr.make(self, self.notnan(self.values < other))
+    def __ge__(self, other): return BoolArr.make(self, self.notnan(self.values >= other))
+    def __le__(self, other): return BoolArr.make(self, self.notnan(self.values <= other))
+    def __eq__(self, other): return BoolArr.make(self, self.notnan(self.values == other))
+    def __ne__(self, other): return BoolArr.make(self, self.notnan(self.values != other))
     
     def __and__(self, other): raise BooleanOperationError(self)
     def __or__(self, other):  raise BooleanOperationError(self)
@@ -131,7 +123,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     def __invert__(self):     raise BooleanOperationError(self)
     
     # The mixin class delegates the operations to the corresponding numpy functions
-    def _raway_ufunc__(self, ufunc, method, *inputs, **kwargs):
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         inputs = [x.values if isinstance(x, Arr) else x for x in inputs]
         return getattr(ufunc, method)(*inputs, **kwargs)
     
@@ -140,15 +132,19 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
 
     @property
     def values(self):
-        return self.raw[self.aliveinds] # TODO: think about if this makes sense for uids
+        return self.raw[self.auids] # TODO: think about if this makes sense for uids
     
-    @property
-    def aliveinds(self):
-        try:
-            return self.people.aliveinds
-        except:
-            print('TEMP: Could not return aliveinds!')
-            return np.arange(len(self.raw))
+    # @property
+    # def auids(self):
+    #     try:
+    #         return self.people.auids
+    #     except:
+    #         print('TEMP: Could not return auids!')
+    #         return np.arange(len(self.raw))
+        
+    # @property
+    # def uids(self):
+    #     return self._uids if self._uids is not None else self.auids
         
     def isnan(self):
         return self.values == self.nan
@@ -240,6 +236,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         people = sim.people
         self.set_people(people)
         people.register_state(self)
+        self.auids = people.auids # Shorten since used a lot
         
         # Connect any distributions in the default to RNGs in the Sim
         if isinstance(self.default, ss.Dist):
@@ -249,6 +246,17 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         self.grow(people.uid)
         self.initialized = True
         return
+
+    def make(self, other, arr=None):
+        """ Duplicate and copy (rather than link) data, optionally resetting the array """
+        new = object.__new__(self.__class__) # Create a new Arr instance
+        new.__dict__ = self.__dict__.copy() # Copy pointers
+        new.raw = np.empty(len(new.raw), dtype=new.raw.dtype) # Copy values, breaking reference
+        if arr is None:
+            new.raw[new.auids] = self.values
+        else:
+            new.raw[new.auids] = arr
+        return new
 
 
 class BooleanOperationError(NotImplementedError):
@@ -293,16 +301,16 @@ class BoolArr(Arr):
         super().__init__(name=name, dtype=ss_bool, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
         return
     
-    def __and__(self, other): return self.dup(self.values & other)
-    def __or__(self, other):  return self.dup(self.values | other)
-    def __xor__(self, other): return self.dup(self.values ^ other)
-    def __invert__(self):     return self.dup(~self.values)
+    def __and__(self, other): return self.make(self.values & other)
+    def __or__(self, other):  return self.make(self.values | other)
+    def __xor__(self, other): return self.make(self.values ^ other)
+    def __invert__(self):     return self.make(~self.values)
     
     def true(self):
-        return self.aliveinds[np.nonzero(self.values)[0]] # TODO: think if can be simplified
+        return self.auids[np.nonzero(self.values)[0]] # TODO: think if can be simplified
     
     def false(self):
-        return self.aliveinds[np.nonzero(~self.values)[0]]
+        return self.auids[np.nonzero(~self.values)[0]]
     
     def isnan(self):
         raise BooleanNaNError()
