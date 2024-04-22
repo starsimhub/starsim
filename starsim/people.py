@@ -96,7 +96,7 @@ class BasePeople(sc.prettyobj):
 
         start_uid = self.uid.len_used
         stop_uid = start_uid + n
-        new_uids = np.arange(start_uid, stop_uid)
+        new_uids = ss.uids(np.arange(start_uid, stop_uid))
         self.uid.grow(new_uids, new_vals=new_uids)
 
         # We need to grow the slots as well

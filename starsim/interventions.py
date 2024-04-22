@@ -505,7 +505,7 @@ class BaseVaccination(Intervention):
             prob = self.prob[ti]  # Get the proportion of people who will be tested this timestep
             is_eligible = self.check_eligibility(sim)  # Check eligibility
             self.coverage_dist.set(p=prob)
-            accept_uids = self.coverage_dist.filter(is_eligible.true()) # TODO: check if sufficiently general
+            accept_uids = self.coverage_dist.filter(is_eligible)
 
             if len(accept_uids):
                 self.product.administer(sim.people, accept_uids)
