@@ -701,7 +701,7 @@ class bernoulli(Dist):
     def filter(self, uids=None, both=False):
         """ Return UIDs that correspond to True, or optionally return both True and False """
         if uids is None:
-            uids = self.people.auids # All active UIDs
+            uids = self.sim.people.auids # All active UIDs
         bools = self.rvs(uids)
         if both:
             return uids[bools], uids[~bools]

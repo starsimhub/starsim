@@ -324,7 +324,7 @@ class Pregnancy(Demographics):
 
             # Adjust rates: rates are based on the entire population, but we need to remove
             # anyone already pregnant and then inflate the rates for the remainder
-            pregnant_uids = uids[module.pregnant[uids]] # TODO: fix!!  # Find agents who are already pregnant
+            pregnant_uids = module.pregnant.uids # Find agents who are already pregnant
             pregnant_age_counts, _ = np.histogram(sim.people.age[pregnant_uids], age_bins)  # Count them by age
             age_counts, _ = np.histogram(sim.people.age[uids], age_bins)  # Count overall number per age bin
             new_denom = age_counts - pregnant_age_counts  # New denominator for rates

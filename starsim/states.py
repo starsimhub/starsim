@@ -118,12 +118,12 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         else:
             return getattr(self.values, attr)
         
-    def __gt__(self, other): return BoolArr.make(self, self.notnan(self.values > other))
-    def __lt__(self, other): return BoolArr.make(self, self.notnan(self.values < other))
-    def __ge__(self, other): return BoolArr.make(self, self.notnan(self.values >= other))
-    def __le__(self, other): return BoolArr.make(self, self.notnan(self.values <= other))
-    def __eq__(self, other): return BoolArr.make(self, self.notnan(self.values == other))
-    def __ne__(self, other): return BoolArr.make(self, self.notnan(self.values != other))
+    def __gt__(self, other): return self.asnew(self.notnan(self.values > other),  cls=BoolArr)
+    def __lt__(self, other): return self.asnew(self.notnan(self.values < other),  cls=BoolArr)
+    def __ge__(self, other): return self.asnew(self.notnan(self.values >= other), cls=BoolArr)
+    def __le__(self, other): return self.asnew(self.notnan(self.values <= other), cls=BoolArr)
+    def __eq__(self, other): return self.asnew(self.notnan(self.values == other), cls=BoolArr)
+    def __ne__(self, other): return self.asnew(self.notnan(self.values != other), cls=BoolArr)
     
     def __and__(self, other): raise BooleanOperationError(self)
     def __or__(self, other):  raise BooleanOperationError(self)
@@ -256,13 +256,14 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         self.initialized = True
         return
 
-    @classmethod
-    def make(cls, orig, arr=None):
+    def asnew(self, arr=None, cls=None):
         """ Duplicate and copy (rather than link) data, optionally resetting the array """
+        if cls is None:
+            cls = self.__class__
         if arr is None:
-            arr = orig.values
+            arr = self.values
         new = object.__new__(cls) # Create a new Arr instance
-        new.__dict__ = orig.__dict__.copy() # Copy pointers
+        new.__dict__ = self.__dict__.copy() # Copy pointers
         new.dtype = arr.dtype # Set to correct dtype
         new.raw = np.empty(len(new.raw), dtype=new.dtype) # Copy values, breaking reference
         new.raw[new.auids] = arr
@@ -319,10 +320,10 @@ class BoolArr(Arr):
         super().__init__(name=name, dtype=ss_bool, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
         return
     
-    def __and__(self, other): return BoolArr.make(self, self.values & other)
-    def __or__(self, other):  return BoolArr.make(self, self.values | other)
-    def __xor__(self, other): return BoolArr.make(self, self.values ^ other)
-    def __invert__(self):     return BoolArr.make(self, ~self.values)
+    def __and__(self, other): return self.asnew(self.values & other)
+    def __or__(self, other):  return self.asnew(self.values | other)
+    def __xor__(self, other): return self.asnew(self.values ^ other)
+    def __invert__(self):     return self.asnew(~self.values)
     
     @property
     def uids(self):
