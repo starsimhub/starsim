@@ -698,8 +698,10 @@ class bernoulli(Dist):
         rvs = rands < self._pars.p
         return rvs
     
-    def filter(self, uids, both=False):
+    def filter(self, uids=None, both=False):
         """ Return UIDs that correspond to True, or optionally return both True and False """
+        if uids is None:
+            uids = self.people.auids # All active UIDs
         bools = self.rvs(uids)
         if both:
             return uids[bools], uids[~bools]

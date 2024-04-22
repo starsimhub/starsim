@@ -232,8 +232,7 @@ class Deaths(Demographics):
 
     def apply_deaths(self, sim):
         """ Select people to die """
-        alive_uids = sim.people.auids # TEMP: needed?
-        death_uids = self.pars.death_rate.filter(alive_uids)
+        death_uids = self.pars.death_rate.filter()
         sim.people.request_death(death_uids)
         return len(death_uids)
 
@@ -408,7 +407,7 @@ class Pregnancy(Demographics):
         """
         # People eligible to become pregnant. We don't remove pregnant people here, these
         # are instead handled in the fertility_dist logic as the rates need to be adjusted
-        eligible_uids = (sim.people.female & sim.people.alive).uids
+        eligible_uids = sim.people.female.uids
         conceive_uids = self.pars.fertility_rate.filter(eligible_uids)
 
         # Set prognoses for the pregnancies
