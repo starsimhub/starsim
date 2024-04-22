@@ -69,7 +69,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         
         # Properties that are initialized later
         self.raw = np.empty(0, dtype=dtype)
-        self._uids = uids()
+        self.auids = uids() # Initialize empty, to be replaced with sim.people.auids
         self.people = None
         self.len_used = 0
         self.len_tot = 0
@@ -147,13 +147,12 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     #     return self._uids if self._uids is not None else self.auids
         
     def isnan(self):
-        return self.values == self.nan
+        errormsg = f'Arr.isnan() not implemented for {self}'
+        raise NotImplementedError(errormsg)
 
     def notnan(self, mask=None):
-        valid = self.values != self.nan
-        if mask is not None:
-            valid = valid*mask
-        return valid
+        errormsg = f'Arr.notnan() not implemented for {self}'
+        raise NotImplementedError(errormsg)
 
     def set_new(self, uids, new_vals=None):
         if new_vals is None: 
@@ -294,6 +293,14 @@ class IntArr(Arr):
         super().__init__(name=name, dtype=ss_int, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
         return
 
+    def isnan(self):
+        return self.values == self.nan
+
+    def notnan(self, mask=None):
+        valid = self.values != self.nan
+        if mask is not None:
+            valid = valid*mask
+        return valid
 
 class BoolArr(Arr):
     """ Subclass of Arr with defaults for booleans """
@@ -306,11 +313,12 @@ class BoolArr(Arr):
     def __xor__(self, other): return self.make(self.values ^ other)
     def __invert__(self):     return self.make(~self.values)
     
-    def true(self):
+    @property
+    def uids(self):
         return self.auids[np.nonzero(self.values)[0]] # TODO: think if can be simplified
     
-    def false(self):
-        return self.auids[np.nonzero(~self.values)[0]]
+    # def false(self):
+    #     return self.auids[np.nonzero(~self.values)[0]]
     
     def isnan(self):
         raise BooleanNaNError()

@@ -43,13 +43,12 @@ class SIR(ss.Infection):
 
     def update_pre(self, sim):
         # Progress infectious -> recovered
-        aliveinds = sim.people.aliveinds
-        recovered = aliveinds[self.infected & (self.ti_recovered <= sim.ti)]
+        recovered = (self.infected & self.ti_recovered <= sim.ti).uids
         self.infected[recovered] = False
         self.recovered[recovered] = True
 
         # Trigger deaths
-        deaths = aliveinds[self.ti_dead <= sim.ti] # TODO: find a better way to implement
+        deaths = (self.ti_dead <= sim.ti).uids
         if len(deaths):
             sim.people.request_death(deaths)
         return
@@ -123,17 +122,16 @@ class SIS(ss.Infection):
 
     def update_pre(self, sim):
         """ Progress infectious -> recovered """
-        aliveinds = sim.people.aliveinds # TODO: fix
-        recovered = aliveinds[self.infected & (self.ti_recovered <= sim.ti)]
+        recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
         self.infected[recovered] = False
         self.susceptible[recovered] = True
         self.update_immunity(sim)
         return
     
     def update_immunity(self, sim):
-        uids = sim.people.aliveinds[(self.immunity > 0)] # TODO: find better way
-        self.immunity[uids] = (self.immunity[uids])*(1 - self.pars.waning*sim.dt)
-        self.rel_sus[uids] = np.maximum(0, 1 - self.immunity[uids])
+        has_imm = (self.immunity > 0).uids
+        self.immunity[has_imm] = (self.immunity[has_imm])*(1 - self.pars.waning*sim.dt)
+        self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])
         return
 
     def set_prognoses(self, sim, uids, source_uids=None):
