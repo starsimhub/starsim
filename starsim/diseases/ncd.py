@@ -45,8 +45,7 @@ class NCD(ss.Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        alive_uids = sim.people.auids # TODO: think about if this is needed
-        initial_risk = self.pars['initial_risk'].filter(alive_uids)
+        initial_risk = self.pars['initial_risk'].filter()
         self.at_risk[initial_risk] = True
         self.ti_affected[initial_risk] = sim.ti + sc.randround(self.pars['dur_risk'].rvs(initial_risk) / sim.dt)
         return initial_risk
@@ -81,8 +80,7 @@ class NCD(ss.Disease):
     def update_results(self, sim):
         super().update_results(sim)
         ti = sim.ti
-        alive = sim.people.alive
-        self.results.n_not_at_risk[ti] = np.count_nonzero(self.not_at_risk & alive)
-        self.results.prevalence[ti]    = np.count_nonzero(self.affected & alive)/alive.count()
+        self.results.n_not_at_risk[ti] = np.count_nonzero(self.not_at_risk)
+        self.results.prevalence[ti]    = np.count_nonzero(self.affected)/len(sim.people)
         self.results.new_deaths[ti]    = np.count_nonzero(self.ti_dead == ti)
         return

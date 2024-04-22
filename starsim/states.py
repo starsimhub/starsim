@@ -39,8 +39,6 @@ def check_dtype(dtype, default=None):
 
 class Arr(np.lib.mixins.NDArrayOperatorsMixin):
 
-    # __slots__ = ('values', 'uid', 'default', 'name', 'label', 'raw', 'values', 'initialized') # TODO: reinstate for speed later
-
     def __init__(self, name, dtype=None, default=None, nan=None, raw=None, label=None, coerce=True, skip_init=False):
         """
         Store a state of the agents (e.g. age, infection status, etc.) as an array
@@ -84,10 +82,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         return string
     
     def __len__(self):
-        try:
-            return len(self.uids)
-        except:
-            return len(self.raw)
+        return len(self.auids)
     
     def __getitem__(self, key):
         if isinstance(key, ss.BoolArr):

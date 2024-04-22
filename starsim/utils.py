@@ -247,46 +247,6 @@ def set_seed(seed=None):
     return
 
 
-# %% Simple array operations
-
-__all__ += ['defined', 'undefined']
-
-
-# def true(arr):
-#     """
-#     TODO: remove! Should replace with BoolArr.true()
-#     """
-#     return np.nonzero(arr)[0]
-
-
-def defined(arr):
-    """
-    Returns the indices of the values of the array that are not-nan.
-
-    Args:
-        arr (array): any array
-
-    **Example**::
-
-        inds = ss.defined(np.array([1,np.nan,0,np.nan,1,0,1]))
-    """
-    return (~np.isnan(arr)).nonzero()[-1]
-
-
-def undefined(arr):
-    """
-    Returns the indices of the values of the array that are not-nan.
-
-    Args:
-        arr (array): any array
-
-    **Example**::
-
-        inds = ss.defined(np.array([1,np.nan,0,np.nan,1,0,1]))
-    """
-    return np.isnan(arr).nonzero()[-1]
-
-
 # %% Data cleaning and processing
 
 __all__ += ['standardize_data']
