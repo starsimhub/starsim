@@ -95,25 +95,23 @@ class Cholera(ss.Infection):
         Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/cholera.py
         Original version by Dom Delport
         """
-        aliveinds = sim.people.aliveinds # TODO: refactor
-
         # Progress exposed -> infected
-        infected = aliveinds[self.exposed & (self.ti_infected <= sim.ti)] # TODO: fix
+        infected = (self.exposed & (self.ti_infected <= sim.ti)).uids
         self.infected[infected] = True
 
         # Progress infected -> symptomatic
-        symptomatic = aliveinds[self.infected & (self.ti_symptomatic <= sim.ti)]
+        symptomatic = (self.infected & (self.ti_symptomatic <= sim.ti)).uids
         self.symptomatic[symptomatic] = True
 
         # Progress symptomatic -> recovered
-        recovered = aliveinds[self.infectious & (self.ti_recovered <= sim.ti)]
+        recovered = (self.infectious & (self.ti_recovered <= sim.ti)).uids
         self.exposed[recovered] = False
         self.infected[recovered] = False
         self.symptomatic[recovered] = False
         self.recovered[recovered] = True
 
         # Trigger deaths
-        deaths = aliveinds[self.ti_dead <= sim.ti]
+        deaths = (self.ti_dead <= sim.ti).uids
         if len(deaths):
             sim.people.request_death(deaths)
 

@@ -56,7 +56,7 @@ class HIV(ss.Infection):
 
         self.rel_trans[sim.people.alive & self.infected & self.on_art] = 1 - self.pars['art_efficacy']
 
-        can_die = sim.people.aliveinds[sim.people.alive & sim.people.hiv.infected] # TODO: fix
+        can_die = sim.people.hiv.infected.uids
         hiv_deaths = self.pars.death_prob.filter(can_die)
         
         sim.people.request_death(hiv_deaths)

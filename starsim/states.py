@@ -91,6 +91,9 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
             return len(self.raw)
     
     def __getitem__(self, key):
+        if isinstance(key, ss.BoolArr):
+            key = key.uids
+            
         if isinstance(key, uids): # Check that it's UIDs # TODO: think about slice, list, etc
             return self.raw[key]
         elif isinstance(key, np.ndarray) and key.dtype == np.int64:
@@ -100,6 +103,9 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
             return self.values[key]
     
     def __setitem__(self, key, value):
+        if isinstance(key, ss.BoolArr):
+            key = key.uids
+            
         if isinstance(key, (int, uids, slice)):
             self.raw[key] = value
         else:
