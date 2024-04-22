@@ -372,7 +372,7 @@ class SexualNetwork(Network):
         # contact networks
         right_sex = people[sex]
         is_active = self.active(people)
-        is_available = people.aliveinds[right_sex & is_active] # TODO: refactor
+        is_available = (right_sex & is_active).uids
         still_available = is_available.remove(self.members)
         return still_available
 
@@ -582,15 +582,15 @@ class MFNet(SexualNetwork, DynamicNetwork):
 
     def set_participation(self, people, upper_age=None):
         # Set people who will participate in the network at some point
-        if upper_age is None: uids = people.aliveinds
-        else: uids = people.aliveinds[(people.age < upper_age)]
+        if upper_age is None: uids = people.auids
+        else: uids = (people.age < upper_age).uids
         self.participant[uids] = self.pars.participation.rvs(uids)
         return
 
     def set_debut(self, people, upper_age=None):
         # Set debut age
-        if upper_age is None: uids = people.aliveinds
-        else: uids = people.aliveinds[(people.age < upper_age)]
+        if upper_age is None: uids = people.auids
+        else: uids = (people.age < upper_age).uids
         self.debut[uids] = self.pars.debut.rvs(uids)
         return
 

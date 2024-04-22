@@ -393,7 +393,7 @@ class Pregnancy(Demographics):
         self.fecund[postpartum] = True
 
         # Maternal deaths
-        maternal_deaths = sim.people.aliveinds[self.ti_dead <= sim.ti] # TODO: fix
+        maternal_deaths = (self.ti_dead <= sim.ti).uids
         sim.people.request_death(maternal_deaths)
 
         return
@@ -402,14 +402,10 @@ class Pregnancy(Demographics):
         """
         Select people to make pregnant using incidence data
         """
-        # Abbreviate
-        ppl = sim.people
-
         # People eligible to become pregnant. We don't remove pregnant people here, these
         # are instead handled in the fertility_dist logic as the rates need to be adjusted
-        denom_conds = ppl.female & ppl.alive
-        inds_to_choose_from = sim.people.aliveinds[denom_conds]
-        conceive_uids = self.pars.fertility_rate.filter(inds_to_choose_from)
+        eligible_uids = (sim.people.female & sim.people.alive).uids
+        conceive_uids = self.pars.fertility_rate.filter(eligible_uids)
 
         # Set prognoses for the pregnancies
         if len(conceive_uids) > 0:

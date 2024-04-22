@@ -81,8 +81,13 @@ class Intervention(ss.Module):
         """
         if self.eligibility is not None:
             is_eligible = self.eligibility(sim)
+            if isinstance(is_eligible, ss.BoolArr):
+                is_eligible = is_eligible.uids
+            if not isinstance(is_eligible, ss.uids):
+                errormsg = f'Eligibility function must return BoolArr or UIDs, not {type(is_eligible)} {is_eligible}'
+                raise TypeError(errormsg)
         else:
-            is_eligible = sim.people.alive  # Probably not required
+            is_eligible = sim.people.auids # Everyone
         return is_eligible
 
 
@@ -214,9 +219,8 @@ class BaseTest(Intervention):
         """
         ti = sc.findinds(self.timepoints, sim.ti)[0]
         prob = self.prob[ti]  # Get the proportion of people who will be tested this timestep
-        is_eligible = self.check_eligibility(sim)  # Check eligibility
+        eligible_uids = self.check_eligibility(sim)  # Check eligibility
         self.coverage_dist.set(p=prob)
-        eligible_uids = sim.people.aliveinds[is_eligible] # TODO: fix
         accept_uids = self.coverage_dist.filter(eligible_uids)
         if len(accept_uids):
             self.outcomes = self.product.administer(sim, accept_uids)  # Actually administer the diagnostic

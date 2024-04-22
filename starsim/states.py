@@ -345,7 +345,9 @@ class IndexArr(IntArr):
     
 class uids(np.ndarray):
     """ Special class to keep track of UIDs: just a wrapped NumPy array """
-    def __new__(cls, arr):
+    def __new__(cls, arr=None):
+        if arr is None:
+            arr = np.empty(0, dtype=ss_int)
         return np.asarray(arr).view(cls)
     
     def concat(self, other, **kw): # TODO: why can't they both be called cat()?

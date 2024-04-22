@@ -59,10 +59,8 @@ class Dx(Product):
         for disease in self.diseases:
             for state in self.health_states:
                 this_state = getattr(sim.diseases[disease], state)
-                # remap_state = sim.people.remap_uids(this_state) # TODO: figure out how to avoid this!
-                alive_uids = sim.people.aliveinds[this_state] # TODO: fix!!!
-                these_uids = alive_uids.intersect(uids) # TODO: fix
-                # these_uids = uids[true_uids]
+                true_uids = this_state.uids # Find people for which this state is true
+                these_uids = true_uids.intersect(uids) # Find intersection of people in this state and the supplied UIDs
 
                 # Filter the dataframe to extract test results for people in this state
                 df_filter = (self.df.state == state) & (self.df.disease == disease)
@@ -101,7 +99,6 @@ class Tx(Product):
         """
 
         tx_successful = []  # Initialize list of successfully treated individuals
-        aliveinds = sim.people.aliveinds # TODO: fix
 
         for disease_name in self.diseases:
 
@@ -110,7 +107,8 @@ class Tx(Product):
             for state in self.health_states:
 
                 pre_tx_state = getattr(disease, state)
-                these_uids = aliveinds[pre_tx_state].intersect(uids) # TODO: fix
+                true_uids = pre_tx_state.uids # People in this state
+                these_uids = true_uids.intersect(uids)
 
                 if len(these_uids):
 
