@@ -143,8 +143,8 @@ class Tx(Product):
 class Vx(Product):
     """ Vaccine product """
     def __init__(self, diseases=None, pars=None, par_dists=None, *args, **kwargs):
-        pars = ss.omerge({}, pars)
-        par_dists = ss.omerge({}, par_dists)
+        pars = ss.dictmerge({}, pars)
+        par_dists = ss.dictmerge({}, par_dists)
         super().__init__(pars, par_dists, *args, **kwargs)
         self.diseases = sc.tolist(diseases)
         return

@@ -71,7 +71,7 @@ class Network(ss.Module):
             p2 = ss_int_,
             beta = ss_float_,
         )
-        self.meta = ss.omerge(default_keys, key_dict)
+        self.meta = ss.dictmerge(default_keys, key_dict)
         self.vertical = vertical  # Whether transmission is bidirectional
 
         # Initialize the keys of the network
@@ -335,7 +335,7 @@ class Networks(ss.ndict):
 class DynamicNetwork(Network):
     """ A network where partnerships update dynamically """
     def __init__(self, pars=None, key_dict=None, **kwargs):
-        key_dict = ss.omerge({'dur': ss_float_}, key_dict)
+        key_dict = ss.dictmerge({'dur': ss_float_}, key_dict)
         super().__init__(pars, key_dict=key_dict, **kwargs)
         return
 
@@ -353,7 +353,7 @@ class DynamicNetwork(Network):
 class SexualNetwork(Network):
     """ Base class for all sexual networks """
     def __init__(self, pars=None, key_dict=None, **kwargs):
-        key_dict = ss.omerge({'acts': ss_int_}, key_dict)
+        key_dict = ss.dictmerge({'acts': ss_int_}, key_dict)
         super().__init__(pars, key_dict=key_dict, **kwargs)
         self.debut = ss.FloatArr('debut', default=0)
         return
@@ -411,7 +411,7 @@ class StaticNet(Network):
     def __init__(self, graph=None, pars=None, **kwargs):
         super().__init__(**kwargs)
         self.graph = graph
-        self.pars = ss.omerge(dict(seed=True), pars)
+        self.pars = ss.dictmerge(dict(seed=True), pars)
         self.dist = ss.Dist(name='StaticNet').initialize()
         return
 
@@ -455,7 +455,7 @@ class RandomNet(DynamicNetwork):
 
     def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
         """ Initialize """
-        pars = ss.omerge({
+        pars = ss.dictmerge({
             'n_contacts': 10,  # Distribution or int. If int, interpreted as the mean of the dist listed in par_dists
             'dur': 0,
         }, pars)
@@ -545,7 +545,7 @@ class MFNet(SexualNetwork, DynamicNetwork):
     """
 
     def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             duration = 15,  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             participation = 0.9,  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             debut = 16,  # Age of debut can vary by using callable parameter values
@@ -553,7 +553,7 @@ class MFNet(SexualNetwork, DynamicNetwork):
             rel_part_rates = 1.0,
         )
 
-        par_dists = ss.omergeleft(par_dists,
+        par_dists = ss.dictmergeleft(par_dists,
             duration      = ss.lognorm_ex,
             participation = ss.bernoulli,
             debut         = ss.normal,
@@ -643,7 +643,7 @@ class MSMNet(SexualNetwork, DynamicNetwork):
     """
 
     def __init__(self, pars=None, key_dict=None, **kwargs):
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             duration_dist = ss.lognorm_ex(mean=15, stdev=15),
             participation_dist = ss.bernoulli(p=0.1),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             debut_dist = ss.normal(loc=16, scale=2),
@@ -719,7 +719,7 @@ class EmbeddingNet(MFNet):
         std is the standard deviation of noise added to the age of each individual when seeking a pair. Larger values will created more diversity in age gaps.
         
         """
-        pars = ss.omerge({
+        pars = ss.dictmerge({
             'embedding_func': ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
             'male_shift': 5,
         }, pars)
@@ -824,7 +824,7 @@ class MF_MSM(NetworkConnector):
     """ Combines the MF and MSM networks """
     def __init__(self, pars=None):
         networks = [ss.MFNet, ss.MSMNet]
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             prop_bi = 0.5,  # Could vary over time -- but not by age or sex or individual
         )
         super().__init__(networks=networks, pars=pars)

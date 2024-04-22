@@ -15,7 +15,7 @@ class Measles(SIR):
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
         """ Initialize with parameters """
 
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             # Natural history parameters, all specified in days
             dur_exp = 8,       # (days) - source: US CDC
             dur_inf = 11,      # (days) - source: US CDC
@@ -26,7 +26,7 @@ class Measles(SIR):
             beta = None,
         )
 
-        par_dists = ss.omergeleft(par_dists,
+        par_dists = ss.dictmergeleft(par_dists,
             dur_exp   = ss.normal,
             dur_inf   = ss.normal,
             init_prev = ss.bernoulli,

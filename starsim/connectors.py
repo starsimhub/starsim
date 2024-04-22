@@ -18,7 +18,7 @@ class simple_hiv_ng(Connector):
 
     def __init__(self, pars=None):
         super().__init__(pars=pars, label='HIV-Gonorrhea', diseases=[ss.HIV, ss.Gonorrhea])
-        self.pars = ss.omerge({
+        self.pars = ss.dictmerge({
             'rel_trans_hiv': 2,
             'rel_trans_aids': 5,
             'rel_sus_hiv': 2,

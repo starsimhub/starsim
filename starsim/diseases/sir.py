@@ -19,14 +19,14 @@ class SIR(ss.Infection):
     """
 
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             dur_inf = 6,
             init_prev = 0.01,
             p_death = 0.01,
             beta = 0.5,
         )
 
-        par_dists = ss.omergeleft(par_dists,
+        par_dists = ss.dictmergeleft(par_dists,
             dur_inf   = ss.lognorm_ex,
             init_prev = ss.bernoulli,
             p_death   = ss.bernoulli,
@@ -99,7 +99,7 @@ class SIS(ss.Infection):
     is no death in this case.
     """
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             dur_inf = 10,
             init_prev = 0.01,
             beta = 0.05,
@@ -107,7 +107,7 @@ class SIS(ss.Infection):
             imm_boost = 1.0,
         )
 
-        par_dists = ss.omergeleft(par_dists,
+        par_dists = ss.dictmergeleft(par_dists,
             dur_inf   = ss.lognorm_ex,
             init_prev = ss.bernoulli,
         )
@@ -179,7 +179,7 @@ class sir_vaccine(ss.Vx):
     Create a vaccine product that changes susceptible people to recovered (i.e., perfect immunity)
     """
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
-        pars = ss.omerge({
+        pars = ss.dictmerge({
             'efficacy': 0.9,
         }, pars)
 

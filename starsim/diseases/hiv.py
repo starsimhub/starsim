@@ -21,7 +21,7 @@ class HIV(ss.Infection):
             ss.FloatArr('cd4', default=500),
         )
 
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             cd4_min = 100,
             cd4_max = 500,
             cd4_rate = 5,
@@ -31,7 +31,7 @@ class HIV(ss.Infection):
             death_prob = 0.05,
         )
 
-        par_dists = ss.omergeleft(par_dists,
+        par_dists = ss.dictmergeleft(par_dists,
             init_prev  = ss.bernoulli,
             death_prob = ss.bernoulli,
         )

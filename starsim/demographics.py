@@ -34,14 +34,14 @@ class Births(Demographics):
         super().__init__(pars, **kwargs)
 
         # Set defaults
-        self.pars = ss.omergeleft(self.pars,
+        self.pars = ss.dictmergeleft(self.pars,
             birth_rate = 0,
             rel_birth = 1,
             units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
         )
 
         # Process metadata. Defaults here are the labels used by UN data
-        self.metadata = ss.omergeleft(metadata,
+        self.metadata = ss.dictmergeleft(metadata,
             data_cols = dict(year='Year', cbr='CBR'),
         )
 
@@ -144,18 +144,18 @@ class Deaths(Demographics):
         """
         super().__init__(pars, **kwargs)
 
-        self.pars = ss.omergeleft(self.pars,
+        self.pars = ss.dictmergeleft(self.pars,
             rel_death = 1,
             death_rate = 20,  # Default = a fixed rate of 2%/year, overwritten if data provided
             units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
 
-        self.par_dists = ss.omergeleft(par_dists,
+        self.par_dists = ss.dictmergeleft(par_dists,
             death_rate = ss.bernoulli
         )
 
         # Process metadata. Defaults here are the labels used by UN data
-        self.metadata = ss.omergeleft(metadata,
+        self.metadata = ss.dictmergeleft(metadata,
             data_cols = dict(year='Time', sex='Sex', age='AgeGrpStart', value='mx'),
             sex_keys = dict(f='Female', m='Male'),
         )
@@ -264,7 +264,7 @@ class Pregnancy(Demographics):
             ss.IntArr('ti_dead'),  # Maternal mortality
         )
 
-        self.pars = ss.omergeleft(self.pars,
+        self.pars = ss.dictmergeleft(self.pars,
             dur_pregnancy = 0.75,
             dur_postpartum = 0.5,
             fertility_rate = 0,    # Usually this will be provided in CSV format
@@ -274,14 +274,14 @@ class Pregnancy(Demographics):
             units = 1e-3,          # Assumes fertility rates are per 1000. If using percentages, switch this to 1
         )
 
-        self.par_dists = ss.omergeleft(par_dists,
+        self.par_dists = ss.dictmergeleft(par_dists,
             fertility_rate = ss.bernoulli,
             maternal_death_rate = ss.bernoulli,
             sex_ratio = ss.bernoulli
         )
 
         # Process metadata. Defaults here are the labels used by UN data
-        self.metadata = ss.omergeleft(metadata,
+        self.metadata = ss.dictmergeleft(metadata,
             data_cols = dict(year='Time', age='AgeGrp', value='ASFR'),
         )
 

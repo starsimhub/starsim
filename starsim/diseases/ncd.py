@@ -25,7 +25,7 @@ class NCD(ss.Disease):
             prognosis = ss.weibull(c=2, scale=5), # Time in years between first becoming affected and death
         )
 
-        super().__init__(ss.omerge(default_pars, pars))
+        super().__init__(ss.dictmerge(default_pars, pars))
         self.add_states(
             ss.BoolArr('at_risk'),
             ss.BoolArr('affected'),

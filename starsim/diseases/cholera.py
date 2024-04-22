@@ -17,7 +17,7 @@ class Cholera(ss.Infection):
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
         """ Initialize with parameters """
 
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             # Natural history parameters, all specified in days
             dur_exp2inf = ss.lognorm_ex(mean=2.772, stdev=4.737),  # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
             dur_asymp2rec = ss.uniform(low=1, high=10),    # From WHO cholera fact sheet, asymptomatic individuals shed bacteria for 1-10 days (https://www.who.int/news-room/fact-sheets/detail/cholera)
@@ -39,7 +39,7 @@ class Cholera(ss.Infection):
             p_env_transmit = 0,    # Probability of environmental transmission - filled out later
         )
 
-        par_dists = ss.omergeleft(par_dists,
+        par_dists = ss.dictmergeleft(par_dists,
             dur_exp2inf    = ss.lognorm_ex,
             dur_asymp2rec  = ss.uniform,
             dur_symp2rec   = ss.lognorm_ex,

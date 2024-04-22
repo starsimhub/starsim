@@ -16,7 +16,7 @@ class Ebola(SIR):
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
         """ Initialize with parameters """
 
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             # Natural history parameters, all specified in days
             dur_exp2symp = 12.7, # Add source
             dur_symp2sev =    6, # Add source
@@ -35,7 +35,7 @@ class Ebola(SIR):
             unburied_factor = 2.1,
         )
 
-        par_dists = ss.omergeleft(par_dists,
+        par_dists = ss.dictmergeleft(par_dists,
             dur_exp2symp    = ss.lognorm_ex,
             dur_symp2sev    = ss.lognorm_ex,
             dur_sev2dead    = ss.lognorm_ex,

@@ -78,7 +78,7 @@ class Syphilis(ss.Infection):
             # Initial conditions
             init_prev=ss.bernoulli(p=0.03),
         )
-        self.pars = ss.omerge(default_pars, self.pars) # NB: regular omerge rather than omergeleft
+        self.pars = ss.dictmerge(default_pars, self.pars) # NB: regular dictmerge rather than dictmergeleft
 
         return
 
