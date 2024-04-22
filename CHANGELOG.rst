@@ -14,6 +14,7 @@ Version 0.4.0 (2024-04-24)
 - ``FloatArr`` and ``IntArr`` classes also have a defined ``nan`` value (not for boolean). These also have only appropriate operations defined on them, e.g. ``~people.female`` works, but ``~people.ti_dead`` does not.
 - UIDs used to be NumPy integer arrays; they are now ``ss.uids`` objects (which is a class, but is lowercase for consistency with ``np.array()``, which it is functionally similar to). Indexing a state by an integer array rather than ``ss.uids()`` now raises an exception, due to the ambiguity involved. To index the underlying array with an integer array, use ``Arr.raw[int_arr]``; to index only the active/alive agents, use ``Arr.values[int_arr]``.
 - Dead agents are no longer removed, so ``uid`` always corresponds to the position in the array. This means that no remapping is necessary, which has a significant performance benefit (roughly 2x faster for large numbers of agents).
+- Renamed ``omerge`` to ``dictmerge`` and ``omergeleft`` to ``dictmergeleft``.
 - *GitHub info*: PR `456 <https://github.com/starsimhub/starsim/pull/456>`_
 
 
