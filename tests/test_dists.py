@@ -127,7 +127,7 @@ class OneMore(ss.Intervention):
             # Create an extra agent
             preg = ss.Pregnancy(rel_fertility=0) # Ensure no default births
             preg.initialize(sim)
-            new_uids = np.array([len(sim.people)]) # Hack since make_embryos doesn't return UIDs
+            new_uids = ss.uids([len(sim.people)]) # Hack since make_embryos doesn't return UIDs
             preg.make_embryos(sim, np.array([0])) # Assign 0th agent to be the "mother"
             assert len(new_uids) == 1
             sim.people.age[new_uids] = -100 # Set to a very low number to never reach debut age
