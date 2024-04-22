@@ -7,10 +7,12 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
-Version 0.4.0 (2024-04-20)
+Version 0.4.0 (2024-04-24)
 --------------------------
-- Replace ``UIDArray``, ``ArrayView``, and ``State`` with ``Arr``.
-- Dead agents are no longer removed.
+- Replace ``UIDArray``, ``ArrayView``, and ``State`` with ``Arr``, which has different subclasses for different data types (e.g. ``FloatArr``, ``IntArr``, ``BoolArr``). States are usually represented by ``BoolArr`` (e.g. ``sir.infected``), while other agent properties are represented by ``FloatArr`` (e.g. ``sir.rel_trans``) or ``IntArr`` (e.g. ``sir.ti_infected``).
+- ``Arr`` objects automatically skip over dead (or otherwise removed) agents; the "active" UIDs are stored in ``sim.people.auids``, which is updated when agents are born or die. This array is linked to each ``Arr``, so that e.g. ``sim.people.age.mean()`` will only calculate the mean over alive agents. To access the underlying Numpy array, use ``sim.people.age.raw``.
+- UIDs used to be NumPy integer arrays; they are now ``ss.uids`` objects (which is a class, but is lowercase for consistency with ``np.array()``, which it is functionally similar to). Indexing a state by an integer array rather than ``ss.uids()`` now raises an exception, due to the ambiguity involved. To index the underlying array with an integer array, use ``Arr.raw[int_arr]``; to index only the active/alive agents, use ``Arr.values[int_arr]``.
+- Dead agents are no longer removed, but are instead skipped by default.
 - *GitHub info*: PR `456 <https://github.com/starsimhub/starsim/pull/456>`_
 
 
