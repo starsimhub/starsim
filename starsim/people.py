@@ -55,11 +55,11 @@ class BasePeople(sc.prettyobj):
     def n_uids(self):
         return self.uid.len_used
     
-    def remap_uids(self, arr):
-        """ Map from sparse to full representation """
-        new = np.empty(self.n_uids, arr.dtype)
-        new[self.auids] = arr
-        return new
+    # def remap_uids(self, arr):
+    #     """ Map from sparse to full representation """
+    #     new = np.empty(self.n_uids, arr.dtype)
+    #     new[self.auids] = arr
+    #     return new
 
     def register_state(self, state, die=True):
         """
@@ -282,7 +282,7 @@ class People(BasePeople):
         """
         Remove dead agents
         """
-        uids = self.alive.false()
+        uids = (~self.alive).uids
         if len(uids):
             
             # Reset the states
@@ -305,7 +305,7 @@ class People(BasePeople):
         :param sim:
         :return:
         """
-        self.age[self.alive] += self.dt
+        self.age[self.alive.uids] += self.dt
         return
 
     def resolve_deaths(self):
@@ -314,7 +314,7 @@ class People(BasePeople):
 
         :return:
         """
-        death_uids = self.auids[self.ti_dead <= self.ti]
+        death_uids = (self.ti_dead <= self.ti).uids
         self.alive[death_uids] = False
         return death_uids
 

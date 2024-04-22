@@ -41,7 +41,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
 
     # __slots__ = ('values', 'uid', 'default', 'name', 'label', 'raw', 'values', 'initialized') # TODO: reinstate for speed later
 
-    def __init__(self, name, dtype=None, default=None, nan=None, label=None, coerce=True, skip_init=False):
+    def __init__(self, name, dtype=None, default=None, nan=None, raw=None, label=None, coerce=True, skip_init=False):
         """
         Store a state of the agents (e.g. age, infection status, etc.) as an array
 
@@ -53,6 +53,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
             - A callable, with a single argument for the number of values to produce
             - A ``ss.Dist`` instance
             nan (any): the value to use to represent NaN (not a number); also used as the default value if not supplied
+            raw (arr): if supplied, the raw values to use
             label (str): The human-readable name for the state
             coerce (bool): Whether to ensure the the data is one of the supported data types
             skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
@@ -74,6 +75,8 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         self.len_used = 0
         self.len_tot = 0
         self.initialized = skip_init
+        if raw is not None:
+            self.grow(new_uids=uids(np.arange(len(raw))), new_vals=raw)
         return
     
     def __repr__(self):
@@ -133,18 +136,6 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     @property
     def values(self):
         return self.raw[self.auids] # TODO: think about if this makes sense for uids
-    
-    # @property
-    # def auids(self):
-    #     try:
-    #         return self.people.auids
-    #     except:
-    #         print('TEMP: Could not return auids!')
-    #         return np.arange(len(self.raw))
-        
-    # @property
-    # def uids(self):
-    #     return self._uids if self._uids is not None else self.auids
         
     def isnan(self):
         errormsg = f'Arr.isnan() not implemented for {self}'
@@ -203,8 +194,15 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     
     def set_people(self, people):
         """ Reset the people object associated with this state """
+        if isinstance(people, ss.People): # It's people, it's fine
+            pass
+        elif isinstance(people, ss.Sim): # Actually a sim
+            people = people.people
+        else:
+            errormsg = f'Must supply a Sim or People object, not {type(people)}'
+            raise TypeError(errormsg)
         assert people.initialized, 'People must be initialized before initializing states'
-        self.people = people
+        self.auids = people.auids # Shorten since used a lot
         return
 
     def initialize(self, sim):
@@ -235,7 +233,6 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         people = sim.people
         self.set_people(people)
         people.register_state(self)
-        self.auids = people.auids # Shorten since used a lot
         
         # Connect any distributions in the default to RNGs in the Sim
         if isinstance(self.default, ss.Dist):
@@ -246,15 +243,16 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         self.initialized = True
         return
 
-    def make(self, other, arr=None):
+    @classmethod
+    def make(cls, orig, arr=None):
         """ Duplicate and copy (rather than link) data, optionally resetting the array """
-        new = object.__new__(self.__class__) # Create a new Arr instance
-        new.__dict__ = self.__dict__.copy() # Copy pointers
-        new.raw = np.empty(len(new.raw), dtype=new.raw.dtype) # Copy values, breaking reference
         if arr is None:
-            new.raw[new.auids] = self.values
-        else:
-            new.raw[new.auids] = arr
+            arr = orig.values
+        new = object.__new__(cls) # Create a new Arr instance
+        new.__dict__ = orig.__dict__.copy() # Copy pointers
+        new.dtype = arr.dtype # Set to correct dtype
+        new.raw = np.empty(len(new.raw), dtype=new.dtype) # Copy values, breaking reference
+        new.raw[new.auids] = arr
         return new
 
 
@@ -308,10 +306,10 @@ class BoolArr(Arr):
         super().__init__(name=name, dtype=ss_bool, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
         return
     
-    def __and__(self, other): return self.make(self.values & other)
-    def __or__(self, other):  return self.make(self.values | other)
-    def __xor__(self, other): return self.make(self.values ^ other)
-    def __invert__(self):     return self.make(~self.values)
+    def __and__(self, other): return BoolArr.make(self, self.values & other)
+    def __or__(self, other):  return BoolArr.make(self, self.values | other)
+    def __xor__(self, other): return BoolArr.make(self, self.values ^ other)
+    def __invert__(self):     return BoolArr.make(self, ~self.values)
     
     @property
     def uids(self):
@@ -335,6 +333,7 @@ class IndexArr(IntArr):
     def __init__(self, name, label=None):
         super().__init__(name=name, label=label, skip_init=True)
         self.raw = uids(self.raw)
+        self.auids = self.raw # On initialization, these are the same, but later linked to People
         return
     
     def grow(self, new_uids=None, new_vals=None):

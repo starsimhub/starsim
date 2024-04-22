@@ -210,7 +210,7 @@ class Infection(Disease):
         if self.pars.init_prev is None:
             return
 
-        alive_uids = sim.people.alive.true()  # Maybe just sim.people.uid?
+        alive_uids = sim.people.alive.uids # TODO: is this needed?
         initial_cases = self.pars.init_prev.filter(alive_uids)
         self.set_prognoses(sim, initial_cases)  # TODO: sentinel value to indicate seeds?
         return
@@ -272,8 +272,8 @@ class Infection(Disease):
             contacts = net.contacts
             rel_trans = self.infectious * self.rel_trans
             rel_sus   = self.susceptible * self.rel_sus
-            rel_trans = people.remap_uids(rel_trans) # TODO: figure out a better way to do this
-            rel_sus   = people.remap_uids(rel_sus)
+            # rel_trans = people.remap_uids(rel_trans) # TODO: figure out a better way to do this
+            # rel_sus   = people.remap_uids(rel_sus)
             p1p2b0 = [contacts.p1, contacts.p2, nbetas[0]]
             p2p1b1 = [contacts.p2, contacts.p1, nbetas[1]]
             for src, trg, beta in [p1p2b0, p2p1b1]:
