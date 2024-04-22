@@ -175,6 +175,7 @@ class Deaths(Demographics):
             death_rate = module.death_rate_data
 
         else:
+            ppl = sim.people
             data_cols = sc.objdict(module.metadata.data_cols)
             year_label = data_cols.year
             age_label  = data_cols.age
@@ -188,17 +189,20 @@ class Deaths(Demographics):
 
             df = module.death_rate_data.loc[module.death_rate_data[year_label] == nearest_year]
             age_bins = df[age_label].unique()
-            age_inds = np.digitize(sim.people.age[uids], age_bins) - 1
 
             f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
             m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
 
             # Initialize
             death_rate_df = pd.Series(index=uids)
-            fem = sim.people.female
-            death_rate_df[uids[fem[uids]]] = f_arr[age_inds[fem[uids]]] # TODO: avoid double indexing
-            death_rate_df[uids[~fem[uids]]] = m_arr[age_inds[~fem[uids]]] # TODO: fix male
-            death_rate_df[uids[sim.people.age[uids] < 0]] = 0  # Don't use background death rates for unborn babies
+            f_uids = uids.intersect(ppl.female.uids) # TODO: reduce duplication
+            m_uids = uids.intersect(ppl.male.uids)
+            f_age_inds = np.digitize(ppl.age[f_uids], age_bins) - 1
+            m_age_inds = np.digitize(ppl.age[m_uids], age_bins) - 1
+            death_rate_df[f_uids] = f_arr[f_age_inds]
+            death_rate_df[m_uids] = m_arr[m_age_inds]
+            unborn_inds = uids.intersect((sim.people.age < 0).uids)
+            death_rate_df[unborn_inds] = 0  # Don't use background death rates for unborn babies
 
             death_rate = death_rate_df.values
 
