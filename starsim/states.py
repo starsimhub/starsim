@@ -70,7 +70,6 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         
         # Properties that are initialized later
         self.raw = np.empty(0, dtype=dtype)
-        self.auids = uids() # Initialize empty, to be replaced with sim.people.auids
         self.people = None
         self.len_used = 0
         self.len_tot = 0
@@ -135,6 +134,14 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         inputs = [x.values if isinstance(x, Arr) else x for x in inputs]
         return getattr(ufunc, method)(*inputs, **kwargs)
+    
+    @property
+    def auids(self):
+        try:
+            return self.people.auids
+        except:
+            print('Non-initialized States object')
+            return uids(np.arange(len(self.raw)))
     
     def count(self):
         return np.count_nonzero(self.values)
@@ -208,7 +215,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
             errormsg = f'Must supply a Sim or People object, not {type(people)}'
             raise TypeError(errormsg)
         assert people.initialized, 'People must be initialized before initializing states'
-        self.auids = people.auids # Shorten since used a lot
+        self.people = people # Shorten since used a lot
         return
 
     def initialize(self, sim):
@@ -339,7 +346,6 @@ class IndexArr(IntArr):
     def __init__(self, name, label=None):
         super().__init__(name=name, label=label, skip_init=True)
         self.raw = uids(self.raw)
-        self.auids = self.raw # On initialization, these are the same, but later linked to People
         return
     
     def grow(self, new_uids=None, new_vals=None):

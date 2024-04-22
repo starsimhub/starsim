@@ -270,13 +270,16 @@ class Infection(Disease):
 
             nbetas = betamap[nkey]
             contacts = net.contacts
-            rel_trans = self.infectious * self.rel_trans
-            rel_sus   = self.susceptible * self.rel_sus
+            # rel_trans = self.infectious * self.rel_trans
+            # rel_sus   = self.susceptible * self.rel_sus
             # rel_trans = people.remap_uids(rel_trans) # TODO: figure out a better way to do this
             # rel_sus   = people.remap_uids(rel_sus)
             p1p2b0 = [contacts.p1, contacts.p2, nbetas[0]]
             p2p1b1 = [contacts.p2, contacts.p1, nbetas[1]]
             for src, trg, beta in [p1p2b0, p2p1b1]:
+                
+                src = src.intersect(self.infectious.uids)
+                trg = trg.intersect(self.susceptible.uids)
 
                 # Skip networks with no transmission
                 if beta == 0:
@@ -284,7 +287,7 @@ class Infection(Disease):
 
                 # Calculate probability of a->b transmission.
                 beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=people.dt) # TODO: should this be sim.dt?
-                p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
+                p_transmit = self.rel_trans[src] * self.rel_sus[trg] * beta_per_dt
 
                 # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
                 rvs_s = self.rng_source.rvs(src)
