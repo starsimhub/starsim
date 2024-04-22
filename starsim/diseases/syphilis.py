@@ -341,7 +341,7 @@ class syph_screening(ss.routine_screening):
         if self.eligibility is not None:
             is_eligible = self.eligibility(sim)
         else:
-            is_eligible = sim.people.alive  # Probably not required
+            is_eligible = sim.people.auids  # Probably not required
         return is_eligible
 
     def initialize(self, sim):

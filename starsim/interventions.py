@@ -81,11 +81,12 @@ class Intervention(ss.Module):
         """
         if self.eligibility is not None:
             is_eligible = self.eligibility(sim)
-            if isinstance(is_eligible, ss.BoolArr):
-                is_eligible = is_eligible.uids
-            if not isinstance(is_eligible, ss.uids):
-                errormsg = f'Eligibility function must return BoolArr or UIDs, not {type(is_eligible)} {is_eligible}'
-                raise TypeError(errormsg)
+            if is_eligible is not None and len(is_eligible): # Only worry if non-None/nonzero length
+                if isinstance(is_eligible, ss.BoolArr):
+                    is_eligible = is_eligible.uids
+                if not isinstance(is_eligible, ss.uids):
+                    errormsg = f'Eligibility function must return BoolArr or UIDs, not {type(is_eligible)} {is_eligible}'
+                    raise TypeError(errormsg)
         else:
             is_eligible = sim.people.auids # Everyone
         return is_eligible
@@ -246,7 +247,7 @@ class BaseScreening(BaseTest):
         """
         Perform screening by finding who's eligible, finding who accepts, and applying the product.
         """
-        accept_uids = np.array([])
+        accept_uids = ss.uids()
         if sim.ti in self.timepoints:
             accept_uids = self.deliver(sim)
             self.screened[accept_uids] = True
@@ -269,7 +270,7 @@ class BaseTriage(BaseTest):
 
     def apply(self, sim):
         self.outcomes = {k: np.array([], dtype=int) for k in self.product.hierarchy}
-        accept_inds = np.array([])
+        accept_inds = ss.uids()
         if sim.t in self.timepoints: accept_inds = self.deliver(sim)
         return accept_inds
 
@@ -398,7 +399,7 @@ class BaseTreatment(Intervention):
         """
         Get indices of people who will acccept treatment; these people are then added to a queue or scheduled for receiving treatment
         """
-        accept_uids = np.array([], dtype=int)
+        accept_uids = ss.uids()
         eligible_uids = self.check_eligibility(sim)  # Apply eligiblity
         if len(eligible_uids):
             self.coverage_dist.set(p=self.prob[0])
