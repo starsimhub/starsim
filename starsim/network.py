@@ -382,8 +382,8 @@ class SexualNetwork(Network):
 
 
 # %% Specific instances of networks
+__all__ += ['StaticNet', 'RandomNet', 'NullNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet']
 
-__all__ += ['StaticNet', 'RandomNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet']
 
 class StaticNet(Network):
     """
@@ -391,11 +391,10 @@ class StaticNet(Network):
     and initialized partnerships only end when one of the partners dies. The networkx graph can be created outside Starsim
     if population size is known. Or the graph can be created by passing a networkx generator function to Starsim.
 
-    If "seed=True" is passed as a parameter, it is replaced with the built-in RNG.
+    If "seed=True" is passed as a keyword argument or a parameter in pars, it is replaced with the built-in RNG.
     The parameter "n" is supplied automatically to be equal to n_agents.
-    
-    **Examples**::
 
+    **Examples**::
         # Generate a networkx graph and pass to Starsim
         import networkx as nx
         import starsim as ss
@@ -404,7 +403,7 @@ class StaticNet(Network):
 
         # Pass a networkx graph generator to Starsim
         ss.StaticNet(graph=nx.erdos_renyi_graph, p=0.0001, seed=True)
-        
+
         # Just create a default graph
     """
 
@@ -426,17 +425,26 @@ class StaticNet(Network):
         if 'seed' in self.pars and self.pars.seed is True:
             self.pars.seed = self.dist.rng
         if callable(self.graph):
-            self.graph = self.graph(n=n_agents, **self.pars)
+            try:
+                self.graph = self.graph(n=n_agents, **self.pars)
+            except TypeError as e:
+                print(f"{str(e)}: networkx {self.graph.name} not supported. Try using ss.NullNet().")
+                raise e
         self.validate_pop(n_agents)
         super().initialize(sim)
         self.get_contacts()
         return
 
-    def validate_pop(self, popsize):
+    def validate_pop(self, n_agents):
         n_nodes = self.graph.number_of_nodes()
-        if n_nodes > popsize:
-            errormsg = f'Please ensure the number of nodes in graph {n_nodes} is smaller than population size {popsize}.'
-            raise ValueError(errormsg)
+        if n_nodes > n_agents:
+            errmsg = (f"Please ensure the number of nodes in graph ({n_nodes}) is less than "
+                      f"or equal to (<=) the agent population size ({n_agents}).")
+            raise ValueError(errmsg)
+
+        if not self.graph.number_of_edges():
+            errmsg = f"The nx generator {self.graph.name} produced a graph with no edges"
+            raise ValueError(errmsg)
 
     def get_contacts(self):
         p1s = []
@@ -461,7 +469,7 @@ class RandomNet(DynamicNetwork):
         }, pars)
 
         super().__init__(pars=pars, key_dict=key_dict, **kwargs)
-        
+
         # Default RNG
         self.dist = ss.Dist(distname='RandomNet')
 
@@ -484,7 +492,7 @@ class RandomNet(DynamicNetwork):
             source[count: count + n] = person_id
             count += n
         return source
-    
+
     def get_contacts(self, inds, n_contacts):
         """
         Efficiently generate contacts
@@ -535,6 +543,47 @@ class RandomNet(DynamicNetwork):
             dur = np.full(len(p1), self.pars.dur)
         
         self.append(p1=p1, p2=p2, beta=beta, dur=dur)
+        return
+
+
+class NullNet(Network):
+    """
+    A convenience class for a network of size n that only has self-connections with a weight of 0.
+    This network can be useful for debugging purposes or as a placeholder network during development
+    for conditions that require more complex network mechanisms.
+
+    Guarantees there's one (1) contact per agent (themselves), and that their connection weight is zero.
+
+    For an empty network (ie, no contacts) use
+    >> import starsim as ss
+    >> import networkx as nx
+    >> empty_net_static = ss.StaticNet(nx.empty_graph)
+    >> empty_net_rand = ss.RandomNet(n_contacts=0)
+
+    """
+
+    def __init__(self, n_people=None, **kwargs):
+        self.n = n_people
+        super().__init__(**kwargs)
+        return
+
+    def initialize(self, sim):
+        super().initialize(sim)
+        popsize = sim.pars['n_agents']
+        if self.n is None:
+            self.n = popsize
+        else:
+            if self.n > popsize:
+                errormsg = f'Please ensure the size of the network ({self.n} is less than or equal to the population size ({popsize}).'
+                raise ValueError(errormsg)
+        self.get_contacts()
+        return
+
+    def get_contacts(self):
+        indices = np.arange(self.n)
+        self.contacts.p1 = np.concatenate([self.contacts.p1, indices])
+        self.contacts.p2 = np.concatenate([self.contacts.p2, indices])
+        self.contacts.beta = np.concatenate([self.contacts.beta, np.zeros_like(indices)])
         return
 
 
