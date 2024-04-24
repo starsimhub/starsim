@@ -581,9 +581,7 @@ class NullNet(Network):
 
     def get_contacts(self):
         indices = np.arange(self.n)
-        self.contacts.p1 = np.concatenate([self.contacts.p1, indices])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, indices])
-        self.contacts.beta = np.concatenate([self.contacts.beta, np.zeros_like(indices)])
+        self.append(dict(p1=indices, p2=indices, beta=np.zeros_like(indices)))
         return
 
 
