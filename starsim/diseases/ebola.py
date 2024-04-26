@@ -60,11 +60,11 @@ class Ebola(SIR):
             ss.BoolArr('buried'),
     
             # Timepoint states
-            ss.IntArr('ti_exposed'),
-            ss.IntArr('ti_severe'),
-            ss.IntArr('ti_recovered'),
-            ss.IntArr('ti_dead'),
-            ss.IntArr('ti_buried'),
+            ss.FloatArr('ti_exposed'),
+            ss.FloatArr('ti_severe'),
+            ss.FloatArr('ti_recovered'),
+            ss.FloatArr('ti_dead'),
+            ss.FloatArr('ti_buried'),
         )
 
         return

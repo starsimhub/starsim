@@ -24,7 +24,7 @@ def test_people():
         locs = [1,2,3]
         return np.random.choice(locs, n)
     extra_states = [
-        ss.IntArr('geolocation', default=geo_func),
+        ss.FloatArr('geolocation', default=geo_func),
     ]
     ppl = ss.People(100, extra_states=extra_states)
 

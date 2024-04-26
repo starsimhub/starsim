@@ -38,7 +38,7 @@ class Measles(SIR):
         # SIR are added automatically, here we add E
         self.add_states(
             ss.BoolArr('exposed'),
-            ss.IntArr('ti_exposed'),
+            ss.FloatArr('ti_exposed'),
         )
 
         return

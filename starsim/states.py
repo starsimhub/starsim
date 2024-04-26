@@ -10,7 +10,7 @@ ss_float = ss.dtypes.float
 ss_int   = ss.dtypes.int
 ss_bool  = ss.dtypes.bool
 
-__all__ = ['check_dtype', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'IndexArr', 'uids']
+__all__ = ['check_dtype', 'Arr', 'FloatArr', 'BoolArr', 'IndexArr', 'uids']
 
 
 def check_dtype(dtype, default=None):
@@ -294,21 +294,6 @@ class FloatArr(Arr):
         return valid
 
     
-class IntArr(Arr):
-    """ Subclass of Arr with defaults for integers """
-    def __init__(self, name, default=None, nan=ss.intnan, label=None, skip_init=False):
-        super().__init__(name=name, dtype=ss_int, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
-        return
-
-    def isnan(self):
-        return self.values == self.nan
-
-    def notnan(self, mask=None):
-        valid = self.values != self.nan
-        if mask is not None:
-            valid = valid*mask
-        return valid
-
 class BoolArr(Arr):
     """ Subclass of Arr with defaults for booleans """
     def __init__(self, name, default=None, nan=False, label=None, skip_init=False): # No good NaN equivalent for bool arrays
@@ -335,14 +320,23 @@ class BoolArr(Arr):
             raise BooleanNaNError()
         else:
             return mask
+
     
-    
-class IndexArr(IntArr):
+class IndexArr(Arr):
     """ A special class of IndexArr used for UIDs and RNG IDs """
     def __init__(self, name, label=None):
-        super().__init__(name=name, label=label, skip_init=True)
+        super().__init__(name=name, dtype=ss_int, default=None, nan=-1, label=label, coerce=False, skip_init=True)
         self.raw = uids(self.raw)
         return
+    
+    def isnan(self):
+        return self.values == self.nan
+
+    def notnan(self, mask=None):
+        valid = self.values != self.nan
+        if mask is not None:
+            valid = valid*mask
+        return valid
     
     def grow(self, new_uids=None, new_vals=None):
         super().grow(new_uids=new_uids, new_vals=new_vals)

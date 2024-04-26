@@ -36,14 +36,14 @@ class SIR(ss.Infection):
 
         self.add_states(
             ss.BoolArr('recovered'),
-            ss.IntArr('ti_recovered'),
-            ss.IntArr('ti_dead'),
+            ss.FloatArr('ti_recovered'),
+            ss.FloatArr('ti_dead'),
         )
         return
 
     def update_pre(self, sim):
         # Progress infectious -> recovered
-        recovered = (self.infected & self.ti_recovered <= sim.ti).uids
+        recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
         self.infected[recovered] = False
         self.recovered[recovered] = True
 
@@ -113,7 +113,7 @@ class SIS(ss.Infection):
         )
         
         self.add_states(
-            ss.IntArr('ti_recovered'),
+            ss.FloatArr('ti_recovered'),
             ss.FloatArr('immunity', default=0.0),
         )
 

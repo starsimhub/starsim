@@ -29,8 +29,8 @@ class NCD(ss.Disease):
         self.add_states(
             ss.BoolArr('at_risk'),
             ss.BoolArr('affected'),
-            ss.IntArr('ti_affected'),
-            ss.IntArr('ti_dead'),
+            ss.FloatArr('ti_affected'),
+            ss.FloatArr('ti_dead'),
         )
         return
 

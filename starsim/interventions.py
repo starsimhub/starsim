@@ -205,8 +205,8 @@ class BaseTest(Intervention):
         self.eligibility = eligibility
         self._parse_product(product)
         self.screened = ss.BoolArr('screened')
-        self.screens = ss.IntArr('screens', default=0)
-        self.ti_screened = ss.IntArr('ti_screened')
+        self.screens = ss.FloatArr('screens', default=0)
+        self.ti_screened = ss.FloatArr('ti_screened')
         return
 
     def initialize(self, sim):
@@ -490,8 +490,8 @@ class BaseVaccination(Intervention):
         self.label = label
         self._parse_product(product)
         self.vaccinated = ss.BoolArr('vaccinated')
-        self.n_doses = ss.IntArr('doses', default=0)
-        self.ti_vaccinated = ss.IntArr('ti_vaccinated')
+        self.n_doses = ss.FloatArr('doses', default=0)
+        self.ti_vaccinated = ss.FloatArr('ti_vaccinated')
         self.coverage_dist = ss.bernoulli(p=0)  # Placeholder
         return
 

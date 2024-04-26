@@ -28,17 +28,17 @@ class Syphilis(ss.Infection):
             ss.BoolArr('congenital'),  # Congenital syphilis states
     
             # Timestep of state changes
-            ss.IntArr('ti_exposed'),
-            ss.IntArr('ti_primary'),
-            ss.IntArr('ti_secondary'),
-            ss.IntArr('ti_latent_temp'),
-            ss.IntArr('ti_latent_long'),
-            ss.IntArr('ti_tertiary'),
-            ss.IntArr('ti_immune'),
-            ss.IntArr('ti_miscarriage'),
-            ss.IntArr('ti_nnd'),
-            ss.IntArr('ti_stillborn'),
-            ss.IntArr('ti_congenital'),
+            ss.FloatArr('ti_exposed'),
+            ss.FloatArr('ti_primary'),
+            ss.FloatArr('ti_secondary'),
+            ss.FloatArr('ti_latent_temp'),
+            ss.FloatArr('ti_latent_long'),
+            ss.FloatArr('ti_tertiary'),
+            ss.FloatArr('ti_immune'),
+            ss.FloatArr('ti_miscarriage'),
+            ss.FloatArr('ti_nnd'),
+            ss.FloatArr('ti_stillborn'),
+            ss.FloatArr('ti_congenital'),
         )
 
         # Parameters
