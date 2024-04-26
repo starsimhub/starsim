@@ -9,29 +9,13 @@ import networkx as nx
 from operator import itemgetter
 import pandas as pd
 
-__all__ = ['Disease', 'Infection', 'InfectionLog']
+__all__ = ['Condition', 'Disease', 'Infection', 'InfectionLog']
 
 
-class Disease(ss.Module):
-    """ Base module class for diseases """
-
+class Condition(ss.Module):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.results = ss.Results(self.name)
-        self.log = InfectionLog()  # See below for definition
-        return
-
-    @property
-    def _boolean_states(self):
-        """
-        Iterator over states with boolean type
-
-        For diseases, these states typically represent attributes like 'susceptible',
-        'infectious', 'diagnosed' etc. These variables are typically useful to
-        """
-        for state in self.states:
-            if state.dtype == bool:
-                yield state
         return
 
     def initialize(self, sim):
@@ -39,10 +23,6 @@ class Disease(ss.Module):
         self.validate_pars(sim)
         self.init_results(sim)
         self.set_initial_states(sim)
-        return
-
-    def finalize(self, sim):
-        super().finalize(sim)
         return
 
     def validate_pars(self, sim):
@@ -54,7 +34,7 @@ class Disease(ss.Module):
             # If there's no beta, make a default one
             if 'beta' not in self.pars or self.pars.beta is None:
                 self.pars.beta = sc.objdict({k: [1, 1] for k in sim.networks})
-                msg = f'Beta not supplied for disease "{self.name}"; defaulting to 1'
+                msg = f'Beta not supplied for "{self.name}"; defaulting to 1'
                 ss.warn(msg)
 
             # If beta is a scalar, apply this bi-directionally to all networks
@@ -69,6 +49,18 @@ class Disease(ss.Module):
                         self.pars.beta[k] = [v, v]
         return
 
+    def init_results(self, sim):
+        """
+        Initialize results
+
+        By default, diseases all report on counts for any boolean states e.g., if
+        a disease contains a boolean state 'susceptible' it will automatically contain a
+        Result for 'n_susceptible'
+        """
+        for state in self._boolean_states:
+            self.results += ss.Result(self.name, f'n_{state.name}', sim.npts, dtype=int, scale=True)
+        return
+
     def set_initial_states(self, sim):
         """
         Set initial values for states
@@ -81,16 +73,16 @@ class Disease(ss.Module):
         """
         pass
 
-    def init_results(self, sim):
+    def update_results(self, sim):
         """
-        Initialize results
+        Update results
 
-        By default, diseases all report on counts for any boolean states e.g., if
-        a disease contains a boolean state 'susceptible' it will automatically contain a
-        Result for 'n_susceptible'
+        This function is executed after transmission in all modules has been resolved.
+        This allows result updates at this point to capture outcomes dependent on multiple
+        modules, where relevant.
         """
         for state in self._boolean_states:
-            self.results += ss.Result(self.name, f'n_{state.name}', sim.npts, dtype=int, scale=True)
+            self.results[f'n_{state.name}'][sim.ti] = np.count_nonzero(state & sim.people.alive)
         return
 
     def update_pre(self, sim):
@@ -118,17 +110,26 @@ class Disease(ss.Module):
 
     def make_new_cases(self, sim):
         """
-        Add new cases of the disease
+        Add new cases.
 
         This method is agnostic as to the mechanism by which new cases occur. This
         could be through transmission (parametrized in different ways, which may or
         may not use the contact networks) or it may be based on risk factors/seeding,
         as may be the case for non-communicable diseases.
 
-        It is expected that this method will internally call Disease.set_prognoses()
+        It is expected that this method will internally call Condition.set_prognoses()
         at some point.
         """
         pass
+
+
+class Disease(Condition):
+    """ Base module class for diseases """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.log = InfectionLog()  # See below for definition
+        return
 
     def set_prognoses(self, sim, target_uids, source_uids=None):
         """
@@ -153,18 +154,6 @@ class Disease(ss.Module):
         else:
             for target, source in zip(target_uids, source_uids):
                 self.log.append(source, target, sim.year)
-        return
-
-    def update_results(self, sim):
-        """
-        Update results
-
-        This function is executed after transmission in all modules has been resolved.
-        This allows result updates at this point to capture outcomes dependent on multiple
-        modules, where relevant.
-        """
-        for state in self._boolean_states:
-            self.results[f'n_{state.name}'][sim.ti] = np.count_nonzero(state & sim.people.alive)
         return
 
 

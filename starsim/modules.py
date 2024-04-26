@@ -110,6 +110,20 @@ class Module(sc.quickobj):
         self.initialized = True
         return
 
+    @property
+    def _boolean_states(self):
+        """
+        Iterator over states with boolean type
+        These states typically represent attributes like:
+            - for diseases: 'susceptible', 'infectious', etc
+            - for interventions: 'eligible', 'treated', etc
+            - for demographics: 'pregnant', 'fertile', etc
+        """
+        for state in self.states:
+            if state.dtype == bool:
+                yield state
+        return
+
     def finalize(self, sim):
         self.finalize_results(sim)
         self.finalized = True
@@ -145,6 +159,7 @@ class Module(sc.quickobj):
                 assert isinstance(state, ss.State), f'Could not add {state}: not a State object'
                 
             setattr(self, state.name, state)
+
         return
 
     @property
