@@ -279,10 +279,6 @@ class People(BasePeople):
         uids = (~self.alive).uids
         if len(uids):
             
-            # Reset the states
-            for state in self._states.values():
-                state.set_nan(uids)
-            
             # Remove the UIDs from the networks too
             for network in sim.networks.values():
                 network.remove_uids(uids) # TODO: only run once every nth timestep
