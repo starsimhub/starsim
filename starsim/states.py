@@ -92,6 +92,8 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
             key = key.uids
         elif isinstance(key, (slice, int)):
             use_raw = False
+        elif not np.isscalar(key) and len(key) == 0: # Handle [], np.array([]), etc.
+            key = uids()
         else:
             errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.'
             raise Exception(errormsg)
