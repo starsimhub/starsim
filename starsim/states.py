@@ -93,7 +93,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         elif isinstance(key, (slice, int)):
             use_raw = False
         else:
-            errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous. Use ss.uids() instead, or index Arr.raw or Arr.values.'
+            errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.'
             raise Exception(errormsg)
         
         return key, use_raw
@@ -149,7 +149,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
 
     @property
     def values(self):
-        return self.raw[self.auids] # TODO: think about if this makes sense for uids
+        return self.raw[self.auids]
         
     def isnan(self):
         errormsg = f'Arr.isnan() not implemented for {self}'
@@ -315,9 +315,6 @@ class BoolArr(Arr):
     def uids(self):
         return self.auids[np.nonzero(self.values)[0]] # TODO: think if can be simplified
     
-    # def false(self):
-    #     return self.auids[np.nonzero(~self.values)[0]]
-    
     def isnan(self):
         raise BooleanNaNError()
 
@@ -334,6 +331,10 @@ class IndexArr(Arr):
         super().__init__(name=name, dtype=ss_int, default=None, nan=-1, label=label, coerce=False, skip_init=True)
         self.raw = uids(self.raw)
         return
+    
+    @property
+    def uids(self):
+        return self.values
     
     def isnan(self):
         return self.values == self.nan
