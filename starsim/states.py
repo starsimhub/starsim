@@ -152,14 +152,6 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     @property
     def values(self):
         return self.raw[self.auids]
-        
-    def isnan(self):
-        errormsg = f'Arr.isnan() not implemented for {self}'
-        raise NotImplementedError(errormsg)
-
-    def notnan(self, mask=None):
-        errormsg = f'Arr.notnan() not implemented for {self}'
-        raise NotImplementedError(errormsg)
 
     def set_new(self, uids, new_vals=None):
         if new_vals is None: 
@@ -292,14 +284,19 @@ class FloatArr(Arr):
         super().__init__(name=name, dtype=ss_float, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
         return
     
+    @property
     def isnan(self):
-        return np.isnan(self.values)
+        return np.nonzero(np.isnan(self.values))[0]
 
-    def notnan(self, mask=None):
-        valid = ~np.isnan(self.values)
-        if mask is not None:
-            valid = valid*mask
-        return valid
+    @property
+    def notnan(self):
+        return np.nonzero(~np.isnan(self.values))[0]
+    
+    @property
+    def notnanvals(self):
+        vals = self.values # Shorten and avoid double indexing
+        out = vals[np.nonzero(~np.isnan(vals))[0]]
+        return out
 
     
 class BoolArr(Arr):
