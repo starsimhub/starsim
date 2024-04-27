@@ -113,12 +113,12 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         else:
             return getattr(self.values, attr)
         
-    def __gt__(self, other): return self.asnew(self.notnan(self.values > other),  cls=BoolArr)
-    def __lt__(self, other): return self.asnew(self.notnan(self.values < other),  cls=BoolArr)
-    def __ge__(self, other): return self.asnew(self.notnan(self.values >= other), cls=BoolArr)
-    def __le__(self, other): return self.asnew(self.notnan(self.values <= other), cls=BoolArr)
-    def __eq__(self, other): return self.asnew(self.notnan(self.values == other), cls=BoolArr)
-    def __ne__(self, other): return self.asnew(self.notnan(self.values != other), cls=BoolArr)
+    def __gt__(self, other): return self.asnew(self.values > other,  cls=BoolArr)
+    def __lt__(self, other): return self.asnew(self.values < other,  cls=BoolArr)
+    def __ge__(self, other): return self.asnew(self.values >= other, cls=BoolArr)
+    def __le__(self, other): return self.asnew(self.values <= other, cls=BoolArr)
+    def __eq__(self, other): return self.asnew(self.values == other, cls=BoolArr)
+    def __ne__(self, other): return self.asnew(self.values != other, cls=BoolArr)
     
     def __and__(self, other): raise BooleanOperationError(self)
     def __or__(self, other):  raise BooleanOperationError(self)
