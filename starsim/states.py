@@ -287,7 +287,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         new = object.__new__(cls) # Create a new Arr instance
         new.__dict__ = self.__dict__.copy() # Copy pointers
         new.dtype = arr.dtype # Set to correct dtype
-        new.raw = np.empty_like(new.raw) # Copy values, breaking reference
+        new.raw = np.empty_like(new.raw, dtype=new.dtype) # Copy values, breaking reference
         new.raw[new.auids] = arr
         return new
 
