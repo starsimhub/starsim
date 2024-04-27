@@ -84,27 +84,33 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     def __len__(self):
         return len(self.auids)
     
-    def __getitem__(self, key):
-        if isinstance(key, ss.BoolArr):
+    def _convert_key(self, key):
+        use_raw = True
+        if isinstance(key, uids):
+            pass
+        elif isinstance(key, (BoolArr, IndexArr)):
             key = key.uids
-            
-        if isinstance(key, uids): # Check that it's UIDs # TODO: think about slice, list, etc
-            return self.raw[key]
-        elif isinstance(key, np.ndarray) and key.dtype == np.int64:
-            errormsg = f'Directly indexing an Arr ({self.name}) by an int array ({key}) is ambiguous. Use ss.uids() instead, or index Arr.raw or Arr.values.'
+        elif isinstance(key, (slice, int)):
+            use_raw = False
+        else:
+            errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous. Use ss.uids() instead, or index Arr.raw or Arr.values.'
             raise Exception(errormsg)
+        
+        return key, use_raw
+    
+    def __getitem__(self, key):
+        key, use_raw = self._convert_key(key)
+        if use_raw:
+            return self.raw[key]
         else:
             return self.values[key]
     
     def __setitem__(self, key, value):
-        if isinstance(key, ss.BoolArr):
-            key = key.uids
-            
-        if isinstance(key, (int, uids, slice)):
+        key, use_raw = self._convert_key(key)
+        if use_raw:
             self.raw[key] = value
         else:
-            errormsg = f'Arr ({self.name}) must be set via integer, slice, or ss.uids(); ({key}) is not allowed.'
-            raise Exception(errormsg)
+            self.raw[self.auids[key]] = value
             
     def __getattr__(self, attr):
         """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
