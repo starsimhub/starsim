@@ -292,19 +292,6 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         return new
 
 
-class BooleanOperationError(NotImplementedError):
-    """ Raised when a logical operation is performed on a non-logical array """
-    def __init__(self, arr):
-        msg = f'Logical operations are only valid on Boolean arrays, not {arr.dtype}'
-        super().__init__(msg)
-
-class BooleanNaNError(NotImplementedError):
-    """ Raised when NaN is called on a Boolean array """
-    def __init__(self):
-        msg = 'NaN is not defined for boolean arrays, you do not want to do this!'
-        super().__init__(msg)
-
-
 class FloatArr(Arr):
     """ Subclass of Arr with defaults for floats """
     def __init__(self, name, default=None, nan=np.nan, label=None, skip_init=False):
@@ -402,3 +389,10 @@ class uids(np.ndarray):
     
     def intersect(self, other, **kw):
         return np.intersect1d(self, other, assume_unique=True, **kw).view(self.__class__)
+    
+
+class BooleanOperationError(NotImplementedError):
+    """ Raised when a logical operation is performed on a non-logical array """
+    def __init__(self, arr):
+        msg = f'Logical operations are only valid on Boolean arrays, not {arr.dtype}'
+        super().__init__(msg)
