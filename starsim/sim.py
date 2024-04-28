@@ -42,7 +42,7 @@ class Sim(sc.prettyobj):
         # Products are not here because they are stored within interventions
         if demographics == True: demographics = [ss.Births(), ss.Deaths()]  # Use default assumptions for demographics
         self.demographics  = ss.ndict(demographics, type=ss.Demographics)
-        self.diseases      = ss.ndict(diseases, type=ss.Disease)
+        self.diseases      = ss.ndict(diseases, type=ss.Condition)
         self.networks      = ss.ndict(networks, type=ss.Network)
         self.connectors    = ss.ndict(connectors, type=ss.Connector)
         self.interventions = ss.ndict(interventions, type=ss.Intervention, strict=False) # strict=False since can be a function
@@ -349,7 +349,7 @@ class Sim(sc.prettyobj):
         """ Initialize diseases """
 
         # Diseases can be provided in sim.demographics or sim.pars
-        diseases = self.convert_plugins(ss.Disease, plugin_name='diseases')
+        diseases = self.convert_plugins(ss.Condition, plugin_name='diseases')
 
         # Interate over diseases and initialize them
         for disease in diseases:

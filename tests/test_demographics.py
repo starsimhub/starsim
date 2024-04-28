@@ -12,8 +12,38 @@ import pytest
 
 
 do_plot = True
-sc.options(interactive=False) # Assume not running interactively
+# sc.options(interactive=False) # Assume not running interactively
 
+
+def make_plot(sim, dt=1, data=None, cbr_data=None, cmr_data=None, which='pregnancy'):
+    fig, ax = plt.subplots(2, 2)
+    ax = ax.ravel()
+    if data is not None:
+        ax[0].scatter(data.year, data.n_alive, alpha=0.5)
+    ax[0].plot(sim.yearvec, sim.results.n_alive, color='k')
+    ax[0].set_title('Population')
+
+    ax[1].plot(sim.yearvec, 1000 * sim.results.deaths.cmr / dt, label='Simulated CMR')
+    if cmr_data is not None:
+        ax[1].scatter(cmr_data.Year, cmr_data.CMR, label='Data CMR')
+    ax[1].set_title('CMR')
+    ax[1].legend()
+
+    ax[2].plot(sim.yearvec, sim.results[which].cbr / dt, label='Simulated CBR')
+    if cbr_data is not None:
+        ax[2].scatter(cbr_data.Year, cbr_data.CBR, label='Data CBR')
+    ax[2].set_title('CBR')
+    ax[2].legend()
+
+    if which != 'births':
+        ax[3].plot(sim.yearvec, sim.results[which].pregnancies / dt, label='Pregnancies')
+        ax[3].plot(sim.yearvec, sim.results[which].births / dt, label='Births')
+        ax[3].set_title('Pregnancies and births')
+        ax[3].legend()
+
+    fig.tight_layout()
+
+    return
 
 def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, do_plot=True):
     """
@@ -93,32 +123,7 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, 
 
     # Plots
     if do_plot:
-        fig, ax = plt.subplots(2, 2)
-        ax = ax.ravel()
-        ax[0].scatter(data.year, data.n_alive, alpha=0.5)
-        ax[0].plot(sim.yearvec, sim.results.n_alive, color='k')
-        ax[0].set_title('Population')
-
-        ax[1].plot(sim.yearvec, 1000 * sim.results.deaths.cmr / dt, label='Simulated CMR')
-        ax[1].scatter(cmr_data.Year, cmr_data.CMR, label='Data CMR')
-        ax[1].set_title('CMR')
-        ax[1].legend()
-
-        if which == 'births':
-            ax[2].plot(sim.yearvec, sim.results.births.cbr / dt, label='Simulated CBR')
-        elif which == 'pregnancy':
-            ax[2].plot(sim.yearvec, sim.results.pregnancy.cbr / dt, label='Simulated CBR')
-        ax[2].scatter(cbr_data.Year, cbr_data.CBR, label='Data CBR')
-        ax[2].set_title('CBR')
-        ax[2].legend()
-
-        if which == 'pregnancy':
-            ax[3].plot(sim.yearvec, sim.results.pregnancy.pregnancies / dt, label='Pregnancies')
-            ax[3].plot(sim.yearvec, sim.results.pregnancy.births / dt, label='Births')
-            ax[3].set_title('Pregnancies and births')
-            ax[3].legend()
-
-        fig.tight_layout()
+        make_plot(sim)
 
     return sim
 
@@ -145,9 +150,63 @@ def test_module_adding():
     return demographics
 
 
+def test_conception(start=1995, n_years=35, dt=1/12):
+
+    # Make conception module
+    start=1995
+    n_years=35
+    dt=1/12
+    conception = ss.Conception()
+    conception.pars.beta = dict(mf=[0.5, 0.0], maternal=[0, 0])  # Probability of transmitting pregnancy
+    conception.pars.init_prev = ss.bernoulli(p=0)
+
+    # Make death module
+    death_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')
+    deaths = ss.Deaths(pars={'death_rate': death_rates, 'units': 1})
+
+    # Make people and networks
+    ss.set_seed(1)
+    nga_pop_1995 = 106819805
+    ppl = ss.People(5000, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
+
+    # Marital
+    mf = ss.MFNet(
+        pars = dict(
+            duration = ss.lognorm_ex(mean=20, stdev=5),
+            acts = ss.lognorm_ex(mean=80, stdev=30),
+        )
+    )
+    maternal = ss.MaternalNet()
+
+    sim = ss.Sim(
+        dt=dt,
+        total_pop=nga_pop_1995,
+        start=start,
+        n_years=n_years,
+        people=ppl,
+        diseases=conception,
+        networks=ss.ndict(mf, maternal),
+        demographics=deaths,
+    )
+
+    sim.run()
+
+    end = start + n_years
+    nigeria_popsize = pd.read_csv(ss.root / 'tests/test_data/nigeria_popsize.csv')
+    data = nigeria_popsize[(nigeria_popsize.year >= start) & (nigeria_popsize.year <= end)]
+    nigeria_cbr = pd.read_csv(ss.root / 'tests/test_data/nigeria_births.csv')
+    cbr_data = nigeria_cbr[(nigeria_cbr.Year >= start) & (nigeria_cbr.Year <= end)]
+    nigeria_cmr = pd.read_csv(ss.root / 'tests/test_data/nigeria_cmr.csv')
+    cmr_data = nigeria_cmr[(nigeria_cmr.Year >= start) & (nigeria_cmr.Year <= end)]
+
+    make_plot(sim, dt=dt, data=data, cbr_data=cbr_data, cmr_data=cmr_data, which='conception')
+    return sim
+
+
 if __name__ == '__main__':
-    sc.options(interactive=do_plot)
-    s1 = test_nigeria(dt=1, which='pregnancy', n_years=15, plot_init=True, do_plot=do_plot)
-    s2 = test_constant_pop()
-    s3 = test_module_adding()
+    # sc.options(interactive=do_plot)
+    # s1 = test_nigeria(dt=1, which='pregnancy', n_years=15, plot_init=True, do_plot=do_plot)
+    # s2 = test_constant_pop()
+    # s3 = test_module_adding()
+    sim = test_conception()
     plt.show()
