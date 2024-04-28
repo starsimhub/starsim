@@ -184,7 +184,7 @@ class Infection(Disease):
             ss.BoolArr('infected'),
             ss.FloatArr('rel_sus', default=1.0),
             ss.FloatArr('rel_trans', default=1.0),
-            ss.IntArr('ti_infected'),
+            ss.FloatArr('ti_infected'),
         )
 
         self.rng_target = ss.random(name='target')

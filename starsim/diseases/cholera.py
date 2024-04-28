@@ -61,10 +61,10 @@ class Cholera(ss.Infection):
             ss.BoolArr('recovered'),
     
             # Timepoint states
-            ss.IntArr('ti_exposed'),
-            ss.IntArr('ti_symptomatic'),
-            ss.IntArr('ti_recovered'),
-            ss.IntArr('ti_dead'),
+            ss.FloatArr('ti_exposed'),
+            ss.FloatArr('ti_symptomatic'),
+            ss.FloatArr('ti_recovered'),
+            ss.FloatArr('ti_dead'),
         )
 
         return

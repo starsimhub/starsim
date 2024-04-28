@@ -10,7 +10,7 @@ ss_float = ss.dtypes.float
 ss_int   = ss.dtypes.int
 ss_bool  = ss.dtypes.bool
 
-__all__ = ['check_dtype', 'Arr', 'FloatArr', 'IntArr', 'BoolArr', 'IndexArr', 'uids']
+__all__ = ['check_dtype', 'Arr', 'FloatArr', 'BoolArr', 'IndexArr', 'uids']
 
 
 def check_dtype(dtype, default=None):
@@ -41,7 +41,25 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
 
     def __init__(self, name, dtype=None, default=None, nan=None, raw=None, label=None, coerce=True, skip_init=False):
         """
-        Store a state of the agents (e.g. age, infection status, etc.) as an array
+        Store a state of the agents (e.g. age, infection status, etc.) as an array.
+        
+        In practice, ``Arr`` objects can be used interchangeably with NumPy arrays.
+        They have two main data interfaces: ``Arr.raw`` contains the "raw", underlying
+        NumPy array of the data. ``Arr.values`` contains the "active" values, which
+        usually corresponds to agents who are alive.
+        
+        By default, operations are performed on active agents only (specified by ``Arr.auids``,
+        which is a pointer to ``sim.people.auids``). For example, ``sim.people.age.mean()``
+        will only use the ages of active agents. Thus, ``sim.people.age.mean()``
+        is equal to ``sim.people.age.values.mean()``, not ``sim.people.age.raw.mean()``.
+        
+        If indexing by an int or slice, ``Arr.values`` is used. If indexing by an
+        ``ss.uids`` object, ``Arr.raw`` is used. ``Arr`` objects can't be directly
+        indexed by a list or array of ints, as this would be ambiguous about whether
+        ``values`` or ``raw`` is intended. For example, if there are 1000 people in a 
+        simulation and 100 of them have died, ``sim.people.age[999]`` will return
+        an ``IndexError`` (since ``sim.people.age[899]`` is the last active agent),
+        whereas ``sim.people.age[ss.uids(999)]`` is valid.
 
         Args: 
             name (str): The name for the state (also used as the dictionary key, so should not have spaces etc.)
@@ -84,27 +102,40 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     def __len__(self):
         return len(self.auids)
     
-    def __getitem__(self, key):
-        if isinstance(key, ss.BoolArr):
+    def _convert_key(self, key):
+        """
+        Used for getitem and setitem to determine whether the key is indexing
+        the raw array (``raw``) or the active agents (``values``), and to convert
+        the key to array indices if needed.
+        """
+        use_raw = True
+        if isinstance(key, uids):
+            pass
+        elif isinstance(key, (BoolArr, IndexArr)):
             key = key.uids
-            
-        if isinstance(key, uids): # Check that it's UIDs # TODO: think about slice, list, etc
-            return self.raw[key]
-        elif isinstance(key, np.ndarray) and key.dtype == np.int64:
-            errormsg = f'Directly indexing an Arr ({self.name}) by an int array ({key}) is ambiguous. Use ss.uids() instead, or index Arr.raw or Arr.values.'
+        elif isinstance(key, (slice, int)):
+            use_raw = False
+        elif not np.isscalar(key) and len(key) == 0: # Handle [], np.array([]), etc.
+            key = uids()
+        else:
+            errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.'
             raise Exception(errormsg)
+        
+        return key, use_raw
+    
+    def __getitem__(self, key):
+        key, use_raw = self._convert_key(key)
+        if use_raw:
+            return self.raw[key]
         else:
             return self.values[key]
     
     def __setitem__(self, key, value):
-        if isinstance(key, ss.BoolArr):
-            key = key.uids
-            
-        if isinstance(key, (int, uids, slice)):
+        key, use_raw = self._convert_key(key)
+        if use_raw:
             self.raw[key] = value
         else:
-            errormsg = f'Arr ({self.name}) must be set via integer, slice, or ss.uids(); ({key}) is not allowed.'
-            raise Exception(errormsg)
+            self.raw[self.auids[key]] = value
             
     def __getattr__(self, attr):
         """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
@@ -113,25 +144,26 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         else:
             return getattr(self.values, attr)
         
-    def __gt__(self, other): return self.asnew(self.notnan(self.values > other),  cls=BoolArr)
-    def __lt__(self, other): return self.asnew(self.notnan(self.values < other),  cls=BoolArr)
-    def __ge__(self, other): return self.asnew(self.notnan(self.values >= other), cls=BoolArr)
-    def __le__(self, other): return self.asnew(self.notnan(self.values <= other), cls=BoolArr)
-    def __eq__(self, other): return self.asnew(self.notnan(self.values == other), cls=BoolArr)
-    def __ne__(self, other): return self.asnew(self.notnan(self.values != other), cls=BoolArr)
+    def __gt__(self, other): return self.asnew(self.values > other,  cls=BoolArr)
+    def __lt__(self, other): return self.asnew(self.values < other,  cls=BoolArr)
+    def __ge__(self, other): return self.asnew(self.values >= other, cls=BoolArr)
+    def __le__(self, other): return self.asnew(self.values <= other, cls=BoolArr)
+    def __eq__(self, other): return self.asnew(self.values == other, cls=BoolArr)
+    def __ne__(self, other): return self.asnew(self.values != other, cls=BoolArr)
     
     def __and__(self, other): raise BooleanOperationError(self)
     def __or__(self, other):  raise BooleanOperationError(self)
     def __xor__(self, other): raise BooleanOperationError(self)
     def __invert__(self):     raise BooleanOperationError(self)
     
-    # The mixin class delegates the operations to the corresponding numpy functions
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        """ For almost everything else, behave like a normal NumPy array on Arr.values """
         inputs = [x.values if isinstance(x, Arr) else x for x in inputs]
         return getattr(ufunc, method)(*inputs, **kwargs)
     
     @property
     def auids(self):
+        """ Link to the indices of active agents -- sim.people.auids """
         try:
             return self.people.auids
         except:
@@ -143,17 +175,11 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
 
     @property
     def values(self):
-        return self.raw[self.auids] # TODO: think about if this makes sense for uids
-        
-    def isnan(self):
-        errormsg = f'Arr.isnan() not implemented for {self}'
-        raise NotImplementedError(errormsg)
+        """ Return the values of the active agents """
+        return self.raw[self.auids]
 
-    def notnan(self, mask=None):
-        errormsg = f'Arr.notnan() not implemented for {self}'
-        raise NotImplementedError(errormsg)
-
-    def set_new(self, uids, new_vals=None):
+    def set(self, uids, new_vals=None):
+        """ Set the values for the specified UIDs"""
         if new_vals is None: 
             if isinstance(self.default, ss.Dist):
                 new_vals = self.default.rvs(uids)
@@ -167,6 +193,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         return new_vals
     
     def set_nan(self, uids):
+        """ Shortcut function to set values to NaN """
         self.raw[uids] = self.nan
         return
     
@@ -197,7 +224,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
                 self.set_nan(nan_uids)
         
         # Set new values, and NaN if needed
-        self.set_new(new_uids, new_vals=new_vals) # Assign new default values to those agents
+        self.set(new_uids, new_vals=new_vals) # Assign new default values to those agents
         return
     
     def set_people(self, people):
@@ -260,22 +287,9 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         new = object.__new__(cls) # Create a new Arr instance
         new.__dict__ = self.__dict__.copy() # Copy pointers
         new.dtype = arr.dtype # Set to correct dtype
-        new.raw = np.empty(len(new.raw), dtype=new.dtype) # Copy values, breaking reference
+        new.raw = np.empty_like(new.raw, dtype=new.dtype) # Copy values, breaking reference
         new.raw[new.auids] = arr
         return new
-
-
-class BooleanOperationError(NotImplementedError):
-    """ Raised when a logical operation is performed on a non-logical array """
-    def __init__(self, arr):
-        msg = f'Logical operations are only valid on Boolean arrays, not {arr.dtype}'
-        super().__init__(msg)
-
-class BooleanNaNError(NotImplementedError):
-    """ Raised when NaN is called on a Boolean array """
-    def __init__(self):
-        msg = 'NaN is not defined for boolean arrays, you do not want to do this!'
-        super().__init__(msg)
 
 
 class FloatArr(Arr):
@@ -284,31 +298,24 @@ class FloatArr(Arr):
         super().__init__(name=name, dtype=ss_float, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
         return
     
+    @property
     def isnan(self):
-        return np.isnan(self.values)
+        """ Return indices that are NaN """
+        return np.nonzero(np.isnan(self.values))[0]
 
-    def notnan(self, mask=None):
-        valid = ~np.isnan(self.values)
-        if mask is not None:
-            valid = valid*mask
-        return valid
+    @property
+    def notnan(self):
+        """ Return indices that are not-NaN """
+        return np.nonzero(~np.isnan(self.values))[0]
+    
+    @property
+    def notnanvals(self):
+        """ Return values that are not-NaN """
+        vals = self.values # Shorten and avoid double indexing
+        out = vals[np.nonzero(~np.isnan(vals))[0]]
+        return out
 
     
-class IntArr(Arr):
-    """ Subclass of Arr with defaults for integers """
-    def __init__(self, name, default=None, nan=ss.intnan, label=None, skip_init=False):
-        super().__init__(name=name, dtype=ss_int, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
-        return
-
-    def isnan(self):
-        return self.values == self.nan
-
-    def notnan(self, mask=None):
-        valid = self.values != self.nan
-        if mask is not None:
-            valid = valid*mask
-        return valid
-
 class BoolArr(Arr):
     """ Subclass of Arr with defaults for booleans """
     def __init__(self, name, default=None, nan=False, label=None, skip_init=False): # No good NaN equivalent for bool arrays
@@ -322,36 +329,46 @@ class BoolArr(Arr):
     
     @property
     def uids(self):
-        return self.auids[np.nonzero(self.values)[0]] # TODO: think if can be simplified
-    
-    # def false(self):
-    #     return self.auids[np.nonzero(~self.values)[0]]
-    
-    def isnan(self):
-        raise BooleanNaNError()
+        """ Convert True values to UIDs """
+        return self.auids[np.nonzero(self.values)[0]]
 
-    def notnan(self, mask=None):
-        if mask is None:
-            raise BooleanNaNError()
-        else:
-            return mask
     
-    
-class IndexArr(IntArr):
+class IndexArr(Arr):
     """ A special class of IndexArr used for UIDs and RNG IDs """
     def __init__(self, name, label=None):
-        super().__init__(name=name, label=label, skip_init=True)
+        super().__init__(name=name, dtype=ss_int, default=None, nan=-1, label=label, coerce=False, skip_init=True)
         self.raw = uids(self.raw)
         return
     
+    @property
+    def uids(self):
+        """ Alias to self.values, to allow Arr.uids like BoolArr """
+        return self.values
+    
+    @property
+    def isnan(self):
+        return np.nonzero(self.values == self.nan)[0]
+
+    @property
+    def notnan(self):
+        return np.nonzero(self.values != self.nan)[0]
+    
     def grow(self, new_uids=None, new_vals=None):
+        """ Change the size of the array """
         super().grow(new_uids=new_uids, new_vals=new_vals)
         self.raw = uids(self.raw)
         return
     
     
 class uids(np.ndarray):
-    """ Special class to keep track of UIDs: just a wrapped NumPy array """
+    """
+    Class to specify that integers should be interpreted as UIDs.
+    
+    For all practical purposes, behaves like a NumPy integer array. However,
+    has additional methods ``uids.concat()`` (instance method), ``ss.uids.cat()``
+    (class method), ``uids.remove()``, and ``uids.intersect()`` to simplify common
+    UID operations.    
+    """
     def __new__(cls, arr=None):
         if arr is None:
             arr = np.empty(0, dtype=ss_int)
@@ -372,3 +389,10 @@ class uids(np.ndarray):
     
     def intersect(self, other, **kw):
         return np.intersect1d(self, other, assume_unique=True, **kw).view(self.__class__)
+    
+
+class BooleanOperationError(NotImplementedError):
+    """ Raised when a logical operation is performed on a non-logical array """
+    def __init__(self, arr):
+        msg = f'Logical operations are only valid on Boolean arrays, not {arr.dtype}'
+        super().__init__(msg)

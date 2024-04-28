@@ -258,10 +258,10 @@ class Pregnancy(Demographics):
             ss.BoolArr('fecund', default=True),  # Applies to girls and women inside the fertility window
             ss.BoolArr('pregnant'),  # Currently pregnant
             ss.BoolArr('postpartum'),  # Currently post-partum
-            ss.IntArr('ti_pregnant'),  # Time pregnancy begins
-            ss.IntArr('ti_delivery'),  # Time of delivery
-            ss.IntArr('ti_postpartum'),  # Time postpartum ends
-            ss.IntArr('ti_dead'),  # Maternal mortality
+            ss.FloatArr('ti_pregnant'),  # Time pregnancy begins
+            ss.FloatArr('ti_delivery'),  # Time of delivery
+            ss.FloatArr('ti_postpartum'),  # Time postpartum ends
+            ss.FloatArr('ti_dead'),  # Maternal mortality
         )
 
         self.pars = ss.dictmergeleft(self.pars,

@@ -9,9 +9,7 @@ import os
 import numpy as np
 import sciris as sc
 
-__all__ = ['intnan', 'dtypes', 'options']
-
-intnan = -32767 # From np.iinfo(np.int16).max: value to use to flag invalid content (i.e., an integer value we are treating like NaN, since NaN can't be stored in an integer array)
+__all__ = ['dtypes', 'options']
 
 # Define Starsim-default data types
 dtypes = sc.objdict(

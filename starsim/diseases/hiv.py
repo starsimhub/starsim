@@ -16,8 +16,8 @@ class HIV(ss.Infection):
         # States
         self.add_states(
             ss.BoolArr('on_art'),
-            ss.IntArr('ti_art'),
-            ss.IntArr('ti_dead'), # Time of HIV-cause death
+            ss.FloatArr('ti_art'),
+            ss.FloatArr('ti_dead'), # Time of HIV-cause death
             ss.FloatArr('cd4', default=500),
         )
 

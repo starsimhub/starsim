@@ -173,7 +173,7 @@ class People(BasePeople):
             ss.BoolArr('alive', default=True),  # Time index for death
             ss.BoolArr('female', default=ss.bernoulli(name='female', p=0.5)),
             ss.FloatArr('age'), # NaN until conceived
-            ss.IntArr('ti_dead'),  # Time index for death
+            ss.FloatArr('ti_dead'),  # Time index for death
             ss.FloatArr('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
         ]
         states.extend(sc.promotetolist(extra_states))
@@ -278,10 +278,6 @@ class People(BasePeople):
         """
         uids = (~self.alive).uids
         if len(uids):
-            
-            # Reset the states
-            for state in self._states.values():
-                state.set_nan(uids)
             
             # Remove the UIDs from the networks too
             for network in sim.networks.values():
