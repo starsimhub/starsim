@@ -24,14 +24,9 @@ class Parameters(sc.objdict):
     def __init__(self, **kwargs):
 
         # Population parameters
-        self.n_agents        = 10e3  # Number of agents
-        self.total_pop       = None  # If defined, used for calculating the scale factor
-        self.pop_scale       = None  # How much to scale the population
-
-        # Demographic parameters
-        self.location    = None  #  NOT CURRENTLY FUNCTIONAL - what demographics to use
-        self.birth_rate = None
-        self.death_rate = None
+        self.n_agents  = 10e3  # Number of agents
+        self.total_pop = None  # If defined, used for calculating the scale factor
+        self.pop_scale = None  # How much to scale the population
 
         # Simulation parameters
         self.start           = 2000          # Start of the simulation
@@ -44,19 +39,21 @@ class Parameters(sc.objdict):
         self.slot_scale      = 5             # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents. Choosing a larger value here will reduce the probability of two agents using the same slot (and hence random draws), but increase the number of random numbers that are required.
         self.verbose         = ss.options.verbose # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
 
-        # Plug-ins: demographics, diseases, connectors, networks, analyzers, and interventions
-        self.demographics = ss.ndict()
-        self.diseases = ss.ndict()
-        self.networks = ss.ndict()
-        self.connectors = ss.ndict()
+        # Demographic parameters
+        self.location   = None  #  NOT CURRENTLY FUNCTIONAL - what demographics to use
+        self.birth_rate = None
+        self.death_rate = None
+
+        # Modules: demographics, diseases, connectors, networks, analyzers, and interventions
+        self.demographics  = ss.ndict()
+        self.diseases      = ss.ndict()
+        self.networks      = ss.ndict()
+        self.connectors    = ss.ndict()
         self.interventions = ss.ndict()
-        self.analyzers = ss.ndict()
+        self.analyzers     = ss.ndict()
 
         # Update with any supplied parameter values and generate things that need to be generated
         self.update(kwargs)
-
-        if self.slot_scale < 1:
-            raise Exception('The value of the "slot_scale" parameter must be a number >= 1.0')
 
         return
 

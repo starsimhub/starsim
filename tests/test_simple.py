@@ -34,6 +34,15 @@ def make_sim_pars():
 def test_demo(do_plot=do_plot):
     """ Test Starsim's demo run """
     sim = ss.demo(plot=do_plot)
+    
+    # Test explicit demo
+    s2 = ss.Sim(diseases='sir', networks='random').run()
+    
+    # Test explicit 
+    sir = ss.SIR()
+    net = ss.RandomNet()
+    s3 = ss.Sim(diseases=sir, networks=net).run()
+    assert not ss.diff_sims(s2, s3), 'Sims should match'
     return sim
 
 

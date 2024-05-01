@@ -21,7 +21,7 @@ class Sim(sc.prettyobj):
         self.label = label  # The label/name of the simulation
         self.created = None  # The datetime the sim was created
         self.people = people  # People object
-        self.results = ss.Results(module='sim')  # For storing results
+        
         self.summary = None  # For storing a summary of the results
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running # TODO: replace with finalized?
@@ -29,7 +29,7 @@ class Sim(sc.prettyobj):
         self.filename = None
 
         # Time indexing
-        self.ti = None  # The time index, e.g. 0, 1, 2 # TODO: do we need all of these?
+        self.ti = None  # The time index, e.g. 0, 1, 2
         self.yearvec = None
         self.tivec = None
         self.npts = None
@@ -40,7 +40,8 @@ class Sim(sc.prettyobj):
 
         # Placeholders for plug-ins: demographics, diseases, connectors, analyzers, and interventions
         # Products are not here because they are stored within interventions
-        if demographics == True: demographics = [ss.Births(), ss.Deaths()]  # Use default assumptions for demographics
+        if demographics == True:
+            demographics = [ss.Births(), ss.Deaths()]  # Use default assumptions for demographics
         self.demographics  = ss.ndict(demographics, type=ss.Demographics)
         self.diseases      = ss.ndict(diseases, type=ss.Disease)
         self.networks      = ss.ndict(networks, type=ss.Network)
@@ -50,15 +51,17 @@ class Sim(sc.prettyobj):
 
         # Initialize the random number generator container
         self.dists = ss.Dists(obj=self)
+        self.results = ss.Results(module='sim')  # For storing results
 
         return
+    
+    @property
+    def label(self):
+        return self.pars.get('label', '')
 
     @property
     def dt(self):
-        if 'dt' in self.pars:
-            return self.pars['dt']
-        else:
-            return np.nan
+        return self.pars.get('dt', np.Nan)
 
     @property
     def year(self):

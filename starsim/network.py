@@ -790,9 +790,6 @@ class EmbeddingNet(MFNet):
 
         available = ss.uids.cat(available_m, available_f)
         loc = self.pars.embedding_func.rvs(available)
-        if np.isnan(loc).sum():
-            raise Exception('WARNING, should not happen!')
-            loc = sc.rmnans(loc, replacenans=9999)
         loc_f = loc[people.female[available]]
         loc_m = loc[~people.female[available]]
 
@@ -805,7 +802,7 @@ class EmbeddingNet(MFNet):
         # Finalize pairs
         p1 = available_m[ind_m]
         p2 = available_f[ind_f]
-        beta = np.ones(n_pairs) # TODO: fix
+        beta = np.ones(n_pairs) # TODO: Add way to use custom beta value
         dur_vals = self.pars.duration.rvs(p1)
         act_vals = self.pars.acts.rvs(p1)
 
