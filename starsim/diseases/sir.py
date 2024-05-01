@@ -19,14 +19,14 @@ class SIR(ss.Infection):
     """
 
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             dur_inf = 6,
             init_prev = 0.01,
             p_death = 0.01,
             beta = 0.5,
         )
 
-        par_dists = ss.omergeleft(par_dists,
+        par_dists = ss.dictmergeleft(par_dists,
             dur_inf   = ss.lognorm_ex,
             init_prev = ss.bernoulli,
             p_death   = ss.bernoulli,
@@ -35,20 +35,20 @@ class SIR(ss.Infection):
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
 
         self.add_states(
-            ss.State('recovered', bool, False),
-            ss.State('ti_recovered', int, ss.INT_NAN),
-            ss.State('ti_dead', int, ss.INT_NAN),
+            ss.BoolArr('recovered'),
+            ss.FloatArr('ti_recovered'),
+            ss.FloatArr('ti_dead'),
         )
         return
 
     def update_pre(self, sim):
         # Progress infectious -> recovered
-        recovered = ss.true(self.infected & (self.ti_recovered <= sim.ti))
+        recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
         self.infected[recovered] = False
         self.recovered[recovered] = True
 
         # Trigger deaths
-        deaths = ss.true(self.ti_dead <= sim.ti)
+        deaths = (self.ti_dead <= sim.ti).uids
         if len(deaths):
             sim.people.request_death(deaths)
         return
@@ -99,7 +99,7 @@ class SIS(ss.Infection):
     is no death in this case.
     """
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             dur_inf = 10,
             init_prev = 0.01,
             beta = 0.05,
@@ -107,14 +107,14 @@ class SIS(ss.Infection):
             imm_boost = 1.0,
         )
 
-        par_dists = ss.omergeleft(par_dists,
+        par_dists = ss.dictmergeleft(par_dists,
             dur_inf   = ss.lognorm_ex,
             init_prev = ss.bernoulli,
         )
         
         self.add_states(
-            ss.State('ti_recovered', int, ss.INT_NAN),
-            ss.State('immunity', float, 0.0),
+            ss.FloatArr('ti_recovered'),
+            ss.FloatArr('immunity', default=0.0),
         )
 
         super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
@@ -122,16 +122,16 @@ class SIS(ss.Infection):
 
     def update_pre(self, sim):
         """ Progress infectious -> recovered """
-        recovered = ss.true(self.infected & (self.ti_recovered <= sim.ti))
+        recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
         self.infected[recovered] = False
         self.susceptible[recovered] = True
         self.update_immunity(sim)
         return
     
     def update_immunity(self, sim):
-        uids = ss.true(self.immunity > 0)
-        self.immunity[uids] = (self.immunity[uids])*(1 - self.pars.waning*sim.dt)
-        self.rel_sus[uids] = np.maximum(0, 1 - self.immunity[uids])
+        has_imm = (self.immunity > 0).uids
+        self.immunity[has_imm] = (self.immunity[has_imm])*(1 - self.pars.waning*sim.dt)
+        self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])
         return
 
     def set_prognoses(self, sim, uids, source_uids=None):
@@ -179,7 +179,7 @@ class sir_vaccine(ss.Vx):
     Create a vaccine product that changes susceptible people to recovered (i.e., perfect immunity)
     """
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
-        pars = ss.omerge({
+        pars = ss.dictmerge({
             'efficacy': 0.9,
         }, pars)
 

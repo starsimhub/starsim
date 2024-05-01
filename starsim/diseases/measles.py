@@ -4,7 +4,6 @@ Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi
 Original version by @alina-muellenmeister, @domdelport, and @RomeshA
 """
 
-import numpy as np
 import starsim as ss
 from starsim.diseases.sir import SIR
 
@@ -16,7 +15,7 @@ class Measles(SIR):
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
         """ Initialize with parameters """
 
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             # Natural history parameters, all specified in days
             dur_exp = 8,       # (days) - source: US CDC
             dur_inf = 11,      # (days) - source: US CDC
@@ -27,7 +26,7 @@ class Measles(SIR):
             beta = None,
         )
 
-        par_dists = ss.omergeleft(par_dists,
+        par_dists = ss.dictmergeleft(par_dists,
             dur_exp   = ss.normal,
             dur_inf   = ss.normal,
             init_prev = ss.bernoulli,
@@ -38,8 +37,8 @@ class Measles(SIR):
 
         # SIR are added automatically, here we add E
         self.add_states(
-            ss.State('exposed', bool, False),
-            ss.State('ti_exposed', float, np.nan),
+            ss.BoolArr('exposed'),
+            ss.FloatArr('ti_exposed'),
         )
 
         return
@@ -50,17 +49,17 @@ class Measles(SIR):
 
     def update_pre(self, sim):
         # Progress exposed -> infected
-        infected = ss.true(self.exposed & (self.ti_infected <= sim.ti))
+        infected = (self.exposed & (self.ti_infected <= sim.ti)).uids
         self.exposed[infected] = False
         self.infected[infected] = True
 
         # Progress infected -> recovered
-        recovered = ss.true(self.infected & (self.ti_recovered <= sim.ti))
+        recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
         self.infected[recovered] = False
         self.recovered[recovered] = True
 
         # Trigger deaths
-        deaths = ss.true(self.ti_dead <= sim.ti)
+        deaths = (self.ti_dead <= sim.ti).uids
         if len(deaths):
             sim.people.request_death(deaths)
         return

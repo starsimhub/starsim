@@ -34,14 +34,14 @@ class Births(Demographics):
         super().__init__(pars, **kwargs)
 
         # Set defaults
-        self.pars = ss.omergeleft(self.pars,
+        self.pars = ss.dictmergeleft(self.pars,
             birth_rate = 0,
             rel_birth = 1,
             units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
         )
 
         # Process metadata. Defaults here are the labels used by UN data
-        self.metadata = ss.omergeleft(metadata,
+        self.metadata = ss.dictmergeleft(metadata,
             data_cols = dict(year='Year', cbr='CBR'),
         )
 
@@ -144,18 +144,18 @@ class Deaths(Demographics):
         """
         super().__init__(pars, **kwargs)
 
-        self.pars = ss.omergeleft(self.pars,
+        self.pars = ss.dictmergeleft(self.pars,
             rel_death = 1,
             death_rate = 20,  # Default = a fixed rate of 2%/year, overwritten if data provided
             units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
 
-        self.par_dists = ss.omergeleft(par_dists,
+        self.par_dists = ss.dictmergeleft(par_dists,
             death_rate = ss.bernoulli
         )
 
         # Process metadata. Defaults here are the labels used by UN data
-        self.metadata = ss.omergeleft(metadata,
+        self.metadata = ss.dictmergeleft(metadata,
             data_cols = dict(year='Time', sex='Sex', age='AgeGrpStart', value='mx'),
             sex_keys = dict(f='Female', m='Male'),
         )
@@ -175,6 +175,7 @@ class Deaths(Demographics):
             death_rate = module.death_rate_data
 
         else:
+            ppl = sim.people
             data_cols = sc.objdict(module.metadata.data_cols)
             year_label = data_cols.year
             age_label  = data_cols.age
@@ -188,16 +189,20 @@ class Deaths(Demographics):
 
             df = module.death_rate_data.loc[module.death_rate_data[year_label] == nearest_year]
             age_bins = df[age_label].unique()
-            age_inds = np.digitize(sim.people.age[uids], age_bins) - 1
 
             f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
             m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
 
             # Initialize
             death_rate_df = pd.Series(index=uids)
-            death_rate_df[uids[sim.people.female[uids]]] = f_arr[age_inds[sim.people.female[uids]]] # TODO: avoid double indexing
-            death_rate_df[uids[sim.people.male[uids]]] = m_arr[age_inds[sim.people.male[uids]]]
-            death_rate_df[uids[sim.people.age[uids] < 0]] = 0  # Don't use background death rates for unborn babies
+            f_uids = uids.intersect(ppl.female.uids) # TODO: reduce duplication
+            m_uids = uids.intersect(ppl.male.uids)
+            f_age_inds = np.digitize(ppl.age[f_uids], age_bins) - 1
+            m_age_inds = np.digitize(ppl.age[m_uids], age_bins) - 1
+            death_rate_df[f_uids] = f_arr[f_age_inds]
+            death_rate_df[m_uids] = m_arr[m_age_inds]
+            unborn_inds = uids.intersect((sim.people.age < 0).uids)
+            death_rate_df[unborn_inds] = 0  # Don't use background death rates for unborn babies
 
             death_rate = death_rate_df.values
 
@@ -227,8 +232,7 @@ class Deaths(Demographics):
 
     def apply_deaths(self, sim):
         """ Select people to die """
-        alive_uids = ss.true(sim.people.alive)
-        death_uids = self.pars.death_rate.filter(alive_uids)
+        death_uids = self.pars.death_rate.filter()
         sim.people.request_death(death_uids)
         return len(death_uids)
 
@@ -250,17 +254,17 @@ class Pregnancy(Demographics):
 
         # Other, e.g. postpartum, on contraception...
         self.add_states(
-            ss.State('infertile', bool, False),  # Applies to girls and women outside the fertility window
-            ss.State('fecund', bool, True),  # Applies to girls and women inside the fertility window
-            ss.State('pregnant', bool, False),  # Currently pregnant
-            ss.State('postpartum', bool, False),  # Currently post-partum
-            ss.State('ti_pregnant', int, ss.INT_NAN),  # Time pregnancy begins
-            ss.State('ti_delivery', int, ss.INT_NAN),  # Time of delivery
-            ss.State('ti_postpartum', int, ss.INT_NAN),  # Time postpartum ends
-            ss.State('ti_dead', int, ss.INT_NAN),  # Maternal mortality
+            ss.BoolArr('infertile'),  # Applies to girls and women outside the fertility window
+            ss.BoolArr('fecund', default=True),  # Applies to girls and women inside the fertility window
+            ss.BoolArr('pregnant'),  # Currently pregnant
+            ss.BoolArr('postpartum'),  # Currently post-partum
+            ss.FloatArr('ti_pregnant'),  # Time pregnancy begins
+            ss.FloatArr('ti_delivery'),  # Time of delivery
+            ss.FloatArr('ti_postpartum'),  # Time postpartum ends
+            ss.FloatArr('ti_dead'),  # Maternal mortality
         )
 
-        self.pars = ss.omergeleft(self.pars,
+        self.pars = ss.dictmergeleft(self.pars,
             dur_pregnancy = 0.75,
             dur_postpartum = 0.5,
             fertility_rate = 0,    # Usually this will be provided in CSV format
@@ -270,14 +274,14 @@ class Pregnancy(Demographics):
             units = 1e-3,          # Assumes fertility rates are per 1000. If using percentages, switch this to 1
         )
 
-        self.par_dists = ss.omergeleft(par_dists,
+        self.par_dists = ss.dictmergeleft(par_dists,
             fertility_rate = ss.bernoulli,
             maternal_death_rate = ss.bernoulli,
             sex_ratio = ss.bernoulli
         )
 
         # Process metadata. Defaults here are the labels used by UN data
-        self.metadata = ss.omergeleft(metadata,
+        self.metadata = ss.dictmergeleft(metadata,
             data_cols = dict(year='Time', age='AgeGrp', value='ASFR'),
         )
 
@@ -320,7 +324,7 @@ class Pregnancy(Demographics):
 
             # Adjust rates: rates are based on the entire population, but we need to remove
             # anyone already pregnant and then inflate the rates for the remainder
-            pregnant_uids = ss.true(module.pregnant[uids])  # Find agents who are already pregnant
+            pregnant_uids = module.pregnant.uids # Find agents who are already pregnant
             pregnant_age_counts, _ = np.histogram(sim.people.age[pregnant_uids], age_bins)  # Count them by age
             age_counts, _ = np.histogram(sim.people.age[uids], age_bins)  # Count overall number per age bin
             new_denom = age_counts - pregnant_age_counts  # New denominator for rates
@@ -392,7 +396,7 @@ class Pregnancy(Demographics):
         self.fecund[postpartum] = True
 
         # Maternal deaths
-        maternal_deaths = ss.true(self.ti_dead <= sim.ti)
+        maternal_deaths = (self.ti_dead <= sim.ti).uids
         sim.people.request_death(maternal_deaths)
 
         return
@@ -401,14 +405,10 @@ class Pregnancy(Demographics):
         """
         Select people to make pregnant using incidence data
         """
-        # Abbreviate
-        ppl = sim.people
-
         # People eligible to become pregnant. We don't remove pregnant people here, these
         # are instead handled in the fertility_dist logic as the rates need to be adjusted
-        denom_conds = ppl.female & ppl.alive
-        inds_to_choose_from = ss.true(denom_conds)
-        conceive_uids = self.pars.fertility_rate.filter(inds_to_choose_from)
+        eligible_uids = sim.people.female.uids
+        conceive_uids = self.pars.fertility_rate.filter(eligible_uids)
 
         # Set prognoses for the pregnancies
         if len(conceive_uids) > 0:

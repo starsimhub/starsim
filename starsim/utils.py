@@ -12,7 +12,7 @@ import pandas as pd
 # %% Helper functions
 
 # What functions are externally visible -- note, this gets populated in each section below
-__all__ = ['ndict', 'omerge', 'omergeleft', 'warn', 'unique', 'find_contacts', 'get_subclasses', 'all_subclasses']
+__all__ = ['ndict', 'dictmerge', 'dictmergeleft', 'warn', 'unique', 'find_contacts', 'get_subclasses', 'all_subclasses']
 
 
 class ndict(sc.objdict):
@@ -125,11 +125,12 @@ class ndict(sc.objdict):
         return self
 
 
-def omerge(*args, **kwargs):
+def dictmerge(*args, **kwargs):
     """ Merge things into an objdict, using standard order """
     return sc.objdict(sc.mergedicts(*args, **kwargs))
 
-def omergeleft(*args, **kwargs):
+
+def dictmergeleft(*args, **kwargs):
     """ Merge things into an odict, using opposite order to allow defaults to be supplied second """
     if len(args) == 1 and len(kwargs):
         new = args[0]
@@ -138,9 +139,10 @@ def omergeleft(*args, **kwargs):
         new = args[0]
         default = args[1]
     else:
-        errormsg = 'Expecting either two arguments, or one argument and kwargs; for any other arrangement, use ss.omerge()'
+        errormsg = 'Expecting either two arguments, or one argument and kwargs; for any other arrangement, use ss.dictmerge()'
         raise ValueError(errormsg)
     return sc.objdict(sc.mergedicts(default, new))
+
 
 def warn(msg, category=None, verbose=None, die=None):
     """ Helper function to handle warnings -- shortcut to warnings.warn """
@@ -171,6 +173,7 @@ def warn(msg, category=None, verbose=None, die=None):
 
     return
 
+
 def unique(arr):
     """
     Find the unique elements and counts in an array.
@@ -181,6 +184,7 @@ def unique(arr):
     unique = np.flatnonzero(counts)
     counts = counts[unique]
     return unique, counts
+
 
 def find_contacts(p1, p2, inds):  # pragma: no cover
     """
@@ -198,6 +202,7 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
         if p2[i] in inds:
             pairing_partners.add(p1[i])
     return pairing_partners
+
 
 def get_subclasses(cls):
     for subclass in cls.__subclasses__():
@@ -241,93 +246,11 @@ def set_seed(seed=None):
 
     return
 
-# %% Simple array operations
-
-__all__ += ['true', 'false', 'defined', 'undefined']
-
-@nb.njit(cache=True)
-def _true(uids, values):
-    """
-    Returns the UIDs for indices where the value evaluates as True
-    """
-    out = np.empty(len(uids), dtype=uids.dtype)
-    j = 0
-    for i in range(len(values)):
-        out[j] = uids[i]
-        if values[i]:
-            j += 1
-    out = out[0:j]
-    return out
-
-@nb.njit(cache=True)
-def _false(uids, values):
-    """
-    Returns the UIDs for indices where the value evaluates as False
-    """
-    out = np.empty(len(uids), dtype=uids.dtype)
-    j = 0
-    for i in range(len(values)):
-        out[j] = uids[i]
-        if not values[i]:
-            j += 1
-    out = out[0:j]
-    return out
-
-def true(state):
-    """
-    Returns the UIDs of the values of the array that are true
-
-    Args:
-        state (State, UIDArray)
-
-    **Example**::
-
-        inds = ss.true(people.alive) # Returns array of UIDs of alive agents
-    """
-    return _true(state.uid.__array__(), state.__array__())
-
-def false(state):
-    """
-    Returns the indices of the values of the array that are false.
-
-    Args:
-        state (State, UIDArray)
-
-    **Example**::
-
-        inds = ss.false(people.alive) # Returns array of UIDs of dead agents
-    """
-    return _false(state.uid.__array__(), state.__array__())
-
-def defined(arr):
-    """
-    Returns the indices of the values of the array that are not-nan.
-
-    Args:
-        arr (array): any array
-
-    **Example**::
-
-        inds = ss.defined(np.array([1,np.nan,0,np.nan,1,0,1]))
-    """
-    return (~np.isnan(arr)).nonzero()[-1]
-
-def undefined(arr):
-    """
-    Returns the indices of the values of the array that are not-nan.
-
-    Args:
-        arr (array): any array
-
-    **Example**::
-
-        inds = ss.defined(np.array([1,np.nan,0,np.nan,1,0,1]))
-    """
-    return np.isnan(arr).nonzero()[-1]
 
 # %% Data cleaning and processing
 
 __all__ += ['standardize_data']
+
 
 def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
     """

@@ -16,20 +16,20 @@ class Gonorrhea(ss.Infection):
         # Additional states dependent on parameter values, e.g. self.p_symp?
         # These might be useful for connectors to target, e.g. if HIV reduces p_clear
         self.add_states(
-            ss.State('symptomatic', bool, False),
-            ss.State('ti_clearance', int, ss.INT_NAN),
-            ss.State('p_symp', float, 1),
+            ss.BoolArr('symptomatic'),
+            ss.FloatArr('ti_clearance'),
+            ss.FloatArr('p_symp', default=1),
         )
 
         # Parameters
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             dur_inf_in_days = ss.lognorm_ex(mean=10, stdev=0.6),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
             p_symp = 0.5,  # Share of infections that are symptomatic. Placeholder value
             p_clear = 0.2,  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
             init_prev = 0.1,
         )
 
-        par_dists = ss.omergeleft(par_dists,
+        par_dists = ss.dictmergeleft(par_dists,
             dur_inf_in_days = ss.lognorm_ex,
             p_symp          = ss.bernoulli,
             p_clear         = ss.bernoulli,

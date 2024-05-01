@@ -22,27 +22,21 @@ class BasePeople(sc.prettyobj):
 
     def __init__(self, n_agents):
 
-        self.initialized = False
-        self._uid_map = ss.ArrayView(int, default=ss.INT_NAN)  # This variable tracks all UIDs ever created
-        self.uid = ss.ArrayView(int, default=ss.INT_NAN)  # This variable tracks all UIDs currently in use
-
         n = int(n_agents)
-
-        self._uid_map.grow(n)
-        self._uid_map[:] = np.arange(0, n)
-        self.uid.grow(n)
-        self.uid[:] = np.arange(0, n)
+        self.initialized = False
+        self.uid = ss.IndexArr('uid')  # This variable tracks all UIDs
+        uids = ss.uids(np.arange(n))
+        self.uid.grow(new_vals=uids)
+        self.auids = uids.copy() # This tracks all active UIDs (in practice, agents who are alive)
 
         # A slot is a special state managed internally by BasePeople
         # This is because it needs to be updated separately from any other states, as other states
         # might have fill_values that depend on the slot
-        self.slot = ss.State('slot', int, ss.INT_NAN)
-
-        self.ti = None  # Track simulation time index
-        self.dt = np.nan  # Track simulation time step
+        self.slot = ss.IndexArr('slot')
+        self.slot.grow(new_vals=uids)
 
         # User-facing collection of states
-        self.states = ss.ndict(type=ss.State)
+        self.states = ss.ndict(type=ss.Arr)
 
         # We also internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
         # e.g., across modules, but we will never change the size of a State multiple times in the same iteration over
@@ -50,12 +44,17 @@ class BasePeople(sc.prettyobj):
         # within the sim, regardless of where they are. In contrast, `People.states` offers a more user-friendly way to access
         # a selection of the states e.g., module states could be added in there, while intervention states might not
         self._states = {}
+        
         return
 
     def __len__(self):
         """ Length of people """
-        return len(self.uid)
-
+        return len(self.auids)
+    
+    @property
+    def n_uids(self):
+        return self.uid.len_used
+    
     def register_state(self, state, die=True):
         """
         Register a state with the People instance for dynamic resizing
@@ -71,59 +70,40 @@ class BasePeople(sc.prettyobj):
             raise ValueError(errormsg)
         return
 
-    def grow(self, n, new_slots=None):
+    def grow(self, n=None, new_slots=None):
         """
         Increase the number of agents
 
         :param n: Integer number of agents to add
         :param new_slots: Optionally specify the slots to assign for the new agents. Otherwise, it will default to the new UIDs
         """
+        
+        if n is None:
+            if new_slots is None:
+                errormsg = 'Must supply either n or new_slots'
+                raise ValueError(errormsg)
+            else:
+                n = len(new_slots)
 
         if n == 0:
             return np.array([], dtype=ss.dtypes.int)
 
-        start_uid = len(self._uid_map)
-        start_idx = len(self.uid)
-
-        new_uids = np.arange(start_uid, start_uid + n)
-        new_inds = np.arange(start_idx, start_idx + n)
-
-        self._uid_map.grow(n)
-        self._uid_map[new_uids] = new_inds
-
-        self.uid.grow(n)
-        self.uid[new_inds] = new_uids
+        start_uid = self.uid.len_used
+        stop_uid = start_uid + n
+        new_uids = ss.uids(np.arange(start_uid, stop_uid))
+        self.uid.grow(new_uids, new_vals=new_uids)
 
         # We need to grow the slots as well
-        self.slot.grow(new_uids)
-        self.slot[new_uids] = new_slots if new_slots is not None else new_uids
+        new_slots = new_slots if new_slots is not None else new_uids
+        self.slot.grow(new_uids, new_vals=new_slots)
 
         for state in self._states.values():
             state.grow(new_uids)
+            
+        # Finally, update the alive indices
+        self.auids = self.auids.concat(new_uids)
 
         return new_uids
-
-    def remove(self, uids_to_remove):
-        """
-        Reduce the number of agents
-
-        :param uids_to_remove: An int/list/array containing the UID(s) to remove
-        """
-
-        # Calculate the *indices* to keep
-        keep_uids = self.uid[~np.in1d(self.uid, uids_to_remove)]  # Calculate UIDs to keep
-        keep_inds = self._uid_map[keep_uids]  # Calculate indices to keep
-
-        # Trim the UIDs and states
-        self.uid._trim(keep_inds)
-        for state in self._states.values(): # includes self.slot
-            state._trim(keep_inds)
-
-        # Update the UID map
-        self._uid_map[:] = ss.INT_NAN  # Clear out all previously used UIDs
-        self._uid_map[keep_uids] = np.arange(0, len(keep_uids))  # Assign the array indices for all of the current UIDs
-
-        return
 
     def __getitem__(self, key):
         """
@@ -190,11 +170,11 @@ class People(BasePeople):
 
         # Handle states
         states = [
-            ss.State('age', float, np.nan), # NaN until conceived
-            ss.State('female', bool, ss.bernoulli(name='female', p=0.5)),
-            ss.State('ti_dead', int, ss.INT_NAN),  # Time index for death
-            ss.State('alive', bool, True),  # Time index for death
-            ss.State('scale', float, 1.0),
+            ss.BoolArr('alive', default=True),  # Time index for death
+            ss.BoolArr('female', default=ss.bernoulli(name='female', p=0.5)),
+            ss.FloatArr('age'), # NaN until conceived
+            ss.FloatArr('ti_dead'),  # Time index for death
+            ss.FloatArr('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
         ]
         states.extend(sc.promotetolist(extra_states))
 
@@ -222,7 +202,6 @@ class People(BasePeople):
             age_props = age_props / age_props.sum()
             return ss.choice(a=age_bins, p=age_props)
 
-
     def initialize(self, sim):
         """ Initialization """
 
@@ -233,8 +212,8 @@ class People(BasePeople):
         
         # For People initialization, first initialize slots, then initialize RNGs, then initialize remaining states
         # This is because some states may depend on RNGs being initialized to generate initial values
-        self.slot.initialize(sim)
-        self.slot[:] = self.uid
+        self.uid.set_people(sim.people)
+        self.slot.set_people(sim.people)
 
         # Initialize states
         # Age is handled separately because the default value for new agents is NaN until they are concieved/born whereas
@@ -297,13 +276,15 @@ class People(BasePeople):
         """
         Remove dead agents
         """
-        uids_to_remove = ss.true(self.dead)
-        if len(uids_to_remove):
-            self.remove(uids_to_remove)
-
-        # Remove the UIDs from the network too
-        for network in sim.networks.values():
-            network.remove_uids(uids_to_remove)
+        uids = (~self.alive).uids
+        if len(uids):
+            
+            # Remove the UIDs from the networks too
+            for network in sim.networks.values():
+                network.remove_uids(uids) # TODO: only run once every nth timestep
+                
+            # Calculate the indices to keep
+            self.auids = self.auids.remove(uids)
 
         return
 
@@ -314,7 +295,7 @@ class People(BasePeople):
         :param sim:
         :return:
         """
-        self.age[self.alive] += self.dt
+        self.age[self.alive.uids] += self.dt
         return
 
     def resolve_deaths(self):
@@ -323,7 +304,7 @@ class People(BasePeople):
 
         :return:
         """
-        death_uids = ss.true(self.ti_dead <= self.ti)
+        death_uids = (self.ti_dead <= self.ti).uids
         self.alive[death_uids] = False
         return death_uids
 
@@ -338,7 +319,7 @@ class People(BasePeople):
         return ~self.female
 
     @property
-    def f(self):
+    def f(self): # TODO: remove?
         """ Shorthand for female """
         return self.female
 
@@ -349,17 +330,18 @@ class People(BasePeople):
 
     def init_results(self, sim):
         sim.results += [
-            ss.Result(None, 'n_alive', sim.npts, ss.dtypes.int, scale=True),
+            ss.Result(None, 'n_alive',    sim.npts, ss.dtypes.int, scale=True),
             ss.Result(None, 'new_deaths', sim.npts, ss.dtypes.int, scale=True),
             ss.Result(None, 'cum_deaths', sim.npts, ss.dtypes.int, scale=True),
         ]
         return
 
     def update_results(self, sim):
+        ti = sim.ti
         res = sim.results
-        res.n_alive[self.ti] = np.count_nonzero(self.alive)
-        res.new_deaths[self.ti] = np.count_nonzero(self.ti_dead == self.ti)
-        res.cum_deaths[self.ti] = np.sum(res.new_deaths[:sim.ti])
+        res.n_alive[ti] = np.count_nonzero(self.alive)
+        res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
+        res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
         return
 
     def request_death(self, uids):
@@ -387,10 +369,5 @@ class People(BasePeople):
         :param uids: Agent IDs to request deaths for
         :return: UIDs of agents that have been scheduled to die on this timestep
         """
-
-        # Only update the time of death for agents that are currently alive. This way modules cannot
-        # modify the time of death for agents that have already died. Noting that if remove_people is
-        # enabled then often such agents would not be present in the simulation anyway
-        uids = ss.true(self.alive[uids])
         self.ti_dead[uids] = self.ti
         return

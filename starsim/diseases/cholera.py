@@ -17,7 +17,7 @@ class Cholera(ss.Infection):
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
         """ Initialize with parameters """
 
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             # Natural history parameters, all specified in days
             dur_exp2inf = ss.lognorm_ex(mean=2.772, stdev=4.737),  # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
             dur_asymp2rec = ss.uniform(low=1, high=10),    # From WHO cholera fact sheet, asymptomatic individuals shed bacteria for 1-10 days (https://www.who.int/news-room/fact-sheets/detail/cholera)
@@ -39,7 +39,7 @@ class Cholera(ss.Infection):
             p_env_transmit = 0,    # Probability of environmental transmission - filled out later
         )
 
-        par_dists = ss.omergeleft(par_dists,
+        par_dists = ss.dictmergeleft(par_dists,
             dur_exp2inf    = ss.lognorm_ex,
             dur_asymp2rec  = ss.uniform,
             dur_symp2rec   = ss.lognorm_ex,
@@ -56,15 +56,15 @@ class Cholera(ss.Infection):
         
         self.add_states(
             # Susceptible & infected are added automatically, here we add the rest
-            ss.State('exposed', bool, False),
-            ss.State('symptomatic', bool, False),
-            ss.State('recovered', bool, False),
+            ss.BoolArr('exposed'),
+            ss.BoolArr('symptomatic'),
+            ss.BoolArr('recovered'),
     
             # Timepoint states
-            ss.State('ti_exposed', float, np.nan),
-            ss.State('ti_symptomatic', float, np.nan),
-            ss.State('ti_recovered', float, np.nan),
-            ss.State('ti_dead', float, np.nan),
+            ss.FloatArr('ti_exposed'),
+            ss.FloatArr('ti_symptomatic'),
+            ss.FloatArr('ti_recovered'),
+            ss.FloatArr('ti_dead'),
         )
 
         return
@@ -95,24 +95,23 @@ class Cholera(ss.Infection):
         Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/cholera.py
         Original version by Dom Delport
         """
-
         # Progress exposed -> infected
-        infected = ss.true(self.exposed & (self.ti_infected <= sim.ti))
+        infected = (self.exposed & (self.ti_infected <= sim.ti)).uids
         self.infected[infected] = True
 
         # Progress infected -> symptomatic
-        symptomatic = ss.true(self.infected & (self.ti_symptomatic <= sim.ti))
+        symptomatic = (self.infected & (self.ti_symptomatic <= sim.ti)).uids
         self.symptomatic[symptomatic] = True
 
         # Progress symptomatic -> recovered
-        recovered = ss.true(self.infectious & (self.ti_recovered <= sim.ti))
+        recovered = (self.infectious & (self.ti_recovered <= sim.ti)).uids
+        self.exposed[recovered] = False
         self.infected[recovered] = False
-        self.infectious[recovered] = False
         self.symptomatic[recovered] = False
         self.recovered[recovered] = True
 
         # Trigger deaths
-        deaths = ss.true(self.ti_dead <= sim.ti)
+        deaths = (self.ti_dead <= sim.ti).uids
         if len(deaths):
             sim.people.request_death(deaths)
 
@@ -128,8 +127,8 @@ class Cholera(ss.Infection):
         p = self.pars
         r = self.results
 
-        n_symptomatic = len(ss.true(self.symptomatic))
-        n_asymptomatic = len(ss.true(self.asymptomatic))
+        n_symptomatic = self.symptomatic.sum()
+        n_asymptomatic = self.asymptomatic.sum()
         old_prev = self.results.env_prev[sim.ti-1]
 
         new_bacteria = p.shedding_rate * (n_symptomatic + p.asymp_trans * n_asymptomatic)

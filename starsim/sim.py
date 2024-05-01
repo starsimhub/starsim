@@ -467,10 +467,6 @@ class Sim(sc.prettyobj):
         # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
         self.dists.jump(to=self.ti+1)  # +1 offset because ti=0 is used on initialization
 
-        # Clean up dead agents, if removing agents is enabled
-        if self.pars.remove_dead and (self.ti % self.pars.remove_dead == 0):
-            self.people.remove_dead(self)
-
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
         for dem_mod in self.demographics.values():
             dem_mod.update(self)
@@ -511,6 +507,9 @@ class Sim(sc.prettyobj):
 
         for analyzer in self.analyzers.values():
             analyzer(self)
+            
+        # Clean up dead agents
+        self.people.remove_dead(self)
 
         # Tidy up
         self.ti += 1

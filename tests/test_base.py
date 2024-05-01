@@ -20,8 +20,11 @@ def test_people():
     del ppl
 
     # Possible to initialize people with extra states, e.g. a geolocation
+    def geo_func(n):
+        locs = [1,2,3]
+        return np.random.choice(locs, n)
     extra_states = [
-        ss.State('geolocation', int, lambda n: np.random.choice([1,2,3],n)),
+        ss.FloatArr('geolocation', default=geo_func),
     ]
     ppl = ss.People(100, extra_states=extra_states)
 
@@ -54,7 +57,7 @@ def test_networks():
 
 
 def test_microsim(do_plot=False):
-    sc.heading('Test making people and providing them to a sim')
+    sc.heading('Test small HIV simulation')
 
     # Make HIV module
     hiv = ss.HIV()
@@ -81,6 +84,7 @@ def test_microsim(do_plot=False):
 
 
 def test_ppl_construction():
+    sc.heading('Test making people and providing them to a sim')
 
     def init_debut(module, sim, uids):
         # Test setting the mean debut age by sex, 16 for men and 21 for women.
@@ -105,6 +109,32 @@ def test_ppl_construction():
     return sim
 
 
+def test_arrs():
+    sc.heading('Testing Arr objects')
+    o = sc.objdict()
+    
+    # Create a sim with only births
+    pars = dict(n_agents=1000, diseases='sis', networks='random')
+    p1 = sc.mergedicts(pars, birth_rate=10)
+    p2 = sc.mergedicts(pars, death_rate=10)
+    s1 = ss.Sim(pars=p1).run()
+    s2 = ss.Sim(pars=p2).run()
+    
+    # Tests
+    assert len(s1.people.auids) > len(s2.people.auids), 'Should have more people with births'
+    assert np.array_equal(s1.people.age, s1.people.age.raw[s1.people.auids]), 'Different ways of indexing age should match'
+    assert np.array_equal(s1.people.alive.uids, s1.people.auids), 'Active/alive agents should match'
+    assert np.all(s2.people.alive), 'All agents should be alive when indexed like this'
+    assert not np.all(s2.people.alive.raw), 'Some agents should not be alive when indexed like this'
+    assert np.array_equal(~s1.people.female, s1.people.male), 'Definition of men does not match'
+    assert isinstance(s1.people.age < 5, ss.BoolArr), 'Performing logical operations should return a BoolArr'
+    
+    o.s1 = s1
+    o.s2 = s2   
+    
+    return o
+
+
 
 # %% Run as a script
 if __name__ == '__main__':
@@ -119,6 +149,7 @@ if __name__ == '__main__':
     nw1, nw2, nw3 = test_networks()
     sim1 = test_microsim(do_plot)
     sim2 = test_ppl_construction()
+    sims = test_arrs()
 
     sc.toc(T)
     pl.show()

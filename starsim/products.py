@@ -59,7 +59,8 @@ class Dx(Product):
         for disease in self.diseases:
             for state in self.health_states:
                 this_state = getattr(sim.diseases[disease], state)
-                these_uids = ss.true(this_state[uids])
+                true_uids = this_state.uids # Find people for which this state is true
+                these_uids = true_uids.intersect(uids) # Find intersection of people in this state and the supplied UIDs
 
                 # Filter the dataframe to extract test results for people in this state
                 df_filter = (self.df.state == state) & (self.df.disease == disease)
@@ -68,8 +69,8 @@ class Dx(Product):
                 self.result_dist.pk = probs  # Overwrite distribution probabilities
 
                 # Sort people into one of the possible result states and then update their overall results
-                this_result = self.result_dist.rvs(these_uids)-these_uids # TODO: check!
-                row_inds = results.uids.isin(these_uids)
+                this_result = self.result_dist.rvs(these_uids)
+                row_inds = sc.findinds(results.uids.isin(these_uids))
                 results.loc[row_inds, 'result'] = np.minimum(this_result, results.loc[row_inds, 'result'])
 
             if return_format == 'dict':
@@ -106,7 +107,8 @@ class Tx(Product):
             for state in self.health_states:
 
                 pre_tx_state = getattr(disease, state)
-                these_uids = ss.true(pre_tx_state[uids])
+                true_uids = pre_tx_state.uids # People in this state
+                these_uids = true_uids.intersect(uids)
 
                 if len(these_uids):
 
@@ -141,8 +143,8 @@ class Tx(Product):
 class Vx(Product):
     """ Vaccine product """
     def __init__(self, diseases=None, pars=None, par_dists=None, *args, **kwargs):
-        pars = ss.omerge({}, pars)
-        par_dists = ss.omerge({}, par_dists)
+        pars = ss.dictmerge({}, pars)
+        par_dists = ss.dictmerge({}, par_dists)
         super().__init__(pars, par_dists, *args, **kwargs)
         self.diseases = sc.tolist(diseases)
         return

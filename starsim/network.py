@@ -71,7 +71,7 @@ class Network(ss.Module):
             p2 = ss_int_,
             beta = ss_float_,
         )
-        self.meta = ss.omerge(default_keys, key_dict)
+        self.meta = ss.dictmerge(default_keys, key_dict)
         self.vertical = vertical  # Whether transmission is bidirectional
 
         # Initialize the keys of the network
@@ -85,7 +85,8 @@ class Network(ss.Module):
             self.initialized = True
 
         # Define states using placeholder values
-        self.participant = ss.State('participant', bool, default=False)
+        self.participant = ss.BoolArr('participant')
+        self.validate_uids()
         return
     
     @property
@@ -128,12 +129,12 @@ class Network(ss.Module):
 
         Returns: True if person index appears in any interactions
         """
-        return (item in self.contacts.p1) or (item in self.contacts.p2)
+        return (item in self.contacts.p1) or (item in self.contacts.p2) # TODO: chek if (item in self.members) is faster
 
     @property
     def members(self):
         """ Return sorted array of all members """
-        return np.unique([self.contacts.p1, self.contacts.p2])
+        return np.unique([self.contacts.p1, self.contacts.p2]).view(ss.uids)
 
     def meta_keys(self):
         """ Return the keys for the network's meta information """
@@ -147,6 +148,16 @@ class Network(ss.Module):
         states that depend on other states.
         """
         pass
+    
+    def validate_uids(self):
+        """ Ensure that p1, p2 are both UID arrays """
+        contacts = self.contacts
+        for key in ['p1', 'p2']:
+            if key in contacts:
+                arr = contacts[key]
+                if not isinstance(arr, ss.uids):
+                    self.contacts[key] = ss.uids(arr)
+        return
 
     def validate(self, force=True):
         """
@@ -166,6 +177,7 @@ class Network(ss.Module):
             if n != actual_n:
                 errormsg = f'Expecting length {n} for network key "{key}"; got {actual_n}'  # Report length mismatches
                 raise TypeError(errormsg)
+        self.validate_uids()
         return
 
     def get_inds(self, inds, remove=False):
@@ -180,6 +192,7 @@ class Network(ss.Module):
             output[key] = self.contacts[key][inds]  # Copy to the output object
             if remove:
                 self.contacts[key] = np.delete(self.contacts[key], inds)  # Remove from the original
+                self.validate_uids()
         return output
 
     def pop_inds(self, inds):
@@ -193,20 +206,23 @@ class Network(ss.Module):
         popped_inds = self.get_inds(inds, remove=True)
         return popped_inds
 
-    def append(self, contacts):
+    def append(self, contacts=None, **kwargs):
         """
         Append contacts to the current network.
 
         Args:
             contacts (dict): a dictionary of arrays with keys p1,p2,beta, as returned from network.pop_inds()
         """
+        contacts = sc.mergedicts(contacts, kwargs)
         for key in self.meta_keys():
-            new_arr = contacts[key]
-            n_curr = len(self.contacts[key])  # Current number of contacts
-            n_new = len(new_arr)  # New contacts to add
-            n_total = n_curr + n_new  # New size
-            self.contacts[key] = np.resize(self.contacts[key], n_total)  # Resize to make room, preserving dtype
-            self.contacts[key][n_curr:] = new_arr  # Copy contacts into the network
+            curr_arr = self.contacts[key]
+            try:
+                new_arr = contacts[key]
+            except KeyError:
+                errormsg = f'Cannot append contacts since required key "{key}" is missing'
+                raise KeyError(errormsg)
+            self.contacts[key] = np.concatenate([curr_arr, new_arr])  # Resize to make room, preserving dtype
+        self.validate_uids()
         return
 
     def to_dict(self):
@@ -319,7 +335,7 @@ class Networks(ss.ndict):
 class DynamicNetwork(Network):
     """ A network where partnerships update dynamically """
     def __init__(self, pars=None, key_dict=None, **kwargs):
-        key_dict = ss.omerge({'dur': ss_float_}, key_dict)
+        key_dict = ss.dictmerge({'dur': ss_float_}, key_dict)
         super().__init__(pars, key_dict=key_dict, **kwargs)
         return
 
@@ -337,14 +353,16 @@ class DynamicNetwork(Network):
 class SexualNetwork(Network):
     """ Base class for all sexual networks """
     def __init__(self, pars=None, key_dict=None, **kwargs):
-        key_dict = ss.omerge({'acts': ss_int_}, key_dict)
+        key_dict = ss.dictmerge({'acts': ss_int_}, key_dict)
         super().__init__(pars, key_dict=key_dict, **kwargs)
-        self.debut = ss.State('debut', float, default=0)
+        self.debut = ss.FloatArr('debut', default=0)
         return
 
     def active(self, people):
         # Exclude people who are not alive
-        return self.participant & (people.age > self.debut) & people.alive
+        valid_age = people.age > self.debut
+        active = self.participant & valid_age & people.alive
+        return active
 
     def available(self, people, sex):
         # Currently assumes unpartnered people are available
@@ -352,7 +370,11 @@ class SexualNetwork(Network):
         # This property could also be overwritten by a NetworkConnector
         # which could incorporate information about membership in other
         # contact networks
-        return np.setdiff1d(ss.true(people[sex] & self.active(people)), self.members) # ss.true instead of people.uid[]?
+        right_sex = people[sex]
+        is_active = self.active(people)
+        is_available = (right_sex & is_active).uids
+        still_available = is_available.remove(self.members)
+        return still_available
 
     def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
         if uids is None: uids = Ellipsis
@@ -388,7 +410,7 @@ class StaticNet(Network):
     def __init__(self, graph=None, pars=None, **kwargs):
         super().__init__(**kwargs)
         self.graph = graph
-        self.pars = ss.omerge(dict(seed=True), pars)
+        self.pars = ss.dictmerge(dict(seed=True), pars)
         self.dist = ss.Dist(name='StaticNet').initialize()
         return
 
@@ -431,9 +453,8 @@ class StaticNet(Network):
             p1, p2 = edge
             p1s.append(p1)
             p2s.append(p2)
-        self.contacts.p1 = np.concatenate([self.contacts.p1, p1s])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, p2s])
-        self.contacts.beta = np.concatenate([self.contacts.beta, np.ones_like(p1s)])
+        contacts = dict(p1=p1s, p2=p2s, beta=np.ones_like(p1s))
+        self.append(contacts)
         return
 
 
@@ -442,7 +463,7 @@ class RandomNet(DynamicNetwork):
 
     def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
         """ Initialize """
-        pars = ss.omerge({
+        pars = ss.dictmerge({
             'n_contacts': 10,  # Distribution or int. If int, interpreted as the mean of the dist listed in par_dists
             'dur': 0,
         }, pars)
@@ -520,12 +541,8 @@ class RandomNet(DynamicNetwork):
             dur = self.pars.dur.rvs(p1)
         else:
             dur = np.full(len(p1), self.pars.dur)
-
-        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
-        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
-
+        
+        self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return
 
 
@@ -564,9 +581,7 @@ class NullNet(Network):
 
     def get_contacts(self):
         indices = np.arange(self.n)
-        self.contacts.p1 = np.concatenate([self.contacts.p1, indices])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, indices])
-        self.contacts.beta = np.concatenate([self.contacts.beta, np.zeros_like(indices)])
+        self.append(dict(p1=indices, p2=indices, beta=np.zeros_like(indices)))
         return
 
 
@@ -577,7 +592,7 @@ class MFNet(SexualNetwork, DynamicNetwork):
     """
 
     def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             duration = 15,  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             participation = 0.9,  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             debut = 16,  # Age of debut can vary by using callable parameter values
@@ -585,7 +600,7 @@ class MFNet(SexualNetwork, DynamicNetwork):
             rel_part_rates = 1.0,
         )
 
-        par_dists = ss.omergeleft(par_dists,
+        par_dists = ss.dictmergeleft(par_dists,
             duration      = ss.lognorm_ex,
             participation = ss.bernoulli,
             debut         = ss.normal,
@@ -614,15 +629,15 @@ class MFNet(SexualNetwork, DynamicNetwork):
 
     def set_participation(self, people, upper_age=None):
         # Set people who will participate in the network at some point
-        if upper_age is None: uids = people.uid
-        else: uids = people.uid[(people.age < upper_age)]
+        if upper_age is None: uids = people.auids
+        else: uids = (people.age < upper_age).uids
         self.participant[uids] = self.pars.participation.rvs(uids)
         return
 
     def set_debut(self, people, upper_age=None):
         # Set debut age
-        if upper_age is None: uids = people.uid
-        else: uids = people.uid[(people.age < upper_age)]
+        if upper_age is None: uids = people.auids
+        else: uids = (people.age < upper_age).uids
         self.debut[uids] = self.pars.debut.rvs(uids)
         return
 
@@ -658,11 +673,7 @@ class MFNet(SexualNetwork, DynamicNetwork):
             dur_vals = self.pars.duration.rvs(len(p1))  # Just use len(p1) to say how many draws are needed
             act_vals = self.pars.acts.rvs(len(p1))
 
-        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
-        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
-        self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
+        self.append(p1=p1, p2=p2, beta=beta, dur=dur_vals, acts=act_vals)
 
         return len(p1)
 
@@ -679,7 +690,7 @@ class MSMNet(SexualNetwork, DynamicNetwork):
     """
 
     def __init__(self, pars=None, key_dict=None, **kwargs):
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             duration_dist = ss.lognorm_ex(mean=15, stdev=15),
             participation_dist = ss.bernoulli(p=0.1),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             debut_dist = ss.normal(loc=16, scale=2),
@@ -731,11 +742,8 @@ class MSMNet(SexualNetwork, DynamicNetwork):
             dur = self.pars.duration.rvs(len(p1)) # Just use len(p1) to say how many draws are needed
             act_vals = self.pars.acts.rvs(len(p1))
 
-        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, p2])
-        self.contacts.beta = np.concatenate([self.contacts.beta, np.ones_like(p1)])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
-        self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
+        self.append(p1=p1, p2=p2, beta=np.ones_like(p1), dur=dur, acts=act_vals)
+        
         return len(p1)
 
     def update(self, people, dt=None):
@@ -758,7 +766,7 @@ class EmbeddingNet(MFNet):
         std is the standard deviation of noise added to the age of each individual when seeking a pair. Larger values will created more diversity in age gaps.
         
         """
-        pars = ss.omerge({
+        pars = ss.dictmerge({
             'embedding_func': ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
             'male_shift': 5,
         }, pars)
@@ -767,7 +775,7 @@ class EmbeddingNet(MFNet):
 
     @staticmethod
     def embedding_loc(module, sim, uids):
-        loc = sim.people.age[uids].values
+        loc = sim.people.age[uids]
         loc[sim.people.female[uids]] += module.pars.male_shift  # Shift females so they will be paired with older men
         return loc
 
@@ -780,7 +788,7 @@ class EmbeddingNet(MFNet):
                 print('No pairs to add')
             return 0
 
-        available = np.concatenate((available_m, available_f))
+        available = ss.uids.cat(available_m, available_f)
         loc = self.pars.embedding_func.rvs(available)
         loc_f = loc[people.female[available]]
         loc_m = loc[~people.female[available]]
@@ -788,22 +796,17 @@ class EmbeddingNet(MFNet):
         dist_mat = spsp.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
 
         ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
-        # loc_f[ind_f[0]] is close to loc_m[ind_m[0]]
 
         n_pairs = len(ind_f)
 
-        beta = np.ones(n_pairs)
-
-        # Figure out durations
+        # Finalize pairs
         p1 = available_m[ind_m]
+        p2 = available_f[ind_f]
+        beta = np.ones(n_pairs) # TODO: Allow custom beta
         dur_vals = self.pars.duration.rvs(p1)
         act_vals = self.pars.acts.rvs(p1)
 
-        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, available_f[ind_f]])
-        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
-        self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
+        self.append(p1=p1, p2=p2, beta=beta, dur=dur_vals, acts=act_vals)
         return len(beta)
 
 
@@ -836,12 +839,10 @@ class MaternalNet(Network):
         """
         Add connections between pregnant women and their as-yet-unborn babies
         """
-        beta = np.ones_like(mother_inds)
-        self.contacts.p1 = np.concatenate([self.contacts.p1, mother_inds])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, unborn_inds])
-        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur])
-        return len(mother_inds)
+        n = len(mother_inds)
+        beta = np.ones(n)
+        self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur)
+        return n
 
 
 # %% Network connectors
@@ -867,7 +868,7 @@ class MF_MSM(NetworkConnector):
     """ Combines the MF and MSM networks """
     def __init__(self, pars=None):
         networks = [ss.MFNet, ss.MSMNet]
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             prop_bi = 0.5,  # Could vary over time -- but not by age or sex or individual
         )
         super().__init__(networks=networks, pars=pars)

@@ -16,7 +16,7 @@ class Ebola(SIR):
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
         """ Initialize with parameters """
 
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             # Natural history parameters, all specified in days
             dur_exp2symp = 12.7, # Add source
             dur_symp2sev =    6, # Add source
@@ -35,7 +35,7 @@ class Ebola(SIR):
             unburied_factor = 2.1,
         )
 
-        par_dists = ss.omergeleft(par_dists,
+        par_dists = ss.dictmergeleft(par_dists,
             dur_exp2symp    = ss.lognorm_ex,
             dur_symp2sev    = ss.lognorm_ex,
             dur_sev2dead    = ss.lognorm_ex,
@@ -54,17 +54,17 @@ class Ebola(SIR):
         
         self.add_states(
             # SIR are added automatically, here we add E
-            ss.State('exposed', bool, False),
-            ss.State('severe', bool, False),
-            ss.State('recovered', bool, False),
-            ss.State('buried', bool, False),
+            ss.BoolArr('exposed'),
+            ss.BoolArr('severe'),
+            ss.BoolArr('recovered'),
+            ss.BoolArr('buried'),
     
             # Timepoint states
-            ss.State('ti_exposed', float, np.nan),
-            ss.State('ti_severe', float, np.nan),
-            ss.State('ti_recovered', float, np.nan),
-            ss.State('ti_dead', float, np.nan),
-            ss.State('ti_buried', float, np.nan),
+            ss.FloatArr('ti_exposed'),
+            ss.FloatArr('ti_severe'),
+            ss.FloatArr('ti_recovered'),
+            ss.FloatArr('ti_dead'),
+            ss.FloatArr('ti_buried'),
         )
 
         return
@@ -76,31 +76,31 @@ class Ebola(SIR):
     def update_pre(self, sim):
 
         # Progress exposed -> infected
-        infected = ss.true(self.exposed & (self.ti_infected <= sim.ti))
+        infected = (self.exposed & (self.ti_infected <= sim.ti)).uids
         self.exposed[infected] = False
         self.infected[infected] = True
 
         # Progress infectious -> severe
-        severe = ss.true(self.infected & (self.ti_severe <= sim.ti))
+        severe = (self.infected & (self.ti_severe <= sim.ti)).uids
         self.severe[severe] = True
 
         # Progress infected -> recovered
-        recovered = ss.true(self.infected & (self.ti_recovered <= sim.ti))
+        recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
         self.infected[recovered] = False
         self.recovered[recovered] = True
 
         # Progress severe -> recovered
-        recovered_sev = ss.true(self.severe & (self.ti_recovered <= sim.ti))
+        recovered_sev = (self.severe & (self.ti_recovered <= sim.ti)).uids
         self.severe[recovered_sev] = False
         self.recovered[recovered_sev] = True
 
         # Trigger deaths
-        deaths = ss.true(self.ti_dead <= sim.ti)
+        deaths = (self.ti_dead <= sim.ti).uids
         if len(deaths):
             sim.people.request_death(deaths)
 
         # Progress dead -> buried
-        buried = ss.true(self.ti_buried <= sim.ti)
+        buried = (self.ti_buried <= sim.ti).uids
         self.buried[buried] = True
         
         return
@@ -140,7 +140,7 @@ class Ebola(SIR):
         # Change rel_trans values
         self.rel_trans[self.infectious] = 1
         self.rel_trans[self.severe] = self.pars['sev_factor']  # Change for severe
-        unburied_uids = ss.true((self.ti_dead <= sim.ti) & (self.ti_buried > sim.ti))
+        unburied_uids = ((self.ti_dead <= sim.ti) & (self.ti_buried > sim.ti)).uids
         self.rel_trans[unburied_uids] = self.pars['unburied_factor']  # Change for unburied
 
         return

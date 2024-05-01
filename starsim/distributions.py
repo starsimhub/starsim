@@ -370,7 +370,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             slots = None
             size = n
         else:
-            uids = np.asarray(n)
+            uids = ss.uids(n)
             if len(uids):
                 slots = self.slots[uids]
                 if len(slots): # Handle case where uids is boolean
@@ -698,8 +698,10 @@ class bernoulli(Dist):
         rvs = rands < self._pars.p
         return rvs
     
-    def filter(self, uids, both=False):
+    def filter(self, uids=None, both=False):
         """ Return UIDs that correspond to True, or optionally return both True and False """
+        if uids is None:
+            uids = self.sim.people.auids # All active UIDs
         bools = self.rvs(uids)
         if both:
             return uids[bools], uids[~bools]

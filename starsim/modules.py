@@ -12,8 +12,8 @@ __all__ = ['Module']
 class Module(sc.quickobj):
 
     def __init__(self, pars=None, par_dists=None, name=None, label=None, requires=None, **kwargs):
-        self.pars = ss.omerge(pars, kwargs)
-        self.par_dists = ss.omerge(par_dists)
+        self.pars = ss.dictmerge(pars, kwargs)
+        self.par_dists = ss.dictmerge(par_dists)
         self.name = sc.ifelse(name, getattr(self, 'name', self.__class__.__name__.lower())) # Default name is the class name
         self.label = sc.ifelse(label, getattr(self, 'label', self.name))
         self.requires = sc.mergelists(requires)
@@ -142,7 +142,7 @@ class Module(sc.quickobj):
                 state = arg
                 
             if check:
-                assert isinstance(state, ss.State), f'Could not add {state}: not a State object'
+                assert isinstance(state, ss.Arr), f'Could not add {state}: not an Arr object'
                 
             setattr(self, state.name, state)
         return
@@ -158,7 +158,7 @@ class Module(sc.quickobj):
         due to supporting features like multiple genotypes) then the Module should
         overload this attribute to ensure that all states appear in here.
         """
-        return [x for x in self.__dict__.values() if isinstance(x, ss.State)]
+        return [x for x in self.__dict__.values() if isinstance(x, ss.Arr)]
 
     @property
     def statesdict(self):

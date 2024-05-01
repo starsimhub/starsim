@@ -15,13 +15,13 @@ class HIV(ss.Infection):
 
         # States
         self.add_states(
-            ss.State('on_art', bool, False),
-            ss.State('ti_art', int, ss.INT_NAN),
-            ss.State('cd4', float, 500),
-            ss.State('ti_dead', int, ss.INT_NAN), # Time of HIV-cause death
+            ss.BoolArr('on_art'),
+            ss.FloatArr('ti_art'),
+            ss.FloatArr('ti_dead'), # Time of HIV-cause death
+            ss.FloatArr('cd4', default=500),
         )
 
-        pars = ss.omergeleft(pars,
+        pars = ss.dictmergeleft(pars,
             cd4_min = 100,
             cd4_max = 500,
             cd4_rate = 5,
@@ -31,7 +31,7 @@ class HIV(ss.Infection):
             death_prob = 0.05,
         )
 
-        par_dists = ss.omergeleft(par_dists,
+        par_dists = ss.dictmergeleft(par_dists,
             init_prev  = ss.bernoulli,
             death_prob = ss.bernoulli,
         )
@@ -56,7 +56,7 @@ class HIV(ss.Infection):
 
         self.rel_trans[sim.people.alive & self.infected & self.on_art] = 1 - self.pars['art_efficacy']
 
-        can_die = ss.true(sim.people.alive & sim.people.hiv.infected)
+        can_die = sim.people.hiv.infected.uids
         hiv_deaths = self.pars.death_prob.filter(can_die)
         
         sim.people.request_death(hiv_deaths)

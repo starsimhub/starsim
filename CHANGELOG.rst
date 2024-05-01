@@ -7,6 +7,18 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 0.4.0 (2024-04-24)
+--------------------------
+- Replace ``UIDArray``, ``ArrayView``, and ``State`` with ``Arr``, which has different subclasses for different data types (e.g. ``FloatArr``, ``BoolArr``, and ``IndexArr``). States are usually represented by ``BoolArr`` (e.g. ``sir.infected``), while other agent properties are represented by ``FloatArr`` (e.g. ``sir.rel_trans``).
+- Arrays that had previously been represented using an integer data type (e.g. ``sir.ti_infected``) are now also ``FloatArr``, to allow the use of ``np.nan``. Integer arrays are supported via ``IndexArr``, but these are only intended for use for slots and UIDs.
+- ``Arr`` objects automatically skip over dead (or otherwise removed) agents; the "active" UIDs are stored in ``sim.people.auids``, which is updated when agents are born or die. This array is linked to each ``Arr``, so that e.g. ``sim.people.age.mean()`` will only calculate the mean over alive agents. To access the underlying Numpy array, use ``sim.people.age.raw``.
+- ``FloatArr`` has ``isnan``, ``notnan``, and ``notnanvals`` properties. ``BoolArr`` has logical operations defined. For example, ``~people.female`` works, but ``~people.ti_dead`` does not; ``people.ti_dead.notnan`` works, but ``people.female.notnan`` does not.
+- UIDs used to be NumPy integer arrays; they are now ``ss.uids`` objects (which is a class, but is lowercase for consistency with ``np.array()``, which it is functionally similar to). Indexing a state by an integer array rather than ``ss.uids()`` now raises an exception, due to the ambiguity involved. To index the underlying array with an integer array, use ``Arr.raw[int_arr]``; to index only the active/alive agents, use ``Arr.values[int_arr]``.
+- Dead agents are no longer removed, so ``uid`` always corresponds to the position in the array. This means that no remapping is necessary, which has a significant performance benefit (roughly 2x faster for large numbers of agents).
+- Renamed ``omerge`` to ``dictmerge`` and ``omergeleft`` to ``dictmergeleft``.
+- *GitHub info*: PR `456 <https://github.com/starsimhub/starsim/pull/456>`_
+
+
 Version 0.3.4 (2024-04-18)
 --------------------------
 - Default duration of edges in ``ss.RandomNet`` changed from 1 to 0; this does not matter if ``dt=1``, but does matter with smaller ``dt`` values.

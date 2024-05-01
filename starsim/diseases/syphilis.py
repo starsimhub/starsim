@@ -17,30 +17,28 @@ class Syphilis(ss.Infection):
 
         self.add_states(
             # Adult syphilis states
-            ss.State('exposed', bool, False),  # AKA incubating. Free of symptoms, not transmissible
-            ss.State('primary', bool, False),  # Primary chancres
-            ss.State('secondary', bool, False),  # Inclusive of those who may still have primary chancres
-            ss.State('latent_temp', bool, False),  # Relapses to secondary (~1y)
-            ss.State('latent_long', bool, False),  # Can progress to tertiary or remain here
-            ss.State('tertiary', bool, False),  # Includes complications (cardio/neuro/disfigurement)
-            ss.State('immune', bool, False),  # After effective treatment people may acquire temp immunity
-            ss.State('ever_exposed', bool, False),  # Anyone ever exposed - stays true after treatment
-    
-            # Congenital syphilis states
-            ss.State('congenital', bool, False),
+            ss.BoolArr('exposed'),  # AKA incubating. Free of symptoms, not transmissible
+            ss.BoolArr('primary'),  # Primary chancres
+            ss.BoolArr('secondary'),  # Inclusive of those who may still have primary chancres
+            ss.BoolArr('latent_temp'),  # Relapses to secondary (~1y)
+            ss.BoolArr('latent_long'),  # Can progress to tertiary or remain here
+            ss.BoolArr('tertiary'),  # Includes complications (cardio/neuro/disfigurement)
+            ss.BoolArr('immune'),  # After effective treatment people may acquire temp immunity
+            ss.BoolArr('ever_exposed'),  # Anyone ever exposed - stays true after treatment
+            ss.BoolArr('congenital'),  # Congenital syphilis states
     
             # Timestep of state changes
-            ss.State('ti_exposed', int, ss.INT_NAN),
-            ss.State('ti_primary', int, ss.INT_NAN),
-            ss.State('ti_secondary', int, ss.INT_NAN),
-            ss.State('ti_latent_temp', int, ss.INT_NAN),
-            ss.State('ti_latent_long', int, ss.INT_NAN),
-            ss.State('ti_tertiary', int, ss.INT_NAN),
-            ss.State('ti_immune', int, ss.INT_NAN),
-            ss.State('ti_miscarriage', int, ss.INT_NAN),
-            ss.State('ti_nnd', int, ss.INT_NAN),
-            ss.State('ti_stillborn', int, ss.INT_NAN),
-            ss.State('ti_congenital', int, ss.INT_NAN),
+            ss.FloatArr('ti_exposed'),
+            ss.FloatArr('ti_primary'),
+            ss.FloatArr('ti_secondary'),
+            ss.FloatArr('ti_latent_temp'),
+            ss.FloatArr('ti_latent_long'),
+            ss.FloatArr('ti_tertiary'),
+            ss.FloatArr('ti_immune'),
+            ss.FloatArr('ti_miscarriage'),
+            ss.FloatArr('ti_nnd'),
+            ss.FloatArr('ti_stillborn'),
+            ss.FloatArr('ti_congenital'),
         )
 
         # Parameters
@@ -80,7 +78,7 @@ class Syphilis(ss.Infection):
             # Initial conditions
             init_prev=ss.bernoulli(p=0.03),
         )
-        self.pars = ss.omerge(default_pars, self.pars) # NB: regular omerge rather than omergeleft
+        self.pars = ss.dictmerge(default_pars, self.pars) # NB: regular dictmerge rather than dictmergeleft
 
         return
 
@@ -129,11 +127,11 @@ class Syphilis(ss.Infection):
         self.rel_trans[primary] = self.pars.rel_trans['primary']
 
         # Secondary from primary
-        secondary_from_primary = self.primary & (self.ti_secondary <= sim.ti)
-        if len(ss.true(secondary_from_primary)) > 0:
+        secondary_from_primary = (self.primary & (self.ti_secondary <= sim.ti)).uids
+        if len(secondary_from_primary) > 0:
             self.secondary[secondary_from_primary] = True
             self.primary[secondary_from_primary] = False
-            self.set_secondary_prognoses(sim, ss.true(secondary_from_primary))
+            self.set_secondary_prognoses(sim, secondary_from_primary)
             self.rel_trans[secondary_from_primary] = self.pars.rel_trans['secondary']
 
         # Hack to reset the MultiRNGs in set_secondary_prognoses so that they can be called again in this timestep. TODO: Refactor
@@ -141,38 +139,38 @@ class Syphilis(ss.Infection):
         self.pars.dur_secondary.jump(sim.ti+1)
 
         # Secondary reactivation from latent
-        secondary_from_latent = self.latent_temp & (self.ti_secondary <= sim.ti)
-        if len(ss.true(secondary_from_latent)) > 0:
+        secondary_from_latent = (self.latent_temp & (self.ti_secondary <= sim.ti)).uids
+        if len(secondary_from_latent) > 0:
             self.secondary[secondary_from_latent] = True
             self.latent_temp[secondary_from_latent] = False
-            self.set_secondary_prognoses(sim, ss.true(secondary_from_latent))
+            self.set_secondary_prognoses(sim, secondary_from_latent)
             self.rel_trans[secondary_from_latent] = self.pars.rel_trans['secondary']
 
         # Latent
-        latent_temp = self.secondary & (self.ti_latent_temp <= sim.ti)
-        if len(ss.true(latent_temp)) > 0:
+        latent_temp = (self.secondary & (self.ti_latent_temp <= sim.ti)).uids
+        if len(latent_temp) > 0:
             self.latent_temp[latent_temp] = True
             self.secondary[latent_temp] = False
-            self.set_latent_temp_prognoses(sim, ss.true(latent_temp))
+            self.set_latent_temp_prognoses(sim, latent_temp)
             self.rel_trans[latent_temp] = self.pars.rel_trans['latent_temp']
 
         # Latent long
-        latent_long = self.secondary & (self.ti_latent_long <= sim.ti)
-        if len(ss.true(latent_long)) > 0:
+        latent_long = (self.secondary & (self.ti_latent_long <= sim.ti)).uids
+        if len(latent_long) > 0:
             self.latent_long[latent_long] = True
             self.secondary[latent_long] = False
-            self.set_latent_long_prognoses(sim, ss.true(latent_long))
+            self.set_latent_long_prognoses(sim, latent_long)
             self.rel_trans[latent_long] = self.pars.rel_trans['latent_long']
 
         # Tertiary
-        tertiary = self.latent_long & (self.ti_tertiary <= sim.ti)
+        tertiary = (self.latent_long & (self.ti_tertiary <= sim.ti)).uids
         self.tertiary[tertiary] = True
         self.latent_long[tertiary] = False
         self.rel_trans[tertiary] = self.pars.rel_trans['tertiary']
 
         # Congenital syphilis deaths
-        nnd = self.ti_nnd == sim.ti
-        stillborn = self.ti_stillborn == sim.ti
+        nnd = (self.ti_nnd == sim.ti).uids
+        stillborn = (self.ti_stillborn == sim.ti).uids
         sim.people.request_death(nnd)
         sim.people.request_death(stillborn)
 
@@ -265,7 +263,7 @@ class Syphilis(ss.Infection):
         # Determine outcomes
         for state in ['active', 'latent']:
 
-            source_state_inds = getattr(self, state)[source_uids].values.nonzero()[-1]
+            source_state_inds = getattr(self, state)[source_uids].nonzero()[0]
             uids = target_uids[source_state_inds]
 
             if len(uids) > 0:
@@ -273,7 +271,7 @@ class Syphilis(ss.Infection):
                 # Birth outcomes must be modified to add probability of susceptible birth
                 birth_outcomes = self.pars.birth_outcomes[state]
                 assigned_outcomes = birth_outcomes.rvs(len(uids))
-                time_to_birth = -sim.people.age
+                time_to_birth = -sim.people.age.raw # TODO: make nicer
 
                 # Schedule events
                 for oi, outcome in enumerate(self.pars.birth_outcome_keys):
@@ -281,7 +279,7 @@ class Syphilis(ss.Infection):
                     if len(o_uids) > 0:
                         ti_outcome = f'ti_{outcome}'
                         vals = getattr(self, ti_outcome)
-                        vals[o_uids] = sim.ti + rr(time_to_birth[o_uids].values / sim.dt)
+                        vals[o_uids] = sim.ti + rr(time_to_birth[o_uids] / sim.dt)
                         setattr(self, ti_outcome, vals)
 
         return
@@ -343,7 +341,7 @@ class syph_screening(ss.routine_screening):
         if self.eligibility is not None:
             is_eligible = self.eligibility(sim)
         else:
-            is_eligible = sim.people.alive  # Probably not required
+            is_eligible = sim.people.auids  # Probably not required
         return is_eligible
 
     def initialize(self, sim):

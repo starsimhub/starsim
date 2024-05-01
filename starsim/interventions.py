@@ -81,8 +81,14 @@ class Intervention(ss.Module):
         """
         if self.eligibility is not None:
             is_eligible = self.eligibility(sim)
+            if is_eligible is not None and len(is_eligible): # Only worry if non-None/nonzero length
+                if isinstance(is_eligible, ss.BoolArr):
+                    is_eligible = is_eligible.uids
+                if not isinstance(is_eligible, ss.uids):
+                    errormsg = f'Eligibility function must return BoolArr or UIDs, not {type(is_eligible)} {is_eligible}'
+                    raise TypeError(errormsg)
         else:
-            is_eligible = sim.people.alive  # Probably not required
+            is_eligible = sim.people.auids # Everyone
         return is_eligible
 
 
@@ -198,9 +204,9 @@ class BaseTest(Intervention):
         self.prob = sc.promotetoarray(prob)
         self.eligibility = eligibility
         self._parse_product(product)
-        self.screened = ss.State('screened', bool, False)
-        self.screens = ss.State('screens', int, 0)
-        self.ti_screened = ss.State('ti_screened', int, ss.INT_NAN)
+        self.screened = ss.BoolArr('screened')
+        self.screens = ss.FloatArr('screens', default=0)
+        self.ti_screened = ss.FloatArr('ti_screened')
         return
 
     def initialize(self, sim):
@@ -214,9 +220,9 @@ class BaseTest(Intervention):
         """
         ti = sc.findinds(self.timepoints, sim.ti)[0]
         prob = self.prob[ti]  # Get the proportion of people who will be tested this timestep
-        is_eligible = self.check_eligibility(sim)  # Check eligibility
+        eligible_uids = self.check_eligibility(sim)  # Check eligibility
         self.coverage_dist.set(p=prob)
-        accept_uids = self.coverage_dist.filter(ss.true(is_eligible))
+        accept_uids = self.coverage_dist.filter(eligible_uids)
         if len(accept_uids):
             self.outcomes = self.product.administer(sim, accept_uids)  # Actually administer the diagnostic
         return accept_uids
@@ -241,7 +247,7 @@ class BaseScreening(BaseTest):
         """
         Perform screening by finding who's eligible, finding who accepts, and applying the product.
         """
-        accept_uids = np.array([])
+        accept_uids = ss.uids()
         if sim.ti in self.timepoints:
             accept_uids = self.deliver(sim)
             self.screened[accept_uids] = True
@@ -264,7 +270,7 @@ class BaseTriage(BaseTest):
 
     def apply(self, sim):
         self.outcomes = {k: np.array([], dtype=int) for k in self.product.hierarchy}
-        accept_inds = np.array([])
+        accept_inds = ss.uids()
         if sim.t in self.timepoints: accept_inds = self.deliver(sim)
         return accept_inds
 
@@ -393,7 +399,7 @@ class BaseTreatment(Intervention):
         """
         Get indices of people who will acccept treatment; these people are then added to a queue or scheduled for receiving treatment
         """
-        accept_uids = np.array([], dtype=int)
+        accept_uids = ss.uids()
         eligible_uids = self.check_eligibility(sim)  # Apply eligiblity
         if len(eligible_uids):
             self.coverage_dist.set(p=self.prob[0])
@@ -413,7 +419,7 @@ class BaseTreatment(Intervention):
         # Get indices of who will get treated
         treat_candidates = self.get_candidates(sim)  # NB, this needs to be implemented by derived classes
         still_eligible = self.check_eligibility(sim)
-        treat_uids = np.intersect1d(treat_candidates, still_eligible)
+        treat_uids = treat_candidates.intersect(still_eligible)
         if len(treat_uids):
             self.outcomes = self.product.administer(sim, treat_uids)
         return treat_uids
@@ -450,7 +456,7 @@ class treat_num(BaseTreatment):
                 treat_candidates = self.queue[:]
             else:
                 treat_candidates = self.queue[:self.max_capacity]
-        return sc.promotetoarray(treat_candidates)
+        return ss.uids(treat_candidates) # TODO: Check
 
     def apply(self, sim):
         """
@@ -483,9 +489,9 @@ class BaseVaccination(Intervention):
         self.prob = sc.promotetoarray(prob)
         self.label = label
         self._parse_product(product)
-        self.vaccinated = ss.State('vaccinated', bool, False)
-        self.n_doses = ss.State('doses', int, 0)
-        self.ti_vaccinated = ss.State('ti_vaccinated', int, ss.INT_NAN)
+        self.vaccinated = ss.BoolArr('vaccinated')
+        self.n_doses = ss.FloatArr('doses', default=0)
+        self.ti_vaccinated = ss.FloatArr('ti_vaccinated')
         self.coverage_dist = ss.bernoulli(p=0)  # Placeholder
         return
 
@@ -500,7 +506,7 @@ class BaseVaccination(Intervention):
             prob = self.prob[ti]  # Get the proportion of people who will be tested this timestep
             is_eligible = self.check_eligibility(sim)  # Check eligibility
             self.coverage_dist.set(p=prob)
-            accept_uids = self.coverage_dist.filter(ss.true(is_eligible))
+            accept_uids = self.coverage_dist.filter(is_eligible)
 
             if len(accept_uids):
                 self.product.administer(sim.people, accept_uids)
