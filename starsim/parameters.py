@@ -100,13 +100,32 @@ class Parameters(sc.objdict):
         if self.demographics == True:
             self.demographics = [ss.Births(), ss.Deaths()]  # Use default assumptions for demographics
         
-        # Initialize modules
-        self.init_demographics(sim)
-        self.init_networks(sim)
-        self.init_diseases(sim)
-        self.init_interventions(sim)
-        self.init_analyzers(sim)
-        self.init_connectors(sim)
+        # Get all modules into a consistent format
+        modmap = dict(demographics=ss.Demographics, diseases=ss.Disease, interventions=ss.Intervention, analyzers=ss.Analyzer, connectors=ss.Connectors)
+        
+        # Initialize and convert modules
+        self.init_demographics()
+        self.init_networks()
+        self.init_diseases()
+        self.init_interventions()
+        self.init_analyzers()
+        self.init_connectors()
+        
+        # Initialize all the modules with the sim
+        self.networks.initialize(sim) # Special initialization for networks
+        for modkey in modmap.keys():
+            modlist = self[modkey]
+            for mod in modlist:
+                mod.initialize(sim)
+                
+        # Initialize products # TODO: think about simplifying
+        for mod in self.interventions:
+            if hasattr(mod, 'product') and isinstance(mod.product, ss.Product):
+                mod.product.initialize(sim)
+                
+        # Convert from lists to ndicts
+        for modkey,modtype in modmap.items():
+            self[modkey] = ss.ndict(self[modkey], type=modtype)
         
         return self
 
@@ -293,7 +312,7 @@ class Parameters(sc.objdict):
 
         return processed_plugins
 
-    def init_demographics(self, sim):
+    def init_demographics(self):
         """ Initialize demographics """
 
         # Demographics can be provided via sim.demographics or sim.pars - this methods reconciles them
@@ -306,10 +325,6 @@ class Parameters(sc.objdict):
         if self.death_rate is not None:
             background_deaths = ss.Deaths(pars={'death_rate': self.death_rate})
             demographics += background_deaths
-
-        # Iterate over demographic modules and initialize them
-        for dem_mod in demographics:
-            dem_mod.initialize(sim)
 
         # Count how many of each kind of demographic module we have
         demdict = {'births': ss.Births, 'pregnancy': ss.Pregnancy, 'deaths': ss.Deaths}
@@ -331,7 +346,7 @@ class Parameters(sc.objdict):
         self.demographics = ss.ndict(demographics, type=ss.Demographics)
         return
     
-    def init_networks(self, sim):
+    def init_networks(self):
         """ Initialize networks if these have been provided separately from the people """
 
         processed_networks = self.convert_plugins(ss.Network, plugin_name='networks')
@@ -339,30 +354,19 @@ class Parameters(sc.objdict):
         # Now store the networks in a Networks object, which also allows for connectors between networks
         if not isinstance(processed_networks, ss.Networks):
             self.networks = ss.Networks(*processed_networks)
-        self.networks.initialize(sim)
         return
 
-    def init_diseases(self, sim):
+    def init_diseases(self):
         """ Initialize diseases """
 
         # Diseases can be provided in sim.demographics or sim.pars
         diseases = self.convert_plugins(ss.Disease, plugin_name='diseases')
 
-        # Interate over diseases and initialize them
-        for disease in diseases:
-            disease.initialize(sim)
-
         # Store diseases in the sim
         self.diseases = ss.ndict(diseases, type=ss.Disease)
         return
 
-    def init_connectors(self, sim):
-        for connector in self.connectors.values():
-            connector.initialize(sim)
-        self.connectors = ss.ndict(self.connectors, type=ss.Connector)
-        return
-
-    def init_interventions(self, sim):
+    def init_interventions(self):
         """ Initialize and validate the interventions """
 
         interventions = self.convert_plugins(ss.Intervention, plugin_name='interventions')
@@ -371,9 +375,7 @@ class Parameters(sc.objdict):
         for i, intervention in enumerate(interventions):
             if isinstance(intervention, type) and issubclass(intervention, ss.Intervention):
                 intervention = intervention()  # Convert from a class to an instance of a class
-            if isinstance(intervention, ss.Intervention):
-                intervention.initialize(sim)
-            elif callable(intervention):
+            elif not isinstance(intervention, ss.Intervention) and callable(intervention):
                 intv_func = intervention
                 intervention = ss.Intervention(name=f'intervention_func_{i}')
                 intervention.apply = intv_func # Monkey-patch together an intervention from a function
@@ -387,10 +389,6 @@ class Parameters(sc.objdict):
             # Add intervention states to the People's dicts
             self.people.add_module(intervention)
 
-            # If there's a product module present, initialize and add it
-            if hasattr(intervention, 'product') and isinstance(intervention.product, ss.Product):
-                intervention.product.initialize(sim)
-        
         # TODO: combine this with the code above
         for k,intervention in self.interventions.items():
             if not isinstance(intervention, ss.Intervention):
@@ -399,10 +397,10 @@ class Parameters(sc.objdict):
                 intervention.apply = intv_func # Monkey-patch together an intervention from a function
                 self.interventions[k] = intervention
         
-        self.interventions = ss.ndict(self.interventions, type=ss.Intervention, strict=False) # strict=False since can be a function
+        self.interventions = ss.ndict(self.interventions, type=ss.Intervention)
         return
 
-    def init_analyzers(self, sim):
+    def init_analyzers(self):
         """ Initialize the analyzers """
         
         analyzers = self.analyzers
@@ -425,11 +423,13 @@ class Parameters(sc.objdict):
                 analyzer = ss.Analyzer(name=f'analyzer_func_{k}')
                 analyzer.apply = ana_func # Monkey-patch together an intervention from a function
                 self.analyzers[k] = analyzer
-            if isinstance(analyzer, ss.Analyzer):
-                analyzer.initialize(sim)
         
-        self.analyzers = ss.ndict(self.analyzers, type=ss.Analyzer, strict=False)
+        self.analyzers = ss.ndict(self.analyzers, type=ss.Analyzer)
 
+        return
+
+    def init_connectors(self):
+        self.connectors = ss.ndict(self.connectors, type=ss.Connector)
         return
 
 

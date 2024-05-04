@@ -45,7 +45,7 @@ class Sim(sc.prettyobj):
         keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
         for key in keys:
             setattr(self, key, p.pop(key))
-            
+        
         # Initialize all distributions now that everything else is in place
         self.dists.initialize(obj=self, base_seed=p.seed, force=True)
 
