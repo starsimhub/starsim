@@ -262,7 +262,8 @@ class People(BasePeople):
 
     def update_post(self, sim):
         """ Final updates at the very end of the timestep """
-        self.age[self.alive.uids] += sim.dt
+        if sim.demographics: # Only update ages if demographics are specified
+            self.age[self.alive.uids] += sim.dt
         return
 
     def resolve_deaths(self):
