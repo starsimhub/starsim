@@ -6,8 +6,8 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-
 __all__ = ['Parameters', 'make_pars']
+
 
 class Parameters(sc.objdict):
     """
@@ -99,22 +99,20 @@ class Parameters(sc.objdict):
         if self.demographics == True:
             self.demographics = [ss.Births(), ss.Deaths()]
         
-        # Get all modules into a consistent format
-        modmap = dict(networks=ss.Network, demographics=ss.Demographics, diseases=ss.Disease, interventions=ss.Intervention, analyzers=ss.Analyzer, connectors=ss.Connectors)
-        for modkey in modmap:
+        # Get all modules into a consistent list format
+        modmap = ss.module_map()
+        for modkey in modmap.keys():
             if not isinstance(self[modkey], ss.ndict):
                 self[modkey] = sc.tolist(self[modkey])
         
         # Initialize and convert modules
-        self.init_networks()
-        self.init_demographics()
-        self.init_diseases()
+        self.convert_modules() # General initialization
+        self.init_demographics() # Demographic-specific initialization
         self.init_interventions()
         self.init_analyzers()
-        self.init_connectors()
         
         # Initialize all the modules with the sim
-        for modkey in modmap.keys():
+        for modkey in ss.modmap.keys():
             modlist = self[modkey]
             for mod in modlist:
                 mod.initialize(sim)
@@ -125,8 +123,8 @@ class Parameters(sc.objdict):
                 mod.product.initialize(sim)
                 
         # Convert from lists to ndicts
-        for modkey,modtype in modmap.items():
-            self[modkey] = ss.ndict(self[modkey], type=modtype)
+        for modkey,modclass in modmap.items():
+            self[modkey] = ss.ndict(self[modkey], type=modclass)
         
         return self
 
@@ -237,143 +235,179 @@ class Parameters(sc.objdict):
         # Set time attributes
         sim.people.init_results(sim)
         return sim.people
-
-    def convert_plugins(self, plugin_class, plugin_name=None):
+    
+    def convert_modules(self):
         """
-        Common logic for converting plug-ins to a standard format
-        Used for networks, demographics, diseases, connectors, analyzers, and interventions
+        Common logic for converting plug-ins to a standard format; they are still
+        a list at this point.  Used for networks, demographics, diseases, analyzers, 
+        interventions, and connectors.
+        """
         
-        Args:
-            plugin: class
-        """
+        modmap = ss.module_map() # List of modules and parent module classes, e.g. ss.Disease
+        modules = ss.find_modules() # Each individual module class option, e.g. ss.SIR
+        
+        for modkey,ssmoddict in modules.items():
+            expected_cls = modmap[modkey]
+            modlist = self[modkey]
+            if isinstance(modlist, list): # Skip over ones that are already ndict format, assume they're already initialized
+                for i,mod in enumerate(modlist):
+                    
+                    # Convert first from a string to a dict
+                    if isinstance(mod, str):
+                        modlist[i] = dict(type=mod)
+                        
+                    # Convert from class to class instance (used for interventions and analyzers only)
+                    if isinstance(mod, type) and modkey in ['interventions', 'analyzers']:
+                        modlist[i] = mod() # Call it to create a class instance
+                    
+                    # Now convert from a dict to a module
+                    if isinstance(mod, dict):
+                        
+                        # Get the module type as a string
+                        try:
+                            modtype = mod.pop('type')
+                        except KeyError as E:
+                            errormsg = f'When defining a module as a dict, you must supply the type ({mod})'
+                            raise ValueError(errormsg) from E
+                        
+                        # Get the module type as a class
+                        try:
+                            if isinstance(modtype, str): # Usual case, a string, e.g. dict(type='sir', dur_inf=6)
+                                modtype = modtype.lower() # Because our map is in lowercase
+                                modcls = ssmoddict[modtype]
+                            else: # Allow supplying directly as a class, e.g. dict(type=ss.SIR, dur_inf=6)
+                                assert modcls in ssmoddict.values(), 'Not a valid module'
+                                modcls = modtype
+                        except Exception as E:
+                            errormsg = f'Invalid module type "{modtype}" for "{modkey}"; must be one of {sc.strjoin(ss.moddict.keys())}'
+                            raise ValueError(errormsg) from E
+                        
+                        # Create the module and store it in the list
+                        try:
+                            newmod = modcls(**mod)
+                            modlist[i] = newmod # Replace
+                        except Exception as E:
+                            errormsg = f'Failed to create module {modtype} with arguments {mod}; see above for full error'
+                            raise ValueError(errormsg) from E
+                    
+                    # Special handling for interventions and analyzers: convert class and function to class instance
+                    if modkey in ['interventions', 'analyzers']:
+                        modlist[i] = self.convert_ia(expected_cls, modlist[i])
+                    
+                    # Do final check
+                    
+                    thismod = modlist[i]
+                    if not isinstance(thismod, expected_cls):
+                        errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls}, but was {type(thismod)} instead'
+                        raise TypeError(errormsg)
+                
+        return
+    
+    def convert_ia(self, ia_cls, mod):
+        """ Additional processing for interventions and analyzers """
+        if isinstance(mod, type) and issubclass(mod, ia_cls):
+            intervention = intervention()  # Convert from a class to an instance of a class
+        elif not isinstance(intervention, ss.Intervention) and callable(intervention):
+            intv_func = intervention
+            intervention = ss.Intervention(name=f'intervention_func_{i}')
+            intervention.apply = intv_func # Monkey-patch together an intervention from a function
+        
+        
 
-        if plugin_name is None: plugin_name = plugin_class.__name__.lower()
+    # def convert_plugins(self, plugin_class, plugin_name=None):
+    #     """
+    #     Common logic for converting plug-ins to a standard format
+    #     Used for networks, demographics, diseases, connectors, analyzers, and interventions
+        
+    #     Args:
+    #         plugin: class
+    #     """
 
-        # Get lower-case names of all subclasses
-        known_plugins = {n.__name__.lower():n for n in ss.all_subclasses(plugin_class)}
-        if plugin_name == 'networks': # Allow "msm" or "msmnet"
-            known_plugins.update({k.removesuffix('net'):v for k,v in known_plugins.items()})
+    #     if plugin_name is None: plugin_name = plugin_class.__name__.lower()
 
-        # Figure out if it's in the sim pars or provided directly
-        attr_plugins = getattr(self, plugin_name)  # Get any plugins that have been provided directly
+    #     # Get lower-case names of all subclasses
+    #     known_plugins = {n.__name__.lower():n for n in ss.all_subclasses(plugin_class)}
+    #     if plugin_name == 'networks': # Allow "msm" or "msmnet"
+    #         known_plugins.update({k.removesuffix('net'):v for k,v in known_plugins.items()})
 
-        # See if they've been provided in the pars dict
-        if self.get(plugin_name):
+    #     # Figure out if it's in the sim pars or provided directly
+    #     attr_plugins = getattr(self, plugin_name)  # Get any plugins that have been provided directly
 
-            par_plug = self[plugin_name]
+    #     # See if they've been provided in the pars dict
+    #     if self.get(plugin_name):
 
-            # String: convert to ndict
-            if isinstance(par_plug, str):
-                plugins = ss.ndict(dict(name=par_plug))
+    #         par_plug = self[plugin_name]
 
-            # List or dict: convert to ndict
-            elif sc.isiterable(par_plug) and len(par_plug):
-                if isinstance(par_plug, dict) and 'type' in par_plug and 'name' not in par_plug:
-                    par_plug['name'] = par_plug['type'] # TODO: simplify/remove this
-                plugins = ss.ndict(par_plug)
+    #         # String: convert to ndict
+    #         if isinstance(par_plug, str):
+    #             plugins = ss.ndict(dict(name=par_plug))
 
-        else:  # Not provided directly or in pars
-            plugins = {}
+    #         # List or dict: convert to ndict
+    #         elif sc.isiterable(par_plug) and len(par_plug):
+    #             if isinstance(par_plug, dict) and 'type' in par_plug and 'name' not in par_plug:
+    #                 par_plug['name'] = par_plug['type'] # TODO: simplify/remove this
+    #             plugins = ss.ndict(par_plug)
 
-        # Check that we don't have two copies
-        for attr_key in attr_plugins.keys():
-            if plugins.get(attr_key):
-                errormsg = f'Sim was created with {attr_key} module, cannot create another through the pars dict.'
-                raise ValueError(errormsg)
+    #     else:  # Not provided directly or in pars
+    #         plugins = {}
 
-        plugins = sc.mergedicts(plugins, attr_plugins)
+    #     # Check that we don't have two copies
+    #     for attr_key in attr_plugins.keys():
+    #         if plugins.get(attr_key):
+    #             errormsg = f'Sim was created with {attr_key} module, cannot create another through the pars dict.'
+    #             raise ValueError(errormsg)
 
-        # Process
-        processed_plugins = sc.autolist()
-        for plugin in plugins.values():
+    #     plugins = sc.mergedicts(plugins, attr_plugins)
 
-            if not isinstance(plugin, plugin_class):
+    #     # Process
+    #     processed_plugins = sc.autolist()
+    #     for plugin in plugins.values():
 
-                if isinstance(plugin, dict):
-                    ptype = (plugin.get('type') or plugin.get('name') or '').lower()
-                    name = plugin.get('name') or ptype
-                    if ptype in known_plugins:
-                        # Make an instance of the requested plugin
-                        plugin_pars = {k: v for k, v in plugin.items() if k not in ['type', 'name']}
-                        pclass = known_plugins[ptype]
-                        plugin = pclass(name=name, pars=plugin_pars) # TODO: does this handle par_dists, etc?
-                    else:
-                        errormsg = (f'Could not convert {plugin} to an instance of class {plugin_name}.'
-                                    f'Try specifying it directly rather than as a dictionary.')
-                        raise ValueError(errormsg)
-                elif plugin_name in ['analyzers', 'interventions'] and callable(plugin):
-                    pass # This is ok, it's a function instead of an Intervention object
-                else:
-                    errormsg = (
-                        f'{plugin_name.capitalize()} must be provided as either class instances or dictionaries with a '
-                        f'"name" key corresponding to one of these known subclasses: {known_plugins}.')
-                    raise ValueError(errormsg)
+    #         if not isinstance(plugin, plugin_class):
 
-            processed_plugins += plugin
+    #             if isinstance(plugin, dict):
+    #                 ptype = (plugin.get('type') or plugin.get('name') or '').lower()
+    #                 name = plugin.get('name') or ptype
+    #                 if ptype in known_plugins:
+    #                     # Make an instance of the requested plugin
+    #                     plugin_pars = {k: v for k, v in plugin.items() if k not in ['type', 'name']}
+    #                     pclass = known_plugins[ptype]
+    #                     plugin = pclass(name=name, pars=plugin_pars) # TODO: does this handle par_dists, etc?
+    #                 else:
+    #                     errormsg = (f'Could not convert {plugin} to an instance of class {plugin_name}.'
+    #                                 f'Try specifying it directly rather than as a dictionary.')
+    #                     raise ValueError(errormsg)
+    #             elif plugin_name in ['analyzers', 'interventions'] and callable(plugin):
+    #                 pass # This is ok, it's a function instead of an Intervention object
+    #             else:
+    #                 errormsg = (
+    #                     f'{plugin_name.capitalize()} must be provided as either class instances or dictionaries with a '
+    #                     f'"name" key corresponding to one of these known subclasses: {known_plugins}.')
+    #                 raise ValueError(errormsg)
 
-        return processed_plugins
+    #         processed_plugins += plugin
+
+    #     return processed_plugins
 
     def init_demographics(self):
         """ Initialize demographics """
 
-        # Demographics can be provided via sim.demographics or sim.pars - this methods reconciles them
-        demographics = self.convert_plugins(ss.Demographics, plugin_name='demographics')
-
-        # We also allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
+        # Allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
         if self.birth_rate is not None:
-            births = ss.Births(pars={'birth_rate': self.birth_rate})
-            demographics += births
+            births = ss.Births(birth_rate=self.birth_rate)
+            self.demographics += births
         if self.death_rate is not None:
-            background_deaths = ss.Deaths(pars={'death_rate': self.death_rate})
-            demographics += background_deaths
-
-        # Count how many of each kind of demographic module we have
-        demdict = {'births': ss.Births, 'pregnancy': ss.Pregnancy, 'deaths': ss.Deaths}
-        mod_names = dict()
-        for demname, demtype in demdict.items():
-            mod_names[demname] = [d.name for d in demographics if isinstance(d, demtype)]
-
-            # Validation
-            if len(mod_names[demname]) > 1:
-                if len(mod_names[demname]) == len(set(mod_names[demname])):  # No duplicate names, raise warning
-                    ss.warn(f'Two instances of {demname} module added to the sim; was this intentional?')
-                else:
-                    errormsg = (f'Cannot add two identically-named {demname} modules to a sim.\n '
-                                f'Demographic modules are: \n{sc.newlinejoin(mod_names[demname])}.\n'
-                                f'Tip: if using demographic modules, do not use birth and death rates in the sim pars.')
-                    raise ValueError(errormsg)
-
-        # Ensure they're stored at the sim level
-        self.demographics = ss.ndict(demographics, type=ss.Demographics)
-        return
-    
-    def init_networks(self):
-        """ Initialize networks if these have been provided separately from the people """
-
-        processed_networks = self.convert_plugins(ss.Network, plugin_name='networks')
-
-        # Now store the networks in a Networks object, which also allows for connectors between networks
-        if not isinstance(processed_networks, ss.Networks):
-            self.networks = ss.Networks(*processed_networks)
-        return
-
-    def init_diseases(self):
-        """ Initialize diseases """
-
-        # Diseases can be provided in sim.demographics or sim.pars
-        diseases = self.convert_plugins(ss.Disease, plugin_name='diseases')
-
-        # Store diseases in the sim
-        self.diseases = ss.ndict(diseases, type=ss.Disease)
+            background_deaths = ss.Deaths(death_rate=self.death_rate)
+            self.demographics += background_deaths
         return
 
     def init_interventions(self):
         """ Initialize and validate the interventions """
 
-        interventions = self.convert_plugins(ss.Intervention, plugin_name='interventions')
+        # interventions = self.convert_plugins(ss.Intervention, plugin_name='interventions')
 
         # Translate the intervention specs into actual interventions
-        for i, intervention in enumerate(interventions):
+        for i, intervention in enumerate(self.interventions):
             if isinstance(intervention, type) and issubclass(intervention, ss.Intervention):
                 intervention = intervention()  # Convert from a class to an instance of a class
             elif not isinstance(intervention, ss.Intervention) and callable(intervention):
@@ -427,10 +461,6 @@ class Parameters(sc.objdict):
         
         self.analyzers = ss.ndict(self.analyzers, type=ss.Analyzer)
 
-        return
-
-    def init_connectors(self):
-        self.connectors = ss.ndict(self.connectors, type=ss.Connector)
         return
 
 

@@ -4,6 +4,8 @@ Define connections between disease modules
 
 import starsim as ss
 
+__all__ = ['Connector']
+
 
 class Connector(ss.Module):
     def __init__(self, pars=None, diseases=None, *args, **kwargs):

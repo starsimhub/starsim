@@ -6,8 +6,41 @@ import sciris as sc
 import starsim as ss
 from scipy.stats._distn_infrastructure import rv_frozen
 
-__all__ = ['Module']
+__all__ = ['module_map', 'find_modules', 'Module']
 
+
+def module_map(key=None):
+    """ Define the mapping between module names and types """
+    module_map = sc.objdict(
+        networks      = ss.Network,
+        demographics  = ss.Demographics,
+        diseases      = ss.Disease,
+        interventions = ss.Intervention,
+        analyzers     = ss.Analyzer,
+        connectors    = ss.Connector,
+    )
+    return module_map if key is None else module_map[key]
+
+
+def find_modules(key=None):
+    """ Find all subclasses of Module, divided by type """
+    modules = sc.objdict()
+    modmap = module_map()
+    attrs = dir(ss)
+    for modkey, modtype in modmap.items(): # Loop over each module type
+        modules[modkey] = sc.objdict()
+        for attr in attrs: # Loop over each attribute (inefficient, but doesn't need to be optimized)
+            item = getattr(ss, attr)
+            try:
+                assert issubclass(item, modtype) # Check that it's a class, and instance of this module
+                low_attr = attr.lower()
+                modules[modkey][low_attr] = item # It passes, so assign it to the dict
+                if modkey == 'networks' and low_attr.endswith('net'): # Also allow networks without 'net' suffix
+                    modules[modkey][low_attr.removesuffix('net')] = item
+            except:
+                pass
+    return modules if key is None else modules[key]
+    
 
 class Module(sc.quickobj):
 

@@ -12,7 +12,7 @@ import pandas as pd
 # %% Helper functions
 
 # What functions are externally visible -- note, this gets populated in each section below
-__all__ = ['ndict', 'dictmerge', 'dictmergeleft', 'warn', 'unique', 'find_contacts', 'get_subclasses', 'all_subclasses']
+__all__ = ['ndict', 'dictmerge', 'dictmergeleft', 'warn', 'unique', 'find_contacts']
 
 
 class ndict(sc.objdict):
