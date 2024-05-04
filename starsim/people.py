@@ -273,11 +273,22 @@ class People(BasePeople):
         """
         return self.scale[inds].sum()
 
+    def update_post(self, sim):
+        """ Final updates at the very end of the timestep """
+        self.age[self.alive.uids] += sim.dt
+        return
+
+    def resolve_deaths(self):
+        """ Carry out any deaths that took place this timestep """
+        death_uids = (self.ti_dead <= self.ti).uids
+        self.alive[death_uids] = False
+        return death_uids
+    
     def remove_dead(self, sim):
         """
         Remove dead agents
         """
-        uids = (~self.alive).uids
+        uids = self.dead.uids
         if len(uids):
             
             # Remove the UIDs from the networks too
@@ -288,27 +299,7 @@ class People(BasePeople):
             self.auids = self.auids.remove(uids)
 
         return
-
-    def update_post(self, sim):
-        """
-        Final updates at the very end of the timestep
-
-        :param sim:
-        :return:
-        """
-        self.age[self.alive.uids] += sim.dt
-        return
-
-    def resolve_deaths(self):
-        """
-        Carry out any deaths that took place this timestep
-
-        :return:
-        """
-        death_uids = (self.ti_dead <= self.ti).uids
-        self.alive[death_uids] = False
-        return death_uids
-
+    
     @property
     def dead(self):
         """ Dead boolean """
