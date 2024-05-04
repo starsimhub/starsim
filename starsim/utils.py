@@ -204,15 +204,15 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
     return pairing_partners
 
 
-def get_subclasses(cls):
-    for subclass in cls.__subclasses__():
-        yield from get_subclasses(subclass)
-        yield subclass
+# def get_subclasses(cls):
+#     for subclass in cls.__subclasses__():
+#         yield from get_subclasses(subclass)
+#         yield subclass
 
-def all_subclasses(cls):
-    """ As above but also returns subsubclases """
-    return set(cls.__subclasses__()).union(
-        [s for c in cls.__subclasses__() for s in all_subclasses(c)])
+# def all_subclasses(cls):
+#     """ As above but also returns subsubclases """
+#     return set(cls.__subclasses__()).union(
+#         [s for c in cls.__subclasses__() for s in all_subclasses(c)])
 
 # %% Seed methods
 
