@@ -7,6 +7,12 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 0.5.0 (2024-05-6)
+--------------------------
+- TBC
+- *GitHub info*: PR `488 <https://github.com/starsimhub/starsim/pull/488>`_
+
+
 Version 0.4.0 (2024-04-24)
 --------------------------
 - Replace ``UIDArray``, ``ArrayView``, and ``State`` with ``Arr``, which has different subclasses for different data types (e.g. ``FloatArr``, ``BoolArr``, and ``IndexArr``). States are usually represented by ``BoolArr`` (e.g. ``sir.infected``), while other agent properties are represented by ``FloatArr`` (e.g. ``sir.rel_trans``).
