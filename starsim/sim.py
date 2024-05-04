@@ -3,6 +3,7 @@ Define core Sim classes
 """
 
 # Imports
+import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -37,22 +38,16 @@ class Sim(sc.prettyobj):
     def initialize(self, reset=False, **kwargs):
         """ Perform all initializations for the sim; most heavy lifting is done by the parameters """
         # Validation and initialization
-        ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
-        self.pars.initialize(sim=self, reset=reset, **kwargs) # Initialize the parameters, including people and modules
+        ss.set_seed(self.pars.seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
+        p = self.pars.initialize(sim=self, reset=reset, **kwargs) # Initialize the parameters, including people and modules
         
         # Move initialized modules to the sim
-        keys = ['dt', 'label', 'people', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
+        keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
         for key in keys:
-            setattr(self, key, self.pars.pop(key))
+            setattr(self, key, p.pop(key))
             
-        # Time indexing
-        self.yearvec = np.arange(start=self.pars.start, stop=self.pars.end, step=self.dt)
-        self.npts = len(self.yearvec)
-        self.tivec = np.arange(self.npts)
-        self.ti = 0  # The time index, e.g. 0, 1, 2
-        
         # Initialize all distributions now that everything else is in place
-        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed, force=True)
+        self.dists.initialize(obj=self, base_seed=p.seed, force=True)
 
         # Final steps
         self.initialized = True
@@ -60,6 +55,21 @@ class Sim(sc.prettyobj):
         self.results_ready = False
 
         return self
+
+    @property
+    def modules(self):
+        # Return iterator over all Module instances (stored in standard places) in the Sim
+        products = [intv.product for intv in self.interventions.values() if
+                    hasattr(intv, 'product') and isinstance(intv.product, ss.Product)]
+        return itertools.chain(
+            self.demographics.values(),
+            self.networks.values(),
+            self.diseases.values(),
+            self.connectors.values(),
+            self.interventions.values(),
+            products,
+            self.analyzers.values(),
+        )
 
     def step(self):
         """ Step through time and update values """

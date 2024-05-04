@@ -106,6 +106,12 @@ class Module(sc.quickobj):
         # Will use random numbers, so do after distribution initialization
         for state in self.states:
             state.initialize(sim)
+            
+        # Link the parameters, results, and module states
+        self.sim = sim # Link back to the sim object
+        sim.pars[self.name] = self.pars
+        sim.results[self.name] = self.results
+        sim.people.add_module(self)
 
         self.initialized = True
         return

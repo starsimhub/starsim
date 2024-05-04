@@ -186,15 +186,14 @@ class People(BasePeople):
             setattr(self, state.name, state)
 
         # Set initial age distribution - likely move this somewhere else later
-        #self.age_data_dist = self.get_age_dist(age_data)
-
+        self.age_data_dist = self.get_age_dist(age_data) # TODO: remove or make more general
         return
 
     @staticmethod
     def get_age_dist(age_data):
         """ Return an age distribution based on provided data """
         if age_data is None:
-            dist = ss.uniform(low=0, high=100, name='Age distribution')
+            dist = ss.uniform(low=0, high=50, name='Age distribution')
             return dist
 
         if sc.checktype(age_data, pd.DataFrame):
@@ -226,6 +225,7 @@ class People(BasePeople):
         # Assign initial ages based on the current age distribution
         self.age_data_dist.initialize(module=self, sim=sim)
         self.age[:] = self.age_data_dist.rvs(self.uid)
+        self.sim = sim # Store the sim
         return
 
     def add_module(self, module, force=False):
@@ -235,35 +235,22 @@ class People(BasePeople):
         This method is used to add a module to the People. It will register any module states with this
         people instance for dynamic resizing, and expose the states contained in the module to the user
         via `People.states.<module_name>.<state_name>`
-        :param module:
-        :param force:
-        :return:
+        
+        The entries created below make it possible to do `sim.people.hiv.susceptible` or
+        `sim.people.states['hiv.susceptible']` and have both of them work
         """
         # Map the module's states into the People state ndict
         if hasattr(self, module.name) and not force:
             raise Exception(f'Module {module.name} already added')
-        self.__setattr__(module.name, sc.objdict())
 
-        # The entries created below make it possible to do `sim.people.hiv.susceptible` or
-        # `sim.people.states['hiv.susceptible']` and have both of them work
-
-        module_states = sc.objdict()
-        setattr(self, module.name, module_states)
-        self._register_module_states(module, module_states)
-        return
-
-    def _register_module_states(self, module, module_states):
-        """Enable dot notation for module specific states:
-         - `sim.people.hiv.susceptible` or
-         - `sim.people.states['hiv.susceptible']`
-        """
-
-        for state in module.states:
-            combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
-            self.states[combined_name] = state  # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
-            pre, _, post = combined_name.rpartition('.')
-            setattr(module_states, state.name, state)
-
+        if len(module.states):
+            module_states = sc.objdict()
+            setattr(self, module.name, module_states)
+            self._register_module_states(module, module_states)
+            for state in module.states:
+                combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
+                self.states[combined_name] = state # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
+                module_states[state.name] = state
         return
 
     def scale_flows(self, inds):
@@ -280,7 +267,7 @@ class People(BasePeople):
 
     def resolve_deaths(self):
         """ Carry out any deaths that took place this timestep """
-        death_uids = (self.ti_dead <= self.ti).uids
+        death_uids = (self.ti_dead <= self.sim.ti).uids
         self.alive[death_uids] = False
         return death_uids
     

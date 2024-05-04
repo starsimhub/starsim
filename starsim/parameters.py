@@ -2,6 +2,7 @@
 Set parameters
 """
 
+import numpy as np
 import sciris as sc
 import starsim as ss
 
@@ -80,31 +81,34 @@ class Parameters(sc.objdict):
     
     def initialize(self, sim, reset=False, **kwargs):
         
+        # Validation
+        self.validate_dt()
+        self.validate_pars()
+        
+        # Time indexing
+        sim.dt = self.dt
+        sim.yearvec = np.arange(start=self.start, stop=self.end, step=self.dt)
+        sim.npts = len(sim.yearvec)
+        sim.tivec = np.arange(sim.npts)
+        sim.ti = 0  # The time index, e.g. 0, 1, 2
+        
         # Initialize the people
-        self.init_people(reset=reset, **kwargs)  # Create all the people (the heaviest step)
+        self.init_people(sim=sim, reset=reset, **kwargs)  # Create all the people (the heaviest step)
         
         # Placeholders for plug-ins: demographics, diseases, connectors, analyzers, and interventions
         # Products are not here because they are stored within interventions
         if self.demographics == True:
             self.demographics = [ss.Births(), ss.Deaths()]  # Use default assumptions for demographics
         
-        # Initialize the modules
-        self.demographics  = ss.ndict(self.demographics, type=ss.Demographics)
-        self.networks      = ss.ndict(self.networks, type=ss.Network)
-        self.diseases      = ss.ndict(self.diseases, type=ss.Disease)
-        self.interventions = ss.ndict(self.interventions, type=ss.Intervention, strict=False) # strict=False since can be a function
-        self.analyzers     = ss.ndict(self.analyzers, type=ss.Analyzer, strict=False)
-        self.connectors    = ss.ndict(self.connectors, type=ss.Connector)
-
-        # Initialize plug-ins
-        self.init_demographics()
-        self.init_networks()
-        self.init_diseases()
-        self.init_interventions()
-        self.init_analyzers()
-        self.init_connectors()
+        # Initialize modules
+        self.init_demographics(sim)
+        self.init_networks(sim)
+        self.init_diseases(sim)
+        self.init_interventions(sim)
+        self.init_analyzers(sim)
+        self.init_connectors(sim)
         
-        return
+        return self
 
     def validate_dt(self):
         """
@@ -118,13 +122,49 @@ class Parameters(sc.objdict):
                 # Round the reciprocal
                 reciprocal = int(reciprocal)
                 rounded_dt = 1.0 / reciprocal
-                self.pars.dt = rounded_dt
-                if self.pars.verbose:
+                self.dt = rounded_dt
+                if self.verbose:
                     warnmsg = f"Warning: Provided time step dt: {dt} resulted in a non-integer number of steps per year. Rounded to {rounded_dt}."
                     print(warnmsg)
         return
     
-    def init_people(self, reset=False, verbose=None, **kwargs):
+    def validate_pars(self):
+        """
+        Some parameters can take multiple types; this makes them consistent.
+        """
+        # Handle n_agents
+        if self.people is not None:
+            self.n_agents = len(self.people)
+        elif self.n_agents is not None:
+            self.n_agents = int(self.n_agents)
+        else:
+            errormsg = 'Must supply n_agents, a people object, or a popdict'
+            raise ValueError(errormsg)
+
+        # Handle end and n_years
+        if self.end:
+            self.n_years = self.end - self.start
+            if self.n_years <= 0:
+                errormsg = f"Number of years must be >0, but you supplied start={str(self.start)} and " \
+                           f"end={str(self.end)}, which gives n_years={self.n_years}"
+                raise ValueError(errormsg)
+        else:
+            if self.n_years:
+                self.end = self.start + self.n_years
+            else:
+                errormsg = 'You must supply one of n_years and end."'
+                raise ValueError(errormsg)
+
+        # Handle verbose
+        if self.verbose == 'brief':
+            self.verbose = -1
+        if not sc.isnumber(self.verbose):  # pragma: no cover
+            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self.par.verbose)} "{self.par.verbose}"'
+            raise ValueError(errormsg)
+            
+        return self
+    
+    def init_people(self, sim, reset=False, verbose=None, **kwargs):
         """
         Initialize people within the sim
         Sometimes the people are provided, in which case this just adds a few sim properties to them.
@@ -138,82 +178,46 @@ class Parameters(sc.objdict):
 
         # Handle inputs
         if verbose is None:
-            verbose = self.pars.verbose
+            verbose = self.verbose
         if verbose > 0:
             resetstr = ''
             if self.people and reset:
                 resetstr = ' (resetting people)'
-            print(f'Initializing sim{resetstr} with {self.pars["n_agents"]:0n} agents')
+            print(f'Initializing sim{resetstr} with {self.n_agents:0n} agents')
 
         # If people have not been supplied, make them
         if self.people is None or reset:
-            self.people = ss.People(n_agents=self.pars.n_agents, **kwargs)  # This just assigns UIDs and length
+            self.people = ss.People(n_agents=self.n_agents, **kwargs)  # This just assigns UIDs and length
 
         # If a popdict has not been supplied, we can make one from location data
-        if self.pars.location is not None:
+        if self.location is not None:
             # Check where to get total_pop from
-            if self.pars.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
+            if self.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
                 errormsg = 'You can either define total_pop explicitly or via the location, but not both'
                 raise ValueError(errormsg)
 
         else:
-            if self.pars.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
-                total_pop = self.pars.total_pop
+            if self.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
+                total_pop = self.total_pop
             else:
-                if self.pars.pop_scale is not None:
-                    total_pop = self.pars.pop_scale * self.pars.n_agents
+                if self.pop_scale is not None:
+                    total_pop = self.pop_scale * self.n_agents
                 else:
-                    total_pop = self.pars.n_agents
+                    total_pop = self.n_agents
 
-        self.pars.total_pop = total_pop
-        if self.pars.pop_scale is None:
-            self.pars.pop_scale = total_pop / self.pars.n_agents
+        self.total_pop = total_pop
+        if self.pop_scale is None:
+            self.pop_scale = total_pop / self.n_agents
 
         # Any other initialization
-        if not self.people.initialized:
-            self.people.initialize(self)
+        sim.people = self.pop('people')
+        if not sim.people.initialized:
+            sim.people.initialize(sim)
 
         # Set time attributes
-        self.people.ti = self.ti
-        self.people.init_results(self)
-        return self
+        sim.people.init_results(sim)
+        return sim.people
 
-    def validate_pars(self):
-        """
-        Some parameters can take multiple types; this makes them consistent.
-        """
-        # Handle n_agents
-        if self.people is not None:
-            self.pars.n_agents = len(self.people)
-        elif self.pars.n_agents is not None:
-            self.pars.n_agents = int(self.pars.n_agents)
-        else:
-            errormsg = 'Must supply n_agents, a people object, or a popdict'
-            raise ValueError(errormsg)
-
-        # Handle end and n_years
-        if self.pars.end:
-            self.pars.n_years = self.pars.end - self.pars.start
-            if self.pars.n_years <= 0:
-                errormsg = f"Number of years must be >0, but you supplied start={str(self.pars.start)} and " \
-                           f"end={str(self.pars.end)}, which gives n_years={self.pars.n_years}"
-                raise ValueError(errormsg)
-        else:
-            if self.pars.n_years:
-                self.pars.end = self.pars.start + self.pars.n_years
-            else:
-                errormsg = 'You must supply one of n_years and end."'
-                raise ValueError(errormsg)
-
-        # Handle verbose
-        if self.pars.verbose == 'brief':
-            self.pars.verbose = -1
-        if not sc.isnumber(self.pars.verbose):  # pragma: no cover
-            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self.par.verbose)} "{self.par.verbose}"'
-            raise ValueError(errormsg)
-
-        return
-    
     def convert_plugins(self, plugin_class, plugin_name=None):
         """
         Common logic for converting plug-ins to a standard format
@@ -234,9 +238,9 @@ class Parameters(sc.objdict):
         attr_plugins = getattr(self, plugin_name)  # Get any plugins that have been provided directly
 
         # See if they've been provided in the pars dict
-        if self.pars.get(plugin_name):
+        if self.get(plugin_name):
 
-            par_plug = self.pars[plugin_name]
+            par_plug = self[plugin_name]
 
             # String: convert to ndict
             if isinstance(par_plug, str):
@@ -289,24 +293,23 @@ class Parameters(sc.objdict):
 
         return processed_plugins
 
-    def init_demographics(self):
+    def init_demographics(self, sim):
         """ Initialize demographics """
 
         # Demographics can be provided via sim.demographics or sim.pars - this methods reconciles them
         demographics = self.convert_plugins(ss.Demographics, plugin_name='demographics')
 
         # We also allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
-        if self.pars.birth_rate is not None:
-            births = ss.Births(pars={'birth_rate': self.pars.birth_rate})
+        if self.birth_rate is not None:
+            births = ss.Births(pars={'birth_rate': self.birth_rate})
             demographics += births
-        if self.pars.death_rate is not None:
-            background_deaths = ss.Deaths(pars={'death_rate': self.pars.death_rate})
+        if self.death_rate is not None:
+            background_deaths = ss.Deaths(pars={'death_rate': self.death_rate})
             demographics += background_deaths
 
         # Iterate over demographic modules and initialize them
         for dem_mod in demographics:
-            dem_mod.initialize(self)
-            self.results[dem_mod.name] = dem_mod.results
+            dem_mod.initialize(sim)
 
         # Count how many of each kind of demographic module we have
         demdict = {'births': ss.Births, 'pregnancy': ss.Pregnancy, 'deaths': ss.Deaths}
@@ -325,36 +328,10 @@ class Parameters(sc.objdict):
                     raise ValueError(errormsg)
 
         # Ensure they're stored at the sim level
-        self.demographics = ss.ndict(*demographics)
-
-    def init_diseases(self):
-        """ Initialize diseases """
-
-        # Diseases can be provided in sim.demographics or sim.pars
-        diseases = self.convert_plugins(ss.Disease, plugin_name='diseases')
-
-        # Interate over diseases and initialize them
-        for disease in diseases:
-            disease.initialize(self)
-
-            # Add the disease's parameters and results into the Sim's dicts
-            self.pars[disease.name] = disease.pars
-            self.results[disease.name] = disease.results
-
-            # Add disease states to the People's dicts
-            self.people.add_module(disease)
-
-        # Store diseases in the sim
-        self.diseases = ss.ndict(*diseases)
-
+        self.demographics = ss.ndict(demographics, type=ss.Demographics)
         return
-
-    def init_connectors(self):
-        for connector in self.connectors.values():
-            connector.initialize(self)
-        return
-
-    def init_networks(self):
+    
+    def init_networks(self, sim):
         """ Initialize networks if these have been provided separately from the people """
 
         processed_networks = self.convert_plugins(ss.Network, plugin_name='networks')
@@ -362,11 +339,30 @@ class Parameters(sc.objdict):
         # Now store the networks in a Networks object, which also allows for connectors between networks
         if not isinstance(processed_networks, ss.Networks):
             self.networks = ss.Networks(*processed_networks)
-        self.networks.initialize(self)
-
+        self.networks.initialize(sim)
         return
 
-    def init_interventions(self):
+    def init_diseases(self, sim):
+        """ Initialize diseases """
+
+        # Diseases can be provided in sim.demographics or sim.pars
+        diseases = self.convert_plugins(ss.Disease, plugin_name='diseases')
+
+        # Interate over diseases and initialize them
+        for disease in diseases:
+            disease.initialize(sim)
+
+        # Store diseases in the sim
+        self.diseases = ss.ndict(diseases, type=ss.Disease)
+        return
+
+    def init_connectors(self, sim):
+        for connector in self.connectors.values():
+            connector.initialize(sim)
+        self.connectors = ss.ndict(self.connectors, type=ss.Connector)
+        return
+
+    def init_interventions(self, sim):
         """ Initialize and validate the interventions """
 
         interventions = self.convert_plugins(ss.Intervention, plugin_name='interventions')
@@ -376,7 +372,7 @@ class Parameters(sc.objdict):
             if isinstance(intervention, type) and issubclass(intervention, ss.Intervention):
                 intervention = intervention()  # Convert from a class to an instance of a class
             if isinstance(intervention, ss.Intervention):
-                intervention.initialize(self)
+                intervention.initialize(sim)
             elif callable(intervention):
                 intv_func = intervention
                 intervention = ss.Intervention(name=f'intervention_func_{i}')
@@ -388,18 +384,12 @@ class Parameters(sc.objdict):
             if intervention.name not in self.interventions:
                 self.interventions += intervention
 
-            # Add the intervention parameters and results into the Sim's dicts
-            self.pars[intervention.name] = intervention.pars
-            self.results[intervention.name] = intervention.results
-
             # Add intervention states to the People's dicts
             self.people.add_module(intervention)
 
             # If there's a product module present, initialize and add it
             if hasattr(intervention, 'product') and isinstance(intervention.product, ss.Product):
-                intervention.product.initialize(self)
-
-                self.people.add_module(intervention.product)
+                intervention.product.initialize(sim)
         
         # TODO: combine this with the code above
         for k,intervention in self.interventions.items():
@@ -408,13 +398,14 @@ class Parameters(sc.objdict):
                 intervention = ss.Intervention(name=f'intervention_func_{k}')
                 intervention.apply = intv_func # Monkey-patch together an intervention from a function
                 self.interventions[k] = intervention
-
+        
+        self.interventions = ss.ndict(self.interventions, type=ss.Intervention, strict=False) # strict=False since can be a function
         return
 
-    def init_analyzers(self):
+    def init_analyzers(self, sim):
         """ Initialize the analyzers """
         
-        analyzers = self.pars.analyzers
+        analyzers = self.analyzers
         if not np.iterable(analyzers):
             analyzers = sc.tolist(analyzers)
 
@@ -435,7 +426,9 @@ class Parameters(sc.objdict):
                 analyzer.apply = ana_func # Monkey-patch together an intervention from a function
                 self.analyzers[k] = analyzer
             if isinstance(analyzer, ss.Analyzer):
-                analyzer.initialize(self)
+                analyzer.initialize(sim)
+        
+        self.analyzers = ss.ndict(self.analyzers, type=ss.Analyzer, strict=False)
 
         return
 
