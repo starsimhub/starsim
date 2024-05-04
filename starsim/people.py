@@ -160,7 +160,7 @@ class People(BasePeople):
         ppl = ss.People(2000)
     """
 
-    def __init__(self, n_agents, age_data=None, extra_states=None, rand_seed=0):
+    def __init__(self, n_agents, age_data=None, states=None):
         """ Initialize """
 
         super().__init__(n_agents)
@@ -169,6 +169,7 @@ class People(BasePeople):
         self.version = ss.__version__  # Store version info
 
         # Handle states
+        extra_states = sc.promotetolist(states)
         states = [
             ss.BoolArr('alive', default=True),  # Time index for death
             ss.BoolArr('female', default=ss.bernoulli(name='female', p=0.5)),
@@ -176,7 +177,7 @@ class People(BasePeople):
             ss.FloatArr('ti_dead'),  # Time index for death
             ss.FloatArr('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
         ]
-        states.extend(sc.promotetolist(extra_states))
+        states.extend(extra_states)
 
         # Expose states with their original names directly as people attributes (e.g., `People.age`) and nested under states
         # (e.g., `People.states.age`)
@@ -185,7 +186,7 @@ class People(BasePeople):
             setattr(self, state.name, state)
 
         # Set initial age distribution - likely move this somewhere else later
-        self.age_data_dist = self.get_age_dist(age_data)
+        #self.age_data_dist = self.get_age_dist(age_data)
 
         return
 
@@ -295,7 +296,7 @@ class People(BasePeople):
         :param sim:
         :return:
         """
-        self.age[self.alive.uids] += self.dt
+        self.age[self.alive.uids] += sim.dt
         return
 
     def resolve_deaths(self):
@@ -317,16 +318,6 @@ class People(BasePeople):
     def male(self):
         """ Male boolean """
         return ~self.female
-
-    @property
-    def f(self): # TODO: remove?
-        """ Shorthand for female """
-        return self.female
-
-    @property
-    def m(self):
-        """ Shorthand for male """
-        return self.male
 
     def init_results(self, sim):
         sim.results += [
