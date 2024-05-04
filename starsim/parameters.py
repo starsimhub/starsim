@@ -47,9 +47,9 @@ class Parameters(sc.objdict):
 
         # Modules: demographics, diseases, connectors, networks, analyzers, and interventions
         self.people = None
+        self.networks      = ss.ndict()
         self.demographics  = ss.ndict()
         self.diseases      = ss.ndict()
-        self.networks      = ss.ndict()
         self.connectors    = ss.ndict()
         self.interventions = ss.ndict()
         self.analyzers     = ss.ndict()
@@ -95,24 +95,25 @@ class Parameters(sc.objdict):
         # Initialize the people
         self.init_people(sim=sim, reset=reset, **kwargs)  # Create all the people (the heaviest step)
         
-        # Placeholders for plug-ins: demographics, diseases, connectors, analyzers, and interventions
-        # Products are not here because they are stored within interventions
+        # Allow shortcut for default demographics # TODO: think about whether we want to enable this, when we have birth_rate and death_rate
         if self.demographics == True:
-            self.demographics = [ss.Births(), ss.Deaths()]  # Use default assumptions for demographics
+            self.demographics = [ss.Births(), ss.Deaths()]
         
         # Get all modules into a consistent format
-        modmap = dict(demographics=ss.Demographics, diseases=ss.Disease, interventions=ss.Intervention, analyzers=ss.Analyzer, connectors=ss.Connectors)
+        modmap = dict(networks=ss.Network, demographics=ss.Demographics, diseases=ss.Disease, interventions=ss.Intervention, analyzers=ss.Analyzer, connectors=ss.Connectors)
+        for modkey in modmap:
+            if not isinstance(self[modkey], ss.ndict):
+                self[modkey] = sc.tolist(self[modkey])
         
         # Initialize and convert modules
-        self.init_demographics()
         self.init_networks()
+        self.init_demographics()
         self.init_diseases()
         self.init_interventions()
         self.init_analyzers()
         self.init_connectors()
         
         # Initialize all the modules with the sim
-        self.networks.initialize(sim) # Special initialization for networks
         for modkey in modmap.keys():
             modlist = self[modkey]
             for mod in modlist:

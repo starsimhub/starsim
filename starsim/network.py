@@ -16,7 +16,7 @@ ss_int_ = ss.dtypes.int
 
 
 # Specify all externally visible functions this file defines; see also more definitions below
-__all__ = ['Network', 'Networks', 'DynamicNetwork', 'SexualNetwork']
+__all__ = ['Network', 'DynamicNetwork', 'SexualNetwork']
 
 # %% General network classes
 
@@ -308,28 +308,28 @@ class Network(ss.Module):
         return self.contacts.beta[uids] * disease_beta * dt
 
 
-class Networks(ss.ndict):
-    """
-    Container for networks
-    """
-    def __init__(self, *args, type=Network, connectors=None, **kwargs):
-        self.setattribute('_connectors', ss.ndict(connectors))
-        super().__init__(*args, type=type, **kwargs)
-        return
+# class Networks(ss.ndict):
+#     """
+#     Container for networks
+#     """
+#     def __init__(self, *args, type=Network, connectors=None, **kwargs):
+#         self.setattribute('_connectors', ss.ndict(connectors))
+#         super().__init__(*args, type=type, **kwargs)
+#         return
 
-    def initialize(self, sim):
-        for nw in self.values():
-            nw.initialize(sim)
-        for cn in self._connectors.values():
-            cn.initialize(sim)
-        return
+#     def initialize(self, sim):
+#         for nw in self.values():
+#             nw.initialize(sim)
+#         for cn in self._connectors.values():
+#             cn.initialize(sim)
+#         return
 
-    def update(self, people):
-        for nw in self.values():
-            nw.update(people)
-        for cn in self._connectors.values():
-            cn.update(people)
-        return
+#     def update(self, people):
+#         for nw in self.values():
+#             nw.update(people)
+#         for cn in self._connectors.values():
+#             cn.update(people)
+#         return
 
 
 class DynamicNetwork(Network):
@@ -847,76 +847,76 @@ class MaternalNet(Network):
 
 # %% Network connectors
 
-__all__ += ['NetworkConnector', 'MF_MSM']
+# __all__ += ['NetworkConnector', 'MF_MSM']
 
-class NetworkConnector(ss.Module):
-    """
-    Template for a connector between networks.
-    """
-    def __init__(self, *args, networks=None, pars=None, **kwargs):
-        super().__init__(pars, requires=networks, *args, **kwargs)
-        return
+# class NetworkConnector(ss.Module):
+#     """
+#     Template for a connector between networks.
+#     """
+#     def __init__(self, *args, networks=None, pars=None, **kwargs):
+#         super().__init__(pars, requires=networks, *args, **kwargs)
+#         return
 
-    def set_participation(self, people, upper_age=None):
-        pass
+#     def set_participation(self, people, upper_age=None):
+#         pass
 
-    def update(self, people):
-        pass
+#     def update(self, people):
+#         pass
 
 
-class MF_MSM(NetworkConnector):
-    """ Combines the MF and MSM networks """
-    def __init__(self, pars=None):
-        networks = [ss.MFNet, ss.MSMNet]
-        pars = ss.dictmergeleft(pars,
-            prop_bi = 0.5,  # Could vary over time -- but not by age or sex or individual
-        )
-        super().__init__(networks=networks, pars=pars)
+# class MF_MSM(NetworkConnector):
+#     """ Combines the MF and MSM networks """
+#     def __init__(self, pars=None):
+#         networks = [ss.MFNet, ss.MSMNet]
+#         pars = ss.dictmergeleft(pars,
+#             prop_bi = 0.5,  # Could vary over time -- but not by age or sex or individual
+#         )
+#         super().__init__(networks=networks, pars=pars)
 
-        self.bi_dist = ss.bernoulli(p=self.pars.prop_bi)
-        return
+#         self.bi_dist = ss.bernoulli(p=self.pars.prop_bi)
+#         return
 
-    def initialize(self, sim):
-        super().initialize(sim)
-        self.set_participation(sim.people)
-        return
+#     def initialize(self, sim):
+#         super().initialize(sim)
+#         self.set_participation(sim.people)
+#         return
 
-    def set_participation(self, people, upper_age=None):
-        if upper_age is None:
-            uids = people.uid
-        else:
-            uids = people.uid[(people.age < upper_age)]
-        uids = ss.true(people.male[uids])
+#     def set_participation(self, people, upper_age=None):
+#         if upper_age is None:
+#             uids = people.uid
+#         else:
+#             uids = people.uid[(people.age < upper_age)]
+#         uids = ss.true(people.male[uids])
 
-        # Get networks and overwrite default participation
-        mf = people.networks.mf
-        msm = people.networks.msm
-        mf.participant[uids] = False
-        msm.participant[uids] = False
+#         # Get networks and overwrite default participation
+#         mf = people.networks.mf
+#         msm = people.networks.msm
+#         mf.participant[uids] = False
+#         msm.participant[uids] = False
 
-        # Male participation rate uses info about cross-network participation.
-        # First, we determine who's participating in the MSM network
-        pr = msm.pars.part_rates
-        dist = ss.bernoulli.rvs(p=pr, size=len(uids))
-        msm.participant[uids] = dist
+#         # Male participation rate uses info about cross-network participation.
+#         # First, we determine who's participating in the MSM network
+#         pr = msm.pars.part_rates
+#         dist = ss.bernoulli.rvs(p=pr, size=len(uids))
+#         msm.participant[uids] = dist
 
-        # Now we take the MSM participants and determine which are also in the MF network
-        msm_uids = ss.true(msm.participant[uids])  # Males in the MSM network
-        bi_uids = self.bi_dist.filter(msm_uids)  # Males in both MSM and MF networks
-        mf_excl_set = np.setdiff1d(uids, msm_uids)  # Set of males who aren't in the MSM network
+#         # Now we take the MSM participants and determine which are also in the MF network
+#         msm_uids = ss.true(msm.participant[uids])  # Males in the MSM network
+#         bi_uids = self.bi_dist.filter(msm_uids)  # Males in both MSM and MF networks
+#         mf_excl_set = np.setdiff1d(uids, msm_uids)  # Set of males who aren't in the MSM network
 
-        # What remaining share to we need?
-        mf_df = mf.pars.part_rates.loc[mf.pars.part_rates.sex == 'm']  # Male participation in the MF network
-        mf_pr = np.interp(people.year, mf_df['year'], mf_df['part_rates']) * mf.pars.rel_part_rates
-        remaining_pr = max(mf_pr*len(uids)-len(bi_uids), 0)/len(mf_excl_set)
+#         # What remaining share to we need?
+#         mf_df = mf.pars.part_rates.loc[mf.pars.part_rates.sex == 'm']  # Male participation in the MF network
+#         mf_pr = np.interp(people.year, mf_df['year'], mf_df['part_rates']) * mf.pars.rel_part_rates
+#         remaining_pr = max(mf_pr*len(uids)-len(bi_uids), 0)/len(mf_excl_set)
 
-        # Don't love the following new syntax:
-        mf_excl_uids = mf_excl_set[ss.random().rvs(size=len(mf_excl_set)) < remaining_pr] # TODO: not RNG safe and yes ugly!
+#         # Don't love the following new syntax:
+#         mf_excl_uids = mf_excl_set[ss.random().rvs(size=len(mf_excl_set)) < remaining_pr] # TODO: not RNG safe and yes ugly!
 
-        mf.participant[bi_uids] = True
-        mf.participant[mf_excl_uids] = True
-        return
+#         mf.participant[bi_uids] = True
+#         mf.participant[mf_excl_uids] = True
+#         return
 
-    def update(self, people):
-        self.set_participation(people, upper_age=people.dt)
-        return
+#     def update(self, people):
+#         self.set_participation(people, upper_age=people.dt)
+#         return
