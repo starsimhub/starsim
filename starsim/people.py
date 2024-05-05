@@ -9,7 +9,7 @@ import sciris as sc
 import starsim as ss
 
 
-__all__ = ['BasePeople', 'People']
+__all__ = ['BasePeople', 'People', 'Person']
 
 # %% Main people class
 
@@ -111,13 +111,13 @@ class BasePeople(sc.prettyobj):
         If the key is an integer, alias `people.person()` to return a `Person` instance
         """
         if isinstance(key, int):
-            return self.person(key)  # TODO: need to re-implement
+            return self.person(key)
         else:
-            return self.__getattribute__(key)
+            return getattr(self, key)
 
     def __setitem__(self, key, value):
         """ Ditto """
-        return self.__setattr__(key, value)
+        return setattr(self, key, value)
 
     def __iter__(self):
         """ Iterate over people """
@@ -152,15 +152,14 @@ class People(BasePeople):
 
     Args:
         pars (dict): the sim parameters, e.g. sim.pars -- alternatively, if a number, interpreted as n_agents
-        strict (bool): whether to only create keys that are already in self.meta.person; otherwise, let any key be set
-        pop_trend (dataframe): a dataframe of years and population sizes, if available
-        kwargs (dict): the actual data, e.g. from a popdict, being specified
+        age_data (dataframe): a dataframe of years and population sizes, if available
+        extra_states (list): non-default states to initialize
 
     **Examples**::
         ppl = ss.People(2000)
     """
 
-    def __init__(self, n_agents, age_data=None, states=None):
+    def __init__(self, n_agents, age_data=None, extra_states=None):
         """ Initialize """
 
         super().__init__(n_agents)
@@ -169,7 +168,7 @@ class People(BasePeople):
         self.version = ss.__version__  # Store version info
 
         # Handle states
-        extra_states = sc.promotetolist(states)
+        extra_states = sc.promotetolist(extra_states)
         states = [
             ss.BoolArr('alive', default=True),  # Time index for death
             ss.BoolArr('female', default=ss.bernoulli(name='female', p=0.5)),
@@ -341,3 +340,21 @@ class People(BasePeople):
         """
         self.ti_dead[uids] = self.ti
         return
+    
+    def person(self, ind):
+        """ Get all the properties for a single person """
+        person = Person()
+        for key in ['uid', 'slot']:
+            person[key] = self[key][ind]
+        for key in self.states.keys():
+            person[key] = self.states[key][ind]
+        return person
+            
+
+class Person(sc.objdict):
+    """ A simple class to hold all attributes of a person """
+    def to_df(self):
+        """ Convert to a dataframe """
+        df = sc.dataframe.from_dict(self, orient='index', columns='value')
+        df.index.name = 'key'
+        return df
