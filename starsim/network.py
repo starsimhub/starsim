@@ -287,7 +287,7 @@ class Network(ss.Module):
         """ Define how pairs of people are formed """
         pass
 
-    def update(self, people):
+    def update(self, sim):
         """ Define how pairs/connections evolve (in time) """
         pass
 
@@ -339,8 +339,9 @@ class DynamicNetwork(Network):
         super().__init__(pars, key_dict=key_dict, **kwargs)
         return
 
-    def end_pairs(self, people):
-        dt = people.dt
+    def end_pairs(self, sim):
+        people = sim.people
+        dt = sim.dt
         self.contacts.dur = self.contacts.dur - dt
 
         # Non-alive agents are removed
@@ -477,7 +478,7 @@ class RandomNet(DynamicNetwork):
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.add_pairs(sim.people)
+        self.add_pairs(sim)
         return
 
     @staticmethod
@@ -520,13 +521,14 @@ class RandomNet(DynamicNetwork):
         self.dist.jump() # Reset the RNG manually # TODO, think if there's a better way
         return source, target
 
-    def update(self, people, dt=None):
-        self.end_pairs(people)
-        self.add_pairs(people)
+    def update(self, sim, dt=None):
+        self.end_pairs(sim)
+        self.add_pairs(sim)
         return
 
-    def add_pairs(self, people):
+    def add_pairs(self, sim):
         """ Generate contacts """
+        people = sim.people
         if isinstance(self.pars.n_contacts, ss.Dist):
             number_of_contacts = self.pars.n_contacts.rvs(people.uid[people.alive])  # or people.uid?
         else:
@@ -641,7 +643,8 @@ class MFNet(SexualNetwork, DynamicNetwork):
         self.debut[uids] = self.pars.debut.rvs(uids)
         return
 
-    def add_pairs(self, people, ti=None):
+    def add_pairs(self, sim, ti=None):
+        people = sim.people
         available_m = self.available(people, 'male')
         available_f = self.available(people, 'female')
 
@@ -677,10 +680,11 @@ class MFNet(SexualNetwork, DynamicNetwork):
 
         return len(p1)
 
-    def update(self, people, dt=None):
-        self.end_pairs(people)
+    def update(self, sim, dt=None):
+        people = sim.people
+        self.end_pairs(sim)
         self.set_network_states(people, upper_age=people.dt)
-        self.add_pairs(people)
+        self.add_pairs(sim)
         return
 
 
@@ -726,9 +730,9 @@ class MSMNet(SexualNetwork, DynamicNetwork):
         self.debut[uids] = self.pars.debut_dist.rvs(len(uids)) # Just pass len(uids) as this network is not crn safe anyway
         return
 
-    def add_pairs(self, people, ti=None):
+    def add_pairs(self, sim, ti=None):
         # Pair all unpartnered MSM
-        available_m = self.available(people, 'm')
+        available_m = self.available(sim.people, 'm')
         n_pairs = int(len(available_m)/2)
         p1 = available_m[:n_pairs]
         p2 = available_m[n_pairs:n_pairs*2]
@@ -746,10 +750,11 @@ class MSMNet(SexualNetwork, DynamicNetwork):
         
         return len(p1)
 
-    def update(self, people, dt=None):
-        self.end_pairs(people)
+    def update(self, sim, dt=None):
+        people = sim.people
+        self.end_pairs(sim)
         self.set_network_states(people, upper_age=people.dt)
-        self.add_pairs(people)
+        self.add_pairs(sim)
         return
 
 
@@ -822,7 +827,8 @@ class MaternalNet(Network):
         super().__init__(key_dict=key_dict, vertical=vertical, **kwargs)
         return
 
-    def update(self, people, dt=None):
+    def update(self, sim, dt=None):
+        people = sim.people
         if dt is None: dt = people.dt
         # Set beta to 0 for women who complete post-partum period
         # Keep connections for now, might want to consider removing

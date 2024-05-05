@@ -35,6 +35,14 @@ class Sim(sc.prettyobj):
         self.filename = None # Store the filename, if saved
         return
     
+    def __getitem__(self, key):
+        """ Allow dict-like access, e.g. sim['diseases'] """
+        return getattr(self, key)
+    
+    def __setitem__(self, key, value):
+        """ Allow dict-like access, e.g. sim['created'] = sc.now() """
+        return setattr(self, key, value)
+    
     def initialize(self, reset=False, **kwargs):
         """ Perform all initializations for the sim; most heavy lifting is done by the parameters """
         # Validation and initialization
@@ -45,6 +53,18 @@ class Sim(sc.prettyobj):
         keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
         for key in keys:
             setattr(self, key, p.pop(key))
+            
+        # Initialize all the modules with the sim
+        modmap = ss.module_map()
+        for modkey in modmap.keys():
+            modlist = self[modkey]
+            for mod in modlist.values():
+                mod.initialize(self)
+                
+        # Initialize products # TODO: think about simplifying
+        for mod in self.interventions:
+            if hasattr(mod, 'product') and isinstance(mod.product, ss.Product):
+                mod.product.initialize(self)
         
         # Initialize all distributions now that everything else is in place
         self.dists.initialize(obj=self, base_seed=p.seed, force=True)
@@ -95,8 +115,9 @@ class Sim(sc.prettyobj):
             connector.update(self)
 
         # Update networks - this takes place here in case autonomous state changes at this timestep
+        for network in self.networks.values():
         # affect eligibility for contacts
-        self.networks.update(self.people)
+            network.update(self)
 
         # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
         # interventions, by running them at this point

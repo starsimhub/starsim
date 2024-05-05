@@ -6,21 +6,15 @@ import starsim as ss
 import sciris as sc
 import numpy as np
 
-__all__ = ['Analyzer', 'Intervention']
+__all__ = ['Plugin', 'Analyzer', 'Intervention']
 
 
-class Analyzer(ss.Module):
-    """
-    Base class for analyzers. Analyzers are used to provide more detailed information 
-    about a simulation than is available by default -- for example, pulling states 
-    out of sim.people on a particular timestep before they get updated on the next step.
+class Plugin(ss.Module):
+    """ Base class for interventions and analyzers """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        return
     
-    The key method of the analyzer is ``apply()``, which is called with the sim
-    on each timestep.
-    
-    To retrieve a particular analyzer from a sim, use sim.get_analyzer().
-    """
-
     def __call__(self, *args, **kwargs):
         return self.apply(*args, **kwargs)
     
@@ -32,9 +26,30 @@ class Analyzer(ss.Module):
 
     def finalize(self, sim):
         return super().finalize(sim)
+    
+    @classmethod
+    def from_func(cls, func):
+        """ Create an intervention or analyzer from a function """
+        new = cls(name=func.__name__)
+        new.apply = func
+        return new
 
 
-class Intervention(ss.Module):
+class Analyzer(Plugin):
+    """
+    Base class for analyzers. Analyzers are used to provide more detailed information 
+    about a simulation than is available by default -- for example, pulling states 
+    out of sim.people on a particular timestep before they get updated on the next step.
+    
+    The key method of the analyzer is ``apply()``, which is called with the sim
+    on each timestep.
+    
+    To retrieve a particular analyzer from a sim, use sim.get_analyzer().
+    """
+    pass
+
+
+class Intervention(Plugin):
     """
     Base class for interventions.
     
@@ -46,18 +61,6 @@ class Intervention(ss.Module):
         super().__init__(*args, **kwargs)
         self.eligibility = eligibility
         return
-
-    def __call__(self, *args, **kwargs):
-        return self.apply(*args, **kwargs)
-    
-    def initialize(self, sim):
-        return super().initialize(sim)
-    
-    def apply(self, sim, *args, **kwargs):
-        raise NotImplementedError
-        
-    def finalize(self, sim):
-        return super().finalize(sim)
 
     def _parse_product(self, product):
         """

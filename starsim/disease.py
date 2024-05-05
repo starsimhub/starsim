@@ -280,7 +280,7 @@ class Infection(Disease):
                     continue
 
                 # Calculate probability of a->b transmission.
-                beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=people.dt) # TODO: should this be sim.dt?
+                beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=sim.dt)
                 p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
 
                 # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`

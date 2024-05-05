@@ -108,20 +108,7 @@ class Parameters(sc.objdict):
         # Initialize and convert modules
         self.convert_modules() # General initialization
         self.init_demographics() # Demographic-specific initialization
-        self.init_interventions()
-        self.init_analyzers()
         
-        # Initialize all the modules with the sim
-        for modkey in ss.modmap.keys():
-            modlist = self[modkey]
-            for mod in modlist:
-                mod.initialize(sim)
-                
-        # Initialize products # TODO: think about simplifying
-        for mod in self.interventions:
-            if hasattr(mod, 'product') and isinstance(mod.product, ss.Product):
-                mod.product.initialize(sim)
-                
         # Convert from lists to ndicts
         for modkey,modclass in modmap.items():
             self[modkey] = ss.ndict(self[modkey], type=modclass)
@@ -292,27 +279,18 @@ class Parameters(sc.objdict):
                     
                     # Special handling for interventions and analyzers: convert class and function to class instance
                     if modkey in ['interventions', 'analyzers']:
-                        modlist[i] = self.convert_ia(expected_cls, modlist[i])
+                        if isinstance(mod, type) and issubclass(mod, expected_cls):
+                            modlist[i] = mod()  # Convert from a class to an instance of a class
+                        elif isinstance(mod, ss.Module) and callable(mod):
+                            modlist[i] = expected_cls.from_func(mod)
                     
                     # Do final check
-                    
                     thismod = modlist[i]
                     if not isinstance(thismod, expected_cls):
                         errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls}, but was {type(thismod)} instead'
                         raise TypeError(errormsg)
                 
         return
-    
-    def convert_ia(self, ia_cls, mod):
-        """ Additional processing for interventions and analyzers """
-        if isinstance(mod, type) and issubclass(mod, ia_cls):
-            intervention = intervention()  # Convert from a class to an instance of a class
-        elif not isinstance(intervention, ss.Intervention) and callable(intervention):
-            intv_func = intervention
-            intervention = ss.Intervention(name=f'intervention_func_{i}')
-            intervention.apply = intv_func # Monkey-patch together an intervention from a function
-        
-        
 
     # def convert_plugins(self, plugin_class, plugin_name=None):
     #     """
@@ -401,67 +379,67 @@ class Parameters(sc.objdict):
             self.demographics += background_deaths
         return
 
-    def init_interventions(self):
-        """ Initialize and validate the interventions """
+    # def init_interventions(self):
+    #     """ Initialize and validate the interventions """
 
-        # interventions = self.convert_plugins(ss.Intervention, plugin_name='interventions')
+    #     # interventions = self.convert_plugins(ss.Intervention, plugin_name='interventions')
 
-        # Translate the intervention specs into actual interventions
-        for i, intervention in enumerate(self.interventions):
-            if isinstance(intervention, type) and issubclass(intervention, ss.Intervention):
-                intervention = intervention()  # Convert from a class to an instance of a class
-            elif not isinstance(intervention, ss.Intervention) and callable(intervention):
-                intv_func = intervention
-                intervention = ss.Intervention(name=f'intervention_func_{i}')
-                intervention.apply = intv_func # Monkey-patch together an intervention from a function
-            else:
-                errormsg = f'Intervention {intervention} does not seem to be a valid intervention: must be a function or Intervention subclass'
-                raise TypeError(errormsg)
+    #     # Translate the intervention specs into actual interventions
+    #     for i, intervention in enumerate(self.interventions):
+    #         if isinstance(intervention, type) and issubclass(intervention, ss.Intervention):
+    #             intervention = intervention()  # Convert from a class to an instance of a class
+    #         elif not isinstance(intervention, ss.Intervention) and callable(intervention):
+    #             intv_func = intervention
+    #             intervention = ss.Intervention(name=f'intervention_func_{i}')
+    #             intervention.apply = intv_func # Monkey-patch together an intervention from a function
+    #         else:
+    #             errormsg = f'Intervention {intervention} does not seem to be a valid intervention: must be a function or Intervention subclass'
+    #             raise TypeError(errormsg)
             
-            if intervention.name not in self.interventions:
-                self.interventions += intervention
+    #         if intervention.name not in self.interventions:
+    #             self.interventions += intervention
 
-            # Add intervention states to the People's dicts
-            self.people.add_module(intervention)
+    #         # Add intervention states to the People's dicts
+    #         self.people.add_module(intervention)
 
-        # TODO: combine this with the code above
-        for k,intervention in self.interventions.items():
-            if not isinstance(intervention, ss.Intervention):
-                intv_func = intervention
-                intervention = ss.Intervention(name=f'intervention_func_{k}')
-                intervention.apply = intv_func # Monkey-patch together an intervention from a function
-                self.interventions[k] = intervention
+    #     # TODO: combine this with the code above
+    #     for k,intervention in self.interventions.items():
+    #         if not isinstance(intervention, ss.Intervention):
+    #             intv_func = intervention
+    #             intervention = ss.Intervention(name=f'intervention_func_{k}')
+    #             intervention.apply = intv_func # Monkey-patch together an intervention from a function
+    #             self.interventions[k] = intervention
         
-        self.interventions = ss.ndict(self.interventions, type=ss.Intervention)
-        return
+    #     self.interventions = ss.ndict(self.interventions, type=ss.Intervention)
+    #     return
 
-    def init_analyzers(self):
-        """ Initialize the analyzers """
+    # def init_analyzers(self):
+    #     """ Initialize the analyzers """
         
-        analyzers = self.analyzers
-        if not np.iterable(analyzers):
-            analyzers = sc.tolist(analyzers)
+    #     analyzers = self.analyzers
+    #     if not np.iterable(analyzers):
+    #         analyzers = sc.tolist(analyzers)
 
-        # Interpret analyzers
-        for ai, analyzer in enumerate(analyzers):
-            if isinstance(analyzer, type) and issubclass(analyzer, ss.Analyzer):
-                analyzer = analyzer()  # Convert from a class to an instance of a class
-            if not (isinstance(analyzer, ss.Analyzer) or callable(analyzer)):
-                errormsg = f'Analyzer {analyzer} does not seem to be a valid analyzer: must be a function or Analyzer subclass'
-                raise TypeError(errormsg)
-            self.analyzers += analyzer  # Add it in
+    #     # Interpret analyzers
+    #     for ai, analyzer in enumerate(analyzers):
+    #         if isinstance(analyzer, type) and issubclass(analyzer, ss.Analyzer):
+    #             analyzer = analyzer()  # Convert from a class to an instance of a class
+    #         if not (isinstance(analyzer, ss.Analyzer) or callable(analyzer)):
+    #             errormsg = f'Analyzer {analyzer} does not seem to be a valid analyzer: must be a function or Analyzer subclass'
+    #             raise TypeError(errormsg)
+    #         self.analyzers += analyzer  # Add it in
 
-        # TODO: should tidy/remove this code
-        for k,analyzer in self.analyzers.items():
-            if not isinstance(analyzer, ss.Analyzer) and callable(analyzer):
-                ana_func = analyzer
-                analyzer = ss.Analyzer(name=f'analyzer_func_{k}')
-                analyzer.apply = ana_func # Monkey-patch together an intervention from a function
-                self.analyzers[k] = analyzer
+    #     # TODO: should tidy/remove this code
+    #     for k,analyzer in self.analyzers.items():
+    #         if not isinstance(analyzer, ss.Analyzer) and callable(analyzer):
+    #             ana_func = analyzer
+    #             analyzer = ss.Analyzer(name=f'analyzer_func_{k}')
+    #             analyzer.apply = ana_func # Monkey-patch together an intervention from a function
+    #             self.analyzers[k] = analyzer
         
-        self.analyzers = ss.ndict(self.analyzers, type=ss.Analyzer)
+    #     self.analyzers = ss.ndict(self.analyzers, type=ss.Analyzer)
 
-        return
+    #     return
 
 
 def make_pars(**kwargs):
