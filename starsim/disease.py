@@ -260,7 +260,6 @@ class Infection(Disease):
         """
         new_cases = []
         sources = []
-        people = sim.people
         betamap = self._check_betas(sim)
 
         for nkey,net in sim.networks.items():
