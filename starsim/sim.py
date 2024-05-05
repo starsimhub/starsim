@@ -46,7 +46,7 @@ class Sim(sc.prettyobj):
     def initialize(self, reset=False, **kwargs):
         """ Perform all initializations for the sim; most heavy lifting is done by the parameters """
         # Validation and initialization
-        ss.set_seed(self.pars.seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
+        ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         p = self.pars.initialize(sim=self, reset=reset, **kwargs) # Initialize the parameters, including people and modules
         
         # Move initialized modules to the sim
@@ -67,7 +67,7 @@ class Sim(sc.prettyobj):
                 mod.product.initialize(self)
         
         # Initialize all distributions now that everything else is in place
-        self.dists.initialize(obj=self, base_seed=p.seed, force=True)
+        self.dists.initialize(obj=self, base_seed=p.rand_seed, force=True)
 
         # Final steps
         self.initialized = True

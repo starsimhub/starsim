@@ -37,7 +37,7 @@ class Parameters(sc.objdict):
         self.end        = None   # End of the simulation
         self.n_years    = 50     # Number of years to run, if end isn't specified. Note that this includes burn-in
         self.dt         = 1.0    # Timestep
-        self.seed       = 1      # Random seed, if None, don't reset
+        self.rand_seed  = 1      # Random seed, if None, don't reset
         self.slot_scale = 5      # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
 
         # Demographic parameters
