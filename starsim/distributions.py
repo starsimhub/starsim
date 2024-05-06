@@ -39,10 +39,10 @@ class Dists(sc.prettyobj):
         self.obj = obj
         self.dists = None
         self.base_seed = base_seed
+        if sim is None and obj is not None and isinstance(obj, ss.Sim):
+            sim = obj
         self.sim = sim
         self.initialized = False
-        if self.obj is not None:
-            self.initialize()
         return
 
     def initialize(self, obj=None, base_seed=None, sim=None, force=False):
@@ -55,6 +55,10 @@ class Dists(sc.prettyobj):
             self.base_seed = base_seed
         sim = sim if (sim is not None) else self.sim
         obj = obj if (obj is not None) else self.obj
+        if sim is None and obj is not None and isinstance(obj, ss.Sim):
+            sim = obj
+        if obj is None and sim is not None:
+            obj = sim
         if obj is None:
             errormsg = 'Must supply a container that contains one or more Dist objects, typically the sim'
             raise ValueError(errormsg)
