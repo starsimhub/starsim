@@ -265,6 +265,34 @@ class People(BasePeople):
             self.age[self.alive.uids] += sim.dt
         return
 
+    def request_death(self, sim, uids):
+        """
+        External-facing function to request an agent die at the current timestep
+
+        In general, users should not directly interact with `People.ti_dead` to minimize
+        interactions between modules (e.g., if a module requesting a future death, overwrites
+        death due to a different module taking place at the current timestep).
+
+        Modules that have a future time of death (e.g., due to disease duration) should keep
+        track of that internally. When the module is ready to cause the agent to die, it should
+        call this method, and can update its own results for the cause of death. This way, if
+        multiple modules request death on the same day, they can each record a death due to their
+        own cause.
+
+        The actual deaths are resolved after modules have all run, but before analyzers. That way,
+        regardless of whether removing dead agents is enabled or not, analyzers will be able to
+        see and record outcomes for agents that died this timestep.
+
+        **WARNING** - this function allows multiple modules to each independently carry out and
+        record state changes associated with death. It is therefore important that they can
+        guarantee that after requesting death, the death is guaranteed to occur.
+
+        :param uids: Agent IDs to request deaths for
+        :return: UIDs of agents that have been scheduled to die on this timestep
+        """
+        self.ti_dead[uids] = sim.ti
+        return
+
     def resolve_deaths(self):
         """ Carry out any deaths that took place this timestep """
         death_uids = (self.ti_dead <= self.sim.ti).uids
@@ -311,34 +339,6 @@ class People(BasePeople):
         res.n_alive[ti] = np.count_nonzero(self.alive)
         res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
-        return
-
-    def request_death(self, uids):
-        """
-        External-facing function to request an agent die at the current timestep
-
-        In general, users should not directly interact with `People.ti_dead` to minimize
-        interactions between modules (e.g., if a module requesting a future death, overwrites
-        death due to a different module taking place at the current timestep).
-
-        Modules that have a future time of death (e.g., due to disease duration) should keep
-        track of that internally. When the module is ready to cause the agent to die, it should
-        call this method, and can update its own results for the cause of death. This way, if
-        multiple modules request death on the same day, they can each record a death due to their
-        own cause.
-
-        The actual deaths are resolved after modules have all run, but before analyzers. That way,
-        regardless of whether removing dead agents is enabled or not, analyzers will be able to
-        see and record outcomes for agents that died this timestep.
-
-        **WARNING** - this function allows multiple modules to each independently carry out and
-        record state changes associated with death. It is therefore important that they can
-        guarantee that after requesting death, the death is guaranteed to occur.
-
-        :param uids: Agent IDs to request deaths for
-        :return: UIDs of agents that have been scheduled to die on this timestep
-        """
-        self.ti_dead[uids] = self.ti
         return
     
     def person(self, ind):

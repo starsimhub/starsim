@@ -113,7 +113,7 @@ class Cholera(ss.Infection):
         # Trigger deaths
         deaths = (self.ti_dead <= sim.ti).uids
         if len(deaths):
-            sim.people.request_death(deaths)
+            sim.people.request_death(sim, deaths)
 
         # Update today's environmental prevalence
         self.calc_environmental_prev(sim)

@@ -171,8 +171,8 @@ class Syphilis(ss.Infection):
         # Congenital syphilis deaths
         nnd = (self.ti_nnd == sim.ti).uids
         stillborn = (self.ti_stillborn == sim.ti).uids
-        sim.people.request_death(nnd)
-        sim.people.request_death(stillborn)
+        sim.people.request_death(sim, nnd)
+        sim.people.request_death(sim, stillborn)
 
         # Congenital syphilis transmission outcomes
         congenital = self.ti_congenital == sim.ti

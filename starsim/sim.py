@@ -90,6 +90,10 @@ class Sim(sc.prettyobj):
             products,
             self.analyzers.values(),
         )
+    
+    @property
+    def year(self):
+        return self.yearvec[self.ti]
 
     def step(self):
         """ Step through time and update values """

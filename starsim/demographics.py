@@ -233,7 +233,7 @@ class Deaths(Demographics):
     def apply_deaths(self, sim):
         """ Select people to die """
         death_uids = self.pars.death_rate.filter()
-        sim.people.request_death(death_uids)
+        sim.people.request_death(sim, death_uids)
         return len(death_uids)
 
     def update_results(self, n_deaths, sim):
@@ -397,7 +397,7 @@ class Pregnancy(Demographics):
 
         # Maternal deaths
         maternal_deaths = (self.ti_dead <= sim.ti).uids
-        sim.people.request_death(maternal_deaths)
+        sim.people.request_death(sim, maternal_deaths)
 
         return
 

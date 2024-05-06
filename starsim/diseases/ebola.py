@@ -97,7 +97,7 @@ class Ebola(SIR):
         # Trigger deaths
         deaths = (self.ti_dead <= sim.ti).uids
         if len(deaths):
-            sim.people.request_death(deaths)
+            sim.people.request_death(sim, deaths)
 
         # Progress dead -> buried
         buried = (self.ti_buried <= sim.ti).uids

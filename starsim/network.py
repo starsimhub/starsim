@@ -620,7 +620,7 @@ class MFNet(SexualNetwork, DynamicNetwork):
     def initialize(self, sim):
         super().initialize(sim)
         self.set_network_states(sim.people)
-        self.add_pairs(sim.people, ti=0)
+        self.add_pairs(sim, ti=0)
         return
 
     def set_network_states(self, people, upper_age=None):
@@ -683,7 +683,7 @@ class MFNet(SexualNetwork, DynamicNetwork):
     def update(self, sim, dt=None):
         people = sim.people
         self.end_pairs(sim)
-        self.set_network_states(people, upper_age=people.dt)
+        self.set_network_states(people, upper_age=sim.dt)
         self.add_pairs(sim)
         return
 
@@ -753,7 +753,7 @@ class MSMNet(SexualNetwork, DynamicNetwork):
     def update(self, sim, dt=None):
         people = sim.people
         self.end_pairs(sim)
-        self.set_network_states(people, upper_age=people.dt)
+        self.set_network_states(people, upper_age=sim.dt)
         self.add_pairs(sim)
         return
 
@@ -828,8 +828,7 @@ class MaternalNet(Network):
         return
 
     def update(self, sim, dt=None):
-        people = sim.people
-        if dt is None: dt = people.dt
+        if dt is None: dt = sim.dt
         # Set beta to 0 for women who complete post-partum period
         # Keep connections for now, might want to consider removing
         self.contacts.dur = self.contacts.dur - dt
