@@ -22,7 +22,7 @@ class Sim(sc.prettyobj):
         args = dict(label=label, people=people, demographics=demographics, diseases=diseases, networks=networks, 
                     interventions=interventions, analyzers=analyzers, connectors=connectors)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
-        self.pars.update_pars(sc.mergedicts(args, pars, kwargs, _copy=copy_inputs))  # Update the parameters
+        self.pars.update(sc.mergedicts(args, pars, kwargs, _copy=copy_inputs))  # Update the parameters
         
         # Set attributes
         self.label = label # Usually overwritten during initalization by the parameters

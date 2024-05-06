@@ -2,14 +2,116 @@
 Set parameters
 """
 
+from numbers import Number
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 
-__all__ = ['Parameters', 'make_pars']
+__all__ = ['Pars', 'SimPars', 'make_pars']
+
+# Define classes to not descend into further -- based on sciris.sc_nested
+atomic_classes = (str, Number, list, np.ndarray, pd.Series, pd.DataFrame, pd.core.indexes.base.Index)
 
 
-class Parameters(sc.objdict):
+class Pars(sc.objdict):
+    """
+    Dict-like container of parameters
+    
+    Acts like an ``sc.objdict()``, except that adding new keys are disallowed by
+    default, and auto-updates known types.
+    """
+    def update(self, pars=None, create=False, **kwargs):
+        """
+        Update internal dict with new pars.
+        
+        Args:
+            pars (dict): the parameters to update (if None, do nothing)
+            create (bool): if create is False, then raise a KeyNotFoundError if the key does not already exist
+            kwargs (dict): merged with pars
+        """
+        # Get parameters, and return if none
+        pars = sc.mergedicts(pars, kwargs)
+        if not len(pars): 
+            return self
+        
+        # Check if there are any mismatches
+        if not create:
+            self.check_key_mismatch(pars)
+        
+        # Perform the update
+        for key,new in pars.items():
+            
+            # Should only be the case if create=True
+            if key not in self.keys(): 
+                self[key] = new
+            
+            # Main use case: update from previous values
+            else: 
+                old = self[key] # Get the object we're about to update
+                
+                # It's a number, string, etc: update directly
+                if isinstance(old, atomic_classes):
+                    self[key] = new
+                
+                # It's a Pars object: update recursively
+                elif isinstance(old, Pars): 
+                    old.update(new, create=create)
+                
+                # Update module parameters
+                elif isinstance(old, ss.Module): 
+                    if isinstance(new, dict):
+                        old.pars.update(new)
+                    else:
+                        errormsg = f'Cannot update a module with {type(new)}: must be a dict to set new parameters'
+                        raise TypeError(errormsg)
+                
+                # Update a distribution
+                elif isinstance(old, ss.Dist):
+                    
+                    # It's a Dist, e.g. dur_inf = ss.normal(6,2); use directly
+                    if isinstance(new, ss.Dist): 
+                        if isinstance(old, ss.bernoulli) and not isinstance(new, ss.bernoulli):
+                            errormsg = f"Bernoulli distributions can't be changed to another type: {type(new)} is invalid"
+                            raise TypeError(errormsg)
+                        else:
+                            self[key] = new
+                    
+                    # It's a single number, e.g. dur_inf = 6; set parameters
+                    elif isinstance(new, Number):
+                        old.set(new)
+                    
+                    # It's a list number, e.g. dur_inf = [6, 2]; set parameters
+                    elif isinstance(new, list):
+                        old.set(*new)
+                    
+                    # It's a dict, figure out what to do
+                    elif isinstance(new, dict):
+                        if 'type' not in new.keys(): # Same type of dist, set parameters
+                            old.set(**new)
+                        else: # We need to create a new distribution
+                            dist = ss.make_dist(new)
+                            self[key] = dist
+                
+                # Everything else
+                else:
+                    ss.warn('No known mechanism for handling {type(old)} → {type(new)}; using default')
+                    self[key] = new
+                    
+        return self
+
+    def check_key_mismatch(self, pars):
+        """ Check whether additional keys are being added to the dictionary """
+        available_keys = list(self.keys())
+        new_keys = pars.keys()
+        mismatches = [key for key in new_keys if key not in available_keys]
+        if len(mismatches):
+            errormsg = f'Key(s) {mismatches} not found; available keys are {available_keys}'
+            raise sc.KeyNotFoundError(errormsg)
+        return
+
+
+class SimPars(Pars):
     """
     Create the parameters for the simulation. Typically, this function is used
     internally rather than called by the user; e.g. typical use would be to do
@@ -22,7 +124,7 @@ class Parameters(sc.objdict):
 
     def __init__(self, **kwargs):
         
-        # Overall parameters
+        # General parameters
         self.label   = '' # The label of the simulation
         self.verbose = ss.options.verbose # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
 
@@ -59,26 +161,6 @@ class Parameters(sc.objdict):
 
         return
 
-    def update_pars(self, pars=None, create=False, **kwargs):
-        """
-        Update internal dict with new pars.
-        
-        Args:
-            pars (dict): the parameters to update (if None, do nothing)
-            create (bool): if create is False, then raise a KeyNotFoundError if the key does not already exist
-            kwargs (dict): merged with pars
-        """
-        if pars or kwargs:
-            pars = sc.mergedicts(pars, kwargs)
-            if not create:
-                available_keys = list(self.keys())
-                mismatches = [key for key in pars.keys() if key not in available_keys]
-                if len(mismatches):
-                    errormsg = f'Key(s) {mismatches} not found; available keys are {available_keys}'
-                    raise sc.KeyNotFoundError(errormsg)
-            self.update(pars)
-        return
-    
     def initialize(self, sim, reset=False, **kwargs):
         
         # Validation
@@ -292,81 +374,6 @@ class Parameters(sc.objdict):
                 
         return
 
-    # def convert_plugins(self, plugin_class, plugin_name=None):
-    #     """
-    #     Common logic for converting plug-ins to a standard format
-    #     Used for networks, demographics, diseases, connectors, analyzers, and interventions
-        
-    #     Args:
-    #         plugin: class
-    #     """
-
-    #     if plugin_name is None: plugin_name = plugin_class.__name__.lower()
-
-    #     # Get lower-case names of all subclasses
-    #     known_plugins = {n.__name__.lower():n for n in ss.all_subclasses(plugin_class)}
-    #     if plugin_name == 'networks': # Allow "msm" or "msmnet"
-    #         known_plugins.update({k.removesuffix('net'):v for k,v in known_plugins.items()})
-
-    #     # Figure out if it's in the sim pars or provided directly
-    #     attr_plugins = getattr(self, plugin_name)  # Get any plugins that have been provided directly
-
-    #     # See if they've been provided in the pars dict
-    #     if self.get(plugin_name):
-
-    #         par_plug = self[plugin_name]
-
-    #         # String: convert to ndict
-    #         if isinstance(par_plug, str):
-    #             plugins = ss.ndict(dict(name=par_plug))
-
-    #         # List or dict: convert to ndict
-    #         elif sc.isiterable(par_plug) and len(par_plug):
-    #             if isinstance(par_plug, dict) and 'type' in par_plug and 'name' not in par_plug:
-    #                 par_plug['name'] = par_plug['type'] # TODO: simplify/remove this
-    #             plugins = ss.ndict(par_plug)
-
-    #     else:  # Not provided directly or in pars
-    #         plugins = {}
-
-    #     # Check that we don't have two copies
-    #     for attr_key in attr_plugins.keys():
-    #         if plugins.get(attr_key):
-    #             errormsg = f'Sim was created with {attr_key} module, cannot create another through the pars dict.'
-    #             raise ValueError(errormsg)
-
-    #     plugins = sc.mergedicts(plugins, attr_plugins)
-
-    #     # Process
-    #     processed_plugins = sc.autolist()
-    #     for plugin in plugins.values():
-
-    #         if not isinstance(plugin, plugin_class):
-
-    #             if isinstance(plugin, dict):
-    #                 ptype = (plugin.get('type') or plugin.get('name') or '').lower()
-    #                 name = plugin.get('name') or ptype
-    #                 if ptype in known_plugins:
-    #                     # Make an instance of the requested plugin
-    #                     plugin_pars = {k: v for k, v in plugin.items() if k not in ['type', 'name']}
-    #                     pclass = known_plugins[ptype]
-    #                     plugin = pclass(name=name, pars=plugin_pars) # TODO: does this handle par_dists, etc?
-    #                 else:
-    #                     errormsg = (f'Could not convert {plugin} to an instance of class {plugin_name}.'
-    #                                 f'Try specifying it directly rather than as a dictionary.')
-    #                     raise ValueError(errormsg)
-    #             elif plugin_name in ['analyzers', 'interventions'] and callable(plugin):
-    #                 pass # This is ok, it's a function instead of an Intervention object
-    #             else:
-    #                 errormsg = (
-    #                     f'{plugin_name.capitalize()} must be provided as either class instances or dictionaries with a '
-    #                     f'"name" key corresponding to one of these known subclasses: {known_plugins}.')
-    #                 raise ValueError(errormsg)
-
-    #         processed_plugins += plugin
-
-    #     return processed_plugins
-
     def init_demographics(self):
         """ Initialize demographics """
 
@@ -379,70 +386,8 @@ class Parameters(sc.objdict):
             self.demographics += background_deaths
         return
 
-    # def init_interventions(self):
-    #     """ Initialize and validate the interventions """
-
-    #     # interventions = self.convert_plugins(ss.Intervention, plugin_name='interventions')
-
-    #     # Translate the intervention specs into actual interventions
-    #     for i, intervention in enumerate(self.interventions):
-    #         if isinstance(intervention, type) and issubclass(intervention, ss.Intervention):
-    #             intervention = intervention()  # Convert from a class to an instance of a class
-    #         elif not isinstance(intervention, ss.Intervention) and callable(intervention):
-    #             intv_func = intervention
-    #             intervention = ss.Intervention(name=f'intervention_func_{i}')
-    #             intervention.apply = intv_func # Monkey-patch together an intervention from a function
-    #         else:
-    #             errormsg = f'Intervention {intervention} does not seem to be a valid intervention: must be a function or Intervention subclass'
-    #             raise TypeError(errormsg)
-            
-    #         if intervention.name not in self.interventions:
-    #             self.interventions += intervention
-
-    #         # Add intervention states to the People's dicts
-    #         self.people.add_module(intervention)
-
-    #     # TODO: combine this with the code above
-    #     for k,intervention in self.interventions.items():
-    #         if not isinstance(intervention, ss.Intervention):
-    #             intv_func = intervention
-    #             intervention = ss.Intervention(name=f'intervention_func_{k}')
-    #             intervention.apply = intv_func # Monkey-patch together an intervention from a function
-    #             self.interventions[k] = intervention
-        
-    #     self.interventions = ss.ndict(self.interventions, type=ss.Intervention)
-    #     return
-
-    # def init_analyzers(self):
-    #     """ Initialize the analyzers """
-        
-    #     analyzers = self.analyzers
-    #     if not np.iterable(analyzers):
-    #         analyzers = sc.tolist(analyzers)
-
-    #     # Interpret analyzers
-    #     for ai, analyzer in enumerate(analyzers):
-    #         if isinstance(analyzer, type) and issubclass(analyzer, ss.Analyzer):
-    #             analyzer = analyzer()  # Convert from a class to an instance of a class
-    #         if not (isinstance(analyzer, ss.Analyzer) or callable(analyzer)):
-    #             errormsg = f'Analyzer {analyzer} does not seem to be a valid analyzer: must be a function or Analyzer subclass'
-    #             raise TypeError(errormsg)
-    #         self.analyzers += analyzer  # Add it in
-
-    #     # TODO: should tidy/remove this code
-    #     for k,analyzer in self.analyzers.items():
-    #         if not isinstance(analyzer, ss.Analyzer) and callable(analyzer):
-    #             ana_func = analyzer
-    #             analyzer = ss.Analyzer(name=f'analyzer_func_{k}')
-    #             analyzer.apply = ana_func # Monkey-patch together an intervention from a function
-    #             self.analyzers[k] = analyzer
-        
-    #     self.analyzers = ss.ndict(self.analyzers, type=ss.Analyzer)
-
-    #     return
-
 
 def make_pars(**kwargs):
-    return Parameters(**kwargs)
+    return SimPars(**kwargs)
 
 

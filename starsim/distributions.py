@@ -31,6 +31,21 @@ def find_dists(obj, verbose=False):
     return out
 
 
+def make_dist(pars=None, **kwargs):
+    """ Make a distribution from a dictionary """
+    pars = sc.mergedicts(pars, kwargs)
+    if 'type' not in pars:
+        errormsg = 'To make a distribution from a dict, one of the keys must be "type" to specify the distribution'
+        raise ValueError(errormsg)
+    dist_type = pars.pop('type')
+    if dist_type not in dist_list:
+        errormsg = f'"{dist_type}" is not a valid distribution; valid types are {dist_list}'
+        raise AttributeError(errormsg)
+    dist_class = getattr(ss, dist_type)
+    dist = dist_class(**pars) # Actually create the distribution
+    return dist
+
+
 class Dists(sc.prettyobj):
     """ Class for managing a collection of Dist objects """
 
@@ -213,11 +228,19 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         """ Alias to self.rvs() """
         return self.rvs(n=n)
     
-    def set(self, dist=None, **kwargs):
+    def set(self, *args, dist=None, **kwargs):
         """ Set (change) the distribution type, or one or more parameters of the distribution """
         if dist:
             self.dist = dist
             self.process_dist()
+        if args:
+            if kwargs:
+                errormsg = f'You can supply args or kwargs, but not both (args={len(args)}, kwargs={len(kwargs)})'
+                raise ValueError(errormsg)
+            else: # Convert from args to kwargs
+                parkeys = list(self.pars.keys())
+                for i,arg in enumerate(args):
+                    kwargs[parkeys[i]] = arg
         if kwargs:
             self.pars.update(kwargs)
             self.process_pars(call=False)
