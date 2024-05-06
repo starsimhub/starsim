@@ -220,3 +220,12 @@ class Module(sc.quickobj):
                 return subcls(*args, **kwargs)
         else:
             raise KeyError(f'Module "{name}" did not match any known Starsim Modules')
+            
+    def to_json(self):
+        out = sc.objdict()
+        out.type = self.__class__.__name__
+        out.name = self.name
+        out.label = self.label
+        out.pars = sc.jsonify(self.pars) # TOOD: replace with pars.to_json()
+        return out
+        

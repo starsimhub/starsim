@@ -499,13 +499,18 @@ class Sim(sc.prettyobj):
             pardict (dict): a dictionary containing all the parameter values
         '''
         pardict = {}
-        for key in self.pars.keys():
-            if key == 'interventions':
-                pardict[key] = [intervention.to_json() for intervention in self.pars[key]]
-            elif key == 'start_day':
-                pardict[key] = str(self.pars[key])
-            else:
-                pardict[key] = self.pars[key]
+        for key,item in self.pars.items():
+            if key in ss.module_map().keys():
+                if np.iterable(item):
+                    item = [mod.to_json() for mod in item]
+                else:
+                    try:
+                        item = item.to_json()
+                    except:
+                        pass
+            elif key == 'people':
+                continue
+            pardict[key] = item
         if filename is not None:
             sc.savejson(filename=filename, obj=pardict, indent=indent, *args, **kwargs)
         return pardict
