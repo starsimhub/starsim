@@ -87,7 +87,8 @@ class Parameters(sc.objdict):
         
         # Time indexing
         sim.dt = self.dt
-        sim.yearvec = np.arange(start=self.start, stop=self.end, step=self.dt)
+        sim.yearvec = np.arange(start=self.start, stop=self.end + self.dt, step=self.dt)
+        
         sim.npts = len(sim.yearvec)
         sim.tivec = np.arange(sim.npts)
         sim.ti = 0  # The time index, e.g. 0, 1, 2

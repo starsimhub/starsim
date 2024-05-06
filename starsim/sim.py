@@ -25,6 +25,7 @@ class Sim(sc.prettyobj):
         self.pars.update_pars(sc.mergedicts(args, pars, kwargs, _copy=copy_inputs))  # Update the parameters
         
         # Set attributes
+        self.label = label # Usually overwritten during initalization by the parameters
         self.created = sc.now()  # The datetime the sim was created
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running # TODO: replace with finalized?
