@@ -79,7 +79,7 @@ def test_dists(n=n, do_plot=False):
         obj.a = sc.objdict()
         obj.a.mylist = [ss.random(), ss.Dist(distname='uniform', low=2, high=3)]
         obj.b = dict(d3=ss.weibull(c=2), d4=ss.delta(v=0.3))
-        dists = ss.Dists(obj)
+        dists = ss.Dists(obj).initialize()
         
         # Call each distribution twice
         for j in range(2):
