@@ -85,10 +85,10 @@ class Parameters(sc.objdict):
         self.validate_dt()
         self.validate_pars()
         
-        # Time indexing
+        # Time indexing; derived values live in the sim rather than in the pars
         sim.dt = self.dt
         sim.yearvec = np.arange(start=self.start, stop=self.end + self.dt, step=self.dt)
-        
+        sim.results.yearvec = sim.yearvec # Copy this here
         sim.npts = len(sim.yearvec)
         sim.tivec = np.arange(sim.npts)
         sim.ti = 0  # The time index, e.g. 0, 1, 2
