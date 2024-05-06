@@ -241,11 +241,11 @@ class Parameters(sc.objdict):
                     
                     # Convert first from a string to a dict
                     if isinstance(mod, str):
-                        modlist[i] = dict(type=mod)
+                        mod = dict(type=mod)
                         
                     # Convert from class to class instance (used for interventions and analyzers only)
                     if isinstance(mod, type) and modkey in ['interventions', 'analyzers']:
-                        modlist[i] = mod() # Call it to create a class instance
+                        mod = mod() # Call it to create a class instance
                     
                     # Now convert from a dict to a module
                     if isinstance(mod, dict):
@@ -271,8 +271,7 @@ class Parameters(sc.objdict):
                         
                         # Create the module and store it in the list
                         try:
-                            newmod = modcls(**mod)
-                            modlist[i] = newmod # Replace
+                            mod = modcls(**mod)
                         except Exception as E:
                             errormsg = f'Failed to create module {modtype} with arguments {mod}; see above for full error'
                             raise ValueError(errormsg) from E
@@ -280,15 +279,15 @@ class Parameters(sc.objdict):
                     # Special handling for interventions and analyzers: convert class and function to class instance
                     if modkey in ['interventions', 'analyzers']:
                         if isinstance(mod, type) and issubclass(mod, expected_cls):
-                            modlist[i] = mod()  # Convert from a class to an instance of a class
+                            mod = mod()  # Convert from a class to an instance of a class
                         elif isinstance(mod, ss.Module) and callable(mod):
-                            modlist[i] = expected_cls.from_func(mod)
+                            mod = expected_cls.from_func(mod)
                     
                     # Do final check
-                    thismod = modlist[i]
-                    if not isinstance(thismod, expected_cls):
-                        errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls}, but was {type(thismod)} instead'
+                    if not isinstance(mod, expected_cls):
+                        errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls}, but was {type(mod)} instead'
                         raise TypeError(errormsg)
+                    modlist[i] = mod
                 
         return
 
