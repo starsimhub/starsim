@@ -280,7 +280,7 @@ class Parameters(sc.objdict):
                     if modkey in ['interventions', 'analyzers']:
                         if isinstance(mod, type) and issubclass(mod, expected_cls):
                             mod = mod()  # Convert from a class to an instance of a class
-                        elif isinstance(mod, ss.Module) and callable(mod):
+                        elif not isinstance(mod, ss.Module) and callable(mod):
                             mod = expected_cls.from_func(mod)
                     
                     # Do final check
