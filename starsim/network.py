@@ -784,7 +784,8 @@ class EmbeddingNet(MFNet):
         loc[sim.people.female[uids]] += module.pars.male_shift  # Shift females so they will be paired with older men
         return loc
 
-    def add_pairs(self, people, ti=None):
+    def add_pairs(self, sim, ti=None):
+        people = sim.people
         available_m = self.available(people, 'male')
         available_f = self.available(people, 'female')
 
