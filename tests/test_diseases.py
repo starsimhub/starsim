@@ -43,12 +43,13 @@ def test_sir():
     # assert df.source.isna().sum() == sir.pars.initial # Check seed infections in line list
 
     plt.figure()
+    res = sim.results
     plt.stackplot(
         sim.yearvec,
-        sir.results.n_susceptible,
-        sir.results.n_infected,
-        sir.results.n_recovered,
-        sim.results.new_deaths.cumsum(),
+        res.sir.n_susceptible,
+        res.sir.n_infected,
+        res.sir.n_recovered,
+        res.new_deaths.cumsum(),
     )
     plt.legend(['Susceptible', 'Infected', 'Recovered', 'Dead'])
     plt.xlabel('Year')
@@ -59,7 +60,7 @@ def test_sir():
 def test_ncd():
     ppl = ss.People(n_agents)
     ncd = ss.NCD()
-    sim = ss.Sim(people=ppl, diseases=ncd)
+    sim = ss.Sim(people=ppl, diseases=ncd, copy_inputs=False) # Since using ncd directly below
     sim.run()
 
     assert len(ncd.log.out_edges) == ncd.log.number_of_edges()
