@@ -115,7 +115,7 @@ def test_simple_vax(do_plot=do_plot):
     sim_intv = ss.Sim(pars=pars, interventions=intv)
     sim_intv.run()
     
-    assert sim_intv.summary.cum_deaths < sim_base.summary.cum_deaths, 'Vaccine should avert deaths'
+    assert sim_intv.summary.sir_cum_infections < sim_base.summary.sir_cum_infections, 'Vaccine should avert infections'
 
     # Check plots
     if do_plot:
