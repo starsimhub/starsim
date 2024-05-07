@@ -735,11 +735,13 @@ class EmbeddingNet(MFNet):
         Args:
             male_shift is the average age that males are older than females in partnerships
         """
-        self.pars = ss.Pars(
+        super().__init__(pars, **kwargs) # The MFNet already comes with pars
+        self.pars.update(
+            create=True,
             embedding_func = ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
             male_shift = 5,
         )
-        super().__init__(pars, **kwargs)
+        
         return
 
     @staticmethod
