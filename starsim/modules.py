@@ -50,6 +50,14 @@ class Module(sc.quickobj):
         self.finalized = False
         return
     
+    def disp(self, output=False):
+        """ Display the full object """
+        out = sc.prepr(self)
+        if not output:
+            print(out)
+        else:
+            return out
+    
     def set_metadata(self, name, label):
         """ Set metadata for the module """
         self.name = sc.ifelse(name, getattr(self, 'name', self.__class__.__name__.lower())) # Default name is the class name
@@ -112,23 +120,18 @@ class Module(sc.quickobj):
         self.initialized = True
         return
     
-    def disp(self, output=False):
-        """ Display the full object """
-        out = sc.prepr(self)
-        if not output:
-            print(out)
-        else:
-            return out
+    def step(self):
+        """ Define how the module updates over time """
+        pass
 
     def finalize(self):
+        """ Perform any final operations, such as removing unneeded data """
         self.finalize_results()
         self.finalized = True
         return
 
     def finalize_results(self):
-        """
-        Finalize results
-        """
+        """ Finalize results """
         # Scale results
         for reskey, res in self.results.items():
             if isinstance(res, ss.Result) and res.scale:

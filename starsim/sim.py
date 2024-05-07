@@ -200,8 +200,8 @@ class Sim(sc.prettyobj):
             raise AlreadyRunError('Simulation has already been finalized')
 
         # Scale the results
-        for reskey, res in self.results.items(): # TODO: does this work for disease-specific results?
-            if isinstance(res, ss.Result) and res.scale:
+        for reskey, res in self.results.items():
+            if isinstance(res, ss.Result) and res.scale: # NB: disease-specific results are scaled in module.finalize() below
                 self.results[reskey] = self.results[reskey] * self.pars.pop_scale
         self.results_ready = True # Results are ready to use
 

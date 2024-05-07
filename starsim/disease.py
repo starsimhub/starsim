@@ -14,11 +14,6 @@ __all__ = ['Disease', 'Infection', 'InfectionLog']
 
 class Disease(ss.Module):
     """ Base module class for diseases """
-    def __init__(self, name=None, label=None):
-        super().__init__(name=name, label=label)
-        self.results = ss.Results(self.name)
-        return
-
     def step(self):
         """ Update states, including transmission """
         pass
