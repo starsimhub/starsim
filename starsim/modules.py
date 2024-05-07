@@ -44,8 +44,9 @@ def find_modules(key=None):
 
 class Module(sc.quickobj):
 
-    def __init__(self, pars=None, name=None, label=None, requires=None, **kwargs):
-        self.pars = ss.Pars(pars, **kwargs)
+    def __init__(self, pars=None, par_dists=None, name=None, label=None, requires=None, **kwargs):
+        self.pars = ss.dictmerge(pars, kwargs)
+        self.par_dists = ss.dictmerge(par_dists)
         self.name = sc.ifelse(name, getattr(self, 'name', self.__class__.__name__.lower())) # Default name is the class name
         self.label = sc.ifelse(label, getattr(self, 'label', self.name))
         self.requires = sc.mergelists(requires)

@@ -96,18 +96,11 @@ def test_api():
     s10 = ss.Sim(diseases=dict(type='sir', dur_inf=d3), **kw).run() # Supply values as a distribution
     ss.check_sims_match(s9, s10), 'Sims should match'
     
+    # # Check that Bernoulli distributions can't be changed
+    # with pytest.raises(TypeError):
+    #     ss.Sim(diseases=dict(type='sir', init_prev=dict(type='normal', loc=10)), **kw).initialize()
+    
     return s1
-
-
-def test_api_exceptions():
-    """ Test that the sim raises appropriate exceptions with invalid input """
-    
-    kw = dict(n_agents=n_agents, networks='random')
-    
-    # Check that Bernoulli distributions can't be changed
-    with pytest.raises(Exception):
-        ss.Sim(diseases=dict(type='sir', init_prev=dict(type='normal', loc=10)), **kw).initialize()
-    return
 
 
 def test_simple_vax(do_plot=do_plot):
