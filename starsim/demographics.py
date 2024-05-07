@@ -410,16 +410,17 @@ class Pregnancy(Demographics):
     def make_embryos(self, sim, conceive_uids):
         """ Add properties for the just-conceived """
         n_unborn_agents = len(conceive_uids)
+        people = sim.people
         if n_unborn_agents > 0:
 
             # Choose slots for the unborn agents
             new_slots = self.choose_slots.rvs(conceive_uids)
 
             # Grow the arrays and set properties for the unborn agents
-            new_uids = sim.people.grow(len(new_slots), new_slots)
-            sim.people.age[new_uids] = -self.pars.dur_pregnancy
-            sim.people.slot[new_uids] = new_slots  # Before sampling female_dist
-            sim.people.female[new_uids] = self.pars.sex_ratio.rvs(new_uids)
+            new_uids = people.grow(len(new_slots), new_slots)
+            people.age[new_uids] = -self.pars.dur_pregnancy
+            people.slot[new_uids] = new_slots  # Before sampling female_dist
+            people.female[new_uids] = self.pars.sex_ratio.rvs(new_uids)
 
             # Add connections to any vertical transmission layers
             # Placeholder code to be moved / refactored. The maternal network may need to be
