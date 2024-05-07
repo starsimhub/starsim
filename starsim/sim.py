@@ -110,21 +110,17 @@ class Sim(sc.prettyobj):
 
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
         for dem in self.demographics():
-            dem.update()
+            dem.step()
 
         # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
         # to be applied to newly created agents
         for disease in self.diseases():
-            disease.update()
-
-        # Update connectors -- TBC where this appears in the ordering
-        for connector in self.connectors():
-            connector.update()
+            disease.step()
 
         # Update networks - this takes place here in case autonomous state changes at this timestep
         # affect eligibility for contacts
         for network in self.networks():
-            network.update()
+            network.step()
 
         # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
         # interventions, by running them at this point

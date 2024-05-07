@@ -286,7 +286,7 @@ class Network(ss.Module):
         """ Define how pairs of people are formed """
         pass
 
-    def update(self, sim):
+    def step(self, sim):
         """ Define how pairs/connections evolve (in time) """
         pass
 
@@ -494,7 +494,7 @@ class RandomNet(DynamicNetwork):
         self.dist.jump() # Reset the RNG manually # TODO, think if there's a better way
         return source, target
 
-    def update(self, sim, dt=None):
+    def step(self, sim, dt=None):
         self.end_pairs(sim)
         self.add_pairs(sim)
         return
@@ -644,7 +644,7 @@ class MFNet(SexualNetwork):
 
         return len(p1)
 
-    def update(self, sim, dt=None):
+    def step(self, sim, dt=None):
         people = sim.people
         self.end_pairs(sim)
         self.set_network_states(people, upper_age=sim.dt)
@@ -710,7 +710,7 @@ class MSMNet(SexualNetwork):
         
         return len(p1)
 
-    def update(self, sim, dt=None):
+    def step(self, sim, dt=None):
         people = sim.people
         self.end_pairs(sim)
         self.set_network_states(people, upper_age=sim.dt)
@@ -789,7 +789,7 @@ class MaternalNet(Network):
         super().__init__(key_dict=key_dict, vertical=vertical, **kwargs)
         return
 
-    def update(self, sim, dt=None):
+    def step(self, sim, dt=None):
         if dt is None: dt = sim.dt
         # Set beta to 0 for women who complete post-partum period
         # Keep connections for now, might want to consider removing

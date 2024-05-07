@@ -18,54 +18,6 @@ class Disease(ss.Module):
     def __init__(self):
         super().__init__()
         self.results = ss.Results(self.name)
-        self.log = InfectionLog()  # See below for definition
-        return
-
-    @property
-    def _boolean_states(self):
-        """
-        Iterator over states with boolean type
-
-        For diseases, these states typically represent attributes like 'susceptible',
-        'infectious', 'diagnosed' etc. These variables are typically useful to
-        """
-        for state in self.states:
-            if state.dtype == bool:
-                yield state
-        return
-
-    def initialize(self, sim):
-        super().initialize(sim)
-        self.init_results(sim)
-        self.set_initial_states(sim)
-        return
-
-    def finalize(self, sim):
-        super().finalize(sim)
-        return
-
-    def set_initial_states(self, sim):
-        """
-        Set initial values for states
-
-        This could involve passing in a full set of initial conditions,
-        or using init_prev, or other. Note that this is different to initialization of the Arr objects
-        i.e., creating their dynamic array, linking them to a People instance. That should have already
-        taken place by the time this method is called. This method is about supplying initial values
-        for the states (e.g., seeding initial infections)
-        """
-        pass
-
-    def init_results(self, sim):
-        """
-        Initialize results
-
-        By default, diseases all report on counts for any boolean states e.g., if
-        a disease contains a boolean state 'susceptible' it will automatically contain a
-        Result for 'n_susceptible'
-        """
-        for state in self._boolean_states:
-            self.results += ss.Result(self.name, f'n_{state.name}', sim.npts, dtype=int, scale=True)
         return
 
     def update_pre(self, sim):

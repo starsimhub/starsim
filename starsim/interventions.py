@@ -11,13 +11,17 @@ __all__ = ['Plugin', 'Analyzer', 'Intervention']
 
 class Plugin(ss.Module):
     """ Base class for interventions and analyzers """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        return
+    
     def __call__(self, *args, **kwargs):
-        return self.apply(*args, **kwargs)
+        return self.step(*args, **kwargs)
     
     def initialize(self, sim):
         return super().initialize(sim)
     
-    def apply(self, sim):
+    def step(self, sim):
         pass
 
     def finalize(self, sim):
@@ -27,7 +31,7 @@ class Plugin(ss.Module):
     def from_func(cls, func):
         """ Create an intervention or analyzer from a function """
         new = cls(name=func.__name__)
-        new.apply = func
+        new.step = func
         return new
 
 
@@ -37,7 +41,7 @@ class Analyzer(Plugin):
     about a simulation than is available by default -- for example, pulling states 
     out of sim.people on a particular timestep before they get updated on the next step.
     
-    The key method of the analyzer is ``apply()``, which is called with the sim
+    The key method of the analyzer is ``step()``, which is called with the sim
     on each timestep.
     
     To retrieve a particular analyzer from a sim, use sim.get_analyzer().
@@ -49,7 +53,7 @@ class Intervention(Plugin):
     """
     Base class for interventions.
     
-    The key method of the intervention is ``apply()``, which is called with the sim
+    The key method of the intervention is ``step()``, which is called with the sim
     on each timestep.
     """
 
@@ -242,7 +246,7 @@ class BaseScreening(BaseTest):
         """
         raise NotImplementedError
 
-    def apply(self, sim, module=None):
+    def step(self, sim, module=None):
         """
         Perform screening by finding who's eligible, finding who accepts, and applying the product.
         """
@@ -267,7 +271,7 @@ class BaseTriage(BaseTest):
     def check_eligibility(self, sim):
         return sc.promotetoarray(self.eligibility(sim))
 
-    def apply(self, sim):
+    def step(self, sim):
         self.outcomes = {k: np.array([], dtype=int) for k in self.product.hierarchy}
         accept_inds = ss.uids()
         if sim.t in self.timepoints: accept_inds = self.deliver(sim)
@@ -411,7 +415,7 @@ class BaseTreatment(Intervention):
         """
         raise NotImplementedError
 
-    def apply(self, sim):
+    def step(self, sim):
         """
         Perform treatment by getting candidates, checking their eligibility, and then treating them.
         """
@@ -457,13 +461,13 @@ class treat_num(BaseTreatment):
                 treat_candidates = self.queue[:self.max_capacity]
         return ss.uids(treat_candidates) # TODO: Check
 
-    def apply(self, sim):
+    def step(self, sim):
         """
         Apply treatment. On each timestep, this method will add eligible people who are willing to accept treatment to a
         queue, and then will treat as many people in the queue as there is capacity for.
         """
         self.add_to_queue(sim)
-        treat_inds = BaseTreatment.apply(self, sim) # Apply method from BaseTreatment class
+        treat_inds = BaseTreatment.step(self, sim) # Apply method from BaseTreatment class
         self.queue = [e for e in self.queue if e not in treat_inds] # Recreate the queue, removing people who were treated
         return treat_inds
 
