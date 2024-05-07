@@ -150,7 +150,7 @@ class Deaths(Demographics):
 
         # Process metadata. Defaults here are the labels used by UN data
         self.metadata = sc.mergedicts(
-            dict(
+            sc.objdict(
                 data_cols = dict(year='Time', sex='Sex', age='AgeGrpStart', value='mx'),
                 sex_keys = dict(f='Female', m='Male'),
             ),
@@ -273,7 +273,7 @@ class Pregnancy(Demographics):
 
         # Process metadata. Defaults here are the labels used by UN data
         self.metadata = sc.mergedicts(
-            dict(data_cols=dict(year='Time', age='AgeGrp', value='ASFR')),
+            sc.objdict(data_cols=dict(year='Time', age='AgeGrp', value='ASFR')),
             metadata,
         )
         self.choose_slots = ss.randint() # Distribution for choosing slots; set in self.initialize()
@@ -286,24 +286,24 @@ class Pregnancy(Demographics):
         return
 
     @staticmethod
-    def make_fertility_prob_fn(module, sim, uids):
+    def make_fertility_prob_fn(self, sim, uids):
         """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
 
-        if sc.isnumber(module.fertility_rate_data):
-            fertility_rate = module.fertility_rate_data
+        if sc.isnumber(self.fertility_rate_data):
+            fertility_rate = self.fertility_rate_data
 
         else:
             # Abbreviate key variables
-            data_cols = sc.objdict(module.metadata.data_cols)
+            data_cols = sc.objdict(self.metadata.data_cols)
             year_label = data_cols.year
             age_label  = data_cols.age
             val_label  = data_cols.value
 
-            available_years = module.fertility_rate_data[year_label].unique()
-            year_ind = sc.findnearest(available_years, sim.year-module.pars.dur_pregnancy)
+            available_years = self.fertility_rate_data[year_label].unique()
+            year_ind = sc.findnearest(available_years, sim.year-self.pars.dur_pregnancy)
             nearest_year = available_years[year_ind]
 
-            df = module.fertility_rate_data.loc[module.fertility_rate_data[year_label] == nearest_year]
+            df = self.fertility_rate_data.loc[self.fertility_rate_data[year_label] == nearest_year]
             df_arr = df[val_label].values  # Pull out dataframe values
             df_arr = np.append(df_arr, 0)  # Add zeros for those outside data range
 
@@ -315,7 +315,7 @@ class Pregnancy(Demographics):
 
             # Adjust rates: rates are based on the entire population, but we need to remove
             # anyone already pregnant and then inflate the rates for the remainder
-            pregnant_uids = module.pregnant.uids # Find agents who are already pregnant
+            pregnant_uids = self.pregnant.uids # Find agents who are already pregnant
             pregnant_age_counts, _ = np.histogram(sim.people.age[pregnant_uids], age_bins)  # Count them by age
             age_counts, _ = np.histogram(sim.people.age[uids], age_bins)  # Count overall number per age bin
             new_denom = age_counts - pregnant_age_counts  # New denominator for rates
@@ -330,7 +330,7 @@ class Pregnancy(Demographics):
             fertility_rate[pregnant_uids] = 0
 
         # Scale from rate to probability. Consider an exponential here.
-        fertility_prob = fertility_rate * (module.pars.units * module.pars.rel_fertility * sim.pars.dt)
+        fertility_prob = fertility_rate * (self.pars.units * self.pars.rel_fertility * sim.pars.dt)
         fertility_prob = np.clip(fertility_prob, a_min=0, a_max=1)
 
         return fertility_prob
