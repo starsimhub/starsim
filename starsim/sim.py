@@ -31,7 +31,7 @@ class Sim(sc.prettyobj):
         self.label = label # Usually overwritten during initalization by the parameters
         self.created = sc.now()  # The datetime the sim was created
         self.initialized = False  # Whether initialization is complete
-        self.complete = False  # Whether a simulation has completed running # TODO: replace with finalized?
+        self.complete = False  # Whether a simulation has completed running
         self.results_ready = False  # Whether results are ready
         self.dists = ss.Dists(obj=self) # Initialize the random number generator container
         self.results = ss.Results(module='sim')  # For storing results
@@ -77,7 +77,6 @@ class Sim(sc.prettyobj):
         self.initialized = True
         self.complete = False
         self.results_ready = False
-
         return self
 
     @property
@@ -89,7 +88,6 @@ class Sim(sc.prettyobj):
             self.demographics(),
             self.networks(),
             self.diseases(),
-            self.connectors(),
             self.interventions(),
             products,
             self.analyzers(),
@@ -222,7 +220,7 @@ class Sim(sc.prettyobj):
             raise AlreadyRunError('Simulation has already been finalized')
 
         # Scale the results
-        for reskey, res in self.results.items():
+        for reskey, res in self.results.items(): # TODO: does this work for disease-specific results?
             if isinstance(res, ss.Result) and res.scale:
                 self.results[reskey] = self.results[reskey] * self.pars.pop_scale
 
@@ -322,99 +320,8 @@ class Sim(sc.prettyobj):
         else:
             return shrunken
 
-    def _get_ia(self, which, label=None, partial=False, as_list=False, as_inds=False, die=True, first=False):
-        """ Helper method for get_interventions() and get_analyzers(); see get_interventions() docstring """
-
-        # Handle inputs
-        if which not in ['interventions', 'analyzers']:  # pragma: no cover
-            errormsg = f'This method is only defined for interventions and analyzers, not "{which}"'
-            raise ValueError(errormsg)
-
-        ia_ndict = self.analyzers if which == 'analyzers' else self.interventions  # List of interventions or analyzers
-        n_ia = len(ia_ndict)  # Number of interventions/analyzers
-
-        position = 0 if first else -1  # Choose either the first or last element
-        if label is None:  # Get all interventions if no label is supplied, e.g. sim.get_interventions()
-            label = np.arange(n_ia)
-        if isinstance(label, np.ndarray):  # Allow arrays to be provided
-            label = label.tolist()
-        labels = sc.promotetolist(label)
-
-        # Calculate the matches
-        matches = []
-        match_inds = []
-
-        for label in labels:
-            if sc.isnumber(label):
-                matches.append(ia_ndict[label])
-                label = n_ia + label if label < 0 else label  # Convert to a positive number
-                match_inds.append(label)
-            elif sc.isstring(label) or isinstance(label, type):
-                for ind, ia_key, ia_obj in ia_ndict.enumitems():
-                    if sc.isstring(label) and ia_obj.label == label or (partial and (label in str(ia_obj.label))):
-                        matches.append(ia_obj)
-                        match_inds.append(ind)
-                    elif isinstance(label, type) and isinstance(ia_obj, label):
-                        matches.append(ia_obj)
-                        match_inds.append(ind)
-            else:  # pragma: no cover
-                errormsg = f'Could not interpret label type "{type(label)}": should be str, int, list, or {which} class'
-                raise TypeError(errormsg)
-
-        # Parse the output options
-        if as_inds:
-            output = match_inds
-        elif as_list:  # Used by get_interventions()
-            output = matches
-        else:
-            if len(matches) == 0:  # pragma: no cover
-                if die:
-                    errormsg = f'No {which} matching "{label}" were found'
-                    raise ValueError(errormsg)
-                else:
-                    output = None
-            else:
-                output = matches[
-                    position]  # Return either the first or last match (usually), used by get_intervention()
-
-        return output
-
-    def get_interventions(self, label=None, partial=False, as_inds=False):
-        """
-        Find the matching intervention(s) by label, index, or type. If None, return
-        all interventions. If the label provided is "summary", then print a summary
-        of the interventions (index, label, type).
-
-        Args:
-            label (str, int, Intervention, list): the label, index, or type of intervention to get; if a list, iterate over one of those types
-            partial (bool): if true, return partial matches (e.g. 'beta' will match all beta interventions)
-            as_inds (bool): if true, return matching indices instead of the actual interventions
-        """
-        return self._get_ia('interventions', label=label, partial=partial, as_inds=as_inds, as_list=True)
-
-    def get_intervention(self, label=None, partial=False, first=False, die=True):
-        """
-        Find the matching intervention(s) by label, index, or type.
-        If more than one intervention matches, return the last by default.
-        If no label is provided, return the last intervention in the list.
-
-        Args:
-            label (str, int, Intervention, list): the label, index, or type of intervention to get; if a list, iterate over one of those types
-            partial (bool): if true, return partial matches
-            first (bool): if true, return first matching intervention (otherwise, return last)
-            die (bool): whether to raise an exception if no intervention is found
-        """
-        return self._get_ia('interventions', label=label, partial=partial, first=first, die=die, as_inds=False,
-                            as_list=False)
-
     def export_df(self):
-        """
-        Export results as a Pandas dataframe
-
-        :return:
-
-        """
-
+        """ Export results as a Pandas dataframe """
         if not self.results_ready:  # pragma: no cover
             errormsg = 'Please run the sim before exporting the results'
             raise RuntimeError(errormsg)
@@ -430,7 +337,6 @@ class Sim(sc.prettyobj):
 
         resdict = flatten_results(self.results)
         resdict['t'] = self.yearvec
-
         df = sc.dataframe.from_dict(resdict).set_index('t')
         return df
 
@@ -471,13 +377,11 @@ class Sim(sc.prettyobj):
         else:
             obj = self
         sc.save(filename=filename, obj=obj)
-
         return filename
 
     @staticmethod
     def load(filename, *args, **kwargs):
         """ Load from disk from a gzipped pickle.  """
-
         sim = sc.load(filename, *args, **kwargs)
         if not isinstance(sim, Sim):  # pragma: no cover
             errormsg = f'Cannot load object of {type(sim)} as a Sim object'
@@ -547,27 +451,27 @@ class Sim(sc.prettyobj):
         keys = sc.promotetolist(keys)
 
         # Convert to JSON-compatible format
-        d = {}
+        d = sc.objdict()
         for key in keys:
             if key == 'results':
                 if self.results_ready:
-                    resdict = self.export_results(for_json=True)
-                    d['results'] = resdict
+                    resdict = self.export_results(for_json=True) # TODO: not implemented
+                    d.results = resdict
                 else:
-                    d['results'] = 'Results not available (Sim has not yet been run)'
+                    d.results = 'Results not available (Sim has not yet been run)'
             elif key in ['pars', 'parameters']:
                 pardict = self.export_pars()
-                d['parameters'] = pardict
+                d.parameters = pardict
             elif key == 'summary':
                 if self.results_ready:
-                    d['summary'] = dict(sc.dcp(self.summary))
+                    d.summary = dict(sc.dcp(self.summary))
                 else:
-                    d['summary'] = 'Summary not available (Sim has not yet been run)'
+                    d.summary = 'Summary not available (Sim has not yet been run)'
             elif key == 'short_summary':
                 if self.results_ready:
-                    d['short_summary'] = dict(sc.dcp(self.short_summary))
+                    d.short_summary = dict(sc.dcp(self.short_summary))
                 else:
-                    d['short_summary'] = 'Full summary not available (Sim has not yet been run)'
+                    d.short_summary = 'Full summary not available (Sim has not yet been run)'
             else:  # pragma: no cover
                 try:
                     d[key] = sc.sanitizejson(getattr(self, key))
@@ -582,13 +486,25 @@ class Sim(sc.prettyobj):
 
         return output
 
-    def plot(self, key=None):
+    def plot(self, key=None, **kwargs):
+        """
+        Plot the results
+        
+        Args:
+            key (str): the disease to plot (if None, plot everything)
+            kwargs (dict): passed to ``pl.subplots()``, and ultimately to ``pl.figure()``
+            
+        **Example**::
+            
+            sim = ss.Sim(diseases='sir', networks='random').run()
+            sim.plot('sir', fig_size=(12,12))
+        """
         with sc.options.with_style('fancy'):
             flat = sc.flattendict(self.results, sep=': ')
             yearvec = flat.pop('yearvec')
             if key is not None:
                 flat = {k:v for k,v in flat.items() if k.startswith(key)}
-            fig, axs = sc.getrowscols(len(flat), make=True)
+            fig, axs = sc.getrowscols(len(flat), make=True, **kwargs)
             for ax, (k, v) in zip(axs.flatten(), flat.items()):
                 ax.plot(yearvec, v)
                 ax.set_title(k)
@@ -597,12 +513,7 @@ class Sim(sc.prettyobj):
 
 
 class AlreadyRunError(RuntimeError):
-    """
-    This error is raised if a simulation is run in such a way that no timesteps
-    will be taken. This error is a distinct type so that it can be safely caught
-    and ignored if required, but it is anticipated that most of the time, calling
-    :py:func:`Sim.run` and not taking any timesteps, would be an inadvertent error.
-    """
+    """ Raised if trying to re-run an already-run sim without re-initializing """
     pass
 
 
@@ -770,11 +681,27 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
 
 
 def check_sims_match(*args, full=False):
-    """ Shortcut to using ss.diff_sims() to check if multiple sims match """
-    s1 = args[0]
+    """
+    Shortcut to using ss.diff_sims() to check if multiple sims match
+    
+    Args:
+        args (list): a list of 2 or more sims to compare
+        full (bool): if True, return whether each sim matches the first 
+    
+    **Example**::
+        
+        s1 = ss.Sim(diseases='sir', networks='random')
+        s2 = ss.Sim(pars=dict(diseases='sir', networks='random'))
+        s3 = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet())
+        assert ss.check_sims_match(s1, s2, s3)
+    """
+    if len(args) < 2:
+        errormsg = 'Must compare at least 2 sims'
+        raise ValueError(errormsg)
+    base = args[0]
     matches = []
-    for s2 in args[1:]:
-        diff = diff_sims(s1, s2, full=False, output=False, die=False)
+    for other in args[1:]:
+        diff = diff_sims(base, other, full=False, output=False, die=False)
         matches.append(not(diff)) # Return the opposite of the diff
     if full:
         return matches

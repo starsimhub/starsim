@@ -4,10 +4,10 @@ Numerical utilities
 
 import warnings
 import numpy as np
-import sciris as sc
-import starsim as ss
 import numba as nb
 import pandas as pd
+import sciris as sc
+import starsim as ss
 
 # %% Helper functions
 
@@ -92,7 +92,7 @@ class ndict(sc.objdict):
     def _check_type(self, arg):
         """ Check types """
         if self._type is not None:
-            if not isinstance(arg, self._type):
+            if not isinstance(arg, self._type) and not isinstance(arg, ss.Plugin): # Plugin is a valid argument anywhere
                 errormsg = f'The following item does not have the expected type {self._type}:\n{arg}'
                 raise TypeError(errormsg)
         return

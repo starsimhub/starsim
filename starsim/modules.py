@@ -5,7 +5,7 @@ General module class -- base class for diseases, interventions, etc.
 import sciris as sc
 import starsim as ss
 
-__all__ = ['module_map', 'find_modules', 'Module', 'Connector']
+__all__ = ['module_map', 'find_modules', 'Module']
 
 
 def module_map(key=None):
@@ -15,9 +15,7 @@ def module_map(key=None):
         demographics  = ss.Demographics,
         diseases      = ss.Disease,
         interventions = ss.Intervention,
-        products      = ss.Product,
         analyzers     = ss.Analyzer,
-        connectors    = ss.Connector,
     )
     return module_map if key is None else module_map[key]
 
@@ -213,13 +211,3 @@ class Module(sc.quickobj):
                 ax.set_title(k)
                 ax.set_xlabel('Year')
         return fig
-
-
-class Connector(Module):
-    """
-    Define a Connector, which mediates interactions between disease modules
-    
-    Because connectors can do anything, they have no specified structure: it is
-    up to the user to define how they behave.    
-    """
-    pass

@@ -185,14 +185,12 @@ class SimPars(Pars):
         self.birth_rate = None
         self.death_rate = None
 
-        # Modules: demographics, diseases, connectors, networks, analyzers, and interventions
+        # Modules: demographics, diseases, networks, analyzers, and interventions
         self.people = None
         self.networks      = ss.ndict()
         self.demographics  = ss.ndict()
         self.diseases      = ss.ndict()
-        self.connectors    = ss.ndict()
         self.interventions = ss.ndict()
-        self.products      = ss.ndict()
         self.analyzers     = ss.ndict()
 
         # Update with any supplied parameter values and generate things that need to be generated
@@ -230,7 +228,6 @@ class SimPars(Pars):
         # Initialize and convert modules
         self.convert_modules() # General initialization
         self.init_demographics() # Demographic-specific initialization
-        self.init_products() # Product-specific initialization
         
         # Convert from lists to ndicts
         for modkey,modclass in modmap.items():
@@ -348,11 +345,11 @@ class SimPars(Pars):
     
     def convert_modules(self):
         """
-        Common logic for converting plug-ins to a standard format; they are still
-        a list at this point.  Used for networks, demographics, diseases, analyzers, 
-        interventions, and connectors.
-        """
+        Common logic for converting plug-ins to a standard format
         
+        They are still a list at this point. Used for demographics, networks, 
+        diseases, interventions, analyzers, 
+        """
         modmap = ss.module_map() # List of modules and parent module classes, e.g. ss.Disease
         modules = ss.find_modules() # Each individual module class option, e.g. ss.SIR
         
@@ -408,8 +405,8 @@ class SimPars(Pars):
                             mod = expected_cls.from_func(mod)
                     
                     # Do final check
-                    if not isinstance(mod, expected_cls):
-                        errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls}, but was {type(mod)} instead'
+                    if not isinstance(mod, (expected_cls, ss.Plugin)):
+                        errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls} or Plugin, but was {type(mod)} instead'
                         raise TypeError(errormsg)
                     modlist[i] = mod
                 
