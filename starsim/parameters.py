@@ -135,6 +135,11 @@ class Pars(sc.objdict):
             raise sc.KeyNotFoundError(errormsg)
         return
     
+    def dict_update(self, *args, **kwargs):
+        """ Redefine default dict.update(), since overwritten in this class; should not usually be used """
+        super().update(*args, **kwargs)
+        return
+    
     def to_json(self, **kwargs):
         """ Convert to JSON representation """
         return sc.jsonify(self, **kwargs)

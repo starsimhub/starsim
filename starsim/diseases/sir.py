@@ -18,14 +18,15 @@ class SIR(ss.Infection):
     results.
     """
 
-    def __init__(self, pars=None, *args, **kwargs):
-        self.pars = ss.Pars(
+    def __init__(self, pars=None, **kwargs):
+        super().__init__()
+        self.default_pars(
             dur_inf = ss.lognorm_ex(6),
             init_prev = ss.bernoulli(0.01),
             p_death = ss.bernoulli(0.01),
             beta = 0.5,
         )
-        super().__init__(pars=pars, *args, **kwargs)
+        self.update_pars(pars, **kwargs)
 
         self.add_states(
             ss.BoolArr('recovered'),

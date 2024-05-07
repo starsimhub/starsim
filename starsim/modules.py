@@ -43,27 +43,48 @@ def find_modules(key=None):
 
 class Module(sc.quickobj):
 
-    def __init__(self, pars=None, name=None, label=None, requires=None, **kwargs):
-        if hasattr(self, 'pars'): # Since sometimes pars are created before super().__init__() is called
-            self.pars.update(pars=pars, **kwargs)
-        else:
-            self.pars = ss.Pars(pars, **kwargs)
-        self.name = sc.ifelse(name, getattr(self, 'name', self.__class__.__name__.lower())) # Default name is the class name
-        self.label = sc.ifelse(label, getattr(self, 'label', self.name))
-        self.requires = sc.mergelists(requires)
+    def __init__(self, name=None, label=None, requires=None):
+        self.set_metadata(name, label, requires) # Usually reset as part of self.update_pars()
+        self.pars = ss.Pars() # Usually populated via self.default_pars()
         self.results = ss.Results(self.name)
         self.initialized = False
         self.finalized = False
         return
     
-    def disp(self, output=False):
-        """ Display the full object """
-        out = sc.prepr(self)
-        if not output:
-            print(out)
-        else:
-            return out
-
+    def set_metadata(self, name, label, requires):
+        """ Set metadata for the module """
+        self.name = sc.ifelse(name, getattr(self, 'name'), self.__class__.__name__.lower()) # Default name is the class name
+        self.label = sc.ifelse(label, getattr(self, 'label'), self.name)
+        self.requires = sc.mergelists(requires)
+        return
+    
+    def default_pars(self, inherit=False, **kwargs):
+        """ Create or merge Pars objects """
+        if inherit: # Merge with existing
+            self.pars.update(**kwargs, create=True)
+        else: # Or overwrite
+            self.pars = ss.Pars(**kwargs)
+        return self.pars
+    
+    def update_pars(self, pars, **kwargs):
+        """ Pull out recognized parameters, returning the rest """
+        pars = sc.mergedicts(pars, kwargs)
+        
+        # Update module parameters
+        for key in pars.keys():
+            if key in self.pars:
+                self.pars[key] = pars.pop(key)
+                
+        # Update module attributes
+        metadata = {key:pars.pop(key, None) for key in ['name', 'label', 'requires']}
+        self.set_metadata(metadata)
+        
+        # Should be no remaining args
+        if len(pars):
+            errormsg = f'{len(pars)} unrecognized arguments for {self.name}: {sc.strjoin(pars.keys())}'
+            raise ValueError(errormsg)
+        return
+    
     def check_requires(self, sim):
         """ Check that the module's requirements (of other modules) are met """
         errs = sc.autolist()
@@ -105,6 +126,14 @@ class Module(sc.quickobj):
         sim.people.add_module(self)
         self.initialized = True
         return
+    
+    def disp(self, output=False):
+        """ Display the full object """
+        out = sc.prepr(self)
+        if not output:
+            print(out)
+        else:
+            return out
 
     def finalize(self, sim):
         self.finalize_results(sim)
@@ -179,6 +208,7 @@ class Module(sc.quickobj):
             raise KeyError(f'Module "{name}" did not match any known Starsim modules')
             
     def to_json(self):
+        """ Export to a JSON-compatible format """
         out = sc.objdict()
         out.type = self.__class__.__name__
         out.name = self.name

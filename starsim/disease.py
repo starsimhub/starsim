@@ -15,8 +15,8 @@ __all__ = ['Disease', 'Infection', 'InfectionLog']
 class Disease(ss.Module):
     """ Base module class for diseases """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.results = ss.Results(self.name)
         self.log = InfectionLog()  # See below for definition
         return
