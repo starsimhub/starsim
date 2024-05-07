@@ -7,9 +7,49 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
-Version 0.5.0 (2024-05-6)
+Version 0.5.0 (2024-05-07)
 --------------------------
-- TBC
+
+Parameter changes
+~~~~~~~~~~~~~~~~~
+- Added a ``ss.Pars`` class (and a ``ss.SimPars`` subclass) that handles parameter creation, updates, and validation.
+- Initialization has been moved from ``sim.py`` to ``parameters.py``; ``ss.Sim.convert_plugins()`` has been replaced by ``ss.SimPars.convert_modules()``.
+- The key method is ``ss.Pars.update()``, which performs all necessary validation on the parameters being updated.
+
+Module changes
+~~~~~~~~~~~~~~
+- Whereas modules previously initialized a dict of parameters and then called ``super().__init__(pars, **kwargs)``, they now call ``super().__init__()`` first, then ``self.default_pars(par1=x, par2=y)``, then finally ``self.update_pars(pars, **kwargs)``.
+- What was previously e.g. ``ss.Module(pars=dict(par=x))`` is now ``ss.Module(par=x)``.
+- ``par_dists`` has been removed; instead, distributions are specified in the default parameters, and are updated via the ``Pars`` object.
+- ``ss.module_map()`` maps different module types to their location in the sim.
+- ``ss.find_modules()`` finds all available modules (including subclasses) in Starsim.
+- Removed ``ss.dictmerge()`` and ``ss.dictmergeleft`` (now handled by ``ss.Pars.update()``).
+- Removed ``ss.get_subclasses()`` and ``ss.all_subclasses()`` (now handled by ``ss.find_modules()``).
+- Modules now contain a link back to the ``Sim`` object.
+- Added ``to_json()`` and ``plot()`` methods to ``Module``.
+- Removed ``connectors.py``; connectors still exist but as an empty subclass of ``Module``.
+
+People and network changes
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+- Time parameters (``ti``, ``dt``, etc.) have been removed from ``People``. Use ``sim.ti``, ``sim.dt`` etc. instead. One consequence of this is that ``people.request_death()`` now requires a ``sim`` argument. Another is that network methods (e.g. ``add_pairs()``) now take ``sim`` arguments instead of ``people`` arguments.
+- ``SexualNetwork`` is now a subclass of ``DynamicNetwork``.
+- Removed ``ss.Networks`` (now just an ``ss.ndict``).
+- Network connectors have been removed.
+- ``Person`` has been implemented as a slice of ``sim.people[i]``.
+- The default maximum age if none is specified is 50 instead of 100.
+- Agents do not age if no demographics modules are supplied.
+
+Other changes
+~~~~~~~~~~~~~
+- All inputs to a sim are now copied by default. To disable, use ``ss.Sim(..., copy_inputs=False)``.
+- There is a new ``Plugin`` class, which contains shared logic for Interventions and Analyzers. It has a ``from_func()``, which will generate an intervention/analyzer from a function.
+- Diseases no longer have a default value of ``beta=1`` assigned; beta must be defined explicitly if being used.
+- Individual diseases can now be plotted via either e.g. ``sim.plot('hiv')`` or ``sim.diseases.hiv.plot()``.
+- Distributions can be created from dicts via ``ss.make_dist()``.
+- A new function ``ss.check_sims_match()`` will check if the results of two or more simulations match.
+- Merged ``test_dcp.py`` and ``test_base.py`` into ``test_other.py``.
+- Renamed ``test_simple.py`` to ``test_sim.py``.
+- Renamed ``test_dists.py`` to ``test_randomness.py``.
 - *GitHub info*: PR `488 <https://github.com/starsimhub/starsim/pull/488>`_
 
 

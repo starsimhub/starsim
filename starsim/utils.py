@@ -125,25 +125,6 @@ class ndict(sc.objdict):
         return self
 
 
-# def dictmerge(*args, **kwargs):
-#     """ Merge things into an objdict, using standard order """
-#     return sc.objdict(sc.mergedicts(*args, **kwargs))
-
-
-# def dictmergeleft(*args, **kwargs):
-#     """ Merge things into an odict, using opposite order to allow defaults to be supplied second """
-#     if len(args) == 1 and len(kwargs):
-#         new = args[0]
-#         default = kwargs
-#     elif len(args) == 2 and len(kwargs) == 0:
-#         new = args[0]
-#         default = args[1]
-#     else:
-#         errormsg = 'Expecting either two arguments, or one argument and kwargs; for any other arrangement, use ss.dictmerge()'
-#         raise ValueError(errormsg)
-#     return sc.objdict(sc.mergedicts(default, new))
-
-
 def warn(msg, category=None, verbose=None, die=None):
     """ Helper function to handle warnings -- shortcut to warnings.warn """
 
@@ -203,16 +184,6 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
             pairing_partners.add(p1[i])
     return pairing_partners
 
-
-# def get_subclasses(cls):
-#     for subclass in cls.__subclasses__():
-#         yield from get_subclasses(subclass)
-#         yield subclass
-
-# def all_subclasses(cls):
-#     """ As above but also returns subsubclases """
-#     return set(cls.__subclasses__()).union(
-#         [s for c in cls.__subclasses__() for s in all_subclasses(c)])
 
 # %% Seed methods
 
