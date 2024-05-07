@@ -18,21 +18,15 @@ class SIR(ss.Infection):
     results.
     """
 
-    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
-        pars = ss.dictmergeleft(pars,
-            dur_inf = 6,
-            init_prev = 0.01,
-            p_death = 0.01,
+    def __init__(self, pars=None, *args, **kwargs):
+        self.pars = ss.Pars(
+            dur_inf = ss.lognorm_ex(6),
+            init_prev = ss.bernoulli(0.01),
+            p_death = ss.bernoulli(0.01),
             beta = 0.5,
         )
 
-        par_dists = ss.dictmergeleft(par_dists,
-            dur_inf   = ss.lognorm_ex,
-            init_prev = ss.bernoulli,
-            p_death   = ss.bernoulli,
-        )
-
-        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+        super().__init__(pars=pars, *args, **kwargs)
 
         self.add_states(
             ss.BoolArr('recovered'),
@@ -98,26 +92,21 @@ class SIS(ss.Infection):
     infected/infectious, and back to susceptible based on waning immunity. There
     is no death in this case.
     """
-    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
-        pars = ss.dictmergeleft(pars,
-            dur_inf = 10,
-            init_prev = 0.01,
+    def __init__(self, pars=None, *args, **kwargs):
+        self.pars = ss.Pars(
+            dur_inf = ss.lognorm_ex(10),
+            init_prev = ss.bernoulli(0.01),
             beta = 0.05,
             waning = 0.05,
             imm_boost = 1.0,
         )
+        super().__init__(pars=pars, *args, **kwargs)
 
-        par_dists = ss.dictmergeleft(par_dists,
-            dur_inf   = ss.lognorm_ex,
-            init_prev = ss.bernoulli,
-        )
-        
         self.add_states(
             ss.FloatArr('ti_recovered'),
             ss.FloatArr('immunity', default=0.0),
         )
-
-        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+        
         return
 
     def update_pre(self, sim):
@@ -178,13 +167,9 @@ class sir_vaccine(ss.Vx):
     """
     Create a vaccine product that changes susceptible people to recovered (i.e., perfect immunity)
     """
-    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
-        pars = ss.dictmerge({
-            'efficacy': 0.9,
-        }, pars)
-
+    def __init__(self, pars=None, *args, **kwargs):
+        self.pars = ss.Pars(efficacy=0.9)
         super().__init__(pars=pars, *args, **kwargs)
-
         return
 
     def administer(self, people, uids):

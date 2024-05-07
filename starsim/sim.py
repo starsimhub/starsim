@@ -583,9 +583,10 @@ class Sim(sc.prettyobj):
     def plot(self):
         with sc.options.with_style('fancy'):
             flat = sc.flattendict(self.results, sep=': ')
+            yearvec = flat.pop('yearvec')
             fig, axs = sc.getrowscols(len(flat), make=True)
             for ax, (k, v) in zip(axs.flatten(), flat.items()):
-                ax.plot(self.yearvec, v)
+                ax.plot(yearvec, v)
                 ax.set_title(k)
                 ax.set_xlabel('Year')
         return fig
