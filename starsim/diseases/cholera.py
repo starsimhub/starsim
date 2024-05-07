@@ -18,6 +18,10 @@ class Cholera(ss.Infection):
         """ Initialize with parameters """
         super().__init__()
         self.default_pars(
+            # Initial conditions and beta
+            beta = 1.0, # Placeholder value
+            init_prev = ss.bernoulli(0.005),
+            
             # Natural history parameters, all specified in days
             dur_exp2inf   = ss.lognorm_ex(mean=2.772, stdev=4.737),  # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
             dur_asymp2rec = ss.uniform(low=1, high=10),    # From WHO cholera fact sheet, asymptomatic individuals shed bacteria for 1-10 days (https://www.who.int/news-room/fact-sheets/detail/cholera)
@@ -26,10 +30,6 @@ class Cholera(ss.Infection):
             p_death       = ss.bernoulli(0.005),   # Probability of death is typically less than 1% when treated
             p_symp        = ss.bernoulli(0.5),   # Proportion of infected which are symptomatic, mid range of ~25% and 57% estimates from Jaclson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3795095/) and Nelson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/), respectively
             asymp_trans   = 0.01,    # Reduction in transmission probability for asymptomatic infection, asymptomatic carriers shed 100-1000 times less bacteria than symptomatic carriers (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3084143/ and https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/). Previous models assume a 10% relative transmissibility (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4238032/)
-
-            # Initial conditions and beta
-            init_prev = ss.bernoulli(0.005),
-            beta = None,
 
             # Environmental parameters
             beta_env = 0.5 / 3,  # Scaling factor for transmission from environment,

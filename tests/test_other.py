@@ -99,7 +99,7 @@ def test_ppl_construction():
         'debut': ss.normal(loc=init_debut, scale=2),  # Age of debut can vary by using callable parameter values
     }
     sim_pars = {'networks': [ss.MFNet(mf_pars)], 'n_agents': small}
-    gon_pars = {'beta': {'mf': [0.08, 0.04]}, 'p_death': 0.2}
+    gon_pars = {'beta': {'mf': [0.08, 0.04]}}
     gon = ss.Gonorrhea(pars=gon_pars)
 
     sim = ss.Sim(pars=sim_pars, diseases=[gon])

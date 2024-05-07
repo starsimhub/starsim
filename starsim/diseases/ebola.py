@@ -17,6 +17,12 @@ class Ebola(SIR):
         """ Initialize with parameters """
         super().__init__()
         self.default_pars(
+            # Initial conditions and beta
+            init_prev       = ss.bernoulli(0.005),
+            beta            = 1.0, # Placeholder value
+            sev_factor      = 2.2,
+            unburied_factor = 2.1,
+            
             # Natural history parameters, all specified in days
             dur_exp2symp    = ss.lognorm_ex(12.7), # Add source
             dur_symp2sev    = ss.lognorm_ex(6), # Add source
@@ -27,12 +33,6 @@ class Ebola(SIR):
             p_sev           = ss.bernoulli(0.7), # Add source
             p_death         = ss.bernoulli(0.55), # Add source
             p_safe_bury     = ss.bernoulli(0.25), # Probability of a safe burial - should be linked to diagnoses
-
-            # Initial conditions and beta
-            init_prev       = ss.bernoulli(0.005),
-            beta            = None,
-            sev_factor      = 2.2,
-            unburied_factor = 2.1,
         )
         self.update_pars(pars=pars, **kwargs)
         

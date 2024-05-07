@@ -36,37 +36,12 @@ class Disease(ss.Module):
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.validate_pars(sim)
         self.init_results(sim)
         self.set_initial_states(sim)
         return
 
     def finalize(self, sim):
         super().finalize(sim)
-        return
-
-    def validate_pars(self, sim):
-        """
-        Perform any parameter validation
-        """
-        if sim.networks is not None and len(sim.networks) > 0:
-
-            # If there's no beta, make a default one
-            if 'beta' not in self.pars or self.pars.beta is None:
-                self.pars.beta = sc.objdict({k: [1, 1] for k in sim.networks})
-                msg = f'Beta not supplied for disease "{self.name}"; defaulting to 1'
-                ss.warn(msg)
-
-            # If beta is a scalar, apply this bi-directionally to all networks
-            if sc.isnumber(self.pars.beta):
-                orig_beta = self.pars.beta
-                self.pars.beta = sc.objdict({k: [orig_beta] * 2 for k in sim.networks})
-
-            # If beta is a dict, check all entries are bi-directional
-            elif isinstance(self.pars.beta, dict):
-                for k, v in self.pars.beta.items():
-                    if sc.isnumber(v):
-                        self.pars.beta[k] = [v, v]
         return
 
     def set_initial_states(self, sim):
@@ -190,6 +165,33 @@ class Infection(Disease):
         # Define random number generators for make_new_cases
         self.rng_target = ss.random(name='target')
         self.rng_source = ss.random(name='source')
+        return
+    
+    def initialize(self, sim):
+        super().initialize(sim)
+        self.validate_beta(sim)
+        return
+    
+    def validate_beta(self, sim):
+        """
+        Perform any parameter validation
+        """
+        if sim.networks is not None and len(sim.networks) > 0:
+            
+            if 'beta' not in self.pars:
+                errormsg = f'Disease {self.name} is missing beta; pars are: {sc.strjoin(self.pars.keys())}'
+                raise sc.KeyNotFoundError(errormsg)
+
+            # If beta is a scalar, apply this bi-directionally to all networks
+            if sc.isnumber(self.pars.beta):
+                β = self.pars.beta
+                self.pars.beta = sc.objdict({k:[β,β] for k in sim.networks})
+
+            # If beta is a dict, check all entries are bi-directional
+            elif isinstance(self.pars.beta, dict):
+                for k,β in self.pars.beta.items():
+                    if sc.isnumber(β):
+                        self.pars.beta[k] = [β,β]
         return
 
     @property

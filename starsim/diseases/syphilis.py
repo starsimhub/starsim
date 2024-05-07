@@ -16,6 +16,10 @@ class Syphilis(ss.Infection):
         # Parameters
         super().__init__()
         self.default_pars(
+            # Initial conditions
+            beta = 1.0, # Placeholder
+            init_prev = ss.bernoulli(p=0.03),
+            
             # Adult syphilis natural history, all specified in years
             dur_exposed = ss.lognorm_ex(mean=1 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_primary = ss.lognorm_ex(mean=1.5 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
@@ -47,9 +51,6 @@ class Syphilis(ss.Infection):
                 latent = ss.choice(a=5, p=np.array([0.050, 0.075, 0.10, 0.05, 0.725])), # Probabilities of latent
             ),
             birth_outcome_keys = ['miscarriage', 'nnd', 'stillborn', 'congenital'],
-
-            # Initial conditions
-            init_prev = ss.bernoulli(p=0.03),
         )
         self.update_pars(pars, **kwargs)
 

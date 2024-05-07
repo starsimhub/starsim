@@ -16,14 +16,14 @@ class Measles(SIR):
         """ Initialize with parameters """
         super().__init__()
         self.default_pars(
+            # Initial conditions and beta
+            beta = 1.0, # Placeholder value
+            init_prev = ss.bernoulli(0.005),
+            
             # Natural history parameters, all specified in days
             dur_exp = ss.normal(8),        # (days) - source: US CDC
             dur_inf = ss.normal(11),       # (days) - source: US CDC
             p_death = ss.bernoulli(0.005), # Probability of death
-
-            # Initial conditions and beta
-            init_prev = ss.bernoulli(0.005),
-            beta = None,
         )
         self.update_pars(pars=pars, **kwargs)
 
