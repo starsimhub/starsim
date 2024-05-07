@@ -53,8 +53,8 @@ class Module(sc.quickobj):
     
     def set_metadata(self, name, label, requires):
         """ Set metadata for the module """
-        self.name = sc.ifelse(name, getattr(self, 'name'), self.__class__.__name__.lower()) # Default name is the class name
-        self.label = sc.ifelse(label, getattr(self, 'label'), self.name)
+        self.name = sc.ifelse(name, getattr(self, 'name', self.__class__.__name__.lower())) # Default name is the class name
+        self.label = sc.ifelse(label, getattr(self, 'label', self.name))
         self.requires = sc.mergelists(requires)
         return
     
@@ -77,7 +77,7 @@ class Module(sc.quickobj):
                 
         # Update module attributes
         metadata = {key:pars.pop(key, None) for key in ['name', 'label', 'requires']}
-        self.set_metadata(metadata)
+        self.set_metadata(**metadata)
         
         # Should be no remaining args
         if len(pars):
@@ -217,7 +217,7 @@ class Module(sc.quickobj):
         return out
 
 
-class Connector(ss.Module):
+class Connector(Module):
     """
     Define a Connector, which mediates interactions between disease modules
     

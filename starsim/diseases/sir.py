@@ -17,7 +17,6 @@ class SIR(ss.Infection):
     infected/infectious, and recovered. It also includes deaths, and basic
     results.
     """
-
     def __init__(self, pars=None, **kwargs):
         super().__init__()
         self.default_pars(

@@ -442,15 +442,13 @@ class RandomNet(DynamicNetwork):
 
     def __init__(self, pars=None, key_dict=None, **kwargs):
         """ Initialize """
-        self.pars = ss.Pars(
+        super().__init__(key_dict=key_dict)
+        self.default_pars(
             n_contacts = ss.delta(10),
             dur = 0,
         )
-        
-        # Finish initialization
-        super().__init__(pars=pars, key_dict=key_dict, **kwargs)
+        self.update_pars(pars, **kwargs)
         self.dist = ss.Dist(distname='RandomNet') # Default RNG
-
         return
 
     def initialize(self, sim):
