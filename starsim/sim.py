@@ -25,22 +25,15 @@ class Sim(sc.prettyobj):
         args = dict(label=label, people=people, demographics=demographics, diseases=diseases, networks=networks, 
                     interventions=interventions, analyzers=analyzers, connectors=connectors)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
-        pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs)
-        self.pars.update(pars)  # Update the parameters
+        self.orig_pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs)
+        self.pars.update(self.orig_pars)  # Update the parameters
         
-        # Set attributes
+        # Set attributes; see also sim.initialize() for more
         self.label = label # Usually overwritten during initalization by the parameters
         self.created = sc.now()  # The datetime the sim was created
         self.version = ss.__version__ # The Starsim version
         self.gitinfo = sc.gitinfo(path=__file__, verbose=False)
         self.initialized = False  # Whether initialization is complete
-        self.complete = False  # Whether a simulation has completed running
-        self.results_ready = False  # Whether results are ready
-        self.dists = ss.Dists(obj=self) # Initialize the random number generator container
-        self.results = ss.Results(module='sim')  # For storing results
-        self.elapsed = None # The time required to run
-        self.summary = None  # For storing a summary of the results
-        self.filename = None # Store the filename, if saved
         return
     
     def __getitem__(self, key):
@@ -54,6 +47,9 @@ class Sim(sc.prettyobj):
     def initialize(self, reset=False, **kwargs):
         """ Perform all initializations for the sim; most heavy lifting is done by the parameters """
         # Validation and initialization
+        if reset:
+            self.pars = ss.make_pars() # Start with default pars
+            self.pars.update(self.orig_pars) # Reset pars
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         p = self.pars.initialize(sim=self, reset=reset, **kwargs) # Initialize the parameters, including people and modules
         
@@ -69,18 +65,23 @@ class Sim(sc.prettyobj):
             for mod in modlist.values():
                 mod.initialize(self)
                 
-        # Initialize products # TODO: think about simplifying
+        # Initialize products # TODO: think about moving with other modules
         for intv in self.interventions:
             if intv.product:
                 intv.product.initialize(self)
         
         # Initialize all distributions now that everything else is in place
-        self.dists.initialize(obj=self, base_seed=p.rand_seed, force=True)
+        self.dists = ss.Dists(obj=self) # Initialize the random number generator container
+        self.dists.initialize(base_seed=p.rand_seed, force=True) # TODO: check if force=False works
 
         # Final steps
         self.initialized = True
-        self.complete = False
-        self.results_ready = False
+        self.complete = False  # Whether a simulation has completed running
+        self.results_ready = False  # Whether results are ready
+        self.results = ss.Results(module='sim')  # For storing results
+        self.elapsed = None # The time required to run
+        self.summary = None  # For storing a summary of the results
+        self.filename = None # Store the filename, if saved
         return self
 
     @property
@@ -127,7 +128,7 @@ class Sim(sc.prettyobj):
         # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
         # interventions, by running them at this point
         for intervention in self.interventions():
-            intervention()
+            intervention(self) # Interventions and analyzers get the sim as an argument in case they're functions
 
         # Carry out transmission/new cases
         for disease in self.diseases():
@@ -135,7 +136,7 @@ class Sim(sc.prettyobj):
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
-        uids = self.people.resolve_deaths()
+        uids = self.people.check_deaths()
         for disease in self.diseases():
             disease.die(uids)
 
@@ -144,7 +145,7 @@ class Sim(sc.prettyobj):
             disease.update_results()
 
         for analyzer in self.analyzers():
-            analyzer()
+            analyzer(self)
             
         # Clean up dead agents
         self.people.finish_step()
@@ -162,14 +163,11 @@ class Sim(sc.prettyobj):
         T = sc.timer()
         if not self.initialized:
             self.initialize()
-            self._orig_pars = sc.dcp(self.pars)  # Create a copy of the parameters to restore after the run
-
-        if verbose is None:
-            verbose = self.pars.verbose
+        verbose = sc.ifelse(verbose, self.pars.verbose)
 
         # Check for AlreadyRun errors
         errormsg = None
-        if until is None: until = self.npts
+        until = sc.ifelse(until, self.npts)
         if until > self.npts:
             errormsg = f'Requested to run until t={until} but the simulation end is ti={self.npts}'
         if self.ti >= until:  # NB. At the start, self.t is None so this check must occur after initialization
@@ -181,12 +179,8 @@ class Sim(sc.prettyobj):
 
         # Main simulation loop
         while self.ti < until:
-
-            # Check if we were asked to stop
             elapsed = T.toc(output=True)
-
-            # Print progress
-            if verbose:
+            if verbose: # Print progress
                 simlabel = f'"{self.label}": ' if self.label else ''
                 string = f'  Running {simlabel}{self.yearvec[self.ti]:0.1f} ({self.ti:2.0f}/{self.npts}) ({elapsed:0.2f} s) '
                 if verbose >= 2:
@@ -195,20 +189,19 @@ class Sim(sc.prettyobj):
                     if not (self.ti % int(1.0 / verbose)):
                         sc.progressbar(self.ti + 1, self.npts, label=string, length=20, newline=True)
 
-            # Actually run the model
+            # Actually run the model -- lots happens on the next line!
             self.step()
 
         # If simulation reached the end, finalize the results
         if self.complete:
+            self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
             self.elapsed = elapsed
-            self.finalize(verbose=verbose)
+            self.finalize()
             sc.printv(f'Run finished after {elapsed:0.2f} s.\n', 1, verbose)
+        return self # Allows e.g. ss.Sim().run().plot()
 
-        return self
-
-    def finalize(self, verbose=None):
+    def finalize(self):
         """ Compute final results """
-
         if self.results_ready:
             # Because the results are rescaled in-place, finalizing the sim cannot be run more than once or
             # otherwise the scale factor will be applied multiple times
@@ -218,25 +211,24 @@ class Sim(sc.prettyobj):
         for reskey, res in self.results.items(): # TODO: does this work for disease-specific results?
             if isinstance(res, ss.Result) and res.scale:
                 self.results[reskey] = self.results[reskey] * self.pars.pop_scale
+        self.results_ready = True # Results are ready to use
 
+        # Finalize each module
         for module in self.modules:
             module.finalize(self)
 
-        self.summarize()
-        self.results_ready = True  # Set this first so self.summary() knows to print the results
-        self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
+        # Generate the summary and finish up
+        self.summarize() # Create summary
         return
 
     def summarize(self, how='default'):
         """
-        Provide a quick summary of the sim
+        Provide a quick summary of the sim; returns the last entry for count and 
+        cumulative results, and the mean otherwise.
         
         Args:
             how (str): how to summarize: can be 'mean', 'median', 'last', or a mapping of result keys to those
-        
-        Returns the last entry for count and cumulative results, and the mean otherwise
         """
-        
         def get_func(key, how, default='mean'):
             """
             Find the right function by matching the "how" key with the result key
@@ -279,6 +271,7 @@ class Sim(sc.prettyobj):
         return summary
     
     def disp(self):
+        """ Display the summary of the simulation """
         print(self.summary)
         return
     
@@ -296,9 +289,9 @@ class Sim(sc.prettyobj):
         Returns:
             shrunken (Sim): a Sim object with the listed attributes removed
         """
-        # By default, skip people (~90% of memory), popdict, and _orig_pars (which is just a backup)
+        # By default, skip people
         if skip_attrs is None:
-            skip_attrs = ['people']
+            skip_attrs = ['people'] # TODO: think about skipping all states in all modules
 
         # Create the new object, and copy original dict, skipping the skipped attributes
         if in_place:
@@ -376,7 +369,7 @@ class Sim(sc.prettyobj):
 
     @staticmethod
     def load(filename, *args, **kwargs):
-        """ Load from disk from a gzipped pickle.  """
+        """ Load from disk from a gzipped pickle """
         sim = sc.load(filename, *args, **kwargs)
         if not isinstance(sim, Sim):  # pragma: no cover
             errormsg = f'Cannot load object of {type(sim)} as a Sim object'
@@ -619,33 +612,25 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
                 abs_ratio = max(this_ratio, 1.0 / this_ratio)
 
                 # Set the character to use
-                if abs_ratio < small_change:
-                    change_char = '≈'
-                elif new > old:
-                    change_char = '↑'
-                elif new < old:
-                    change_char = '↓'
-                elif new == old:
-                    change_char = '='
+                approx_eq = abs_ratio < small_change
+                if approx_eq:    change_char = '≈'
+                elif new > old:  change_char = '↑'
+                elif new < old:  change_char = '↓'
+                elif new == old: change_char = '='
                 else:
                     errormsg = f'Could not determine relationship between sim1={old} and sim2={new}'
                     raise ValueError(errormsg)
 
                 # Set how many repeats it should have
                 repeats = 1
-                if abs_ratio == 0:
-                    repeats = 0
-                if abs_ratio >= 1.1:
-                    repeats = 2
-                if abs_ratio >= 2:
-                    repeats = 3
-                if abs_ratio >= 10:
-                    repeats = 4
-
+                if abs_ratio == 0:   repeats = 0
+                if abs_ratio >= 1.1: repeats = 2
+                if abs_ratio >= 2:   repeats = 3
+                if abs_ratio >= 10:  repeats = 4
                 this_change = change_char * repeats
             else:  # pragma: no cover
-                this_diff = np.nan
-                this_ratio = np.nan
+                this_diff =  np.nan
+                this_ratio  = np.nan
                 this_change = 'N/A'
 
             diff.append(this_diff)

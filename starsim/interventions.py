@@ -24,8 +24,8 @@ class Plugin(ss.Module):
     def step(self, sim):
         pass
 
-    def finalize(self, sim):
-        return super().finalize(sim)
+    def finalize(self):
+        return super().finalize()
     
     @classmethod
     def from_func(cls, func):
