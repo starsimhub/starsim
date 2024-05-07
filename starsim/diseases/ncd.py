@@ -18,13 +18,13 @@ class NCD(ss.Disease):
     mortality.
     """
     def __init__(self, pars=None, **kwargs):
-        self.pars = ss.Pars(
+        super().__init__()
+        self.default_pars(
             initial_risk = ss.bernoulli(p=0.3), # Initial prevalence of risk factors
-            #'affection_rate': ss.rate(p=0.1), # Instantaneous rate of acquisition applied to those at risk (units are acquisitions / year)
             dur_risk = ss.expon(scale=10),
             prognosis = ss.weibull(c=2, scale=5), # Time in years between first becoming affected and death
         )
-        super().__init__(pars, **kwargs)
+        self.update_pars(pars=pars, **kwargs)
         
         self.add_states(
             ss.BoolArr('at_risk'),

@@ -60,10 +60,10 @@ class Network(ss.Module):
         network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
     """
 
-    def __init__(self, pars=None, key_dict=None, vertical=False, *args, **kwargs):
-
+    def __init__(self, pars=None, key_dict=None, vertical=False, **kwargs):
         # Initialize as a module
-        super().__init__(pars, *args, **kwargs)
+        super().__init__()
+        self.update_pars(pars, **kwargs)
 
         # Each relationship is characterized by these default set of keys, plus any user- or network-supplied ones
         default_keys = sc.objdict(
@@ -385,10 +385,9 @@ class StaticNet(Network):
     """
 
     def __init__(self, graph=None, pars=None, **kwargs):
-        self.pars = ss.Pars(
-            seed = True,
-        )
-        super().__init__(pars, **kwargs)
+        super().__init__()
+        self.default_pars(seed=True)
+        self.update_pars(pars, **kwargs)
         self.graph = graph
         self.dist = ss.Dist(name='StaticNet').initialize()
         return
@@ -568,16 +567,18 @@ class MFNet(SexualNetwork):
     relationship durations.
     """
     def __init__(self, pars=None, key_dict=None, **kwargs):
-        self.pars = ss.Pars(
+        super().__init__(key_dict=key_dict)
+        self.default_pars(
             duration = ss.lognorm_ex(15),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             participation = ss.bernoulli(0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             debut = ss.normal(16),  # Age of debut can vary by using callable parameter values
             acts = ss.poisson(80),
             rel_part_rates = 1.0,
         )
+        self.update_pars(pars=pars, **kwargs)
 
         # Finish initialization
-        super().__init__(pars=pars, key_dict=key_dict, **kwargs)
+        
         self.dist = ss.choice(name='MFNet', replace=False) # Set the array later
         return
 
@@ -658,15 +659,14 @@ class MSMNet(SexualNetwork):
     """
 
     def __init__(self, pars=None, key_dict=None, **kwargs):
-        self.pars = ss.Pars(
-            duration_dist = ss.lognorm_ex(mean=15, stdev=15),
-            participation_dist = ss.bernoulli(p=0.1),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
-            debut_dist = ss.normal(loc=16, scale=2),
+        super().__init__(key_dict=key_dict)
+        self.default_pars(
+            duration = ss.lognorm_ex(mean=15, stdev=15),
+            debut = ss.normal(loc=16, scale=2),
             acts = ss.lognorm_ex(mean=80, stdev=20),
-            rel_part_rates = 1.0,
+            participation = ss.bernoulli(0.1),
         )
-        super().__init__(pars=pars, key_dict=key_dict)
-        self.dist = ss.bernoulli(name='MSMNet')
+        self.update_pars(pars, **kwargs)
         return
 
     def initialize(self, sim):
@@ -685,12 +685,10 @@ class MSMNet(SexualNetwork):
 
         # Participation
         self.participant[people.female] = False
-        pr = self.pars.rel_part_rates
-        self.dist.set(p=pr)
-        self.participant[uids] = self.dist.rvs(uids) # Should be CRN safe?
+        self.participant[uids] = self.participation.rvs(uids) # Should be CRN safe?
 
         # Debut
-        self.debut[uids] = self.pars.debut_dist.rvs(len(uids)) # Just pass len(uids) as this network is not crn safe anyway
+        self.debut[uids] = self.pars.debut.rvs(len(uids)) # Just pass len(uids) as this network is not crn safe anyway
         return
 
     def add_pairs(self, sim, ti=None):

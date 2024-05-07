@@ -31,14 +31,13 @@ class Demographics(ss.Module):
 
 class Births(Demographics):
     def __init__(self, pars=None, metadata=None, **kwargs):
-        super().__init__(pars, **kwargs)
-
-        # Set defaults
-        self.pars = ss.Pars(
+        super().__init__()
+        self.default_pars(
             birth_rate = 0,
             rel_birth = 1,
             units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
         )
+        self.update_pars(pars, **kwargs)
 
         # Process metadata. Defaults here are the labels used by UN data
         self.metadata = sc.mergedicts(
@@ -141,13 +140,13 @@ class Deaths(Demographics):
                 "data_cols" is is a dictionary mapping standard keys, like "year" to the
                 corresponding column name in data. Similar for "sex_keys". Finally,
         """
-        super().__init__(pars, **kwargs)
-
-        self.pars = ss.Pars(
+        super().__init__()
+        self.default_pars(
             rel_death = 1,
             death_rate = 20,  # Default = a fixed rate of 2%/year, overwritten if data provided
             units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
+        self.update_pars(pars, **kwargs)
 
         # Process metadata. Defaults here are the labels used by UN data
         self.metadata = sc.mergedicts(
@@ -160,33 +159,37 @@ class Deaths(Demographics):
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
-        self.death_rate_data = self.standardize_death_data()
+        self.death_rate_data = self.standardize_death_data() # TODO: refactor
         self.pars.death_rate = ss.bernoulli(p=self.make_death_prob_fn)
-
         return
+    
+    def standardize_death_data(self):
+        """ Standardize/validate death rates - handled in an external file due to shared functionality """
+        death_rate = ss.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
+        return death_rate
 
-    @staticmethod
-    def make_death_prob_fn(module, sim, uids):
+    @staticmethod # Needs to be static since called externally, although it sure looks like a class method!
+    def make_death_prob_fn(self, sim, uids):
         """ Take in the module, sim, and uids, and return the probability of death for each UID on this timestep """
 
-        drd = module.death_rate_data
+        drd = self.death_rate_data
         if sc.isnumber(drd) or isinstance(drd, ss.Dist):
             death_rate = drd
 
         else:
             ppl = sim.people
-            data_cols = sc.objdict(module.metadata.data_cols)
+            data_cols = sc.objdict(self.metadata.data_cols)
             year_label = data_cols.year
             age_label  = data_cols.age
             sex_label  = data_cols.sex
             val_label  = data_cols.value
-            sex_keys = module.metadata.sex_keys
+            sex_keys = self.metadata.sex_keys
 
-            available_years = module.death_rate_data[year_label].unique()
+            available_years = self.death_rate_data[year_label].unique()
             year_ind = sc.findnearest(available_years, sim.year)
             nearest_year = available_years[year_ind]
 
-            df = module.death_rate_data.loc[module.death_rate_data[year_label] == nearest_year]
+            df = self.death_rate_data.loc[self.death_rate_data[year_label] == nearest_year]
             age_bins = df[age_label].unique()
 
             f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
@@ -206,15 +209,10 @@ class Deaths(Demographics):
             death_rate = death_rate_df.values
 
         # Scale from rate to probability. Consider an exponential here.
-        death_prob = death_rate * (module.pars.units * module.pars.rel_death * sim.pars.dt)
+        death_prob = death_rate * (self.pars.units * self.pars.rel_death * sim.pars.dt)
         death_prob = np.clip(death_prob, a_min=0, a_max=1)
 
         return death_prob
-
-    def standardize_death_data(self):
-        """ Standardize/validate death rates - handled in an external file due to shared functionality """
-        death_rate = ss.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
-        return death_rate
 
     def init_results(self, sim):
         self.results += [
@@ -249,8 +247,18 @@ class Deaths(Demographics):
 class Pregnancy(Demographics):
 
     def __init__(self, pars=None, metadata=None, **kwargs):
+        super().__init__()
+        self.default_pars(
+            dur_pregnancy = 0.75,
+            dur_postpartum = 0.5,
+            fertility_rate = 0, # See make_fertility_prob_function
+            rel_fertility = 1,
+            maternal_death_rate = ss.bernoulli(0),
+            sex_ratio = ss.bernoulli(0.5), # Ratio of babies born female
+            units = 1e-3, # Assumes fertility rates are per 1000. If using percentages, switch this to 1
+        )
+        self.update_pars(pars, **kwargs)
         
-
         # Other, e.g. postpartum, on contraception...
         self.add_states(
             ss.BoolArr('infertile'),  # Applies to girls and women outside the fertility window
@@ -263,25 +271,12 @@ class Pregnancy(Demographics):
             ss.FloatArr('ti_dead'),  # Maternal mortality
         )
 
-        self.pars = ss.Pars(
-            dur_pregnancy = 0.75,
-            dur_postpartum = 0.5,
-            fertility_rate = 0, # See make_fertility_prob_function
-            rel_fertility = 1,
-            maternal_death_rate = ss.bernoulli(0),
-            sex_ratio = ss.bernoulli(0.5),       # Ratio of babies born female
-            units = 1e-3,          # Assumes fertility rates are per 1000. If using percentages, switch this to 1
-        )
-        
-        super().__init__(pars, **kwargs)
-
         # Process metadata. Defaults here are the labels used by UN data
         self.metadata = sc.mergedicts(
             dict(data_cols=dict(year='Time', age='AgeGrp', value='ASFR')),
             metadata,
         )
-
-        self.choose_slots = ss.randint() # Low and high will be reset upon initialization
+        self.choose_slots = None # Distribution for choosing slots; set in self.initialize()
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
@@ -349,7 +344,7 @@ class Pregnancy(Demographics):
         super().initialize(sim)
         low = sim.pars.n_agents + 1
         high = int(sim.pars.slot_scale*sim.pars.n_agents)
-        self.choose_slots.set(low=low, high=high)
+        self.choose_slots = ss.randint(low=low, high=high)
         return
 
     def init_results(self, sim):

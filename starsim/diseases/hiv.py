@@ -12,8 +12,8 @@ __all__ = ['HIV', 'ART', 'CD4_analyzer']
 class HIV(ss.Infection):
 
     def __init__(self, pars=None, *args, **kwargs):
-        
-        self.pars = ss.Pars(
+        super().__init__()
+        self.default_pars(
             cd4_min = 100,
             cd4_max = 500,
             cd4_rate = 5,
@@ -22,7 +22,7 @@ class HIV(ss.Infection):
             init_prev = ss.bernoulli(0.05),
             death_prob = 0.05,
         )
-        super().__init__(pars=pars, *args, **kwargs)
+        self.update_pars(pars=pars, **kwargs)
 
         # States
         self.add_states(

@@ -14,8 +14,8 @@ class Measles(SIR):
 
     def __init__(self, pars=None, *args, **kwargs):
         """ Initialize with parameters """
-
-        pars = ss.Pars(
+        super().__init__()
+        self.default_pars(
             # Natural history parameters, all specified in days
             dur_exp = ss.normal(8),        # (days) - source: US CDC
             dur_inf = ss.normal(11),       # (days) - source: US CDC
@@ -25,7 +25,7 @@ class Measles(SIR):
             init_prev = ss.bernoulli(0.005),
             beta = None,
         )
-        super().__init__(pars=pars, *args, **kwargs)
+        self.update_pars(pars=pars, **kwargs)
 
         # SIR are added automatically, here we add E
         self.add_states(

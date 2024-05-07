@@ -16,7 +16,8 @@ class Cholera(ss.Infection):
     """
     def __init__(self, pars=None, *args, **kwargs):
         """ Initialize with parameters """
-        self.pars = ss.Pars(
+        super().__init__()
+        self.default_pars(
             # Natural history parameters, all specified in days
             dur_exp2inf   = ss.lognorm_ex(mean=2.772, stdev=4.737),  # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
             dur_asymp2rec = ss.uniform(low=1, high=10),    # From WHO cholera fact sheet, asymptomatic individuals shed bacteria for 1-10 days (https://www.who.int/news-room/fact-sheets/detail/cholera)
@@ -37,10 +38,9 @@ class Cholera(ss.Infection):
             decay_rate = 0.033,    # Rate at which bacteria in the environment dies (per day), from Chao et al. and Mukandavire et al. citing https://pubmed.ncbi.nlm.nih.gov/8882180/
             p_env_transmit = ss.bernoulli(0),    # Probability of environmental transmission - filled out later
         )
-        super().__init__(pars=pars, *args, **kwargs)
+        self.update_pars(pars, **kwargs)
 
         # Boolean states
-        
         self.add_states(
             # Susceptible & infected are added automatically, here we add the rest
             ss.BoolArr('exposed'),
@@ -53,7 +53,6 @@ class Cholera(ss.Infection):
             ss.FloatArr('ti_recovered'),
             ss.FloatArr('ti_dead'),
         )
-
         return
 
     @property

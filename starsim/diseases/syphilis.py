@@ -14,7 +14,8 @@ class Syphilis(ss.Infection):
 
     def __init__(self, pars=None, **kwargs):
         # Parameters
-        self.pars = ss.Pars(
+        super().__init__()
+        self.default_pars(
             # Adult syphilis natural history, all specified in years
             dur_exposed = ss.lognorm_ex(mean=1 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_primary = ss.lognorm_ex(mean=1.5 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
@@ -50,7 +51,7 @@ class Syphilis(ss.Infection):
             # Initial conditions
             init_prev = ss.bernoulli(p=0.03),
         )
-        super().__init__(pars, **kwargs)
+        self.update_pars(pars, **kwargs)
 
         self.add_states(
             # Adult syphilis states

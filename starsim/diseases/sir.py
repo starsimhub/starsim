@@ -92,20 +92,20 @@ class SIS(ss.Infection):
     is no death in this case.
     """
     def __init__(self, pars=None, *args, **kwargs):
-        self.pars = ss.Pars(
+        super().__init__()
+        self.default_pars(
             dur_inf = ss.lognorm_ex(10),
             init_prev = ss.bernoulli(0.01),
             beta = 0.05,
             waning = 0.05,
             imm_boost = 1.0,
         )
-        super().__init__(pars=pars, *args, **kwargs)
+        self.update_pars(pars=pars, *args, **kwargs)
 
         self.add_states(
             ss.FloatArr('ti_recovered'),
             ss.FloatArr('immunity', default=0.0),
         )
-        
         return
 
     def update_pre(self, sim):
@@ -167,8 +167,9 @@ class sir_vaccine(ss.Vx):
     Create a vaccine product that changes susceptible people to recovered (i.e., perfect immunity)
     """
     def __init__(self, pars=None, *args, **kwargs):
-        self.pars = ss.Pars(efficacy=0.9)
-        super().__init__(pars=pars, *args, **kwargs)
+        super().__init__()
+        self.default_pars(efficacy=0.9)
+        self.update_pars(pars, **kwargs)
         return
 
     def administer(self, people, uids):

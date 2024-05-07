@@ -15,7 +15,8 @@ class Ebola(SIR):
 
     def __init__(self, pars=None, *args, **kwargs):
         """ Initialize with parameters """
-        self.pars = ss.Pars(
+        super().__init__()
+        self.default_pars(
             # Natural history parameters, all specified in days
             dur_exp2symp    = ss.lognorm_ex(12.7), # Add source
             dur_symp2sev    = ss.lognorm_ex(6), # Add source
@@ -33,10 +34,9 @@ class Ebola(SIR):
             sev_factor      = 2.2,
             unburied_factor = 2.1,
         )
-        super().__init__(pars=pars, *args, **kwargs)
-
-        # Boolean states
+        self.update_pars(pars=pars, **kwargs)
         
+        # Boolean states
         self.add_states(
             # SIR are added automatically, here we add E
             ss.BoolArr('exposed'),
@@ -51,7 +51,6 @@ class Ebola(SIR):
             ss.FloatArr('ti_dead'),
             ss.FloatArr('ti_buried'),
         )
-
         return
 
     @property
