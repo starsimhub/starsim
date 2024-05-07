@@ -8,9 +8,7 @@ __all__ = ['Connector']
 
 
 class Connector(ss.Module):
-    def __init__(self, pars=None, diseases=None, *args, **kwargs):
-        super().__init__(pars=pars, requires=diseases, *args, **kwargs)
-        return
+    pass
 
 
 # %% Individual connectors
@@ -18,14 +16,15 @@ class Connector(ss.Module):
 class simple_hiv_ng(Connector):
     """ Simple connector whereby rel_sus to NG doubles if CD4 count is <200"""
 
-    def __init__(self, pars=None):
-        self.pars = ss.Pars(
+    def __init__(self, pars=None, **kwargs):
+        super().__init__(label='HIV-Gonorrhea', requires=[ss.HIV, ss.Gonorrhea])
+        self.default_pars(
             rel_trans_hiv  = 2,
             rel_trans_aids = 5,
             rel_sus_hiv    = 2,
             rel_sus_aids   = 5,
         )
-        super().__init__(pars=pars, label='HIV-Gonorrhea', diseases=[ss.HIV, ss.Gonorrhea])
+        self.update_pars(pars, **kwargs)
         return
 
     def update(self, sim):
