@@ -20,7 +20,7 @@ class HIV(ss.Infection):
             eff_condoms = 0.7,
             art_efficacy = 0.96,
             init_prev = ss.bernoulli(0.05),
-            death_prob = ss.bernoulli(0.05),
+            death_prob = 0.05,
         )
         super().__init__(pars=pars, *args, **kwargs)
 
@@ -33,7 +33,7 @@ class HIV(ss.Infection):
         )
 
         self.death_prob_data = sc.dcp(self.pars.death_prob)
-        self.pars.death_prob = self.make_death_prob
+        self.pars.death_prob = ss.bernoulli(self.make_death_prob)
         return
 
     @staticmethod

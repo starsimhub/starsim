@@ -266,7 +266,7 @@ class Pregnancy(Demographics):
         self.pars = ss.Pars(
             dur_pregnancy = 0.75,
             dur_postpartum = 0.5,
-            fertility_rate = ss.bernoulli(0),    # Usually this will be provided in CSV format
+            fertility_rate = 0, # See make_fertility_prob_function
             rel_fertility = 1,
             maternal_death_rate = ss.bernoulli(0),
             sex_ratio = ss.bernoulli(0.5),       # Ratio of babies born female
@@ -286,7 +286,7 @@ class Pregnancy(Demographics):
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.fertility_rate_data = self.standardize_fertility_data()
-        self.pars.fertility_rate = self.make_fertility_prob_fn
+        self.pars.fertility_rate = ss.bernoulli(self.make_fertility_prob_fn)
 
         return
 
