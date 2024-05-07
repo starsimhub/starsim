@@ -10,6 +10,54 @@ All notable changes to the codebase are documented in this file. Changes that ma
 Version 0.5.0 (2024-05-07)
 --------------------------
 
+Summary
+~~~~~~~
+All inputs to the sim and modules now use a ``ss.Pars()`` class, which handles updating and validation. It is now not necessary to ever use ``pars=`` (although you still can if you want), so what was previously:
+
+``sim = ss.Sim(pars=dict(diseases='sir', networks='random'))``
+
+is now just:
+
+``sim = ss.Sim(diseases='sir', networks='random')``
+
+Updates happen recursively, so distributions etc. can be flexibly updated.
+
+This has significantly changed how modules are initialized; what was previously:
+
+.. code-block:: python
+
+    def __init__(self, pars=None, **kwargs):
+
+        pars = ss.omergeleft(pars,
+            dur_inf = 6,
+            init_prev = 0.01,
+            p_death = 0.01,
+            beta = 0.5,
+        )
+
+        par_dists = ss.omergeleft(par_dists,
+            dur_inf = ss.lognorm_ex,
+            init_prev = ss.bernoulli,
+            p_death = ss.bernoulli,
+        )
+
+        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+
+is now:
+
+.. code-block:: python
+    
+    def __init__(self, pars=None, **kwargs):
+        super().__init__()
+        self.default_pars(
+            beta = 0.5,
+            init_prev = ss.bernoulli(0.01),
+            dur_inf = ss.lognorm_ex(6),
+            p_death = ss.bernoulli(0.01),
+        )
+        self.update_pars(pars, **kwargs)
+
+
 Parameter changes
 ~~~~~~~~~~~~~~~~~
 - Added a ``ss.Pars`` class (and a ``ss.SimPars`` subclass) that handles parameter creation, updates, and validation.
@@ -25,6 +73,7 @@ Module changes
 - ``ss.find_modules()`` finds all available modules (including subclasses) in Starsim.
 - Removed ``ss.dictmerge()`` and ``ss.dictmergeleft`` (now handled by ``ss.Pars.update()``).
 - Removed ``ss.get_subclasses()`` and ``ss.all_subclasses()`` (now handled by ``ss.find_modules()``).
+- Modules can no longer be initialized with a ``name`` key; it must be ``type`` (e.g. ``dict(type='sir')`` rather than ``dict(name='sir')``.
 - Modules now contain a link back to the ``Sim`` object.
 - Added ``to_json()`` and ``plot()`` methods to ``Module``.
 - Removed ``connectors.py``; connectors still exist but as an empty subclass of ``Module``.
