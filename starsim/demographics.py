@@ -424,11 +424,10 @@ class Pregnancy(Demographics):
             # Add connections to any vertical transmission layers
             # Placeholder code to be moved / refactored. The maternal network may need to be
             # handled separately to the sexual networks, TBC how to handle this most elegantly
-            for lkey, layer in sim.networks.items():
+            for lkey, layer in sim.networks.items(): # TODO: think about how to move this into networks.py
                 if layer.vertical:  # What happens if there's more than one vertical layer?
                     durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
                     layer.add_pairs(conceive_uids, new_uids, dur=durs)
-
         return
 
     def set_prognoses(self, sim, uids):

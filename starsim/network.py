@@ -71,7 +71,7 @@ class Network(ss.Module):
             beta = ss_float_,
         )
         self.meta = sc.mergedicts(default_keys, key_dict)
-        self.vertical = vertical  # Whether transmission is bidirectional
+        self.vertical = vertical  # Whether transmission is bidirectional; defined in demographics.py
 
         # Initialize the keys of the network
         self.contacts = sc.objdict()
