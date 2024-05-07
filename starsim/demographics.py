@@ -41,7 +41,7 @@ class Births(Demographics):
 
         # Process metadata. Defaults here are the labels used by UN data
         self.metadata = sc.mergedicts(
-            dict(data_cols=dict(year='Year', cbr='CBR')),
+            sc.objdict(data_cols=dict(year='Year', cbr='CBR')),
             metadata,
         )
 
