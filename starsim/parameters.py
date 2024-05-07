@@ -373,31 +373,31 @@ class SimPars(Pars):
                     if isinstance(mod, dict):
                         
                         # Get the module type as a string
-                        try:
+                        if 'type' in mod:
                             modtype = mod.pop('type')
-                        except KeyError as E:
+                        else:
                             errormsg = f'When defining a module as a dict, you must supply the type ({mod})'
-                            raise ValueError(errormsg) from E
+                            raise ValueError(errormsg)
                         
                         # Get the module type as a class
-                        try:
-                            if isinstance(modtype, str): # Usual case, a string, e.g. dict(type='sir', dur_inf=6)
-                                modtype = modtype.lower() # Because our map is in lowercase
+                        if isinstance(modtype, str): # Usual case, a string, e.g. dict(type='sir', dur_inf=6)
+                            modtype = modtype.lower() # Because our map is in lowercase
+                            moddictkeys = ssmoddict.keys()
+                            moddictvals = ssmoddict.values()
+                            if modtype in moddictkeys:
                                 modcls = ssmoddict[modtype]
-                            else: # Allow supplying directly as a class, e.g. dict(type=ss.SIR, dur_inf=6)
-                                assert modcls in ssmoddict.values(), 'Not a valid module'
+                            else:
+                                errormsg = f'Invalid module name "{modtype}" for "{modkey}"; must be one of {moddictkeys}'
+                                raise TypeError(errormsg)
+                        else: # Allow supplying directly as a class, e.g. dict(type=ss.SIR, dur_inf=6)
+                            if modtype in moddictvals:
                                 modcls = modtype
-                        except Exception as E:
-                            errormsg = f'Invalid module type "{modtype}" for "{modkey}"; must be one of {sc.strjoin(ss.moddict.keys())}'
-                            raise ValueError(errormsg) from E
+                            else:
+                                errormsg = f'Invalid module class "{modtype}" for "{modkey}"; must be one of {moddictvals}'
+                                raise TypeError(errormsg)
                         
                         # Create the module and store it in the list
-                        try:
-                            mod = modcls(**mod)
-                        except Exception as E:
-                            errormsg = f'Failed to create module {modtype} with arguments {mod}; see above for full error'
-                            exc = type(E) # Preserve exception type
-                            raise exc(errormsg) from E
+                        mod = modcls(**mod)
                     
                     # Special handling for interventions and analyzers: convert class and function to class instance
                     if modkey in ['interventions', 'analyzers']:

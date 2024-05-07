@@ -60,10 +60,9 @@ class Network(ss.Module):
         network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
     """
 
-    def __init__(self, pars=None, key_dict=None, vertical=False, **kwargs):
+    def __init__(self, key_dict=None, vertical=False, name=None, label=None, requires=None, **kwargs):
         # Initialize as a module
-        super().__init__()
-        self.update_pars(pars, **kwargs)
+        super().__init__(name=name, label=label, requires=requires)
 
         # Each relationship is characterized by these default set of keys, plus any user- or network-supplied ones
         default_keys = sc.objdict(
@@ -81,7 +80,7 @@ class Network(ss.Module):
 
         # Set data, if provided
         for key, value in kwargs.items():
-            self.contacts[key] = np.array(value, dtype=self.meta.get(key))
+            self.contacts[key] = np.array(value, dtype=self.meta.get(key)) # Overwrite dtype if supplied, else keep original
             self.initialized = True
 
         # Define states using placeholder values
@@ -310,9 +309,9 @@ class Network(ss.Module):
 
 class DynamicNetwork(Network):
     """ A network where partnerships update dynamically """
-    def __init__(self, pars=None, key_dict=None, **kwargs):
+    def __init__(self, key_dict=None, **kwargs):
         key_dict = sc.mergedicts({'dur': ss_float_}, key_dict)
-        super().__init__(pars, key_dict=key_dict, **kwargs)
+        super().__init__(key_dict=key_dict, **kwargs)
         return
 
     def end_pairs(self, sim):
@@ -329,9 +328,9 @@ class DynamicNetwork(Network):
 
 class SexualNetwork(DynamicNetwork):
     """ Base class for all sexual networks """
-    def __init__(self, pars=None, key_dict=None, **kwargs):
+    def __init__(self, key_dict=None, **kwargs):
         key_dict = sc.mergedicts({'acts': ss_int_}, key_dict)
-        super().__init__(pars, key_dict=key_dict, **kwargs)
+        super().__init__(key_dict=key_dict, **kwargs)
         self.debut = ss.FloatArr('debut', default=0)
         return
 
@@ -731,13 +730,13 @@ class EmbeddingNet(MFNet):
         Args:
             male_shift is the average age that males are older than females in partnerships
         """
-        super().__init__(pars, **kwargs) # The MFNet already comes with pars
-        self.pars.update(
-            create=True,
+        super().__init__()
+        self.default_pars(
+            inherit = True, # The MFNet already comes with pars, we want to keep those
             embedding_func = ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
             male_shift = 5,
         )
-        
+        self.update_pars(pars, **kwargs)
         return
 
     @staticmethod
