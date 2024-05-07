@@ -9,7 +9,7 @@ import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as pl
 
-__all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims']
+__all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
 
 
 class Sim(sc.prettyobj):
@@ -757,7 +757,22 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
             return df
         else:
             print(mismatchmsg)
+            return True
     else:
         if not output:
             print('Sims match')
-    return
+        return False
+
+
+def check_sims_match(*args, full=False):
+    """ Shortcut to using ss.diff_sims() to check if multiple sims match """
+    s1 = args[0]
+    matches = []
+    for s2 in args[1:]:
+        diff = diff_sims(s1, s2, full=False, output=False, die=False)
+        matches.append(not(diff)) # Return the opposite of the diff
+    if full:
+        return matches
+    else:
+        return all(matches)
+        

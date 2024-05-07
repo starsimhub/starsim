@@ -42,7 +42,7 @@ def test_demo(do_plot=do_plot):
     sir = ss.SIR()
     net = ss.RandomNet()
     s3 = ss.Sim(diseases=sir, networks=net).run()
-    assert not (ss.diff_sims(s1, s2) or ss.diff_sims(s2, s3)), 'Sims should match'
+    assert ss.check_sims_match(s1, s2, s3), 'Sims should match'
     return s1
 
 
@@ -62,6 +62,32 @@ def test_simple(do_plot=do_plot):
     if do_plot:
         sim.plot()
     return sim
+
+
+def test_api():
+    """ Test all different ways of creating a sim """
+    
+    # Check different ways of specifying a sim
+    s1 = ss.Sim(n_agents=n_agents, diseases='sir', networks='random').run() # Supply strings directly
+    s2 = ss.Sim(pars=dict(n_agents=n_agents, diseases='sir', networks='random')).run() # Supply as parameters
+    s3 = ss.Sim(n_agents=n_agents, diseases=ss.SIR(), networks=ss.RandomNet()).run() # Supply as objects
+    ss.check_sims_match(s1, s2, s3), 'Sims should match'
+    
+    # Check different ways of setting a distribution
+    kw = dict(n_agents=n_agents, networks='random')
+    d1 = ss.lognorm_ex(10) # Create a distribution with an argument
+    d2 = ss.lognorm_ex(mean=10, stdev=2) # Create a distribution with kwargs
+    
+    s4 = ss.Sim(diseases=dict(type='sir', dur_inf=10), **kw).run() # Supply values as a number
+    s5 = ss.Sim(diseases=dict(type='sir', dur_inf=d1), **kw).run()
+    ss.check_sims_match(s4, s5), 'Sims should match'
+    
+    s6 = ss.Sim(diseases=dict(type='sir', dur_inf=[10,2]), **kw).run() # Supply values as a list
+    s7 = ss.Sim(diseases=dict(type='sir', dur_inf=dict(mean=10, stdev=2)), **kw).run() # Supply values as dict
+    s8 = ss.Sim(diseases=dict(type='sir', dur_inf=d2), **kw).run()
+    ss.check_sims_match(s6, s7, s8), 'Sims should match'
+    
+    return s1
 
 
 def test_simple_vax(do_plot=do_plot):
@@ -133,9 +159,10 @@ if __name__ == '__main__':
     sim0 = test_demo(do_plot=do_plot)
     sim1 = test_default(do_plot=do_plot)
     sim2 = test_simple(do_plot=do_plot)
-    sim3b, sim3i = test_simple_vax(do_plot=do_plot)
-    sim4 = test_components(do_plot=do_plot)
-    sim5a, sim5b = test_parallel()
+    sim3 = test_api()
+    sim4b, sim4i = test_simple_vax(do_plot=do_plot)
+    sim5 = test_components(do_plot=do_plot)
+    sim6a, sim6b = test_parallel()
     
     T.toc()
     
