@@ -29,7 +29,12 @@ class Infection(Disease):
         super().__init__(name=name, label=label)
         
         self.define_states(
-            
+            'susceptible',
+            'infectious',
+        )
+        
+        self.define_transitions(
+            ss.Transition('susceptible', 'infectious', self.transmit)
         )
         
         self.add_states(
@@ -141,17 +146,17 @@ class Infection(Disease):
         new_cases = []
         sources = []
         betamap = self._check_betas(sim) # FIXX
+        rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans) # FIXX
+        rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
 
         for nkey,net in sim.networks.items():
             if not len(net):
                 break
 
             nbetas = betamap[nkey]
-            contacts = net.contacts
-            rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans) # FIXX
-            rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
-            p1p2b0 = [contacts.p1, contacts.p2, nbetas[0]]
-            p2p1b1 = [contacts.p2, contacts.p1, nbetas[1]]
+            edges = net.edges
+            p1p2b0 = [edges.p1, edges.p2, nbetas[0]]
+            p2p1b1 = [edges.p2, edges.p1, nbetas[1]]
             for src, trg, beta in [p1p2b0, p2p1b1]:
 
                 # Skip networks with no transmission
