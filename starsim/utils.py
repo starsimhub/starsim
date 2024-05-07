@@ -12,7 +12,7 @@ import pandas as pd
 # %% Helper functions
 
 # What functions are externally visible -- note, this gets populated in each section below
-__all__ = ['ndict', 'dictmerge', 'dictmergeleft', 'warn', 'unique', 'find_contacts']
+__all__ = ['ndict', 'warn', 'unique', 'find_contacts']
 
 
 class ndict(sc.objdict):
@@ -125,23 +125,23 @@ class ndict(sc.objdict):
         return self
 
 
-def dictmerge(*args, **kwargs):
-    """ Merge things into an objdict, using standard order """
-    return sc.objdict(sc.mergedicts(*args, **kwargs))
+# def dictmerge(*args, **kwargs):
+#     """ Merge things into an objdict, using standard order """
+#     return sc.objdict(sc.mergedicts(*args, **kwargs))
 
 
-def dictmergeleft(*args, **kwargs):
-    """ Merge things into an odict, using opposite order to allow defaults to be supplied second """
-    if len(args) == 1 and len(kwargs):
-        new = args[0]
-        default = kwargs
-    elif len(args) == 2 and len(kwargs) == 0:
-        new = args[0]
-        default = args[1]
-    else:
-        errormsg = 'Expecting either two arguments, or one argument and kwargs; for any other arrangement, use ss.dictmerge()'
-        raise ValueError(errormsg)
-    return sc.objdict(sc.mergedicts(default, new))
+# def dictmergeleft(*args, **kwargs):
+#     """ Merge things into an odict, using opposite order to allow defaults to be supplied second """
+#     if len(args) == 1 and len(kwargs):
+#         new = args[0]
+#         default = kwargs
+#     elif len(args) == 2 and len(kwargs) == 0:
+#         new = args[0]
+#         default = args[1]
+#     else:
+#         errormsg = 'Expecting either two arguments, or one argument and kwargs; for any other arrangement, use ss.dictmerge()'
+#         raise ValueError(errormsg)
+#     return sc.objdict(sc.mergedicts(default, new))
 
 
 def warn(msg, category=None, verbose=None, die=None):
