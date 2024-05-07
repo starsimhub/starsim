@@ -21,6 +21,16 @@ class Pars(sc.objdict):
     Acts like an ``sc.objdict()``, except that adding new keys are disallowed by
     default, and auto-updates known types.
     """
+    def __init__(self, pars=None, **kwargs):
+        if pars is not None:
+            if isinstance(pars, dict):
+                kwargs = pars | kwargs
+            else:
+                errormsg = f'Cannot supply parameters as type {type(pars)}: must be dict'
+                raise ValueError(errormsg)
+        super().__init__(**kwargs)
+        return
+    
     def update(self, pars=None, create=False, **kwargs):
         """
         Update internal dict with new pars.
@@ -31,7 +41,8 @@ class Pars(sc.objdict):
             kwargs (dict): merged with pars
         """
         # Get parameters, and return if none
-        pars = sc.mergedicts(pars, kwargs)
+        pars = {} if pars is None else dict(pars) # Make it a simple dict, since just iterating over
+        pars = pars | kwargs # Merge dictionaries
         if not len(pars): 
             return self
         
