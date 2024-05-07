@@ -25,16 +25,20 @@ class Sim(sc.prettyobj):
         args = dict(label=label, people=people, demographics=demographics, diseases=diseases, networks=networks, 
                     interventions=interventions, analyzers=analyzers, connectors=connectors)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
-        self.pars.update(sc.mergedicts(args, pars, kwargs, _copy=copy_inputs))  # Update the parameters
+        pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs)
+        self.pars.update(pars)  # Update the parameters
         
         # Set attributes
         self.label = label # Usually overwritten during initalization by the parameters
         self.created = sc.now()  # The datetime the sim was created
+        self.version = ss.__version__ # The Starsim version
+        self.gitinfo = sc.gitinfo(path=__file__, verbose=False)
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running
         self.results_ready = False  # Whether results are ready
         self.dists = ss.Dists(obj=self) # Initialize the random number generator container
         self.results = ss.Results(module='sim')  # For storing results
+        self.elapsed = None # The time required to run
         self.summary = None  # For storing a summary of the results
         self.filename = None # Store the filename, if saved
         return
@@ -54,7 +58,7 @@ class Sim(sc.prettyobj):
         p = self.pars.initialize(sim=self, reset=reset, **kwargs) # Initialize the parameters, including people and modules
         
         # Move initialized modules to the sim
-        keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
+        keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers']
         for key in keys:
             setattr(self, key, p.pop(key))
             
@@ -66,9 +70,9 @@ class Sim(sc.prettyobj):
                 mod.initialize(self)
                 
         # Initialize products # TODO: think about simplifying
-        for mod in self.interventions:
-            if hasattr(mod, 'product') and isinstance(mod.product, ss.Product):
-                mod.product.initialize(self)
+        for intv in self.interventions:
+            if intv.product:
+                intv.product.initialize(self)
         
         # Initialize all distributions now that everything else is in place
         self.dists.initialize(obj=self, base_seed=p.rand_seed, force=True)
@@ -81,20 +85,18 @@ class Sim(sc.prettyobj):
 
     @property
     def modules(self):
-        # Return iterator over all Module instances (stored in standard places) in the Sim
-        products = [intv.product for intv in self.interventions.values() if
-                    hasattr(intv, 'product') and isinstance(intv.product, ss.Product)]
+        """ Return iterator over all Module instances (stored in standard places) in the Sim """
         return itertools.chain(
             self.demographics(),
             self.networks(),
             self.diseases(),
             self.interventions(),
-            products,
+            [intv.product for intv in self.interventions() if isinstance(intv.product, ss.Product)],
             self.analyzers(),
         )
     
     @property
-    def year(self): # TODO: remove
+    def year(self): # TODO: remove when we do the time refactor
         return self.yearvec[self.ti]
 
     def step(self):
@@ -146,15 +148,11 @@ class Sim(sc.prettyobj):
             
         # Clean up dead agents
         self.people.finish_step()
-        self.people.update_results()
-        self.people.remove_dead()
-        self.people.update_post()
 
         # Tidy up
         self.ti += 1
         if self.ti == self.npts:
             self.complete = True
-
         return
 
     def run(self, until=None, verbose=None):
@@ -202,6 +200,7 @@ class Sim(sc.prettyobj):
 
         # If simulation reached the end, finalize the results
         if self.complete:
+            self.elapsed = elapsed
             self.finalize(verbose=verbose)
             sc.printv(f'Run finished after {elapsed:0.2f} s.\n', 1, verbose)
 
