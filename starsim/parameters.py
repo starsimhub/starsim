@@ -192,6 +192,7 @@ class SimPars(Pars):
         self.diseases      = ss.ndict()
         self.connectors    = ss.ndict()
         self.interventions = ss.ndict()
+        self.products      = ss.ndict()
         self.analyzers     = ss.ndict()
 
         # Update with any supplied parameter values and generate things that need to be generated
@@ -229,6 +230,7 @@ class SimPars(Pars):
         # Initialize and convert modules
         self.convert_modules() # General initialization
         self.init_demographics() # Demographic-specific initialization
+        self.init_products() # Product-specific initialization
         
         # Convert from lists to ndicts
         for modkey,modclass in modmap.items():

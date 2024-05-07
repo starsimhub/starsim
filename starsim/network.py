@@ -60,9 +60,9 @@ class Network(ss.Module):
         network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
     """
 
-    def __init__(self, key_dict=None, vertical=False, name=None, label=None, requires=None, **kwargs):
+    def __init__(self, key_dict=None, vertical=False, name=None, label=None, **kwargs):
         # Initialize as a module
-        super().__init__(name=name, label=label, requires=requires)
+        super().__init__(name=name, label=label)
 
         # Each relationship is characterized by these default set of keys, plus any user- or network-supplied ones
         default_keys = sc.objdict(
@@ -442,7 +442,7 @@ class RandomNet(DynamicNetwork):
         """ Initialize """
         super().__init__(key_dict=key_dict)
         self.default_pars(
-            n_contacts = ss.delta(10),
+            n_contacts = ss.const(10),
             dur = 0,
         )
         self.update_pars(pars, **kwargs)

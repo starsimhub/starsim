@@ -11,8 +11,8 @@ import pandas as pd
 
 # %% Helper functions
 
-# What functions are externally visible -- note, this gets populated in each section below
-__all__ = ['ndict', 'warn', 'unique', 'find_contacts']
+# What functions are externally visible
+__all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'standardize_data']
 
 
 class ndict(sc.objdict):
@@ -40,6 +40,10 @@ class ndict(sc.objdict):
         self.setattribute('_overwrite', overwrite)
         self.extend(*args, **kwargs)
         return
+    
+    def __call__(self):
+        """ Shortcut for returning values """
+        return self.values()
 
     def append(self, arg, key=None, overwrite=None):
         valid = False
@@ -155,18 +159,6 @@ def warn(msg, category=None, verbose=None, die=None):
     return
 
 
-def unique(arr):
-    """
-    Find the unique elements and counts in an array.
-    Equivalent to np.unique(return_counts=True) but ~5x faster, and
-    only works for arrays of positive integers.
-    """
-    counts = np.bincount(arr.ravel())
-    unique = np.flatnonzero(counts)
-    counts = counts[unique]
-    return unique, counts
-
-
 def find_contacts(p1, p2, inds):  # pragma: no cover
     """
     Variation on Network.find_contacts() that avoids sorting.
@@ -185,9 +177,19 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
     return pairing_partners
 
 
-# %% Seed methods
+def check_requires(sim, requires, *args):
+    """ Check that the module's requirements (of other modules) are met """
+    errs = sc.autolist()
+    all_classes = [m.__class__ for m in sim.modules]
+    all_names = [m.name for m in sim.modules]
+    for req in sc.mergelists(requires, *args):
+        if req not in all_classes + all_names:
+            errs += req
+    if len(errs):
+        errormsg = f'The following module(s) are required, but the Sim does not contain them: {sc.strjoin(errs)}'
+        raise AttributeError(errormsg)
+    return
 
-__all__ += ['set_seed']
 
 def set_seed(seed=None):
     '''
@@ -219,9 +221,6 @@ def set_seed(seed=None):
 
 
 # %% Data cleaning and processing
-
-__all__ += ['standardize_data']
-
 
 def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
     """

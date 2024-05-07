@@ -15,6 +15,7 @@ def module_map(key=None):
         demographics  = ss.Demographics,
         diseases      = ss.Disease,
         interventions = ss.Intervention,
+        products      = ss.Product,
         analyzers     = ss.Analyzer,
         connectors    = ss.Connector,
     )
@@ -43,19 +44,18 @@ def find_modules(key=None):
 
 class Module(sc.quickobj):
 
-    def __init__(self, name=None, label=None, requires=None):
-        self.set_metadata(name, label, requires) # Usually reset as part of self.update_pars()
+    def __init__(self, name=None, label=None):
+        self.set_metadata(name, label) # Usually reset as part of self.update_pars()
         self.pars = ss.Pars() # Usually populated via self.default_pars()
         self.results = ss.Results(self.name)
         self.initialized = False
         self.finalized = False
         return
     
-    def set_metadata(self, name, label, requires):
+    def set_metadata(self, name, label):
         """ Set metadata for the module """
         self.name = sc.ifelse(name, getattr(self, 'name', self.__class__.__name__.lower())) # Default name is the class name
         self.label = sc.ifelse(label, getattr(self, 'label', self.name))
-        self.requires = sc.mergelists(requires)
         return
     
     def default_pars(self, inherit=False, **kwargs):
@@ -78,7 +78,7 @@ class Module(sc.quickobj):
         self.pars.update(matches)
                 
         # Update module attributes
-        metadata = {key:pars.pop(key, None) for key in ['name', 'label', 'requires']}
+        metadata = {key:pars.pop(key, None) for key in ['name', 'label']}
         self.set_metadata(**metadata)
         
         # Should be no remaining pars
@@ -87,27 +87,12 @@ class Module(sc.quickobj):
             raise ValueError(errormsg)
         return
     
-    def check_requires(self, sim):
-        """ Check that the module's requirements (of other modules) are met """
-        errs = sc.autolist()
-        all_names = [m.__class__ for m in sim.modules] + [m.name for m in sim.modules if hasattr(m, 'name')]
-        for req in self.requires:
-            if req not in all_names:
-                errs += req
-        if len(errs):
-            errormsg = f'{self.name} (label={self.label}) requires the following module(s), but the Sim does not contain them.'
-            errormsg += sc.newlinejoin(errs)
-            raise Exception(errormsg)
-        return
-
     def initialize(self, sim):
         """
         Perform initialization steps
 
         This method is called once, as part of initializing a Sim
         """
-        self.check_requires(sim)
-        
         # Initialize distributions (warning: only operates at the top level!)
         dists = ss.find_dists(self) # Important that this comes first, before the sim is linked to the dist!
         for key,val in dists.items():

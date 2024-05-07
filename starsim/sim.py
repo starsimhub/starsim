@@ -2,7 +2,6 @@
 Define core Sim classes
 """
 
-# Imports
 import itertools
 import numpy as np
 import sciris as sc
@@ -13,10 +12,14 @@ __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
 
 
 class Sim(sc.prettyobj):
-
+    """
+    The Sim object
+    
+    All Starsim simulations run via the Sim class. It is responsible for initializing
+    and running all modules and generating results.
+    """
     def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, networks=None,
                  interventions=None, analyzers=None, connectors=None, copy_inputs=True, **kwargs):
-
         # Make default parameters (using values from parameters.py)
         self.pars = ss.make_pars() # Start with default pars
         args = dict(label=label, people=people, demographics=demographics, diseases=diseases, networks=networks, 
@@ -83,17 +86,17 @@ class Sim(sc.prettyobj):
         products = [intv.product for intv in self.interventions.values() if
                     hasattr(intv, 'product') and isinstance(intv.product, ss.Product)]
         return itertools.chain(
-            self.demographics.values(),
-            self.networks.values(),
-            self.diseases.values(),
-            self.connectors.values(),
-            self.interventions.values(),
+            self.demographics(),
+            self.networks(),
+            self.diseases(),
+            self.connectors(),
+            self.interventions(),
             products,
-            self.analyzers.values(),
+            self.analyzers(),
         )
     
     @property
-    def year(self):
+    def year(self): # TODO: remove
         return self.yearvec[self.ti]
 
     def step(self):
@@ -101,61 +104,60 @@ class Sim(sc.prettyobj):
 
         # Set the time and if we have reached the end of the simulation, then do nothing
         if self.complete:
-            raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
+            errormsg = 'Simulation already complete (call sim.initialize() to re-run)'
+            raise AlreadyRunError(errormsg)
 
         # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
         self.dists.jump(to=self.ti+1)  # +1 offset because ti=0 is used on initialization
 
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
-        for dem_mod in self.demographics.values():
-            dem_mod.update(self)
+        for dem in self.demographics():
+            dem.update()
 
         # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
         # to be applied to newly created agents
-        for disease in self.diseases.values():
-            disease.update_pre(self)
+        for disease in self.diseases():
+            disease.update()
 
         # Update connectors -- TBC where this appears in the ordering
-        for connector in self.connectors.values():
-            connector.update(self)
+        for connector in self.connectors():
+            connector.update()
 
         # Update networks - this takes place here in case autonomous state changes at this timestep
-        for network in self.networks.values():
         # affect eligibility for contacts
-            network.update(self)
+        for network in self.networks():
+            network.update()
 
         # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
         # interventions, by running them at this point
-        for intervention in self.interventions.values():
-            intervention(self)
+        for intervention in self.interventions():
+            intervention()
 
         # Carry out transmission/new cases
-        for disease in self.diseases.values():
-            disease.make_new_cases(self)
+        for disease in self.diseases():
+            disease.transmit()
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
         uids = self.people.resolve_deaths()
-        for disease in self.diseases.values():
-            disease.update_death(self, uids)
+        for disease in self.diseases():
+            disease.die(uids)
 
         # Update results
-        self.people.update_results(self)
+        for disease in self.diseases():
+            disease.update_results()
 
-        for disease in self.diseases.values():
-            disease.update_results(self)
-
-        for analyzer in self.analyzers.values():
-            analyzer(self)
+        for analyzer in self.analyzers():
+            analyzer()
             
         # Clean up dead agents
-        self.people.remove_dead(self)
+        self.people.finish_step()
+        self.people.update_results()
+        self.people.remove_dead()
+        self.people.update_post()
 
         # Tidy up
         self.ti += 1
-        self.people.ti = self.ti
-        self.people.update_post(self)
-
         if self.ti == self.npts:
             self.complete = True
 

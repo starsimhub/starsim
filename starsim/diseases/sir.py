@@ -19,13 +19,26 @@ class SIR(ss.Infection):
     """
     def __init__(self, pars=None, **kwargs):
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             beta = 0.5,
             init_prev = ss.bernoulli(0.01),
             dur_inf = ss.lognorm_ex(6),
             p_death = ss.bernoulli(0.01),
         )
         self.update_pars(pars, **kwargs)
+        
+        self.define_states(
+            'susceptible',
+            'infected',
+            'recovered',
+            'dead',
+        )
+        
+        self.define_transitions(
+            ss.Transition('susceptible -> infected', self.infect),
+            ss.Transition('infected -> recovered', self.recover),
+            ss.Transition('infected -> dead', self.die),
+        )
 
         self.add_states(
             ss.BoolArr('recovered'),
