@@ -11,7 +11,7 @@ import starsim as ss
 __all__ = ['Pars', 'SimPars', 'make_pars']
 
 # Define classes to not descend into further -- based on sciris.sc_nested
-atomic_classes = (str, Number, list, np.ndarray, pd.Series, pd.DataFrame, pd.core.indexes.base.Index)
+atomic_classes = (str, Number, list, np.ndarray, pd.Series, pd.DataFrame, type(None))
 
 
 class Pars(sc.objdict):
@@ -58,10 +58,22 @@ class Pars(sc.objdict):
                 elif isinstance(old, Pars): 
                     old.update(new, create=create)
                 
-                # Update module parameters
+                # Update module containers
+                elif isinstance(old, ss.ndict):
+                    if not len(old): # It's empty, just overwrite
+                        self[key] = new
+                    else: # Don't overwrite an existing ndict
+                        if isinstance(new, dict):
+                            for newkey,newvals in new.items():
+                                old[newkey].pars.update(newvals) # e.g. pars = {'diseases": {'sir': {'dur_inf': 6}}}
+                        else:
+                            errormsg = f'Cannot update an ndict with {type(new)}: must be a dict to set new parameters'
+                            raise TypeError(errormsg)
+                
+                # Update modules
                 elif isinstance(old, ss.Module): 
                     if isinstance(new, dict):
-                        old.pars.update(new)
+                        old[key].pars.update(newvals) # e.g. pars = {'dur_inf': 6}
                     else:
                         errormsg = f'Cannot update a module with {type(new)}: must be a dict to set new parameters'
                         raise TypeError(errormsg)
@@ -95,8 +107,10 @@ class Pars(sc.objdict):
                 
                 # Everything else
                 else:
-                    ss.warn('No known mechanism for handling {type(old)} → {type(new)}; using default')
+                    warnmsg = 'No known mechanism for handling {type(old)} → {type(new)}; using default'
+                    ss.warn(warnmsg)
                     self[key] = new
+                    raise Exception() # TEMP
                     
         return self
 

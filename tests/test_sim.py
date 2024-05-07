@@ -7,6 +7,7 @@ import starsim as ss
 import sciris as sc
 import numpy as np
 import matplotlib.pyplot as plt
+import pytest
 
 n_agents = 1_000
 do_plot = False
@@ -77,17 +78,36 @@ def test_api():
     kw = dict(n_agents=n_agents, networks='random')
     d1 = ss.lognorm_ex(10) # Create a distribution with an argument
     d2 = ss.lognorm_ex(mean=10, stdev=2) # Create a distribution with kwargs
+    d3 = ss.normal(loc=10) # Create a different type of distribution
     
-    s4 = ss.Sim(diseases=dict(type='sir', dur_inf=10), **kw).run() # Supply values as a number
-    s5 = ss.Sim(diseases=dict(type='sir', dur_inf=d1), **kw).run()
+    # Check specifying dist with a scalar
+    s4 = ss.Sim(diseases=dict(type='sir', dur_inf=10), **kw).run() # Supply values as a scalar
+    s5 = ss.Sim(diseases=dict(type='sir', dur_inf=d1), **kw).run() # Supply as a distribution
     ss.check_sims_match(s4, s5), 'Sims should match'
     
+    # Check specifying dist with a list and dict
     s6 = ss.Sim(diseases=dict(type='sir', dur_inf=[10,2]), **kw).run() # Supply values as a list
-    s7 = ss.Sim(diseases=dict(type='sir', dur_inf=dict(mean=10, stdev=2)), **kw).run() # Supply values as dict
-    s8 = ss.Sim(diseases=dict(type='sir', dur_inf=d2), **kw).run()
+    s7 = ss.Sim(diseases=dict(type='sir', dur_inf=dict(mean=10, stdev=2)), **kw).run() # Supply values as a dict
+    s8 = ss.Sim(diseases=dict(type='sir', dur_inf=d2), **kw).run() # Supply as a distribution
     ss.check_sims_match(s6, s7, s8), 'Sims should match'
     
+    # Check changing dist type
+    s9  = ss.Sim(diseases=dict(type='sir', dur_inf=dict(type='normal', loc=10)), **kw).run() # Supply values as a dict
+    s10 = ss.Sim(diseases=dict(type='sir', dur_inf=d3), **kw).run() # Supply values as a distribution
+    ss.check_sims_match(s9, s10), 'Sims should match'
+    
     return s1
+
+
+def test_api_exceptions():
+    """ Test that the sim raises appropriate exceptions with invalid input """
+    
+    kw = dict(n_agents=n_agents, networks='random')
+    
+    # Check that Bernoulli distributions can't be changed
+    with pytest.raises(Exception):
+        ss.Sim(diseases=dict(type='sir', init_prev=dict(type='normal', loc=10)), **kw).initialize()
+    return
 
 
 def test_simple_vax(do_plot=do_plot):
