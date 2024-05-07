@@ -123,6 +123,10 @@ class Pars(sc.objdict):
             errormsg = f'Key(s) {mismatches} not found; available keys are {available_keys}'
             raise sc.KeyNotFoundError(errormsg)
         return
+    
+    def to_json(self, **kwargs):
+        """ Convert to JSON representation """
+        return sc.jsonify(self, **kwargs)
 
 
 class SimPars(Pars):

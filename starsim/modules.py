@@ -4,7 +4,6 @@ General module class -- base class for diseases, interventions, etc.
 
 import sciris as sc
 import starsim as ss
-from scipy.stats._distn_infrastructure import rv_frozen
 
 __all__ = ['module_map', 'find_modules', 'Module']
 
@@ -44,9 +43,8 @@ def find_modules(key=None):
 
 class Module(sc.quickobj):
 
-    def __init__(self, pars=None, par_dists=None, name=None, label=None, requires=None, **kwargs):
-        self.pars = ss.dictmerge(pars, kwargs)
-        self.par_dists = ss.dictmerge(par_dists)
+    def __init__(self, pars=None, name=None, label=None, requires=None, **kwargs):
+        self.pars = ss.Pars(pars, **kwargs)
         self.name = sc.ifelse(name, getattr(self, 'name', self.__class__.__name__.lower())) # Default name is the class name
         self.label = sc.ifelse(label, getattr(self, 'label', self.name))
         self.requires = sc.mergelists(requires)
@@ -83,52 +81,10 @@ class Module(sc.quickobj):
         This method is called once, as part of initializing a Sim
         """
         self.check_requires(sim)
-
-        # First, convert any scalar pars to distributions if required
-        for key in self.par_dists.keys():
-            par = self.pars[key]
-            if isinstance(par, ss.Dist):
-                continue
-
-            # Handle arguments
-            args = ()
-            kwargs = {}
-            if isinstance(par, dict):
-                kwargs = par
-            elif isinstance(par, (tuple, list)):
-                args = par
-            else:
-                args = [par]
-
-            # Make the distribution
-            par_dist = self.par_dists[key]
-            if isinstance(par_dist, str):
-                try:
-                    par_dist = getattr(ss.distributions, par_dist)
-                except Exception as E:
-                    errormsg = f'"{par_dist}" is not a valid distribution name; valid distributions are: {sc.newlinejoin(ss.dists.dist_list)}'
-                    raise ValueError(errormsg) from E
-            
-            if issubclass(par_dist, ss.Dist): # Main use case
-                par_dist = par_dist(*args, sim=sim, module=self, **kwargs)
-            
-            if not isinstance(par_dist, ss.Dist):
-                print('Warning, should probably be an ss.Dist already')
-                par_dist = ss.Dist(dist=par_dist, *args, **kwargs)
-            
-            self.pars[key] = par_dist
-
-        # Initialize distributions in pars # TODO: refactor
-        for key, value in self.pars.items():
-            if isinstance(value, rv_frozen):
-                self.pars[key] = ss.Dist(dist=value)
-
-        for key, value in self.__dict__.items():
-            if isinstance(value, rv_frozen):
-                setattr(self, key, ss.Dist(dist=value))
         
-        # Initialize everything # TODO: shouldn't be needed, should be able to recurse more
-        for key,val in list(self.pars.items()) + list(self.__dict__.items()):
+        # Initialize distributions (warning: only operates at the top level!)
+        dists = ss.find_dists(self) # Important that this comes first, before the sim is linked to the dist!
+        for key,val in dists.items():
             if isinstance(val, ss.Dist):
                 if val.initialized is not True: # Catches False and 'partial'
                     val.initialize(module=self, sim=sim, force=True) # Actually a dist
@@ -136,7 +92,6 @@ class Module(sc.quickobj):
                     raise RuntimeError(f'Trying to reinitialize {val}, this should not happen')
 
         # Connect the states to the sim
-        # Will use random numbers, so do after distribution initialization
         for state in self.states:
             state.initialize(sim)
             
@@ -145,7 +100,6 @@ class Module(sc.quickobj):
         sim.pars[self.name] = self.pars
         sim.results[self.name] = self.results
         sim.people.add_module(self)
-
         self.initialized = True
         return
 
@@ -219,13 +173,13 @@ class Module(sc.quickobj):
             if subcls.__name__.lower() == name:
                 return subcls(*args, **kwargs)
         else:
-            raise KeyError(f'Module "{name}" did not match any known Starsim Modules')
+            raise KeyError(f'Module "{name}" did not match any known Starsim modules')
             
     def to_json(self):
         out = sc.objdict()
         out.type = self.__class__.__name__
         out.name = self.name
         out.label = self.label
-        out.pars = sc.jsonify(self.pars) # TOOD: replace with pars.to_json()
+        out.pars = self.pars.to_json()
         return out
         
