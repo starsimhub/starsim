@@ -96,9 +96,9 @@ def test_api():
     s10 = ss.Sim(diseases=dict(type='sir', dur_inf=d3), **kw).run() # Supply values as a distribution
     ss.check_sims_match(s9, s10), 'Sims should match'
     
-    # # Check that Bernoulli distributions can't be changed
-    # with pytest.raises(TypeError):
-    #     ss.Sim(diseases=dict(type='sir', init_prev=dict(type='normal', loc=10)), **kw).initialize()
+    # Check that Bernoulli distributions can't be changed
+    with pytest.raises(TypeError):
+        ss.Sim(diseases=dict(type='sir', init_prev=dict(type='normal', loc=10)), **kw).initialize()
     
     return s1
 
@@ -119,11 +119,9 @@ def test_simple_vax(do_plot=do_plot):
 
     # Check plots
     if do_plot:
-        pi = 0
-
         plt.figure()
-        plt.plot(sim_base.yearvec[pi:], sim_base.results.sir.prevalence[pi:], label='Baseline')
-        plt.plot(sim_intv.yearvec[pi:], sim_intv.results.sir.prevalence[pi:], label='Vax')
+        plt.plot(sim_base.yearvec, sim_base.results.sir.prevalence, label='Baseline')
+        plt.plot(sim_intv.yearvec, sim_intv.results.sir.prevalence, label='Vax')
         plt.axvline(x=2015, color='k', ls='--')
         plt.title('Prevalence')
         plt.legend()

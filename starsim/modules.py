@@ -71,7 +71,7 @@ class Module(sc.quickobj):
         pars = sc.mergedicts(pars, kwargs)
         
         # Update module parameters
-        for key in pars.keys():
+        for key in list(pars.keys()): # Need to cast to list to avoid "dict changed during iteration"
             if key in self.pars:
                 self.pars[key] = pars.pop(key)
                 
