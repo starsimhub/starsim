@@ -14,43 +14,30 @@ class Cholera(ss.Infection):
     """
     Cholera
     """
-    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
+    def __init__(self, pars=None, *args, **kwargs):
         """ Initialize with parameters """
-
-        pars = ss.dictmergeleft(pars,
+        self.pars = ss.Pars(
             # Natural history parameters, all specified in days
-            dur_exp2inf = ss.lognorm_ex(mean=2.772, stdev=4.737),  # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
+            dur_exp2inf   = ss.lognorm_ex(mean=2.772, stdev=4.737),  # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
             dur_asymp2rec = ss.uniform(low=1, high=10),    # From WHO cholera fact sheet, asymptomatic individuals shed bacteria for 1-10 days (https://www.who.int/news-room/fact-sheets/detail/cholera)
-            dur_symp2rec = ss.lognorm_ex(mean=5, stdev=1.8),    # According to Fung most modelling studies assume 5 days of symptoms (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3926264/), but found a range of 2.9-14 days. Distribution approximately fit to these values
+            dur_symp2rec  = ss.lognorm_ex(mean=5, stdev=1.8),    # According to Fung most modelling studies assume 5 days of symptoms (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3926264/), but found a range of 2.9-14 days. Distribution approximately fit to these values
             dur_symp2dead = ss.lognorm_ex(mean=1, stdev=0.5),   # There does not appear to be differences in timing/duration of mild vs severe disease, but death from severe disease happens rapidly https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5767916/
-            p_death = 0.005,   # Probability of death is typically less than 1% when treated
-            p_symp = 0.5,   # Proportion of infected which are symptomatic, mid range of ~25% and 57% estimates from Jaclson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3795095/) and Nelson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/), respectively
-            asymp_trans = 0.01,    # Reduction in transmission probability for asymptomatic infection, asymptomatic carriers shed 100-1000 times less bacteria than symptomatic carriers (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3084143/ and https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/). Previous models assume a 10% relative transmissibility (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4238032/)
+            p_death       = ss.bernoulli(0.005),   # Probability of death is typically less than 1% when treated
+            p_symp        = ss.bernoulli(0.5),   # Proportion of infected which are symptomatic, mid range of ~25% and 57% estimates from Jaclson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3795095/) and Nelson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/), respectively
+            asymp_trans   = 0.01,    # Reduction in transmission probability for asymptomatic infection, asymptomatic carriers shed 100-1000 times less bacteria than symptomatic carriers (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3084143/ and https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/). Previous models assume a 10% relative transmissibility (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4238032/)
 
             # Initial conditions and beta
-            init_prev = 0.005,
+            init_prev = ss.bernoulli(0.005),
             beta = None,
 
             # Environmental parameters
             beta_env = 0.5 / 3,  # Scaling factor for transmission from environment,
-            half_sat_rate = 1000000,   # Infectious dose in water sufficient to produce infection in 50% of  exposed, from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
+            half_sat_rate = 1_000_000,   # Infectious dose in water sufficient to produce infection in 50% of  exposed, from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
             shedding_rate = 10,    # Rate at which infectious people shed bacteria to the environment (per day), from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
             decay_rate = 0.033,    # Rate at which bacteria in the environment dies (per day), from Chao et al. and Mukandavire et al. citing https://pubmed.ncbi.nlm.nih.gov/8882180/
-            p_env_transmit = 0,    # Probability of environmental transmission - filled out later
+            p_env_transmit = ss.bernoulli(0),    # Probability of environmental transmission - filled out later
         )
-
-        par_dists = ss.dictmergeleft(par_dists,
-            dur_exp2inf    = ss.lognorm_ex,
-            dur_asymp2rec  = ss.uniform,
-            dur_symp2rec   = ss.lognorm_ex,
-            dur_symp2dead  = ss.lognorm_ex,
-            init_prev      = ss.bernoulli,
-            p_death        = ss.bernoulli,
-            p_symp         = ss.bernoulli,
-            p_env_transmit = ss.bernoulli,
-        )
-
-        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+        super().__init__(pars=pars, *args, **kwargs)
 
         # Boolean states
         

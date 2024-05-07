@@ -12,37 +12,9 @@ __all__ = ['Syphilis']
 
 class Syphilis(ss.Infection):
 
-    def __init__(self, pars=None):
-        super().__init__(pars)
-
-        self.add_states(
-            # Adult syphilis states
-            ss.BoolArr('exposed'),  # AKA incubating. Free of symptoms, not transmissible
-            ss.BoolArr('primary'),  # Primary chancres
-            ss.BoolArr('secondary'),  # Inclusive of those who may still have primary chancres
-            ss.BoolArr('latent_temp'),  # Relapses to secondary (~1y)
-            ss.BoolArr('latent_long'),  # Can progress to tertiary or remain here
-            ss.BoolArr('tertiary'),  # Includes complications (cardio/neuro/disfigurement)
-            ss.BoolArr('immune'),  # After effective treatment people may acquire temp immunity
-            ss.BoolArr('ever_exposed'),  # Anyone ever exposed - stays true after treatment
-            ss.BoolArr('congenital'),  # Congenital syphilis states
-    
-            # Timestep of state changes
-            ss.FloatArr('ti_exposed'),
-            ss.FloatArr('ti_primary'),
-            ss.FloatArr('ti_secondary'),
-            ss.FloatArr('ti_latent_temp'),
-            ss.FloatArr('ti_latent_long'),
-            ss.FloatArr('ti_tertiary'),
-            ss.FloatArr('ti_immune'),
-            ss.FloatArr('ti_miscarriage'),
-            ss.FloatArr('ti_nnd'),
-            ss.FloatArr('ti_stillborn'),
-            ss.FloatArr('ti_congenital'),
-        )
-
+    def __init__(self, pars=None, **kwargs):
         # Parameters
-        default_pars = dict(
+        self.pars = ss.Pars(
             # Adult syphilis natural history, all specified in years
             dur_exposed = ss.lognorm_ex(mean=1 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_primary = ss.lognorm_ex(mean=1.5 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
@@ -69,16 +41,42 @@ class Syphilis(ss.Infection):
             #   2: Congenital syphilis
             #   3: Live birth without syphilis-related complications
             # Source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5973824/)
-            birth_outcomes=sc.objdict(
+            birth_outcomes = sc.objdict(
                 active = ss.choice(a=5, p=np.array([0.125, 0.125, 0.20, 0.35, 0.200])), # Probabilities of active by birth outcome
                 latent = ss.choice(a=5, p=np.array([0.050, 0.075, 0.10, 0.05, 0.725])), # Probabilities of latent
             ),
-            birth_outcome_keys=['miscarriage', 'nnd', 'stillborn', 'congenital'],
+            birth_outcome_keys = ['miscarriage', 'nnd', 'stillborn', 'congenital'],
 
             # Initial conditions
-            init_prev=ss.bernoulli(p=0.03),
+            init_prev = ss.bernoulli(p=0.03),
         )
-        self.pars = ss.dictmerge(default_pars, self.pars) # NB: regular dictmerge rather than dictmergeleft
+        super().__init__(pars, **kwargs)
+
+        self.add_states(
+            # Adult syphilis states
+            ss.BoolArr('exposed'),  # AKA incubating. Free of symptoms, not transmissible
+            ss.BoolArr('primary'),  # Primary chancres
+            ss.BoolArr('secondary'),  # Inclusive of those who may still have primary chancres
+            ss.BoolArr('latent_temp'),  # Relapses to secondary (~1y)
+            ss.BoolArr('latent_long'),  # Can progress to tertiary or remain here
+            ss.BoolArr('tertiary'),  # Includes complications (cardio/neuro/disfigurement)
+            ss.BoolArr('immune'),  # After effective treatment people may acquire temp immunity
+            ss.BoolArr('ever_exposed'),  # Anyone ever exposed - stays true after treatment
+            ss.BoolArr('congenital'),  # Congenital syphilis states
+    
+            # Timestep of state changes
+            ss.FloatArr('ti_exposed'),
+            ss.FloatArr('ti_primary'),
+            ss.FloatArr('ti_secondary'),
+            ss.FloatArr('ti_latent_temp'),
+            ss.FloatArr('ti_latent_long'),
+            ss.FloatArr('ti_tertiary'),
+            ss.FloatArr('ti_immune'),
+            ss.FloatArr('ti_miscarriage'),
+            ss.FloatArr('ti_nnd'),
+            ss.FloatArr('ti_stillborn'),
+            ss.FloatArr('ti_congenital'),
+        )
 
         return
 

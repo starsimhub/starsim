@@ -17,15 +17,15 @@ class NCD(ss.Disease):
     (e.g., hypertension, diabetes), a state for having the condition, and associated
     mortality.
     """
-    def __init__(self, pars=None):
-        default_pars = dict(
+    def __init__(self, pars=None, **kwargs):
+        self.pars = ss.Pars(
             initial_risk = ss.bernoulli(p=0.3), # Initial prevalence of risk factors
             #'affection_rate': ss.rate(p=0.1), # Instantaneous rate of acquisition applied to those at risk (units are acquisitions / year)
             dur_risk = ss.expon(scale=10),
             prognosis = ss.weibull(c=2, scale=5), # Time in years between first becoming affected and death
         )
-
-        super().__init__(ss.dictmerge(default_pars, pars))
+        super().__init__(pars, **kwargs)
+        
         self.add_states(
             ss.BoolArr('at_risk'),
             ss.BoolArr('affected'),

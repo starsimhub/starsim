@@ -12,28 +12,20 @@ __all__ = ['Measles']
 
 class Measles(SIR):
 
-    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
+    def __init__(self, pars=None, *args, **kwargs):
         """ Initialize with parameters """
 
-        pars = ss.dictmergeleft(pars,
+        pars = ss.Pars(
             # Natural history parameters, all specified in days
-            dur_exp = 8,       # (days) - source: US CDC
-            dur_inf = 11,      # (days) - source: US CDC
-            p_death = 0.005,   # Probability of death
+            dur_exp = ss.normal(8),        # (days) - source: US CDC
+            dur_inf = ss.normal(11),       # (days) - source: US CDC
+            p_death = ss.bernoulli(0.005), # Probability of death
 
             # Initial conditions and beta
-            init_prev = 0.005,
+            init_prev = ss.bernoulli(0.005),
             beta = None,
         )
-
-        par_dists = ss.dictmergeleft(par_dists,
-            dur_exp   = ss.normal,
-            dur_inf   = ss.normal,
-            init_prev = ss.bernoulli,
-            p_death   = ss.bernoulli,
-        )
-
-        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+        super().__init__(pars=pars, *args, **kwargs)
 
         # SIR are added automatically, here we add E
         self.add_states(

@@ -10,8 +10,16 @@ __all__ = ['Gonorrhea']
 
 class Gonorrhea(ss.Infection):
 
-    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
-
+    def __init__(self, pars=None, *args, **kwargs):
+        # Parameters
+        self.pars = ss.Pars(
+            dur_inf_in_days = ss.lognorm_ex(mean=10, stdev=0.6),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
+            p_symp    = ss.bernoulli(0.5),  # Share of infections that are symptomatic. Placeholder value
+            p_clear   = ss.bernoulli(0.2),  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
+            init_prev = ss.bernoulli(0.1),
+        )
+        super().__init__(pars=pars, *args, **kwargs)
+        
         # States additional to the default disease states (see base class)
         # Additional states dependent on parameter values, e.g. self.p_symp?
         # These might be useful for connectors to target, e.g. if HIV reduces p_clear
@@ -20,23 +28,7 @@ class Gonorrhea(ss.Infection):
             ss.FloatArr('ti_clearance'),
             ss.FloatArr('p_symp', default=1),
         )
-
-        # Parameters
-        pars = ss.dictmergeleft(pars,
-            dur_inf_in_days = ss.lognorm_ex(mean=10, stdev=0.6),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
-            p_symp = 0.5,  # Share of infections that are symptomatic. Placeholder value
-            p_clear = 0.2,  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
-            init_prev = 0.1,
-        )
-
-        par_dists = ss.dictmergeleft(par_dists,
-            dur_inf_in_days = ss.lognorm_ex,
-            p_symp          = ss.bernoulli,
-            p_clear         = ss.bernoulli,
-            init_prev       = ss.bernoulli,
-        )
-
-        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+        
         return
 
     def init_results(self, sim):

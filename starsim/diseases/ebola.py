@@ -13,42 +13,27 @@ __all__ = ['Ebola']
 
 class Ebola(SIR):
 
-    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
+    def __init__(self, pars=None, *args, **kwargs):
         """ Initialize with parameters """
-
-        pars = ss.dictmergeleft(pars,
+        self.pars = ss.Pars(
             # Natural history parameters, all specified in days
-            dur_exp2symp = 12.7, # Add source
-            dur_symp2sev =    6, # Add source
-            dur_sev2dead =  1.5, # Add source
-            dur_dead2buried = 2, # Add source
-            dur_symp2rec =   10, # Add source
-            dur_sev2rec =  10.4, # Add source
-            p_sev =         0.7, # Add source
-            p_death =      0.55, # Add source
-            p_safe_bury =  0.25, # Probability of a safe burial - should be linked to diagnoses
+            dur_exp2symp    = ss.lognorm_ex(12.7), # Add source
+            dur_symp2sev    = ss.lognorm_ex(6), # Add source
+            dur_sev2dead    = ss.lognorm_ex(1.5), # Add source
+            dur_dead2buried = ss.lognorm_ex(2), # Add source
+            dur_symp2rec    = ss.lognorm_ex(10), # Add source
+            dur_sev2rec     = ss.lognorm_ex(10.4), # Add source
+            p_sev           = ss.bernoulli(0.7), # Add source
+            p_death         = ss.bernoulli(0.55), # Add source
+            p_safe_bury     = ss.bernoulli(0.25), # Probability of a safe burial - should be linked to diagnoses
 
             # Initial conditions and beta
-            init_prev = 0.005,
-            beta = None,
-            sev_factor = 2.2,
+            init_prev       = ss.bernoulli(0.005),
+            beta            = None,
+            sev_factor      = 2.2,
             unburied_factor = 2.1,
         )
-
-        par_dists = ss.dictmergeleft(par_dists,
-            dur_exp2symp    = ss.lognorm_ex,
-            dur_symp2sev    = ss.lognorm_ex,
-            dur_sev2dead    = ss.lognorm_ex,
-            dur_dead2buried = ss.lognorm_ex,
-            dur_symp2rec    = ss.lognorm_ex,
-            dur_sev2rec     = ss.lognorm_ex,
-            p_sev           = ss.bernoulli,
-            p_death         = ss.bernoulli,
-            p_safe_bury     = ss.bernoulli,
-            init_prev       = ss.bernoulli,
-        )
-
-        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+        super().__init__(pars=pars, *args, **kwargs)
 
         # Boolean states
         

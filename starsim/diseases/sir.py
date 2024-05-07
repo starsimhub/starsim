@@ -25,7 +25,6 @@ class SIR(ss.Infection):
             p_death = ss.bernoulli(0.01),
             beta = 0.5,
         )
-
         super().__init__(pars=pars, *args, **kwargs)
 
         self.add_states(

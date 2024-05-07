@@ -12,6 +12,17 @@ __all__ = ['HIV', 'ART', 'CD4_analyzer']
 class HIV(ss.Infection):
 
     def __init__(self, pars=None, par_dists=None, *args, **kwargs):
+        
+        self.pars = ss.Pars(
+            cd4_min = 100,
+            cd4_max = 500,
+            cd4_rate = 5,
+            eff_condoms = 0.7,
+            art_efficacy = 0.96,
+            init_prev = ss.bernoulli(0.05),
+            death_prob = ss.bernoulli(0.05),
+        )
+        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
 
         # States
         self.add_states(
@@ -21,25 +32,8 @@ class HIV(ss.Infection):
             ss.FloatArr('cd4', default=500),
         )
 
-        pars = ss.dictmergeleft(pars,
-            cd4_min = 100,
-            cd4_max = 500,
-            cd4_rate = 5,
-            init_prev = 0.05,
-            eff_condoms = 0.7,
-            art_efficacy = 0.96,
-            death_prob = 0.05,
-        )
-
-        par_dists = ss.dictmergeleft(par_dists,
-            init_prev  = ss.bernoulli,
-            death_prob = ss.bernoulli,
-        )
-
-        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
         self.death_prob_data = sc.dcp(self.pars.death_prob)
         self.pars.death_prob = self.make_death_prob
-
         return
 
     @staticmethod
