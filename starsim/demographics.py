@@ -145,7 +145,7 @@ class Deaths(Demographics):
 
         self.pars = ss.Pars(
             rel_death = 1,
-            death_rate = ss.bernoulli(20),  # Default = a fixed rate of 2%/year, overwritten if data provided
+            death_rate = 20,  # Default = a fixed rate of 2%/year, overwritten if data provided
             units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
 
@@ -161,7 +161,7 @@ class Deaths(Demographics):
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.death_rate_data = self.standardize_death_data()
-        self.pars.death_rate = self.make_death_prob_fn
+        self.pars.death_rate = ss.bernoulli(p=self.make_death_prob_fn)
 
         return
 
@@ -169,8 +169,9 @@ class Deaths(Demographics):
     def make_death_prob_fn(module, sim, uids):
         """ Take in the module, sim, and uids, and return the probability of death for each UID on this timestep """
 
-        if sc.isnumber(module.death_rate_data):
-            death_rate = module.death_rate_data
+        drd = module.death_rate_data
+        if sc.isnumber(drd) or isinstance(drd, ss.Dist):
+            death_rate = drd
 
         else:
             ppl = sim.people

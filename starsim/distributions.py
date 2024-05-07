@@ -8,7 +8,7 @@ import scipy.stats as sps
 import starsim as ss
 import matplotlib.pyplot as pl
 
-__all__ = ['find_dists', 'dist_list', 'Dists', 'Dist']
+__all__ = ['find_dists', 'make_dist', 'dist_list', 'Dists', 'Dist']
 
 def str2int(string, modulo=1_000_000):
     """

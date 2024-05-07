@@ -312,7 +312,7 @@ def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
             new_data[sim_name] = sc.tolist(data[col_name])
         df = sc.dataframe(new_data)
 
-    elif sc.isnumber(data):
+    elif sc.isnumber(data) or isinstance(data, ss.Dist):
         df = data  # Just return it as-is
 
     else:
