@@ -33,7 +33,7 @@ def make_sim_pars():
 
 def test_demo(do_plot=do_plot):
     """ Test Starsim's demo run """
-    sim = ss.demo(plot=do_plot)
+    s1 = ss.demo(plot=do_plot)
     
     # Test explicit demo
     s2 = ss.Sim(diseases='sir', networks='random').run()
@@ -42,8 +42,8 @@ def test_demo(do_plot=do_plot):
     sir = ss.SIR()
     net = ss.RandomNet()
     s3 = ss.Sim(diseases=sir, networks=net).run()
-    assert not ss.diff_sims(s2, s3), 'Sims should match'
-    return sim
+    assert not (ss.diff_sims(s1, s2) or ss.diff_sims(s2, s3)), 'Sims should match'
+    return s1
 
 
 def test_default(do_plot=do_plot):
@@ -64,54 +64,6 @@ def test_simple(do_plot=do_plot):
     return sim
 
 
-def test_sir_epi():
-    sc.heading('Test basic epi dynamics')
-
-    # Define the parameters to vary
-    par_effects = dict(
-        beta=[0.01, 0.99],
-        n_contacts=[1, 20],
-        init_prev=[0.1, 0.9],
-        dur_inf=[1, 8],
-        p_death=[.01, .1],
-    )
-
-    # Loop over each of the above parameters and make sure they affect the epi dynamics in the expected ways
-    for par, par_val in par_effects.items():
-        lo = par_val[0]
-        hi = par_val[1]
-
-        # Make baseline pars
-        pars0 = make_sim_pars()
-        pars1 = make_sim_pars()
-
-        if par != 'n_contacts':
-            pars0['diseases'] = sc.mergedicts(pars0['diseases'], {par: lo})
-            pars1['diseases'] = sc.mergedicts(pars1['diseases'], {par: hi})
-        else:
-            pars0['networks'] = sc.mergedicts(pars0['networks'], {par: lo})
-            pars1['networks'] = sc.mergedicts(pars1['networks'], {par: hi})
-
-        # Run the simulations and pull out the results
-        s0 = ss.Sim(pars0, label=f'{par} {par_val[0]}').run()
-        s1 = ss.Sim(pars1, label=f'{par} {par_val[1]}').run()
-
-        # Check results
-        if par == 'p_death':
-            v0 = s0.results.cum_deaths[-1]
-            v1 = s1.results.cum_deaths[-1]
-        else:
-            ind = 1 if par == 'init_prev' else -1
-            v0 = s0.results.sir.cum_infections[ind]
-            v1 = s1.results.sir.cum_infections[ind]
-
-        print(f'Checking with varying {par:10s} ... ', end='')
-        assert v0 <= v1, f'Expected infections to be lower with {par}={lo} than with {par}={hi}, but {v0} > {v1})'
-        print(f'✓ ({v0} <= {v1})')
-
-    return s0, s1
-
-
 def test_simple_vax(do_plot=do_plot):
     """ Create and run a sim with vaccination """
     ss.set_seed(1)
@@ -123,6 +75,8 @@ def test_simple_vax(do_plot=do_plot):
     intv = ss.routine_vx(start_year=2015, prob=0.2, product=my_vax)
     sim_intv = ss.Sim(pars=pars, interventions=intv)
     sim_intv.run()
+    
+    assert sim_intv.summary.cum_deaths < sim_base.summary.cum_deaths, 'Vaccine should avert deaths'
 
     # Check plots
     if do_plot:
@@ -171,33 +125,17 @@ def test_parallel():
     return s1, s2
 
 
-def test_sis(do_plot=do_plot):
-    pars = dict(
-        n_agents = n_agents,
-        diseases = 'sis',
-        networks = 'random'
-    )
-    sim = ss.Sim(pars)
-    sim.run()
-    if do_plot:
-        sim.plot()
-        sim.diseases.sis.plot()
-    return sim
-
-
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
     T = sc.timer()
     
-    s0 = test_demo(do_plot=do_plot)
-    s1 = test_default(do_plot=do_plot)
-    s2 = test_simple(do_plot=do_plot)
-    s3a, s3b = test_sir_epi()
-    s4_base, s4_intv = test_simple_vax(do_plot=do_plot)
-    s5 = test_components(do_plot=do_plot)
-    s6a, s6b = test_parallel()
-    s7 = test_sis(do_plot=do_plot)
+    sim0 = test_demo(do_plot=do_plot)
+    sim1 = test_default(do_plot=do_plot)
+    sim2 = test_simple(do_plot=do_plot)
+    sim3b, sim3i = test_simple_vax(do_plot=do_plot)
+    sim4 = test_components(do_plot=do_plot)
+    sim5a, sim5b = test_parallel()
     
     T.toc()
     

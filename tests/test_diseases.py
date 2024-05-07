@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 test_run = True
 n_agents = [10_000, 2_000][test_run]
-do_plot = True
+do_plot = False
 sc.options(interactive=False) # Assume not running interactively
 
 
@@ -39,7 +39,7 @@ def test_sir():
 
     # CK: parameters changed
     # assert len(sir.log.out_edges(np.nan)) == sir.pars.initial # Log should match initial infections
-    df = sir.log.line_list  # Check generation of line-list
+    df = sir.log.line_list  # Check generation of line-list # TODO: fix
     # assert df.source.isna().sum() == sir.pars.initial # Check seed infections in line list
 
     plt.figure()
@@ -54,6 +54,70 @@ def test_sir():
     plt.legend(['Susceptible', 'Infected', 'Recovered', 'Dead'])
     plt.xlabel('Year')
     plt.title('SIR')
+    return sim
+
+
+def test_sir_epi():
+    sc.heading('Test basic epi dynamics')
+    
+    base_pars = dict(n_agents=n_agents, networks=dict(type='random'), diseases=dict(type='sir'))
+
+    # Define the parameters to vary
+    par_effects = dict(
+        beta = [0.01, 0.99],
+        n_contacts = [1, 20],
+        init_prev = [0.1, 0.9],
+        dur_inf = [1, 8],
+        p_death = [.01, .1],
+    )
+
+    # Loop over each of the above parameters and make sure they affect the epi dynamics in the expected ways
+    for par, par_val in par_effects.items():
+        lo = par_val[0]
+        hi = par_val[1]
+
+        # Make baseline pars
+        pars0 = sc.dcp(base_pars)
+        pars1 = sc.dcp(base_pars)
+
+        if par != 'n_contacts':
+            pars0['diseases'] = sc.mergedicts(pars0['diseases'], {par: lo})
+            pars1['diseases'] = sc.mergedicts(pars1['diseases'], {par: hi})
+        else:
+            pars0['networks'] = sc.mergedicts(pars0['networks'], {par: lo})
+            pars1['networks'] = sc.mergedicts(pars1['networks'], {par: hi})
+
+        # Run the simulations and pull out the results
+        s0 = ss.Sim(pars0, label=f'{par} {par_val[0]}').run()
+        s1 = ss.Sim(pars1, label=f'{par} {par_val[1]}').run()
+
+        # Check results
+        if par == 'p_death':
+            v0 = s0.results.cum_deaths[-1]
+            v1 = s1.results.cum_deaths[-1]
+        else:
+            ind = 1 if par == 'init_prev' else -1
+            v0 = s0.results.sir.cum_infections[ind]
+            v1 = s1.results.sir.cum_infections[ind]
+
+        print(f'Checking with varying {par:10s} ... ', end='')
+        assert v0 <= v1, f'Expected infections to be lower with {par}={lo} than with {par}={hi}, but {v0} > {v1})'
+        print(f'✓ ({v0} <= {v1})')
+
+    return s0, s1
+
+
+def test_sis(do_plot=do_plot):
+    pars = dict(
+        n_agents = n_agents,
+        diseases = 'sis',
+        networks = 'random'
+    )
+    sim = ss.Sim(pars)
+    sim.run()
+    if do_plot:
+        sim.plot()
+        sim.diseases.sis.plot()
     return sim
 
 
@@ -111,7 +175,9 @@ def test_multidisease():
 
 if __name__ == '__main__':
     sc.options(interactive=do_plot)
-    sim1 = test_sir()
-    sim2 = test_ncd()
-    sims = test_gavi()
-    sim = test_multidisease()
+    sir   = test_sir()
+    s1,s2 = test_sir_epi()
+    sis   = test_sis()
+    ncd   = test_ncd()
+    gavi  = test_gavi()
+    multi = test_multidisease()
