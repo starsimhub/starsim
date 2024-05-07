@@ -113,8 +113,13 @@ class Pars(sc.objdict):
                         if 'type' not in new.keys(): # Same type of dist, set parameters
                             old.set(**new)
                         else: # We need to create a new distribution
-                            dist = ss.make_dist(new)
-                            self[key] = dist
+                            newtype = new['type']
+                            if isinstance(old, ss.bernoulli) and newtype != 'bernoulli':
+                                errormsg = f"Bernoulli distributions can't be changed to another type: {newtype} is invalid"
+                                raise TypeError(errormsg)
+                            else:
+                                dist = ss.make_dist(new)
+                                self[key] = dist
                 
                 # Everything else
                 else:
@@ -391,7 +396,8 @@ class SimPars(Pars):
                             mod = modcls(**mod)
                         except Exception as E:
                             errormsg = f'Failed to create module {modtype} with arguments {mod}; see above for full error'
-                            raise ValueError(errormsg) from E
+                            exc = type(E) # Preserve exception type
+                            raise exc(errormsg) from E
                     
                     # Special handling for interventions and analyzers: convert class and function to class instance
                     if modkey in ['interventions', 'analyzers']:
