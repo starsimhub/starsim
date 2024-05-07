@@ -580,10 +580,12 @@ class Sim(sc.prettyobj):
 
         return output
 
-    def plot(self):
+    def plot(self, key=None):
         with sc.options.with_style('fancy'):
             flat = sc.flattendict(self.results, sep=': ')
             yearvec = flat.pop('yearvec')
+            if key is not None:
+                flat = {k:v for k,v in flat.items() if k.startswith(key)}
             fig, axs = sc.getrowscols(len(flat), make=True)
             for ax, (k, v) in zip(axs.flatten(), flat.items()):
                 ax.plot(yearvec, v)

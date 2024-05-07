@@ -218,6 +218,17 @@ class Module(sc.quickobj):
         out.pars = self.pars.to_json()
         return out
 
+    def plot(self):
+        with sc.options.with_style('fancy'):
+            flat = sc.flattendict(self.results, sep=': ')
+            yearvec = self.sim.yearvec
+            fig, axs = sc.getrowscols(len(flat), make=True)
+            for ax, (k, v) in zip(axs.flatten(), flat.items()):
+                ax.plot(yearvec, v)
+                ax.set_title(k)
+                ax.set_xlabel('Year')
+        return fig
+
 
 class Connector(Module):
     """

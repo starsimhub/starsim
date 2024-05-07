@@ -123,12 +123,11 @@ class Pars(sc.objdict):
                 
                 # Everything else
                 else:
-                    warnmsg = 'No known mechanism for handling {type(old)} → {type(new)}; using default'
-                    ss.warn(warnmsg)
-                    self[key] = new
-                    raise Exception() # TEMP
-                    
+                    errormsg = 'No known mechanism for handling {type(old)} → {type(new)}; using default'
+                    raise TypeError(errormsg)
+                
         return self
+        
 
     def check_key_mismatch(self, pars):
         """ Check whether additional keys are being added to the dictionary """
@@ -376,7 +375,7 @@ class SimPars(Pars):
                         if 'type' in mod:
                             modtype = mod.pop('type')
                         else:
-                            errormsg = f'When defining a module as a dict, you must supply the type ({mod})'
+                            errormsg = f'When specifying a {modkey} module with a dict, one of the keys must be "type"; you supplied {mod}'
                             raise ValueError(errormsg)
                         
                         # Get the module type as a class
