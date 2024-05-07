@@ -14,9 +14,7 @@ __all__ = ['Disease', 'Infection', 'InfectionLog']
 
 class Disease(ss.Module):
     """ Base module class for diseases """
-    def step(self):
-        """ Update states, including transmission """
-        pass
+    pass
 
 
 class Infection(Disease):
@@ -29,6 +27,11 @@ class Infection(Disease):
     """
     def __init__(self, name=None, label=None):
         super().__init__(name=name, label=label)
+        
+        self.define_states(
+            
+        )
+        
         self.add_states(
             ss.BoolArr('susceptible', default=True),
             ss.BoolArr('infected'),
@@ -38,8 +41,7 @@ class Infection(Disease):
         )
 
         # Define random number generators for make_new_cases
-        self.rng_target = ss.random(name='target')
-        self.rng_source = ss.random(name='source')
+        self.rng_trans = ss.multi_random('target', 'source')
         return
     
     def initialize(self, sim):
@@ -138,7 +140,7 @@ class Infection(Disease):
         sim = self.sim
         new_cases = []
         sources = []
-        betamap = self._check_betas(sim)
+        betamap = self._check_betas(sim) # FIXX
 
         for nkey,net in sim.networks.items():
             if not len(net):
@@ -146,7 +148,7 @@ class Infection(Disease):
 
             nbetas = betamap[nkey]
             contacts = net.contacts
-            rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
+            rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans) # FIXX
             rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
             p1p2b0 = [contacts.p1, contacts.p2, nbetas[0]]
             p2p1b1 = [contacts.p2, contacts.p1, nbetas[1]]
@@ -157,19 +159,14 @@ class Infection(Disease):
                     continue
 
                 # Calculate probability of a->b transmission.
-                beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=sim.dt)
+                beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=sim.dt) # FIXX
                 p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
 
                 # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
-                rvs_s = self.rng_source.rvs(src)
-                rvs_t = self.rng_target.rvs(trg)
-                rvs = rvs_s + rvs_t
-                inds = np.where(rvs>1.0)[0]
-                rvs[inds] -= 1
-                
-                new_cases_bool = rvs < p_transmit
-                new_cases.append(trg[new_cases_bool])
-                sources.append(src[new_cases_bool])
+                rands = self.rng_trans.rvs(src, trg)
+                transmitted = p_transmit > rands
+                new_cases.append(trg[transmitted])
+                sources.append(src[transmitted])
                 
         # Tidy up
         if len(new_cases) and len(sources):
@@ -234,7 +231,6 @@ class InfectionLog(nx.MultiDiGraph):
 
     A table of outcomes can be returned using `InfectionLog.line_list()`
     """
-
     def add_entries(self, sim, target_uids, source_uids=None): # TODO: reconcile with other methods
         if source_uids is None:
             for target in target_uids:
@@ -251,8 +247,9 @@ class InfectionLog(nx.MultiDiGraph):
         This method can be used to add data to an existing transmission event.
         The most recent transmission event will be used
 
-        :param uid: The UID of the target node (the agent that was infected)
-        :param kwargs: Remaining arguments are stored as edge data
+        Args:
+            uid: The UID of the target node (the agent that was infected)
+            kwargs: Remaining arguments are stored as edge data
         """
         for uid in sc.promotetoarray(uids):
             source, target, key = max(self.in_edges(uid, keys=True),

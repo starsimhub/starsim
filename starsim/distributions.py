@@ -764,6 +764,56 @@ class choice(Dist):
         return rvs
 
 
+class multi_random(sc.prettyobj):
+    """
+    A class for holding two or more ss.random() distributions, and generating
+    random numbers linked to each of them. Useful for e.g. pairwise transmission
+    probabilities.
+    """
+    def __init__(self, names, *args, **kwargs):
+        names = sc.mergelists(names, args)
+        self.dists = [ss.random(name=name, **kwargs) for name in names]
+        return
+    
+    def __len__(self):
+        return len(self.dists)
+        
+    def initialize(self, *args, **kwargs):
+        for dist in self.dists: dist.initialize(*args, **kwargs)
+        return
+    
+    def reset(self, *args, **kwargs):
+        for dist in self.dists: dist.reset(*args, **kwargs)
+        return
+    
+    def jump(self, *args, **kwargs):
+        for dist in self.dists: dist.jump(*args, **kwargs)
+        return
+    
+    def rvs(self, *args):
+        """ Get random variates from each of the underlying distributions and combine them efficiently """
+        # Validation
+        n_args = len(args)
+        n_dists = len(self)
+        if n_args != len(self):
+            errormsg = f'Number of UID lists supplied ({n_args}) does not match number of distributions ({n_dists})'
+            raise ValueError(errormsg)
+        
+        # Generate the random numbers
+        rvs = self.dists[0].rvs(args[0]) # Get the initial random numbers
+        for i,uids in enumerate(args[1:]):
+            rvs += self.dists[i+1].rvs[uids]
+    
+        # Convert to a value between 0 and 1 efficiently
+        inds = np.where(rvs>1.0)[0]
+        if n_dists == 2: # Optimization for common use case
+            rvs[inds] -= 1
+        else:
+            rvs[inds] = rvs[inds] % 1.0 # Slower, but handles values over 2.0
+        return rvs
+
+    
+
 #%% Dist exceptions
 
 class DistNotInitializedError(RuntimeError):
