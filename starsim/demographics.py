@@ -34,15 +34,16 @@ class Births(Demographics):
         super().__init__(pars, **kwargs)
 
         # Set defaults
-        self.pars = ss.dictmergeleft(self.pars,
+        self.pars = ss.Pars(
             birth_rate = 0,
             rel_birth = 1,
             units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
         )
 
         # Process metadata. Defaults here are the labels used by UN data
-        self.metadata = ss.dictmergeleft(metadata,
-            data_cols = dict(year='Year', cbr='CBR'),
+        self.metadata = sc.mergedicts(
+            dict(data_cols=dict(year='Year', cbr='CBR')),
+            metadata,
         )
 
         # Process data, which may be provided as a number, dict, dataframe, or series
@@ -112,7 +113,7 @@ class Births(Demographics):
 
 
 class Deaths(Demographics):
-    def __init__(self, pars=None, par_dists=None, metadata=None, **kwargs):
+    def __init__(self, pars=None, metadata=None, **kwargs):
         """
         Configure disease-independent "background" deaths.
 
@@ -136,28 +137,25 @@ class Deaths(Demographics):
                 death_rate: float, dict, or pandas dataframe/series containing mortality data
                 units: units for death rates (see in-line comment on par dict below)
 
-            par_dists: dict
-
             metadata: data about the data contained within the data input.
                 "data_cols" is is a dictionary mapping standard keys, like "year" to the
                 corresponding column name in data. Similar for "sex_keys". Finally,
         """
         super().__init__(pars, **kwargs)
 
-        self.pars = ss.dictmergeleft(self.pars,
+        self.pars = ss.Pars(
             rel_death = 1,
-            death_rate = 20,  # Default = a fixed rate of 2%/year, overwritten if data provided
+            death_rate = ss.bernoulli(20),  # Default = a fixed rate of 2%/year, overwritten if data provided
             units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
 
-        self.par_dists = ss.dictmergeleft(par_dists,
-            death_rate = ss.bernoulli
-        )
-
         # Process metadata. Defaults here are the labels used by UN data
-        self.metadata = ss.dictmergeleft(metadata,
-            data_cols = dict(year='Time', sex='Sex', age='AgeGrpStart', value='mx'),
-            sex_keys = dict(f='Female', m='Male'),
+        self.metadata = sc.mergedicts(
+            dict(
+                data_cols = dict(year='Time', sex='Sex', age='AgeGrpStart', value='mx'),
+                sex_keys = dict(f='Female', m='Male'),
+            ),
+            metadata
         )
 
         # Process data, which may be provided as a number, dict, dataframe, or series
@@ -249,8 +247,8 @@ class Deaths(Demographics):
 
 class Pregnancy(Demographics):
 
-    def __init__(self, pars=None, par_dists=None, metadata=None, **kwargs):
-        super().__init__(pars, **kwargs)
+    def __init__(self, pars=None, metadata=None, **kwargs):
+        
 
         # Other, e.g. postpartum, on contraception...
         self.add_states(
@@ -264,25 +262,22 @@ class Pregnancy(Demographics):
             ss.FloatArr('ti_dead'),  # Maternal mortality
         )
 
-        self.pars = ss.dictmergeleft(self.pars,
+        self.pars = ss.Pars(
             dur_pregnancy = 0.75,
             dur_postpartum = 0.5,
-            fertility_rate = 0,    # Usually this will be provided in CSV format
+            fertility_rate = ss.bernoulli(0),    # Usually this will be provided in CSV format
             rel_fertility = 1,
-            maternal_death_rate = 0,
-            sex_ratio = 0.5,       # Ratio of babies born female
+            maternal_death_rate = ss.bernoulli(0),
+            sex_ratio = ss.bernoulli(0.5),       # Ratio of babies born female
             units = 1e-3,          # Assumes fertility rates are per 1000. If using percentages, switch this to 1
         )
-
-        self.par_dists = ss.dictmergeleft(par_dists,
-            fertility_rate = ss.bernoulli,
-            maternal_death_rate = ss.bernoulli,
-            sex_ratio = ss.bernoulli
-        )
+        
+        super().__init__(pars, **kwargs)
 
         # Process metadata. Defaults here are the labels used by UN data
-        self.metadata = ss.dictmergeleft(metadata,
-            data_cols = dict(year='Time', age='AgeGrp', value='ASFR'),
+        self.metadata = sc.mergedicts(
+            dict(data_cols=dict(year='Time', age='AgeGrp', value='ASFR')),
+            metadata,
         )
 
         self.choose_slots = ss.randint() # Low and high will be reset upon initialization

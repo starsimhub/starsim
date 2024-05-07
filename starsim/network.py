@@ -440,10 +440,10 @@ class StaticNet(Network):
 class RandomNet(DynamicNetwork):
     """ Random connectivity between agents """
 
-    def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
+    def __init__(self, pars=None, key_dict=None, **kwargs):
         """ Initialize """
         self.pars = ss.Pars(
-            n_contacts = 10,  # Distribution or int. If int, interpreted as the mean of the dist listed in par_dists
+            n_contacts = ss.delta(10),
             dur = 0,
         )
         
@@ -569,7 +569,7 @@ class MFNet(SexualNetwork):
     This network is built by **randomly pairing** males and female with variable
     relationship durations.
     """
-    def __init__(self, pars=None, par_dists=None, key_dict=None, **kwargs):
+    def __init__(self, pars=None, key_dict=None, **kwargs):
         self.pars = ss.Pars(
             duration = ss.lognorm_ex(15),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             participation = ss.bernoulli(0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
@@ -581,8 +581,6 @@ class MFNet(SexualNetwork):
         # Finish initialization
         super().__init__(pars=pars, key_dict=key_dict, **kwargs)
         self.dist = ss.choice(name='MFNet', replace=False) # Set the array later
-        self.par_dists = par_dists
-
         return
 
     def initialize(self, sim):
