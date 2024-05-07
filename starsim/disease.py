@@ -14,85 +14,14 @@ __all__ = ['Disease', 'Infection', 'InfectionLog']
 
 class Disease(ss.Module):
     """ Base module class for diseases """
-
-    def __init__(self):
-        super().__init__()
+    def __init__(self, name=None, label=None):
+        super().__init__(name=name, label=label)
         self.results = ss.Results(self.name)
         return
 
-    def update_pre(self, sim):
-        """
-        Carry out autonomous updates at the start of the timestep (prior to transmission)
-        """
+    def step(self):
+        """ Update states, including transmission """
         pass
-
-    def update_death(self, sim, uids):
-        """
-        Carry out state changes upon death
-
-        This function is triggered after deaths are resolved, and before analyzers are run.
-        See the SIR example model for a typical use case - deaths are requested as an autonomous
-        update, to take effect after transmission on the same timestep. State changes that occur
-        upon death (e.g., clearing an `infected` flag) are executed in this function. That also
-        allows an intervention to avert a death scheduled on the same timestep, without having
-        to undo any state changes that have already been applied (because they only run via this
-        function if the death actually occurs).
-
-        Depending on the module and the results it produces, it may or may not be necessary
-        to implement this.
-        """
-        pass
-
-    def make_new_cases(self, sim):
-        """
-        Add new cases of the disease
-
-        This method is agnostic as to the mechanism by which new cases occur. This
-        could be through transmission (parametrized in different ways, which may or
-        may not use the contact networks) or it may be based on risk factors/seeding,
-        as may be the case for non-communicable diseases.
-
-        It is expected that this method will internally call Disease.set_prognoses()
-        at some point.
-        """
-        pass
-
-    def set_prognoses(self, sim, target_uids, source_uids=None):
-        """
-        Set prognoses upon infection/acquisition
-
-        This function assigns state values upon infection or acquisition of
-        the disease. It would normally be called somewhere towards the end of
-        `Disease.make_new_cases()`. Infections will automatically be added to
-        the log as part of this operation.
-
-        The from_uids are relevant for infectious diseases, but would be left
-        as `None` for NCDs.
-
-        Args:
-            sim (Sim): the STarsim simulation object
-            uids (array): UIDs for agents to assign disease progoses to
-            from_uids (array): Optionally specify the infecting agent
-        """
-        if source_uids is None:
-            for target in target_uids:
-                self.log.append(np.nan, target, sim.year)
-        else:
-            for target, source in zip(target_uids, source_uids):
-                self.log.append(source, target, sim.year)
-        return
-
-    def update_results(self, sim):
-        """
-        Update results
-
-        This function is executed after transmission in all modules has been resolved.
-        This allows result updates at this point to capture outcomes dependent on multiple
-        modules, where relevant.
-        """
-        for state in self._boolean_states:
-            self.results[f'n_{state.name}'][sim.ti] = np.count_nonzero(state & sim.people.alive)
-        return
 
 
 class Infection(Disease):
@@ -103,9 +32,8 @@ class Infection(Disease):
     transmission with directional beta values) and defines attributes that connectors
     operate on to capture co-infection
     """
-
-    def __init__(self):
-        super().__init__()
+    def __init__(self, name=None, label=None):
+        super().__init__(name=name, label=label)
         self.add_states(
             ss.BoolArr('susceptible', default=True),
             ss.BoolArr('infected'),
@@ -205,13 +133,14 @@ class Infection(Disease):
                         raise ValueError(errormsg)
         return betamap
 
-    def make_new_cases(self, sim):
+    def transmit(self):
         """
         Add new cases of module, through transmission, incidence, etc.
         
         Common-random-number-safe transmission code works by mapping edges onto
         slots.
         """
+        sim = self.sim
         new_cases = []
         sources = []
         betamap = self._check_betas(sim)
@@ -311,8 +240,14 @@ class InfectionLog(nx.MultiDiGraph):
     A table of outcomes can be returned using `InfectionLog.line_list()`
     """
 
-    # Add entries
-    # Add items to the most recent infection for an agent
+    def add_entries(self, sim, target_uids, source_uids=None): # TODO: reconcile with other methods
+        if source_uids is None:
+            for target in target_uids:
+                self.log.append(np.nan, target, sim.year)
+        else:
+            for target, source in zip(target_uids, source_uids):
+                self.log.append(source, target, sim.year)
+        return
 
     def add_data(self, uids, **kwargs):
         """
@@ -363,5 +298,4 @@ class InfectionLog(nx.MultiDiGraph):
         df = df.fillna(pd.NA)
         df['source'] = df['source'].astype("Int64")
         df['target'] = df['target'].astype("Int64")
-
         return df

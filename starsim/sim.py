@@ -115,11 +115,6 @@ class Sim(sc.prettyobj):
         for dem in self.demographics():
             dem.step()
 
-        # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
-        # to be applied to newly created agents
-        for disease in self.diseases():
-            disease.step()
-
         # Update networks - this takes place here in case autonomous state changes at this timestep
         # affect eligibility for contacts
         for network in self.networks():
@@ -129,10 +124,10 @@ class Sim(sc.prettyobj):
         # interventions, by running them at this point
         for intervention in self.interventions():
             intervention(self) # Interventions and analyzers get the sim as an argument in case they're functions
-
-        # Carry out transmission/new cases
+        
+        # Carry out autonomous state changes in the disease modules, including transmission (but excluding deaths)
         for disease in self.diseases():
-            disease.transmit()
+            disease.step()
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
@@ -140,14 +135,11 @@ class Sim(sc.prettyobj):
         for disease in self.diseases():
             disease.die(uids)
 
-        # Update results
-        for disease in self.diseases():
-            disease.update_results()
-
+        # Apply analyzers
         for analyzer in self.analyzers():
             analyzer(self)
             
-        # Clean up dead agents
+        # Clean up dead agents and perform other housekeeping tasks
         self.people.finish_step()
 
         # Tidy up
