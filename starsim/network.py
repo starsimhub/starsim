@@ -706,11 +706,11 @@ class MSMNet(SexualNetwork):
         
         return len(p1)
 
-    def step(self, sim, dt=None):
-        people = sim.people
-        self.end_pairs(sim)
-        self.set_network_states(people, upper_age=sim.dt)
-        self.add_pairs(sim)
+    def step(self):
+        people = self.sim.people
+        self.end_pairs()
+        self.set_network_states(people, upper_age=self.sim.dt) # TODO: this looks weird
+        self.add_pairs()
         return
 
 
@@ -741,8 +741,8 @@ class EmbeddingNet(MFNet):
         loc[sim.people.female[uids]] += module.pars.male_shift  # Shift females so they will be paired with older men
         return loc
 
-    def add_pairs(self, sim, ti=None):
-        people = sim.people
+    def add_pairs(self):
+        people = self.sim.people
         available_m = self.available(people, 'male')
         available_f = self.available(people, 'female')
 
@@ -785,18 +785,14 @@ class MaternalNet(Network):
         super().__init__(key_dict=key_dict, vertical=vertical, **kwargs)
         return
 
-    def step(self, sim, dt=None):
-        if dt is None: dt = sim.dt
+    def step(self):
+        dt = self.sim.dt
         # Set beta to 0 for women who complete post-partum period
         # Keep connections for now, might want to consider removing
-        self.contacts.dur = self.contacts.dur - dt
+        self.contacts.dur = self.contacts.dur - dt # TODO: this looks weird
         inactive = self.contacts.dur <= 0
         self.contacts.beta[inactive] = 0
         return
-
-    def initialize(self, sim):
-        """ No pairs added upon initialization """
-        pass
 
     def add_pairs(self, mother_inds, unborn_inds, dur):
         """
