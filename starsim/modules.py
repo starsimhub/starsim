@@ -70,16 +70,18 @@ class Module(sc.quickobj):
         """ Pull out recognized parameters, returning the rest """
         pars = sc.mergedicts(pars, kwargs)
         
-        # Update module parameters
+        # Update matching module parameters
+        matches = {}
         for key in list(pars.keys()): # Need to cast to list to avoid "dict changed during iteration"
             if key in self.pars:
-                self.pars[key] = pars.pop(key)
+                matches[key] = pars.pop(key)
+        self.pars.update(matches)
                 
         # Update module attributes
         metadata = {key:pars.pop(key, None) for key in ['name', 'label', 'requires']}
         self.set_metadata(**metadata)
         
-        # Should be no remaining args
+        # Should be no remaining pars
         if len(pars):
             errormsg = f'{len(pars)} unrecognized arguments for {self.name}: {sc.strjoin(pars.keys())}'
             raise ValueError(errormsg)
