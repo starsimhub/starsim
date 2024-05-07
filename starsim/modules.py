@@ -44,7 +44,10 @@ def find_modules(key=None):
 class Module(sc.quickobj):
 
     def __init__(self, pars=None, name=None, label=None, requires=None, **kwargs):
-        self.pars = ss.Pars(pars, **kwargs)
+        if hasattr(self, 'pars'): # Since sometimes pars are created before super().__init__() is called
+            self.pars.update(pars=pars, **kwargs)
+        else:
+            self.pars = ss.Pars(pars, **kwargs)
         self.name = sc.ifelse(name, getattr(self, 'name', self.__class__.__name__.lower())) # Default name is the class name
         self.label = sc.ifelse(label, getattr(self, 'label', self.name))
         self.requires = sc.mergelists(requires)
