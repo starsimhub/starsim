@@ -65,4 +65,4 @@ pl.xlabel('Year')
 pl.ylabel('Count')
 
 sc.figlayout()
-plt.show()
+pl.show()
