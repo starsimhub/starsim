@@ -12,7 +12,7 @@ import starsim as ss
 # %% Helper functions
 
 # What functions are externally visible
-__all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'standardize_data']
+__all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'standardize_netkey', 'standardize_data']
 
 
 class ndict(sc.objdict):
@@ -221,6 +221,12 @@ def set_seed(seed=None):
 
 
 # %% Data cleaning and processing
+
+
+def standardize_netkey(key):
+    """ Networks can be upper or lowercase, and have a suffix 'net' or not; this function standardizes them """
+    return key.lower().removesuffix('net')
+
 
 def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
     """

@@ -29,61 +29,18 @@ class Infection(Disease):
         super().__init__(name=name, label=label)
         
         self.define_states(
-            'susceptible',
-            'infectious',
+            ss.State('susceptible', default=True),
+            ss.State('infected'),
         )
         
         self.define_transitions(
-            ss.Transition('susceptible', 'infectious', self.transmit)
-        )
-        
-        self.add_states(
-            ss.BoolArr('susceptible', default=True),
-            ss.BoolArr('infected'),
-            ss.FloatArr('rel_sus', default=1.0),
-            ss.FloatArr('rel_trans', default=1.0),
-            ss.FloatArr('ti_infected'),
+            ss.Transition(src='susceptible', dest='infected', func=self.infect, reskey='infections')
         )
 
         # Define random number generators for make_new_cases
-        self.rng_trans = ss.multi_random('target', 'source')
+        self.rng = ss.multi_random('target', 'source')
         return
     
-    def initialize(self, sim):
-        super().initialize(sim)
-        self.validate_beta(sim)
-        return
-    
-    def validate_beta(self, sim):
-        """
-        Perform any parameter validation
-        """
-        if sim.networks is not None and len(sim.networks) > 0:
-            
-            if 'beta' not in self.pars:
-                errormsg = f'Disease {self.name} is missing beta; pars are: {sc.strjoin(self.pars.keys())}'
-                raise sc.KeyNotFoundError(errormsg)
-
-            # If beta is a scalar, apply this bi-directionally to all networks
-            if sc.isnumber(self.pars.beta):
-                β = self.pars.beta
-                self.pars.beta = sc.objdict({k:[β,β] for k in sim.networks})
-
-            # If beta is a dict, check all entries are bi-directional
-            elif isinstance(self.pars.beta, dict):
-                for k,β in self.pars.beta.items():
-                    if sc.isnumber(β):
-                        self.pars.beta[k] = [β,β]
-        return
-
-    @property
-    def infectious(self):
-        """
-        Generally defined as an alias for infected, although these may differ in some diseases.
-        Transmission comes from infectious people; prevalence estimates may include infected people who don't transmit
-        """
-        return self.infected
-
     def set_initial_states(self, sim):
         """
         Set initial values for states. This could involve passing in a full set of initial conditions,
@@ -91,11 +48,9 @@ class Infection(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        if self.pars.init_prev is None:
-            return
-
-        initial_cases = self.pars.init_prev.filter()
-        self.set_prognoses(sim, initial_cases)  # TODO: sentinel value to indicate seeds?
+        if self.pars.init_prev:
+            initial_cases = self.pars.init_prev.filter()
+            self.infect(initial_cases)  # TODO: sentinel value to indicate seeds?
         return
 
     def init_results(self, sim):
@@ -105,34 +60,39 @@ class Infection(Disease):
         super().init_results(sim)
         self.results += [
             ss.Result(self.name, 'prevalence', sim.npts, dtype=float, scale=False),
-            ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cum_infections', sim.npts, dtype=int, scale=True),
+            # ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True),
+            # ss.Result(self.name, 'cum_infections', sim.npts, dtype=int, scale=True),
         ]
         return
+    
+    def validate_beta(self, sim):
+        """ Validate beta and return as a map to match the networks """
+        
+        if 'beta' not in self.pars:
+            errormsg = f'Disease {self.name} is missing beta; pars are: {sc.strjoin(self.pars.keys())}'
+            raise sc.KeyNotFoundError(errormsg)
 
-    def _check_betas(self, sim):
-        """ Check that there's a network for each beta key """
-        # Ensure keys are lowercase
-        if isinstance(self.pars.beta, dict): # TODO: check if needed
-            self.pars.beta = {k.lower(): v for k, v in self.pars.beta.items()}
+        # If beta is a scalar, apply this bi-directionally to all networks
+        β = self.pars.beta
+        if sc.isnumber(β):
+            betamap = {ss.standardize_netkey(k):[β,β] for k in sim.networks.keys()}
 
-        # Create a mapping between beta and networks, and populate it
-        betapars = self.pars.beta
-        betamap = sc.objdict()
-        netkeys = list(sim.networks.keys())
-        if netkeys: # Skip if no networks
-            for bkey in betapars.keys():
-                orig_bkey = bkey[:]
-                if bkey in netkeys: # TODO: CK: could tidy up logic
-                    betamap[bkey] = betapars[orig_bkey]
+        # If beta is a dict, check all entries are bi-directional
+        elif isinstance(β, dict):
+            betamap = dict()
+            for k,thisbeta in β.items():
+                nkey = ss.standardize_netkey(k)
+                if sc.isnumber(thisbeta):
+                    betamap[nkey] = [thisbeta, thisbeta]
                 else:
-                    if 'net' not in bkey:
-                        bkey += 'net'  # Add 'net' suffix if not already there
-                    if bkey in netkeys:
-                        betamap[bkey] = betapars[orig_bkey]
-                    else:
-                        errormsg = f'No network for beta parameter "{bkey}"; your beta should match network keys:\n{sc.newlinejoin(netkeys)}'
-                        raise ValueError(errormsg)
+                    betamap[nkey] = thisbeta
+        
+        # Check that it matches the network
+        netkeys = [ss.standardize_netkey(k) for k in list(sim.networks.keys())]
+        if set(betamap.keys()) != set(netkeys):
+            errormsg = f'Network keys ({netkeys}) and beta keys ({betamap.keys()}) do not match'
+            raise ValueError(errormsg)
+
         return betamap
 
     def transmit(self):
@@ -145,48 +105,33 @@ class Infection(Disease):
         sim = self.sim
         new_cases = []
         sources = []
-        betamap = self._check_betas(sim) # FIXX
-        rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans) # FIXX
-        rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
-
+        betamap = self.validate_beta()
+        
         for nkey,net in sim.networks.items():
-            if not len(net):
-                break
-
-            nbetas = betamap[nkey]
-            edges = net.edges
-            p1p2b0 = [edges.p1, edges.p2, nbetas[0]]
-            p2p1b1 = [edges.p2, edges.p1, nbetas[1]]
-            for src, trg, beta in [p1p2b0, p2p1b1]:
-
-                # Skip networks with no transmission
-                if beta == 0:
-                    continue
-
-                # Calculate probability of a->b transmission.
-                beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=sim.dt) # FIXX
-                p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
-
-                # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
-                rands = self.rng_trans.rvs(src, trg)
-                transmitted = p_transmit > rands
-                new_cases.append(trg[transmitted])
-                sources.append(src[transmitted])
+            if len(net): # Skip networks with no edges
+                edges = net.edges
+                p1p2b0 = [edges.p1, edges.p2, betamap[nkey][0]]
+                p2p1b1 = [edges.p2, edges.p1, betamap[nkey][1]]
+                for src, trg, beta in [p1p2b0, p2p1b1]:
+                    if beta: # Skip networks with no transmission
+    
+                        # Calculate probability of a->b transmission.
+                        beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=sim.dt)
+        
+                        # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
+                        randvals = self.rng.rvs(src, trg)
+                        transmitted = beta_per_dt > randvals
+                        new_cases.append(trg[transmitted])
+                        sources.append(src[transmitted])
                 
         # Tidy up
-        if len(new_cases) and len(sources):
-            new_cases = ss.uids.cat(new_cases)
-            sources = ss.uids.cat(sources)
-        else:
-            new_cases = np.empty(0, dtype=int)
-            sources = np.empty(0, dtype=int)
-            
+        new_cases = ss.uids.cat(new_cases)
+        sources = ss.uids.cat(sources)
         if len(new_cases):
-            self._set_cases(sim, new_cases, sources)
-            
+            self.set_outcomes(sim, new_cases, sources)
         return new_cases, sources
 
-    def _set_cases(self, sim, target_uids, source_uids=None):
+    def set_outcomes(self, sim, target_uids, source_uids=None): ## FIXX
         congenital = sim.people.age[target_uids] <= 0
         if np.count_nonzero(congenital):
             src_c = source_uids[congenital] if source_uids is not None else None
@@ -198,7 +143,7 @@ class Infection(Disease):
     def set_congenital(self, sim, target_uids, source_uids=None):
         pass
 
-    def update_results(self, sim):
+    def update_results(self, sim): # FIXX
         super().update_results(sim)
         res = self.results
         ti = sim.ti

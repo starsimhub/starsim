@@ -28,22 +28,26 @@ class SIR(ss.Infection):
         self.update_pars(pars, **kwargs)
         
         self.define_states(
-            'susceptible',
-            'infected',
-            'recovered',
-            'dead',
+            ss.State('susceptible', True),
+            ss.State('infected'),
+            ss.State('recovered'),
         )
         
         self.define_transitions(
-            ss.Transition('susceptible -> infected', self.infect),
-            ss.Transition('infected -> recovered', self.recover),
-            ss.Transition('infected -> dead', self.die),
+            ss.Transition('susceptible -> infected', func=self.infect,  reskey='infections'),
+            ss.Transition('infected -> recovered',   func=self.recover, reskey='recoveries'),
+            ss.Transition('infected -> dead',        func=self.die,     reskey='deaths'),
+        )
+        
+        self.define_transitions(
+            ss.Transition(src='susceptible', dest='infected', func=self.infect),
+            ss.Transition(src='infected', dest='recovered', func=self.recover),
+            ss.Transition(src='infected', dest='dead', func=self.die),
         )
 
-        self.add_states(
-            ss.BoolArr('recovered'),
-            ss.FloatArr('ti_recovered'),
-            ss.FloatArr('ti_dead'),
+        self.add_props(
+            ss.FloatArr('rel_sus'),
+            ss.FloatArr('rel_trans'),
         )
         return
 

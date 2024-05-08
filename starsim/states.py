@@ -373,14 +373,16 @@ class uids(np.ndarray):
             arr = np.empty(0, dtype=ss_int)
         return np.asarray(arr).view(cls)
     
-    def concat(self, other, **kw): # TODO: why can't they both be called cat()?
+    def concat(self, other, **kw): # Class and instance methods can't share a name
         """ Equivalent to np.concatenate(), but return correct type """
         return np.concatenate([self, other], **kw).view(self.__class__)
     
     @classmethod
     def cat(cls, *args, **kw):
         """ Equivalent to np.concatenate(), but return correct type """
-        arrs = args[0] if len(args) == 1 else args
+        if len(args) == 0 or (len(args) == 1 and (args[0] is None or not len(args[0]))):
+            return uids()
+        arrs = args[0] if len(args) == 1 else args # TODO: handle one-array case
         return np.concatenate(arrs, **kw).view(cls)
     
     def remove(self, other, **kw):
