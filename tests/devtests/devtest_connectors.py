@@ -7,10 +7,10 @@ import starsim as ss
 import pylab as pl
 import sciris as sc
 
-class simple_hiv_syph(ss.Connector):
+class hiv_syph(ss.Connector):
     """ Simple connector whereby rel_sus to NG doubles if CD4 count is <200"""
     def __init__(self, pars=None, **kwargs):
-        super().__init__(pars=pars, label='HIV-Gonorrhea', diseases=[ss.HIV, ss.Syphilis])
+        super().__init__(pars=pars, label='HIV-Syphilis', diseases=[ss.HIV, ss.Syphilis])
         self.pars = ss.dictmerge({
             'rel_trans_hiv': 20,
             'rel_trans_aids': 50,
@@ -36,7 +36,7 @@ syph = ss.Syphilis()
 syph.pars['beta'] = {'mf': [0.1, 0.05]}
 syph.pars['init_prev'] = ss.bernoulli(p=0.05)
 ppl2 = ss.People(10000)
-sim_hiv = ss.Sim(people=ppl2, networks=ss.MFNet(), diseases=[hiv, syph], connectors=simple_hiv_syph())
+sim_hiv = ss.Sim(people=ppl2, networks=ss.MFNet(), diseases=[hiv, syph], connectors=hiv_syph())
 sim_hiv.run()
 
 # Make syphilis sim
