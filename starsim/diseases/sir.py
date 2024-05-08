@@ -33,21 +33,15 @@ class SIR(ss.Infection):
             ss.State('recovered'),
         )
         
-        self.define_transitions(
-            ss.Transition('susceptible -> infected', func=self.infect,  reskey='infections'),
-            ss.Transition('infected -> recovered',   func=self.recover, reskey='recoveries'),
-            ss.Transition('infected -> dead',        func=self.die,     reskey='deaths'),
-        )
-        
-        self.define_transitions(
-            ss.Transition(src='susceptible', dest='infected', func=self.infect),
-            ss.Transition(src='infected', dest='recovered', func=self.recover),
-            ss.Transition(src='infected', dest='dead', func=self.die),
+        self.define_events(
+            ss.Event('susceptible -> infected', func=self.infect,  reskey='infections'),
+            ss.Event('infected -> recovered',   func=self.recover, reskey='recoveries'),
+            ss.Event('infected -> dead',        func=self.die,     reskey='deaths'),
         )
 
         self.add_props(
-            ss.FloatArr('rel_sus'),
-            ss.FloatArr('rel_trans'),
+            ss.FloatArr('rel_sus',   default=1.0),
+            ss.FloatArr('rel_trans', default=1.0),
         )
         return
 

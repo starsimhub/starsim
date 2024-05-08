@@ -331,6 +331,11 @@ class BoolArr(Arr):
         """ Convert True values to UIDs """
         return self.auids[np.nonzero(self.values)[0]]
 
+
+class State(BoolArr):
+    """ A boolean array being used as a state """
+    pass
+
     
 class IndexArr(Arr):
     """ A special class of IndexArr used for UIDs and RNG IDs """
