@@ -1,5 +1,11 @@
 """
 Define array-handling classes, including agent states
+
+an event:
+- handles setting states true/false
+- gets uids automatically
+- generates ti_arrays
+- generates results
 """
 
 import numpy as np
