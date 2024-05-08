@@ -29,6 +29,12 @@ class hiv_syph(ss.Connector):
 
 
 # Make HIV and syphilis with a connector, and run
+# Marital
+mf = ss.MFNet(
+    pars = dict(
+        duration = ss.lognorm_ex(mean=5, stdev=0.5),
+    )
+)
 hiv = ss.HIV()
 hiv.pars['beta'] = {'mf': [0.0008, 0.0004]}
 hiv.pars['init_prev'] = ss.bernoulli(p=0.2)
@@ -36,16 +42,20 @@ syph = ss.Syphilis()
 syph.pars['beta'] = {'mf': [0.1, 0.05]}
 syph.pars['init_prev'] = ss.bernoulli(p=0.05)
 ppl2 = ss.People(10000)
-sim_hiv = ss.Sim(people=ppl2, networks=ss.MFNet(), diseases=[hiv, syph], connectors=hiv_syph())
+sim_hiv = ss.Sim(people=ppl2, networks=mf, diseases=[hiv, syph], connectors=hiv_syph())
 sim_hiv.run()
 
 # Make syphilis sim
 syph = ss.Syphilis()
 syph.pars['beta'] = {'mf': [0.1, 0.05]}
 syph.pars['init_prev'] = ss.bernoulli(p=0.05)
-
+mf = ss.MFNet(
+    pars = dict(
+        duration = ss.lognorm_ex(mean=5, stdev=0.5),
+    )
+)
 ppl1 = ss.People(10000)
-sim_nohiv = ss.Sim(people=ppl1, networks=ss.MFNet(), diseases=syph)
+sim_nohiv = ss.Sim(people=ppl1, networks=mf, diseases=syph)
 sim_nohiv.run()
 
 # Plotting
