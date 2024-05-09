@@ -55,22 +55,17 @@ class Pars(sc.objdict):
                 self[key] = new # It's a new parameter or a number, string, etc: update directly
             elif isinstance(old, Pars): # It's a Pars object: update recursively
                 old.update(new, create=create)
-            else: # Everything else: it's complicated
-                self._process_item(key, new)
+            elif isinstance(old, ss.ndict): # Update module containers
+                self._process_ndict(key, old, new)
+            elif isinstance(old, ss.Module):  # Update modules
+                self._process_module(key, old, new)
+            elif isinstance(old, ss.Dist): # Update a distribution
+                self._process_dist(key, old, new)
+            else: # Everything else; not used currently but could be
+                warnmsg = 'No known mechanism for handling {type(old)} → {type(new)}; using default'
+                ss.warn(warnmsg)
+                self[key] = new
         return self
-    
-    def _process_item(self, key, old, new):
-        """ Process a single item in the supplied parameters """
-        if isinstance(old, ss.ndict): # Update module containers
-            self._process_ndict(key, old, new)
-        elif isinstance(old, ss.Module):  # Update modules
-            self._process_module(key, old, new)
-        elif isinstance(old, ss.Dist): # Update a distribution
-            self._process_dist(self, old, new)
-        else: # Everything else
-            errormsg = 'No known mechanism for handling {type(old)} → {type(new)}; using default'
-            raise TypeError(errormsg)
-        return
     
     def _process_ndict(self, key, old, new):
         """ Update an ndict object in the parameters, e.g. sim.pars.diseases """
@@ -114,10 +109,10 @@ class Pars(sc.objdict):
         
         # It's a dict, figure out what to do
         elif isinstance(new, dict):
-            if 'type' not in new.keys(): # Same type of dist, set parameters
+            newtype = new.get('type')
+            if newtype is None: # Same type of dist, set parameters
                 old.set(**new)
             else: # We need to create a new distribution
-                newtype = new['type']
                 if isinstance(old, ss.bernoulli) and newtype != 'bernoulli':
                     errormsg = f"Bernoulli distributions can't be changed to another type: {newtype} is invalid"
                     raise TypeError(errormsg)
