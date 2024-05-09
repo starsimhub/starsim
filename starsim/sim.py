@@ -77,7 +77,7 @@ class Sim(sc.prettyobj):
         
         # Initialize all distributions now that everything else is in place, then set states
         self.dists.initialize(obj=self, base_seed=p.rand_seed, force=True)
-        # self.init_states()
+        self.init_states()
 
         # Final steps
         self.initialized = True
@@ -149,6 +149,10 @@ class Sim(sc.prettyobj):
         # Set time attributes
         self.people.init_results(self)
         return self.people
+    
+    def init_states(self):
+        """ Initialize the states with values """
+        TODO
 
     @property
     def modules(self):
