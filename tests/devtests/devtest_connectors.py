@@ -12,15 +12,16 @@ import numpy as np
 class hiv_syph(ss.Connector):
     """ Simple connector whereby rel_sus to NG doubles if CD4 count is <200"""
     def __init__(self, pars=None, **kwargs):
-        super().__init__(pars=pars, label='HIV-Syphilis', diseases=[ss.HIV, ss.Syphilis])
-        self.pars = ss.dictmerge({
+        super().__init__(label='HIV-Syphilis', requires=[ss.HIV, ss.Syphilis])
+        self.default_pars(**{
             'rel_sus_syph_hiv': 2, # People with HIV are 2x more likely to acquire syphilis
             'rel_sus_syph_aids': 5, # People with AIDS are 5x more likely to acquire syphilis
             'rel_trans_syph_hiv': 1.5, # People with HIV are 1.5x more likely to transmit syphilis
             'rel_trans_syph_aids': 3, # People with AIDS are 3x more likely to transmit syphilis
             'rel_sus_hiv_syph': 2.7, # People with syphilis are 2.7x more likely to acquire HIV
             'rel_trans_hiv_syph': 2.7, # People with syphilis are 2.7x more likely to transmit HIV
-        }, self.pars)
+        })
+        self.update_pars(pars, **kwargs)
         return
 
     def update(self, sim):
