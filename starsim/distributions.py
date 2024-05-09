@@ -488,6 +488,8 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         # Check for readiness
         if not self.initialized:
             raise DistNotInitializedError(self)
+        # elif self.initialized == 'partial':
+        #     print(f'WARNING: {self} called on {self.sim.ti} with {n}')
         if not self.ready and self.strict and not ss.options._centralized:
             raise DistNotReadyError(self)
         
