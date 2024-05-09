@@ -43,91 +43,88 @@ class Pars(sc.objdict):
         # Get parameters, and return if none
         pars = {} if pars is None else dict(pars) # Make it a simple dict, since just iterating over
         pars = pars | kwargs # Merge dictionaries
-        if not len(pars): 
+        if not len(pars): # Check that new parameters are supplied, and if not return unchanged
             return self
-        
-        # Check if there are any mismatches
-        if not create:
+        if not create: # Check if there are any mismatches, which raises an exception if there are
             self.check_key_mismatch(pars)
         
         # Perform the update
         for key,new in pars.items():
-            
-            # Should only be the case if create=True
-            if key not in self.keys(): 
-                self[key] = new
-            
-            # Main use case: update from previous values
-            else: 
-                old = self[key] # Get the object we're about to update
-                
-                # It's a number, string, etc: update directly
-                if isinstance(old, atomic_classes):
-                    self[key] = new
-                
-                # It's a Pars object: update recursively
-                elif isinstance(old, Pars): 
-                    old.update(new, create=create)
-                
-                # Update module containers
-                elif isinstance(old, ss.ndict):
-                    if not len(old): # It's empty, just overwrite
-                        self[key] = new
-                    else: # Don't overwrite an existing ndict
-                        if isinstance(new, dict):
-                            for newkey,newvals in new.items():
-                                old[newkey].pars.update(newvals) # e.g. pars = {'diseases": {'sir': {'dur_inf': 6}}}
-                        else:
-                            errormsg = f'Cannot update an ndict with {type(new)}: must be a dict to set new parameters'
-                            raise TypeError(errormsg)
-                
-                # Update modules
-                elif isinstance(old, ss.Module): 
-                    if isinstance(new, dict):
-                        old[key].pars.update(newvals) # e.g. pars = {'dur_inf': 6}
-                    else:
-                        errormsg = f'Cannot update a module with {type(new)}: must be a dict to set new parameters'
-                        raise TypeError(errormsg)
-                
-                # Update a distribution
-                elif isinstance(old, ss.Dist):
-                    
-                    # It's a Dist, e.g. dur_inf = ss.normal(6,2); use directly
-                    if isinstance(new, ss.Dist): 
-                        if isinstance(old, ss.bernoulli) and not isinstance(new, ss.bernoulli):
-                            errormsg = f"Bernoulli distributions can't be changed to another type: {type(new)} is invalid"
-                            raise TypeError(errormsg)
-                        else:
-                            self[key] = new
-                    
-                    # It's a single number, e.g. dur_inf = 6; set parameters
-                    elif isinstance(new, Number):
-                        old.set(new)
-                    
-                    # It's a list number, e.g. dur_inf = [6, 2]; set parameters
-                    elif isinstance(new, list):
-                        old.set(*new)
-                    
-                    # It's a dict, figure out what to do
-                    elif isinstance(new, dict):
-                        if 'type' not in new.keys(): # Same type of dist, set parameters
-                            old.set(**new)
-                        else: # We need to create a new distribution
-                            newtype = new['type']
-                            if isinstance(old, ss.bernoulli) and newtype != 'bernoulli':
-                                errormsg = f"Bernoulli distributions can't be changed to another type: {newtype} is invalid"
-                                raise TypeError(errormsg)
-                            else:
-                                dist = ss.make_dist(new)
-                                self[key] = dist
-                
-                # Everything else
-                else:
-                    errormsg = 'No known mechanism for handling {type(old)} → {type(new)}; using default'
-                    raise TypeError(errormsg)
-                
+            old = self[key] # Get the object we're about to update
+            if key not in self.keys() or isinstance(old, atomic_classes):
+                self[key] = new # It's a new parameter or a number, string, etc: update directly
+            elif isinstance(old, Pars): # It's a Pars object: update recursively
+                old.update(new, create=create)
+            else: # Everything else: it's complicated
+                self._process_item(key, new)
         return self
+    
+    def _process_item(self, key, old, new):
+        """ Process a single item in the supplied parameters """
+        if isinstance(old, ss.ndict): # Update module containers
+            self._process_ndict(key, old, new)
+        elif isinstance(old, ss.Module):  # Update modules
+            self._process_module(key, old, new)
+        elif isinstance(old, ss.Dist): # Update a distribution
+            self._process_dist(self, old, new)
+        else: # Everything else
+            errormsg = 'No known mechanism for handling {type(old)} → {type(new)}; using default'
+            raise TypeError(errormsg)
+        return
+    
+    def _process_ndict(self, key, old, new):
+        """ Update an ndict object in the parameters, e.g. sim.pars.diseases """
+        if not len(old): # It's empty, just overwrite
+            self[key] = new
+        else: # Don't overwrite an existing ndict
+            if isinstance(new, dict):
+                for newkey,newvals in new.items():
+                    old[newkey].pars.update(newvals) # e.g. pars = {'diseases": {'sir': {'dur_inf': 6}}}
+            else:
+                errormsg = f'Cannot update an ndict with {type(new)}: must be a dict to set new parameters'
+                raise TypeError(errormsg)
+        return
+    
+    def _process_module(self, key, old, new):
+        """ Update a Module object in the parameters, e.g. sim.pars.diseases.sir """
+        if isinstance(new, dict):
+            old[key].pars.update(new) # e.g. pars = {'dur_inf': 6}
+        else:
+            errormsg = f'Cannot update a module with {type(new)}: must be a dict to set new parameters'
+            raise TypeError(errormsg)
+        return
+    
+    def _process_dist(self, key, old, new):
+        """ Update a Dist object in the parameters, e.g. sim.pars.diseases.sir.dur_inf """
+        # It's a Dist, e.g. dur_inf = ss.normal(6,2); use directly
+        if isinstance(new, ss.Dist): 
+            if isinstance(old, ss.bernoulli) and not isinstance(new, ss.bernoulli):
+                errormsg = f"Bernoulli distributions can't be changed to another type: {type(new)} is invalid"
+                raise TypeError(errormsg)
+            else:
+                self[key] = new
         
+        # It's a single number, e.g. dur_inf = 6; set parameters
+        elif isinstance(new, Number):
+            old.set(new)
+        
+        # It's a list number, e.g. dur_inf = [6, 2]; set parameters
+        elif isinstance(new, list):
+            old.set(*new)
+        
+        # It's a dict, figure out what to do
+        elif isinstance(new, dict):
+            if 'type' not in new.keys(): # Same type of dist, set parameters
+                old.set(**new)
+            else: # We need to create a new distribution
+                newtype = new['type']
+                if isinstance(old, ss.bernoulli) and newtype != 'bernoulli':
+                    errormsg = f"Bernoulli distributions can't be changed to another type: {newtype} is invalid"
+                    raise TypeError(errormsg)
+                else:
+                    dist = ss.make_dist(new)
+                    self[key] = dist
+        return
 
     def check_key_mismatch(self, pars):
         """ Check whether additional keys are being added to the dictionary """
