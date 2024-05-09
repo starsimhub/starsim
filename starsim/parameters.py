@@ -50,21 +50,24 @@ class Pars(sc.objdict):
         
         # Perform the update
         for key,new in pars.items():
-            old = self[key] # Get the object we're about to update
-            if key not in self.keys() or isinstance(old, atomic_classes):
-                self[key] = new # It's a new parameter or a number, string, etc: update directly
-            elif isinstance(old, Pars): # It's a Pars object: update recursively
-                old.update(new, create=create)
-            elif isinstance(old, ss.ndict): # Update module containers
-                self._process_ndict(key, old, new)
-            elif isinstance(old, ss.Module):  # Update modules
-                self._process_module(key, old, new)
-            elif isinstance(old, ss.Dist): # Update a distribution
-                self._process_dist(key, old, new)
-            else: # Everything else; not used currently but could be
-                warnmsg = 'No known mechanism for handling {type(old)} → {type(new)}; using default'
-                ss.warn(warnmsg)
+            if key not in self.keys(): # It's a new parameter and create=True: update directly
                 self[key] = new
+            else:
+                old = self[key] # Get the existing object we're about to update
+                if isinstance(old, atomic_classes): # It's a number, string, etc: update directly
+                    self[key] = new
+                elif isinstance(old, Pars): # It's a Pars object: update recursively
+                    old.update(new, create=create)
+                elif isinstance(old, ss.ndict): # Update module containers
+                    self._process_ndict(key, old, new)
+                elif isinstance(old, ss.Module):  # Update modules
+                    self._process_module(key, old, new)
+                elif isinstance(old, ss.Dist): # Update a distribution
+                    self._process_dist(key, old, new)
+                else: # Everything else; not used currently but could be
+                    warnmsg = 'No known mechanism for handling {type(old)} → {type(new)}; using default'
+                    ss.warn(warnmsg)
+                    self[key] = new
         return self
     
     def _process_ndict(self, key, old, new):
