@@ -48,7 +48,15 @@ class Sim(sc.prettyobj):
         """ Perform all initializations for the sim; most heavy lifting is done by the parameters """
         # Validation and initialization
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
-        p = self.pars.initialize(sim=self, reset=reset, **kwargs) # Initialize the parameters, including people and modules
+        self.pars.validate_dt()
+        self.pars.validate_pars()
+        self.init_time_pars()
+        
+        # Initialize the people
+        self.init_people(reset=reset, **kwargs)  # Create all the people
+        
+        # Initialize the parameters, including the modules
+        p = self.pars.init_modules(sim=self, reset=reset, **kwargs)
         
         # Move initialized modules to the sim
         keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
@@ -67,8 +75,9 @@ class Sim(sc.prettyobj):
             if hasattr(mod, 'product') and isinstance(mod.product, ss.Product):
                 mod.product.initialize(self)
         
-        # Initialize all distributions now that everything else is in place
+        # Initialize all distributions now that everything else is in place, then set states
         self.dists.initialize(obj=self, base_seed=p.rand_seed, force=True)
+        # self.init_states()
 
         # Final steps
         self.initialized = True
@@ -76,6 +85,70 @@ class Sim(sc.prettyobj):
         self.results_ready = False
 
         return self
+    
+    def init_time_pars(self):
+        # Time indexing; derived values live in the sim rather than in the pars
+        self.dt = self.pars.dt
+        self.yearvec = np.arange(start=self.pars.start, stop=self.pars.end + self.pars.dt, step=self.pars.dt)
+        self.results.yearvec = self.yearvec # Copy this here
+        self.npts = len(self.yearvec)
+        self.tivec = np.arange(self.npts)
+        self.ti = 0  # The time index, e.g. 0, 1, 2
+        return
+
+    def init_people(self, reset=False, verbose=None, **kwargs):
+        """
+        Initialize people within the sim
+        Sometimes the people are provided, in which case this just adds a few sim properties to them.
+        Other time people are not provided and this method makes them.
+        
+        Args:
+            reset   (bool): whether to regenerate the people even if they already exist
+            verbose (int):  detail to print
+            kwargs  (dict): passed to ss.make_people()
+        """
+        # Handle inputs
+        pars = self.pars
+        if verbose is None:
+            verbose = pars.verbose
+        if verbose > 0:
+            resetstr = ''
+            if pars.people and reset:
+                resetstr = ' (resetting people)'
+            print(f'Initializing sim{resetstr} with {pars.n_agents:0n} agents')
+
+        # If people have not been supplied, make them
+        if pars.people is None or reset:
+            pars.people = ss.People(n_agents=pars.n_agents, **kwargs)  # This just assigns UIDs and length
+
+        # If a popdict has not been supplied, we can make one from location data
+        if pars.location is not None:
+            # Check where to get total_pop from
+            if pars.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
+                errormsg = 'You can either define total_pop explicitly or via the location, but not both'
+                raise ValueError(errormsg)
+
+        else:
+            if pars.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
+                total_pop = pars.total_pop
+            else:
+                if pars.pop_scale is not None:
+                    total_pop = pars.pop_scale * pars.n_agents
+                else:
+                    total_pop = pars.n_agents
+
+        pars.total_pop = total_pop
+        if pars.pop_scale is None:
+            pars.pop_scale = total_pop / pars.n_agents
+
+        # Any other initialization
+        self.people = pars.pop('people')
+        if not self.people.initialized:
+            self.people.initialize(self)
+
+        # Set time attributes
+        self.people.init_results(self)
+        return self.people
 
     @property
     def modules(self):

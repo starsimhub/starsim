@@ -154,7 +154,6 @@ class SimPars(Pars):
     Args:
         kwargs (dict): any additional kwargs are interpreted as parameter names
     """
-
     def __init__(self, **kwargs):
         
         # General parameters
@@ -191,26 +190,10 @@ class SimPars(Pars):
 
         # Update with any supplied parameter values and generate things that need to be generated
         self.update(kwargs)
-
         return
 
-    def initialize(self, sim, reset=False, **kwargs):
-        
-        # Validation
-        self.validate_dt()
-        self.validate_pars()
-        
-        # Time indexing; derived values live in the sim rather than in the pars
-        sim.dt = self.dt
-        sim.yearvec = np.arange(start=self.start, stop=self.end + self.dt, step=self.dt)
-        sim.results.yearvec = sim.yearvec # Copy this here
-        sim.npts = len(sim.yearvec)
-        sim.tivec = np.arange(sim.npts)
-        sim.ti = 0  # The time index, e.g. 0, 1, 2
-        
-        # Initialize the people
-        self.init_people(sim=sim, reset=reset, **kwargs)  # Create all the people (the heaviest step)
-        
+    def init_modules(self, sim, reset=False, **kwargs):
+        """ Initialize the modules """
         # Allow shortcut for default demographics # TODO: think about whether we want to enable this, when we have birth_rate and death_rate
         if self.demographics == True:
             self.demographics = [ss.Births(), ss.Deaths()]
@@ -284,60 +267,6 @@ class SimPars(Pars):
             raise ValueError(errormsg)
             
         return self
-    
-    def init_people(self, sim, reset=False, verbose=None, **kwargs):
-        """
-        Initialize people within the sim
-        Sometimes the people are provided, in which case this just adds a few sim properties to them.
-        Other time people are not provided and this method makes them.
-        
-        Args:
-            reset   (bool): whether to regenerate the people even if they already exist
-            verbose (int):  detail to print
-            kwargs  (dict): passed to ss.make_people()
-        """
-
-        # Handle inputs
-        if verbose is None:
-            verbose = self.verbose
-        if verbose > 0:
-            resetstr = ''
-            if self.people and reset:
-                resetstr = ' (resetting people)'
-            print(f'Initializing sim{resetstr} with {self.n_agents:0n} agents')
-
-        # If people have not been supplied, make them
-        if self.people is None or reset:
-            self.people = ss.People(n_agents=self.n_agents, **kwargs)  # This just assigns UIDs and length
-
-        # If a popdict has not been supplied, we can make one from location data
-        if self.location is not None:
-            # Check where to get total_pop from
-            if self.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
-                errormsg = 'You can either define total_pop explicitly or via the location, but not both'
-                raise ValueError(errormsg)
-
-        else:
-            if self.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
-                total_pop = self.total_pop
-            else:
-                if self.pop_scale is not None:
-                    total_pop = self.pop_scale * self.n_agents
-                else:
-                    total_pop = self.n_agents
-
-        self.total_pop = total_pop
-        if self.pop_scale is None:
-            self.pop_scale = total_pop / self.n_agents
-
-        # Any other initialization
-        sim.people = self.pop('people')
-        if not sim.people.initialized:
-            sim.people.initialize(sim)
-
-        # Set time attributes
-        sim.people.init_results(sim)
-        return sim.people
     
     def convert_modules(self):
         """
