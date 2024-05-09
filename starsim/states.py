@@ -6,6 +6,10 @@ an event:
 - gets uids automatically
 - generates ti_arrays
 - generates results
+
+get working without events/transitions
+define events as scheduling things, then transitions as making them happen
+consider function decorators
 """
 
 import numpy as np
