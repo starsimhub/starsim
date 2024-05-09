@@ -103,20 +103,6 @@ sim_treat.run()
 
 # Plotting
 pl.figure()
-# pl.subplot(2,1,1)
-# pl.plot(sim_connect.yearvec, sim_connect.results.syphilis.n_infected, label='Accounting for relative risks')
-# pl.plot(sim_noconnect.yearvec, sim_noconnect.results.syphilis.n_infected, label='No relative risks')
-# pl.title('Syphilis infections')
-# pl.xlabel('Year')
-# pl.ylabel('Count')
-# pl.legend()
-#
-# pl.subplot(2,1,2)
-# pl.plot(sim_connect.yearvec, sim_connect.results.hiv.n_infected, label='Accounting for relative risks')
-# pl.plot(sim_noconnect.yearvec, sim_noconnect.results.hiv.n_infected, label='No relative risks')
-# pl.title('HIV infections')
-# pl.xlabel('Year')
-# pl.ylabel('Count')
 
 pl.subplot(2,1,1)
 pl.plot(sim_treat.yearvec, sim_treat.results.syphilis.n_infected, label='With syphilis treatment')
