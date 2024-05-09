@@ -384,9 +384,11 @@ class uids(np.ndarray):
         return np.concatenate(arrs, **kw).view(cls)
     
     def remove(self, other, **kw):
+        """ Remove provided UIDs from current array"""
         return np.setdiff1d(self, other, assume_unique=True, **kw).view(self.__class__)
     
     def intersect(self, other, **kw):
+        """ Keep only UIDs that match other array """
         return np.intersect1d(self, other, assume_unique=True, **kw).view(self.__class__)
     
 
