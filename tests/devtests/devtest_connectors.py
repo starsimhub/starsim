@@ -43,7 +43,7 @@ class hiv_syph(ss.Connector):
         return
 
 
-class BPG(ss.Intervention):  # Create a BPG intervention
+class Penicillin(ss.Intervention):  # Create a penicillin (BPG) intervention
 
     def __init__(self, year=2020, prob=0.5):
         super().__init__() # Initialize the intervention
@@ -81,46 +81,51 @@ def make_args():
     syph = ss.Syphilis()
     syph.pars['beta'] = {'mf': [0.1, 0.05]}
     syph.pars['init_prev'] = ss.bernoulli(p=0.05)
-    ppl = ss.People(10000)
 
-    return hiv, syph, mf, ppl
-
-# Make a sim with a connector, and run
-hiv, syph, mf, ppl = make_args()
-sim_connect = ss.Sim(people=ppl, networks=mf, diseases=[hiv, syph], connectors=hiv_syph())
-sim_connect.run()
-
-# Make a sim without a connector, and run
-hiv, syph, mf, ppl = make_args()
-sim_noconnect = ss.Sim(people=ppl, networks=mf, diseases=[hiv, syph])
-sim_noconnect.run()
-
-# Make a sim with a connector and syph treatment, and run
-hiv, syph, mf, ppl = make_args()
-sim_treat = ss.Sim(people=ppl, networks=mf, diseases=[hiv, syph], connectors=hiv_syph(), interventions=BPG())
-sim_treat.run()
+    return hiv, syph, mf
 
 
-# Plotting
-pl.figure()
-
-pl.subplot(2,1,1)
-pl.plot(sim_treat.yearvec, sim_treat.results.syphilis.n_infected, label='With syphilis treatment')
-pl.plot(sim_connect.yearvec, sim_connect.results.syphilis.n_infected, label='Baseline')
-pl.title('Syphilis infections')
-pl.xlabel('Year')
-pl.ylabel('Count')
-pl.axvline(2020)
-pl.legend()
-
-pl.subplot(2,1,2)
-pl.plot(sim_treat.yearvec, sim_treat.results.hiv.n_infected, label='With syphilis treatment')
-pl.plot(sim_connect.yearvec, sim_connect.results.hiv.n_infected, label='Baseline')
-pl.title('HIV infections')
-pl.xlabel('Year')
-pl.ylabel('Count')
-pl.axvline(2020)
-pl.legend()
-
-sc.figlayout()
-pl.show()
+if __name__ == '__main__':
+    
+    # Make arguments
+    hiv, syph, mf = make_args()
+    
+    # Make a sim with a connector, and run
+    sim_connect = ss.Sim(networks=mf, diseases=[hiv, syph], connectors=hiv_syph())
+    sim_connect.run()
+    
+    # Make a sim without a connector, and run
+    sim_noconnect = ss.Sim(networks=mf, diseases=[hiv, syph])
+    sim_noconnect.run()
+    
+    # Make a sim with a connector and syph treatment, and run
+    sim_treat = ss.Sim(networks=mf, diseases=[hiv, syph], connectors=hiv_syph(), interventions=Penicillin())
+    sim_treat.run()
+    
+    # Or in parallel:
+    # sim_connect, sim_noconnect, sim_treat = ss.parallel(sim_connect, sim_noconnect, sim_treat).sims
+    
+    
+    # Plotting
+    pl.figure()
+    
+    pl.subplot(2,1,1)
+    pl.plot(sim_treat.yearvec, sim_treat.results.syphilis.n_infected, label='With syphilis treatment')
+    pl.plot(sim_connect.yearvec, sim_connect.results.syphilis.n_infected, label='Baseline')
+    pl.title('Syphilis infections')
+    pl.xlabel('Year')
+    pl.ylabel('Count')
+    pl.axvline(2020)
+    pl.legend()
+    
+    pl.subplot(2,1,2)
+    pl.plot(sim_treat.yearvec, sim_treat.results.hiv.n_infected, label='With syphilis treatment')
+    pl.plot(sim_connect.yearvec, sim_connect.results.hiv.n_infected, label='Baseline')
+    pl.title('HIV infections')
+    pl.xlabel('Year')
+    pl.ylabel('Count')
+    pl.axvline(2020)
+    pl.legend()
+    
+    sc.figlayout()
+    pl.show()
