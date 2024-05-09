@@ -108,6 +108,10 @@ class Module(sc.quickobj):
             state.initialize(sim)
 
         self.initialized = True
+
+        # Add module states to the People's dicts
+        sim.people.add_module(self)
+        
         return
 
     def finalize(self, sim):

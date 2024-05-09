@@ -359,9 +359,6 @@ class Sim(sc.prettyobj):
             self.pars[disease.name] = disease.pars
             self.results[disease.name] = disease.results
 
-            # Add disease states to the People's dicts
-            self.people.add_module(disease)
-
         # Store diseases in the sim
         self.diseases = ss.ndict(*diseases)
 
@@ -410,14 +407,9 @@ class Sim(sc.prettyobj):
             self.pars[intervention.name] = intervention.pars
             self.results[intervention.name] = intervention.results
 
-            # Add intervention states to the People's dicts
-            self.people.add_module(intervention)
-
             # If there's a product module present, initialize and add it
             if hasattr(intervention, 'product') and isinstance(intervention.product, ss.Product):
                 intervention.product.initialize(self)
-
-                self.people.add_module(intervention.product)
         
         # TODO: combine this with the code above
         for k,intervention in self.interventions.items():
