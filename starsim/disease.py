@@ -270,6 +270,7 @@ class Infection(Disease):
 
             nbetas = betamap[nkey]
             contacts = net.contacts
+
             rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
             rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
             p1p2b0 = [contacts.p1, contacts.p2, nbetas[0]]
