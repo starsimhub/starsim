@@ -26,7 +26,7 @@ class Pars(sc.objdict):
             if isinstance(pars, dict):
                 kwargs = pars | kwargs
             else:
-                errormsg = f'Cannot supply parameters as type {type(pars)}: must be dict'
+                errormsg = f'Cannot supply parameters as type {type(pars)}: must be a dict'
                 raise ValueError(errormsg)
         super().__init__(**kwargs)
         return
