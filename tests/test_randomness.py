@@ -170,6 +170,8 @@ def plot_infs(s1, s2):
 
 
 def test_worlds(do_plot=False):
+    """ Test that one extra birth leads to one extra infection """
+    sc.heading('Testing worlds...')
     
     res = sc.objdict()
     
@@ -213,6 +215,66 @@ def test_worlds(do_plot=False):
     return res
 
 
+def test_independence(do_plot=False, thresh=0.1):
+    """ Test that when variables are created, they are uncorrelated """
+    sc.heading('Testing independence...')
+    
+    # Create the sim and initialize (do not run)
+    sim = ss.Sim(
+        n_agents = 1000,
+        diseases = [
+            dict(type='sir', init_prev=0.1),
+            dict(type='sis', init_prev=0.1),
+            dict(type='hiv', init_prev=0.1),
+        ],
+        networks = [
+            dict(type='random', n_contacts=ss.poisson(8)),
+            dict(type='mf')
+        ]
+    )
+    sim.initialize()
+    
+    # Assemble measures
+    st = sim.people.states
+    arrs = sc.objdict()
+    arrs.age = st.age.values
+    arrs.sex = st.female.values
+    for key,disease in sim.diseases.items():
+        arrs[f'{key}_init'] = disease.infected.values
+    for key,network in sim.networks.items():
+        data = np.zeros(len(sim.people))
+        data[network.contacts.p1.values] += 1
+        data[network.contacts.p2.values] += 1
+        if len(np.unique(data)) > 1:
+            arrs[f'{key}_edges'] = data
+        else:
+            print(f'Skipping {key} since no variability')
+    
+    # Compute the correlations
+    n = len(arrs)
+    stats = np.zeros((n,n))
+    for i,arr1 in arrs.enumvals():
+        for j,arr2 in arrs.enumvals():
+            if i != j:
+                stats[i,j] = np.corrcoef(arr1, arr2)[0,1]
+                
+    # Optionally plot
+    if do_plot:
+        pl.figure()
+        pl.imshow(stats)
+        ticks = np.arange(n)
+        labels = arrs.keys()
+        pl.xticks(ticks, labels)
+        pl.yticks(ticks, labels)
+            
+    # Test that everything is independent
+    max_corr = abs(stats).max()
+    assert max_corr < thresh, f'The maximum correlation between variables was {max_corr}, above the threshold {thresh}'
+    
+    return sim
+    
+
+
 # %% Run as a script
 if __name__ == '__main__':
     T = sc.timer()
@@ -223,5 +285,7 @@ if __name__ == '__main__':
     o3 = test_jump(n)
     o4 = test_order(n)
     o5 = test_worlds(do_plot=do_plot)
+    o6 = test_independence(do_plot=do_plot)
 
     T.toc()
+

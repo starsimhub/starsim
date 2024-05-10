@@ -152,7 +152,8 @@ class Sim(sc.prettyobj):
     
     def init_states(self):
         """ Initialize the states with values """
-        TODO
+        pass
+        # TODO
 
     @property
     def modules(self):
