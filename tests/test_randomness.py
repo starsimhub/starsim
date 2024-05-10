@@ -229,7 +229,7 @@ def test_independence(do_plot=False, thresh=0.1):
         ],
         networks = [
             dict(type='random', n_contacts=ss.poisson(8)),
-            dict(type='mf')
+            dict(type='mf', debut=ss.delta(0)), # To avoid age correlations
         ]
     )
     sim.initialize()
@@ -243,12 +243,10 @@ def test_independence(do_plot=False, thresh=0.1):
         arrs[f'{key}_init'] = disease.infected.values
     for key,network in sim.networks.items():
         data = np.zeros(len(sim.people))
-        data[network.contacts.p1.values] += 1
-        data[network.contacts.p2.values] += 1
-        if len(np.unique(data)) > 1:
-            arrs[f'{key}_edges'] = data
-        else:
-            print(f'Skipping {key} since no variability')
+        for p in ['p1', 'p2']:
+            for uid in network.contacts[p]:
+                data[uid] += 1 # Could also use a histogram
+        arrs[f'{key}_edges'] = data
     
     # Compute the correlations
     n = len(arrs)
