@@ -58,9 +58,10 @@ class BasePeople(sc.prettyobj): #ZRF
     def n_uids(self):
         return self.uid.len_used
     
-    def link_state(self, state, die=True):
+    def _link_state(self, state, die=True):
         """
-        Link a state with the People instance for dynamic resizing
+        Link a state with the People instance for dynamic resizing; usually called by
+        state.link_people()
 
         All states should be registered by this function for the purpose of connecting them to the
         People's UIDs and to have them be automatically resized when the number of agents changes.
@@ -187,7 +188,7 @@ class People(BasePeople):
             self.states.append(state, overwrite=False)
             setattr(self, state.name, state)
             state.link_people(self)
-            self.link_state(state)
+            # self.link_state(state) #ZRF
 
         # Set initial age distribution - likely move this somewhere else later
         self.age_data_dist = self.get_age_dist(age_data) # TODO: remove or make more general
@@ -253,6 +254,7 @@ class People(BasePeople):
             setattr(self, module.name, module_states)
             # self._register_module_states(module, module_states)
             for state in module.states:
+                state.link_people(self)
                 combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
                 self.states[combined_name] = state # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
                 module_states[state.name] = state

@@ -228,7 +228,8 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     
     def link_people(self, people):
         """ Link a People object to this state, for access auids """
-        self.people = people # Shorten since used a lot
+        self.people = people # Link the people object to this state
+        people._link_state(self) # Ensure the state is linked to the People object as well
         return
 
     # def link(self, sim):

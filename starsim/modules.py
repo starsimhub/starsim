@@ -100,7 +100,7 @@ class Module(sc.quickobj):
             raise Exception(errormsg)
         return
 
-    def initialize(self, sim):
+    def link_sim(self, sim):
         """
         Perform initialization steps
 
@@ -108,25 +108,25 @@ class Module(sc.quickobj):
         """
         self.check_requires(sim)
         
-        # Initialize distributions (warning: only operates at the top level!)
-        dists = ss.find_dists(self) # Important that this comes first, before the sim is linked to the dist!
-        for key,val in dists.items():
-            if isinstance(val, ss.Dist):
-                if val.initialized is not True: # Catches False and 'partial'
-                    print('TEMP INITIIALZIZING')
-                    val.initialize(module=self, sim=sim, force=True) # Actually a dist
-                else:
-                    raise RuntimeError(f'Trying to reinitialize {val}, this should not happen')
+        # # Initialize distributions (warning: only operates at the top level!) #ZRF
+        # dists = ss.find_dists(self) # Important that this comes first, before the sim is linked to the dist!
+        # for key,val in dists.items():
+        #     if isinstance(val, ss.Dist):
+        #         if val.initialized is not True: # Catches False and 'partial'
+        #             print('TEMP INITIIALZIZING')
+        #             val.initialize(module=self, sim=sim, force=True) # Actually a dist
+        #         else:
+        #             raise RuntimeError(f'Trying to reinitialize {val}, this should not happen')
 
-        # Connect the states to the sim
-        for state in self.states:
-            state.initialize(sim)
+        # # Connect the states to the people
+        # for state in self.states:
+        #     state.link_people(sim.people)
             
         # Link the parameters, results, and module states
         self.sim = sim # Link back to the sim object
         sim.pars[self.name] = self.pars
         sim.results[self.name] = self.results
-        sim.people.add_module(self)
+        sim.people.add_module(self) # Connect the states to the people
         self.initialized = True
         return
     
