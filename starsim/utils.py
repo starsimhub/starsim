@@ -40,6 +40,10 @@ class ndict(sc.objdict):
         self.setattribute('_overwrite', overwrite)
         self.extend(*args, **kwargs)
         return
+    
+    def __call__(self):
+        """ Shortcut for returning values """
+        return self.values()
 
     def append(self, arg, key=None, overwrite=None):
         valid = False
