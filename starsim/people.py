@@ -55,9 +55,8 @@ class People(sc.prettyobj):
         # might have fill_values that depend on the slot
         self.slot = ss.IndexArr('slot')
         self.slot.grow(new_vals=uids)
-        
         for state in [self.uid, self.slot]:
-            state.link_people(self)
+            state.people = self
 
         # User-facing collection of states
         self.states = ss.ndict(type=ss.Arr)
