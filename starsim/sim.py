@@ -68,12 +68,12 @@ class Sim(sc.prettyobj):
         for modkey in modmap.keys():
             modlist = self[modkey]
             for mod in modlist.values():
-                mod.link_sim(self)
+                mod.initialize(self)
                 
         # Initialize products # TODO: think about simplifying
         for mod in self.interventions:
             if hasattr(mod, 'product') and isinstance(mod.product, ss.Product):
-                mod.product.link_sim(self)
+                mod.product.initialize(self)
         
         # Initialize all distributions now that everything else is in place, then set states
         self.dists.initialize(obj=self, base_seed=self.pars.rand_seed, force=True)

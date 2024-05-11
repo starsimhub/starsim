@@ -100,7 +100,7 @@ class Module(sc.quickobj):
             raise Exception(errormsg)
         return
 
-    def link_sim(self, sim):
+    def initialize(self, sim):
         """
         Perform initialization steps
 
