@@ -498,14 +498,14 @@ class RandomNet(DynamicNetwork):
         self.dist.jump() # Reset the RNG manually # TODO, think if there's a better way
         return source, target
 
-    def update(self, sim, dt=None):
-        self.end_pairs(sim)
-        self.add_pairs(sim)
+    def update(self):
+        self.end_pairs()
+        self.add_pairs()
         return
 
-    def add_pairs(self, sim):
+    def add_pairs(self):
         """ Generate contacts """
-        people = sim.people
+        people = self.sim.people
         if isinstance(self.pars.n_contacts, ss.Dist):
             number_of_contacts = self.pars.n_contacts.rvs(people.uid[people.alive])  # or people.uid?
         else:
@@ -581,38 +581,38 @@ class MFNet(SexualNetwork):
         self.update_pars(pars=pars, **kwargs)
 
         # Finish initialization
-        
         self.dist = ss.choice(name='MFNet', replace=False) # Set the array later
         return
 
-    def initialize(self, sim):
-        super().initialize(sim)
-        self.set_network_states(sim.people)
-        self.add_pairs(sim, ti=0)
+    def init_vals(self):
+        self.set_network_states()
+        self.add_pairs()
         return
 
-    def set_network_states(self, people, upper_age=None):
+    def set_network_states(self, upper_age=None):
         """ Set network states including age of entry into network and participation rates """
-        self.set_debut(people, upper_age=upper_age)
-        self.set_participation(people, upper_age=upper_age)
+        self.set_debut(upper_age=upper_age)
+        self.set_participation(upper_age=upper_age)
         return
 
-    def set_participation(self, people, upper_age=None):
-        # Set people who will participate in the network at some point
+    def set_participation(self, upper_age=None):
+        """ Set people who will participate in the network at some point """
+        people = self.sim.people
         if upper_age is None: uids = people.auids
         else: uids = (people.age < upper_age).uids
         self.participant[uids] = self.pars.participation.rvs(uids)
         return
 
-    def set_debut(self, people, upper_age=None):
-        # Set debut age
+    def set_debut(self, upper_age=None):
+        """ Set debut age """
+        people = self.sim.people
         if upper_age is None: uids = people.auids
         else: uids = (people.age < upper_age).uids
         self.debut[uids] = self.pars.debut.rvs(uids)
         return
 
-    def add_pairs(self, sim, ti=None):
-        people = sim.people
+    def add_pairs(self):
+        people = self.sim.people
         available_m = self.available(people, 'male')
         available_f = self.available(people, 'female')
 
@@ -636,7 +636,7 @@ class MFNet(SexualNetwork):
             dur_vals = self.pars.duration.rvs(p1)
             act_vals = self.pars.acts.rvs(p1)
         else:
-            # If multirng is enabled, we're here because some individuals in p1
+            # If multirng is enabled, we're here because some individuals in p1 #ZRF
             # are starting multiple relationships on this timestep. If using
             # slotted draws, as above, repeated relationships will get the same
             # duration and act rates, which is scientifically undesirable.
@@ -648,11 +648,10 @@ class MFNet(SexualNetwork):
 
         return len(p1)
 
-    def update(self, sim, dt=None):
-        people = sim.people
-        self.end_pairs(sim)
-        self.set_network_states(people, upper_age=sim.dt)
-        self.add_pairs(sim)
+    def update(self):
+        self.end_pairs()
+        self.set_network_states(self.sim.people, upper_age=self.sim.dt)
+        self.add_pairs()
         return
 
 
@@ -714,11 +713,10 @@ class MSMNet(SexualNetwork):
         
         return len(p1)
 
-    def update(self, sim, dt=None):
-        people = sim.people
-        self.end_pairs(sim)
-        self.set_network_states(people, upper_age=sim.dt)
-        self.add_pairs(sim)
+    def update(self):
+        self.end_pairs(self.sim)
+        self.set_network_states(self.sim.people, upper_age=self.sim.dt)
+        self.add_pairs(self.sim)
         return
 
 
