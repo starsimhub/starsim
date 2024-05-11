@@ -109,21 +109,21 @@ class Sim(sc.prettyobj):
             kwargs  (dict): passed to ss.make_people()
         """
         # Handle inputs
-        pars = self.pars
-        if verbose is None:
-            verbose = pars.verbose
+        people = self.pars.pop('people')
+        n_agents = self.pars.n_agents
+        verbose = sc.ifelse(verbose, self.pars.verbose)
         if verbose > 0:
             resetstr = ''
-            if pars.people and reset:
+            if people and reset:
                 resetstr = ' (resetting people)'
-            print(f'Initializing sim{resetstr} with {pars.n_agents:0n} agents')
+            print(f'Initializing sim{resetstr} with {n_agents:0n} agents')
 
-        # If people have not been supplied, make them
-        if pars.people is None or reset:
-            pars.people = ss.People(n_agents=pars.n_agents, **kwargs)  # This just assigns UIDs and length
+        # If people have not been supplied, make them -- typical use case
+        if people is None or reset:
+            people = ss.People(n_agents=n_agents, **kwargs)  # This just assigns UIDs and length
 
-        # Any other initialization
-        self.people = pars.pop('people')
+        # Finish up (NB: the People object is not yet initialized)
+        self.people = people
         self.people.link_sim(self)
         return self.people
     

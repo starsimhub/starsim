@@ -13,7 +13,7 @@ __all__ = ['BasePeople', 'People', 'Person']
 
 # %% Main people class
 
-class BasePeople(sc.prettyobj):
+class BasePeople(sc.prettyobj): #ZRF
     """
     A class to handle all the boilerplate for people -- everything interesting 
     happens in the People class, whereas this class exists to handle the less 
@@ -55,9 +55,9 @@ class BasePeople(sc.prettyobj):
     def n_uids(self):
         return self.uid.len_used
     
-    def register_state(self, state, die=True):
+    def link_state(self, state, die=True):
         """
-        Register a state with the People instance for dynamic resizing
+        Link a state with the People instance for dynamic resizing
 
         All states should be registered by this function for the purpose of connecting them to the
         People's UIDs and to have them be automatically resized when the number of agents changes.
@@ -220,6 +220,7 @@ class People(BasePeople):
         # agents can be sampled from the same distribution used to initialize the population #ZRF
         for state in self.states():
             state.link_people(sim.people)
+            self.link_state(state)
 
         # Assign initial ages based on the current age distribution
         # self.age_data_dist.initialize(module=self, sim=sim) #ZRF
