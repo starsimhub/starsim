@@ -259,13 +259,14 @@ class People(sc.prettyobj):
         """
         return self.scale[inds].sum()
 
-    def update_post(self, sim):
+    def update_post(self):
         """ Final updates at the very end of the timestep """
+        sim = self.sim
         if sim.demographics: # Only update ages if demographics are specified
             self.age[self.alive.uids] += sim.dt
         return
 
-    def request_death(self, sim, uids):
+    def request_death(self, uids):
         """
         External-facing function to request an agent die at the current timestep
 
@@ -290,7 +291,7 @@ class People(sc.prettyobj):
         :param uids: Agent IDs to request deaths for
         :return: UIDs of agents that have been scheduled to die on this timestep
         """
-        self.ti_dead[uids] = sim.ti
+        self.ti_dead[uids] = self.sim.ti
         return
 
     def resolve_deaths(self):
@@ -299,7 +300,7 @@ class People(sc.prettyobj):
         self.alive[death_uids] = False
         return death_uids
     
-    def remove_dead(self, sim):
+    def remove_dead(self):
         """
         Remove dead agents
         """
@@ -307,7 +308,7 @@ class People(sc.prettyobj):
         if len(uids):
             
             # Remove the UIDs from the networks too
-            for network in sim.networks.values():
+            for network in self.sim.networks.values():
                 network.remove_uids(uids) # TODO: only run once every nth timestep
                 
             # Calculate the indices to keep
@@ -325,9 +326,9 @@ class People(sc.prettyobj):
         """ Male boolean """
         return ~self.female
 
-    def update_results(self, sim):
-        ti = sim.ti
-        res = sim.results
+    def update_results(self):
+        ti = self.sim.ti
+        res = self.sim.results
         res.n_alive[ti] = np.count_nonzero(self.alive)
         res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!

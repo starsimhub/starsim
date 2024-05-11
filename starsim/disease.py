@@ -39,10 +39,6 @@ class Disease(ss.Module):
         self.init_results()
         return
 
-    def finalize(self, sim):
-        super().finalize(sim)
-        return
-
     def init_results(self):
         """
         Initialize results
@@ -55,13 +51,13 @@ class Disease(ss.Module):
             self.results += ss.Result(self.name, f'n_{state.name}', self.sim.npts, dtype=int, scale=True)
         return
 
-    def update_pre(self, sim):
+    def update_pre(self):
         """
         Carry out autonomous updates at the start of the timestep (prior to transmission)
         """
         pass
 
-    def update_death(self, sim, uids):
+    def update_death(self, uids):
         """
         Carry out state changes upon death
 
@@ -78,7 +74,7 @@ class Disease(ss.Module):
         """
         pass
 
-    def make_new_cases(self, sim):
+    def make_new_cases(self):
         """
         Add new cases of the disease
 
@@ -92,7 +88,7 @@ class Disease(ss.Module):
         """
         pass
 
-    def set_prognoses(self, sim, target_uids, source_uids=None):
+    def set_prognoses(self, target_uids, source_uids=None):
         """
         Set prognoses upon infection/acquisition
 
@@ -109,6 +105,7 @@ class Disease(ss.Module):
             uids (array): UIDs for agents to assign disease progoses to
             from_uids (array): Optionally specify the infecting agent
         """
+        sim = self.sim
         if source_uids is None:
             for target in target_uids:
                 self.log.append(np.nan, target, sim.year)
@@ -117,7 +114,7 @@ class Disease(ss.Module):
                 self.log.append(source, target, sim.year)
         return
 
-    def update_results(self, sim):
+    def update_results(self):
         """
         Update results
 
@@ -125,6 +122,7 @@ class Disease(ss.Module):
         This allows result updates at this point to capture outcomes dependent on multiple
         modules, where relevant.
         """
+        sim = self.sim
         for state in self._boolean_states:
             self.results[f'n_{state.name}'][sim.ti] = np.count_nonzero(state & sim.people.alive)
         return
@@ -156,14 +154,15 @@ class Infection(Disease):
     
     def initialize(self, sim):
         super().initialize(sim)
-        self.validate_beta(sim)
+        self.validate_beta()
         return
     
-    def validate_beta(self, sim):
+    def validate_beta(self):
         """
         Perform any parameter validation
         """
-        if sim.networks is not None and len(sim.networks) > 0:
+        networks = self.sim.networks
+        if networks is not None and len(networks) > 0:
             
             if 'beta' not in self.pars:
                 errormsg = f'Disease {self.name} is missing beta; pars are: {sc.strjoin(self.pars.keys())}'
@@ -172,7 +171,7 @@ class Infection(Disease):
             # If beta is a scalar, apply this bi-directionally to all networks
             if sc.isnumber(self.pars.beta):
                 β = self.pars.beta
-                self.pars.beta = sc.objdict({k:[β,β] for k in sim.networks})
+                self.pars.beta = sc.objdict({k:[β,β] for k in networks.keys()})
 
             # If beta is a dict, check all entries are bi-directional
             elif isinstance(self.pars.beta, dict):
@@ -200,7 +199,7 @@ class Infection(Disease):
             return
 
         initial_cases = self.pars.init_prev.filter()
-        self.set_prognoses(self.sim, initial_cases)  # TODO: sentinel value to indicate seeds?
+        self.set_prognoses(initial_cases)  # TODO: sentinel value to indicate seeds?
         return
 
     def init_results(self):
@@ -216,7 +215,7 @@ class Infection(Disease):
         ]
         return
 
-    def _check_betas(self, sim):
+    def _check_betas(self):
         """ Check that there's a network for each beta key """
         # Ensure keys are lowercase
         if isinstance(self.pars.beta, dict): # TODO: check if needed
@@ -225,7 +224,7 @@ class Infection(Disease):
         # Create a mapping between beta and networks, and populate it
         betapars = self.pars.beta
         betamap = sc.objdict()
-        netkeys = list(sim.networks.keys())
+        netkeys = list(self.sim.networks.keys())
         if netkeys: # Skip if no networks
             for bkey in betapars.keys():
                 orig_bkey = bkey[:]
@@ -241,7 +240,7 @@ class Infection(Disease):
                         raise ValueError(errormsg)
         return betamap
 
-    def make_new_cases(self, sim):
+    def make_new_cases(self):
         """
         Add new cases of module, through transmission, incidence, etc.
         
@@ -250,9 +249,9 @@ class Infection(Disease):
         """
         new_cases = []
         sources = []
-        betamap = self._check_betas(sim)
+        betamap = self._check_betas()
 
-        for nkey,net in sim.networks.items():
+        for nkey,net in self.sim.networks.items():
             if not len(net):
                 break
 
@@ -270,7 +269,7 @@ class Infection(Disease):
                     continue
 
                 # Calculate probability of a->b transmission.
-                beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=sim.dt)
+                beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
                 p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
 
                 # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
@@ -293,27 +292,28 @@ class Infection(Disease):
             sources = np.empty(0, dtype=int)
             
         if len(new_cases):
-            self._set_cases(sim, new_cases, sources)
+            self._set_cases(new_cases, sources)
             
         return new_cases, sources
 
-    def _set_cases(self, sim, target_uids, source_uids=None):
+    def _set_cases(self, target_uids, source_uids=None):
+        sim = self.sim
         congenital = sim.people.age[target_uids] <= 0
         if np.count_nonzero(congenital):
             src_c = source_uids[congenital] if source_uids is not None else None
-            self.set_congenital(sim, target_uids[congenital], src_c)
+            self.set_congenital(target_uids[congenital], src_c)
         src_p = source_uids[~congenital] if source_uids is not None else None
-        self.set_prognoses(sim, target_uids[~congenital], src_p)
+        self.set_prognoses(target_uids[~congenital], src_p)
         return
 
-    def set_congenital(self, sim, target_uids, source_uids=None):
+    def set_congenital(self, target_uids, source_uids=None):
         pass
 
-    def update_results(self, sim):
-        super().update_results(sim)
+    def update_results(self):
+        super().update_results()
         res = self.results
-        ti = sim.ti
-        res.prevalence[ti] = res.n_infected[ti] / np.count_nonzero(sim.people.alive)
+        ti = self.sim.ti
+        res.prevalence[ti] = res.n_infected[ti] / np.count_nonzero(self.sim.people.alive)
         res.new_infections[ti] = np.count_nonzero(self.ti_infected == ti)
         res.cum_infections[ti] = np.sum(res['new_infections'][:ti+1])
         return

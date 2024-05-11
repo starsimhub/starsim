@@ -34,8 +34,9 @@ class SIR(ss.Infection):
         )
         return
 
-    def update_pre(self, sim):
+    def update_pre(self):
         # Progress infectious -> recovered
+        sim = self.sim
         recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
         self.infected[recovered] = False
         self.recovered[recovered] = True
@@ -43,14 +44,16 @@ class SIR(ss.Infection):
         # Trigger deaths
         deaths = (self.ti_dead <= sim.ti).uids
         if len(deaths):
-            sim.people.request_death(sim, deaths)
+            sim.people.request_death(deaths)
         return
 
-    def set_prognoses(self, sim, uids, source_uids=None):
+    def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses """
+        ti = self.sim.ti
+        dt = self.sim.dt
         self.susceptible[uids] = False
         self.infected[uids] = True
-        self.ti_infected[uids] = sim.ti
+        self.ti_infected[uids] = ti
 
         p = self.pars
 
@@ -62,12 +65,12 @@ class SIR(ss.Infection):
         will_die = p.p_death.rvs(uids)
         dead_uids = uids[will_die]
         rec_uids = uids[~will_die]
-        self.ti_dead[dead_uids] = sim.ti + dur_inf[will_die] / sim.dt # Consider rand round, but not CRN safe
-        self.ti_recovered[rec_uids] = sim.ti + dur_inf[~will_die] / sim.dt
+        self.ti_dead[dead_uids] = ti + dur_inf[will_die] / dt # Consider rand round, but not CRN safe
+        self.ti_recovered[rec_uids] = ti + dur_inf[~will_die] / dt
 
         return
 
-    def update_death(self, sim, uids):
+    def update_death(self, uids):
         """ Reset infected/recovered flags for dead agents """
         self.susceptible[uids] = False
         self.infected[uids] = False
@@ -108,45 +111,45 @@ class SIS(ss.Infection):
         )
         return
 
-    def update_pre(self, sim):
+    def update_pre(self):
         """ Progress infectious -> recovered """
-        recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
+        recovered = (self.infected & (self.ti_recovered <= self.sim.ti)).uids
         self.infected[recovered] = False
         self.susceptible[recovered] = True
-        self.update_immunity(sim)
+        self.update_immunity()
         return
     
-    def update_immunity(self, sim):
+    def update_immunity(self):
         has_imm = (self.immunity > 0).uids
-        self.immunity[has_imm] = (self.immunity[has_imm])*(1 - self.pars.waning*sim.dt)
+        self.immunity[has_imm] = (self.immunity[has_imm])*(1 - self.pars.waning*self.sim.dt)
         self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])
         return
 
-    def set_prognoses(self, sim, uids, source_uids=None):
+    def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses """
         self.susceptible[uids] = False
         self.infected[uids] = True
-        self.ti_infected[uids] = sim.ti
+        self.ti_infected[uids] = self.sim.ti
         self.immunity[uids] += self.pars.imm_boost
 
         # Sample duration of infection
         dur_inf = self.pars.dur_inf.rvs(uids)
 
         # Determine when people recover
-        self.ti_recovered[uids] = sim.ti + dur_inf / sim.dt
+        self.ti_recovered[uids] = self.sim.ti + dur_inf / self.sim.sim.dt
 
         return
     
-    def init_results(self, sim):
+    def init_results(self):
         """ Initialize results """
-        super().init_results(sim)
-        self.results += ss.Result(self.name, 'rel_sus', sim.npts, dtype=float)
+        super().init_results()
+        self.results += ss.Result(self.name, 'rel_sus', self.sim.npts, dtype=float)
         return
 
-    def update_results(self, sim):
+    def update_results(self):
         """ Store the population immunity (susceptibility) """
-        super().update_results(sim)
-        self.results['rel_sus'][sim.ti] = self.rel_sus.mean()
+        super().update_results()
+        self.results['rel_sus'][self.sim.ti] = self.rel_sus.mean()
         return 
 
     def plot(self):

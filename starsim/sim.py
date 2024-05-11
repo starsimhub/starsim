@@ -185,54 +185,54 @@ class Sim(sc.prettyobj):
         self.dists.jump(to=self.ti+1)  # +1 offset because ti=0 is used on initialization
 
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
-        for dem_mod in self.demographics.values():
-            dem_mod.update(self)
+        for dem_mod in self.demographics():
+            dem_mod.update()
 
         # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
         # to be applied to newly created agents
-        for disease in self.diseases.values():
-            disease.update_pre(self)
+        for disease in self.diseases():
+            disease.update_pre()
 
         # Update connectors -- TBC where this appears in the ordering
-        for connector in self.connectors.values():
-            connector.update(self)
+        for connector in self.connectors():
+            connector.update()
 
         # Update networks - this takes place here in case autonomous state changes at this timestep
-        for network in self.networks.values():
+        for network in self.networks():
         # affect eligibility for contacts
             network.update()
 
         # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
         # interventions, by running them at this point
-        for intervention in self.interventions.values():
+        for intervention in self.interventions():
             intervention(self)
 
         # Carry out transmission/new cases
-        for disease in self.diseases.values():
-            disease.make_new_cases(self)
+        for disease in self.diseases():
+            disease.make_new_cases()
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
         uids = self.people.resolve_deaths()
-        for disease in self.diseases.values():
-            disease.update_death(self, uids)
+        for disease in self.diseases():
+            disease.update_death(uids)
 
         # Update results
-        self.people.update_results(self)
+        self.people.update_results()
 
-        for disease in self.diseases.values():
-            disease.update_results(self)
+        for disease in self.diseases():
+            disease.update_results()
 
-        for analyzer in self.analyzers.values():
+        for analyzer in self.analyzers():
             analyzer(self)
             
         # Clean up dead agents
-        self.people.remove_dead(self)
+        self.people.remove_dead()
 
         # Tidy up
         self.ti += 1
         self.people.ti = self.ti
-        self.people.update_post(self)
+        self.people.update_post()
 
         if self.ti == self.npts:
             self.complete = True
