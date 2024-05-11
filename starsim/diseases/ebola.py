@@ -57,79 +57,81 @@ class Ebola(SIR):
     def infectious(self):
         return self.infected | self.exposed
 
-    def update_pre(self, sim):
+    def update_pre(self):
 
         # Progress exposed -> infected
-        infected = (self.exposed & (self.ti_infected <= sim.ti)).uids
+        ti = self.sim.ti
+        infected = (self.exposed & (self.ti_infected <= ti)).uids
         self.exposed[infected] = False
         self.infected[infected] = True
 
         # Progress infectious -> severe
-        severe = (self.infected & (self.ti_severe <= sim.ti)).uids
+        severe = (self.infected & (self.ti_severe <= ti)).uids
         self.severe[severe] = True
 
         # Progress infected -> recovered
-        recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
+        recovered = (self.infected & (self.ti_recovered <= ti)).uids
         self.infected[recovered] = False
         self.recovered[recovered] = True
 
         # Progress severe -> recovered
-        recovered_sev = (self.severe & (self.ti_recovered <= sim.ti)).uids
+        recovered_sev = (self.severe & (self.ti_recovered <= ti)).uids
         self.severe[recovered_sev] = False
         self.recovered[recovered_sev] = True
 
         # Trigger deaths
-        deaths = (self.ti_dead <= sim.ti).uids
+        deaths = (self.ti_dead <= ti).uids
         if len(deaths):
-            sim.people.request_death(sim, deaths)
+            self.sim.people.request_death(deaths)
 
         # Progress dead -> buried
-        buried = (self.ti_buried <= sim.ti).uids
+        buried = (self.ti_buried <= ti).uids
         self.buried[buried] = True
         
         return
 
-    def set_prognoses(self, sim, uids, source_uids=None):
+    def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses for those who get infected """
         # Do not call set_prognoses on the parent
         #super().set_prognoses(sim, uids, source_uids)
 
+        ti = self.sim.ti
+        dt = self.sim.dt
         self.susceptible[uids] = False
         self.exposed[uids] = True
-        self.ti_exposed[uids] = sim.ti
+        self.ti_exposed[uids] = ti
 
         p = self.pars
 
         # Determine when exposed become infected
-        self.ti_infected[uids] = sim.ti + p.dur_exp2symp.rvs(uids) / sim.dt
+        self.ti_infected[uids] = ti + p.dur_exp2symp.rvs(uids) / dt
 
         # Determine who progresses to sever and when
         sev_uids = p.p_sev.filter(uids)
-        self.ti_severe[sev_uids] = self.ti_infected[sev_uids] + p.dur_symp2sev.rvs(sev_uids) / sim.dt
+        self.ti_severe[sev_uids] = self.ti_infected[sev_uids] + p.dur_symp2sev.rvs(sev_uids) / dt
 
         # Determine who dies and who recovers and when
         dead_uids = p.p_death.filter(sev_uids)
-        self.ti_dead[dead_uids] = self.ti_severe[dead_uids] + p.dur_sev2dead.rvs(dead_uids) / sim.dt
+        self.ti_dead[dead_uids] = self.ti_severe[dead_uids] + p.dur_sev2dead.rvs(dead_uids) / dt
         rec_sev_uids = np.setdiff1d(sev_uids, dead_uids)
-        self.ti_recovered[rec_sev_uids] = self.ti_severe[rec_sev_uids] + p.dur_sev2rec.rvs(rec_sev_uids) / sim.dt
+        self.ti_recovered[rec_sev_uids] = self.ti_severe[rec_sev_uids] + p.dur_sev2rec.rvs(rec_sev_uids) / dt
         rec_symp_uids = np.setdiff1d(uids, sev_uids)
-        self.ti_recovered[rec_symp_uids] = self.ti_infected[rec_symp_uids] + p.dur_symp2rec.rvs(rec_symp_uids) / sim.dt
+        self.ti_recovered[rec_symp_uids] = self.ti_infected[rec_symp_uids] + p.dur_symp2rec.rvs(rec_symp_uids) / dt
 
         # Determine time of burial - either immediate (safe burials) or after a delay (unsafe)
         safe_buried = p.p_safe_bury.filter(dead_uids)
         unsafe_buried = np.setdiff1d(dead_uids, safe_buried)
         self.ti_buried[safe_buried] = self.ti_dead[safe_buried]
-        self.ti_buried[unsafe_buried] = self.ti_dead[unsafe_buried] + p.dur_dead2buried.rvs(unsafe_buried) / sim.dt
+        self.ti_buried[unsafe_buried] = self.ti_dead[unsafe_buried] + p.dur_dead2buried.rvs(unsafe_buried) / dt
 
         # Change rel_trans values
         self.rel_trans[self.infectious] = 1
         self.rel_trans[self.severe] = self.pars['sev_factor']  # Change for severe
-        unburied_uids = ((self.ti_dead <= sim.ti) & (self.ti_buried > sim.ti)).uids
+        unburied_uids = ((self.ti_dead <= ti) & (self.ti_buried > ti)).uids
         self.rel_trans[unburied_uids] = self.pars['unburied_factor']  # Change for unburied
-
         return
 
-    def update_death(self, sim, uids):
+    def update_death(self, uids):
         # Reset infected/recovered flags for dead agents
         for state in ['susceptible', 'exposed', 'infected', 'severe', 'recovered']:
             self.statesdict[state][uids] = False
