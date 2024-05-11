@@ -8,141 +8,10 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 
-
-__all__ = ['BasePeople', 'People', 'Person']
-
-# %% Main people class
-
-class BasePeople(sc.prettyobj): #ZRF
-    """
-    A class to handle all the boilerplate for people -- everything interesting 
-    happens in the People class, whereas this class exists to handle the less 
-    interesting implementation details.
-    """
-
-    def __init__(self, n_agents):
-
-        n = int(n_agents)
-        self.initialized = False
-        self.uid = ss.IndexArr('uid')  # This variable tracks all UIDs
-        uids = ss.uids(np.arange(n))
-        self.uid.grow(new_vals=uids)
-        self.auids = uids.copy() # This tracks all active UIDs (in practice, agents who are alive)
-
-        # A slot is a special state managed internally by BasePeople
-        # This is because it needs to be updated separately from any other states, as other states
-        # might have fill_values that depend on the slot
-        self.slot = ss.IndexArr('slot')
-        self.slot.grow(new_vals=uids)
-        
-        for state in [self.uid, self.slot]:
-            state.link_people(self)
-
-        # User-facing collection of states
-        self.states = ss.ndict(type=ss.Arr)
-
-        # We also internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
-        # e.g., across modules, but we will never change the size of a State multiple times in the same iteration over
-        # _states. This is a hidden variable because it is internally used to synchronize the size of all States contained
-        # within the sim, regardless of where they are. In contrast, `People.states` offers a more user-friendly way to access
-        # a selection of the states e.g., module states could be added in there, while intervention states might not
-        self._states = {}
-        
-        return
-
-    def __len__(self):
-        """ Length of people """
-        return len(self.auids)
-    
-    @property
-    def n_uids(self):
-        return self.uid.len_used
-    
-    def _link_state(self, state, die=True):
-        """
-        Link a state with the People instance for dynamic resizing; usually called by
-        state.link_people()
-
-        All states should be registered by this function for the purpose of connecting them to the
-        People's UIDs and to have them be automatically resized when the number of agents changes.
-        This operation is normally triggered as part of initializing the state (via `State.initialize()`)
-        """
-        if id(state) not in self._states:
-            self._states[id(state)] = state
-        elif die:
-            errormsg = f'Cannot add state {state} since already added'
-            raise ValueError(errormsg)
-        return
-
-    def grow(self, n=None, new_slots=None):
-        """
-        Increase the number of agents
-
-        :param n: Integer number of agents to add
-        :param new_slots: Optionally specify the slots to assign for the new agents. Otherwise, it will default to the new UIDs
-        """
-        
-        if n is None:
-            if new_slots is None:
-                errormsg = 'Must supply either n or new_slots'
-                raise ValueError(errormsg)
-            else:
-                n = len(new_slots)
-
-        if n == 0:
-            return np.array([], dtype=ss.dtypes.int)
-
-        start_uid = self.uid.len_used
-        stop_uid = start_uid + n
-        new_uids = ss.uids(np.arange(start_uid, stop_uid))
-        self.uid.grow(new_uids, new_vals=new_uids)
-
-        # We need to grow the slots as well
-        new_slots = new_slots if new_slots is not None else new_uids
-        self.slot.grow(new_uids, new_vals=new_slots)
-
-        for state in self._states.values():
-            state.grow(new_uids)
-            
-        # Finally, update the alive indices
-        self.auids = self.auids.concat(new_uids)
-
-        return new_uids
-
-    def __getitem__(self, key):
-        """
-        Allow people['attr'] instead of getattr(people, 'attr')
-        If the key is an integer, alias `people.person()` to return a `Person` instance
-        """
-        if isinstance(key, int):
-            return self.person(key)
-        else:
-            return getattr(self, key)
-
-    def __setitem__(self, key, value):
-        """ Ditto """
-        return setattr(self, key, value)
-
-    def __iter__(self):
-        """ Iterate over people """
-        for i in range(len(self)):
-            yield self[i]
-
-    def __setstate__(self, state):
-        """
-        Set the state upon unpickling/deepcopying
-
-        If a People instance is copied (by any mechanism) then the keys in the `_states`
-        registry will no longer match the memory addresses of the new copied states. Therefore,
-        after copying, we need to re-create the states registry with the new object IDs
-        """
-        state['_states'] =  {id(v):v for v in state['_states'].values()}
-        self.__dict__ = state
-        
-        return
+__all__ = ['People', 'Person']
 
 
-class People(BasePeople):
+class People(sc.prettyobj):
     """
     A class to perform all the operations on the people
     This class is usually created automatically by the sim. The only required input
@@ -165,10 +34,33 @@ class People(BasePeople):
 
     def __init__(self, n_agents, age_data=None, extra_states=None):
         """ Initialize """
+        
+        #ZRF
+        # We also internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
+        # e.g., across modules, but we will never change the size of a State multiple times in the same iteration over
+        # _states. This is a hidden variable because it is internally used to synchronize the size of all States contained
+        # within the sim, regardless of where they are. In contrast, `People.states` offers a more user-friendly way to access
+        # a selection of the states e.g., module states could be added in there, while intervention states might not
+        self._states = {}
 
-        super().__init__(n_agents)
-
+        n = int(n_agents)
+        uids = ss.uids(np.arange(n))
         self.initialized = False
+        self.uid = ss.IndexArr('uid')  # This variable tracks all UIDs
+        self.uid.grow(new_vals=uids)
+        self.auids = uids.copy() # This tracks all active UIDs (in practice, agents who are alive)
+
+        # A slot is a special state managed internally by BasePeople
+        # This is because it needs to be updated separately from any other states, as other states
+        # might have fill_values that depend on the slot
+        self.slot = ss.IndexArr('slot')
+        self.slot.grow(new_vals=uids)
+        
+        for state in [self.uid, self.slot]:
+            state.link_people(self)
+
+        # User-facing collection of states
+        self.states = ss.ndict(type=ss.Arr)
         self.version = ss.__version__  # Store version info
 
         # Handle states
@@ -265,6 +157,98 @@ class People(BasePeople):
         for state in self.states():
             state.init_vals()
         self.initialized = True
+        return
+    
+    def __len__(self):
+        """ Length of people """
+        return len(self.auids)
+    
+    @property
+    def n_uids(self):
+        return self.uid.len_used
+    
+    def _link_state(self, state, die=True):
+        """
+        Link a state with the People instance for dynamic resizing; usually called by
+        state.link_people()
+
+        All states should be registered by this function for the purpose of connecting them to the
+        People's UIDs and to have them be automatically resized when the number of agents changes.
+        This operation is normally triggered as part of initializing the state (via `State.initialize()`)
+        """
+        if id(state) not in self._states:
+            self._states[id(state)] = state
+        elif die:
+            errormsg = f'Cannot add state {state} since already added'
+            raise ValueError(errormsg)
+        return
+
+    def grow(self, n=None, new_slots=None):
+        """
+        Increase the number of agents
+
+        :param n: Integer number of agents to add
+        :param new_slots: Optionally specify the slots to assign for the new agents. Otherwise, it will default to the new UIDs
+        """
+        
+        if n is None:
+            if new_slots is None:
+                errormsg = 'Must supply either n or new_slots'
+                raise ValueError(errormsg)
+            else:
+                n = len(new_slots)
+
+        if n == 0:
+            return np.array([], dtype=ss.dtypes.int)
+
+        start_uid = self.uid.len_used
+        stop_uid = start_uid + n
+        new_uids = ss.uids(np.arange(start_uid, stop_uid))
+        self.uid.grow(new_uids, new_vals=new_uids)
+
+        # We need to grow the slots as well
+        new_slots = new_slots if new_slots is not None else new_uids
+        self.slot.grow(new_uids, new_vals=new_slots)
+
+        # Grow the states
+        for state in self._states.values():
+            state.grow(new_uids)
+            
+        # Finally, update the alive indices
+        self.auids = self.auids.concat(new_uids)
+
+        return new_uids
+
+    def __getitem__(self, key):
+        """
+        Allow people['attr'] instead of getattr(people, 'attr')
+        If the key is an integer, alias `people.person()` to return a `Person` instance
+        """
+        if isinstance(key, int):
+            return self.person(key)
+        else:
+            return getattr(self, key)
+
+    def __setitem__(self, key, value):
+        """ Ditto """
+        return setattr(self, key, value)
+
+    def __iter__(self):
+        """ Iterate over people """
+        for i in range(len(self)):
+            yield self[i]
+
+    def __setstate__(self, state):
+        """
+        Set the state upon unpickling/deepcopying
+
+        If a People instance is copied (by any mechanism) then the keys in the `_states`
+        registry will no longer match the memory addresses of the new copied states. Therefore,
+        after copying, we need to re-create the states registry with the new object IDs
+        """
+        state['_states'] =  {id(v):v for v in state['_states'].values()}
+        self.__dict__ = state
+        
         return
 
     def scale_flows(self, inds):
