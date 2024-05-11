@@ -259,6 +259,13 @@ class People(BasePeople):
                 self.states[combined_name] = state # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
                 module_states[state.name] = state
         return
+    
+    def init_state_vals(self):
+        """ Populate states with initial values, the final step of initialization """
+        for state in self.states():
+            state.init_vals()
+        self.initialized = True
+        return
 
     def scale_flows(self, inds):
         """

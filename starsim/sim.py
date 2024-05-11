@@ -77,14 +77,13 @@ class Sim(sc.prettyobj):
         
         # Initialize all distributions now that everything else is in place, then set states
         self.dists.initialize(obj=self, base_seed=self.pars.rand_seed, force=True)
-        self.init_states()
+        self.people.init_state_vals()
         self.init_results()
 
         # Final steps
         self.initialized = True
         self.complete = False
         self.results_ready = False
-
         return self
     
     def init_time_pars(self):
