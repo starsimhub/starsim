@@ -34,6 +34,9 @@ class BasePeople(sc.prettyobj): #ZRF
         # might have fill_values that depend on the slot
         self.slot = ss.IndexArr('slot')
         self.slot.grow(new_vals=uids)
+        
+        for state in [self.uid, self.slot]:
+            state.link_people(self)
 
         # User-facing collection of states
         self.states = ss.ndict(type=ss.Arr)
@@ -180,9 +183,11 @@ class People(BasePeople):
 
         # Expose states with their original names directly as people attributes (e.g., `People.age`) and nested under states
         # (e.g., `People.states.age`)
-        for state in states:
+        for state in states: #ZRF
             self.states.append(state, overwrite=False)
             setattr(self, state.name, state)
+            state.link_people(self)
+            self.link_state(state)
 
         # Set initial age distribution - likely move this somewhere else later
         self.age_data_dist = self.get_age_dist(age_data) # TODO: remove or make more general
@@ -211,16 +216,16 @@ class People(BasePeople):
         
         # For People initialization, first initialize slots, then initialize RNGs, then initialize remaining states
         # This is because some states may depend on RNGs being initialized to generate initial values
-        self.uid.set_people(sim.people)
-        self.slot.set_people(sim.people)
+        self.uid.link_people(sim.people)
+        self.slot.link_people(sim.people)
 
         # Initialize states
         # Age is handled separately because the default value for new agents is NaN until they are concieved/born whereas
         # the initial values need to depend on the current age distribution for the setting. In contrast, the sex for new
         # agents can be sampled from the same distribution used to initialize the population #ZRF
-        for state in self.states():
-            state.link_people(sim.people)
-            self.link_state(state)
+        # for state in self.states():
+        #     state.link_people(sim.people)
+        #     self.link_state(state)
 
         # Assign initial ages based on the current age distribution
         # self.age_data_dist.initialize(module=self, sim=sim) #ZRF
