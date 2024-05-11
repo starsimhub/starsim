@@ -216,8 +216,8 @@ class People(BasePeople):
         
         # For People initialization, first initialize slots, then initialize RNGs, then initialize remaining states
         # This is because some states may depend on RNGs being initialized to generate initial values
-        self.uid.link_people(sim.people)
-        self.slot.link_people(sim.people)
+        # self.uid.link_people(sim.people)
+        # self.slot.link_people(sim.people)
 
         # Initialize states
         # Age is handled separately because the default value for new agents is NaN until they are concieved/born whereas
