@@ -100,8 +100,9 @@ class Network(ss.Module):
     def beta(self):
         return self.contacts['beta'] if 'beta' in self.contacts else None
 
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_vals(self):
+        super().init_vals()
+        self.add_pairs()
         return
 
     def __len__(self):
@@ -323,7 +324,7 @@ class DynamicNetwork(Network):
         active = (self.contacts.dur > 0) & people.alive[self.contacts.p1] & people.alive[self.contacts.p2]
         for k in self.meta_keys():
             self.contacts[k] = self.contacts[k][active]
-        return
+        return len(active)
 
 
 class SexualNetwork(DynamicNetwork):
@@ -385,30 +386,34 @@ class StaticNet(Network):
 
     def __init__(self, graph=None, pars=None, **kwargs):
         super().__init__()
+        self.graph = graph
         self.default_pars(seed=True)
         self.update_pars(pars, **kwargs)
-        self.graph = graph
-        self.dist = ss.Dist(name='StaticNet').initialize()
+        self.dist = ss.Dist(name='StaticNet')
         return
 
     def initialize(self, sim):
-        n_agents = sim.pars.n_agents
+        super().initialize(sim)
+        self.n_agents = sim.pars.n_agents
         if self.graph is None:
             self.graph = nx.fast_gnp_random_graph # Fast random (Erdos-Renyi) graph creator
             if 'p' not in self.pars and 'n_contacts' not in self.pars: # TODO: refactor
                 self.pars.n_contacts = 10
         if 'n_contacts' in self.pars: # Convert from n_contacts to probability
-            self.pars.p = self.pars.pop('n_contacts')/n_agents
+            self.pars.p = self.pars.pop('n_contacts')/self.n_agents
+        return
+    
+    def init_vals(self):
+        super().init_vals()
         if 'seed' in self.pars and self.pars.seed is True:
             self.pars.seed = self.dist.rng
         if callable(self.graph):
             try:
-                self.graph = self.graph(n=n_agents, **self.pars)
+                self.graph = self.graph(n=self.n_agents, **self.pars)
             except TypeError as e:
                 print(f"{str(e)}: networkx {self.graph.name} not supported. Try using ss.NullNet().")
                 raise e
-        self.validate_pop(n_agents)
-        super().initialize(sim)
+        self.validate_pop(self.n_agents)
         self.get_contacts()
         return
 
@@ -449,9 +454,8 @@ class RandomNet(DynamicNetwork):
         self.dist = ss.Dist(distname='RandomNet') # Default RNG
         return
 
-    def initialize(self, sim):
-        super().initialize(sim)
-        self.add_pairs(sim)
+    def init_vals(self):
+        self.add_pairs()
         return
 
     @staticmethod
