@@ -331,8 +331,8 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.make_history(reset=True)
         
         # Handle the sim, module, and slots
-        self.sim = sim if (sim is not None) else self.sim
-        self.module = module if (module is not None) else self.module
+        self.link_sim(sim)
+        self.link_module(module)
         if slots is None and self.sim is not None:
             try:
                 slots = self.sim.people.slot
@@ -352,6 +352,16 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         else:
             self.initialized = True
         return self
+    
+    def link_sim(self, sim=None):
+        """ Shortcut for linking the sim """
+        self.sim = sc.ifelse(sim, self.sim)
+        return
+    
+    def link_module(self, module=None):
+        """ Shortcut for linking the module """
+        self.module = sc.ifelse(module, self.module)
+        return
     
     def process_seed(self, trace=None, seed=None):
         """ Obtain the seed offset by hashing the path to this distribution; called automatically """
@@ -436,6 +446,9 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             
             # If the parameter is callable, then call it
             if callable(val): 
+                if self.module is None or self.sim is None:
+                    errormsg = f'Dist {self} is not fully initialized; cannot create random numbers from function'
+                    raise RuntimeError(errormsg)
                 size_par = uids if uids is not None else size
                 out = val(self.module, self.sim, size_par) # TODO: swap order to sim, module, size?
                 val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
