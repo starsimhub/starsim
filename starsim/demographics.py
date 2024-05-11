@@ -94,10 +94,10 @@ class Births(Demographics):
 
     def add_births(self):
         """ Add n_new births to each state in the sim """
-        sim = self.sim
-        n_new = self.get_births(sim)
-        new_uids = sim.people.grow(n_new)
-        sim.people.age[new_uids] = 0
+        people = self.sim.people
+        n_new = self.get_births()
+        new_uids = people.grow(n_new)
+        people.age[new_uids] = 0
         return new_uids
 
     def update_results(self, n_new):

@@ -293,5 +293,5 @@ def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
     else:
         errormsg = f'Data type {type(data)} not understood.'
         raise ValueError(errormsg)
-
+        
     return df

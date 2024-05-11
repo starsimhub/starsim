@@ -128,13 +128,13 @@ class OneMore(ss.Intervention):
             preg = ss.Pregnancy(rel_fertility=0) # Ensure no default births
             preg.initialize(sim)
             new_uids = ss.uids([len(sim.people)]) # Hack since make_embryos doesn't return UIDs
-            preg.make_embryos(sim, np.array([0])) # Assign 0th agent to be the "mother"
+            preg.make_embryos(np.array([0])) # Assign 0th agent to be the "mother"
             assert len(new_uids) == 1
             sim.people.age[new_uids] = -100 # Set to a very low number to never reach debut age
             
             # Infect that agent
             sir = sim.diseases.sir
-            sir.set_prognoses(sim, new_uids)
+            sir.set_prognoses(new_uids)
             sir.ti_recovered[new_uids] = sim.ti + 1 # Reset recovery time to next timestep
             
             # Reset the random states
