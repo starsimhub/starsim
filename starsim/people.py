@@ -154,7 +154,9 @@ class People(sc.prettyobj):
     
     def init_state_vals(self):
         """ Populate states with initial values, the final step of initialization """
+        print('DOFIUDFOIUD')
         for state in self.states():
+            print('WORKING ON', state.name)
             state.init_vals()
         self.initialized = True
         return

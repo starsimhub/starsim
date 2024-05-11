@@ -104,7 +104,9 @@ class Module(sc.quickobj):
         """
         Perform initialization steps
 
-        This method is called once, as part of initializing a Sim
+        This method is called once, as part of initializing a Sim. Note: after
+        initialization, initialized=False until init_vals() is called (which is after
+        distributions are initialized).
         """
         self.check_requires(sim)
         
@@ -127,6 +129,13 @@ class Module(sc.quickobj):
         sim.pars[self.name] = self.pars
         sim.results[self.name] = self.results
         sim.people.add_module(self) # Connect the states to the people
+        return
+    
+    def init_vals(self):
+        """ Initialize the values of the states; the last step of initialization """
+        for state in self.states: #ZRF
+            if not state.initialized:
+                state.init_vals()
         self.initialized = True
         return
     
@@ -186,10 +195,10 @@ class Module(sc.quickobj):
         due to supporting features like multiple genotypes) then the Module should
         overload this attribute to ensure that all states appear in here.
         """
-        return [x for x in self.__dict__.values() if isinstance(x, ss.Arr)]
+        return [x for x in self.__dict__.values() if isinstance(x, ss.Arr)] #ZRF use ndict
 
     @property
-    def statesdict(self):
+    def statesdict(self): #ZRF remove
         """
         Return a flat dictionary (objdict) of all states
 
