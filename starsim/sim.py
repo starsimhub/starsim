@@ -55,7 +55,7 @@ class Sim(sc.prettyobj):
         # Initialize the people
         self.init_people(reset=reset, **kwargs)  # Create all the people
         
-        # Initialize the parameters, including the modules
+        # Initialize the modules within the parameters
         self.pars.init_modules(sim=self, reset=reset, **kwargs)
         
         # Move initialized modules to the sim
@@ -78,6 +78,7 @@ class Sim(sc.prettyobj):
         # Initialize all distributions now that everything else is in place, then set states
         self.dists.initialize(obj=self, base_seed=self.pars.rand_seed, force=True)
         self.init_states()
+        self.init_results()
 
         # Final steps
         self.initialized = True
@@ -121,38 +122,32 @@ class Sim(sc.prettyobj):
         if pars.people is None or reset:
             pars.people = ss.People(n_agents=pars.n_agents, **kwargs)  # This just assigns UIDs and length
 
-        # If a popdict has not been supplied, we can make one from location data
-        if pars.location is not None:
-            # Check where to get total_pop from
-            if pars.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
-                errormsg = 'You can either define total_pop explicitly or via the location, but not both'
-                raise ValueError(errormsg)
-
-        else:
-            if pars.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
-                total_pop = pars.total_pop
-            else:
-                if pars.pop_scale is not None:
-                    total_pop = pars.pop_scale * pars.n_agents
-                else:
-                    total_pop = pars.n_agents
-
-        pars.total_pop = total_pop
-        if pars.pop_scale is None:
-            pars.pop_scale = total_pop / pars.n_agents
-
         # Any other initialization
         self.people = pars.pop('people')
-        if not self.people.initialized:
-            self.people.initialize(self)
-
-        # Set time attributes
-        self.people.init_results(self)
+        self.people.link_sim(self)
         return self.people
     
     def init_states(self):
         """ Initialize the states with values """
         pass
+    
+    def init_results(self): #ZRF
+        """ Create initial results that are present in all simulations """
+        self.results += [
+            ss.Result(None, 'n_alive',    self.npts, ss.dtypes.int, scale=True),
+            ss.Result(None, 'new_deaths', self.npts, ss.dtypes.int, scale=True),
+            ss.Result(None, 'cum_deaths', self.npts, ss.dtypes.int, scale=True),
+        ]
+        return
+    
+    # def init_results(self): #ZRF
+    #     """ Create initial results that are present in all simulations """
+    #     self.add_results(
+    #         dict(name='n_alive',    dtype=int, scale=True),
+    #         dict(name='new_deaths', dtype=int, scale=True),
+    #         dict(name='cum_deaths', dtype=int, scale=True),
+    #     )
+    #     return
 
     @property
     def modules(self):

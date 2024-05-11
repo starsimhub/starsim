@@ -244,6 +244,21 @@ class SimPars(Pars):
         else:
             errormsg = 'Must supply n_agents, a people object, or a popdict'
             raise ValueError(errormsg)
+            
+        # Handle total_pop
+        if self.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
+            if self.pop_scale is not None:
+                errormsg = 'You can define total_pop or pop_scale, but not both'
+                raise ValueError(errormsg)
+            total_pop = self.total_pop
+        else:
+            if self.pop_scale is not None:
+                total_pop = self.pop_scale * self.n_agents
+            else:
+                total_pop = self.n_agents
+        self.total_pop = total_pop
+        if self.pop_scale is None:
+            self.pop_scale = total_pop / self.n_agents
 
         # Handle end and n_years
         if self.end:

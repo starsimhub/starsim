@@ -201,7 +201,7 @@ class People(BasePeople):
             age_props = age_props / age_props.sum()
             return ss.choice(a=age_bins, p=age_props)
 
-    def initialize(self, sim):
+    def link_sim(self, sim):
         """ Initialization """
         if self.initialized:
             errormsg = 'Cannot re-initialize a People object directly; use sim.initialize(reset=True)'
@@ -226,7 +226,7 @@ class People(BasePeople):
         # self.age[:] = self.age_data_dist.rvs(self.uid)
         self.sim = sim # Store the sim
         return
-
+    
     def add_module(self, module, force=False):
         """
         Add a Module to the People instance
@@ -324,14 +324,6 @@ class People(BasePeople):
     def male(self):
         """ Male boolean """
         return ~self.female
-
-    def init_results(self, sim):
-        sim.results += [
-            ss.Result(None, 'n_alive',    sim.npts, ss.dtypes.int, scale=True),
-            ss.Result(None, 'new_deaths', sim.npts, ss.dtypes.int, scale=True),
-            ss.Result(None, 'cum_deaths', sim.npts, ss.dtypes.int, scale=True),
-        ]
-        return
 
     def update_results(self, sim):
         ti = sim.ti
