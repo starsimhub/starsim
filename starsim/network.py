@@ -799,9 +799,12 @@ class MaternalNet(Network):
         self.contacts.beta[inactive] = 0
         return
 
-    def add_pairs(self, mother_inds, unborn_inds, dur):
+    def add_pairs(self, mother_inds=None, unborn_inds=None, dur=None):
         """ Add connections between pregnant women and their as-yet-unborn babies """
-        n = len(mother_inds)
-        beta = np.ones(n)
-        self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur)
-        return n
+        if not mother_inds:
+            return 0
+        else:
+            n = len(mother_inds)
+            beta = np.ones(n)
+            self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur)
+            return n
