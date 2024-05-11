@@ -192,7 +192,7 @@ class SimPars(Pars):
         self.update(kwargs)
         return
 
-    def init_modules(self, sim, reset=False, **kwargs):
+    def init_modules(self, sim):
         """ Initialize the modules """
         # Allow shortcut for default demographics # TODO: think about whether we want to enable this, when we have birth_rate and death_rate
         if self.demographics == True:

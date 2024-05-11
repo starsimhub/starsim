@@ -44,7 +44,7 @@ class Sim(sc.prettyobj):
         """ Allow dict-like access, e.g. sim['created'] = sc.now() """
         return setattr(self, key, value)
     
-    def initialize(self, reset=False, **kwargs):
+    def initialize(self, **kwargs):
         """ Perform all initializations for the sim; most heavy lifting is done by the parameters """
         # Validation and initialization
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
@@ -53,10 +53,10 @@ class Sim(sc.prettyobj):
         self.init_time_pars()
         
         # Initialize the people
-        self.init_people(reset=reset, **kwargs)  # Create all the people
+        self.init_people(**kwargs)  # Create all the people
         
         # Initialize the modules within the parameters
-        self.pars.init_modules(sim=self, reset=reset, **kwargs)
+        self.pars.init_modules(self)
         
         # Move initialized modules to the sim
         keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
@@ -64,11 +64,12 @@ class Sim(sc.prettyobj):
             setattr(self, key, self.pars.pop(key))
             
         # Initialize all the modules with the sim
-        modmap = ss.module_map()
-        for modkey in modmap.keys():
-            modlist = self[modkey]
-            for mod in modlist.values():
-                mod.initialize(self)
+        for mod in self.modules:
+        # modmap = ss.module_map() #ZRF
+        # for modkey in modmap.keys():
+        #     modlist = self[modkey]
+        #     for mod in modlist.values():
+            mod.initialize(self)
                 
         # Initialize products # TODO: think about simplifying
         for mod in self.interventions:
@@ -89,23 +90,22 @@ class Sim(sc.prettyobj):
         return self
     
     def init_time_pars(self):
-        # Time indexing; derived values live in the sim rather than in the pars
-        self.dt = self.pars.dt
-        self.yearvec = np.arange(start=self.pars.start, stop=self.pars.end + self.pars.dt, step=self.pars.dt)
-        self.results.yearvec = self.yearvec # Copy this here
-        self.npts = len(self.yearvec)
-        self.tivec = np.arange(self.npts)
+        """ Time indexing; derived values live in the sim rather than in the pars """
+        self.dt = self.pars.dt # Shortcut to dt since used a lot
+        self.yearvec = np.arange(start=self.pars.start, stop=self.pars.end + self.pars.dt, step=self.pars.dt) # The time points of the sim
+        self.results.yearvec = self.yearvec # Store the yearvec in the results for plotting
+        self.npts = len(self.yearvec) # The number of points in the sim
+        self.tivec = np.arange(self.npts) # The vector of time indices
         self.ti = 0  # The time index, e.g. 0, 1, 2
         return
 
-    def init_people(self, reset=False, verbose=None, **kwargs):
+    def init_people(self, verbose=None, **kwargs):
         """
         Initialize people within the sim
         Sometimes the people are provided, in which case this just adds a few sim properties to them.
         Other time people are not provided and this method makes them.
         
         Args:
-            reset   (bool): whether to regenerate the people even if they already exist
             verbose (int):  detail to print
             kwargs  (dict): passed to ss.make_people()
         """
@@ -114,13 +114,11 @@ class Sim(sc.prettyobj):
         n_agents = self.pars.n_agents
         verbose = sc.ifelse(verbose, self.pars.verbose)
         if verbose > 0:
-            resetstr = ''
-            if people and reset:
-                resetstr = ' (resetting people)'
-            print(f'Initializing sim{resetstr} with {n_agents:0n} agents')
+            labelstr = f' "{self.label}"' if self.label else ''
+            print(f'Initializing sim{labelstr} with {n_agents:0n} agents')
 
         # If people have not been supplied, make them -- typical use case
-        if people is None or reset:
+        if people is None:
             people = ss.People(n_agents=n_agents, **kwargs)  # This just assigns UIDs and length
 
         # Finish up (NB: the People object is not yet initialized)
@@ -128,9 +126,16 @@ class Sim(sc.prettyobj):
         self.people.link_sim(self)
         return self.people
     
-    def init_states(self):
-        """ Initialize the states with values """
-        pass
+    def init_vals(self):
+        """ Initialize the states and other objects with values """
+        
+        # Initialize values in people
+        self.people.init_vals()
+        
+        # Initialize values in other modules, including networks
+        for mod in self.modules:
+            mod.init_vals()
+        return
     
     def init_results(self): #ZRF
         """ Create initial results that are present in all simulations """
