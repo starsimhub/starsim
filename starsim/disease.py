@@ -36,27 +36,14 @@ class Disease(ss.Module):
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.init_results(sim)
-        self.set_initial_states(sim)
+        self.init_results()
         return
 
     def finalize(self, sim):
         super().finalize(sim)
         return
 
-    def set_initial_states(self, sim):
-        """
-        Set initial values for states
-
-        This could involve passing in a full set of initial conditions,
-        or using init_prev, or other. Note that this is different to initialization of the Arr objects
-        i.e., creating their dynamic array, linking them to a People instance. That should have already
-        taken place by the time this method is called. This method is about supplying initial values
-        for the states (e.g., seeding initial infections)
-        """
-        pass
-
-    def init_results(self, sim):
+    def init_results(self):
         """
         Initialize results
 
@@ -65,7 +52,7 @@ class Disease(ss.Module):
         Result for 'n_susceptible'
         """
         for state in self._boolean_states:
-            self.results += ss.Result(self.name, f'n_{state.name}', sim.npts, dtype=int, scale=True)
+            self.results += ss.Result(self.name, f'n_{state.name}', self.sim.npts, dtype=int, scale=True)
         return
 
     def update_pre(self, sim):
@@ -202,7 +189,7 @@ class Infection(Disease):
         """
         return self.infected
 
-    def set_initial_states(self, sim):
+    def init_vals(self):
         """
         Set initial values for states. This could involve passing in a full set of initial conditions,
         or using init_prev, or other. Note that this is different to initialization of the Arr objects
@@ -213,16 +200,17 @@ class Infection(Disease):
             return
 
         initial_cases = self.pars.init_prev.filter()
-        self.set_prognoses(sim, initial_cases)  # TODO: sentinel value to indicate seeds?
+        self.set_prognoses(self.sim, initial_cases)  # TODO: sentinel value to indicate seeds?
         return
 
-    def init_results(self, sim):
+    def init_results(self):
         """
         Initialize results
         """
-        super().init_results(sim)
+        super().init_results()
+        sim = self.sim
         self.results += [
-            ss.Result(self.name, 'prevalence', sim.npts, dtype=float, scale=False),
+            ss.Result(self.name, 'prevalence',     sim.npts, dtype=float, scale=False),
             ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True),
             ss.Result(self.name, 'cum_infections', sim.npts, dtype=int, scale=True),
         ]

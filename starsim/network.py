@@ -498,8 +498,8 @@ class RandomNet(DynamicNetwork):
         self.dist.jump() # Reset the RNG manually # TODO, think if there's a better way
         return source, target
 
-    def update(self):
-        self.end_pairs()
+    def update(self, sim): #ZRF
+        self.end_pairs(sim)
         self.add_pairs()
         return
 
