@@ -107,14 +107,15 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         the raw array (``raw``) or the active agents (``values``), and to convert
         the key to array indices if needed.
         """
-        use_raw = True
         if isinstance(key, uids):
-            pass
+            use_raw = True
         elif isinstance(key, (BoolArr, IndexArr)):
+            use_raw = True
             key = key.uids
-        elif isinstance(key, (slice, int)):
+        elif isinstance(key, slice):
             use_raw = False
         elif not np.isscalar(key) and len(key) == 0: # Handle [], np.array([]), etc.
+            use_raw = True # Doesn't matter since returning empty, but this is faster
             key = uids()
         else:
             errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.'
