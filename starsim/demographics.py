@@ -107,7 +107,7 @@ class Births(Demographics):
     def finalize(self):
         super().finalize()
         res = self.sim.results
-        self.results.cumulative = np.cumsum(self.results.ne)
+        self.results.cumulative = np.cumsum(self.results.new)
         self.results.cbr = 1/self.pars.units*np.divide(self.results.new/self.sim.dt, res.n_alive, where=res.n_alive>0)
         return
 
@@ -235,8 +235,8 @@ class Deaths(Demographics):
         self.sim.people.request_death(death_uids)
         return len(death_uids)
 
-    def update_results(self, n_deaths, sim):
-        self.results['new'][sim.ti] = n_deaths
+    def update_results(self, n_deaths):
+        self.results['new'][self.sim.ti] = n_deaths
         return
 
     def finalize(self):

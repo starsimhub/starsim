@@ -303,7 +303,7 @@ class Sim(sc.prettyobj):
                 self.results[reskey] = self.results[reskey] * self.pars.pop_scale
 
         for module in self.modules:
-            module.finalize(self)
+            module.finalize()
 
         self.summarize()
         self.results_ready = True  # Set this first so self.summary() knows to print the results

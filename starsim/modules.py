@@ -148,19 +148,17 @@ class Module(sc.quickobj):
         else:
             return out
 
-    def finalize(self, sim):
-        self.finalize_results(sim)
+    def finalize(self):
+        self.finalize_results()
         self.finalized = True
         return
 
-    def finalize_results(self, sim):
-        """
-        Finalize results
-        """
+    def finalize_results(self):
+        """ Finalize results """
         # Scale results
         for reskey, res in self.results.items():
             if isinstance(res, ss.Result) and res.scale:
-                self.results[reskey] = self.results[reskey]*sim.pars.pop_scale
+                self.results[reskey] = self.results[reskey]*self.sim.pars.pop_scale
         return
     
     def add_states(self, *args, check=True):
