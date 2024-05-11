@@ -649,7 +649,7 @@ class MFNet(SexualNetwork):
 
     def update(self):
         self.end_pairs()
-        self.set_network_states(self.sim.people, upper_age=self.sim.dt)
+        self.set_network_states(upper_age=self.sim.dt) # TODO: looks wrong
         self.add_pairs()
         return
 
