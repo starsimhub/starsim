@@ -113,6 +113,7 @@ class Module(sc.quickobj):
         for key,val in dists.items():
             if isinstance(val, ss.Dist):
                 if val.initialized is not True: # Catches False and 'partial'
+                    print('TEMP INITIIALZIZING')
                     val.initialize(module=self, sim=sim, force=True) # Actually a dist
                 else:
                     raise RuntimeError(f'Trying to reinitialize {val}, this should not happen')

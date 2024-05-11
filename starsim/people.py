@@ -203,11 +203,11 @@ class People(BasePeople):
 
     def initialize(self, sim):
         """ Initialization """
-
         if self.initialized:
-            return
-        else:
-            self.initialized = True # Expected by state.initialize()
+            errormsg = 'Cannot re-initialize a People object directly; use sim.initialize(reset=True)'
+            raise RuntimeError(errormsg)
+        # else: #ZRF
+        #     self.initialized = True # Expected by state.initialize()
         
         # For People initialization, first initialize slots, then initialize RNGs, then initialize remaining states
         # This is because some states may depend on RNGs being initialized to generate initial values
@@ -217,13 +217,13 @@ class People(BasePeople):
         # Initialize states
         # Age is handled separately because the default value for new agents is NaN until they are concieved/born whereas
         # the initial values need to depend on the current age distribution for the setting. In contrast, the sex for new
-        # agents can be sampled from the same distribution used to initialize the population
-        for state in self.states.values():
-            state.initialize(sim)
+        # agents can be sampled from the same distribution used to initialize the population #ZRF
+        for state in self.states():
+            state.link_people(sim.people)
 
         # Assign initial ages based on the current age distribution
-        self.age_data_dist.initialize(module=self, sim=sim)
-        self.age[:] = self.age_data_dist.rvs(self.uid)
+        # self.age_data_dist.initialize(module=self, sim=sim) #ZRF
+        # self.age[:] = self.age_data_dist.rvs(self.uid)
         self.sim = sim # Store the sim
         return
 

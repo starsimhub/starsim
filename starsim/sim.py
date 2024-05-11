@@ -56,12 +56,12 @@ class Sim(sc.prettyobj):
         self.init_people(reset=reset, **kwargs)  # Create all the people
         
         # Initialize the parameters, including the modules
-        p = self.pars.init_modules(sim=self, reset=reset, **kwargs)
+        self.pars.init_modules(sim=self, reset=reset, **kwargs)
         
         # Move initialized modules to the sim
         keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
         for key in keys:
-            setattr(self, key, p.pop(key))
+            setattr(self, key, self.pars.pop(key))
             
         # Initialize all the modules with the sim
         modmap = ss.module_map()
@@ -76,7 +76,7 @@ class Sim(sc.prettyobj):
                 mod.product.initialize(self)
         
         # Initialize all distributions now that everything else is in place, then set states
-        self.dists.initialize(obj=self, base_seed=p.rand_seed, force=True)
+        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed, force=True)
         self.init_states()
 
         # Final steps
@@ -153,7 +153,6 @@ class Sim(sc.prettyobj):
     def init_states(self):
         """ Initialize the states with values """
         pass
-        # TODO
 
     @property
     def modules(self):
