@@ -391,6 +391,10 @@ class uids(np.ndarray):
         """ Keep only UIDs that match other array """
         return np.intersect1d(self, other, assume_unique=True, **kw).view(self.__class__)
     
+    def to_numpy(self):
+        """ Convert to a standard NumPy array """
+        return np.array(self)
+    
 
 class BooleanOperationError(NotImplementedError):
     """ Raised when a logical operation is performed on a non-logical array """
