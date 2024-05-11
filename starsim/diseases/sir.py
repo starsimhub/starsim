@@ -136,7 +136,7 @@ class SIS(ss.Infection):
         dur_inf = self.pars.dur_inf.rvs(uids)
 
         # Determine when people recover
-        self.ti_recovered[uids] = self.sim.ti + dur_inf / self.sim.sim.dt
+        self.ti_recovered[uids] = self.sim.ti + dur_inf / self.sim.dt
 
         return
     
