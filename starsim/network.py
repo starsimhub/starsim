@@ -287,7 +287,7 @@ class Network(ss.Module):
         """ Define how pairs of people are formed """
         pass
 
-    def update(self, sim):
+    def update(self):
         """ Define how pairs/connections evolve (in time) """
         pass
 
@@ -315,10 +315,9 @@ class DynamicNetwork(Network):
         super().__init__(key_dict=key_dict, **kwargs)
         return
 
-    def end_pairs(self, sim):
-        people = sim.people
-        dt = sim.dt
-        self.contacts.dur = self.contacts.dur - dt
+    def end_pairs(self):
+        people = self.sim.people
+        self.contacts.dur = self.contacts.dur - self.sim.dt
 
         # Non-alive agents are removed
         active = (self.contacts.dur > 0) & people.alive[self.contacts.p1] & people.alive[self.contacts.p2]
@@ -498,8 +497,8 @@ class RandomNet(DynamicNetwork):
         self.dist.jump() # Reset the RNG manually # TODO, think if there's a better way
         return source, target
 
-    def update(self, sim): #ZRF
-        self.end_pairs(sim)
+    def update(self):
+        self.end_pairs()
         self.add_pairs()
         return
 
@@ -693,9 +692,9 @@ class MSMNet(SexualNetwork):
         self.debut[uids] = self.pars.debut.rvs(len(uids)) # Just pass len(uids) as this network is not crn safe anyway
         return
 
-    def add_pairs(self, sim, ti=None):
-        # Pair all unpartnered MSM
-        available_m = self.available(sim.people, 'm')
+    def add_pairs(self):
+        """ Pair all unpartnered MSM """
+        available_m = self.available(self.sim.people, 'm')
         n_pairs = int(len(available_m)/2)
         p1 = available_m[:n_pairs]
         p2 = available_m[n_pairs:n_pairs*2]
@@ -747,8 +746,8 @@ class EmbeddingNet(MFNet):
         loc[sim.people.female[uids]] += module.pars.male_shift  # Shift females so they will be paired with older men
         return loc
 
-    def add_pairs(self, sim, ti=None):
-        people = sim.people
+    def add_pairs(self):
+        people = self.sim.people
         available_m = self.available(people, 'male')
         available_f = self.available(people, 'female')
 
@@ -763,9 +762,7 @@ class EmbeddingNet(MFNet):
         loc_m = loc[~people.female[available]]
 
         dist_mat = spsp.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
-
         ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
-
         n_pairs = len(ind_f)
 
         # Finalize pairs
@@ -791,23 +788,19 @@ class MaternalNet(Network):
         super().__init__(key_dict=key_dict, vertical=vertical, **kwargs)
         return
 
-    def update(self, sim, dt=None):
-        if dt is None: dt = sim.dt
-        # Set beta to 0 for women who complete post-partum period
-        # Keep connections for now, might want to consider removing
+    def update(self):
+        """
+        Set beta to 0 for women who complete post-partum period
+        Keep connections for now, might want to consider removing
+        """
+        dt = self.sim.dt
         self.contacts.dur = self.contacts.dur - dt
         inactive = self.contacts.dur <= 0
         self.contacts.beta[inactive] = 0
         return
 
-    def initialize(self, sim):
-        """ No pairs added upon initialization """
-        pass
-
     def add_pairs(self, mother_inds, unborn_inds, dur):
-        """
-        Add connections between pregnant women and their as-yet-unborn babies
-        """
+        """ Add connections between pregnant women and their as-yet-unborn babies """
         n = len(mother_inds)
         beta = np.ones(n)
         self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur)
