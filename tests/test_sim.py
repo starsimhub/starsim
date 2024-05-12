@@ -106,6 +106,83 @@ def test_api():
     
     return s1
 
+def test_complex_api():
+    """ Test that complex inputs can be parsed correctly """
+    sc.heading('Testing complex API...')
+    
+    def jump_age(sim):
+        """ Arbitrary intervention to reduce people's ages in the simulation """
+        if sim.ti == 20:
+            sim.people.age += 1000
+    
+    # Specify parameters as a dictionary
+    p = dict(
+        n_agents = 1000,
+        label = 'v1',
+        verbose = 'brief',
+        end = 2020,
+        networks = [
+            ss.RandomNet(name='random1', n_contacts=6),
+            dict(
+                type = 'random',
+                name = 'random2',
+                n_contacts = 4,
+            )
+        ],
+        diseases = [
+            dict(
+                type = 'sir',
+                dur_inf = dict(
+                    type = 'expon',
+                    scale = 6.0,
+                )
+            ),
+            dict(
+                type = 'sis',
+                beta = 0.07,
+                init_prev = 0.1,
+            ),
+        ],
+        demographics = [
+            ss.Births(birth_rate=20),
+            dict(
+                type = 'deaths',
+                death_rate = 20,
+            )
+        ],
+        interventions = jump_age,
+    )
+    s1 = ss.Sim(p)
+    
+    # Test with explicit initialization
+    pars = ss.SimPars(n_agents=1000, label='v1', verbose='brief', end=2020)
+    
+    net1 = ss.RandomNet(name='random1', n_contacts=6)
+    net2 = ss.RandomNet(name='random2', n_contacts=4)
+    networks = ss.ndict(net1, net2)
+    
+    dis1 = ss.SIR(dur_inf=ss.expon(scale=6.0))
+    dis2 = ss.SIS(beta=0.07, init_prev=ss.bernoulli(0.1))
+    diseases = ss.ndict(dis1, dis2)
+    
+    dem1 = ss.Births(birth_rate=20)
+    dem2 = ss.Deaths(death_rate=20)
+    demographics = ss.ndict(dem1, dem2)
+    
+    int1 = ss.Intervention.from_func(jump_age)
+    interventions = ss.ndict(int1)
+
+    # Assemble
+    s2 = ss.Sim(pars=pars, networks=networks, diseases=diseases, demographics=demographics, interventions=interventions)
+    
+    # Run
+    s1.run()
+    s2.run()
+    
+    assert ss.check_sims_match(s1, s2), 'Sims should match'
+    
+    return s1
+
 
 def test_simple_vax(do_plot=do_plot):
     """ Create and run a sim with vaccination """
@@ -210,10 +287,11 @@ if __name__ == '__main__':
     sim1 = test_default(do_plot=do_plot)
     sim2 = test_simple(do_plot=do_plot)
     sim3 = test_api()
-    sim4b, sim4i = test_simple_vax(do_plot=do_plot)
-    sim5 = test_shared_product(do_plot=do_plot)
-    sim6 = test_components(do_plot=do_plot)
-    sim7a, sim7b = test_parallel()
+    sim4 = test_complex_api()
+    sim5b, sim5i = test_simple_vax(do_plot=do_plot)
+    sim6 = test_shared_product(do_plot=do_plot)
+    sim7 = test_components(do_plot=do_plot)
+    sim8a, sim8b = test_parallel()
     
     T.toc()
     

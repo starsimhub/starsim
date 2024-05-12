@@ -166,13 +166,21 @@ def test_aging():
     age2 = s2.people.age.mean()
     assert orig_age < age2, f'With aging, start age {orig_age} should be less than end age {age2}'
     
-    # Aging should turn out automatically if we add demographics
+    # Aging should turn on automatically if we add demographics
     s3 = ss.Sim(n_agents=n_agents, demographics=True).run()
     agent = s3.people.auids[0] # Find first alive agent
     orig_agent_age = orig_ages[agent]
     age3 = s3.people.age[ss.uids(agent)]
     assert orig_agent_age < age3, f'With demographics, original agent age {orig_agent_age} should be less than end age {age3}'
-    return s3
+    
+    # ...but can be turned off manually
+    s4 = ss.Sim(n_agents=n_agents, demographics=True, use_aging=False).run()
+    agent = s4.people.auids[0] # Find first alive agent
+    orig_agent_age = orig_ages[agent]
+    age4 = s4.people.age[ss.uids(agent)]
+    assert orig_agent_age == age4, f'With aging turned off, original agent age {orig_agent_age} should match end age {age4}'
+
+    return s3 # Most interesting sim
 
 
 if __name__ == '__main__':
