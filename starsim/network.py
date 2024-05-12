@@ -571,10 +571,10 @@ class MFNet(SexualNetwork):
     def __init__(self, pars=None, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
         self.default_pars(
-            duration = ss.lognorm_ex(15),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
-            participation = ss.bernoulli(0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
-            debut = ss.normal(16),  # Age of debut can vary by using callable parameter values
-            acts = ss.poisson(80),
+            duration = ss.lognorm_ex(mean=15),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+            participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
+            debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
+            acts = ss.poisson(lam=80),
             rel_part_rates = 1.0,
         )
         self.update_pars(pars=pars, **kwargs)
@@ -665,7 +665,7 @@ class MSMNet(SexualNetwork):
             duration = ss.lognorm_ex(mean=15, stdev=15),
             debut = ss.normal(loc=16, scale=2),
             acts = ss.lognorm_ex(mean=80, stdev=20),
-            participation = ss.bernoulli(0.1),
+            participation = ss.bernoulli(p=0.1),
         )
         self.update_pars(pars, **kwargs)
         return
