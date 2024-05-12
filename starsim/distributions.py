@@ -446,9 +446,9 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             
             # If the parameter is callable, then call it
             if callable(val): 
-                if self.module is None or self.sim is None:
-                    errormsg = f'Dist {self} is not fully initialized; cannot create random numbers from function'
-                    raise RuntimeError(errormsg)
+                # if self.module is None or self.sim is None:
+                #     errormsg = f'Dist {self} is not fully initialized; cannot create random numbers from function'
+                #     raise RuntimeError(errormsg)
                 size_par = uids if uids is not None else size
                 out = val(self.module, self.sim, size_par) # TODO: swap order to sim, module, size?
                 val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
