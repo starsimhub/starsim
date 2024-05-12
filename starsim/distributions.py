@@ -64,7 +64,6 @@ def make_dist(pars=None, **kwargs):
 
 class Dists(sc.prettyobj):
     """ Class for managing a collection of Dist objects """
-
     def __init__(self, obj=None, *args, base_seed=None, sim=None):
         if len(args): obj = [obj] + list(args)
         self.obj = obj
@@ -132,7 +131,7 @@ class Dists(sc.prettyobj):
         return out
 
 
-class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
+class Dist:
     """
     Base class for tracking one random number generator associated with one distribution,
     i.e. one decision per timestep.
@@ -463,9 +462,6 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             
             # If the parameter is callable, then call it
             if callable(val): 
-                # if self.module is None or self.sim is None:
-                #     errormsg = f'Dist {self} is not fully initialized; cannot create random numbers from function'
-                #     raise RuntimeError(errormsg)
                 size_par = uids if uids is not None else size
                 out = val(self.module, self.sim, size_par) # TODO: swap order to sim, module, size?
                 val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
