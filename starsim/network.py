@@ -801,7 +801,7 @@ class MaternalNet(Network):
 
     def add_pairs(self, mother_inds=None, unborn_inds=None, dur=None):
         """ Add connections between pregnant women and their as-yet-unborn babies """
-        if not mother_inds:
+        if mother_inds is None:
             return 0
         else:
             n = len(mother_inds)
