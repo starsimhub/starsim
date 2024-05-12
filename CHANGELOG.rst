@@ -91,8 +91,7 @@ People and network changes
 - Removed ``ss.Networks`` (now just an ``ss.ndict``).
 - Network connectors have been removed.
 - ``Person`` has been implemented as a slice of ``sim.people[i]``.
-- The default maximum age if none is specified is 50 instead of 100.
-- Agents do not age if no demographics modules are supplied.
+- There is a new parameter ``use_aging``; this defaults to ``True`` if demographic modules are supplied, and ``False`` otherwise.
 
 Other changes
 ~~~~~~~~~~~~~

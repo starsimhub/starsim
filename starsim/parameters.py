@@ -178,6 +178,7 @@ class SimPars(Pars):
         self.location   = None  #  NOT CURRENTLY FUNCTIONAL - what demographics to use
         self.birth_rate = None
         self.death_rate = None
+        self.use_aging  = None # True if demographics, false otherwise
 
         # Modules: demographics, diseases, connectors, networks, analyzers, and interventions
         self.people = None
@@ -327,6 +328,11 @@ class SimPars(Pars):
         if self.death_rate is not None:
             background_deaths = ss.Deaths(death_rate=self.death_rate)
             self.demographics += background_deaths
+        
+        # Decide whether to use aging based on if demographics modules are present
+        if self.use_aging is None:
+            self.use_aging = True if self.demographics else False
+        
         return
 
     def convert_modules(self):

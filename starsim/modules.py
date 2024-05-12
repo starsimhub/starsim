@@ -51,6 +51,10 @@ class Module(sc.quickobj):
         self.finalized = False
         return
     
+    def __bool__(self):
+        """ Ensure that zero-length modules (e.g. networks) are still truthy """
+        return True
+    
     def set_metadata(self, name, label, requires):
         """ Set metadata for the module """
         self.name = sc.ifelse(name, getattr(self, 'name', self.__class__.__name__.lower())) # Default name is the class name

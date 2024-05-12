@@ -78,7 +78,7 @@ class People(sc.prettyobj):
     def get_age_dist(age_data):
         """ Return an age distribution based on provided data """
         if age_data is None:
-            dist = ss.uniform(low=0, high=50, name='Age distribution')
+            dist = ss.uniform(low=0, high=100, name='Age distribution')
             return dist
 
         if sc.checktype(age_data, pd.DataFrame):
@@ -128,6 +128,10 @@ class People(sc.prettyobj):
                 state.init_vals()
         self.initialized = True
         return
+    
+    def __bool__(self):
+        """ Ensure that zero-length people are still truthy """
+        return True
     
     def __len__(self):
         """ Length of people """
@@ -230,7 +234,7 @@ class People(sc.prettyobj):
     def update_post(self):
         """ Final updates at the very end of the timestep """
         sim = self.sim
-        if sim.demographics: # Only update ages if demographics are specified
+        if sim.pars.use_aging:
             self.age[self.alive.uids] += sim.dt
         return
 
