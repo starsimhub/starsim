@@ -143,7 +143,7 @@ def test_exceptions(m=m):
     
     # Check that we can with a non-strict Dist
     dist2 = ss.random(strict=False)
-    dist2.initialize(trace='test', sim=make_sim())
+    dist2.initialize(trace='test')
     rvs2 = sc.autolist()
     for i in range(2):
         rvs2 += dist2(m) # We should be able to call multiple times with no problem
@@ -161,7 +161,7 @@ def test_reset(m=m):
     sc.heading('Testing reset')
     
     # Create and draw two sets of random numbers
-    dist = ss.random(seed=533).initialize(sim=make_sim())
+    dist = ss.random(seed=533, strict=False).initialize()
     r1 = dist.rvs(m)
     r2 = dist.rvs(m)
     assert all(r1 != r2)
@@ -200,7 +200,7 @@ def test_callable(n=n):
         return out
     
     scale = 1
-    d = ss.normal(loc=custom_loc, scale=scale).initialize(sim=sim)
+    d = ss.normal(name='callable', loc=custom_loc, scale=scale).initialize(sim=sim)
 
     uids = np.array([1, 3, 7, 9])
     draws = d.rvs(uids)
@@ -220,7 +220,7 @@ def test_array(n=n):
     low  = np.array([1, 100]) # Low
     high = np.array([3, 125]) # High
 
-    d = ss.uniform(low=low, high=high).initialize(sim=make_sim(), slots=np.arange(uids.max()+1))
+    d = ss.uniform(low=low, high=high, strict=False).initialize(slots=np.arange(uids.max()+1))
     draws = d.rvs(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
@@ -242,7 +242,7 @@ def test_repeat_slot():
     high = low + 1
 
     # Draw values
-    d = ss.uniform(low=low, high=high).initialize(sim=make_sim(), slots=slots)
+    d = ss.uniform(low=low, high=high, strict=False).initialize(slots=slots)
     draws = d.rvs(uids)
     
     # Print and test

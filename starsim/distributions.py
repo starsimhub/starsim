@@ -364,8 +364,10 @@ class Dist:
         none_dict = dict(trace=self.trace, sim=self.sim, slots=self.slots)
         none_dict = {k:v for k,v in none_dict.items() if v is None}
         if len(none_dict):
-            warnmsg = f'Distribution {self} is not fully initialized, the following inputs are None:\n{none_dict}\nThis distribution may not produce valid random numbers.'
-            ss.warn(warnmsg)
+            self.initialized = 'partial'
+            if self.strict:
+                errormsg = f'Distribution {self} is not fully initialized, the following inputs are None:\n{none_dict.keys()}\nThis distribution may not produce valid random numbers.'
+                raise RuntimeError(errormsg)
         else:
             self.initialized = True
         return self
@@ -514,13 +516,11 @@ class Dist:
         
         Args:
             n (int/tuple/arr): if an int or tuple, return this many random variables; if an array, treat as UIDs
+            reset (bool): whether to automatically reset the random number distribution state after being called
         """
         # Check for readiness
         if not self.initialized:
             raise DistNotInitializedError(self)
-        elif self.initialized == 'partial':
-            raise Exception
-            print(f'WARNING: {self} called on {self.sim.ti} with {n}')
         if not self.ready and self.strict and not ss.options._centralized:
             raise DistNotReadyError(self)
         
@@ -530,13 +530,15 @@ class Dist:
         # Check if size is 0, then we can return
         if size == 0:
             return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
+        elif isinstance(size, ss.uids) and self.initialized == 'partial': # This point can be reached if and only if strict=False and UIDs are used as input
+            errormsg = f'Distribution {self} is only partially initialized; cannot generate random numbers to match UIDs'
+            raise ValueError(errormsg)
         
         # Store the state
         self.make_history() # Store the pre-call state
         
         # Check if any keywords are callable -- parameters shouldn't need to be reprocessed otherwise
-        if True: # self.dynamic_pars: # TODO: fix!!!!
-            self.process_pars()
+        self.process_pars()
         
         # Actually get the random numbers
         if self.dynamic_pars:
