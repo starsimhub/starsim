@@ -353,14 +353,16 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
             self.initialized = True
         return self
     
-    def link_sim(self, sim=None):
-        """ Shortcut for linking the sim """
-        self.sim = sc.ifelse(sim, self.sim)
+    def link_sim(self, sim=None, overwrite=False):
+        """ Shortcut for linking the sim, only overwriting an existing one if overwrite=True """
+        if sim and (overwrite or not self.sim):
+            self.sim = sim
         return
     
-    def link_module(self, module=None):
+    def link_module(self, module=None, overwrite=False):
         """ Shortcut for linking the module """
-        self.module = sc.ifelse(module, self.module)
+        if module and (overwrite or not self.module):
+            self.module = module
         return
     
     def process_seed(self, trace=None, seed=None):

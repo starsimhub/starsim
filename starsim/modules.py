@@ -128,13 +128,13 @@ class Module(sc.quickobj):
         self.link_dists() # Link the distributions to sim and module
         return
     
-    def link_dists(self, init=False):
+    def link_dists(self, overwrite=False, init=False):
         """ Link distributions to the sim and the module """
         dists = ss.find_dists(self) # Important that this comes first, before the sim is linked to the dist!
         for key,val in dists.items():
             if isinstance(val, ss.Dist):
-                val.link_sim(self.sim)
-                val.link_module(self)
+                val.link_sim(self.sim, overwrite=overwrite)
+                val.link_module(self, overwrite=overwrite)
                 if init: # Usually this is false since usually these are initialized centrally by the sim
                     val.initialize()
         return
