@@ -67,7 +67,7 @@ class People(sc.prettyobj):
         states = [
             ss.BoolArr('alive', default=True),  # Time index for death
             ss.BoolArr('female', default=ss.bernoulli(name='female', p=0.5)),
-            ss.FloatArr('age'), # NaN until conceived
+            ss.FloatArr('age', default=self.get_age_dist(age_data)), # NaN until conceived
             ss.FloatArr('ti_dead'),  # Time index for death
             ss.FloatArr('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
         ]
@@ -81,7 +81,7 @@ class People(sc.prettyobj):
             state.link_people(self)
 
         # Set initial age distribution - likely move this somewhere else later
-        self.age_data_dist = self.get_age_dist(age_data) # TODO: remove or make more general
+        # self.age_data_dist =  # TODO: remove or make more general
         return
 
     @staticmethod
