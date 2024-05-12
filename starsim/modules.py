@@ -122,6 +122,10 @@ class Module(sc.quickobj):
             if not state.initialized:
                 state.init_vals()
         self.initialized = True
+
+        # Add module states to the People's dicts
+        sim.people.add_module(self)
+        
         return
     
     def disp(self, output=False):

@@ -192,27 +192,30 @@ class SimPars(Pars):
         self.update(kwargs)
         return
 
-    def init_modules(self, sim):
-        """ Initialize the modules """
-        # Allow shortcut for default demographics # TODO: think about whether we want to enable this, when we have birth_rate and death_rate
-        if self.demographics == True:
-            self.demographics = [ss.Births(), ss.Deaths()]
-        
+    def validate(self):
+        """ Call parameter validation methods """
+        self.validate_domain_pars()
+        self.validate_dt()
+        self.validate_demographics()  # Handle birth-rates and death-rates
+        self.validate_modules()
+        self.validate_verbosity()
+        return self
+
+    def validate_modules(self):
+        """ Validate modules passed in pars"""
         # Get all modules into a consistent list format
         modmap = ss.module_map()
         for modkey in modmap.keys():
             if not isinstance(self[modkey], ss.ndict):
                 self[modkey] = sc.tolist(self[modkey])
-        
-        # Initialize and convert modules
-        self.convert_modules() # General initialization
-        self.init_demographics() # Demographic-specific initialization
-        
+
+        self.standardize_modules()
+
         # Convert from lists to ndicts
         for modkey,modclass in modmap.items():
             self[modkey] = ss.ndict(self[modkey], type=modclass)
         
-        return self
+        return
 
     def validate_dt(self):
         """
@@ -231,11 +234,8 @@ class SimPars(Pars):
                     warnmsg = f"Warning: Provided time step dt: {dt} resulted in a non-integer number of steps per year. Rounded to {rounded_dt}."
                     print(warnmsg)
         return
-    
-    def validate_pars(self):
-        """
-        Some parameters can take multiple types; this makes them consistent.
-        """
+
+    def validate_domain_pars(self):
         # Handle n_agents
         if self.people is not None:
             self.n_agents = len(self.people)
@@ -274,6 +274,11 @@ class SimPars(Pars):
                 errormsg = 'You must supply one of n_years and end."'
                 raise ValueError(errormsg)
 
+    def validate_verbosity(self):
+        """
+        Some parameters can take multiple types; this makes them consistent.
+        """
+
         # Handle verbose
         if self.verbose == 'brief':
             self.verbose = -1
@@ -282,12 +287,19 @@ class SimPars(Pars):
             raise ValueError(errormsg)
             
         return self
-    
-    def convert_modules(self):
+
+    def standardize_modules(self):
         """
-        Common logic for converting plug-ins to a standard format; they are still
-        a list at this point.  Used for networks, demographics, diseases, analyzers, 
-        interventions, and connectors.
+        Convert different types of representations for modules into a
+        standardized object representation that can be parsed and used by
+        a Sim object.
+        Used for starsim classes:
+        - networks,
+        - demographics,
+        - diseases,
+        - analyzers,
+        - interventions, and
+        - connectors.
         """
         
         modmap = ss.module_map() # List of modules and parent module classes, e.g. ss.Disease
@@ -352,8 +364,11 @@ class SimPars(Pars):
                 
         return
 
-    def init_demographics(self):
-        """ Initialize demographics """
+    def validate_demographics(self):
+        """ Validate demographics-related input parameters"""
+        # Allow shortcut for default demographics # TODO: think about whether we want to enable this, when we have birth_rate and death_rate
+        if self.demographics == True:
+            self.demographics = [ss.Births(), ss.Deaths()]
 
         # Allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
         if self.birth_rate is not None:

@@ -48,9 +48,11 @@ class Sim(sc.prettyobj):
         """ Perform all initializations for the sim; most heavy lifting is done by the parameters """
         # Validation and initialization
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
-        self.pars.validate_dt()
-        self.pars.validate_pars()
-        self.init_time_pars()
+        # Validate parameters
+        p = self.pars.validate()
+
+        # Initialize time
+        self.init_time_attrs()
         
         # Initialize the people
         self.init_people(**kwargs)  # Create all the people
@@ -85,7 +87,7 @@ class Sim(sc.prettyobj):
         self.initialized = True
         return self
     
-    def init_time_pars(self):
+    def init_time_attrs(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
         self.dt = self.pars.dt # Shortcut to dt since used a lot
         self.yearvec = np.arange(start=self.pars.start, stop=self.pars.end + self.pars.dt, step=self.pars.dt) # The time points of the sim
