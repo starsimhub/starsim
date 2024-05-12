@@ -191,30 +191,89 @@ class SimPars(Pars):
         # Update with any supplied parameter values and generate things that need to be generated
         self.update(kwargs)
         return
+    
+    def is_default(self, key):
+        """ Check if the provided value matches the default """
+        default_pars = SimPars() # Create a default SimPars object
+        default_val = default_pars[key]
+        current_val = self[key]
+        match = (current_val == default_val) # Check if the value matches
+        return match
 
     def validate(self):
         """ Call parameter validation methods """
-        self.validate_domain_pars()
-        self.validate_dt()
-        self.validate_demographics()  # Handle birth-rates and death-rates
+        self.validate_sim_pars()
         self.validate_modules()
-        self.validate_verbosity()
-        return self
-
-    def validate_modules(self):
-        """ Validate modules passed in pars"""
-        # Get all modules into a consistent list format
-        modmap = ss.module_map()
-        for modkey in modmap.keys():
-            if not isinstance(self[modkey], ss.ndict):
-                self[modkey] = sc.tolist(self[modkey])
-
-        self.standardize_modules()
-
-        # Convert from lists to ndicts
-        for modkey,modclass in modmap.items():
-            self[modkey] = ss.ndict(self[modkey], type=modclass)
-        
+        return
+    
+    def validate_sim_pars(self):
+        """ Validate each of the parameter values """
+        self.validate_verbose()
+        self.validate_agents()
+        self.validate_total_pop()
+        self.validate_start_end()
+        self.validate_dt()
+        return
+    
+    def validate_verbose(self):
+        """ Validate verbosity """
+        if self.verbose == 'brief':
+            self.verbose = -1
+        if not sc.isnumber(self.verbose):  # pragma: no cover
+            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self.par.verbose)} "{self.par.verbose}"'
+            raise ValueError(errormsg)
+        return
+    
+    def validate_agents(self):
+        """ Check that n_agents is supplied and convert to an integer """
+        if self.people is not None:
+            len_people = len(self.people)
+            if (len_people != self.n_agents) and not self.is_default('n_agents'):
+                errormsg = f'Cannot set a custom value of n_agents ({self.n_agents}) that does not match a pre-created People object ({len_people}); use n_agents to create the People object instead'
+                raise ValueError(errormsg)
+            self.n_agents = len_people
+        elif self.n_agents is not None:
+            self.n_agents = int(self.n_agents)
+        else:
+            errormsg = 'Must supply n_agents, a people object, or a popdict'
+            raise ValueError(errormsg)
+        return
+    
+    def validate_total_pop(self):
+        """ Ensure one but not both of total_pop and pop_scale are defined """
+        if self.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
+            if self.pop_scale is not None:
+                errormsg = f'You can define total_pop ({self.total_pop}) or pop_scale ({self.pop_scale}), but not both, since one is calculated from the other'
+                raise ValueError(errormsg)
+            total_pop = self.total_pop
+        else:
+            if self.pop_scale is not None:
+                total_pop = self.pop_scale * self.n_agents
+            else:
+                total_pop = self.n_agents
+        self.total_pop = total_pop
+        if self.pop_scale is None:
+            self.pop_scale = total_pop / self.n_agents
+        return
+    
+    def validate_start_end(self):
+        """ Ensure at least one of n_years and end is defined, but not both """
+        if self.end is not None:
+            if self.is_default('n_years'):
+                self.n_years = self.end - self.start
+            else:
+                errormsg = f'You can supply either end ({self.end}) or n_years ({self.n_years}) but not both, since one is calculated from the other'
+                raise ValueError(errormsg)
+            if self.n_years <= 0:
+                errormsg = f"Number of years must be >0, but you supplied start={str(self.start)} and " \
+                           f"end={str(self.end)}, which gives n_years={self.n_years}"
+                raise ValueError(errormsg)
+        else:
+            if self.n_years is not None:
+                self.end = self.start + self.n_years
+            else:
+                errormsg = 'You must supply one of n_years and end."'
+                raise ValueError(errormsg)
         return
 
     def validate_dt(self):
@@ -231,64 +290,46 @@ class SimPars(Pars):
                 rounded_dt = 1.0 / reciprocal
                 self.dt = rounded_dt
                 if self.verbose:
-                    warnmsg = f"Warning: Provided time step dt: {dt} resulted in a non-integer number of steps per year. Rounded to {rounded_dt}."
-                    print(warnmsg)
+                    warnmsg = f'Warning: Provided time step dt={dt} resulted in a non-integer number of steps per year. Rounded to {rounded_dt}.'
+                    ss.warn(warnmsg)
+        return
+    
+    def validate_modules(self):
+        """ Validate modules passed in pars"""
+        
+        # Do special initializtaion on demographics
+        self.validate_demographics()
+        
+        # Get all modules into a consistent list format
+        modmap = ss.module_map()
+        for modkey in modmap.keys():
+            if not isinstance(self[modkey], ss.ndict):
+                self[modkey] = sc.tolist(self[modkey])
+
+        # Convert any modules that are not already Module objects
+        self.convert_modules()
+
+        # Convert from lists to ndicts
+        for modkey,modclass in modmap.items():
+            self[modkey] = ss.ndict(self[modkey], type=modclass)
+        return
+    
+    def validate_demographics(self):
+        """ Validate demographics-related input parameters"""
+        # Allow shortcut for default demographics # TODO: think about whether we want to enable this, when we have birth_rate and death_rate
+        if self.demographics == True:
+            self.demographics = [ss.Births(), ss.Deaths()]
+
+        # Allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
+        if self.birth_rate is not None:
+            births = ss.Births(birth_rate=self.birth_rate)
+            self.demographics += births
+        if self.death_rate is not None:
+            background_deaths = ss.Deaths(death_rate=self.death_rate)
+            self.demographics += background_deaths
         return
 
-    def validate_domain_pars(self):
-        # Handle n_agents
-        if self.people is not None:
-            self.n_agents = len(self.people)
-        elif self.n_agents is not None:
-            self.n_agents = int(self.n_agents)
-        else:
-            errormsg = 'Must supply n_agents, a people object, or a popdict'
-            raise ValueError(errormsg)
-            
-        # Handle total_pop
-        if self.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
-            if self.pop_scale is not None:
-                errormsg = 'You can define total_pop or pop_scale, but not both'
-                raise ValueError(errormsg)
-            total_pop = self.total_pop
-        else:
-            if self.pop_scale is not None:
-                total_pop = self.pop_scale * self.n_agents
-            else:
-                total_pop = self.n_agents
-        self.total_pop = total_pop
-        if self.pop_scale is None:
-            self.pop_scale = total_pop / self.n_agents
-
-        # Handle end and n_years
-        if self.end:
-            self.n_years = self.end - self.start
-            if self.n_years <= 0:
-                errormsg = f"Number of years must be >0, but you supplied start={str(self.start)} and " \
-                           f"end={str(self.end)}, which gives n_years={self.n_years}"
-                raise ValueError(errormsg)
-        else:
-            if self.n_years:
-                self.end = self.start + self.n_years
-            else:
-                errormsg = 'You must supply one of n_years and end."'
-                raise ValueError(errormsg)
-
-    def validate_verbosity(self):
-        """
-        Some parameters can take multiple types; this makes them consistent.
-        """
-
-        # Handle verbose
-        if self.verbose == 'brief':
-            self.verbose = -1
-        if not sc.isnumber(self.verbose):  # pragma: no cover
-            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self.par.verbose)} "{self.par.verbose}"'
-            raise ValueError(errormsg)
-            
-        return self
-
-    def standardize_modules(self):
+    def convert_modules(self):
         """
         Convert different types of representations for modules into a
         standardized object representation that can be parsed and used by
@@ -301,7 +342,6 @@ class SimPars(Pars):
         - interventions, and
         - connectors.
         """
-        
         modmap = ss.module_map() # List of modules and parent module classes, e.g. ss.Disease
         modules = ss.find_modules() # Each individual module class option, e.g. ss.SIR
         
@@ -361,26 +401,8 @@ class SimPars(Pars):
                         errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls}, but was {type(mod)} instead'
                         raise TypeError(errormsg)
                     modlist[i] = mod
-                
-        return
-
-    def validate_demographics(self):
-        """ Validate demographics-related input parameters"""
-        # Allow shortcut for default demographics # TODO: think about whether we want to enable this, when we have birth_rate and death_rate
-        if self.demographics == True:
-            self.demographics = [ss.Births(), ss.Deaths()]
-
-        # Allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
-        if self.birth_rate is not None:
-            births = ss.Births(birth_rate=self.birth_rate)
-            self.demographics += births
-        if self.death_rate is not None:
-            background_deaths = ss.Deaths(death_rate=self.death_rate)
-            self.demographics += background_deaths
         return
 
 
 def make_pars(**kwargs):
     return SimPars(**kwargs)
-
-
