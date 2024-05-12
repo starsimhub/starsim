@@ -34,6 +34,7 @@ def make_sim_pars():
 
 def test_demo(do_plot=do_plot):
     """ Test Starsim's demo run """
+    sc.heading('Testing demo...')
     s1 = ss.demo(plot=do_plot)
     
     # Test explicit demo
@@ -49,6 +50,7 @@ def test_demo(do_plot=do_plot):
 
 def test_default(do_plot=do_plot):
     """ Create, run, and plot a sim with default settings """
+    sc.heading('Testing default...')
     sim = ss.Sim(n_agents=n_agents).run()
     if do_plot:
         sim.plot()
@@ -57,6 +59,7 @@ def test_default(do_plot=do_plot):
 
 def test_simple(do_plot=do_plot):
     """ Create, run, and plot a sim by passing a parameters dictionary """
+    sc.heading('Testing simple run...')
     pars = make_sim_pars()
     sim = ss.Sim(pars)
     sim.run()
@@ -67,6 +70,7 @@ def test_simple(do_plot=do_plot):
 
 def test_api():
     """ Test all different ways of creating a sim """
+    sc.heading('Testing sim API...')
     
     # Check different ways of specifying a sim
     s1 = ss.Sim(n_agents=n_agents, diseases='sir', networks='random').run() # Supply strings directly
@@ -105,6 +109,7 @@ def test_api():
 
 def test_simple_vax(do_plot=do_plot):
     """ Create and run a sim with vaccination """
+    sc.heading('Testing simple vaccination...')
     ss.set_seed(1)
     pars = make_sim_pars()
     sim_base = ss.Sim(pars=pars)
@@ -129,8 +134,41 @@ def test_simple_vax(do_plot=do_plot):
     return sim_base, sim_intv
 
 
+def test_shared_product(do_plot=do_plot):
+    """ Check that multiple interventions can use the same product """
+    sc.heading('Testing sharing a product across interventions...')
+    
+    # Make interventions
+    vax = ss.sir_vaccine(pars=dict(efficacy=0.5))
+    routine1 = ss.routine_vx(name='early-small', start_year=2010, prob=0.05, product=vax)
+    routine2 = ss.routine_vx(name='late-big', start_year=2020, prob=0.5, product=vax)
+    
+    # Make and run sims
+    pars = make_sim_pars()
+    s1 = ss.Sim(pars, label='Baseline')
+    s2 = ss.Sim(pars, interventions=routine1, label='One vaccine campaign')
+    s3 = ss.Sim(pars=pars, interventions=[routine1, routine2], label='Two vaccine campaigns')
+    s1.run()
+    s2.run()
+    s3.run()
+    
+    if do_plot:
+        plt.figure()
+        for sim in [s1, s2, s3]:
+            plt.plot(sim.yearvec, sim.results.sir.cum_infections, label=sim.label)
+        plt.legend()
+        plt.title('Impact of vaccination')
+        plt.xlabel('Year')
+        plt.ylabel('Cumulative infections')
+        
+    assert s2.summary.sir_cum_infections < s1.summary.sir_cum_infections, 'Vaccine should avert infections'
+    assert s3.summary.sir_cum_infections < s2.summary.sir_cum_infections, 'Vaccine should avert infections'
+    return s3
+
+
 def test_components(do_plot=do_plot):
     """ Create, run, and plot a sim by assembling components """
+    sc.heading('Testing components...')
     people = ss.People(n_agents=n_agents)
     network = ss.RandomNet(pars=dict(n_contacts=4))
     sir = ss.SIR(pars=dict(dur_inf=10, beta=0.1))
@@ -143,6 +181,7 @@ def test_components(do_plot=do_plot):
 
 def test_parallel():
     """ Test running two identical sims in parallel """
+    sc.heading('Testing parallel...')
     pars = make_sim_pars()
 
     # Check that two identical sims match
@@ -172,8 +211,9 @@ if __name__ == '__main__':
     sim2 = test_simple(do_plot=do_plot)
     sim3 = test_api()
     sim4b, sim4i = test_simple_vax(do_plot=do_plot)
-    sim5 = test_components(do_plot=do_plot)
-    sim6a, sim6b = test_parallel()
+    sim5 = test_shared_product(do_plot=do_plot)
+    sim6 = test_components(do_plot=do_plot)
+    sim7a, sim7b = test_parallel()
     
     T.toc()
     
