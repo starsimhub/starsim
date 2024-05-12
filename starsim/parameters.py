@@ -59,18 +59,18 @@ class Pars(sc.objdict):
                 elif isinstance(old, Pars): # It's a Pars object: update recursively
                     old.update(new, create=create)
                 elif isinstance(old, ss.ndict): # Update module containers
-                    self._process_ndict(key, old, new)
+                    self._update_ndict(key, old, new)
                 elif isinstance(old, ss.Module):  # Update modules
-                    self._process_module(key, old, new)
+                    self._update_module(key, old, new)
                 elif isinstance(old, ss.Dist): # Update a distribution
-                    self._process_dist(key, old, new)
+                    self._update_dist(key, old, new)
                 else: # Everything else; not used currently but could be
                     warnmsg = 'No known mechanism for handling {type(old)} → {type(new)}; using default'
                     ss.warn(warnmsg)
                     self[key] = new
         return self
     
-    def _process_ndict(self, key, old, new):
+    def _update_ndict(self, key, old, new):
         """ Update an ndict object in the parameters, e.g. sim.pars.diseases """
         if not len(old): # It's empty, just overwrite
             self[key] = new
@@ -83,7 +83,7 @@ class Pars(sc.objdict):
                 raise TypeError(errormsg)
         return
     
-    def _process_module(self, key, old, new):
+    def _update_module(self, key, old, new):
         """ Update a Module object in the parameters, e.g. sim.pars.diseases.sir """
         if isinstance(new, dict):
             old[key].pars.update(new) # e.g. pars = {'dur_inf': 6}
@@ -92,7 +92,7 @@ class Pars(sc.objdict):
             raise TypeError(errormsg)
         return
     
-    def _process_dist(self, key, old, new):
+    def _update_dist(self, key, old, new):
         """ Update a Dist object in the parameters, e.g. sim.pars.diseases.sir.dur_inf """
         # It's a Dist, e.g. dur_inf = ss.normal(6,2); use directly
         if isinstance(new, ss.Dist): 
