@@ -371,7 +371,9 @@ class uids(np.ndarray):
     def __new__(cls, arr=None):
         if arr is None:
             arr = np.empty(0, dtype=ss_int)
-        return np.asarray(arr).view(cls)
+        elif isinstance(arr, int): # Convert e.g. ss.uids(0) to ss.uids([0])
+            arr = [arr]
+        return np.asarray(arr, dtype=ss_int).view(cls)
     
     def concat(self, other, **kw): # TODO: why can't they both be called cat()?
         """ Equivalent to np.concatenate(), but return correct type """

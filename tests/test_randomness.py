@@ -122,16 +122,16 @@ class CountInf(ss.Intervention):
 
 class OneMore(ss.Intervention):
     """ Add one additional agent and infection """
+    def initialize(self, sim):
+        one_birth = ss.Pregnancy(name='one_birth', rel_fertility=0) # Ensure no default births
+        one_birth.initialize(sim)
+        sim.demographics += one_birth
+        return
+    
     def apply(self, sim):
         if sim.ti == 0:
             # Create an extra agent
-            preg = ss.Pregnancy(rel_fertility=0, name='one_birth') # Ensure no default births
-            preg.initialize(sim)
-            preg.choose_slots.initialize(trace='one_birth') # Initialize the distribution
-            ss.link_dists(preg, sim=sim, init=True) # Since going outside of usual sim initialization
-            preg.init_vals()
-            new_uids = ss.uids([len(sim.people)]) # Hack since make_embryos doesn't return UIDs
-            preg.make_embryos(np.array([0])) # Assign 0th agent to be the "mother"
+            new_uids = sim.demographics.one_birth.make_embryos(ss.uids(0)) # Assign 0th agent to be the "mother"
             assert len(new_uids) == 1
             sim.people.age[new_uids] = -100 # Set to a very low number to never reach debut age
             

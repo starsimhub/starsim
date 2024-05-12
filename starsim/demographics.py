@@ -405,8 +405,10 @@ class Pregnancy(Demographics):
     def make_embryos(self, conceive_uids):
         """ Add properties for the just-conceived """
         people = self.sim.people
-        n_unborn_agents = len(conceive_uids)
-        if n_unborn_agents > 0:
+        n_unborn = len(conceive_uids)
+        if n_unborn == 0:
+            new_uids = ss.uids()
+        else:
 
             # Choose slots for the unborn agents
             new_slots = self.choose_slots.rvs(conceive_uids)
@@ -422,10 +424,10 @@ class Pregnancy(Demographics):
             # handled separately to the sexual networks, TBC how to handle this most elegantly
             for lkey, layer in self.sim.networks.items():
                 if layer.vertical:  # What happens if there's more than one vertical layer?
-                    durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
+                    durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
                     layer.add_pairs(conceive_uids, new_uids, dur=durs)
 
-        return
+        return new_uids
 
     def set_prognoses(self, uids):
         """
