@@ -285,7 +285,6 @@ class Pregnancy(Demographics):
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.fertility_rate_data = self.standardize_fertility_data()
         self.pars.fertility_rate = ss.bernoulli(self.make_fertility_prob_fn)
-
         return
 
     @staticmethod
