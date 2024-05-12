@@ -256,7 +256,7 @@ class Pregnancy(Demographics):
             dur_postpartum = 0.5,
             fertility_rate = 0, # See make_fertility_prob_function
             rel_fertility = 1,
-            maternal_death_rate = ss.bernoulli(0),
+            maternal_death_prob = ss.bernoulli(0),
             sex_ratio = ss.bernoulli(0.5), # Ratio of babies born female
             units = 1e-3, # Assumes fertility rates are per 1000. If using percentages, switch this to 1
         )
@@ -447,7 +447,7 @@ class Pregnancy(Demographics):
         # Outcomes for pregnancies
         dur_preg = np.full(len(uids), self.pars.dur_pregnancy / dt)
         dur_postpartum = np.full(len(uids), self.pars.dur_postpartum / dt)
-        dead = self.pars.maternal_death_rate.rvs(uids)
+        dead = self.pars.maternal_death_prob.rvs(uids)
         self.ti_delivery[uids] = ti + dur_preg # Currently assumes maternal deaths still result in a live baby
         self.ti_postpartum[uids] = ti + dur_preg + dur_postpartum
 
