@@ -110,11 +110,6 @@ class Module(sc.quickobj):
         """
         self.check_requires(sim)
         
-        # Initialize distributions (warning: only operates at the top level!) #ZRF
-        dists = ss.find_dists(self) # Important that this comes first, before the sim is linked to the dist!
-        for key,val in dists.items():
-            if isinstance(val, ss.Dist):
-                val.link_module(self)
         #         if val.initialized is not True: # Catches False and 'partial'
         #             print('TEMP INITIIALZIZING')
         #             val.initialize(module=self, sim=sim, force=True) # Actually a dist
@@ -130,6 +125,18 @@ class Module(sc.quickobj):
         sim.pars[self.name] = self.pars
         sim.results[self.name] = self.results
         sim.people.add_module(self) # Connect the states to the people
+        self.link_dists() # Link the distributions to sim and module
+        return
+    
+    def link_dists(self, init=False):
+        """ Link distributions to the sim and the module """
+        dists = ss.find_dists(self) # Important that this comes first, before the sim is linked to the dist!
+        for key,val in dists.items():
+            if isinstance(val, ss.Dist):
+                val.link_sim(self.sim)
+                val.link_module(self)
+                if init: # Usually this is false since usually these are initialized centrally by the sim
+                    val.initialize()
         return
     
     def init_vals(self):

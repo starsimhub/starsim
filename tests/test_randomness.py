@@ -127,6 +127,9 @@ class OneMore(ss.Intervention):
             # Create an extra agent
             preg = ss.Pregnancy(rel_fertility=0) # Ensure no default births
             preg.initialize(sim)
+            preg.link_dists(init=True) # Since going outside of usual sim initialization
+            # preg.choose_slots.initialize(trace='OneMore') # Initialize the distribution
+            preg.init_vals()
             new_uids = ss.uids([len(sim.people)]) # Hack since make_embryos doesn't return UIDs
             preg.make_embryos(np.array([0])) # Assign 0th agent to be the "mother"
             assert len(new_uids) == 1
