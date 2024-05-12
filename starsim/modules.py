@@ -128,6 +128,10 @@ class Module(sc.quickobj):
         sim.results[self.name] = self.results
         sim.people.add_module(self)
         self.initialized = True
+
+        # Add module states to the People's dicts
+        sim.people.add_module(self)
+        
         return
     
     def disp(self, output=False):
