@@ -19,10 +19,10 @@ def str2int(string, modulo=1_000_000):
     """
     return int.from_bytes(string.encode(), byteorder='big') % modulo
 
-def find_dists(obj, verbose=False):
+def find_dists(obj, verbose=False, **kwargs):
     """ Find all Dist objects in a parent object """
     out = sc.objdict()
-    tree = sc.iterobj(obj, depthfirst=False, flatten=True)
+    tree = sc.iterobj(obj, depthfirst=False, flatten=True, **kwargs)
     if verbose: print(f'Found {len(tree)} objects')
     for trace,val in tree.items():
         if isinstance(val, Dist):
@@ -355,13 +355,13 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
     
     def link_sim(self, sim=None, overwrite=False):
         """ Shortcut for linking the sim, only overwriting an existing one if overwrite=True """
-        if sim and (overwrite or not self.sim):
+        if (not self.sim or overwrite) and sim:
             self.sim = sim
         return
     
     def link_module(self, module=None, overwrite=False):
         """ Shortcut for linking the module """
-        if module and (overwrite or not self.module):
+        if (not self.module or overwrite) and module:
             self.module = module
         return
     

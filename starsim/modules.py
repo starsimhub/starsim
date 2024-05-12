@@ -122,15 +122,16 @@ class Module(sc.quickobj):
             
         # Link the parameters, results, and module states
         self.sim = sim # Link back to the sim object
+        self.link_dists() # Link the distributions to sim and module
         sim.pars[self.name] = self.pars
         sim.results[self.name] = self.results
         sim.people.add_module(self) # Connect the states to the people
-        self.link_dists() # Link the distributions to sim and module
         return
     
-    def link_dists(self, overwrite=False, init=False):
+    def link_dists(self, sim=None, overwrite=False, init=False):
         """ Link distributions to the sim and the module """
-        dists = ss.find_dists(self) # Important that this comes first, before the sim is linked to the dist!
+        # if sim is None: sim = self.sim # Typical usage is before the sim is linked, but can also be used after
+        dists = ss.find_dists(self, skip=ss.Sim) # Important that this comes first, before the sim is linked to the dist!
         for key,val in dists.items():
             if isinstance(val, ss.Dist):
                 val.link_sim(self.sim, overwrite=overwrite)
