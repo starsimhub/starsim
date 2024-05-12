@@ -79,7 +79,6 @@ class People(sc.prettyobj):
             self.states.append(state, overwrite=False)
             setattr(self, state.name, state)
             state.link_people(self)
-            # self.link_state(state) #ZRF
 
         # Set initial age distribution - likely move this somewhere else later
         self.age_data_dist = self.get_age_dist(age_data) # TODO: remove or make more general
@@ -187,10 +186,10 @@ class People(sc.prettyobj):
         """
         Increase the number of agents
 
-        :param n: Integer number of agents to add
-        :param new_slots: Optionally specify the slots to assign for the new agents. Otherwise, it will default to the new UIDs
+        Args:
+            n: Integer number of agents to add
+            new_slots: Optionally specify the slots to assign for the new agents. Otherwise, it will default to the new UIDs
         """
-        
         if n is None:
             if new_slots is None:
                 errormsg = 'Must supply either n or new_slots'
@@ -216,7 +215,6 @@ class People(sc.prettyobj):
             
         # Finally, update the alive indices
         self.auids = self.auids.concat(new_uids)
-
         return new_uids
 
     def __getitem__(self, key):
