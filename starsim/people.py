@@ -35,34 +35,28 @@ class People(sc.prettyobj):
     def __init__(self, n_agents, age_data=None, extra_states=None):
         """ Initialize """
         
-        #ZRF
-        # We also internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
+        # We internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
         # e.g., across modules, but we will never change the size of a State multiple times in the same iteration over
         # _states. This is a hidden variable because it is internally used to synchronize the size of all States contained
         # within the sim, regardless of where they are. In contrast, `People.states` offers a more user-friendly way to access
         # a selection of the states e.g., module states could be added in there, while intervention states might not
         self._states = {}
+        self.version = ss.__version__  # Store version info
+        self.initialized = False
 
+        # Handle the three fundamental arrays: UIDs for tracking agents, slots for 
+        # tracking random numbers, and AUIDs for tracking alive agents
         n = int(n_agents)
         uids = ss.uids(np.arange(n))
-        self.initialized = False
-        self.uid = ss.IndexArr('uid')  # This variable tracks all UIDs
-        self.uid.grow(new_vals=uids)
         self.auids = uids.copy() # This tracks all active UIDs (in practice, agents who are alive)
-
-        # A slot is a special state managed internally by BasePeople
-        # This is because it needs to be updated separately from any other states, as other states
-        # might have fill_values that depend on the slot
-        self.slot = ss.IndexArr('slot')
+        self.uid = ss.IndexArr('uid')  # This variable tracks all UIDs
+        self.slot = ss.IndexArr('slot') # A slot is a special state managed internally
+        self.uid.grow(new_vals=uids)
         self.slot.grow(new_vals=uids)
         for state in [self.uid, self.slot]:
-            state.people = self
-
-        # User-facing collection of states
-        self.states = ss.ndict(type=ss.Arr)
-        self.version = ss.__version__  # Store version info
-
-        # Handle states
+            state.people = self # Manually link to people since we don't want to link to states
+        
+        # Handle additional states
         extra_states = sc.promotetolist(extra_states)
         states = [
             ss.BoolArr('alive', default=True),  # Time index for death
@@ -72,16 +66,12 @@ class People(sc.prettyobj):
             ss.FloatArr('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
         ]
         states.extend(extra_states)
-
-        # Expose states with their original names directly as people attributes (e.g., `People.age`) and nested under states
-        # (e.g., `People.states.age`)
-        for state in states: #ZRF
+        self.states = ss.ndict(type=ss.Arr)
+        for state in states:
             self.states.append(state, overwrite=False)
             setattr(self, state.name, state)
             state.link_people(self)
-
-        # Set initial age distribution - likely move this somewhere else later
-        # self.age_data_dist =  # TODO: remove or make more general
+            
         return
 
     @staticmethod
@@ -102,25 +92,6 @@ class People(sc.prettyobj):
         if self.initialized:
             errormsg = 'Cannot re-initialize a People object directly; use sim.initialize(reset=True)'
             raise RuntimeError(errormsg)
-        # else: #ZRF
-        #     self.initialized = True # Expected by state.initialize()
-        
-        # For People initialization, first initialize slots, then initialize RNGs, then initialize remaining states
-        # This is because some states may depend on RNGs being initialized to generate initial values
-        # self.uid.link_people(sim.people)
-        # self.slot.link_people(sim.people)
-
-        # Initialize states
-        # Age is handled separately because the default value for new agents is NaN until they are concieved/born whereas
-        # the initial values need to depend on the current age distribution for the setting. In contrast, the sex for new
-        # agents can be sampled from the same distribution used to initialize the population #ZRF
-        # for state in self.states():
-        #     state.link_people(sim.people)
-        #     self.link_state(state)
-
-        # Assign initial ages based on the current age distribution
-        # self.age_data_dist.initialize(module=self, sim=sim) #ZRF
-        # self.age[:] = self.age_data_dist.rvs(self.uid)
         self.sim = sim # Store the sim
         ss.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module])
         return
@@ -143,7 +114,6 @@ class People(sc.prettyobj):
         if len(module.states):
             module_states = sc.objdict()
             setattr(self, module.name, module_states)
-            # self._register_module_states(module, module_states)
             for state in module.states:
                 state.link_people(self)
                 combined_name = module.name + '.' + state.name  # We will have to resolve how this works with multiple instances of the same module (e.g., for strains). The underlying machinery should be fine though, with People._states being flat and keyed by ID
