@@ -106,6 +106,7 @@ def test_api():
     
     return s1
 
+
 def test_complex_api():
     """ Test that complex inputs can be parsed correctly """
     sc.heading('Testing complex API...')
@@ -113,7 +114,7 @@ def test_complex_api():
     def jump_age(sim):
         """ Arbitrary intervention to reduce people's ages in the simulation """
         if sim.ti == 20:
-            sim.people.age += 1000
+            sim.people.age[:] = sim.people.age[:] + 1000
     
     # Specify parameters as a dictionary
     p = dict(
@@ -123,36 +124,18 @@ def test_complex_api():
         end = 2020,
         networks = [
             ss.RandomNet(name='random1', n_contacts=6),
-            dict(
-                type = 'random',
-                name = 'random2',
-                n_contacts = 4,
-            )
+            dict(type='random', name='random2', n_contacts=4)
         ],
         diseases = [
-            dict(
-                type = 'sir',
-                dur_inf = dict(
-                    type = 'expon',
-                    scale = 6.0,
-                )
-            ),
-            dict(
-                type = 'sis',
-                beta = 0.07,
-                init_prev = 0.1,
-            ),
+            dict(type='sir',  dur_inf=dict(type='expon', scale=6.0)),
+            dict(type='sis', beta=0.07, init_prev=0.1),
         ],
         demographics = [
             ss.Births(birth_rate=20),
-            dict(
-                type = 'deaths',
-                death_rate = 20,
-            )
+            dict(type='deaths', death_rate=20)
         ],
         interventions = jump_age,
     )
-    s1 = ss.Sim(p)
     
     # Test with explicit initialization
     pars = ss.SimPars(n_agents=1000, label='v1', verbose='brief', end=2020)
@@ -173,6 +156,7 @@ def test_complex_api():
     interventions = ss.ndict(int1)
 
     # Assemble
+    s1 = ss.Sim(p)
     s2 = ss.Sim(pars=pars, networks=networks, diseases=diseases, demographics=demographics, interventions=interventions)
     
     # Run
