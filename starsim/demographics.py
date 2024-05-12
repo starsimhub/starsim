@@ -279,7 +279,7 @@ class Pregnancy(Demographics):
             sc.objdict(data_cols=dict(year='Time', age='AgeGrp', value='ASFR')),
             metadata,
         )
-        self.choose_slots = ss.randint() # Distribution for choosing slots; set in self.initialize()
+        self.choose_slots = None # Distribution for choosing slots; set in self.initialize()
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
@@ -347,7 +347,7 @@ class Pregnancy(Demographics):
         super().initialize(sim)
         low = sim.pars.n_agents + 1
         high = int(sim.pars.slot_scale*sim.pars.n_agents)
-        self.choose_slots.set(low=low, high=high)
+        self.choose_slots = ss.randint(low=low, high=high, sim=sim, module=self)
         return
 
     def init_results(self):
