@@ -109,18 +109,6 @@ class Module(sc.quickobj):
         distributions are initialized).
         """
         self.check_requires(sim)
-        
-        #         if val.initialized is not True: # Catches False and 'partial'
-        #             print('TEMP INITIIALZIZING')
-        #             val.initialize(module=self, sim=sim, force=True) # Actually a dist
-        #         else:
-        #             raise RuntimeError(f'Trying to reinitialize {val}, this should not happen')
-
-        # # Connect the states to the people
-        # for state in self.states:
-        #     state.link_people(sim.people)
-            
-        # Link the parameters, results, and module states
         self.sim = sim # Link back to the sim object
         ss.link_dists(self, sim, skip=ss.Sim) # Link the distributions to sim and module
         sim.pars[self.name] = self.pars
