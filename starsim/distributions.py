@@ -361,8 +361,11 @@ class Dist:
         self.process_dist()
         self.process_pars(call=False)
         self.ready = True
-        if self.trace is None or self.sim is None or self.slots is None:
-            self.initialized = 'partial' # Initialized enough to produce random numbers, but not fully initialized
+        none_dict = dict(trace=self.trace, sim=self.sim, slots=self.slots)
+        none_dict = {k:v for k,v in none_dict.items() if v is None}
+        if len(none_dict):
+            warnmsg = f'Distribution {self} is not fully initialized, the following inputs are None:\n{none_dict}\nThis distribution may not produce valid random numbers.'
+            ss.warn(warnmsg)
         else:
             self.initialized = True
         return self
@@ -515,8 +518,9 @@ class Dist:
         # Check for readiness
         if not self.initialized:
             raise DistNotInitializedError(self)
-        # elif self.initialized == 'partial':
-        #     print(f'WARNING: {self} called on {self.sim.ti} with {n}')
+        elif self.initialized == 'partial':
+            raise Exception
+            print(f'WARNING: {self} called on {self.sim.ti} with {n}')
         if not self.ready and self.strict and not ss.options._centralized:
             raise DistNotReadyError(self)
         

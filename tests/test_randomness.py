@@ -17,9 +17,10 @@ def make_dist(name='test', **kwargs):
 
 def make_dists(**kwargs):
     """ Make a Dists object with two distributions in it """
+    sim = ss.Sim(n_agents=100).initialize() # Need an empty sim to initialize properly
     distlist = [make_dist(), make_dist()]
     dists = ss.Dists(distlist)
-    dists.initialize()
+    dists.initialize(sim=sim)
     return dists
 
 
