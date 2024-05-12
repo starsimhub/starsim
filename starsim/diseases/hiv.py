@@ -21,7 +21,8 @@ class HIV(ss.Infection):
             eff_condoms = 0.7,
             art_efficacy = 0.96,
             init_prev = ss.bernoulli(0.05),
-            death_prob = 0.05,
+            death_dist = ss.bernoulli(self.death_prob_func), # Uses p_death by default, modulated by CD4
+            p_death = 0.05,
         )
         self.update_pars(pars=pars, **kwargs)
 
@@ -32,15 +33,12 @@ class HIV(ss.Infection):
             ss.FloatArr('ti_dead'), # Time of HIV-cause death
             ss.FloatArr('cd4', default=500),
         )
-
-        self.death_prob_data = sc.dcp(self.pars.death_prob)
-        self.pars.death_prob = ss.bernoulli(self.make_death_prob)
         return
 
     @staticmethod
-    def make_death_prob(module, sim, uids):
+    def death_prob_func(module, sim, uids):
         p = module.pars
-        out = sim.dt * module.death_prob_data / (p.cd4_min - p.cd4_max)**2 *  (module.cd4[uids] - p.cd4_max)**2
+        out = sim.dt * p.p_death / (p.cd4_min - p.cd4_max)**2 *  (module.cd4[uids] - p.cd4_max)**2
         out = np.array(out)
         return out
 
@@ -53,7 +51,7 @@ class HIV(ss.Infection):
         self.rel_trans[people.alive & self.infected & self.on_art] = 1 - self.pars['art_efficacy']
 
         can_die = people.hiv.infected.uids
-        hiv_deaths = self.pars.death_prob.filter(can_die)
+        hiv_deaths = self.pars.death_dist.filter(can_die)
         
         people.request_death(hiv_deaths)
         self.ti_dead[hiv_deaths] = self.sim.ti

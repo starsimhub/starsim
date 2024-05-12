@@ -346,6 +346,8 @@ class SimPars(Pars):
         modules = ss.find_modules() # Each individual module class option, e.g. ss.SIR
         
         for modkey,ssmoddict in modules.items():
+            moddictkeys = ssmoddict.keys()
+            moddictvals = ssmoddict.values()
             expected_cls = modmap[modkey]
             modlist = self[modkey]
             if isinstance(modlist, list): # Skip over ones that are already ndict format, assume they're already initialized
@@ -372,8 +374,6 @@ class SimPars(Pars):
                         # Get the module type as a class
                         if isinstance(modtype, str): # Usual case, a string, e.g. dict(type='sir', dur_inf=6)
                             modtype = modtype.lower() # Because our map is in lowercase
-                            moddictkeys = ssmoddict.keys()
-                            moddictvals = ssmoddict.values()
                             if modtype in moddictkeys:
                                 modcls = ssmoddict[modtype]
                             else:
