@@ -37,8 +37,8 @@ def make_sim():
 def test_dist(m=m):
     """ Test the Dist class """
     sc.heading('Testing the basic Dist call')
-    dist = ss.Dist(distname='random', name='test')
-    dist.initialize(sim=make_sim())
+    dist = ss.Dist(distname='random', name='test', strict=False)
+    dist.initialize()
     rvs = dist(m)
     print(rvs)
     assert 0 < rvs.min() < 1, 'Values should be between 0 and 1'
@@ -49,14 +49,14 @@ def test_custom_dists(n=n, do_plot=False):
     """ Test all custom dists """
     sc.heading('Testing all custom distributions')
     
-    o = sc.objdict()
+    o     = sc.objdict()
     dists = sc.objdict()
-    rvs = sc.objdict()
+    rvs   = sc.objdict()
     times = sc.objdict()
     for name in ss.dist_list:
         func = getattr(ss, name)
-        dist = func(name='test')
-        dist.initialize(sim=make_sim())
+        dist = func(name='test', strict=False)
+        dist.initialize()
         dists[name] = dist
         sc.tic()
         rvs[name] = dist.rvs(n)
@@ -114,8 +114,8 @@ def test_scipy(m=m):
     sc.heading('Testing SciPy distributions')
     
     # Make SciPy distributions in two different ways
-    dist1 = ss.Dist(dist=sps.expon, name='scipy', scale=2).initialize(sim=make_sim()) # Version 1: callable
-    dist2 = ss.Dist(dist=sps.expon(scale=2), name='scipy').initialize(sim=make_sim()) # Version 2: frozen
+    dist1 = ss.Dist(dist=sps.expon, name='scipy', scale=2, strict=False).initialize() # Version 1: callable
+    dist2 = ss.Dist(dist=sps.expon(scale=2), name='scipy', strict=False).initialize() # Version 2: frozen
     rvs1 = dist1(m)
     rvs2 = dist2(m)
     
