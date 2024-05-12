@@ -67,7 +67,7 @@ Parameter changes
 Initialization changes
 ~~~~~~~~~~~~~~~~~~~~~~
 - Previously, the people were initialized first, then the states were initialized and the values populated, then the modules were initialized, and finally the distributions are initialized. This led to circular logic with the states being initialized based on uninitialized distributions. Now, states and modules are *linked* to the ``People`` and ``Sim`` objects, but further initialization is not done at this step. This ensures all distributions are created but not yet used. Next, distributions are initialized. Finally, the initial values are populated, and everything is initialized.
-- New methods supporting these changes include ``ss.link_dists()``, ``dist.link_sim()``, ``dist.link_module()``, 
+- New methods supporting these changes include ``ss.link_dists()``, ``dist.link_sim()``, ``dist.link_module()``, ``sim.init_vals()``, ``people.init_vals()``, ``module.init_vals()``, 
 
 Module changes
 ~~~~~~~~~~~~~~
@@ -85,6 +85,7 @@ Module changes
 
 People and network changes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
+- ``BasePeople`` has been removed and merged with ``People``.
 - Time parameters (``ti``, ``dt``, etc.) have been removed from ``People``. Use ``sim.ti``, ``sim.dt`` etc. instead. One consequence of this is that ``people.request_death()`` now requires a ``sim`` argument. Another is that network methods (e.g. ``add_pairs()``) now take ``sim`` arguments instead of ``people`` arguments.
 - ``SexualNetwork`` is now a subclass of ``DynamicNetwork``.
 - Removed ``ss.Networks`` (now just an ``ss.ndict``).
@@ -101,6 +102,7 @@ Other changes
 - Individual diseases can now be plotted via either e.g. ``sim.plot('hiv')`` or ``sim.diseases.hiv.plot()``.
 - Distributions can be created from dicts via ``ss.make_dist()``.
 - A new function ``ss.check_sims_match()`` will check if the results of two or more simulations match.
+- ``ndict`` values can be accessed through a call; e.g. ``sim.diseases()`` is equivalent to ``sim.diseases.values()``.
 - Merged ``test_dcp.py`` and ``test_base.py`` into ``test_other.py``.
 - Renamed ``test_simple.py`` to ``test_sim.py``.
 - Renamed ``test_dists.py`` to ``test_randomness.py``.

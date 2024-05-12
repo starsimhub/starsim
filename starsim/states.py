@@ -232,41 +232,6 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         self.people = people # Link the people object to this state
         people._link_state(self) # Ensure the state is linked to the People object as well
         return
-
-    # def link(self, sim):
-    #     """
-    #     Link the state to the 
-
-    #     This method should be called as part of initialization of the parent class containing the state -
-    #     specifically, `People.initialize()` and `Module.initialize()`. Initialization of a State object
-    #     involves two processes:
-
-    #     - Converting any distribution objects to a Dist instance and linking it to RNGs stored in a `Sim`
-    #     - Establishing a bidirectional connection with a `People` object for the purpose of UID indexing and resizing
-
-    #     Since State objects can be stored in `People` or in a `Module` and the collection of all states in a `Sim` should
-    #     be connected to RNGs within that same `Sim`, the states must necessarily be linked to the same `People` object that
-    #     is inside a `Sim`. Initializing States outside of a `Sim` is not possible because of this RNG dependency, particularly
-    #     because the states in a `People` object cannot be initialized without a `Sim` and therefore it would not be possible to
-    #     have an initialized `People` object outside of a `Sim`.
-        
-    #     Args:
-    #         sim: A `Sim` instance that contains an initialized `People` object
-    #     """
-    #     raise Exception
-    #     # Skip if already initialized
-    #     if self.initialized:
-    #         return
-
-    #     # Establish connection with the People object
-    #     self.link_people(sim.people)
-    #     sim.people.register_state(self)
-        
-    #     # Connect any distributions in the default to RNGs in the Sim # TODO: remove?
-    #     if isinstance(self.default, ss.Dist):
-    #         self.default.initialize(module=self, sim=sim)
-
-    #     return
     
     def init_vals(self):
         """ Actually populate the initial values and mark as initialized; only to be used on initialization """
