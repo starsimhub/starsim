@@ -237,7 +237,7 @@ def test_independence(do_plot=False, thresh=0.1):
         ],
         networks = [
             dict(type='random', n_contacts=ss.poisson(8)),
-            dict(type='mf', debut=ss.delta(0)), # To avoid age correlations
+            dict(type='mf', debut=ss.delta(0), participation=0.5), # To avoid age correlations
         ]
     )
     sim.initialize()
@@ -254,7 +254,7 @@ def test_independence(do_plot=False, thresh=0.1):
         for p in ['p1', 'p2']:
             for uid in network.contacts[p]:
                 data[uid] += 1 # Could also use a histogram
-        arrs[f'{key}_edges'] = data
+        arrs[key] = data
     
     # Compute the correlations
     n = len(arrs)
@@ -272,6 +272,10 @@ def test_independence(do_plot=False, thresh=0.1):
         labels = arrs.keys()
         pl.xticks(ticks, labels)
         pl.yticks(ticks, labels)
+        pl.xticks(rotation=15)
+        pl.colorbar()
+        sc.figlayout()
+        pl.show()
             
     # Test that everything is independent
     max_corr = abs(stats).max()
