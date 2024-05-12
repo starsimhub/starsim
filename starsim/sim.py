@@ -48,8 +48,9 @@ class Sim(sc.prettyobj):
         """ Perform all initializations for the sim; most heavy lifting is done by the parameters """
         # Validation and initialization
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
+        
         # Validate parameters
-        p = self.pars.validate()
+        self.pars.validate()
 
         # Initialize time
         self.init_time_attrs()
@@ -57,8 +58,8 @@ class Sim(sc.prettyobj):
         # Initialize the people
         self.init_people(**kwargs)  # Create all the people
         
-        # Initialize the modules within the parameters
-        self.pars.init_modules(self)
+        # # Initialize the modules within the parameters
+        # self.pars.validate_modules(self)
         
         # Move initialized modules to the sim
         keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
