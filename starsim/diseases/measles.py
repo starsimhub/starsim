@@ -18,12 +18,12 @@ class Measles(SIR):
         self.default_pars(
             # Initial conditions and beta
             beta = 1.0, # Placeholder value
-            init_prev = ss.bernoulli(0.005),
+            init_prev = ss.bernoulli(p=0.005),
             
             # Natural history parameters, all specified in days
-            dur_exp = ss.normal(8),        # (days) - source: US CDC
-            dur_inf = ss.normal(11),       # (days) - source: US CDC
-            p_death = ss.bernoulli(0.005), # Probability of death
+            dur_exp = ss.normal(loc=8),        # (days) - source: US CDC
+            dur_inf = ss.normal(loc=11),       # (days) - source: US CDC
+            p_death = ss.bernoulli(p=0.005), # Probability of death
         )
         self.update_pars(pars=pars, **kwargs)
 

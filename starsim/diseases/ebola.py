@@ -18,21 +18,21 @@ class Ebola(SIR):
         super().__init__()
         self.default_pars(
             # Initial conditions and beta
-            init_prev       = ss.bernoulli(0.005),
+            init_prev       = ss.bernoulli(p=0.005),
             beta            = 1.0, # Placeholder value
             sev_factor      = 2.2,
             unburied_factor = 2.1,
             
             # Natural history parameters, all specified in days
-            dur_exp2symp    = ss.lognorm_ex(12.7), # Add source
-            dur_symp2sev    = ss.lognorm_ex(6), # Add source
-            dur_sev2dead    = ss.lognorm_ex(1.5), # Add source
-            dur_dead2buried = ss.lognorm_ex(2), # Add source
-            dur_symp2rec    = ss.lognorm_ex(10), # Add source
-            dur_sev2rec     = ss.lognorm_ex(10.4), # Add source
-            p_sev           = ss.bernoulli(0.7), # Add source
-            p_death         = ss.bernoulli(0.55), # Add source
-            p_safe_bury     = ss.bernoulli(0.25), # Probability of a safe burial - should be linked to diagnoses
+            dur_exp2symp    = ss.lognorm_ex(mean=12.7), # Add source
+            dur_symp2sev    = ss.lognorm_ex(mean=6), # Add source
+            dur_sev2dead    = ss.lognorm_ex(mean=1.5), # Add source
+            dur_dead2buried = ss.lognorm_ex(mean=2), # Add source
+            dur_symp2rec    = ss.lognorm_ex(mean=10), # Add source
+            dur_sev2rec     = ss.lognorm_ex(mean=10.4), # Add source
+            p_sev           = ss.bernoulli(p=0.7), # Add source
+            p_death         = ss.bernoulli(p=0.55), # Add source
+            p_safe_bury     = ss.bernoulli(p=0.25), # Probability of a safe burial - should be linked to diagnoses
         )
         self.update_pars(pars=pars, **kwargs)
         

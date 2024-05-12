@@ -20,8 +20,8 @@ class HIV(ss.Infection):
             cd4_rate = 5,
             eff_condoms = 0.7,
             art_efficacy = 0.96,
-            init_prev = ss.bernoulli(0.05),
-            death_dist = ss.bernoulli(self.death_prob_func), # Uses p_death by default, modulated by CD4
+            init_prev = ss.bernoulli(p=0.05),
+            death_dist = ss.bernoulli(p=self.death_prob_func), # Uses p_death by default, modulated by CD4
             p_death = 0.05,
         )
         self.update_pars(pars=pars, **kwargs)
