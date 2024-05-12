@@ -126,17 +126,15 @@ class OneMore(ss.Intervention):
         one_birth = ss.Pregnancy(name='one_birth', rel_fertility=0) # Ensure no default births
         one_birth.initialize(sim)
         self.one_birth = one_birth
-        # sim.demographics += one_birth
         return
     
     def apply(self, sim, ti=10):
         """ Create an extra agent """
         if sim.ti == ti:
             new_uids = self.one_birth.make_embryos(ss.uids(0)) # Assign 0th agent to be the "mother"
-            assert len(new_uids) == 1
             sim.people.age[new_uids] = -100 # Set to a very low number to never reach debut age
             
-            # Infect that agent
+            # Infect that agent and immediately recover
             sir = sim.diseases.sir
             sir.set_prognoses(new_uids)
             sir.ti_recovered[new_uids] = sim.ti + 1 # Reset recovery time to next timestep
