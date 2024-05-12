@@ -8,7 +8,8 @@ import scipy.stats as sps
 import starsim as ss
 import matplotlib.pyplot as pl
 
-__all__ = ['find_dists', 'make_dist', 'dist_list', 'Dists', 'Dist']
+__all__ = ['find_dists', 'link_dists', 'make_dist', 'dist_list', 'Dists', 'Dist']
+
 
 def str2int(string, modulo=1_000_000):
     """
@@ -18,6 +19,7 @@ def str2int(string, modulo=1_000_000):
     this is almost as fast (and 5x faster than hashlib).
     """
     return int.from_bytes(string.encode(), byteorder='big') % modulo
+
 
 def find_dists(obj, verbose=False, **kwargs):
     """ Find all Dist objects in a parent object """
@@ -29,6 +31,20 @@ def find_dists(obj, verbose=False, **kwargs):
             out[trace] = val
             if verbose: print(f'  {trace} is a dist ({len(out)})')
     return out
+
+
+def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs):
+    """ Link distributions to the sim and the module; used in module.initialize() and people.initialize() """
+    if module is None and isinstance(obj, ss.Module):
+        module = obj
+    dists = ss.find_dists(obj, **kwargs) # Important that this comes first, before the sim is linked to the dist!
+    for key,val in dists.items():
+        if isinstance(val, ss.Dist):
+            val.link_sim(sim, overwrite=overwrite)
+            val.link_module(module, overwrite=overwrite)
+            if init: # Usually this is false since usually these are initialized centrally by the sim
+                val.initialize()
+    return
 
 
 def make_dist(pars=None, **kwargs):

@@ -122,6 +122,7 @@ class People(sc.prettyobj):
         # self.age_data_dist.initialize(module=self, sim=sim) #ZRF
         # self.age[:] = self.age_data_dist.rvs(self.uid)
         self.sim = sim # Store the sim
+        ss.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module])
         return
     
     def add_module(self, module, force=False):
