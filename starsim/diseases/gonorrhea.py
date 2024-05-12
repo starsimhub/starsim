@@ -33,48 +33,45 @@ class Gonorrhea(ss.Infection):
         
         return
 
-    def init_results(self, sim):
+    def init_results(self):
         """
         Initialize results
         """
-        super().init_results(sim)
-        self.results += ss.Result(self.name, 'new_clearances', sim.npts, dtype=int)
+        super().init_results()
+        self.results += ss.Result(self.name, 'new_clearances', self.sim.npts, dtype=int)
         return
 
-    def update_results(self, sim):
-        ti = sim.ti
-        super(Gonorrhea, self).update_results(sim)
+    def update_results(self):
+        super().update_results()
+        ti = self.sim.ti
         self.results.n_symptomatic[ti] = self.symptomatic.count()
         self.results.new_clearances[ti] = np.count_nonzero(self.ti_clearance == ti)
         return
 
-    def update_pre(self, sim):
+    def update_pre(self):
         # What if something in here should depend on another module?
         # I guess we could just check for it e.g., 'if HIV in sim.modules' or
         # 'if 'hiv' in sim.people' or something
         # Natural clearance
-        clearances = self.ti_clearance <= sim.ti
+        clearances = self.ti_clearance <= self.sim.ti
         self.susceptible[clearances] = True
         self.infected[clearances] = False
         self.symptomatic[clearances] = False
-        self.ti_clearance[clearances] = sim.ti
+        self.ti_clearance[clearances] = self.sim.ti
 
         return
-    
-    def make_new_cases(self, sim):
-        super(Gonorrhea, self).make_new_cases(sim)
-        return
 
-    def set_prognoses(self, sim, target_uids, source_uids=None):
+    def set_prognoses(self, target_uids, source_uids=None):
         """
         Natural history of gonorrhea for adult infection
         """
-        super().set_prognoses(sim, target_uids, source_uids)
+        super().set_prognoses(target_uids, source_uids)
+        ti = self.sim.ti
 
         # Set infection status
         self.susceptible[target_uids] = False
         self.infected[target_uids] = True
-        self.ti_infected[target_uids] = sim.ti
+        self.ti_infected[target_uids] = ti
 
         # Set infection status
         symp_uids = self.pars.p_symp.filter(target_uids)
@@ -82,10 +79,6 @@ class Gonorrhea(ss.Infection):
 
         # Set natural clearance
         clear_uids = self.pars.p_clear.filter(target_uids)
-        dur = sim.ti + self.pars.dur_inf_in_days.rvs(clear_uids)/365/sim.dt # Convert from days to years and then adjust for dt
+        dur = ti + self.pars.dur_inf_in_days.rvs(clear_uids)/365/self.sim.dt # Convert from days to years and then adjust for dt
         self.ti_clearance[clear_uids] = dur
-
         return
-
-    def set_congenital(self, sim, target_uids, source_uids=None):
-        pass

@@ -40,6 +40,10 @@ class ndict(sc.objdict):
         self.setattribute('_overwrite', overwrite)
         self.extend(*args, **kwargs)
         return
+    
+    def __call__(self):
+        """ Shortcut for returning values """
+        return self.values()
 
     def append(self, arg, key=None, overwrite=None):
         valid = False
@@ -289,5 +293,5 @@ def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
     else:
         errormsg = f'Data type {type(data)} not understood.'
         raise ValueError(errormsg)
-
+        
     return df

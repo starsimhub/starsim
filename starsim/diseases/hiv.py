@@ -44,48 +44,42 @@ class HIV(ss.Infection):
         out = np.array(out)
         return out
 
-    def update_pre(self, sim):
+    def update_pre(self):
         """ Update CD4 """
-        self.cd4[sim.people.alive & self.infected & self.on_art] += (self.pars.cd4_max - self.cd4[sim.people.alive & self.infected & self.on_art])/self.pars.cd4_rate
-        self.cd4[sim.people.alive & self.infected & ~self.on_art] += (self.pars.cd4_min - self.cd4[sim.people.alive & self.infected & ~self.on_art])/self.pars.cd4_rate
+        people = self.sim.people
+        self.cd4[people.alive & self.infected & self.on_art] += (self.pars.cd4_max - self.cd4[people.alive & self.infected & self.on_art])/self.pars.cd4_rate
+        self.cd4[people.alive & self.infected & ~self.on_art] += (self.pars.cd4_min - self.cd4[people.alive & self.infected & ~self.on_art])/self.pars.cd4_rate
 
-        self.rel_trans[sim.people.alive & self.infected & self.on_art] = 1 - self.pars['art_efficacy']
+        self.rel_trans[people.alive & self.infected & self.on_art] = 1 - self.pars['art_efficacy']
 
-        can_die = sim.people.hiv.infected.uids
+        can_die = people.hiv.infected.uids
         hiv_deaths = self.pars.death_prob.filter(can_die)
         
-        sim.people.request_death(sim, hiv_deaths)
-        self.ti_dead[hiv_deaths] = sim.ti
+        people.request_death(hiv_deaths)
+        self.ti_dead[hiv_deaths] = self.sim.ti
         return
 
-    def init_results(self, sim):
-        """
-        Initialize results
-        """
-        super().init_results(sim)
-        self.results += ss.Result(self.name, 'new_deaths', sim.npts, dtype=int)
+    def init_results(self):
+        """ Initialize results """
+        super().init_results()
+        self.results += ss.Result(self.name, 'new_deaths', self.sim.npts, dtype=int)
         return
 
-    def update_results(self, sim):
-        super().update_results(sim)
-        self.results['new_deaths'][sim.ti] = np.count_nonzero(self.ti_dead == sim.ti)
+    def update_results(self):
+        super().update_results()
+        ti = self.sim.ti
+        self.results['new_deaths'][ti] = np.count_nonzero(self.ti_dead == ti)
         return 
 
-    def make_new_cases(self, sim):
-        # eff_condoms = sim.pars[self.name]['eff_condoms'] # TODO figure out how to add this
-        super().make_new_cases(sim)
-        return
-
-    def set_prognoses(self, sim, uids, source_uids=None):
-        super().set_prognoses(sim, uids, source_uids)
-
+    def set_prognoses(self, uids, source_uids=None):
+        super().set_prognoses(uids, source_uids)
         self.susceptible[uids] = False
         self.infected[uids] = True
-        self.ti_infected[uids] = sim.ti
+        self.ti_infected[uids] = self.sim.ti
         return
 
-    def set_congenital(self, sim, target_uids, source_uids):
-        return self.set_prognoses(sim, target_uids, source_uids)
+    def set_congenital(self, target_uids, source_uids):
+        return self.set_prognoses(target_uids, source_uids)
 
 
 # %% HIV-related interventions

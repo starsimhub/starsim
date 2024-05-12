@@ -63,80 +63,84 @@ class Cholera(ss.Infection):
     def asymptomatic(self):
         return self.infected & ~self.symptomatic
 
-    def init_results(self, sim):
+    def init_results(self):
         """
         Initialize results
         """
-        super().init_results(sim)
+        super().init_results()
+        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'new_deaths', sim.npts, dtype=int),
-            ss.Result(self.name, 'cum_deaths', sim.npts, dtype=int),
-            ss.Result(self.name, 'env_prev', sim.npts, dtype=float),
-            ss.Result(self.name, 'env_conc', sim.npts, dtype=float),
+            ss.Result(self.name, 'new_deaths', npts, dtype=int),
+            ss.Result(self.name, 'cum_deaths', npts, dtype=int),
+            ss.Result(self.name, 'env_prev', npts, dtype=float),
+            ss.Result(self.name, 'env_conc', npts, dtype=float),
         ]
         return
 
-    def update_pre(self, sim):
+    def update_pre(self):
         """
         Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/cholera.py
         Original version by Dom Delport
         """
         # Progress exposed -> infected
-        infected = (self.exposed & (self.ti_infected <= sim.ti)).uids
+        ti = self.sim.ti
+        infected = (self.exposed & (self.ti_infected <= ti)).uids
         self.infected[infected] = True
 
         # Progress infected -> symptomatic
-        symptomatic = (self.infected & (self.ti_symptomatic <= sim.ti)).uids
+        symptomatic = (self.infected & (self.ti_symptomatic <= ti)).uids
         self.symptomatic[symptomatic] = True
 
         # Progress symptomatic -> recovered
-        recovered = (self.infectious & (self.ti_recovered <= sim.ti)).uids
+        recovered = (self.infectious & (self.ti_recovered <= ti)).uids
         self.exposed[recovered] = False
         self.infected[recovered] = False
         self.symptomatic[recovered] = False
         self.recovered[recovered] = True
 
         # Trigger deaths
-        deaths = (self.ti_dead <= sim.ti).uids
+        deaths = (self.ti_dead <= ti).uids
         if len(deaths):
-            sim.people.request_death(sim, deaths)
+            self.sim.people.request_death(deaths)
 
         # Update today's environmental prevalence
-        self.calc_environmental_prev(sim)
+        self.calc_environmental_prev()
 
         return
 
-    def calc_environmental_prev(self, sim):
+    def calc_environmental_prev(self):
         """
         Calculate environmental prevalence
         """
         p = self.pars
         r = self.results
+        ti = self.sim.ti
 
         n_symptomatic = self.symptomatic.sum()
         n_asymptomatic = self.asymptomatic.sum()
-        old_prev = self.results.env_prev[sim.ti-1]
+        old_prev = self.results.env_prev[ti-1]
 
         new_bacteria = p.shedding_rate * (n_symptomatic + p.asymp_trans * n_asymptomatic)
         old_bacteria = old_prev * (1 - p.decay_rate)
 
-        r.env_prev[sim.ti] = new_bacteria + old_bacteria
-        r.env_conc[sim.ti] = r.env_prev[sim.ti] / (r.env_prev[sim.ti] + p.half_sat_rate)
-
+        r.env_prev[ti] = new_bacteria + old_bacteria
+        r.env_conc[ti] = r.env_prev[ti] / (r.env_prev[ti] + p.half_sat_rate)
         return
 
-    def set_prognoses(self, sim, uids, source_uids=None):
+    def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses for those who get infected """
-        super().set_prognoses(sim, uids, source_uids)
+        super().set_prognoses(uids, source_uids)
+        ti = self.sim.ti
+        dt = self.sim.dt
 
         self.susceptible[uids] = False
         self.exposed[uids] = True
-        self.ti_exposed[uids] = sim.ti
+        self.ti_exposed[uids] = ti
 
         p = self.pars
 
         # Determine when exposed become infected
-        self.ti_infected[uids] = sim.ti + p.dur_exp2inf.rvs(uids) / sim.dt
+        self.ti_infected[uids] = ti + p.dur_exp2inf.rvs(uids) / dt
 
         # Determine who becomes symptomatic and when
         symp_uids = p.p_symp.filter(uids)
@@ -144,43 +148,41 @@ class Cholera(ss.Infection):
 
         # Determine who dies and when
         dead_uids = p.p_death.filter(symp_uids)
-        self.ti_dead[dead_uids] = self.ti_symptomatic[dead_uids] + p.dur_symp2dead.rvs(dead_uids) / sim.dt
+        self.ti_dead[dead_uids] = self.ti_symptomatic[dead_uids] + p.dur_symp2dead.rvs(dead_uids) / dt
         symp_rev_uids = np.setdiff1d(symp_uids, dead_uids)
         asymp_uids = np.setdiff1d(uids, symp_uids)
 
         # Determine when agents recover
-        self.ti_recovered[symp_rev_uids] = self.ti_exposed[symp_rev_uids] + p.dur_symp2rec.rvs(symp_rev_uids) / sim.dt
-        self.ti_recovered[asymp_uids] = self.ti_exposed[asymp_uids] + p.dur_asymp2rec.rvs(asymp_uids) / sim.dt
+        self.ti_recovered[symp_rev_uids] = self.ti_exposed[symp_rev_uids] + p.dur_symp2rec.rvs(symp_rev_uids) / dt
+        self.ti_recovered[asymp_uids] = self.ti_exposed[asymp_uids] + p.dur_asymp2rec.rvs(asymp_uids) / dt
 
         return
 
-    def make_new_cases(self, sim):
+    def make_new_cases(self):
         """ Add indirect transmission """
-
+        # Make new cases via direct transmission
+        super().make_new_cases()
+        
+        # Make new cases via indirect transmission
         pars = self.pars
         res = self.results
-
-        # Make new cases via direct transmission
-        super().make_new_cases(sim)
-
-        # Make new cases via indirect transmission
-        p_transmit = res.env_conc[sim.ti] * pars.beta_env
+        p_transmit = res.env_conc[self.sim.ti] * pars.beta_env
         pars.p_env_transmit.set(p=p_transmit)
-        new_cases = pars.p_env_transmit.filter(sim.people.uid[self.susceptible]) # TODO: make syntax nicer
+        new_cases = pars.p_env_transmit.filter(self.sim.people.uid[self.susceptible]) # TODO: make syntax nicer
         if new_cases.any():
-            self.set_prognoses(sim, new_cases, source_uids=None)
+            self.set_prognoses(new_cases, source_uids=None)
         return
 
-    def update_death(self, sim, uids):
+    def update_death(self, uids):
         """ Reset infected/recovered flags for dead agents """
         for state in ['susceptible', 'exposed', 'infected', 'symptomatic', 'recovered']:
             self.statesdict[state][uids] = False
         return
 
-    def update_results(self, sim):
-        super().update_results(sim)
+    def update_results(self):
+        super().update_results()
         res = self.results
-        ti = sim.ti
+        ti = self.sim.ti
         res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti+1])
         return

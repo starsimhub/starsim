@@ -17,13 +17,10 @@ class Demographics(ss.Module):
 
     def initialize(self, sim):
         super().initialize(sim)
-        self.init_results(sim)
+        self.init_results()
         return
 
-    def init_results(self, sim):
-        pass
-
-    def update(self, sim):
+    def update(self):
         # Note that for demographic modules, any result updates should be
         # carried out inside this function
         pass
@@ -65,23 +62,25 @@ class Births(Demographics):
         birth_rate = ss.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
         return birth_rate
 
-    def init_results(self, sim):
+    def init_results(self):
+        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'new', sim.npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cumulative', sim.npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cbr', sim.npts, dtype=int, scale=False),
+            ss.Result(self.name, 'new', npts, dtype=int, scale=True),
+            ss.Result(self.name, 'cumulative', npts, dtype=int, scale=True),
+            ss.Result(self.name, 'cbr', npts, dtype=int, scale=False),
         ]
         return
 
-    def update(self, sim):
-        new_uids = self.add_births(sim)
-        self.update_results(len(new_uids), sim)
+    def update(self):
+        new_uids = self.add_births()
+        self.update_results(len(new_uids))
         return new_uids
 
-    def get_births(self, sim):
+    def get_births(self):
         """
         Extract the right birth rates to use and translate it into a number of people to add.
         """
+        sim = self.sim
         p = self.pars
         if sc.isnumber(p.birth_rate):
             this_birth_rate = p.birth_rate
@@ -93,21 +92,23 @@ class Births(Demographics):
         n_new = int(np.floor(sim.people.alive.count() * scaled_birth_prob))
         return n_new
 
-    def add_births(self, sim):
-        # Add n_new births to each state in the sim
-        n_new = self.get_births(sim)
-        new_uids = sim.people.grow(n_new)
-        sim.people.age[new_uids] = 0
+    def add_births(self):
+        """ Add n_new births to each state in the sim """
+        people = self.sim.people
+        n_new = self.get_births()
+        new_uids = people.grow(n_new)
+        people.age[new_uids] = 0
         return new_uids
 
-    def update_results(self, n_new, sim):
-        self.results['new'][sim.ti] = n_new
+    def update_results(self, n_new):
+        self.results['new'][self.sim.ti] = n_new
         return
 
-    def finalize(self, sim):
-        super().finalize(sim)
-        self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['cbr'] = 1/self.pars.units*np.divide(self.results['new'] / sim.dt, sim.results['n_alive'], where=sim.results['n_alive']>0)
+    def finalize(self):
+        super().finalize()
+        res = self.sim.results
+        self.results.cumulative = np.cumsum(self.results.new)
+        self.results.cbr = 1/self.pars.units*np.divide(self.results.new/self.sim.dt, res.n_alive, where=res.n_alive>0)
         return
 
 
@@ -214,33 +215,35 @@ class Deaths(Demographics):
 
         return death_prob
 
-    def init_results(self, sim):
+    def init_results(self):
+        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'new', sim.npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cumulative', sim.npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cmr', sim.npts, dtype=int, scale=False),
+            ss.Result(self.name, 'new', npts, dtype=int, scale=True),
+            ss.Result(self.name, 'cumulative', npts, dtype=int, scale=True),
+            ss.Result(self.name, 'cmr', npts, dtype=int, scale=False),
         ]
         return
 
-    def update(self, sim):
-        n_deaths = self.apply_deaths(sim)
-        self.update_results(n_deaths, sim)
+    def update(self):
+        n_deaths = self.apply_deaths()
+        self.update_results(n_deaths)
         return
 
-    def apply_deaths(self, sim):
+    def apply_deaths(self):
         """ Select people to die """
         death_uids = self.pars.death_rate.filter()
-        sim.people.request_death(sim, death_uids)
+        self.sim.people.request_death(death_uids)
         return len(death_uids)
 
-    def update_results(self, n_deaths, sim):
-        self.results['new'][sim.ti] = n_deaths
+    def update_results(self, n_deaths):
+        self.results['new'][self.sim.ti] = n_deaths
         return
 
-    def finalize(self, sim):
-        super().finalize(sim)
-        self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['cmr'] = 1/self.pars.units*np.divide(self.results['new'] / sim.dt, sim.results['n_alive'], where=sim.results['n_alive']>0)
+    def finalize(self):
+        super().finalize()
+        n_alive = self.sim.results.n_alive
+        self.results.cumulative = np.cumsum(self.results.new)
+        self.results.cmr = 1/self.pars.units*np.divide(self.results.new / self.sim.dt, n_alive, where=n_alive>0)
         return
 
 
@@ -276,13 +279,12 @@ class Pregnancy(Demographics):
             sc.objdict(data_cols=dict(year='Time', age='AgeGrp', value='ASFR')),
             metadata,
         )
-        self.choose_slots = ss.randint() # Distribution for choosing slots; set in self.initialize()
+        self.choose_slots = None # Distribution for choosing slots; set in self.initialize()
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.fertility_rate_data = self.standardize_fertility_data()
         self.pars.fertility_rate = ss.bernoulli(self.make_fertility_prob_fn)
-
         return
 
     @staticmethod
@@ -344,94 +346,90 @@ class Pregnancy(Demographics):
         super().initialize(sim)
         low = sim.pars.n_agents + 1
         high = int(sim.pars.slot_scale*sim.pars.n_agents)
-        self.choose_slots.set(low=low, high=high)
+        self.choose_slots = ss.randint(low=low, high=high, sim=sim, module=self)
         return
 
-    def init_results(self, sim):
+    def init_results(self):
         """
         Results could include a range of birth outcomes e.g. LGA, stillbirths, etc.
         Still unclear whether this logic should live in the pregnancy module, the
         individual disease modules, the connectors, or the sim.
         """
+        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'pregnancies', sim.npts, dtype=int, scale=True),
-            ss.Result(self.name, 'births', sim.npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cbr', sim.npts, dtype=int, scale=False),
+            ss.Result(self.name, 'pregnancies', npts, dtype=int, scale=True),
+            ss.Result(self.name, 'births', npts, dtype=int, scale=True),
+            ss.Result(self.name, 'cbr', npts, dtype=int, scale=False),
         ]
         return
 
-    def update(self, sim):
-        """
-        Perform all updates
-        """
-        self.update_states(sim)
-        conceive_uids = self.make_pregnancies(sim)
-        self.make_embryos(sim, conceive_uids)
-        self.update_results(sim)
+    def update(self):
+        """ Perform all updates """
+        self.update_states()
+        conceive_uids = self.make_pregnancies()
+        self.make_embryos(conceive_uids)
+        self.update_results()
         return
 
-    def update_states(self, sim):
-        """
-        Update states
-        """
-
+    def update_states(self):
+        """ Update states """
         # Check for new deliveries
-        deliveries = self.pregnant & (self.ti_delivery <= sim.ti)
+        ti = self.sim.ti
+        deliveries = self.pregnant & (self.ti_delivery <= ti)
         self.pregnant[deliveries] = False
         self.postpartum[deliveries] = True
         self.fecund[deliveries] = False
 
         # Check for new women emerging from post-partum
-        postpartum = ~self.pregnant & (self.ti_postpartum <= sim.ti)
+        postpartum = ~self.pregnant & (self.ti_postpartum <= ti)
         self.postpartum[postpartum] = False
         self.fecund[postpartum] = True
 
         # Maternal deaths
-        maternal_deaths = (self.ti_dead <= sim.ti).uids
-        sim.people.request_death(sim, maternal_deaths)
-
+        maternal_deaths = (self.ti_dead <= ti).uids
+        self.sim.people.request_death(maternal_deaths)
         return
 
-    def make_pregnancies(self, sim):
-        """
-        Select people to make pregnant using incidence data
-        """
+    def make_pregnancies(self):
+        """ Select people to make pregnant using incidence data """
         # People eligible to become pregnant. We don't remove pregnant people here, these
         # are instead handled in the fertility_dist logic as the rates need to be adjusted
-        eligible_uids = sim.people.female.uids
+        eligible_uids = self.sim.people.female.uids
         conceive_uids = self.pars.fertility_rate.filter(eligible_uids)
 
         # Set prognoses for the pregnancies
         if len(conceive_uids) > 0:
-            self.set_prognoses(sim, conceive_uids)
-
+            self.set_prognoses(conceive_uids)
         return conceive_uids
 
-    def make_embryos(self, sim, conceive_uids):
+    def make_embryos(self, conceive_uids):
         """ Add properties for the just-conceived """
-        n_unborn_agents = len(conceive_uids)
-        if n_unborn_agents > 0:
+        people = self.sim.people
+        n_unborn = len(conceive_uids)
+        if n_unborn == 0:
+            new_uids = ss.uids()
+        else:
 
             # Choose slots for the unborn agents
             new_slots = self.choose_slots.rvs(conceive_uids)
 
             # Grow the arrays and set properties for the unborn agents
-            new_uids = sim.people.grow(len(new_slots), new_slots)
-            sim.people.age[new_uids] = -self.pars.dur_pregnancy
-            sim.people.slot[new_uids] = new_slots  # Before sampling female_dist
-            sim.people.female[new_uids] = self.pars.sex_ratio.rvs(new_uids)
+            new_uids = people.grow(len(new_slots), new_slots)
+            people.age[new_uids] = -self.pars.dur_pregnancy
+            people.slot[new_uids] = new_slots  # Before sampling female_dist
+            people.female[new_uids] = self.pars.sex_ratio.rvs(new_uids)
 
             # Add connections to any vertical transmission layers
             # Placeholder code to be moved / refactored. The maternal network may need to be
             # handled separately to the sexual networks, TBC how to handle this most elegantly
-            for lkey, layer in sim.networks.items():
+            for lkey, layer in self.sim.networks.items():
                 if layer.vertical:  # What happens if there's more than one vertical layer?
-                    durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
+                    durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
                     layer.add_pairs(conceive_uids, new_uids, dur=durs)
 
-        return
+        return new_uids
 
-    def set_prognoses(self, sim, uids):
+    def set_prognoses(self, uids):
         """
         Make pregnancies
         Add miscarriage/termination logic here
@@ -440,27 +438,31 @@ class Pregnancy(Demographics):
         """
 
         # Change states for the newly pregnant woman
+        ti = self.sim.ti
+        dt = self.sim.dt
         self.fecund[uids] = False
         self.pregnant[uids] = True
-        self.ti_pregnant[uids] = sim.ti
+        self.ti_pregnant[uids] = ti
 
         # Outcomes for pregnancies
-        dur_preg = np.full(len(uids), self.pars.dur_pregnancy / sim.dt)
-        dur_postpartum = np.full(len(uids), self.pars.dur_postpartum / sim.dt)
+        dur_preg = np.full(len(uids), self.pars.dur_pregnancy / dt)
+        dur_postpartum = np.full(len(uids), self.pars.dur_postpartum / dt)
         dead = self.pars.maternal_death_rate.rvs(uids)
-        self.ti_delivery[uids] = sim.ti + dur_preg # Currently assumes maternal deaths still result in a live baby
-        self.ti_postpartum[uids] = sim.ti + dur_preg + dur_postpartum
+        self.ti_delivery[uids] = ti + dur_preg # Currently assumes maternal deaths still result in a live baby
+        self.ti_postpartum[uids] = ti + dur_preg + dur_postpartum
 
         if np.any(dead): # NB: 100x faster than np.sum(), 10x faster than np.count_nonzero()
-            self.ti_dead[uids[dead]] = sim.ti + dur_preg[dead]
+            self.ti_dead[uids[dead]] = ti + dur_preg[dead]
         return
 
-    def update_results(self, sim):
-        self.results['pregnancies'][sim.ti] = np.count_nonzero(self.ti_pregnant == sim.ti)
-        self.results['births'][sim.ti] = np.count_nonzero(self.ti_delivery == sim.ti)
+    def update_results(self):
+        ti = self.sim.ti
+        self.results['pregnancies'][ti] = np.count_nonzero(self.ti_pregnant == ti)
+        self.results['births'][ti] = np.count_nonzero(self.ti_delivery == ti)
         return
 
-    def finalize(self, sim):
-        super().finalize(sim)
-        self.results['cbr'] = 1/self.pars.units * np.divide(self.results['births'] / sim.dt, sim.results['n_alive'], where=sim.results['n_alive']>0)
+    def finalize(self):
+        super().finalize()
+        n_alive = self.sim.results.n_alive
+        self.results['cbr'] = 1/self.pars.units * np.divide(self.results['births'] / self.sim.dt, n_alive, where=n_alive>0)
         return
