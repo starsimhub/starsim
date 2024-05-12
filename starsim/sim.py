@@ -25,7 +25,7 @@ class Sim(sc.prettyobj):
         self.pars.update(sc.mergedicts(args, pars, kwargs, _copy=copy_inputs))  # Update the parameters
         
         # Set attributes
-        self.label = label # Usually overwritten during initalization by the parameters
+        self.label = label # Usually overwritten during initialization by the parameters
         self.created = sc.now()  # The datetime the sim was created
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running # TODO: replace with finalized?
@@ -65,10 +65,6 @@ class Sim(sc.prettyobj):
             
         # Initialize all the modules with the sim
         for mod in self.modules:
-        # modmap = ss.module_map() #ZRF
-        # for modkey in modmap.keys():
-        #     modlist = self[modkey]
-        #     for mod in modlist.values():
             mod.initialize(self)
                 
         # Initialize products # TODO: think about simplifying
@@ -137,23 +133,14 @@ class Sim(sc.prettyobj):
             mod.init_vals()
         return
     
-    def init_results(self): #ZRF
+    def init_results(self):
         """ Create initial results that are present in all simulations """
-        self.results += [
+        self.results += [ # TODO: refactor with self.add_results()
             ss.Result(None, 'n_alive',    self.npts, ss.dtypes.int, scale=True),
             ss.Result(None, 'new_deaths', self.npts, ss.dtypes.int, scale=True),
             ss.Result(None, 'cum_deaths', self.npts, ss.dtypes.int, scale=True),
         ]
         return
-    
-    # def init_results(self): #ZRF
-    #     """ Create initial results that are present in all simulations """
-    #     self.add_results(
-    #         dict(name='n_alive',    dtype=int, scale=True),
-    #         dict(name='new_deaths', dtype=int, scale=True),
-    #         dict(name='cum_deaths', dtype=int, scale=True),
-    #     )
-    #     return
 
     @property
     def modules(self):

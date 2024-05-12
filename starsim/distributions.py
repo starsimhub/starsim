@@ -361,9 +361,8 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         # Initialize the distribution and finalize
         self.process_dist()
         self.process_pars(call=False)
-        self.ready = True #ZRF
+        self.ready = True
         if self.trace is None or self.sim is None or self.slots is None:
-            # raise Exception #ZRF
             self.initialized = 'partial' # Initialized enough to produce random numbers, but not fully initialized
         else:
             self.initialized = True

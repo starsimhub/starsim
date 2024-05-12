@@ -130,7 +130,7 @@ class Module(sc.quickobj):
     
     def init_vals(self):
         """ Initialize the values of the states; the last step of initialization """
-        for state in self.states: #ZRF
+        for state in self.states:
             if not state.initialized:
                 state.init_vals()
         self.initialized = True
@@ -190,10 +190,10 @@ class Module(sc.quickobj):
         due to supporting features like multiple genotypes) then the Module should
         overload this attribute to ensure that all states appear in here.
         """
-        return [x for x in self.__dict__.values() if isinstance(x, ss.Arr)] #ZRF use ndict
+        return [x for x in self.__dict__.values() if isinstance(x, ss.Arr)] # TODO: use ndict
 
     @property
-    def statesdict(self): #ZRF remove
+    def statesdict(self): # TODO: remove
         """
         Return a flat dictionary (objdict) of all states
 
