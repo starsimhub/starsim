@@ -125,13 +125,14 @@ class OneMore(ss.Intervention):
     def initialize(self, sim):
         one_birth = ss.Pregnancy(name='one_birth', rel_fertility=0) # Ensure no default births
         one_birth.initialize(sim)
-        sim.demographics += one_birth
+        self.one_birth = one_birth
+        # sim.demographics += one_birth
         return
     
-    def apply(self, sim):
-        if sim.ti == 0:
-            # Create an extra agent
-            new_uids = sim.demographics.one_birth.make_embryos(ss.uids(0)) # Assign 0th agent to be the "mother"
+    def apply(self, sim, ti=10):
+        """ Create an extra agent """
+        if sim.ti == ti:
+            new_uids = self.one_birth.make_embryos(ss.uids(0)) # Assign 0th agent to be the "mother"
             assert len(new_uids) == 1
             sim.people.age[new_uids] = -100 # Set to a very low number to never reach debut age
             
@@ -211,9 +212,15 @@ def test_worlds(do_plot=False):
         plot_infs(s1, s2)
         pl.show()
     
-    assert len(s2.people) == len(s1.people) + 1
-    assert sum2.sir_cum_infections == sum1.sir_cum_infections + 1
-    assert (s1.interventions.countinf.arr != s2.interventions.countinf.arr).sum() == 0
+    l1 = len(s1.people)
+    l2 = len(s2.people)
+    i1 = sum1.sir_cum_infections
+    i2 = sum2.sir_cum_infections
+    a1 = s1.interventions.countinf.arr
+    a2 = s2.interventions.countinf.arr
+    assert l2 == l1 + 1, f'Expected one more person in s2 ({l2}) than s1 ({l1})'
+    assert i2 == i1 + 1, f'Expected one more infection in s2 ({i2}) than s1 ({i1})'
+    assert (a1 != a2).sum() == 0, f'Expected infection arrays to match:\n{a1}\n{a2}'
         
     return res
 
