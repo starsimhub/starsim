@@ -387,7 +387,7 @@ class Pregnancy(Demographics):
         # Check for new deliveries
         ti = self.sim.ti
         deliveries = self.pregnant & (self.ti_delivery <= ti)
-        self.n_births = len(deliveries)
+        self.n_births = np.count_nonzero(deliveries)
         self.pregnant[deliveries] = False
         self.postpartum[deliveries] = True
         self.fecund[deliveries] = False
