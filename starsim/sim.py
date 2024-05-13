@@ -210,6 +210,9 @@ class Sim(sc.prettyobj):
         # Update results
         self.people.update_results()
 
+        for dem_mod in self.demographics():
+            dem_mod.update_results()
+
         for disease in self.diseases():
             disease.update_results()
 
