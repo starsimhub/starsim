@@ -1,12 +1,13 @@
 """
-Experiment with connectors
+Test connectors and custom interventions
 """
 
-# %% Imports and settings
-import starsim as ss
-import pylab as pl
 import sciris as sc
 import numpy as np
+import pylab as pl
+import starsim as ss
+
+sc.options(interactive=False) # Assume not running interactively
 
 
 class hiv_syph(ss.Connector):
@@ -47,12 +48,13 @@ class hiv_syph(ss.Connector):
         return
 
 
-class Penicillin(ss.Intervention):  # Create a penicillin (BPG) intervention
-
+class Penicillin(ss.Intervention):
+    """ Create a penicillin (BPG) intervention for treating syphilis """
     def __init__(self, year=2020, prob=0.5):
         super().__init__() # Initialize the intervention
         self.prob = prob # Store the probability of treatment
         self.year = year
+        return
 
     def apply(self, sim):
         if sim.year > self.year:
@@ -69,10 +71,11 @@ class Penicillin(ss.Intervention):  # Create a penicillin (BPG) intervention
             syphilis.susceptible[treat_ids] = True
             sim.diseases.hiv.rel_sus[treat_ids] = 1
             sim.diseases.hiv.rel_trans[treat_ids] = 1
+        return
 
 
-# Make people, HIV, syphilis, and network
 def make_args():
+    """ Make people, HIV, syphilis, and network """
     pars = dict(n_agents=1000, verbose=0)
     mf = ss.MFNet(duration=ss.lognorm_ex(mean=5, stdev=0.5))
     hiv = ss.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2)
@@ -81,47 +84,74 @@ def make_args():
     return args
 
 
-if __name__ == '__main__':
+def test_connectors(do_plot=False):
+    """ Test connector example """
+    sc.heading('Testing connectors')
     
     # Make arguments
     args = make_args()
+    sims = sc.objdict() # List of sims
     
     # Make a sim with a connector, and run
-    sim_connect = ss.Sim(label='With connector', connectors=hiv_syph(), **args)
-    sim_connect.run()
+    sims.con = ss.Sim(label='With connector', connectors=hiv_syph(), **args)
+    sims.con.run()
     
     # Make a sim without a connector, and run
-    sim_noconnect = ss.Sim(label='Without connector', **args)
-    sim_noconnect.run()
+    sims.nocon = ss.Sim(label='Without connector', **args)
+    sims.nocon.run()
     
     # Make a sim with a connector and syph treatment, and run
-    sim_treat = ss.Sim(label='With treatment', connectors=hiv_syph(), interventions=Penicillin(), **args)
-    sim_treat.run()
+    sims.treat = ss.Sim(label='With treatment', connectors=hiv_syph(), interventions=Penicillin(), **args)
+    sims.treat.run()
     
-    # Or in parallel:
-    # sim_connect, sim_noconnect, sim_treat = ss.parallel(sim_connect, sim_noconnect, sim_treat).sims
+    # Parse results
+    results = sc.odict()
+    diseases = ['syphilis', 'hiv']
+    for sim in sims.values():
+        results[sim.label] = sc.objdict()
+        for disease in diseases:
+            results[sim.label][disease] = sim.results[disease].n_infected
+
+    # Plot
+    if do_plot:
+        pl.figure()
+        
+        pl.subplot(2,1,1)
+        x = sims.con.yearvec
+        for label,res in results.items():
+            pl.plot(x, res.syphilis, label=label)
+        pl.title('Syphilis infections')
+        pl.xlabel('Year')
+        pl.ylabel('Count')
+        pl.axvline(2020)
+        pl.legend()
+        
+        pl.subplot(2,1,2)
+        for label,res in results.items():
+            pl.plot(x, res.hiv, label=label)
+        pl.title('HIV infections')
+        pl.xlabel('Year')
+        pl.ylabel('Count')
+        pl.axvline(2020)
+        pl.legend()
+        
+        sc.figlayout()
+        pl.show()
     
+    # Check results
+    for disease in diseases:
+        assert results[0][disease].sum() > results[1][disease].sum(), f'{disease.title()} infections should be higher with connector'
+        assert results[0][disease].sum() > results[2][disease].sum(), f'{disease.title()} infections should be lower with treatment'
+   
+    return sims
+
+
+if __name__ == '__main__':
+    do_plot = True
+    sc.options(interactive=do_plot)
+    T = sc.timer()
     
-    # Plotting
-    pl.figure()
+    sims = test_connectors(do_plot=do_plot)
     
-    pl.subplot(2,1,1)
-    pl.plot(sim_treat.yearvec, sim_treat.results.syphilis.n_infected, label='With syphilis treatment')
-    pl.plot(sim_connect.yearvec, sim_connect.results.syphilis.n_infected, label='Baseline')
-    pl.title('Syphilis infections')
-    pl.xlabel('Year')
-    pl.ylabel('Count')
-    pl.axvline(2020)
-    pl.legend()
+    T.toc()
     
-    pl.subplot(2,1,2)
-    pl.plot(sim_treat.yearvec, sim_treat.results.hiv.n_infected, label='With syphilis treatment')
-    pl.plot(sim_connect.yearvec, sim_connect.results.hiv.n_infected, label='Baseline')
-    pl.title('HIV infections')
-    pl.xlabel('Year')
-    pl.ylabel('Count')
-    pl.axvline(2020)
-    pl.legend()
-    
-    sc.figlayout()
-    pl.show()
