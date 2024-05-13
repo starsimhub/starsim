@@ -306,6 +306,12 @@ class People(sc.prettyobj):
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
         return
     
+    def finish_step(self):
+        self.people.update_results()
+        self.people.remove_dead()
+        self.people.update_post()
+        return
+    
     def person(self, ind):
         """ Get all the properties for a single person """
         person = Person()

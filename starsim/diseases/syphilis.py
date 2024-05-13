@@ -54,32 +54,37 @@ class Syphilis(ss.Infection):
         )
         self.update_pars(pars, **kwargs)
 
-        self.add_states(
+        self.define_states(
             # Adult syphilis states
-            ss.BoolArr('exposed'),  # AKA incubating. Free of symptoms, not transmissible
-            ss.BoolArr('primary'),  # Primary chancres
-            ss.BoolArr('secondary'),  # Inclusive of those who may still have primary chancres
-            ss.BoolArr('latent_temp'),  # Relapses to secondary (~1y)
-            ss.BoolArr('latent_long'),  # Can progress to tertiary or remain here
-            ss.BoolArr('tertiary'),  # Includes complications (cardio/neuro/disfigurement)
-            ss.BoolArr('immune'),  # After effective treatment people may acquire temp immunity
-            ss.BoolArr('ever_exposed'),  # Anyone ever exposed - stays true after treatment
-            ss.BoolArr('congenital'),  # Congenital syphilis states
+            ss.State('susceptible', default=True),
+            ss.State('exposed'),  # AKA incubating. Free of symptoms, not transmissible
+            ss.State('infected'), # TODO -- do we use this?
+            ss.State('primary'),  # Primary chancres
+            ss.State('secondary'),  # Inclusive of those who may still have primary chancres
+            ss.State('latent_temp'),  # Relapses to secondary (~1y)
+            ss.State('latent_long'),  # Can progress to tertiary or remain here
+            ss.State('tertiary'),  # Includes complications (cardio/neuro/disfigurement)
+            ss.State('immune'),  # After effective treatment people may acquire temp immunity
+            ss.State('ever_exposed', track_time=False),  # Anyone ever exposed - stays true after treatment
+            ss.State('congenital'),  # Congenital syphilis states
+        )
+        
+        self.define_events(
+            ss.Event(src='susceptible', dest=['exposed', 'infected', 'ever_exposed'], func=self.infect),
+            ss.Event('exposed -> primary', func=self.to_primary),
+            ss.Event('primary -> secondary', func=self.to_secondary),
+            ss.Event('latent_temp -> secondary', func=self.to_secondary_latent),
+            ss.Event('secondary -> latent_temp', func=self.to_latent_temp),
+            ss.Event('secondary -> latent_long', func=self.to_latent_long),
+            ss.Event('latent_long -> tertiary', func=self.to_tertiary),
+        )
     
-            # Timestep of state changes
-            ss.FloatArr('ti_exposed'),
-            ss.FloatArr('ti_primary'),
-            ss.FloatArr('ti_secondary'),
-            ss.FloatArr('ti_latent_temp'),
-            ss.FloatArr('ti_latent_long'),
-            ss.FloatArr('ti_tertiary'),
-            ss.FloatArr('ti_immune'),
+        # Timestep of state changes
+        self.add_props(
             ss.FloatArr('ti_miscarriage'),
             ss.FloatArr('ti_nnd'),
             ss.FloatArr('ti_stillborn'),
-            ss.FloatArr('ti_congenital'),
         )
-
         return
 
     @property

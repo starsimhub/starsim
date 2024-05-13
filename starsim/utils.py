@@ -4,15 +4,15 @@ Numerical utilities
 
 import warnings
 import numpy as np
-import sciris as sc
-import starsim as ss
 import numba as nb
 import pandas as pd
+import sciris as sc
+import starsim as ss
 
 # %% Helper functions
 
-# What functions are externally visible -- note, this gets populated in each section below
-__all__ = ['ndict', 'warn', 'unique', 'find_contacts']
+# What functions are externally visible
+__all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'standardize_netkey', 'standardize_data']
 
 
 class ndict(sc.objdict):
@@ -92,7 +92,7 @@ class ndict(sc.objdict):
     def _check_type(self, arg):
         """ Check types """
         if self._type is not None:
-            if not isinstance(arg, self._type):
+            if not isinstance(arg, self._type) and not isinstance(arg, ss.Plugin): # Plugin is a valid argument anywhere
                 errormsg = f'The following item does not have the expected type {self._type}:\n{arg}'
                 raise TypeError(errormsg)
         return
@@ -159,18 +159,6 @@ def warn(msg, category=None, verbose=None, die=None):
     return
 
 
-def unique(arr):
-    """
-    Find the unique elements and counts in an array.
-    Equivalent to np.unique(return_counts=True) but ~5x faster, and
-    only works for arrays of positive integers.
-    """
-    counts = np.bincount(arr.ravel())
-    unique = np.flatnonzero(counts)
-    counts = counts[unique]
-    return unique, counts
-
-
 def find_contacts(p1, p2, inds):  # pragma: no cover
     """
     Variation on Network.find_contacts() that avoids sorting.
@@ -189,9 +177,19 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
     return pairing_partners
 
 
-# %% Seed methods
+def check_requires(sim, requires, *args):
+    """ Check that the module's requirements (of other modules) are met """
+    errs = sc.autolist()
+    all_classes = [m.__class__ for m in sim.modules]
+    all_names = [m.name for m in sim.modules]
+    for req in sc.mergelists(requires, *args):
+        if req not in all_classes + all_names:
+            errs += req
+    if len(errs):
+        errormsg = f'The following module(s) are required, but the Sim does not contain them: {sc.strjoin(errs)}'
+        raise AttributeError(errormsg)
+    return
 
-__all__ += ['set_seed']
 
 def set_seed(seed=None):
     '''
@@ -224,7 +222,10 @@ def set_seed(seed=None):
 
 # %% Data cleaning and processing
 
-__all__ += ['standardize_data']
+
+def standardize_netkey(key):
+    """ Networks can be upper or lowercase, and have a suffix 'net' or not; this function standardizes them """
+    return key.lower().removesuffix('net')
 
 
 def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):

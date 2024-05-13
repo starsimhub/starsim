@@ -180,12 +180,11 @@ class SimPars(Pars):
         self.death_rate = None
         self.use_aging  = None # True if demographics, false otherwise
 
-        # Modules: demographics, diseases, connectors, networks, analyzers, and interventions
+        # Modules: demographics, diseases, networks, analyzers, and interventions
         self.people = None
         self.networks      = ss.ndict()
         self.demographics  = ss.ndict()
         self.diseases      = ss.ndict()
-        self.connectors    = ss.ndict()
         self.interventions = ss.ndict()
         self.analyzers     = ss.ndict()
 
@@ -344,9 +343,8 @@ class SimPars(Pars):
         - networks,
         - demographics,
         - diseases,
-        - analyzers,
-        - interventions, and
-        - connectors.
+        - analyzers, and
+        - interventions
         """
         modmap = ss.module_map() # List of modules and parent module classes, e.g. ss.Disease
         modules = ss.find_modules() # Each individual module class option, e.g. ss.SIR
@@ -403,8 +401,8 @@ class SimPars(Pars):
                             mod = expected_cls.from_func(mod)
                     
                     # Do final check
-                    if not isinstance(mod, expected_cls):
-                        errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls}, but was {type(mod)} instead'
+                    if not isinstance(mod, (expected_cls, ss.Plugin)):
+                        errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls} or Plugin, but was {type(mod)} instead'
                         raise TypeError(errormsg)
                     modlist[i] = mod
         return
