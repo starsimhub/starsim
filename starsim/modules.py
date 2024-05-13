@@ -68,7 +68,7 @@ class Module(sc.quickobj):
         self.label = sc.ifelse(label, getattr(self, 'label', self.name))
         return
     
-    def default_pars(self, inherit=False, **kwargs):
+    def define_pars(self, inherit=False, **kwargs):
         """ Create or merge Pars objects """
         if inherit: # Merge with existing
             self.pars.update(**kwargs, create=True)

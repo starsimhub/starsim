@@ -29,7 +29,7 @@ class Demographics(ss.Module):
 class Births(Demographics):
     def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             birth_rate = 0,
             rel_birth = 1,
             units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
@@ -142,7 +142,7 @@ class Deaths(Demographics):
                 corresponding column name in data. Similar for "sex_keys". Finally,
         """
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             rel_death = 1,
             death_rate = 20,  # Default = a fixed rate of 2%/year, overwritten if data provided
             units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
@@ -251,7 +251,7 @@ class Pregnancy(Demographics):
 
     def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             dur_pregnancy = 0.75,
             dur_postpartum = 0.5,
             fertility_rate = 0, # See make_fertility_prob_function

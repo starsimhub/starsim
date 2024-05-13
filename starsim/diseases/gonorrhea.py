@@ -13,7 +13,7 @@ class Gonorrhea(ss.Infection):
     def __init__(self, pars=None, *args, **kwargs):
         # Parameters
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             beta = 1.0, # Placeholder value
             dur_inf_in_days = ss.lognorm_ex(mean=10, stdev=0.6),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
             p_symp    = ss.bernoulli(p=0.5),  # Share of infections that are symptomatic. Placeholder value

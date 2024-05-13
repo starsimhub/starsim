@@ -382,7 +382,7 @@ class StaticNet(Network):
     def __init__(self, graph=None, pars=None, **kwargs):
         super().__init__()
         self.graph = graph
-        self.default_pars(seed=True)
+        self.define_pars(seed=True)
         self.update_pars(pars, **kwargs)
         self.dist = ss.Dist(name='StaticNet')
         return
@@ -441,7 +441,7 @@ class RandomNet(DynamicNetwork):
     def __init__(self, pars=None, key_dict=None, **kwargs):
         """ Initialize """
         super().__init__(key_dict=key_dict)
-        self.default_pars(
+        self.define_pars(
             n_contacts = ss.const(10),
             dur = 0,
         )
@@ -554,7 +554,7 @@ class MFNet(SexualNetwork):
     """
     def __init__(self, pars=None, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
-        self.default_pars(
+        self.define_pars(
             duration = ss.lognorm_ex(mean=15),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
@@ -645,7 +645,7 @@ class MSMNet(SexualNetwork):
 
     def __init__(self, pars=None, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
-        self.default_pars(
+        self.define_pars(
             duration = ss.lognorm_ex(mean=15, stdev=15),
             debut = ss.normal(loc=16, scale=2),
             acts = ss.lognorm_ex(mean=80, stdev=20),
@@ -716,7 +716,7 @@ class EmbeddingNet(MFNet):
             male_shift is the average age that males are older than females in partnerships
         """
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             inherit = True, # The MFNet already comes with pars, we want to keep those
             embedding_func = ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
             male_shift = 5,

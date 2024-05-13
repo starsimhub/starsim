@@ -107,7 +107,7 @@ class SIS(ss.Infection):
     """
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             beta = 0.05,
             init_prev = ss.bernoulli(p=0.01),
             dur_inf = ss.lognorm_ex(mean=10),
@@ -182,7 +182,7 @@ class sir_vaccine(ss.Vx):
     """
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
-        self.default_pars(efficacy=0.9)
+        self.define_pars(efficacy=0.9)
         self.update_pars(pars, **kwargs)
         return
 

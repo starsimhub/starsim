@@ -15,7 +15,7 @@ class Syphilis(ss.Infection):
     def __init__(self, pars=None, **kwargs):
         # Parameters
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             # Initial conditions
             beta = 1.0, # Placeholder
             init_prev = ss.bernoulli(p=0.03),
