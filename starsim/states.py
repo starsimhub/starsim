@@ -293,7 +293,7 @@ class BoolArr(Arr):
     
     @property
     def uids(self):
-        """ Convert True values to UIDs """
+        """ Efficiently convert True values to UIDs """
         return self.auids[np.nonzero(self.values)[0]]
 
     
@@ -334,11 +334,15 @@ class uids(np.ndarray):
     UID operations.    
     """
     def __new__(cls, arr=None):
-        if arr is None:
-            arr = np.empty(0, dtype=ss_int)
+        if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
+            return arr.astype(ss_int).view(cls)
+        elif isinstance(arr, BoolArr): # Shortcut for arr.uids
+            return arr.uids
+        elif arr is None: # Shortcut to return empty
+            return np.empty(0, dtype=ss_int).view(cls)
         elif isinstance(arr, int): # Convert e.g. ss.uids(0) to ss.uids([0])
             arr = [arr]
-        return np.asarray(arr, dtype=ss_int).view(cls)
+        return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
     
     def concat(self, other, **kw): # TODO: why can't they both be called cat()?
         """ Equivalent to np.concatenate(), but return correct type """

@@ -24,22 +24,26 @@ class hiv_syph(ss.Connector):
         self.update_pars(pars, **kwargs)
         return
 
-    def update(self, sim):
+    def update(self):
         """ Specify HIV-syphilis interactions """
+        diseases = self.sim.diseases
+        syph = diseases.syphilis
+        hiv = diseases.hiv
+        cd4 = self.sim.people.hiv.cd4
+        
         # People with HIV are more likely to acquire syphilis
-        sim.diseases.syphilis.rel_sus[sim.people.hiv.cd4 < 500] = self.pars.rel_sus_syph_hiv
-        sim.diseases.syphilis.rel_sus[sim.people.hiv.cd4 < 200] = self.pars.rel_sus_syph_aids
+        syph.rel_sus[cd4 < 500] = self.pars.rel_sus_syph_hiv
+        syph.rel_sus[cd4 < 200] = self.pars.rel_sus_syph_aids
 
         # People with HIV are more likely to transmit syphilis
-        sim.diseases.syphilis.rel_trans[sim.people.hiv.cd4 < 500] = self.pars.rel_trans_syph_hiv
-        sim.diseases.syphilis.rel_trans[sim.people.hiv.cd4 < 200] = self.pars.rel_trans_syph_aids
+        syph.rel_trans[cd4 < 500] = self.pars.rel_trans_syph_hiv
+        syph.rel_trans[cd4 < 200] = self.pars.rel_trans_syph_aids
 
         # People with syphilis are more likely to acquire HIV
-        sim.diseases.hiv.rel_sus[sim.diseases.syphilis.active] = self.pars.rel_sus_hiv_syph
+        hiv.rel_sus[syph.active] = self.pars.rel_sus_hiv_syph
 
         # People with syphilis are more likely to transmit HIV
-        sim.diseases.hiv.rel_trans[sim.diseases.syphilis.active] = self.pars.rel_trans_hiv_syph
-
+        hiv.rel_trans[syph.active] = self.pars.rel_trans_hiv_syph
         return
 
 
@@ -69,37 +73,29 @@ class Penicillin(ss.Intervention):  # Create a penicillin (BPG) intervention
 
 # Make people, HIV, syphilis, and network
 def make_args():
-    # Marital
-    mf = ss.MFNet(
-        pars = dict(
-            duration = ss.lognorm_ex(mean=5, stdev=0.5),
-        )
-    )
-    hiv = ss.HIV()
-    hiv.pars['beta'] = {'mf': [0.0008, 0.0004]}
-    hiv.pars['init_prev'] = ss.bernoulli(p=0.2)
-    syph = ss.Syphilis()
-    syph.pars['beta'] = {'mf': [0.1, 0.05]}
-    syph.pars['init_prev'] = ss.bernoulli(p=0.05)
-
-    return hiv, syph, mf
+    pars = dict(n_agents=1000, verbose=0)
+    mf = ss.MFNet(duration=ss.lognorm_ex(mean=5, stdev=0.5))
+    hiv = ss.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2)
+    syph = ss.Syphilis(beta={'mf': [0.1, 0.05]}, init_prev=0.05)
+    args = dict(pars=pars, networks=mf, diseases=[hiv, syph])
+    return args
 
 
 if __name__ == '__main__':
     
     # Make arguments
-    hiv, syph, mf = make_args()
+    args = make_args()
     
     # Make a sim with a connector, and run
-    sim_connect = ss.Sim(networks=mf, diseases=[hiv, syph], connectors=hiv_syph())
+    sim_connect = ss.Sim(label='With connector', connectors=hiv_syph(), **args)
     sim_connect.run()
     
     # Make a sim without a connector, and run
-    sim_noconnect = ss.Sim(networks=mf, diseases=[hiv, syph])
+    sim_noconnect = ss.Sim(label='Without connector', **args)
     sim_noconnect.run()
     
     # Make a sim with a connector and syph treatment, and run
-    sim_treat = ss.Sim(networks=mf, diseases=[hiv, syph], connectors=hiv_syph(), interventions=Penicillin())
+    sim_treat = ss.Sim(label='With treatment', connectors=hiv_syph(), interventions=Penicillin(), **args)
     sim_treat.run()
     
     # Or in parallel:
