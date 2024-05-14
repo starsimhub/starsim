@@ -7,6 +7,108 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 0.5.0 (2024-05-07)
+--------------------------
+
+Summary
+~~~~~~~
+All inputs to the sim and modules now use a ``ss.Pars()`` class, which handles updating and validation. It is now not necessary to ever use ``pars=`` (although you still can if you want), so what was previously:
+
+``sim = ss.Sim(pars=dict(diseases='sir', networks='random'))``
+
+is now just:
+
+``sim = ss.Sim(diseases='sir', networks='random')``
+
+Updates happen recursively, so distributions etc. can be flexibly updated.
+
+This has significantly changed how modules are initialized; what was previously:
+
+.. code-block:: python
+
+    def __init__(self, pars=None, **kwargs):
+
+        pars = ss.omergeleft(pars,
+            dur_inf = 6,
+            init_prev = 0.01,
+            p_death = 0.01,
+            beta = 0.5,
+        )
+
+        par_dists = ss.omergeleft(par_dists,
+            dur_inf = ss.lognorm_ex,
+            init_prev = ss.bernoulli,
+            p_death = ss.bernoulli,
+        )
+
+        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+
+is now:
+
+.. code-block:: python
+    
+    def __init__(self, pars=None, **kwargs):
+        super().__init__()
+        self.default_pars(
+            beta = 0.5,
+            init_prev = ss.bernoulli(0.01),
+            dur_inf = ss.lognorm_ex(6),
+            p_death = ss.bernoulli(0.01),
+        )
+        self.update_pars(pars, **kwargs)
+
+
+Parameter changes
+~~~~~~~~~~~~~~~~~
+- Added a ``ss.Pars`` class (and a ``ss.SimPars`` subclass) that handles parameter creation, updates, and validation.
+- Initialization has been moved from ``sim.py`` to ``parameters.py``; ``ss.Sim.convert_plugins()`` has been replaced by ``ss.SimPars.convert_modules()``.
+- The key method is ``ss.Pars.update()``, which performs all necessary validation on the parameters being updated.
+
+Initialization changes
+~~~~~~~~~~~~~~~~~~~~~~
+- Previously, the people were initialized first, then the states were initialized and the values populated, then the modules were initialized, and finally the distributions are initialized. This led to circular logic with the states being initialized based on uninitialized distributions. Now, states and modules are *linked* to the ``People`` and ``Sim`` objects, but further initialization is not done at this step. This ensures all distributions are created but not yet used. Next, distributions are initialized. Finally, the initial values are populated, and everything is initialized.
+- New methods supporting these changes include ``ss.link_dists()``, ``dist.link_sim()``, ``dist.link_module()``, ``sim.init_vals()``, ``people.init_vals()``, ``module.init_vals()``, 
+
+Module changes
+~~~~~~~~~~~~~~
+- Whereas modules previously initialized a dict of parameters and then called ``super().__init__(pars, **kwargs)``, they now call ``super().__init__()`` first, then ``self.default_pars(par1=x, par2=y)``, then finally ``self.update_pars(pars, **kwargs)``.
+- What was previously e.g. ``ss.Module(pars=dict(par=x))`` is now ``ss.Module(par=x)``.
+- ``par_dists`` has been removed; instead, distributions are specified in the default parameters, and are updated via the ``Pars`` object.
+- Modules now contain a link back to the ``Sim`` object. This means that all methods that used to have ``sim`` as an argument now do not, e.g. ``self.update()`` instead of ``self.update(sim)``.
+- ``ss.module_map()`` maps different module types to their location in the sim.
+- ``ss.find_modules()`` finds all available modules (including subclasses) in Starsim.
+- Removed ``ss.dictmerge()`` and ``ss.dictmergeleft`` (now handled by ``ss.Pars.update()``).
+- Removed ``ss.get_subclasses()`` and ``ss.all_subclasses()`` (now handled by ``ss.find_modules()``).
+- Modules can no longer be initialized with a ``name`` key; it must be ``type`` (e.g. ``dict(type='sir')`` rather than ``dict(name='sir')``.
+- Added ``to_json()`` and ``plot()`` methods to ``Module``.
+- Removed ``connectors.py``; connectors still exist but as an empty subclass of ``Module``.
+
+People and network changes
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+- ``BasePeople`` has been removed and merged with ``People``.
+- Time parameters (``ti``, ``dt``, etc.) have been removed from ``People``. Use ``sim.ti``, ``sim.dt`` etc. instead. One consequence of this is that ``people.request_death()`` now requires a ``sim`` argument. Another is that network methods (e.g. ``add_pairs()``) now take ``sim`` arguments instead of ``people`` arguments.
+- ``SexualNetwork`` is now a subclass of ``DynamicNetwork``.
+- Removed ``ss.Networks`` (now just an ``ss.ndict``).
+- Network connectors have been removed.
+- ``Person`` has been implemented as a slice of ``sim.people[i]``.
+- There is a new parameter ``use_aging``; this defaults to ``True`` if demographic modules are supplied, and ``False`` otherwise.
+
+Other changes
+~~~~~~~~~~~~~
+- Boolean arrays have new methods ``true()``, ``false()``, and ``split()``, which return the UIDs for the ``True`` values (alias to ``arr.uids``), ``False`` values, and both sets of values, respectively. ``ss.bernoulli.split()`` has been added as an alias of ``ss.bernoulli.filter(both=True)``.
+- All inputs to a sim are now copied by default. To disable, use ``ss.Sim(..., copy_inputs=False)``.
+- There is a new ``Plugin`` class, which contains shared logic for Interventions and Analyzers. It has a ``from_func()``, which will generate an intervention/analyzer from a function.
+- Diseases no longer have a default value of ``beta=1`` assigned; beta must be defined explicitly if being used.
+- Individual diseases can now be plotted via either e.g. ``sim.plot('hiv')`` or ``sim.diseases.hiv.plot()``.
+- Distributions can be created from dicts via ``ss.make_dist()``.
+- A new function ``ss.check_sims_match()`` will check if the results of two or more simulations match.
+- ``ndict`` values can be accessed through a call; e.g. ``sim.diseases()`` is equivalent to ``sim.diseases.values()``.
+- Merged ``test_dcp.py`` and ``test_base.py`` into ``test_other.py``.
+- Renamed ``test_simple.py`` to ``test_sim.py``.
+- Renamed ``test_dists.py`` to ``test_randomness.py``.
+- *GitHub info*: PR `488 <https://github.com/starsimhub/starsim/pull/488>`_
+
+
 Version 0.4.0 (2024-04-24)
 --------------------------
 - Replace ``UIDArray``, ``ArrayView``, and ``State`` with ``Arr``, which has different subclasses for different data types (e.g. ``FloatArr``, ``BoolArr``, and ``IndexArr``). States are usually represented by ``BoolArr`` (e.g. ``sir.infected``), while other agent properties are represented by ``FloatArr`` (e.g. ``sir.rel_trans``).

@@ -12,6 +12,11 @@ __all__ = ['Product', 'Dx', 'Tx', 'Vx']
 
 class Product(ss.Module):
     """ Generic product implementation """
+    def initialize(self, sim):
+        if not self.initialized:
+            super().initialize(sim)
+        else:
+            return
 
     def administer(self, people, inds):
         """ Adminster a Product - implemented by derived classes """
@@ -142,10 +147,8 @@ class Tx(Product):
 
 class Vx(Product):
     """ Vaccine product """
-    def __init__(self, diseases=None, pars=None, par_dists=None, *args, **kwargs):
-        pars = ss.dictmerge({}, pars)
-        par_dists = ss.dictmerge({}, par_dists)
-        super().__init__(pars, par_dists, *args, **kwargs)
+    def __init__(self, diseases=None, pars=None, *args, **kwargs):
+        super().__init__(pars, *args, **kwargs)
         self.diseases = sc.tolist(diseases)
         return
 

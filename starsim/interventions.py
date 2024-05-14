@@ -6,10 +6,37 @@ import starsim as ss
 import sciris as sc
 import numpy as np
 
-__all__ = ['Analyzer', 'Intervention']
+__all__ = ['Plugin', 'Analyzer', 'Intervention']
 
 
-class Analyzer(ss.Module):
+class Plugin(ss.Module):
+    """ Base class for interventions and analyzers """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        return
+    
+    def __call__(self, *args, **kwargs):
+        return self.apply(*args, **kwargs)
+    
+    def initialize(self, sim):
+        return super().initialize(sim)
+    
+    def apply(self, sim):
+        pass
+
+    def finalize(self):
+        return super().finalize()
+    
+    @classmethod
+    def from_func(cls, func):
+        """ Create an intervention or analyzer from a function """
+        name = func.__name__
+        new = cls(name=name)
+        new.apply = func
+        return new
+
+
+class Analyzer(Plugin):
     """
     Base class for analyzers. Analyzers are used to provide more detailed information 
     about a simulation than is available by default -- for example, pulling states 
@@ -20,21 +47,10 @@ class Analyzer(ss.Module):
     
     To retrieve a particular analyzer from a sim, use sim.get_analyzer().
     """
-
-    def __call__(self, *args, **kwargs):
-        return self.apply(*args, **kwargs)
-    
-    def initialize(self, sim):
-        return super().initialize(sim)
-    
-    def apply(self, sim):
-        pass
-
-    def finalize(self, sim):
-        return super().finalize(sim)
+    pass
 
 
-class Intervention(ss.Module):
+class Intervention(Plugin):
     """
     Base class for interventions.
     
@@ -46,18 +62,6 @@ class Intervention(ss.Module):
         super().__init__(*args, **kwargs)
         self.eligibility = eligibility
         return
-
-    def __call__(self, *args, **kwargs):
-        return self.apply(*args, **kwargs)
-    
-    def initialize(self, sim):
-        return super().initialize(sim)
-    
-    def apply(self, sim, *args, **kwargs):
-        raise NotImplementedError
-        
-    def finalize(self, sim):
-        return super().finalize(sim)
 
     def _parse_product(self, product):
         """

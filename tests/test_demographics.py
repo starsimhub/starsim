@@ -11,15 +11,15 @@ import sciris as sc
 import pytest
 
 
-do_plot = True
 sc.options(interactive=False) # Assume not running interactively
 
 
-def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, do_plot=True):
+def test_nigeria(which='births', dt=1, start=1995, n_years=15, do_plot=False):
     """
     Make a Nigeria sim with demographic modules
     Switch between which='births' or 'pregnancy' to determine which demographic module to use
     """
+    sc.heading('Testing Nigeria demographics')
 
     # Make demographic modules
     demographics = sc.autolist()
@@ -53,7 +53,7 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, 
         demographics=demographics,
     )
 
-    if plot_init:
+    if do_plot:
         sim.initialize()
         # Plot histograms of the age distributions - simulated vs data
         bins = np.arange(0, 101, 1)
@@ -123,8 +123,9 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, plot_init=False, 
     return sim
 
 
-def test_constant_pop():
-    # Test pars for constant pop size
+def test_constant_pop(do_plot=False):
+    """ Test pars for constant pop size """
+    sc.heading('Testing constant population size')
     sim = ss.Sim(n_agents=10e3, birth_rate=10, death_rate=10/1010*1000, n_years=200, rand_seed=1).run()
     print("Check final pop size within 5% of starting pop")
     assert np.isclose(sim.results.n_alive[0], sim.results.n_alive[-1], rtol=0.05)
@@ -137,6 +138,8 @@ def test_constant_pop():
 
 
 def test_module_adding():
+    """ Test that modules can't be added twice """
+    sc.heading('Testing module duplication')
     births = ss.Births(pars={'birth_rate': 10})
     deaths = ss.Deaths(pars={'death_rate': 10})
     demographics = [births, deaths]
@@ -145,9 +148,46 @@ def test_module_adding():
     return demographics
 
 
+def test_aging():
+    """ Test that aging is configured properly """
+    sc.heading('Testing aging')
+    n_agents = int(1e3)
+    
+    # With no demograhpics, people shouldn't age
+    s1 = ss.Sim(n_agents=n_agents).initialize()
+    orig_ages = s1.people.age.raw.copy()
+    orig_age = orig_ages.mean()
+    s1.run()
+    end_age = s1.people.age.mean()
+    assert orig_age == end_age, f'By default there should be no aging, but {orig_age} != {end_age}'
+    
+    # We should be able to manually turn on aging
+    s2 = ss.Sim(n_agents=n_agents, use_aging=True).run()
+    age2 = s2.people.age.mean()
+    assert orig_age < age2, f'With aging, start age {orig_age} should be less than end age {age2}'
+    
+    # Aging should turn on automatically if we add demographics
+    s3 = ss.Sim(n_agents=n_agents, demographics=True).run()
+    agent = s3.people.auids[0] # Find first alive agent
+    orig_agent_age = orig_ages[agent]
+    age3 = s3.people.age[ss.uids(agent)]
+    assert orig_agent_age < age3, f'With demographics, original agent age {orig_agent_age} should be less than end age {age3}'
+    
+    # ...but can be turned off manually
+    s4 = ss.Sim(n_agents=n_agents, demographics=True, use_aging=False).run()
+    agent = s4.people.auids[0] # Find first alive agent
+    orig_agent_age = orig_ages[agent]
+    age4 = s4.people.age[ss.uids(agent)]
+    assert orig_agent_age == age4, f'With aging turned off, original agent age {orig_agent_age} should match end age {age4}'
+
+    return s3 # Most interesting sim
+
+
 if __name__ == '__main__':
+    do_plot = True
     sc.options(interactive=do_plot)
-    s1 = test_nigeria(dt=1, which='pregnancy', n_years=15, plot_init=True, do_plot=do_plot)
-    s2 = test_constant_pop()
+    s1 = test_nigeria(do_plot=do_plot)
+    s2 = test_constant_pop(do_plot=do_plot)
     s3 = test_module_adding()
+    s4 = test_aging()
     plt.show()

@@ -1,7 +1,7 @@
 from .version import __version__, __versiondate__, __license__
 from .settings      import *
-from .parameters    import *
 from .utils         import *
+from .parameters    import *
 from .distributions import *
 from .states        import *
 from .people        import *
@@ -12,7 +12,6 @@ from .demographics  import *
 from .products      import *
 from .interventions import *
 from .demographics  import *
-from .connectors    import *
 from .disease       import *
 from .diseases      import *
 from .sim           import *

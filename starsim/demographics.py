@@ -11,43 +11,47 @@ __all__ = ['Demographics', 'Births', 'Deaths', 'Pregnancy']
 
 
 class Demographics(ss.Module):
-    # A demographic module typically handles births/deaths/migration and takes
-    # place at the start of the timestep, before networks are updated and before
-    # any disease modules are executed
-
+    """
+    A demographic module typically handles births/deaths/migration and takes
+    place at the start of the timestep, before networks are updated and before
+    any disease modules are executed.
+    """
     def initialize(self, sim):
         super().initialize(sim)
-        self.init_results(sim)
+        self.init_results()
         return
 
-    def init_results(self, sim):
+    def init_results(self):
         pass
 
-    def update(self, sim):
-        # Note that for demographic modules, any result updates should be
-        # carried out inside this function
+    def update(self):
+        pass
+
+    def update_results(self):
         pass
 
 
 class Births(Demographics):
+    """ Create births based on rates, rather than based on pregnancy """
     def __init__(self, pars=None, metadata=None, **kwargs):
-        super().__init__(pars, **kwargs)
-
-        # Set defaults
-        self.pars = ss.dictmergeleft(self.pars,
+        super().__init__()
+        self.default_pars(
             birth_rate = 0,
             rel_birth = 1,
             units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
         )
+        self.update_pars(pars, **kwargs)
 
         # Process metadata. Defaults here are the labels used by UN data
-        self.metadata = ss.dictmergeleft(metadata,
-            data_cols = dict(year='Year', cbr='CBR'),
+        self.metadata = sc.mergedicts(
+            sc.objdict(data_cols=dict(year='Year', cbr='CBR')),
+            metadata,
         )
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.pars.birth_rate = self.standardize_birth_data()
+        self.n_births = 0 # For results tracking
         return
 
     def initialize(self, sim):
@@ -65,23 +69,25 @@ class Births(Demographics):
         birth_rate = ss.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
         return birth_rate
 
-    def init_results(self, sim):
+    def init_results(self):
+        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'new', sim.npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cumulative', sim.npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cbr', sim.npts, dtype=int, scale=False),
+            ss.Result(self.name, 'new', npts, dtype=int, scale=True),
+            ss.Result(self.name, 'cumulative', npts, dtype=int, scale=True),
+            ss.Result(self.name, 'cbr', npts, dtype=int, scale=False),
         ]
         return
 
-    def update(self, sim):
-        new_uids = self.add_births(sim)
-        self.update_results(len(new_uids), sim)
+    def update(self):
+        new_uids = self.add_births()
+        self.n_births = len(new_uids)
         return new_uids
 
-    def get_births(self, sim):
+    def get_births(self):
         """
         Extract the right birth rates to use and translate it into a number of people to add.
         """
+        sim = self.sim
         p = self.pars
         if sc.isnumber(p.birth_rate):
             this_birth_rate = p.birth_rate
@@ -93,26 +99,28 @@ class Births(Demographics):
         n_new = int(np.floor(sim.people.alive.count() * scaled_birth_prob))
         return n_new
 
-    def add_births(self, sim):
-        # Add n_new births to each state in the sim
-        n_new = self.get_births(sim)
-        new_uids = sim.people.grow(n_new)
-        sim.people.age[new_uids] = 0
+    def add_births(self):
+        """ Add n_new births to each state in the sim """
+        people = self.sim.people
+        n_new = self.get_births()
+        new_uids = people.grow(n_new)
+        people.age[new_uids] = 0
         return new_uids
 
-    def update_results(self, n_new, sim):
-        self.results['new'][sim.ti] = n_new
+    def update_results(self):
+        self.results['new'][self.sim.ti] = self.n_births
         return
 
-    def finalize(self, sim):
-        super().finalize(sim)
-        self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['cbr'] = 1/self.pars.units*np.divide(self.results['new'] / sim.dt, sim.results['n_alive'], where=sim.results['n_alive']>0)
+    def finalize(self):
+        super().finalize()
+        res = self.sim.results
+        self.results.cumulative = np.cumsum(self.results.new)
+        self.results.cbr = 1/self.pars.units*np.divide(self.results.new/self.sim.dt, res.n_alive, where=res.n_alive>0)
         return
 
 
 class Deaths(Demographics):
-    def __init__(self, pars=None, par_dists=None, metadata=None, **kwargs):
+    def __init__(self, pars=None, metadata=None, **kwargs):
         """
         Configure disease-independent "background" deaths.
 
@@ -136,58 +144,61 @@ class Deaths(Demographics):
                 death_rate: float, dict, or pandas dataframe/series containing mortality data
                 units: units for death rates (see in-line comment on par dict below)
 
-            par_dists: dict
-
             metadata: data about the data contained within the data input.
                 "data_cols" is is a dictionary mapping standard keys, like "year" to the
                 corresponding column name in data. Similar for "sex_keys". Finally,
         """
-        super().__init__(pars, **kwargs)
-
-        self.pars = ss.dictmergeleft(self.pars,
+        super().__init__()
+        self.default_pars(
             rel_death = 1,
             death_rate = 20,  # Default = a fixed rate of 2%/year, overwritten if data provided
             units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
-
-        self.par_dists = ss.dictmergeleft(par_dists,
-            death_rate = ss.bernoulli
-        )
+        self.update_pars(pars, **kwargs)
 
         # Process metadata. Defaults here are the labels used by UN data
-        self.metadata = ss.dictmergeleft(metadata,
-            data_cols = dict(year='Time', sex='Sex', age='AgeGrpStart', value='mx'),
-            sex_keys = dict(f='Female', m='Male'),
+        self.metadata = sc.mergedicts(
+            sc.objdict(
+                data_cols = dict(year='Time', sex='Sex', age='AgeGrpStart', value='mx'),
+                sex_keys = dict(f='Female', m='Male'),
+            ),
+            metadata
         )
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
-        self.death_rate_data = self.standardize_death_data()
-        self.pars.death_rate = self.make_death_prob_fn
-
+        self.death_rate_data = self.standardize_death_data() # TODO: refactor
+        self.pars.death_rate = ss.bernoulli(p=self.make_death_prob_fn)
+        self.n_deaths = 0 # For results tracking
         return
+    
+    def standardize_death_data(self):
+        """ Standardize/validate death rates - handled in an external file due to shared functionality """
+        death_rate = ss.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
+        return death_rate
 
-    @staticmethod
-    def make_death_prob_fn(module, sim, uids):
+    @staticmethod # Needs to be static since called externally, although it sure looks like a class method!
+    def make_death_prob_fn(self, sim, uids):
         """ Take in the module, sim, and uids, and return the probability of death for each UID on this timestep """
 
-        if sc.isnumber(module.death_rate_data):
-            death_rate = module.death_rate_data
+        drd = self.death_rate_data
+        if sc.isnumber(drd) or isinstance(drd, ss.Dist):
+            death_rate = drd
 
         else:
             ppl = sim.people
-            data_cols = sc.objdict(module.metadata.data_cols)
+            data_cols = sc.objdict(self.metadata.data_cols)
             year_label = data_cols.year
             age_label  = data_cols.age
             sex_label  = data_cols.sex
             val_label  = data_cols.value
-            sex_keys = module.metadata.sex_keys
+            sex_keys = self.metadata.sex_keys
 
-            available_years = module.death_rate_data[year_label].unique()
+            available_years = self.death_rate_data[year_label].unique()
             year_ind = sc.findnearest(available_years, sim.year)
             nearest_year = available_years[year_ind]
 
-            df = module.death_rate_data.loc[module.death_rate_data[year_label] == nearest_year]
+            df = self.death_rate_data.loc[self.death_rate_data[year_label] == nearest_year]
             age_bins = df[age_label].unique()
 
             f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
@@ -207,51 +218,57 @@ class Deaths(Demographics):
             death_rate = death_rate_df.values
 
         # Scale from rate to probability. Consider an exponential here.
-        death_prob = death_rate * (module.pars.units * module.pars.rel_death * sim.pars.dt)
+        death_prob = death_rate * (self.pars.units * self.pars.rel_death * sim.pars.dt)
         death_prob = np.clip(death_prob, a_min=0, a_max=1)
 
         return death_prob
 
-    def standardize_death_data(self):
-        """ Standardize/validate death rates - handled in an external file due to shared functionality """
-        death_rate = ss.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
-        return death_rate
-
-    def init_results(self, sim):
+    def init_results(self):
+        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'new', sim.npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cumulative', sim.npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cmr', sim.npts, dtype=int, scale=False),
+            ss.Result(self.name, 'new', npts, dtype=int, scale=True),
+            ss.Result(self.name, 'cumulative', npts, dtype=int, scale=True),
+            ss.Result(self.name, 'cmr', npts, dtype=int, scale=False),
         ]
         return
 
-    def update(self, sim):
-        n_deaths = self.apply_deaths(sim)
-        self.update_results(n_deaths, sim)
+    def update(self):
+        self.n_deaths = self.apply_deaths()
         return
 
-    def apply_deaths(self, sim):
+    def apply_deaths(self):
         """ Select people to die """
         death_uids = self.pars.death_rate.filter()
-        sim.people.request_death(death_uids)
+        self.sim.people.request_death(death_uids)
         return len(death_uids)
 
-    def update_results(self, n_deaths, sim):
-        self.results['new'][sim.ti] = n_deaths
+    def update_results(self):
+        self.results['new'][self.sim.ti] = self.n_deaths
         return
 
-    def finalize(self, sim):
-        super().finalize(sim)
-        self.results['cumulative'] = np.cumsum(self.results['new'])
-        self.results['cmr'] = 1/self.pars.units*np.divide(self.results['new'] / sim.dt, sim.results['n_alive'], where=sim.results['n_alive']>0)
+    def finalize(self):
+        super().finalize()
+        n_alive = self.sim.results.n_alive
+        self.results.cumulative = np.cumsum(self.results.new)
+        self.results.cmr = 1/self.pars.units*np.divide(self.results.new / self.sim.dt, n_alive, where=n_alive>0)
         return
 
 
 class Pregnancy(Demographics):
-
-    def __init__(self, pars=None, par_dists=None, metadata=None, **kwargs):
-        super().__init__(pars, **kwargs)
-
+    """ Create births via pregnancies """
+    def __init__(self, pars=None, metadata=None, **kwargs):
+        super().__init__()
+        self.default_pars(
+            dur_pregnancy = 0.75,
+            dur_postpartum = 0.5,
+            fertility_rate = 0, # See make_fertility_prob_function
+            rel_fertility = 1,
+            maternal_death_prob = ss.bernoulli(0),
+            sex_ratio = ss.bernoulli(0.5), # Ratio of babies born female
+            units = 1e-3, # Assumes fertility rates are per 1000. If using percentages, switch this to 1
+        )
+        self.update_pars(pars, **kwargs)
+        
         # Other, e.g. postpartum, on contraception...
         self.add_states(
             ss.BoolArr('infertile'),  # Applies to girls and women outside the fertility window
@@ -264,55 +281,42 @@ class Pregnancy(Demographics):
             ss.FloatArr('ti_dead'),  # Maternal mortality
         )
 
-        self.pars = ss.dictmergeleft(self.pars,
-            dur_pregnancy = 0.75,
-            dur_postpartum = 0.5,
-            fertility_rate = 0,    # Usually this will be provided in CSV format
-            rel_fertility = 1,
-            maternal_death_rate = 0,
-            sex_ratio = 0.5,       # Ratio of babies born female
-            units = 1e-3,          # Assumes fertility rates are per 1000. If using percentages, switch this to 1
-        )
-
-        self.par_dists = ss.dictmergeleft(par_dists,
-            fertility_rate = ss.bernoulli,
-            maternal_death_rate = ss.bernoulli,
-            sex_ratio = ss.bernoulli
-        )
-
         # Process metadata. Defaults here are the labels used by UN data
-        self.metadata = ss.dictmergeleft(metadata,
-            data_cols = dict(year='Time', age='AgeGrp', value='ASFR'),
+        self.metadata = sc.mergedicts(
+            sc.objdict(data_cols=dict(year='Time', age='AgeGrp', value='ASFR')),
+            metadata,
         )
-
-        self.choose_slots = ss.randint() # Low and high will be reset upon initialization
+        self.choose_slots = None # Distribution for choosing slots; set in self.initialize()
 
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.fertility_rate_data = self.standardize_fertility_data()
-        self.pars.fertility_rate = self.make_fertility_prob_fn
+        self.pars.fertility_rate = ss.bernoulli(self.make_fertility_prob_fn)
 
+        # For results tracking
+        self.n_pregnancies = 0
+        self.n_births = 0
         return
 
     @staticmethod
-    def make_fertility_prob_fn(module, sim, uids):
+    def make_fertility_prob_fn(self, sim, uids):
         """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
 
-        if sc.isnumber(module.fertility_rate_data):
-            fertility_rate = module.fertility_rate_data
+        if sc.isnumber(self.fertility_rate_data):
+            fertility_rate = self.fertility_rate_data
 
         else:
             # Abbreviate key variables
-            data_cols = sc.objdict(module.metadata.data_cols)
+            data_cols = sc.objdict(self.metadata.data_cols)
             year_label = data_cols.year
             age_label  = data_cols.age
             val_label  = data_cols.value
 
-            available_years = module.fertility_rate_data[year_label].unique()
-            year_ind = sc.findnearest(available_years, sim.year-module.pars.dur_pregnancy)
+            available_years = self.fertility_rate_data[year_label].unique()
+            year_ind = sc.findnearest(available_years, sim.year-self.pars.dur_pregnancy)
             nearest_year = available_years[year_ind]
 
-            df = module.fertility_rate_data.loc[module.fertility_rate_data[year_label] == nearest_year]
+            df = self.fertility_rate_data.loc[self.fertility_rate_data[year_label] == nearest_year]
             df_arr = df[val_label].values  # Pull out dataframe values
             df_arr = np.append(df_arr, 0)  # Add zeros for those outside data range
 
@@ -324,7 +328,7 @@ class Pregnancy(Demographics):
 
             # Adjust rates: rates are based on the entire population, but we need to remove
             # anyone already pregnant and then inflate the rates for the remainder
-            pregnant_uids = module.pregnant.uids # Find agents who are already pregnant
+            pregnant_uids = self.pregnant.uids # Find agents who are already pregnant
             pregnant_age_counts, _ = np.histogram(sim.people.age[pregnant_uids], age_bins)  # Count them by age
             age_counts, _ = np.histogram(sim.people.age[uids], age_bins)  # Count overall number per age bin
             new_denom = age_counts - pregnant_age_counts  # New denominator for rates
@@ -339,7 +343,7 @@ class Pregnancy(Demographics):
             fertility_rate[pregnant_uids] = 0
 
         # Scale from rate to probability. Consider an exponential here.
-        fertility_prob = fertility_rate * (module.pars.units * module.pars.rel_fertility * sim.pars.dt)
+        fertility_prob = fertility_rate * (self.pars.units * self.pars.rel_fertility * sim.pars.dt)
         fertility_prob = np.clip(fertility_prob, a_min=0, a_max=1)
 
         return fertility_prob
@@ -353,94 +357,91 @@ class Pregnancy(Demographics):
         super().initialize(sim)
         low = sim.pars.n_agents + 1
         high = int(sim.pars.slot_scale*sim.pars.n_agents)
-        self.choose_slots.set(low=low, high=high)
+        self.choose_slots = ss.randint(low=low, high=high, sim=sim, module=self)
         return
 
-    def init_results(self, sim):
+    def init_results(self):
         """
         Results could include a range of birth outcomes e.g. LGA, stillbirths, etc.
         Still unclear whether this logic should live in the pregnancy module, the
         individual disease modules, the connectors, or the sim.
         """
+        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'pregnancies', sim.npts, dtype=int, scale=True),
-            ss.Result(self.name, 'births', sim.npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cbr', sim.npts, dtype=int, scale=False),
+            ss.Result(self.name, 'pregnancies', npts, dtype=int, scale=True),
+            ss.Result(self.name, 'births', npts, dtype=int, scale=True),
+            ss.Result(self.name, 'cbr', npts, dtype=int, scale=False),
         ]
         return
 
-    def update(self, sim):
-        """
-        Perform all updates
-        """
-        self.update_states(sim)
-        conceive_uids = self.make_pregnancies(sim)
-        self.make_embryos(sim, conceive_uids)
-        self.update_results(sim)
+    def update(self):
+        """ Perform all updates """
+        self.update_states()
+        conceive_uids = self.make_pregnancies()
+        self.n_pregnancies = len(conceive_uids)
+        self.make_embryos(conceive_uids)
         return
 
-    def update_states(self, sim):
-        """
-        Update states
-        """
-
+    def update_states(self):
+        """ Update states """
         # Check for new deliveries
-        deliveries = self.pregnant & (self.ti_delivery <= sim.ti)
+        ti = self.sim.ti
+        deliveries = self.pregnant & (self.ti_delivery <= ti)
+        self.n_births = np.count_nonzero(deliveries)
         self.pregnant[deliveries] = False
         self.postpartum[deliveries] = True
         self.fecund[deliveries] = False
 
         # Check for new women emerging from post-partum
-        postpartum = ~self.pregnant & (self.ti_postpartum <= sim.ti)
+        postpartum = ~self.pregnant & (self.ti_postpartum <= ti)
         self.postpartum[postpartum] = False
         self.fecund[postpartum] = True
 
         # Maternal deaths
-        maternal_deaths = (self.ti_dead <= sim.ti).uids
-        sim.people.request_death(maternal_deaths)
-
+        maternal_deaths = (self.ti_dead <= ti).uids
+        self.sim.people.request_death(maternal_deaths)
         return
 
-    def make_pregnancies(self, sim):
-        """
-        Select people to make pregnant using incidence data
-        """
+    def make_pregnancies(self):
+        """ Select people to make pregnant using incidence data """
         # People eligible to become pregnant. We don't remove pregnant people here, these
         # are instead handled in the fertility_dist logic as the rates need to be adjusted
-        eligible_uids = sim.people.female.uids
+        eligible_uids = self.sim.people.female.uids
         conceive_uids = self.pars.fertility_rate.filter(eligible_uids)
 
         # Set prognoses for the pregnancies
         if len(conceive_uids) > 0:
-            self.set_prognoses(sim, conceive_uids)
-
+            self.set_prognoses(conceive_uids)
         return conceive_uids
 
-    def make_embryos(self, sim, conceive_uids):
+    def make_embryos(self, conceive_uids):
         """ Add properties for the just-conceived """
-        n_unborn_agents = len(conceive_uids)
-        if n_unborn_agents > 0:
+        people = self.sim.people
+        n_unborn = len(conceive_uids)
+        if n_unborn == 0:
+            new_uids = ss.uids()
+        else:
 
             # Choose slots for the unborn agents
             new_slots = self.choose_slots.rvs(conceive_uids)
 
             # Grow the arrays and set properties for the unborn agents
-            new_uids = sim.people.grow(len(new_slots), new_slots)
-            sim.people.age[new_uids] = -self.pars.dur_pregnancy
-            sim.people.slot[new_uids] = new_slots  # Before sampling female_dist
-            sim.people.female[new_uids] = self.pars.sex_ratio.rvs(new_uids)
+            new_uids = people.grow(len(new_slots), new_slots)
+            people.age[new_uids] = -self.pars.dur_pregnancy
+            people.slot[new_uids] = new_slots  # Before sampling female_dist
+            people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
 
             # Add connections to any vertical transmission layers
             # Placeholder code to be moved / refactored. The maternal network may need to be
             # handled separately to the sexual networks, TBC how to handle this most elegantly
-            for lkey, layer in sim.networks.items():
+            for lkey, layer in self.sim.networks.items():
                 if layer.vertical:  # What happens if there's more than one vertical layer?
-                    durs = np.full(n_unborn_agents, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
+                    durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
                     layer.add_pairs(conceive_uids, new_uids, dur=durs)
 
-        return
+        return new_uids
 
-    def set_prognoses(self, sim, uids):
+    def set_prognoses(self, uids):
         """
         Make pregnancies
         Add miscarriage/termination logic here
@@ -449,27 +450,31 @@ class Pregnancy(Demographics):
         """
 
         # Change states for the newly pregnant woman
+        ti = self.sim.ti
+        dt = self.sim.dt
         self.fecund[uids] = False
         self.pregnant[uids] = True
-        self.ti_pregnant[uids] = sim.ti
+        self.ti_pregnant[uids] = ti
 
         # Outcomes for pregnancies
-        dur_preg = np.full(len(uids), self.pars.dur_pregnancy / sim.dt)
-        dur_postpartum = np.full(len(uids), self.pars.dur_postpartum / sim.dt)
-        dead = self.pars.maternal_death_rate.rvs(uids)
-        self.ti_delivery[uids] = sim.ti + dur_preg # Currently assumes maternal deaths still result in a live baby
-        self.ti_postpartum[uids] = sim.ti + dur_preg + dur_postpartum
+        dur_preg = np.full(len(uids), self.pars.dur_pregnancy / dt)
+        dur_postpartum = np.full(len(uids), self.pars.dur_postpartum / dt)
+        dead = self.pars.maternal_death_prob.rvs(uids)
+        self.ti_delivery[uids] = ti + dur_preg # Currently assumes maternal deaths still result in a live baby
+        self.ti_postpartum[uids] = ti + dur_preg + dur_postpartum
 
         if np.any(dead): # NB: 100x faster than np.sum(), 10x faster than np.count_nonzero()
-            self.ti_dead[uids[dead]] = sim.ti + dur_preg[dead]
+            self.ti_dead[uids[dead]] = ti + dur_preg[dead]
         return
 
-    def update_results(self, sim):
-        self.results['pregnancies'][sim.ti] = np.count_nonzero(self.ti_pregnant == sim.ti)
-        self.results['births'][sim.ti] = np.count_nonzero(self.ti_delivery == sim.ti)
+    def update_results(self):
+        ti = self.sim.ti
+        self.results['pregnancies'][ti] = self.n_pregnancies
+        self.results['births'][ti] = self.n_births
         return
 
-    def finalize(self, sim):
-        super().finalize(sim)
-        self.results['cbr'] = 1/self.pars.units * np.divide(self.results['births'] / sim.dt, sim.results['n_alive'], where=sim.results['n_alive']>0)
+    def finalize(self):
+        super().finalize()
+        n_alive = self.sim.results.n_alive
+        self.results['cbr'] = 1/self.pars.units * np.divide(self.results['births'] / self.sim.dt, n_alive, where=n_alive>0)
         return

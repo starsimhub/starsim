@@ -17,22 +17,15 @@ class SIR(ss.Infection):
     infected/infectious, and recovered. It also includes deaths, and basic
     results.
     """
-
-    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
-        pars = ss.dictmergeleft(pars,
-            dur_inf = 6,
-            init_prev = 0.01,
-            p_death = 0.01,
+    def __init__(self, pars=None, **kwargs):
+        super().__init__()
+        self.default_pars(
             beta = 0.5,
+            init_prev = ss.bernoulli(p=0.01),
+            dur_inf = ss.lognorm_ex(mean=6),
+            p_death = ss.bernoulli(p=0.01),
         )
-
-        par_dists = ss.dictmergeleft(par_dists,
-            dur_inf   = ss.lognorm_ex,
-            init_prev = ss.bernoulli,
-            p_death   = ss.bernoulli,
-        )
-
-        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
+        self.update_pars(pars, **kwargs)
 
         self.add_states(
             ss.BoolArr('recovered'),
@@ -41,8 +34,9 @@ class SIR(ss.Infection):
         )
         return
 
-    def update_pre(self, sim):
+    def update_pre(self):
         # Progress infectious -> recovered
+        sim = self.sim
         recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
         self.infected[recovered] = False
         self.recovered[recovered] = True
@@ -53,11 +47,13 @@ class SIR(ss.Infection):
             sim.people.request_death(deaths)
         return
 
-    def set_prognoses(self, sim, uids, source_uids=None):
+    def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses """
+        ti = self.sim.ti
+        dt = self.sim.dt
         self.susceptible[uids] = False
         self.infected[uids] = True
-        self.ti_infected[uids] = sim.ti
+        self.ti_infected[uids] = ti
 
         p = self.pars
 
@@ -69,12 +65,12 @@ class SIR(ss.Infection):
         will_die = p.p_death.rvs(uids)
         dead_uids = uids[will_die]
         rec_uids = uids[~will_die]
-        self.ti_dead[dead_uids] = sim.ti + dur_inf[will_die] / sim.dt # Consider rand round, but not CRN safe
-        self.ti_recovered[rec_uids] = sim.ti + dur_inf[~will_die] / sim.dt
+        self.ti_dead[dead_uids] = ti + dur_inf[will_die] / dt # Consider rand round, but not CRN safe
+        self.ti_recovered[rec_uids] = ti + dur_inf[~will_die] / dt
 
         return
 
-    def update_death(self, sim, uids):
+    def update_death(self, uids):
         """ Reset infected/recovered flags for dead agents """
         self.susceptible[uids] = False
         self.infected[uids] = False
@@ -98,67 +94,62 @@ class SIS(ss.Infection):
     infected/infectious, and back to susceptible based on waning immunity. There
     is no death in this case.
     """
-    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
-        pars = ss.dictmergeleft(pars,
-            dur_inf = 10,
-            init_prev = 0.01,
+    def __init__(self, pars=None, *args, **kwargs):
+        super().__init__()
+        self.default_pars(
             beta = 0.05,
+            init_prev = ss.bernoulli(p=0.01),
+            dur_inf = ss.lognorm_ex(mean=10),
             waning = 0.05,
             imm_boost = 1.0,
         )
+        self.update_pars(pars=pars, *args, **kwargs)
 
-        par_dists = ss.dictmergeleft(par_dists,
-            dur_inf   = ss.lognorm_ex,
-            init_prev = ss.bernoulli,
-        )
-        
         self.add_states(
             ss.FloatArr('ti_recovered'),
             ss.FloatArr('immunity', default=0.0),
         )
-
-        super().__init__(pars=pars, par_dists=par_dists, *args, **kwargs)
         return
 
-    def update_pre(self, sim):
+    def update_pre(self):
         """ Progress infectious -> recovered """
-        recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
+        recovered = (self.infected & (self.ti_recovered <= self.sim.ti)).uids
         self.infected[recovered] = False
         self.susceptible[recovered] = True
-        self.update_immunity(sim)
+        self.update_immunity()
         return
     
-    def update_immunity(self, sim):
+    def update_immunity(self):
         has_imm = (self.immunity > 0).uids
-        self.immunity[has_imm] = (self.immunity[has_imm])*(1 - self.pars.waning*sim.dt)
+        self.immunity[has_imm] = (self.immunity[has_imm])*(1 - self.pars.waning*self.sim.dt)
         self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])
         return
 
-    def set_prognoses(self, sim, uids, source_uids=None):
+    def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses """
         self.susceptible[uids] = False
         self.infected[uids] = True
-        self.ti_infected[uids] = sim.ti
+        self.ti_infected[uids] = self.sim.ti
         self.immunity[uids] += self.pars.imm_boost
 
         # Sample duration of infection
         dur_inf = self.pars.dur_inf.rvs(uids)
 
         # Determine when people recover
-        self.ti_recovered[uids] = sim.ti + dur_inf / sim.dt
+        self.ti_recovered[uids] = self.sim.ti + dur_inf / self.sim.dt
 
         return
     
-    def init_results(self, sim):
+    def init_results(self):
         """ Initialize results """
-        super().init_results(sim)
-        self.results += ss.Result(self.name, 'rel_sus', sim.npts, dtype=float)
+        super().init_results()
+        self.results += ss.Result(self.name, 'rel_sus', self.sim.npts, dtype=float)
         return
 
-    def update_results(self, sim):
+    def update_results(self):
         """ Store the population immunity (susceptibility) """
-        super().update_results(sim)
-        self.results['rel_sus'][sim.ti] = self.rel_sus.mean()
+        super().update_results()
+        self.results['rel_sus'][self.sim.ti] = self.rel_sus.mean()
         return 
 
     def plot(self):
@@ -178,13 +169,10 @@ class sir_vaccine(ss.Vx):
     """
     Create a vaccine product that changes susceptible people to recovered (i.e., perfect immunity)
     """
-    def __init__(self, pars=None, par_dists=None, *args, **kwargs):
-        pars = ss.dictmerge({
-            'efficacy': 0.9,
-        }, pars)
-
-        super().__init__(pars=pars, *args, **kwargs)
-
+    def __init__(self, pars=None, *args, **kwargs):
+        super().__init__()
+        self.default_pars(efficacy=0.9)
+        self.update_pars(pars, **kwargs)
         return
 
     def administer(self, people, uids):

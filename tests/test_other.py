@@ -10,13 +10,16 @@ import matplotlib.pyplot as pl
 
 sc.options(interactive=False) # Assume not running interactively
 
+small = 100
+medium = 1000
+
 # %% Define the tests
 
 def test_people():
     sc.heading('Testing people object')
 
     # Base people contains only the states defined in base.base_states
-    ppl = ss.People(100)  # BasePeople
+    ppl = ss.People(small)  # BasePeople
     del ppl
 
     # Possible to initialize people with extra states, e.g. a geolocation
@@ -26,7 +29,7 @@ def test_people():
     extra_states = [
         ss.FloatArr('geolocation', default=geo_func),
     ]
-    ppl = ss.People(100, extra_states=extra_states)
+    ppl = ss.People(small, extra_states=extra_states)
 
     # Possible to add a module to people outside a sim (not typical workflow)
     ppl.add_module(ss.HIV())
@@ -39,21 +42,20 @@ def test_networks():
 
     # Make completely abstract layers
     n_edges = 10_000
-    n_people = 1000
+    n_people = medium
     p1 = np.random.randint(n_people, size=n_edges)
     p2 = np.random.randint(n_people, size=n_edges)
     beta = np.ones(n_edges)
     nw1 = ss.Network(p1=p1, p2=p2, beta=beta, label='rand')
-    nw2 = ss.Network(dict(p1=p1, p2=p2, beta=beta), label='rand')  # Alternate method
 
     sim = ss.Sim()
     sim.initialize()
     
-    nw3 = ss.MaternalNet()
-    nw3.initialize(sim)
-    nw3.add_pairs(mother_inds=[1, 2, 3], unborn_inds=[100, 101, 102], dur=[1, 1, 1])
+    nw2 = ss.MaternalNet()
+    nw2.initialize(sim)
+    nw2.add_pairs(mother_inds=[1, 2, 3], unborn_inds=[100, 101, 102], dur=[1, 1, 1])
 
-    return nw1, nw2, nw3
+    return nw1, nw2
 
 
 def test_microsim(do_plot=False):
@@ -67,7 +69,7 @@ def test_microsim(do_plot=False):
     hiv.pars['beta'] = {'mf': [0.15, 0.10], 'maternal': [0.2, 0]}
 
     sim = ss.Sim(
-        people=ss.People(100),
+        people=ss.People(small),
         networks=[ss.MFNet(), ss.MaternalNet()],
         demographics=ss.Pregnancy(),
         diseases=hiv
@@ -95,8 +97,8 @@ def test_ppl_construction():
     mf_pars = {
         'debut': ss.normal(loc=init_debut, scale=2),  # Age of debut can vary by using callable parameter values
     }
-    sim_pars = {'networks': [ss.MFNet(mf_pars)], 'n_agents': 100}
-    gon_pars = {'beta': {'mf': [0.08, 0.04]}, 'p_death': 0.2}
+    sim_pars = {'networks': [ss.MFNet(mf_pars)], 'n_agents': small}
+    gon_pars = {'beta': {'mf': [0.08, 0.04]}}
     gon = ss.Gonorrhea(pars=gon_pars)
 
     sim = ss.Sim(pars=sim_pars, diseases=[gon])
@@ -114,7 +116,7 @@ def test_arrs():
     o = sc.objdict()
     
     # Create a sim with only births
-    pars = dict(n_agents=1000, diseases='sis', networks='random')
+    pars = dict(n_agents=medium, diseases='sis', networks='random')
     p1 = sc.mergedicts(pars, birth_rate=10)
     p2 = sc.mergedicts(pars, death_rate=10)
     s1 = ss.Sim(pars=p1).run()
@@ -135,6 +137,41 @@ def test_arrs():
     return o
 
 
+def test_deepcopy():
+    s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=small)
+    s1.initialize()
+    
+    s2 = sc.dcp(s1)
+
+    s1.run()
+    s2.run()
+    s1.plot()
+    s2.plot()
+    
+    ss.diff_sims(s1, s2, full=True)
+    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
+
+    return s1, s2
+
+
+def test_deepcopy_until():
+    s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=small)
+    s1.initialize()
+
+    s1.run(until=5)
+
+    s2 = sc.dcp(s1)
+
+    s1.run()
+    s2.run()
+    s1.plot()
+    s2.plot()
+
+    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
+
+    return s1, s2
+
+
 
 # %% Run as a script
 if __name__ == '__main__':
@@ -146,10 +183,12 @@ if __name__ == '__main__':
 
     # Run tests
     ppl = test_people()
-    nw1, nw2, nw3 = test_networks()
+    nw1, nw2 = test_networks()
     sim1 = test_microsim(do_plot)
     sim2 = test_ppl_construction()
     sims = test_arrs()
+    sims2 = test_deepcopy()
+    sims3 = test_deepcopy_until()
 
     sc.toc(T)
     pl.show()

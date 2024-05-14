@@ -30,7 +30,7 @@ def make_people():
     return ppl
 
 
-def make_sim(ppl=None, do_plot=False, **kwargs):
+def make_sim(ppl=None, do_run=False, **kwargs):
     '''
     Define a default simulation for testing the baseline, including
     interventions to increase coverage. If run directly (not via pytest), also
@@ -45,9 +45,9 @@ def make_sim(ppl=None, do_plot=False, **kwargs):
     hiv.pars.beta = {'mf': [0.15, 0.10], 'maternal': [0.2, 0]}
     networks = [ss.MFNet(), ss.MaternalNet()]
     sim = ss.Sim(pars=pars, people=ppl, networks=networks, demographics=ss.Pregnancy(), diseases=hiv)
-
-    # Optionally plot
-    if do_plot:
+    
+    # Optionally run and plot
+    if do_run:
         sim.run()
         sim.plot()
 
@@ -209,7 +209,7 @@ if __name__ == '__main__':
 
     json = test_benchmark(do_save=do_save, repeats=5) # Run this first so benchmarking is available even if results are different
     new  = test_baseline()
-    sim = make_sim(do_plot=do_plot)
+    sim = make_sim(do_run=do_plot)
 
     print('\n'*2)
     sc.toc(T)
