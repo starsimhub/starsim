@@ -770,6 +770,10 @@ class bernoulli(Dist):
         else:
             return uids[bools]
 
+    def split(self, uids=None):
+        """ Alias to filter(uids, both=True) """
+        return self.filter(uids=uids, both=True)
+
 
 class choice(Dist):
     """
