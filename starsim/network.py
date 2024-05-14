@@ -100,9 +100,9 @@ class Network(ss.Module):
     def beta(self):
         return self.contacts['beta'] if 'beta' in self.contacts else None
 
-    def init_vals(self):
+    def init_vals(self, add_pairs=True):
         super().init_vals()
-        self.add_pairs()
+        if add_pairs: self.add_pairs()
         return
 
     def __len__(self):
