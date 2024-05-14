@@ -296,6 +296,20 @@ class BoolArr(Arr):
         """ Efficiently convert True values to UIDs """
         return self.auids[np.nonzero(self.values)[0]]
 
+    def true(self):
+        """ Alias to BoolArr.uids """
+        return self.uids
+
+    def false(self):
+        """ Reverse of true(); return UIDs of values that are false """
+        return self.auids[np.nonzero(~self.values)[0]]
+
+    def split(self):
+        """ Return UIDs of values that are true and false as separate arrays """
+        t_uids = self.true()
+        f_uids = self.false()
+        return t_uids, f_uids
+
     
 class IndexArr(Arr):
     """ A special class of IndexArr used for UIDs and RNG IDs """
