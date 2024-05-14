@@ -20,6 +20,12 @@ class Demographics(ss.Module):
         self.init_results()
         return
 
+    def init_results(self):
+        pass
+
+    def update_results(self):
+        pass
+
     def update(self):
         # Note that for demographic modules, any result updates should be
         # carried out inside this function
@@ -45,6 +51,7 @@ class Births(Demographics):
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.pars.birth_rate = self.standardize_birth_data()
+        self.n_births = 0 # For results tracking
         return
 
     def initialize(self, sim):
@@ -73,7 +80,7 @@ class Births(Demographics):
 
     def update(self):
         new_uids = self.add_births()
-        self.update_results(len(new_uids))
+        self.n_births = len(new_uids)
         return new_uids
 
     def get_births(self):
@@ -100,8 +107,8 @@ class Births(Demographics):
         people.age[new_uids] = 0
         return new_uids
 
-    def update_results(self, n_new):
-        self.results['new'][self.sim.ti] = n_new
+    def update_results(self):
+        self.results['new'][self.sim.ti] = self.n_births
         return
 
     def finalize(self):
@@ -162,6 +169,7 @@ class Deaths(Demographics):
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.death_rate_data = self.standardize_death_data() # TODO: refactor
         self.pars.death_rate = ss.bernoulli(p=self.make_death_prob_fn)
+        self.n_deaths = 0 # For results tracking
         return
     
     def standardize_death_data(self):
@@ -225,8 +233,7 @@ class Deaths(Demographics):
         return
 
     def update(self):
-        n_deaths = self.apply_deaths()
-        self.update_results(n_deaths)
+        self.n_deaths = self.apply_deaths()
         return
 
     def apply_deaths(self):
@@ -235,8 +242,8 @@ class Deaths(Demographics):
         self.sim.people.request_death(death_uids)
         return len(death_uids)
 
-    def update_results(self, n_deaths):
-        self.results['new'][self.sim.ti] = n_deaths
+    def update_results(self):
+        self.results['new'][self.sim.ti] = self.n_deaths
         return
 
     def finalize(self):
@@ -285,6 +292,10 @@ class Pregnancy(Demographics):
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.fertility_rate_data = self.standardize_fertility_data()
         self.pars.fertility_rate = ss.bernoulli(self.make_fertility_prob_fn)
+
+        # For results tracking
+        self.n_pregnancies = 0
+        self.n_births = 0
         return
 
     @staticmethod
@@ -367,8 +378,8 @@ class Pregnancy(Demographics):
         """ Perform all updates """
         self.update_states()
         conceive_uids = self.make_pregnancies()
+        self.n_pregnancies = len(conceive_uids)
         self.make_embryos(conceive_uids)
-        self.update_results()
         return
 
     def update_states(self):
@@ -376,6 +387,7 @@ class Pregnancy(Demographics):
         # Check for new deliveries
         ti = self.sim.ti
         deliveries = self.pregnant & (self.ti_delivery <= ti)
+        self.n_births = np.count_nonzero(deliveries)
         self.pregnant[deliveries] = False
         self.postpartum[deliveries] = True
         self.fecund[deliveries] = False
@@ -417,7 +429,7 @@ class Pregnancy(Demographics):
             new_uids = people.grow(len(new_slots), new_slots)
             people.age[new_uids] = -self.pars.dur_pregnancy
             people.slot[new_uids] = new_slots  # Before sampling female_dist
-            people.female[new_uids] = self.pars.sex_ratio.rvs(new_uids)
+            people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
 
             # Add connections to any vertical transmission layers
             # Placeholder code to be moved / refactored. The maternal network may need to be
@@ -457,8 +469,8 @@ class Pregnancy(Demographics):
 
     def update_results(self):
         ti = self.sim.ti
-        self.results['pregnancies'][ti] = np.count_nonzero(self.ti_pregnant == ti)
-        self.results['births'][ti] = np.count_nonzero(self.ti_delivery == ti)
+        self.results['pregnancies'][ti] = self.n_pregnancies
+        self.results['births'][ti] = self.n_births
         return
 
     def finalize(self):
