@@ -22,10 +22,10 @@ class Sim(sc.prettyobj):
         args = dict(label=label, people=people, demographics=demographics, diseases=diseases, networks=networks, 
                     interventions=interventions, analyzers=analyzers, connectors=connectors)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
-        self.pars.update(sc.mergedicts(args, pars, kwargs, _copy=copy_inputs))  # Update the parameters
+        self.pars.update(sc.mergedicts(pars, args, kwargs, _copy=copy_inputs))  # Update the parameters
         
         # Set attributes
-        self.label = label # Usually overwritten during initalization by the parameters
+        self.label = label # Usually overwritten during initialization by the parameters
         self.created = sc.now()  # The datetime the sim was created
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running # TODO: replace with finalized?
@@ -44,38 +44,106 @@ class Sim(sc.prettyobj):
         """ Allow dict-like access, e.g. sim['created'] = sc.now() """
         return setattr(self, key, value)
     
-    def initialize(self, reset=False, **kwargs):
+    def initialize(self, **kwargs):
         """ Perform all initializations for the sim; most heavy lifting is done by the parameters """
         # Validation and initialization
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
-        p = self.pars.initialize(sim=self, reset=reset, **kwargs) # Initialize the parameters, including people and modules
+        
+        # Validate parameters
+        self.pars.validate()
+
+        # Initialize time
+        self.init_time_attrs()
+        
+        # Initialize the people
+        self.init_people(**kwargs)  # Create all the people
+        
+        # # Initialize the modules within the parameters
+        # self.pars.validate_modules(self)
         
         # Move initialized modules to the sim
         keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
         for key in keys:
-            setattr(self, key, p.pop(key))
+            setattr(self, key, self.pars.pop(key))
             
         # Initialize all the modules with the sim
-        modmap = ss.module_map()
-        for modkey in modmap.keys():
-            modlist = self[modkey]
-            for mod in modlist.values():
-                mod.initialize(self)
+        for mod in self.modules:
+            mod.initialize(self)
                 
         # Initialize products # TODO: think about simplifying
         for mod in self.interventions:
             if hasattr(mod, 'product') and isinstance(mod.product, ss.Product):
                 mod.product.initialize(self)
         
-        # Initialize all distributions now that everything else is in place
-        self.dists.initialize(obj=self, base_seed=p.rand_seed, force=True)
+        # Initialize all distributions now that everything else is in place, then set states
+        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed, force=True)
+        
+        # Initialize the values in all of the states and networks
+        self.init_vals()
+        
+        # Initialize the results
+        self.init_results()
 
-        # Final steps
+        # It's initialized
         self.initialized = True
-        self.complete = False
-        self.results_ready = False
-
         return self
+    
+    def init_time_attrs(self):
+        """ Time indexing; derived values live in the sim rather than in the pars """
+        self.dt = self.pars.dt # Shortcut to dt since used a lot
+        self.yearvec = np.arange(start=self.pars.start, stop=self.pars.end + self.pars.dt, step=self.pars.dt) # The time points of the sim
+        self.results.yearvec = self.yearvec # Store the yearvec in the results for plotting
+        self.npts = len(self.yearvec) # The number of points in the sim
+        self.tivec = np.arange(self.npts) # The vector of time indices
+        self.ti = 0  # The time index, e.g. 0, 1, 2
+        return
+
+    def init_people(self, verbose=None, **kwargs):
+        """
+        Initialize people within the sim
+        Sometimes the people are provided, in which case this just adds a few sim properties to them.
+        Other time people are not provided and this method makes them.
+        
+        Args:
+            verbose (int):  detail to print
+            kwargs  (dict): passed to ss.make_people()
+        """
+        # Handle inputs
+        people = self.pars.pop('people')
+        n_agents = self.pars.n_agents
+        verbose = sc.ifelse(verbose, self.pars.verbose)
+        if verbose > 0:
+            labelstr = f' "{self.label}"' if self.label else ''
+            print(f'Initializing sim{labelstr} with {n_agents:0n} agents')
+
+        # If people have not been supplied, make them -- typical use case
+        if people is None:
+            people = ss.People(n_agents=n_agents, **kwargs)  # This just assigns UIDs and length
+
+        # Finish up (NB: the People object is not yet initialized)
+        self.people = people
+        self.people.link_sim(self)
+        return self.people
+    
+    def init_vals(self):
+        """ Initialize the states and other objects with values """
+        
+        # Initialize values in people
+        self.people.init_vals()
+        
+        # Initialize values in other modules, including networks
+        for mod in self.modules:
+            mod.init_vals()
+        return
+    
+    def init_results(self):
+        """ Create initial results that are present in all simulations """
+        self.results += [ # TODO: refactor with self.add_results()
+            ss.Result(None, 'n_alive',    self.npts, ss.dtypes.int, scale=True),
+            ss.Result(None, 'new_deaths', self.npts, ss.dtypes.int, scale=True),
+            ss.Result(None, 'cum_deaths', self.npts, ss.dtypes.int, scale=True),
+        ]
+        return
 
     @property
     def modules(self):
@@ -107,54 +175,54 @@ class Sim(sc.prettyobj):
         self.dists.jump(to=self.ti+1)  # +1 offset because ti=0 is used on initialization
 
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
-        for dem_mod in self.demographics.values():
-            dem_mod.update(self)
+        for dem_mod in self.demographics():
+            dem_mod.update()
 
         # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
         # to be applied to newly created agents
-        for disease in self.diseases.values():
-            disease.update_pre(self)
+        for disease in self.diseases():
+            disease.update_pre()
 
         # Update connectors -- TBC where this appears in the ordering
-        for connector in self.connectors.values():
-            connector.update(self)
+        for connector in self.connectors():
+            connector.update()
 
         # Update networks - this takes place here in case autonomous state changes at this timestep
-        for network in self.networks.values():
+        for network in self.networks():
         # affect eligibility for contacts
-            network.update(self)
+            network.update()
 
         # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
         # interventions, by running them at this point
-        for intervention in self.interventions.values():
+        for intervention in self.interventions():
             intervention(self)
 
         # Carry out transmission/new cases
-        for disease in self.diseases.values():
-            disease.make_new_cases(self)
+        for disease in self.diseases():
+            disease.make_new_cases()
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
         uids = self.people.resolve_deaths()
-        for disease in self.diseases.values():
-            disease.update_death(self, uids)
+        for disease in self.diseases():
+            disease.update_death(uids)
 
         # Update results
-        self.people.update_results(self)
+        self.people.update_results()
 
-        for disease in self.diseases.values():
-            disease.update_results(self)
+        for disease in self.diseases():
+            disease.update_results()
 
-        for analyzer in self.analyzers.values():
+        for analyzer in self.analyzers():
             analyzer(self)
             
         # Clean up dead agents
-        self.people.remove_dead(self)
+        self.people.remove_dead()
 
         # Tidy up
         self.ti += 1
         self.people.ti = self.ti
-        self.people.update_post(self)
+        self.people.update_post()
 
         if self.ti == self.npts:
             self.complete = True
@@ -225,7 +293,7 @@ class Sim(sc.prettyobj):
                 self.results[reskey] = self.results[reskey] * self.pars.pop_scale
 
         for module in self.modules:
-            module.finalize(self)
+            module.finalize()
 
         self.summarize()
         self.results_ready = True  # Set this first so self.summary() knows to print the results

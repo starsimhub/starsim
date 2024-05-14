@@ -51,6 +51,10 @@ class Module(sc.quickobj):
         self.finalized = False
         return
     
+    def __bool__(self):
+        """ Ensure that zero-length modules (e.g. networks) are still truthy """
+        return True
+    
     def set_metadata(self, name, label, requires):
         """ Set metadata for the module """
         self.name = sc.ifelse(name, getattr(self, 'name', self.__class__.__name__.lower())) # Default name is the class name
@@ -104,28 +108,23 @@ class Module(sc.quickobj):
         """
         Perform initialization steps
 
-        This method is called once, as part of initializing a Sim
+        This method is called once, as part of initializing a Sim. Note: after
+        initialization, initialized=False until init_vals() is called (which is after
+        distributions are initialized).
         """
         self.check_requires(sim)
-        
-        # Initialize distributions (warning: only operates at the top level!)
-        dists = ss.find_dists(self) # Important that this comes first, before the sim is linked to the dist!
-        for key,val in dists.items():
-            if isinstance(val, ss.Dist):
-                if val.initialized is not True: # Catches False and 'partial'
-                    val.initialize(module=self, sim=sim, force=True) # Actually a dist
-                else:
-                    raise RuntimeError(f'Trying to reinitialize {val}, this should not happen')
-
-        # Connect the states to the sim
-        for state in self.states:
-            state.initialize(sim)
-            
-        # Link the parameters, results, and module states
         self.sim = sim # Link back to the sim object
+        ss.link_dists(self, sim, skip=ss.Sim) # Link the distributions to sim and module
         sim.pars[self.name] = self.pars
         sim.results[self.name] = self.results
-        sim.people.add_module(self)
+        sim.people.add_module(self) # Connect the states to the people
+        return
+    
+    def init_vals(self):
+        """ Initialize the values of the states; the last step of initialization """
+        for state in self.states:
+            if not state.initialized:
+                state.init_vals()
         self.initialized = True
         return
     
@@ -137,19 +136,17 @@ class Module(sc.quickobj):
         else:
             return out
 
-    def finalize(self, sim):
-        self.finalize_results(sim)
+    def finalize(self):
+        self.finalize_results()
         self.finalized = True
         return
 
-    def finalize_results(self, sim):
-        """
-        Finalize results
-        """
+    def finalize_results(self):
+        """ Finalize results """
         # Scale results
         for reskey, res in self.results.items():
             if isinstance(res, ss.Result) and res.scale:
-                self.results[reskey] = self.results[reskey]*sim.pars.pop_scale
+                self.results[reskey] = self.results[reskey]*self.sim.pars.pop_scale
         return
     
     def add_states(self, *args, check=True):
@@ -185,10 +182,10 @@ class Module(sc.quickobj):
         due to supporting features like multiple genotypes) then the Module should
         overload this attribute to ensure that all states appear in here.
         """
-        return [x for x in self.__dict__.values() if isinstance(x, ss.Arr)]
+        return [x for x in self.__dict__.values() if isinstance(x, ss.Arr)] # TODO: use ndict
 
     @property
-    def statesdict(self):
+    def statesdict(self): # TODO: remove
         """
         Return a flat dictionary (objdict) of all states
 

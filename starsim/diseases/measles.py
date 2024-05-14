@@ -18,12 +18,12 @@ class Measles(SIR):
         self.default_pars(
             # Initial conditions and beta
             beta = 1.0, # Placeholder value
-            init_prev = ss.bernoulli(0.005),
+            init_prev = ss.bernoulli(p=0.005),
             
             # Natural history parameters, all specified in days
-            dur_exp = ss.normal(8),        # (days) - source: US CDC
-            dur_inf = ss.normal(11),       # (days) - source: US CDC
-            p_death = ss.bernoulli(0.005), # Probability of death
+            dur_exp = ss.normal(loc=8),        # (days) - source: US CDC
+            dur_inf = ss.normal(loc=11),       # (days) - source: US CDC
+            p_death = ss.bernoulli(p=0.005), # Probability of death
         )
         self.update_pars(pars=pars, **kwargs)
 
@@ -39,36 +39,39 @@ class Measles(SIR):
     def infectious(self):
         return self.infected | self.exposed
 
-    def update_pre(self, sim):
+    def update_pre(self):
         # Progress exposed -> infected
-        infected = (self.exposed & (self.ti_infected <= sim.ti)).uids
+        ti = self.sim.ti
+        infected = (self.exposed & (self.ti_infected <= ti)).uids
         self.exposed[infected] = False
         self.infected[infected] = True
 
         # Progress infected -> recovered
-        recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
+        recovered = (self.infected & (self.ti_recovered <= ti)).uids
         self.infected[recovered] = False
         self.recovered[recovered] = True
 
         # Trigger deaths
-        deaths = (self.ti_dead <= sim.ti).uids
+        deaths = (self.ti_dead <= ti).uids
         if len(deaths):
-            sim.people.request_death(sim, deaths)
+            self.sim.people.request_death(deaths)
         return
 
-    def set_prognoses(self, sim, uids, source_uids=None):
+    def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses for those who get infected """
         # Do not call set_prognosis on parent
         # super().set_prognoses(sim, uids, source_uids)
+        ti = self.sim.ti
+        dt = self.sim.dt
 
         self.susceptible[uids] = False
         self.exposed[uids] = True
-        self.ti_exposed[uids] = sim.ti
+        self.ti_exposed[uids] = ti
 
         p = self.pars
 
         # Determine when exposed become infected
-        self.ti_infected[uids] = sim.ti + p.dur_exp.rvs(uids) / sim.dt
+        self.ti_infected[uids] = ti + p.dur_exp.rvs(uids) / dt
 
         # Sample duration of infection, being careful to only sample from the
         # distribution once per timestep.
@@ -78,12 +81,12 @@ class Measles(SIR):
         will_die = p.p_death.rvs(uids)
         dead_uids = uids[will_die]
         rec_uids = uids[~will_die]
-        self.ti_dead[dead_uids] = self.ti_infected[dead_uids] + dur_inf[will_die] / sim.dt
-        self.ti_recovered[rec_uids] = self.ti_infected[rec_uids] + dur_inf[~will_die] / sim.dt
+        self.ti_dead[dead_uids] = self.ti_infected[dead_uids] + dur_inf[will_die] / dt
+        self.ti_recovered[rec_uids] = self.ti_infected[rec_uids] + dur_inf[~will_die] / dt
 
         return
 
-    def update_death(self, sim, uids):
+    def update_death(self, uids):
         # Reset infected/recovered flags for dead agents
         for state in ['susceptible', 'exposed', 'infected', 'recovered']:
             self.statesdict[state][uids] = False

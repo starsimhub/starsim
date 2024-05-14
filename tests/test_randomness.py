@@ -17,9 +17,10 @@ def make_dist(name='test', **kwargs):
 
 def make_dists(**kwargs):
     """ Make a Dists object with two distributions in it """
+    sim = ss.Sim(n_agents=100).initialize() # Need an empty sim to initialize properly
     distlist = [make_dist(), make_dist()]
     dists = ss.Dists(distlist)
-    dists.initialize()
+    dists.initialize(sim=sim)
     return dists
 
 
@@ -122,19 +123,21 @@ class CountInf(ss.Intervention):
 
 class OneMore(ss.Intervention):
     """ Add one additional agent and infection """
-    def apply(self, sim):
-        if sim.ti == 0:
-            # Create an extra agent
-            preg = ss.Pregnancy(rel_fertility=0) # Ensure no default births
-            preg.initialize(sim)
-            new_uids = ss.uids([len(sim.people)]) # Hack since make_embryos doesn't return UIDs
-            preg.make_embryos(sim, np.array([0])) # Assign 0th agent to be the "mother"
-            assert len(new_uids) == 1
+    def initialize(self, sim):
+        one_birth = ss.Pregnancy(name='one_birth', rel_fertility=0) # Ensure no default births
+        one_birth.initialize(sim)
+        self.one_birth = one_birth
+        return
+    
+    def apply(self, sim, ti=10):
+        """ Create an extra agent """
+        if sim.ti == ti:
+            new_uids = self.one_birth.make_embryos(ss.uids(0)) # Assign 0th agent to be the "mother"
             sim.people.age[new_uids] = -100 # Set to a very low number to never reach debut age
             
-            # Infect that agent
+            # Infect that agent and immediately recover
             sir = sim.diseases.sir
-            sir.set_prognoses(sim, new_uids)
+            sir.set_prognoses(new_uids)
             sir.ti_recovered[new_uids] = sim.ti + 1 # Reset recovery time to next timestep
             
             # Reset the random states
@@ -170,6 +173,8 @@ def plot_infs(s1, s2):
 
 
 def test_worlds(do_plot=False):
+    """ Test that one extra birth leads to one extra infection """
+    sc.heading('Testing worlds...')
     
     res = sc.objdict()
     
@@ -206,11 +211,79 @@ def test_worlds(do_plot=False):
         plot_infs(s1, s2)
         pl.show()
     
-    assert len(s2.people) == len(s1.people) + 1
-    assert sum2.sir_cum_infections == sum1.sir_cum_infections + 1
-    assert (s1.interventions.countinf.arr != s2.interventions.countinf.arr).sum() == 0
+    l1 = len(s1.people)
+    l2 = len(s2.people)
+    i1 = sum1.sir_cum_infections
+    i2 = sum2.sir_cum_infections
+    a1 = s1.interventions.countinf.arr
+    a2 = s2.interventions.countinf.arr
+    assert l2 == l1 + 1, f'Expected one more person in s2 ({l2}) than s1 ({l1})'
+    assert i2 == i1 + 1, f'Expected one more infection in s2 ({i2}) than s1 ({i1})'
+    assert (a1 != a2).sum() == 0, f'Expected infection arrays to match:\n{a1}\n{a2}'
         
     return res
+
+
+def test_independence(do_plot=False, thresh=0.1):
+    """ Test that when variables are created, they are uncorrelated """
+    sc.heading('Testing independence...')
+    
+    # Create the sim and initialize (do not run)
+    sim = ss.Sim(
+        n_agents = 1000,
+        diseases = [
+            dict(type='sir', init_prev=0.1),
+            dict(type='sis', init_prev=0.1),
+            dict(type='hiv', init_prev=0.1),
+        ],
+        networks = [
+            dict(type='random', n_contacts=ss.poisson(8)),
+            dict(type='mf', debut=ss.delta(0), participation=0.5), # To avoid age correlations
+        ]
+    )
+    sim.initialize()
+    
+    # Assemble measures
+    st = sim.people.states
+    arrs = sc.objdict()
+    arrs.age = st.age.values
+    arrs.sex = st.female.values
+    for key,disease in sim.diseases.items():
+        arrs[f'{key}_init'] = disease.infected.values
+    for key,network in sim.networks.items():
+        data = np.zeros(len(sim.people))
+        for p in ['p1', 'p2']:
+            for uid in network.contacts[p]:
+                data[uid] += 1 # Could also use a histogram
+        arrs[key] = data
+    
+    # Compute the correlations
+    n = len(arrs)
+    stats = np.zeros((n,n))
+    for i,arr1 in arrs.enumvals():
+        for j,arr2 in arrs.enumvals():
+            if i != j:
+                stats[i,j] = np.corrcoef(arr1, arr2)[0,1]
+                
+    # Optionally plot
+    if do_plot:
+        pl.figure()
+        pl.imshow(stats)
+        ticks = np.arange(n)
+        labels = arrs.keys()
+        pl.xticks(ticks, labels)
+        pl.yticks(ticks, labels)
+        pl.xticks(rotation=15)
+        pl.colorbar()
+        sc.figlayout()
+        pl.show()
+            
+    # Test that everything is independent
+    max_corr = abs(stats).max()
+    assert max_corr < thresh, f'The maximum correlation between variables was {max_corr}, above the threshold {thresh}'
+    
+    return sim
+    
 
 
 # %% Run as a script
@@ -223,5 +296,7 @@ if __name__ == '__main__':
     o3 = test_jump(n)
     o4 = test_order(n)
     o5 = test_worlds(do_plot=do_plot)
+    o6 = test_independence(do_plot=do_plot)
 
     T.toc()
+

@@ -8,7 +8,8 @@ import scipy.stats as sps
 import starsim as ss
 import matplotlib.pyplot as pl
 
-__all__ = ['find_dists', 'make_dist', 'dist_list', 'Dists', 'Dist']
+__all__ = ['find_dists', 'link_dists', 'make_dist', 'dist_list', 'Dists', 'Dist']
+
 
 def str2int(string, modulo=1_000_000):
     """
@@ -19,16 +20,31 @@ def str2int(string, modulo=1_000_000):
     """
     return int.from_bytes(string.encode(), byteorder='big') % modulo
 
-def find_dists(obj, verbose=False):
+
+def find_dists(obj, verbose=False, **kwargs):
     """ Find all Dist objects in a parent object """
     out = sc.objdict()
-    tree = sc.iterobj(obj, depthfirst=False, flatten=True)
+    tree = sc.iterobj(obj, depthfirst=False, flatten=True, **kwargs)
     if verbose: print(f'Found {len(tree)} objects')
     for trace,val in tree.items():
         if isinstance(val, Dist):
             out[trace] = val
             if verbose: print(f'  {trace} is a dist ({len(out)})')
     return out
+
+
+def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs):
+    """ Link distributions to the sim and the module; used in module.initialize() and people.initialize() """
+    if module is None and isinstance(obj, ss.Module):
+        module = obj
+    dists = ss.find_dists(obj, **kwargs) # Important that this comes first, before the sim is linked to the dist!
+    for key,val in dists.items():
+        if isinstance(val, ss.Dist):
+            val.link_sim(sim, overwrite=overwrite)
+            val.link_module(module, overwrite=overwrite)
+            if init: # Usually this is false since usually these are initialized centrally by the sim
+                val.initialize()
+    return
 
 
 def make_dist(pars=None, **kwargs):
@@ -48,7 +64,6 @@ def make_dist(pars=None, **kwargs):
 
 class Dists(sc.prettyobj):
     """ Class for managing a collection of Dist objects """
-
     def __init__(self, obj=None, *args, base_seed=None, sim=None):
         if len(args): obj = [obj] + list(args)
         self.obj = obj
@@ -116,7 +131,7 @@ class Dists(sc.prettyobj):
         return out
 
 
-class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
+class Dist:
     """
     Base class for tracking one random number generator associated with one distribution,
     i.e. one decision per timestep.
@@ -331,8 +346,8 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.make_history(reset=True)
         
         # Handle the sim, module, and slots
-        self.sim = sim if (sim is not None) else self.sim
-        self.module = module if (module is not None) else self.module
+        self.link_sim(sim)
+        self.link_module(module)
         if slots is None and self.sim is not None:
             try:
                 slots = self.sim.people.slot
@@ -346,11 +361,28 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         self.process_dist()
         self.process_pars(call=False)
         self.ready = True
-        if self.trace is None or self.sim is None or self.slots is None:
-            self.initialized = 'partial' # Initialized enough to produce random numbers, but not fully initialized
+        none_dict = dict(trace=self.trace, sim=self.sim, slots=self.slots)
+        none_dict = {k:v for k,v in none_dict.items() if v is None}
+        if len(none_dict):
+            self.initialized = 'partial'
+            if self.strict:
+                errormsg = f'Distribution {self} is not fully initialized, the following inputs are None:\n{none_dict.keys()}\nThis distribution may not produce valid random numbers.'
+                raise RuntimeError(errormsg)
         else:
             self.initialized = True
         return self
+    
+    def link_sim(self, sim=None, overwrite=False):
+        """ Shortcut for linking the sim, only overwriting an existing one if overwrite=True """
+        if (not self.sim or overwrite) and sim is not None:
+            self.sim = sim
+        return
+    
+    def link_module(self, module=None, overwrite=False):
+        """ Shortcut for linking the module """
+        if (not self.module or overwrite) and module is not None:
+            self.module = module
+        return
     
     def process_seed(self, trace=None, seed=None):
         """ Obtain the seed offset by hashing the path to this distribution; called automatically """
@@ -484,6 +516,7 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         
         Args:
             n (int/tuple/arr): if an int or tuple, return this many random variables; if an array, treat as UIDs
+            reset (bool): whether to automatically reset the random number distribution state after being called
         """
         # Check for readiness
         if not self.initialized:
@@ -497,13 +530,15 @@ class Dist: # TODO: figure out why subclassing sc.prettyobj breaks isinstance
         # Check if size is 0, then we can return
         if size == 0:
             return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
+        elif isinstance(size, ss.uids) and self.initialized == 'partial': # This point can be reached if and only if strict=False and UIDs are used as input
+            errormsg = f'Distribution {self} is only partially initialized; cannot generate random numbers to match UIDs'
+            raise ValueError(errormsg)
         
         # Store the state
         self.make_history() # Store the pre-call state
         
         # Check if any keywords are callable -- parameters shouldn't need to be reprocessed otherwise
-        if True: # self.dynamic_pars: # TODO: fix!!!!
-            self.process_pars()
+        self.process_pars()
         
         # Actually get the random numbers
         if self.dynamic_pars:

@@ -64,29 +64,34 @@ Parameter changes
 - Initialization has been moved from ``sim.py`` to ``parameters.py``; ``ss.Sim.convert_plugins()`` has been replaced by ``ss.SimPars.convert_modules()``.
 - The key method is ``ss.Pars.update()``, which performs all necessary validation on the parameters being updated.
 
+Initialization changes
+~~~~~~~~~~~~~~~~~~~~~~
+- Previously, the people were initialized first, then the states were initialized and the values populated, then the modules were initialized, and finally the distributions are initialized. This led to circular logic with the states being initialized based on uninitialized distributions. Now, states and modules are *linked* to the ``People`` and ``Sim`` objects, but further initialization is not done at this step. This ensures all distributions are created but not yet used. Next, distributions are initialized. Finally, the initial values are populated, and everything is initialized.
+- New methods supporting these changes include ``ss.link_dists()``, ``dist.link_sim()``, ``dist.link_module()``, ``sim.init_vals()``, ``people.init_vals()``, ``module.init_vals()``, 
+
 Module changes
 ~~~~~~~~~~~~~~
 - Whereas modules previously initialized a dict of parameters and then called ``super().__init__(pars, **kwargs)``, they now call ``super().__init__()`` first, then ``self.default_pars(par1=x, par2=y)``, then finally ``self.update_pars(pars, **kwargs)``.
 - What was previously e.g. ``ss.Module(pars=dict(par=x))`` is now ``ss.Module(par=x)``.
 - ``par_dists`` has been removed; instead, distributions are specified in the default parameters, and are updated via the ``Pars`` object.
+- Modules now contain a link back to the ``Sim`` object. This means that all methods that used to have ``sim`` as an argument now do not, e.g. ``self.update()`` instead of ``self.update(sim)``.
 - ``ss.module_map()`` maps different module types to their location in the sim.
 - ``ss.find_modules()`` finds all available modules (including subclasses) in Starsim.
 - Removed ``ss.dictmerge()`` and ``ss.dictmergeleft`` (now handled by ``ss.Pars.update()``).
 - Removed ``ss.get_subclasses()`` and ``ss.all_subclasses()`` (now handled by ``ss.find_modules()``).
 - Modules can no longer be initialized with a ``name`` key; it must be ``type`` (e.g. ``dict(type='sir')`` rather than ``dict(name='sir')``.
-- Modules now contain a link back to the ``Sim`` object.
 - Added ``to_json()`` and ``plot()`` methods to ``Module``.
 - Removed ``connectors.py``; connectors still exist but as an empty subclass of ``Module``.
 
 People and network changes
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
+- ``BasePeople`` has been removed and merged with ``People``.
 - Time parameters (``ti``, ``dt``, etc.) have been removed from ``People``. Use ``sim.ti``, ``sim.dt`` etc. instead. One consequence of this is that ``people.request_death()`` now requires a ``sim`` argument. Another is that network methods (e.g. ``add_pairs()``) now take ``sim`` arguments instead of ``people`` arguments.
 - ``SexualNetwork`` is now a subclass of ``DynamicNetwork``.
 - Removed ``ss.Networks`` (now just an ``ss.ndict``).
 - Network connectors have been removed.
 - ``Person`` has been implemented as a slice of ``sim.people[i]``.
-- The default maximum age if none is specified is 50 instead of 100.
-- Agents do not age if no demographics modules are supplied.
+- There is a new parameter ``use_aging``; this defaults to ``True`` if demographic modules are supplied, and ``False`` otherwise.
 
 Other changes
 ~~~~~~~~~~~~~
@@ -96,6 +101,7 @@ Other changes
 - Individual diseases can now be plotted via either e.g. ``sim.plot('hiv')`` or ``sim.diseases.hiv.plot()``.
 - Distributions can be created from dicts via ``ss.make_dist()``.
 - A new function ``ss.check_sims_match()`` will check if the results of two or more simulations match.
+- ``ndict`` values can be accessed through a call; e.g. ``sim.diseases()`` is equivalent to ``sim.diseases.values()``.
 - Merged ``test_dcp.py`` and ``test_base.py`` into ``test_other.py``.
 - Renamed ``test_simple.py`` to ``test_sim.py``.
 - Renamed ``test_dists.py`` to ``test_randomness.py``.

@@ -100,8 +100,9 @@ class Network(ss.Module):
     def beta(self):
         return self.contacts['beta'] if 'beta' in self.contacts else None
 
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_vals(self):
+        super().init_vals()
+        self.add_pairs()
         return
 
     def __len__(self):
@@ -286,7 +287,7 @@ class Network(ss.Module):
         """ Define how pairs of people are formed """
         pass
 
-    def update(self, sim):
+    def update(self):
         """ Define how pairs/connections evolve (in time) """
         pass
 
@@ -314,16 +315,15 @@ class DynamicNetwork(Network):
         super().__init__(key_dict=key_dict, **kwargs)
         return
 
-    def end_pairs(self, sim):
-        people = sim.people
-        dt = sim.dt
-        self.contacts.dur = self.contacts.dur - dt
+    def end_pairs(self):
+        people = self.sim.people
+        self.contacts.dur = self.contacts.dur - self.sim.dt
 
         # Non-alive agents are removed
         active = (self.contacts.dur > 0) & people.alive[self.contacts.p1] & people.alive[self.contacts.p2]
         for k in self.meta_keys():
             self.contacts[k] = self.contacts[k][active]
-        return
+        return len(active)
 
 
 class SexualNetwork(DynamicNetwork):
@@ -385,30 +385,34 @@ class StaticNet(Network):
 
     def __init__(self, graph=None, pars=None, **kwargs):
         super().__init__()
+        self.graph = graph
         self.default_pars(seed=True)
         self.update_pars(pars, **kwargs)
-        self.graph = graph
-        self.dist = ss.Dist(name='StaticNet').initialize()
+        self.dist = ss.Dist(name='StaticNet')
         return
 
     def initialize(self, sim):
-        n_agents = sim.pars.n_agents
+        super().initialize(sim)
+        self.n_agents = sim.pars.n_agents
         if self.graph is None:
             self.graph = nx.fast_gnp_random_graph # Fast random (Erdos-Renyi) graph creator
             if 'p' not in self.pars and 'n_contacts' not in self.pars: # TODO: refactor
                 self.pars.n_contacts = 10
         if 'n_contacts' in self.pars: # Convert from n_contacts to probability
-            self.pars.p = self.pars.pop('n_contacts')/n_agents
+            self.pars.p = self.pars.pop('n_contacts')/self.n_agents
+        return
+    
+    def init_vals(self):
+        super().init_vals()
         if 'seed' in self.pars and self.pars.seed is True:
             self.pars.seed = self.dist.rng
         if callable(self.graph):
             try:
-                self.graph = self.graph(n=n_agents, **self.pars)
+                self.graph = self.graph(n=self.n_agents, **self.pars)
             except TypeError as e:
                 print(f"{str(e)}: networkx {self.graph.name} not supported. Try using ss.NullNet().")
                 raise e
-        self.validate_pop(n_agents)
-        super().initialize(sim)
+        self.validate_pop(self.n_agents)
         self.get_contacts()
         return
 
@@ -449,9 +453,8 @@ class RandomNet(DynamicNetwork):
         self.dist = ss.Dist(distname='RandomNet') # Default RNG
         return
 
-    def initialize(self, sim):
-        super().initialize(sim)
-        self.add_pairs(sim)
+    def init_vals(self):
+        self.add_pairs()
         return
 
     @staticmethod
@@ -494,14 +497,14 @@ class RandomNet(DynamicNetwork):
         self.dist.jump() # Reset the RNG manually # TODO, think if there's a better way
         return source, target
 
-    def update(self, sim, dt=None):
-        self.end_pairs(sim)
-        self.add_pairs(sim)
+    def update(self):
+        self.end_pairs()
+        self.add_pairs()
         return
 
-    def add_pairs(self, sim):
+    def add_pairs(self):
         """ Generate contacts """
-        people = sim.people
+        people = self.sim.people
         if isinstance(self.pars.n_contacts, ss.Dist):
             number_of_contacts = self.pars.n_contacts.rvs(people.uid[people.alive])  # or people.uid?
         else:
@@ -568,47 +571,47 @@ class MFNet(SexualNetwork):
     def __init__(self, pars=None, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
         self.default_pars(
-            duration = ss.lognorm_ex(15),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
-            participation = ss.bernoulli(0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
-            debut = ss.normal(16),  # Age of debut can vary by using callable parameter values
-            acts = ss.poisson(80),
+            duration = ss.lognorm_ex(mean=15),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+            participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
+            debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
+            acts = ss.poisson(lam=80),
             rel_part_rates = 1.0,
         )
         self.update_pars(pars=pars, **kwargs)
 
         # Finish initialization
-        
         self.dist = ss.choice(name='MFNet', replace=False) # Set the array later
         return
 
-    def initialize(self, sim):
-        super().initialize(sim)
-        self.set_network_states(sim.people)
-        self.add_pairs(sim, ti=0)
+    def init_vals(self):
+        self.set_network_states()
+        self.add_pairs()
         return
 
-    def set_network_states(self, people, upper_age=None):
+    def set_network_states(self, upper_age=None):
         """ Set network states including age of entry into network and participation rates """
-        self.set_debut(people, upper_age=upper_age)
-        self.set_participation(people, upper_age=upper_age)
+        self.set_debut(upper_age=upper_age)
+        self.set_participation(upper_age=upper_age)
         return
 
-    def set_participation(self, people, upper_age=None):
-        # Set people who will participate in the network at some point
+    def set_participation(self, upper_age=None):
+        """ Set people who will participate in the network at some point """
+        people = self.sim.people
         if upper_age is None: uids = people.auids
         else: uids = (people.age < upper_age).uids
         self.participant[uids] = self.pars.participation.rvs(uids)
         return
 
-    def set_debut(self, people, upper_age=None):
-        # Set debut age
+    def set_debut(self, upper_age=None):
+        """ Set debut age """
+        people = self.sim.people
         if upper_age is None: uids = people.auids
         else: uids = (people.age < upper_age).uids
         self.debut[uids] = self.pars.debut.rvs(uids)
         return
 
-    def add_pairs(self, sim, ti=None):
-        people = sim.people
+    def add_pairs(self):
+        people = self.sim.people
         available_m = self.available(people, 'male')
         available_f = self.available(people, 'female')
 
@@ -631,7 +634,7 @@ class MFNet(SexualNetwork):
             # No duplicates and user has enabled multirng, so use slotting based on p1
             dur_vals = self.pars.duration.rvs(p1)
             act_vals = self.pars.acts.rvs(p1)
-        else:
+        else: # TODO: rethink explanation without multirng
             # If multirng is enabled, we're here because some individuals in p1
             # are starting multiple relationships on this timestep. If using
             # slotted draws, as above, repeated relationships will get the same
@@ -644,11 +647,10 @@ class MFNet(SexualNetwork):
 
         return len(p1)
 
-    def update(self, sim, dt=None):
-        people = sim.people
-        self.end_pairs(sim)
-        self.set_network_states(people, upper_age=sim.dt)
-        self.add_pairs(sim)
+    def update(self):
+        self.end_pairs()
+        self.set_network_states(upper_age=self.sim.dt) # TODO: looks wrong
+        self.add_pairs()
         return
 
 
@@ -663,7 +665,7 @@ class MSMNet(SexualNetwork):
             duration = ss.lognorm_ex(mean=15, stdev=15),
             debut = ss.normal(loc=16, scale=2),
             acts = ss.lognorm_ex(mean=80, stdev=20),
-            participation = ss.bernoulli(0.1),
+            participation = ss.bernoulli(p=0.1),
         )
         self.update_pars(pars, **kwargs)
         return
@@ -690,9 +692,9 @@ class MSMNet(SexualNetwork):
         self.debut[uids] = self.pars.debut.rvs(len(uids)) # Just pass len(uids) as this network is not crn safe anyway
         return
 
-    def add_pairs(self, sim, ti=None):
-        # Pair all unpartnered MSM
-        available_m = self.available(sim.people, 'm')
+    def add_pairs(self):
+        """ Pair all unpartnered MSM """
+        available_m = self.available(self.sim.people, 'm')
         n_pairs = int(len(available_m)/2)
         p1 = available_m[:n_pairs]
         p2 = available_m[n_pairs:n_pairs*2]
@@ -710,11 +712,10 @@ class MSMNet(SexualNetwork):
         
         return len(p1)
 
-    def update(self, sim, dt=None):
-        people = sim.people
-        self.end_pairs(sim)
-        self.set_network_states(people, upper_age=sim.dt)
-        self.add_pairs(sim)
+    def update(self):
+        self.end_pairs(self.sim)
+        self.set_network_states(self.sim.people, upper_age=self.sim.dt)
+        self.add_pairs(self.sim)
         return
 
 
@@ -745,8 +746,8 @@ class EmbeddingNet(MFNet):
         loc[sim.people.female[uids]] += module.pars.male_shift  # Shift females so they will be paired with older men
         return loc
 
-    def add_pairs(self, sim, ti=None):
-        people = sim.people
+    def add_pairs(self):
+        people = self.sim.people
         available_m = self.available(people, 'male')
         available_f = self.available(people, 'female')
 
@@ -761,9 +762,7 @@ class EmbeddingNet(MFNet):
         loc_m = loc[~people.female[available]]
 
         dist_mat = spsp.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
-
         ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
-
         n_pairs = len(ind_f)
 
         # Finalize pairs
@@ -789,24 +788,23 @@ class MaternalNet(Network):
         super().__init__(key_dict=key_dict, vertical=vertical, **kwargs)
         return
 
-    def update(self, sim, dt=None):
-        if dt is None: dt = sim.dt
-        # Set beta to 0 for women who complete post-partum period
-        # Keep connections for now, might want to consider removing
+    def update(self):
+        """
+        Set beta to 0 for women who complete post-partum period
+        Keep connections for now, might want to consider removing
+        """
+        dt = self.sim.dt
         self.contacts.dur = self.contacts.dur - dt
         inactive = self.contacts.dur <= 0
         self.contacts.beta[inactive] = 0
         return
 
-    def initialize(self, sim):
-        """ No pairs added upon initialization """
-        pass
-
-    def add_pairs(self, mother_inds, unborn_inds, dur):
-        """
-        Add connections between pregnant women and their as-yet-unborn babies
-        """
-        n = len(mother_inds)
-        beta = np.ones(n)
-        self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur)
-        return n
+    def add_pairs(self, mother_inds=None, unborn_inds=None, dur=None):
+        """ Add connections between pregnant women and their as-yet-unborn babies """
+        if mother_inds is None:
+            return 0
+        else:
+            n = len(mother_inds)
+            beta = np.ones(n)
+            self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur)
+            return n

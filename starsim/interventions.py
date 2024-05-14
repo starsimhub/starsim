@@ -24,13 +24,14 @@ class Plugin(ss.Module):
     def apply(self, sim):
         pass
 
-    def finalize(self, sim):
-        return super().finalize(sim)
+    def finalize(self):
+        return super().finalize()
     
     @classmethod
     def from_func(cls, func):
         """ Create an intervention or analyzer from a function """
-        new = cls(name=func.__name__)
+        name = func.__name__
+        new = cls(name=name)
         new.apply = func
         return new
 

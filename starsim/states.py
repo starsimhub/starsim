@@ -85,7 +85,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         
         # Properties that are initialized later
         self.raw = np.empty(0, dtype=dtype)
-        self.people = None
+        self.people = None # Used solely for accessing people.auids
         self.len_used = 0
         self.len_tot = 0
         self.initialized = skip_init
@@ -107,14 +107,15 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         the raw array (``raw``) or the active agents (``values``), and to convert
         the key to array indices if needed.
         """
-        use_raw = True
         if isinstance(key, uids):
-            pass
+            use_raw = True
         elif isinstance(key, (BoolArr, IndexArr)):
+            use_raw = True
             key = key.uids
-        elif isinstance(key, (slice, int)):
+        elif isinstance(key, slice):
             use_raw = False
         elif not np.isscalar(key) and len(key) == 0: # Handle [], np.array([]), etc.
+            use_raw = True # Doesn't matter since returning empty, but this is faster
             key = uids()
         else:
             errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.'
@@ -166,7 +167,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         try:
             return self.people.auids
         except:
-            print('Non-initialized States object')
+            ss.warn('Trying to access non-initialized States object')
             return uids(np.arange(len(self.raw)))
     
     def count(self):
@@ -226,54 +227,18 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         self.set(new_uids, new_vals=new_vals) # Assign new default values to those agents
         return
     
-    def set_people(self, people):
-        """ Reset the people object associated with this state """
-        if isinstance(people, ss.People): # It's people, it's fine
-            pass
-        elif isinstance(people, ss.Sim): # Actually a sim
-            people = people.people
-        else:
-            errormsg = f'Must supply a Sim or People object, not {type(people)}'
-            raise TypeError(errormsg)
-        assert people.initialized, 'People must be initialized before initializing states'
-        self.people = people # Shorten since used a lot
+    def link_people(self, people):
+        """ Link a People object to this state, for access auids """
+        self.people = people # Link the people object to this state
+        people._link_state(self) # Ensure the state is linked to the People object as well
         return
-
-    def initialize(self, sim):
-        """
-        Initialize state
-
-        This method should be called as part of initialization of the parent class containing the state -
-        specifically, `People.initialize()` and `Module.initialize()`. Initialization of a State object
-        involves two processes:
-
-        - Converting any distribution objects to a Dist instance and linking it to RNGs stored in a `Sim`
-        - Establishing a bidirectional connection with a `People` object for the purpose of UID indexing and resizing
-
-        Since State objects can be stored in `People` or in a `Module` and the collection of all states in a `Sim` should
-        be connected to RNGs within that same `Sim`, the states must necessarily be linked to the same `People` object that
-        is inside a `Sim`. Initializing States outside of a `Sim` is not possible because of this RNG dependency, particularly
-        because the states in a `People` object cannot be initialized without a `Sim` and therefore it would not be possible to
-        have an initialized `People` object outside of a `Sim`.
-        
-        Args:
-            sim: A `Sim` instance that contains an initialized `People` object
-        """
-        # Skip if already initialized
+    
+    def init_vals(self):
+        """ Actually populate the initial values and mark as initialized; only to be used on initialization """
         if self.initialized:
-            return
-
-        # Establish connection with the People object
-        people = sim.people
-        self.set_people(people)
-        people.register_state(self)
-        
-        # Connect any distributions in the default to RNGs in the Sim
-        if isinstance(self.default, ss.Dist):
-            self.default.initialize(module=self, sim=sim)
-
-        # Populate initial values
-        self.grow(people.uid)
+            errormsg = f'Cannot re-initialize state {self}; use set() instead'
+            raise RuntimeError(errormsg)
+        self.grow(self.people.uid)
         self.initialized = True
         return
 
@@ -328,7 +293,7 @@ class BoolArr(Arr):
     
     @property
     def uids(self):
-        """ Convert True values to UIDs """
+        """ Efficiently convert True values to UIDs """
         return self.auids[np.nonzero(self.values)[0]]
 
     
@@ -369,9 +334,15 @@ class uids(np.ndarray):
     UID operations.    
     """
     def __new__(cls, arr=None):
-        if arr is None:
-            arr = np.empty(0, dtype=ss_int)
-        return np.asarray(arr).view(cls)
+        if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
+            return arr.astype(ss_int).view(cls)
+        elif isinstance(arr, BoolArr): # Shortcut for arr.uids
+            return arr.uids
+        elif arr is None: # Shortcut to return empty
+            return np.empty(0, dtype=ss_int).view(cls)
+        elif isinstance(arr, int): # Convert e.g. ss.uids(0) to ss.uids([0])
+            arr = [arr]
+        return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
     
     def concat(self, other, **kw): # TODO: why can't they both be called cat()?
         """ Equivalent to np.concatenate(), but return correct type """
@@ -384,10 +355,16 @@ class uids(np.ndarray):
         return np.concatenate(arrs, **kw).view(cls)
     
     def remove(self, other, **kw):
+        """ Remove provided UIDs from current array"""
         return np.setdiff1d(self, other, assume_unique=True, **kw).view(self.__class__)
     
     def intersect(self, other, **kw):
+        """ Keep only UIDs that match other array """
         return np.intersect1d(self, other, assume_unique=True, **kw).view(self.__class__)
+    
+    def to_numpy(self):
+        """ Convert to a standard NumPy array """
+        return np.array(self)
     
 
 class BooleanOperationError(NotImplementedError):

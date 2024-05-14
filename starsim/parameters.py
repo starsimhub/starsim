@@ -26,7 +26,7 @@ class Pars(sc.objdict):
             if isinstance(pars, dict):
                 kwargs = pars | kwargs
             else:
-                errormsg = f'Cannot supply parameters as type {type(pars)}: must be dict'
+                errormsg = f'Cannot supply parameters as type {type(pars)}: must be a dict'
                 raise ValueError(errormsg)
         super().__init__(**kwargs)
         return
@@ -43,91 +43,86 @@ class Pars(sc.objdict):
         # Get parameters, and return if none
         pars = {} if pars is None else dict(pars) # Make it a simple dict, since just iterating over
         pars = pars | kwargs # Merge dictionaries
-        if not len(pars): 
+        if not len(pars): # Check that new parameters are supplied, and if not return unchanged
             return self
-        
-        # Check if there are any mismatches
-        if not create:
+        if not create: # Check if there are any mismatches, which raises an exception if there are
             self.check_key_mismatch(pars)
         
         # Perform the update
         for key,new in pars.items():
-            
-            # Should only be the case if create=True
-            if key not in self.keys(): 
+            if key not in self.keys(): # It's a new parameter and create=True: update directly
                 self[key] = new
-            
-            # Main use case: update from previous values
-            else: 
-                old = self[key] # Get the object we're about to update
-                
-                # It's a number, string, etc: update directly
-                if isinstance(old, atomic_classes):
+            else:
+                old = self[key] # Get the existing object we're about to update
+                if isinstance(old, atomic_classes): # It's a number, string, etc: update directly
                     self[key] = new
-                
-                # It's a Pars object: update recursively
-                elif isinstance(old, Pars): 
+                elif isinstance(old, Pars): # It's a Pars object: update recursively
                     old.update(new, create=create)
-                
-                # Update module containers
-                elif isinstance(old, ss.ndict):
-                    if not len(old): # It's empty, just overwrite
-                        self[key] = new
-                    else: # Don't overwrite an existing ndict
-                        if isinstance(new, dict):
-                            for newkey,newvals in new.items():
-                                old[newkey].pars.update(newvals) # e.g. pars = {'diseases": {'sir': {'dur_inf': 6}}}
-                        else:
-                            errormsg = f'Cannot update an ndict with {type(new)}: must be a dict to set new parameters'
-                            raise TypeError(errormsg)
-                
-                # Update modules
-                elif isinstance(old, ss.Module): 
-                    if isinstance(new, dict):
-                        old[key].pars.update(newvals) # e.g. pars = {'dur_inf': 6}
-                    else:
-                        errormsg = f'Cannot update a module with {type(new)}: must be a dict to set new parameters'
-                        raise TypeError(errormsg)
-                
-                # Update a distribution
-                elif isinstance(old, ss.Dist):
-                    
-                    # It's a Dist, e.g. dur_inf = ss.normal(6,2); use directly
-                    if isinstance(new, ss.Dist): 
-                        if isinstance(old, ss.bernoulli) and not isinstance(new, ss.bernoulli):
-                            errormsg = f"Bernoulli distributions can't be changed to another type: {type(new)} is invalid"
-                            raise TypeError(errormsg)
-                        else:
-                            self[key] = new
-                    
-                    # It's a single number, e.g. dur_inf = 6; set parameters
-                    elif isinstance(new, Number):
-                        old.set(new)
-                    
-                    # It's a list number, e.g. dur_inf = [6, 2]; set parameters
-                    elif isinstance(new, list):
-                        old.set(*new)
-                    
-                    # It's a dict, figure out what to do
-                    elif isinstance(new, dict):
-                        if 'type' not in new.keys(): # Same type of dist, set parameters
-                            old.set(**new)
-                        else: # We need to create a new distribution
-                            newtype = new['type']
-                            if isinstance(old, ss.bernoulli) and newtype != 'bernoulli':
-                                errormsg = f"Bernoulli distributions can't be changed to another type: {newtype} is invalid"
-                                raise TypeError(errormsg)
-                            else:
-                                dist = ss.make_dist(new)
-                                self[key] = dist
-                
-                # Everything else
-                else:
-                    errormsg = 'No known mechanism for handling {type(old)} → {type(new)}; using default'
-                    raise TypeError(errormsg)
-                
+                elif isinstance(old, ss.ndict): # Update module containers
+                    self._update_ndict(key, old, new)
+                elif isinstance(old, ss.Module):  # Update modules
+                    self._update_module(key, old, new)
+                elif isinstance(old, ss.Dist): # Update a distribution
+                    self._update_dist(key, old, new)
+                else: # Everything else; not used currently but could be
+                    warnmsg = 'No known mechanism for handling {type(old)} → {type(new)}; using default'
+                    ss.warn(warnmsg)
+                    self[key] = new
         return self
+    
+    def _update_ndict(self, key, old, new):
+        """ Update an ndict object in the parameters, e.g. sim.pars.diseases """
+        if not len(old): # It's empty, just overwrite
+            self[key] = new
+        else: # Don't overwrite an existing ndict
+            if isinstance(new, dict):
+                for newkey,newvals in new.items():
+                    old[newkey].pars.update(newvals) # e.g. pars = {'diseases": {'sir': {'dur_inf': 6}}}
+            else:
+                errormsg = f'Cannot update an ndict with {type(new)}: must be a dict to set new parameters'
+                raise TypeError(errormsg)
+        return
+    
+    def _update_module(self, key, old, new):
+        """ Update a Module object in the parameters, e.g. sim.pars.diseases.sir """
+        if isinstance(new, dict):
+            old[key].pars.update(new) # e.g. pars = {'dur_inf': 6}
+        else:
+            errormsg = f'Cannot update a module with {type(new)}: must be a dict to set new parameters'
+            raise TypeError(errormsg)
+        return
+    
+    def _update_dist(self, key, old, new):
+        """ Update a Dist object in the parameters, e.g. sim.pars.diseases.sir.dur_inf """
+        # It's a Dist, e.g. dur_inf = ss.normal(6,2); use directly
+        if isinstance(new, ss.Dist): 
+            if isinstance(old, ss.bernoulli) and not isinstance(new, ss.bernoulli):
+                errormsg = f"Bernoulli distributions can't be changed to another type: {type(new)} is invalid"
+                raise TypeError(errormsg)
+            else:
+                self[key] = new
         
+        # It's a single number, e.g. dur_inf = 6; set parameters
+        elif isinstance(new, Number):
+            old.set(new)
+        
+        # It's a list number, e.g. dur_inf = [6, 2]; set parameters
+        elif isinstance(new, list):
+            old.set(*new)
+        
+        # It's a dict, figure out what to do
+        elif isinstance(new, dict):
+            newtype = new.get('type')
+            if newtype is None: # Same type of dist, set parameters
+                old.set(**new)
+            else: # We need to create a new distribution
+                if isinstance(old, ss.bernoulli) and newtype != 'bernoulli':
+                    errormsg = f"Bernoulli distributions can't be changed to another type: {newtype} is invalid"
+                    raise TypeError(errormsg)
+                else:
+                    dist = ss.make_dist(new)
+                    self[key] = dist
+        return
 
     def check_key_mismatch(self, pars):
         """ Check whether additional keys are being added to the dictionary """
@@ -159,7 +154,6 @@ class SimPars(Pars):
     Args:
         kwargs (dict): any additional kwargs are interpreted as parameter names
     """
-
     def __init__(self, **kwargs):
         
         # General parameters
@@ -184,6 +178,7 @@ class SimPars(Pars):
         self.location   = None  #  NOT CURRENTLY FUNCTIONAL - what demographics to use
         self.birth_rate = None
         self.death_rate = None
+        self.use_aging  = None # True if demographics, false otherwise
 
         # Modules: demographics, diseases, connectors, networks, analyzers, and interventions
         self.people = None
@@ -196,45 +191,91 @@ class SimPars(Pars):
 
         # Update with any supplied parameter values and generate things that need to be generated
         self.update(kwargs)
-
         return
+    
+    def is_default(self, key):
+        """ Check if the provided value matches the default """
+        default_pars = SimPars() # Create a default SimPars object
+        default_val = default_pars[key]
+        current_val = self[key]
+        match = (current_val == default_val) # Check if the value matches
+        return match
 
-    def initialize(self, sim, reset=False, **kwargs):
-        
-        # Validation
+    def validate(self):
+        """ Call parameter validation methods """
+        self.validate_sim_pars()
+        self.validate_modules()
+        return
+    
+    def validate_sim_pars(self):
+        """ Validate each of the parameter values """
+        self.validate_verbose()
+        self.validate_agents()
+        self.validate_total_pop()
+        self.validate_start_end()
         self.validate_dt()
-        self.validate_pars()
-        
-        # Time indexing; derived values live in the sim rather than in the pars
-        sim.dt = self.dt
-        sim.yearvec = np.arange(start=self.start, stop=self.end + self.dt, step=self.dt)
-        sim.results.yearvec = sim.yearvec # Copy this here
-        sim.npts = len(sim.yearvec)
-        sim.tivec = np.arange(sim.npts)
-        sim.ti = 0  # The time index, e.g. 0, 1, 2
-        
-        # Initialize the people
-        self.init_people(sim=sim, reset=reset, **kwargs)  # Create all the people (the heaviest step)
-        
-        # Allow shortcut for default demographics # TODO: think about whether we want to enable this, when we have birth_rate and death_rate
-        if self.demographics == True:
-            self.demographics = [ss.Births(), ss.Deaths()]
-        
-        # Get all modules into a consistent list format
-        modmap = ss.module_map()
-        for modkey in modmap.keys():
-            if not isinstance(self[modkey], ss.ndict):
-                self[modkey] = sc.tolist(self[modkey])
-        
-        # Initialize and convert modules
-        self.convert_modules() # General initialization
-        self.init_demographics() # Demographic-specific initialization
-        
-        # Convert from lists to ndicts
-        for modkey,modclass in modmap.items():
-            self[modkey] = ss.ndict(self[modkey], type=modclass)
-        
-        return self
+        return
+    
+    def validate_verbose(self):
+        """ Validate verbosity """
+        if self.verbose == 'brief':
+            self.verbose = -1
+        if not sc.isnumber(self.verbose):  # pragma: no cover
+            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self.par.verbose)} "{self.par.verbose}"'
+            raise ValueError(errormsg)
+        return
+    
+    def validate_agents(self):
+        """ Check that n_agents is supplied and convert to an integer """
+        if self.people is not None:
+            len_people = len(self.people)
+            if (len_people != self.n_agents) and not self.is_default('n_agents'):
+                errormsg = f'Cannot set a custom value of n_agents ({self.n_agents}) that does not match a pre-created People object ({len_people}); use n_agents to create the People object instead'
+                raise ValueError(errormsg)
+            self.n_agents = len_people
+        elif self.n_agents is not None:
+            self.n_agents = int(self.n_agents)
+        else:
+            errormsg = 'Must supply n_agents, a people object, or a popdict'
+            raise ValueError(errormsg)
+        return
+    
+    def validate_total_pop(self):
+        """ Ensure one but not both of total_pop and pop_scale are defined """
+        if self.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
+            if self.pop_scale is not None:
+                errormsg = f'You can define total_pop ({self.total_pop}) or pop_scale ({self.pop_scale}), but not both, since one is calculated from the other'
+                raise ValueError(errormsg)
+            total_pop = self.total_pop
+        else:
+            if self.pop_scale is not None:
+                total_pop = self.pop_scale * self.n_agents
+            else:
+                total_pop = self.n_agents
+        self.total_pop = total_pop
+        if self.pop_scale is None:
+            self.pop_scale = total_pop / self.n_agents
+        return
+    
+    def validate_start_end(self):
+        """ Ensure at least one of n_years and end is defined, but not both """
+        if self.end is not None:
+            if self.is_default('n_years'):
+                self.n_years = self.end - self.start
+            else:
+                errormsg = f'You can supply either end ({self.end}) or n_years ({self.n_years}) but not both, since one is calculated from the other'
+                raise ValueError(errormsg)
+            if self.n_years <= 0:
+                errormsg = f"Number of years must be >0, but you supplied start={str(self.start)} and " \
+                           f"end={str(self.end)}, which gives n_years={self.n_years}"
+                raise ValueError(errormsg)
+        else:
+            if self.n_years is not None:
+                self.end = self.start + self.n_years
+            else:
+                errormsg = 'You must supply one of n_years and end."'
+                raise ValueError(errormsg)
+        return
 
     def validate_dt(self):
         """
@@ -250,111 +291,69 @@ class SimPars(Pars):
                 rounded_dt = 1.0 / reciprocal
                 self.dt = rounded_dt
                 if self.verbose:
-                    warnmsg = f"Warning: Provided time step dt: {dt} resulted in a non-integer number of steps per year. Rounded to {rounded_dt}."
-                    print(warnmsg)
+                    warnmsg = f'Warning: Provided time step dt={dt} resulted in a non-integer number of steps per year. Rounded to {rounded_dt}.'
+                    ss.warn(warnmsg)
         return
     
-    def validate_pars(self):
-        """
-        Some parameters can take multiple types; this makes them consistent.
-        """
-        # Handle n_agents
-        if self.people is not None:
-            self.n_agents = len(self.people)
-        elif self.n_agents is not None:
-            self.n_agents = int(self.n_agents)
-        else:
-            errormsg = 'Must supply n_agents, a people object, or a popdict'
-            raise ValueError(errormsg)
-
-        # Handle end and n_years
-        if self.end:
-            self.n_years = self.end - self.start
-            if self.n_years <= 0:
-                errormsg = f"Number of years must be >0, but you supplied start={str(self.start)} and " \
-                           f"end={str(self.end)}, which gives n_years={self.n_years}"
-                raise ValueError(errormsg)
-        else:
-            if self.n_years:
-                self.end = self.start + self.n_years
-            else:
-                errormsg = 'You must supply one of n_years and end."'
-                raise ValueError(errormsg)
-
-        # Handle verbose
-        if self.verbose == 'brief':
-            self.verbose = -1
-        if not sc.isnumber(self.verbose):  # pragma: no cover
-            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self.par.verbose)} "{self.par.verbose}"'
-            raise ValueError(errormsg)
-            
-        return self
-    
-    def init_people(self, sim, reset=False, verbose=None, **kwargs):
-        """
-        Initialize people within the sim
-        Sometimes the people are provided, in which case this just adds a few sim properties to them.
-        Other time people are not provided and this method makes them.
+    def validate_modules(self):
+        """ Validate modules passed in pars"""
         
-        Args:
-            reset   (bool): whether to regenerate the people even if they already exist
-            verbose (int):  detail to print
-            kwargs  (dict): passed to ss.make_people()
-        """
+        # Do special initializtaion on demographics
+        self.validate_demographics()
+        
+        # Get all modules into a consistent list format
+        modmap = ss.module_map()
+        for modkey in modmap.keys():
+            if not isinstance(self[modkey], ss.ndict):
+                self[modkey] = sc.tolist(self[modkey])
 
-        # Handle inputs
-        if verbose is None:
-            verbose = self.verbose
-        if verbose > 0:
-            resetstr = ''
-            if self.people and reset:
-                resetstr = ' (resetting people)'
-            print(f'Initializing sim{resetstr} with {self.n_agents:0n} agents')
+        # Convert any modules that are not already Module objects
+        self.convert_modules()
 
-        # If people have not been supplied, make them
-        if self.people is None or reset:
-            self.people = ss.People(n_agents=self.n_agents, **kwargs)  # This just assigns UIDs and length
-
-        # If a popdict has not been supplied, we can make one from location data
-        if self.location is not None:
-            # Check where to get total_pop from
-            if self.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
-                errormsg = 'You can either define total_pop explicitly or via the location, but not both'
-                raise ValueError(errormsg)
-
-        else:
-            if self.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
-                total_pop = self.total_pop
-            else:
-                if self.pop_scale is not None:
-                    total_pop = self.pop_scale * self.n_agents
-                else:
-                    total_pop = self.n_agents
-
-        self.total_pop = total_pop
-        if self.pop_scale is None:
-            self.pop_scale = total_pop / self.n_agents
-
-        # Any other initialization
-        sim.people = self.pop('people')
-        if not sim.people.initialized:
-            sim.people.initialize(sim)
-
-        # Set time attributes
-        sim.people.init_results(sim)
-        return sim.people
+        # Convert from lists to ndicts
+        for modkey,modclass in modmap.items():
+            self[modkey] = ss.ndict(self[modkey], type=modclass)
+        return
     
+    def validate_demographics(self):
+        """ Validate demographics-related input parameters"""
+        # Allow shortcut for default demographics # TODO: think about whether we want to enable this, when we have birth_rate and death_rate
+        if self.demographics == True:
+            self.demographics = [ss.Births(), ss.Deaths()]
+
+        # Allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
+        if self.birth_rate is not None:
+            births = ss.Births(birth_rate=self.birth_rate)
+            self.demographics += births
+        if self.death_rate is not None:
+            background_deaths = ss.Deaths(death_rate=self.death_rate)
+            self.demographics += background_deaths
+        
+        # Decide whether to use aging based on if demographics modules are present
+        if self.use_aging is None:
+            self.use_aging = True if self.demographics else False
+        
+        return
+
     def convert_modules(self):
         """
-        Common logic for converting plug-ins to a standard format; they are still
-        a list at this point.  Used for networks, demographics, diseases, analyzers, 
-        interventions, and connectors.
+        Convert different types of representations for modules into a
+        standardized object representation that can be parsed and used by
+        a Sim object.
+        Used for starsim classes:
+        - networks,
+        - demographics,
+        - diseases,
+        - analyzers,
+        - interventions, and
+        - connectors.
         """
-        
         modmap = ss.module_map() # List of modules and parent module classes, e.g. ss.Disease
         modules = ss.find_modules() # Each individual module class option, e.g. ss.SIR
         
         for modkey,ssmoddict in modules.items():
+            moddictkeys = ssmoddict.keys()
+            moddictvals = ssmoddict.values()
             expected_cls = modmap[modkey]
             modlist = self[modkey]
             if isinstance(modlist, list): # Skip over ones that are already ndict format, assume they're already initialized
@@ -381,8 +380,6 @@ class SimPars(Pars):
                         # Get the module type as a class
                         if isinstance(modtype, str): # Usual case, a string, e.g. dict(type='sir', dur_inf=6)
                             modtype = modtype.lower() # Because our map is in lowercase
-                            moddictkeys = ssmoddict.keys()
-                            moddictvals = ssmoddict.values()
                             if modtype in moddictkeys:
                                 modcls = ssmoddict[modtype]
                             else:
@@ -410,23 +407,8 @@ class SimPars(Pars):
                         errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls}, but was {type(mod)} instead'
                         raise TypeError(errormsg)
                     modlist[i] = mod
-                
-        return
-
-    def init_demographics(self):
-        """ Initialize demographics """
-
-        # Allow users to add vital dynamics by entering birth_rate and death_rate parameters directly to the sim
-        if self.birth_rate is not None:
-            births = ss.Births(birth_rate=self.birth_rate)
-            self.demographics += births
-        if self.death_rate is not None:
-            background_deaths = ss.Deaths(death_rate=self.death_rate)
-            self.demographics += background_deaths
         return
 
 
 def make_pars(**kwargs):
     return SimPars(**kwargs)
-
-

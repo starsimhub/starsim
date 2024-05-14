@@ -27,11 +27,17 @@ def plot_rvs(rvs, times=None, nrows=None):
     return fig
 
 
+def make_sim():
+    """ Make a tiny sim for initializing the distributions """
+    sim = ss.Sim(n_agents=100).initialize() # Need an empty sim to initialize properly
+    return sim
+
+
 # %% Define the tests
 def test_dist(m=m):
     """ Test the Dist class """
     sc.heading('Testing the basic Dist call')
-    dist = ss.Dist(distname='random', name='test')
+    dist = ss.Dist(distname='random', name='test', strict=False)
     dist.initialize()
     rvs = dist(m)
     print(rvs)
@@ -43,13 +49,13 @@ def test_custom_dists(n=n, do_plot=False):
     """ Test all custom dists """
     sc.heading('Testing all custom distributions')
     
-    o = sc.objdict()
+    o     = sc.objdict()
     dists = sc.objdict()
-    rvs = sc.objdict()
+    rvs   = sc.objdict()
     times = sc.objdict()
     for name in ss.dist_list:
         func = getattr(ss, name)
-        dist = func(name='test')
+        dist = func(name='test', strict=False)
         dist.initialize()
         dists[name] = dist
         sc.tic()
@@ -79,7 +85,7 @@ def test_dists(n=n, do_plot=False):
         obj.a = sc.objdict()
         obj.a.mylist = [ss.random(), ss.Dist(distname='uniform', low=2, high=3)]
         obj.b = dict(d3=ss.weibull(c=2), d4=ss.delta(v=0.3))
-        dists = ss.Dists(obj).initialize()
+        dists = ss.Dists(obj).initialize(sim=make_sim())
         
         # Call each distribution twice
         for j in range(2):
@@ -108,8 +114,8 @@ def test_scipy(m=m):
     sc.heading('Testing SciPy distributions')
     
     # Make SciPy distributions in two different ways
-    dist1 = ss.Dist(dist=sps.expon, name='scipy', scale=2).initialize() # Version 1: callable
-    dist2 = ss.Dist(dist=sps.expon(scale=2), name='scipy').initialize() # Version 2: frozen
+    dist1 = ss.Dist(dist=sps.expon, name='scipy', scale=2, strict=False).initialize() # Version 1: callable
+    dist2 = ss.Dist(dist=sps.expon(scale=2), name='scipy', strict=False).initialize() # Version 2: frozen
     rvs1 = dist1(m)
     rvs2 = dist2(m)
     
@@ -130,13 +136,14 @@ def test_exceptions(m=m):
         dist(m) # Check that we can't call an uninitialized
     
     # Initialize and check we can't call repeatedly
-    dist.initialize()
+    dist.initialize(trace='test', sim=make_sim())
     rvs = dist(m)
     with pytest.raises(ss.distributions.DistNotReadyError):
         dist(m) # Check that we can't call an already-used distribution
     
     # Check that we can with a non-strict Dist
     dist2 = ss.random(strict=False)
+    dist2.initialize(trace='test')
     rvs2 = sc.autolist()
     for i in range(2):
         rvs2 += dist2(m) # We should be able to call multiple times with no problem
@@ -154,7 +161,7 @@ def test_reset(m=m):
     sc.heading('Testing reset')
     
     # Create and draw two sets of random numbers
-    dist = ss.random(seed=533).initialize()
+    dist = ss.random(seed=533, strict=False).initialize()
     r1 = dist.rvs(m)
     r2 = dist.rvs(m)
     assert all(r1 != r2)
@@ -193,7 +200,7 @@ def test_callable(n=n):
         return out
     
     scale = 1
-    d = ss.normal(loc=custom_loc, scale=scale).initialize(sim=sim)
+    d = ss.normal(name='callable', loc=custom_loc, scale=scale).initialize(sim=sim)
 
     uids = np.array([1, 3, 7, 9])
     draws = d.rvs(uids)
@@ -213,7 +220,7 @@ def test_array(n=n):
     low  = np.array([1, 100]) # Low
     high = np.array([3, 125]) # High
 
-    d = ss.uniform(low=low, high=high).initialize(slots=np.arange(uids.max()+1))
+    d = ss.uniform(low=low, high=high, strict=False).initialize(slots=np.arange(uids.max()+1))
     draws = d.rvs(uids)
     print(f'Uniform sample for uids {uids} returned {draws}')
 
@@ -235,7 +242,7 @@ def test_repeat_slot():
     high = low + 1
 
     # Draw values
-    d = ss.uniform(low=low, high=high).initialize(slots=slots)
+    d = ss.uniform(low=low, high=high, strict=False).initialize(slots=slots)
     draws = d.rvs(uids)
     
     # Print and test

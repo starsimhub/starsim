@@ -12,6 +12,11 @@ __all__ = ['Product', 'Dx', 'Tx', 'Vx']
 
 class Product(ss.Module):
     """ Generic product implementation """
+    def initialize(self, sim):
+        if not self.initialized:
+            super().initialize(sim)
+        else:
+            return
 
     def administer(self, people, inds):
         """ Adminster a Product - implemented by derived classes """
