@@ -11,10 +11,11 @@ __all__ = ['Demographics', 'Births', 'Deaths', 'Pregnancy']
 
 
 class Demographics(ss.Module):
-    # A demographic module typically handles births/deaths/migration and takes
-    # place at the start of the timestep, before networks are updated and before
-    # any disease modules are executed
-
+    """
+    A demographic module typically handles births/deaths/migration and takes
+    place at the start of the timestep, before networks are updated and before
+    any disease modules are executed.
+    """
     def initialize(self, sim):
         super().initialize(sim)
         self.init_results()
@@ -23,16 +24,15 @@ class Demographics(ss.Module):
     def init_results(self):
         pass
 
-    def update_results(self):
+    def update(self):
         pass
 
-    def update(self):
-        # Note that for demographic modules, any result updates should be
-        # carried out inside this function
+    def update_results(self):
         pass
 
 
 class Births(Demographics):
+    """ Create births based on rates, rather than based on pregnancy """
     def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__()
         self.default_pars(
@@ -255,7 +255,7 @@ class Deaths(Demographics):
 
 
 class Pregnancy(Demographics):
-
+    """ Create births via pregnancies """
     def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__()
         self.default_pars(
