@@ -179,16 +179,16 @@ def test_mtct():
     sis = ss.SIS(beta={'random':[0.005, 0.001], 'prenatal':[0.1, 0], 'postnatal':[0.1, 0]})
     networks = [ss.RandomNet(), ss.PrenatalNet(), ss.PostnatalNet()]
     demographics = ss.Pregnancy(fertility_rate=20)
-    sim = ss.Sim(people=ppl, diseases=sis, networks=networks, demographics=demographics)
+    sim = ss.Sim(dt=1/12, people=ppl, diseases=sis, networks=networks, demographics=demographics)
     sim.run()
     return sim
 
 if __name__ == '__main__':
-    sc.options(interactive=do_plot)
-    sir   = test_sir()
-    s1,s2 = test_sir_epi()
-    sis   = test_sis()
-    ncd   = test_ncd()
-    gavi  = test_gavi()
-    multi = test_multidisease()
+    # sc.options(interactive=do_plot)
+    # sir   = test_sir()
+    # s1,s2 = test_sir_epi()
+    # sis   = test_sis()
+    # ncd   = test_ncd()
+    # gavi  = test_gavi()
+    # multi = test_multidisease()
     mtct  = test_mtct()

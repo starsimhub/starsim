@@ -304,7 +304,8 @@ class Pregnancy(Demographics):
         """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
 
         if sc.isnumber(self.fertility_rate_data):
-            fertility_rate = self.fertility_rate_data
+            fertility_rate = pd.Series(index=uids, data=self.fertility_rate_data)
+            fertility_rate[self.pregnant.uids] = 0
 
         else:
             # Abbreviate key variables
@@ -396,17 +397,30 @@ class Pregnancy(Demographics):
         # Add connections to any postnatal transmission layers
         for lkey, layer in self.sim.networks.items():
             if layer.postnatal and self.n_births:
+
                 # Add postnatal connections by finding the prenatal contacts
                 # Validation of the networks is done during initialization to ensure that 1 prenatal netwrok is present
                 prenatalnet = [nw for nw in self.sim.networks.values() if nw.prenatal][0]
-                mother_bools = np.in1d(prenatalnet.contacts.p1, deliveries.uids)  # Find the indices of new mothers in the prenatal network
-                infant_uids = prenatalnet.contacts.p2[mother_bools]  # Find the babies belonging to new mothers
-                new_infant_uids = np.setdiff1d(infant_uids, layer.contacts.p2)  # Take out the previous babies born to the new mothers
-                durs = self.dur_postpartum[deliveries.uids]
-                if len(deliveries.uids) != len(new_infant_uids):
-                    errormsg = f'Number of new mothers ({len(deliveries.uids)}) does not match number of new infants ({len(new_infant_uids)})in the postnatal network.'
+
+                # Find the prenatal connections that are ending
+                prenatal_ending = prenatalnet.contacts.end==self.sim.ti
+                new_mother_uids = prenatalnet.contacts.p1[prenatal_ending]
+                new_infant_uids = prenatalnet.contacts.p2[prenatal_ending]
+
+                # Validation
+                if not np.array_equal(new_mother_uids, deliveries.uids):
+                    errormsg = f'IDs of new mothers do not match IDs of new deliveries.'
+                    import traceback; traceback.print_exc(); import pdb; pdb.set_trace()
                     raise ValueError(errormsg)
-                layer.add_pairs(deliveries.uids, new_infant_uids, dur=durs)
+                if len(new_mother_uids) != len(new_infant_uids):
+                    errormsg = f'Number of new mothers ({len(deliveries.uids)}) does not match number of new infants ({len(new_infant_uids)})in the postnatal network.'
+                    import traceback; traceback.print_exc(); import pdb; pdb.set_trace()
+                    raise ValueError(errormsg)
+
+                # Create durations and start dates, and add connections
+                durs = self.dur_postpartum[new_mother_uids]
+                start = np.full(self.n_births, fill_value=self.sim.ti)
+                layer.add_pairs(deliveries.uids, new_infant_uids, dur=durs, start=start)
 
         # Check for new women emerging from post-partum
         postpartum = ~self.pregnant & (self.ti_postpartum <= ti)
@@ -424,6 +438,11 @@ class Pregnancy(Demographics):
         # are instead handled in the fertility_dist logic as the rates need to be adjusted
         eligible_uids = self.sim.people.female.uids
         conceive_uids = self.pars.fertility_rate.filter(eligible_uids)
+
+        # Validation
+        if np.any(self.pregnant[conceive_uids]):
+            which_uids = conceive_uids[self.pregnant[conceive_uids]]
+            errormsg = f'New conceptions registered in {len(which_uids)} pregnant agent(s) at timestep {self.sim.ti}.'
 
         # Set prognoses for the pregnancies
         if len(conceive_uids) > 0:
@@ -451,7 +470,8 @@ class Pregnancy(Demographics):
             for lkey, layer in self.sim.networks.items():
                 if layer.prenatal:
                     durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy)
-                    layer.add_pairs(conceive_uids, new_uids, dur=durs)
+                    start = np.full(n_unborn, fill_value=self.sim.ti)
+                    layer.add_pairs(conceive_uids, new_uids, dur=durs, start=start)
 
         return new_uids
 

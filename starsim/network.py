@@ -786,7 +786,7 @@ class MaternalNet(Network):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
-        key_dict = sc.mergedicts({'dur': ss_float_}, key_dict)
+        key_dict = sc.mergedicts({'dur': ss_float_, 'start': ss_int_, 'end': ss_int_}, key_dict)
         super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
         return
 
@@ -796,19 +796,20 @@ class MaternalNet(Network):
         Keep connections for now, might want to consider removing
         """
         dt = self.sim.dt
-        self.contacts.dur = self.contacts.dur/dt - dt
+        self.contacts.dur = self.contacts.dur - dt
         inactive = self.contacts.dur <= 0
         self.contacts.beta[inactive] = 0
         return
 
-    def add_pairs(self, mother_inds=None, unborn_inds=None, dur=None):
+    def add_pairs(self, mother_inds=None, unborn_inds=None, dur=None, start=None):
         """ Add connections between pregnant women and their as-yet-unborn babies """
         if mother_inds is None:
             return 0
         else:
             n = len(mother_inds)
             beta = np.ones(n)
-            self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur)
+            end=start+dur/self.sim.dt
+            self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur, start=start, end=end)
             return n
 
 
