@@ -7,6 +7,14 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 0.5.1 (2024-05-15)
+--------------------------
+- Separates maternal transmission into prenatal and postnatal modules
+- *GitHub info*: PR `509 <https://github.com/starsimhub/starsim/pull/509>`_
+
+
+
+
 Version 0.5.0 (2024-05-14)
 --------------------------
 
