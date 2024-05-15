@@ -259,9 +259,9 @@ class Pregnancy(Demographics):
     def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__()
         self.default_pars(
-            dur_pregnancy = 0.75,
-            dur_postpartum = 0.5,
-            fertility_rate = 0, # See make_fertility_prob_function
+            dur_pregnancy = 0.75,   # Duration for pre-natal transmission
+            dur_postpartum = ss.lognorm_ex(0.5, 0.5),   # Duration for post-natal transmission (e.g. via breastfeeding)
+            fertility_rate = 0,     # See make_fertility_prob_function
             rel_fertility = 1,
             maternal_death_prob = ss.bernoulli(0),
             sex_ratio = ss.bernoulli(0.5), # Ratio of babies born female
@@ -275,6 +275,7 @@ class Pregnancy(Demographics):
             ss.BoolArr('fecund', default=True),  # Applies to girls and women inside the fertility window
             ss.BoolArr('pregnant'),  # Currently pregnant
             ss.BoolArr('postpartum'),  # Currently post-partum
+            ss.FloatArr('dur_postpartum'),  # Duration of postpartum phase
             ss.FloatArr('ti_pregnant'),  # Time pregnancy begins
             ss.FloatArr('ti_delivery'),  # Time of delivery
             ss.FloatArr('ti_postpartum'),  # Time postpartum ends
@@ -392,6 +393,21 @@ class Pregnancy(Demographics):
         self.postpartum[deliveries] = True
         self.fecund[deliveries] = False
 
+        # Add connections to any postnatal transmission layers
+        for lkey, layer in self.sim.networks.items():
+            if layer.postnatal and self.n_births:
+                # Add postnatal connections by finding the prenatal contacts
+                # Validation of the networks is done during initialization to ensure that 1 prenatal netwrok is present
+                prenatalnet = [nw for nw in self.sim.networks.values() if nw.prenatal][0]
+                mother_bools = np.in1d(prenatalnet.contacts.p1, deliveries.uids)  # Find the indices of new mothers in the prenatal network
+                infant_uids = prenatalnet.contacts.p2[mother_bools]  # Find the babies belonging to new mothers
+                new_infant_uids = np.setdiff1d(infant_uids, layer.contacts.p2)  # Take out the previous babies born to the new mothers
+                durs = self.dur_postpartum[deliveries.uids]
+                if len(deliveries.uids) != len(new_infant_uids):
+                    errormsg = f'Number of new mothers ({len(deliveries.uids)}) does not match number of new infants ({len(new_infant_uids)})in the postnatal network.'
+                    raise ValueError(errormsg)
+                layer.add_pairs(deliveries.uids, new_infant_uids, dur=durs)
+
         # Check for new women emerging from post-partum
         postpartum = ~self.pregnant & (self.ti_postpartum <= ti)
         self.postpartum[postpartum] = False
@@ -431,12 +447,10 @@ class Pregnancy(Demographics):
             people.slot[new_uids] = new_slots  # Before sampling female_dist
             people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
 
-            # Add connections to any vertical transmission layers
-            # Placeholder code to be moved / refactored. The maternal network may need to be
-            # handled separately to the sexual networks, TBC how to handle this most elegantly
+            # Add connections to any prenatal transmission layers
             for lkey, layer in self.sim.networks.items():
-                if layer.vertical:  # What happens if there's more than one vertical layer?
-                    durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
+                if layer.prenatal:
+                    durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy)
                     layer.add_pairs(conceive_uids, new_uids, dur=durs)
 
         return new_uids
@@ -457,11 +471,12 @@ class Pregnancy(Demographics):
         self.ti_pregnant[uids] = ti
 
         # Outcomes for pregnancies
-        dur_preg = np.full(len(uids), self.pars.dur_pregnancy / dt)
-        dur_postpartum = np.full(len(uids), self.pars.dur_postpartum / dt)
+        dur_preg = np.full(len(uids), self.pars.dur_pregnancy)  # Duration in years
+        dur_postpartum = self.pars.dur_postpartum.rvs(uids)
         dead = self.pars.maternal_death_prob.rvs(uids)
-        self.ti_delivery[uids] = ti + dur_preg # Currently assumes maternal deaths still result in a live baby
-        self.ti_postpartum[uids] = ti + dur_preg + dur_postpartum
+        self.ti_delivery[uids] = ti + dur_preg/dt # Currently assumes maternal deaths still result in a live baby
+        self.ti_postpartum[uids] = self.ti_delivery[uids] + dur_postpartum/dt
+        self.dur_postpartum[uids] = dur_postpartum
 
         if np.any(dead): # NB: 100x faster than np.sum(), 10x faster than np.count_nonzero()
             self.ti_dead[uids[dead]] = ti + dur_preg[dead]

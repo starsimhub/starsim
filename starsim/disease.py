@@ -270,7 +270,10 @@ class Infection(Disease):
 
                 # Calculate probability of a->b transmission.
                 beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
-                p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
+                try:
+                    p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
+                except:
+                    import traceback; traceback.print_exc(); import pdb; pdb.set_trace()
 
                 # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
                 rvs_s = self.rng_source.rvs(src)

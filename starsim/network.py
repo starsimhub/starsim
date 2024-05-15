@@ -60,7 +60,7 @@ class Network(ss.Module):
         network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
     """
 
-    def __init__(self, key_dict=None, vertical=False, name=None, label=None, requires=None, **kwargs):
+    def __init__(self, key_dict=None, prenatal=False, postnatal=False, name=None, label=None, requires=None, **kwargs):
         # Initialize as a module
         super().__init__(name=name, label=label, requires=requires)
 
@@ -71,7 +71,8 @@ class Network(ss.Module):
             beta = ss_float_,
         )
         self.meta = sc.mergedicts(default_keys, key_dict)
-        self.vertical = vertical  # Whether transmission is bidirectional
+        self.prenatal = prenatal  # Prenatal connections are added at the time of conception. Requires ss.Pregnancy()
+        self.postnatal = postnatal  # Ppstnatal connections are added at the time of delivery. Requires ss.Pregnancy()
 
         # Initialize the keys of the network
         self.contacts = sc.objdict()
@@ -358,7 +359,7 @@ class SexualNetwork(DynamicNetwork):
 
 
 # %% Specific instances of networks
-__all__ += ['StaticNet', 'RandomNet', 'NullNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet']
+__all__ += ['StaticNet', 'RandomNet', 'NullNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet', 'PrenatalNet', 'PostnatalNet']
 
 
 class StaticNet(Network):
@@ -778,23 +779,24 @@ class EmbeddingNet(MFNet):
 
 class MaternalNet(Network):
     """
-    Vertical (birth-related) transmission network
+    Base class for maternal transmission
+    Use PrenatalNet and PostnatalNet to capture transmission in different phases
     """
-    def __init__(self, key_dict=None, vertical=True, **kwargs):
+    def __init__(self, key_dict=None, prenatal=True, postnatal=False, **kwargs):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
         key_dict = sc.mergedicts({'dur': ss_float_}, key_dict)
-        super().__init__(key_dict=key_dict, vertical=vertical, **kwargs)
+        super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
         return
 
     def update(self):
         """
-        Set beta to 0 for women who complete post-partum period
+        Set beta to 0 for women who complete duration of transmission
         Keep connections for now, might want to consider removing
         """
         dt = self.sim.dt
-        self.contacts.dur = self.contacts.dur - dt
+        self.contacts.dur = self.contacts.dur/dt - dt
         inactive = self.contacts.dur <= 0
         self.contacts.beta[inactive] = 0
         return
@@ -808,3 +810,20 @@ class MaternalNet(Network):
             beta = np.ones(n)
             self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur)
             return n
+
+
+class PrenatalNet(MaternalNet):
+    """
+    Prenatal transmission network
+    """
+    def __init__(self, key_dict=None, prenatal=True, postnatal=False, **kwargs):
+        super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
+        return
+
+class PostnatalNet(MaternalNet):
+    """
+    Prenatal transmission network
+    """
+    def __init__(self, key_dict=None, prenatal=False, postnatal=True, **kwargs):
+        super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
+        return

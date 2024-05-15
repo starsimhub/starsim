@@ -298,9 +298,10 @@ class SimPars(Pars):
     def validate_modules(self):
         """ Validate modules passed in pars"""
         
-        # Do special initializtaion on demographics
+        # Do special initializtaion on demographics and networks
         self.validate_demographics()
-        
+        self.validate_networks()
+
         # Get all modules into a consistent list format
         modmap = ss.module_map()
         for modkey in modmap.keys():
@@ -333,6 +334,24 @@ class SimPars(Pars):
         if self.use_aging is None:
             self.use_aging = True if self.demographics else False
         
+        return
+
+    def validate_networks(self):
+        """ Validate networks """
+        # Don't allow more than one prenatal or postnatal network
+        prenatal = [nw.prenatal for nw in self.networks]
+        postnatal = [nw.postnatal for nw in self.networks]
+        if sum(prenatal)>1:
+            prenatal_nets = np.array([nw.name for nw in self.networks])[prenatal]
+            errormsg = f'Starsim currently only supports one prenatal network; prenatal networks are: {prenatal_nets}'
+            raise ValueError(errormsg)
+        if sum(postnatal)>1:
+            postnatal_nets = np.array([nw.name for nw in self.networks])[postnatal]
+            errormsg = f'Starsim currently only supports one postnatal network; postnatal networks are: {postnatal_nets}'
+            raise ValueError(errormsg)
+            if not sum(prenatal):
+                errormsg = 'Starsim currently only supports adding a postnatal network if a prenatal network is present'
+                raise ValueError(errormsg)
         return
 
     def convert_modules(self):

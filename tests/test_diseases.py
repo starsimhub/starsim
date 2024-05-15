@@ -172,6 +172,16 @@ def test_multidisease():
     sim.run()
     return sim
 
+def test_mtct():
+    """ Test mother-to-child transmission routes """
+
+    ppl = ss.People(n_agents)
+    sis = ss.SIS(beta={'random':[0.005, 0.001], 'maternal':[0.1, 0]})
+    networks = [ss.RandomNet(), ss.MaternalNet()]
+    demographics = ss.Pregnancy(fertility_rate=20)
+    sim = ss.Sim(people=ppl, diseases=sis, networks=networks, demographics=demographics)
+    sim.run()
+    return sim
 
 if __name__ == '__main__':
     sc.options(interactive=do_plot)
@@ -181,3 +191,4 @@ if __name__ == '__main__':
     ncd   = test_ncd()
     gavi  = test_gavi()
     multi = test_multidisease()
+    mtct  = test_mtct()
