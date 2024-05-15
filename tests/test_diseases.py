@@ -176,8 +176,8 @@ def test_mtct():
     """ Test mother-to-child transmission routes """
 
     ppl = ss.People(n_agents)
-    sis = ss.SIS(beta={'random':[0.005, 0.001], 'maternal':[0.1, 0]})
-    networks = [ss.RandomNet(), ss.MaternalNet()]
+    sis = ss.SIS(beta={'random':[0.005, 0.001], 'prenatal':[0.1, 0], 'postnatal':[0.1, 0]})
+    networks = [ss.RandomNet(), ss.PrenatalNet(), ss.PostnatalNet()]
     demographics = ss.Pregnancy(fertility_rate=20)
     sim = ss.Sim(people=ppl, diseases=sis, networks=networks, demographics=demographics)
     sim.run()

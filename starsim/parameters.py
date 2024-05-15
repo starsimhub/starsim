@@ -298,9 +298,8 @@ class SimPars(Pars):
     def validate_modules(self):
         """ Validate modules passed in pars"""
         
-        # Do special initializtaion on demographics and networks
+        # Do special initializtaion on demographics
         self.validate_demographics()
-        self.validate_networks()
 
         # Get all modules into a consistent list format
         modmap = ss.module_map()
@@ -314,6 +313,10 @@ class SimPars(Pars):
         # Convert from lists to ndicts
         for modkey,modclass in modmap.items():
             self[modkey] = ss.ndict(self[modkey], type=modclass)
+
+        # Check networks
+        self.validate_networks()
+
         return
     
     def validate_demographics(self):
@@ -339,14 +342,14 @@ class SimPars(Pars):
     def validate_networks(self):
         """ Validate networks """
         # Don't allow more than one prenatal or postnatal network
-        prenatal = [nw.prenatal for nw in self.networks]
-        postnatal = [nw.postnatal for nw in self.networks]
+        prenatal = [nw.prenatal for nw in self.networks.values()]
+        postnatal = [nw.postnatal for nw in self.networks.values()]
         if sum(prenatal)>1:
-            prenatal_nets = np.array([nw.name for nw in self.networks])[prenatal]
+            prenatal_nets = np.array([nw.name for nw in self.networks.values()])[prenatal]
             errormsg = f'Starsim currently only supports one prenatal network; prenatal networks are: {prenatal_nets}'
             raise ValueError(errormsg)
         if sum(postnatal)>1:
-            postnatal_nets = np.array([nw.name for nw in self.networks])[postnatal]
+            postnatal_nets = np.array([nw.name for nw in self.networks.values()])[postnatal]
             errormsg = f'Starsim currently only supports one postnatal network; postnatal networks are: {postnatal_nets}'
             raise ValueError(errormsg)
             if not sum(prenatal):
