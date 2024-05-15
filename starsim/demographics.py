@@ -403,24 +403,25 @@ class Pregnancy(Demographics):
                 prenatalnet = [nw for nw in self.sim.networks.values() if nw.prenatal][0]
 
                 # Find the prenatal connections that are ending
-                prenatal_ending = prenatalnet.contacts.end==self.sim.ti
+                prenatal_ending = prenatalnet.contacts.end<=self.sim.ti
                 new_mother_uids = prenatalnet.contacts.p1[prenatal_ending]
                 new_infant_uids = prenatalnet.contacts.p2[prenatal_ending]
 
                 # Validation
                 if not np.array_equal(new_mother_uids, deliveries.uids):
                     errormsg = f'IDs of new mothers do not match IDs of new deliveries.'
-                    import traceback; traceback.print_exc(); import pdb; pdb.set_trace()
                     raise ValueError(errormsg)
                 if len(new_mother_uids) != len(new_infant_uids):
                     errormsg = f'Number of new mothers ({len(deliveries.uids)}) does not match number of new infants ({len(new_infant_uids)})in the postnatal network.'
-                    import traceback; traceback.print_exc(); import pdb; pdb.set_trace()
                     raise ValueError(errormsg)
 
                 # Create durations and start dates, and add connections
                 durs = self.dur_postpartum[new_mother_uids]
                 start = np.full(self.n_births, fill_value=self.sim.ti)
-                layer.add_pairs(deliveries.uids, new_infant_uids, dur=durs, start=start)
+
+                # # Remove pairs from prenatal network and add to postnatal
+                prenatalnet.end_pairs()
+                layer.add_pairs(new_mother_uids, new_infant_uids, dur=durs, start=start)
 
         # Check for new women emerging from post-partum
         postpartum = ~self.pregnant & (self.ti_postpartum <= ti)

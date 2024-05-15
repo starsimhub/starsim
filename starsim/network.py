@@ -777,7 +777,7 @@ class EmbeddingNet(MFNet):
         return len(beta)
 
 
-class MaternalNet(Network):
+class MaternalNet(DynamicNetwork):
     """
     Base class for maternal transmission
     Use PrenatalNet and PostnatalNet to capture transmission in different phases
@@ -795,11 +795,16 @@ class MaternalNet(Network):
         Set beta to 0 for women who complete duration of transmission
         Keep connections for now, might want to consider removing
         """
-        dt = self.sim.dt
-        self.contacts.dur = self.contacts.dur - dt
-        inactive = self.contacts.dur <= 0
+        inactive = self.contacts.end <= self.sim.ti
         self.contacts.beta[inactive] = 0
         return
+
+    def end_pairs(self):
+        people = self.sim.people
+        active = (self.contacts.end > self.sim.ti) & people.alive[self.contacts.p1] & people.alive[self.contacts.p2]
+        for k in self.meta_keys():
+            self.contacts[k] = self.contacts[k][active]
+        return len(active)
 
     def add_pairs(self, mother_inds=None, unborn_inds=None, dur=None, start=None):
         """ Add connections between pregnant women and their as-yet-unborn babies """
