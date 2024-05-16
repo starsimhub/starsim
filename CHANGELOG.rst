@@ -13,8 +13,6 @@ Version 0.5.1 (2024-05-15)
 - *GitHub info*: PR `509 <https://github.com/starsimhub/starsim/pull/509>`_
 
 
-
-
 Version 0.5.0 (2024-05-14)
 --------------------------
 
