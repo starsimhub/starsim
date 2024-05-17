@@ -61,6 +61,9 @@ class People(sc.prettyobj):
         states = [
             ss.BoolArr('alive', default=True),  # Time index for death
             ss.BoolArr('female', default=ss.bernoulli(name='female', p=0.5)),
+            ss.Arr('parent_uids', dtype=[]), # List indicating the UID of mother giving birth
+            ss.Arr('child_uids', dtype=[]), # List indicating the UID of mother giving birth
+            ss.Arr('ti_birth', dtype=[]), # List with Time Index, sim.ti when child was born
             ss.FloatArr('age', default=self.get_age_dist(age_data)), # NaN until conceived
             ss.FloatArr('ti_dead'),  # Time index for death
             ss.FloatArr('scale', default=1.0), # The scale factor for the agents (multiplied for making results)
