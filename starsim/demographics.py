@@ -62,8 +62,15 @@ class Births(Demographics):
             br_val = self.pars.birth_rate[self.metadata.data_cols['cbr']]
             all_birth_rates = np.interp(sim.yearvec, br_year, br_val)
             self.pars.birth_rate = all_birth_rates
-        return
 
+        '''Empty the parent and child uids on first sim iteration sim.ti==0 '''
+        if(sim.ti==0):
+            sim.people.parent_uids=[]
+            sim.people.child_uids=[]
+            sim.people.ti_birth=[]
+
+        return
+         
     def standardize_birth_data(self):
         """ Standardize/validate birth rates - handled in an external file due to shared functionality """
         birth_rate = ss.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
@@ -83,12 +90,13 @@ class Births(Demographics):
         self.n_births = len(new_uids)
         return new_uids
 
-    def get_births(self):
+    def make_birth_prob_fn(self):
         """
         Extract the right birth rates to use and translate it into a number of people to add.
         """
         sim = self.sim
         p = self.pars
+
         if sc.isnumber(p.birth_rate):
             this_birth_rate = p.birth_rate
         elif sc.checktype(p.birth_rate, 'arraylike'):
@@ -96,14 +104,33 @@ class Births(Demographics):
 
         scaled_birth_prob = this_birth_rate * p.units * p.rel_birth * sim.pars.dt
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
-        n_new = int(np.floor(sim.people.alive.count() * scaled_birth_prob))
+        
+        ''' Select Mothers for Birth '''    
+       
+        # People eligible to become pregnant. We don't remove pregnant people here, these
+        # are instead handled in the fertility_dist logic as the rates need to be adjusted
+        denom_conds = (sim.people.female) & (sim.people.alive) & (sim.people.age>=18)
+        inds_to_choose_from = sim.people.uid[denom_conds]
+        
+        self.pars.birth_rate_data = ss.bernoulli(p=scaled_birth_prob)
+        self.pars.birth_rate_data.initialize(trace='any', sim=sim, slots=None)
+        mother_uids = self.pars.birth_rate_data.filter(inds_to_choose_from)
+        n_new=len(mother_uids)
+        np.array(mother_uids)
+        sim.people.parent_uids=np.hstack([sim.people.parent_uids,mother_uids.tolist()])
+        this_ti_arr=np.full(n_new,sim.ti)
+        sim.people.ti_birth=np.hstack([sim.people.ti_birth,this_ti_arr])
         return n_new
 
     def add_births(self):
         """ Add n_new births to each state in the sim """
+        sim = self.sim
         people = self.sim.people
-        n_new = self.get_births()
+        n_new = self.make_birth_prob_fn()
         new_uids = people.grow(n_new)
+        baby_uids=new_uids
+        np.array(baby_uids)
+        sim.people.child_uids=np.hstack([sim.people.child_uids,baby_uids.tolist()])
         people.age[new_uids] = 0
         return new_uids
 
@@ -220,7 +247,7 @@ class Deaths(Demographics):
         # Scale from rate to probability. Consider an exponential here.
         death_prob = death_rate * (self.pars.units * self.pars.rel_death * sim.pars.dt)
         death_prob = np.clip(death_prob, a_min=0, a_max=1)
-
+        
         return death_prob
 
     def init_results(self):
