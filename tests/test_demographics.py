@@ -126,7 +126,7 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, do_plot=False):
 def test_constant_pop(do_plot=False):
     """ Test pars for constant pop size """
     sc.heading('Testing constant population size')
-    sim = ss.Sim(n_agents=10e3, birth_rate=10, death_rate=1, n_years=200, rand_seed=1).run()
+    sim = ss.Sim(n_agents=10e3, birth_rate=20, death_rate=1, n_years=200, rand_seed=1).run()
     print("Check final pop size within 5% of starting pop")
     assert np.isclose(sim.results.n_alive[0], sim.results.n_alive[-1], rtol=0.05)
     print(f'✓ (final pop / starting pop={sim.results.n_alive[-1] / sim.results.n_alive[0]:.2f})')
