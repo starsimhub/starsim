@@ -240,6 +240,7 @@ class Infection(Disease):
                         raise ValueError(errormsg)
         return betamap
 
+    '''
     def make_new_cases(self):
         """
         Add new cases of module, through transmission, incidence, etc.
@@ -294,6 +295,110 @@ class Infection(Disease):
         if len(new_cases):
             self._set_cases(new_cases, sources)
             
+        return new_cases, sources
+    '''
+    def make_new_cases(self):
+        """
+        Common-random-number-safe transmission code works by computing the
+        probability of each _node_ acquiring a case rather than checking if each
+        _edge_ transmits.
+        Subsequent step uses a roulette wheel with slotted RNG to determine
+        infection source.
+        """
+        people = self.sim.people
+        n = len(people.uid)  # TODO: possibly could be shortened to just the people who are alive
+        p_acq_node = np.zeros(n)
+        betamap = self._check_betas()
+
+        src_vec = []
+        trg_vec = []
+        prb_vec = []
+        for nkey, net in self.sim.networks.items():
+            if not len(net):
+                break
+
+            nbetas = betamap[nkey]
+            contacts = net.contacts
+
+            rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
+            rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
+
+            p1p2b0 = [contacts.p1, contacts.p2, nbetas[0]]
+            p2p1b1 = [contacts.p2, contacts.p1, nbetas[1]]
+            for src, trg, beta in [p1p2b0, p2p1b1]:
+
+                # Skip networks with no transmission
+                if beta == 0:
+                    continue
+
+                # Calculate probability of a->b transmission.
+                #a, b, beta_arr = contacts[src], contacts[trg], contacts.beta
+                nzi = (rel_trans[src] > 0) & (rel_sus[trg] > 0) & (contacts.beta > 0)
+                src_vec.append(src[nzi])
+                trg_vec.append(trg[nzi])
+
+                # TODO: Check alignment of slices with uids
+                beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt, uids=nzi)
+                trans_arr = rel_trans[src[nzi]]
+                sus_arr = rel_sus[trg[nzi]]
+                new_pvec = trans_arr * sus_arr * beta_per_dt
+                prb_vec.append(new_pvec)
+
+        if len(src_vec):
+            dfp1 = np.concatenate(src_vec)
+            dfp2 = np.concatenate(trg_vec)
+            dfp = np.concatenate(prb_vec)
+        else:
+            return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
+
+        if len(dfp) == 0:
+            return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
+
+        p2uniq, p2idx, p2inv, p2cnt = np.unique(ss.uids(dfp2), return_index=True, return_inverse=True, return_counts=True)
+
+        # Pre-draw random numbers
+        slots = people.slot[p2uniq]  # Slots for the possible infectee
+        r = self.rng_target.rvs(n=np.max(slots) + 1)
+        q = self.rng_source.rvs(n=np.max(slots) + 1)
+
+        # Now address nodes with multiple possible infectees
+        degrees = np.unique(p2cnt)
+        new_cases = []
+        sources = []
+        for deg in degrees:
+            if deg == 1:
+                # UIDs that only appear once
+                cnt1 = p2cnt == 1
+                uids = p2uniq[cnt1]
+                idx = p2idx[cnt1]
+                p_acq_node = dfp[idx]
+                cases = r[people.slot[uids]] < p_acq_node
+                if cases.any():
+                    s = dfp1[idx][cases]
+            else:
+                dups = np.argwhere(p2cnt==deg).flatten()
+                uids = p2uniq[dups]
+                inds = [np.argwhere(np.isin(p2inv, d)).flatten() for d in dups]
+                probs = dfp[inds]
+                p_acq_node = 1-np.prod(1-probs, axis=1)
+
+                cases = r[people.slot[uids]] < p_acq_node
+                if cases.any():
+                    # Vectorized roulette wheel
+                    cumsum = probs[cases].cumsum(axis=1)
+                    cumsum /= cumsum[:,-1][:,np.newaxis]
+                    ix = np.argmax(cumsum >= q[people.slot[uids[cases]]][:,np.newaxis], axis=1)
+                    s = np.take_along_axis(dfp1[inds][cases], ix[:,np.newaxis], axis=1).flatten()#dfp1[inds][cases][np.arange(len(cases)),ix]
+
+            if cases.any():
+                new_cases.append(uids[cases])
+                sources.append(s)
+
+        if len(new_cases) == 0:
+            return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
+
+        new_cases = np.concatenate(new_cases)
+        sources = np.concatenate(sources)
         return new_cases, sources
 
     def _set_cases(self, target_uids, source_uids=None):
