@@ -259,9 +259,9 @@ class Pregnancy(Demographics):
     def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__()
         self.default_pars(
-            dur_pregnancy = 0.75,
-            dur_postpartum = 0.5,
-            fertility_rate = 0, # See make_fertility_prob_function
+            dur_pregnancy = 0.75,   # Duration for pre-natal transmission
+            dur_postpartum = ss.lognorm_ex(0.5, 0.5),   # Duration for post-natal transmission (e.g. via breastfeeding)
+            fertility_rate = 0,     # See make_fertility_prob_function
             rel_fertility = 1,
             maternal_death_prob = ss.bernoulli(0),
             sex_ratio = ss.bernoulli(0.5), # Ratio of babies born female
@@ -275,6 +275,7 @@ class Pregnancy(Demographics):
             ss.BoolArr('fecund', default=True),  # Applies to girls and women inside the fertility window
             ss.BoolArr('pregnant'),  # Currently pregnant
             ss.BoolArr('postpartum'),  # Currently post-partum
+            ss.FloatArr('dur_postpartum'),  # Duration of postpartum phase
             ss.FloatArr('ti_pregnant'),  # Time pregnancy begins
             ss.FloatArr('ti_delivery'),  # Time of delivery
             ss.FloatArr('ti_postpartum'),  # Time postpartum ends
@@ -303,7 +304,7 @@ class Pregnancy(Demographics):
         """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
 
         if sc.isnumber(self.fertility_rate_data):
-            fertility_rate = self.fertility_rate_data
+            fertility_rate = pd.Series(index=uids, data=self.fertility_rate_data)
 
         else:
             # Abbreviate key variables
@@ -340,10 +341,10 @@ class Pregnancy(Demographics):
             # Make array of fertility rates
             fertility_rate = pd.Series(index=uids)
             fertility_rate[uids] = new_percent[age_inds]
-            fertility_rate[pregnant_uids] = 0
 
         # Scale from rate to probability. Consider an exponential here.
         fertility_prob = fertility_rate * (self.pars.units * self.pars.rel_fertility * sim.pars.dt)
+        fertility_prob[self.pregnant.uids] = 0 # Currently pregnant women cannot become pregnant again
         fertility_prob = np.clip(fertility_prob, a_min=0, a_max=1)
 
         return fertility_prob
@@ -392,6 +393,32 @@ class Pregnancy(Demographics):
         self.postpartum[deliveries] = True
         self.fecund[deliveries] = False
 
+        # Add connections to any postnatal transmission layers
+        for lkey, layer in self.sim.networks.items():
+            if layer.postnatal and self.n_births:
+
+                # Add postnatal connections by finding the prenatal contacts
+                # Validation of the networks is done during initialization to ensure that 1 prenatal netwrok is present
+                prenatalnet = [nw for nw in self.sim.networks.values() if nw.prenatal][0]
+
+                # Find the prenatal connections that are ending
+                prenatal_ending = prenatalnet.contacts.end<=self.sim.ti
+                new_mother_uids = prenatalnet.contacts.p1[prenatal_ending]
+                new_infant_uids = prenatalnet.contacts.p2[prenatal_ending]
+
+                # Validation
+                if not np.array_equal(new_mother_uids, deliveries.uids):
+                    errormsg = f'IDs of new mothers do not match IDs of new deliveries.'
+                    raise ValueError(errormsg)
+
+                # Create durations and start dates, and add connections
+                durs = self.dur_postpartum[new_mother_uids]
+                start = np.full(self.n_births, fill_value=self.sim.ti)
+
+                # # Remove pairs from prenatal network and add to postnatal
+                prenatalnet.end_pairs()
+                layer.add_pairs(new_mother_uids, new_infant_uids, dur=durs, start=start)
+
         # Check for new women emerging from post-partum
         postpartum = ~self.pregnant & (self.ti_postpartum <= ti)
         self.postpartum[postpartum] = False
@@ -408,6 +435,12 @@ class Pregnancy(Demographics):
         # are instead handled in the fertility_dist logic as the rates need to be adjusted
         eligible_uids = self.sim.people.female.uids
         conceive_uids = self.pars.fertility_rate.filter(eligible_uids)
+
+        # Validation
+        if np.any(self.pregnant[conceive_uids]):
+            which_uids = conceive_uids[self.pregnant[conceive_uids]]
+            errormsg = f'New conceptions registered in {len(which_uids)} pregnant agent(s) at timestep {self.sim.ti}.'
+            raise ValueError(errormsg)
 
         # Set prognoses for the pregnancies
         if len(conceive_uids) > 0:
@@ -431,13 +464,12 @@ class Pregnancy(Demographics):
             people.slot[new_uids] = new_slots  # Before sampling female_dist
             people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
 
-            # Add connections to any vertical transmission layers
-            # Placeholder code to be moved / refactored. The maternal network may need to be
-            # handled separately to the sexual networks, TBC how to handle this most elegantly
+            # Add connections to any prenatal transmission layers
             for lkey, layer in self.sim.networks.items():
-                if layer.vertical:  # What happens if there's more than one vertical layer?
-                    durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy + self.pars.dur_postpartum)
-                    layer.add_pairs(conceive_uids, new_uids, dur=durs)
+                if layer.prenatal:
+                    durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy)
+                    start = np.full(n_unborn, fill_value=self.sim.ti)
+                    layer.add_pairs(conceive_uids, new_uids, dur=durs, start=start)
 
         return new_uids
 
@@ -457,11 +489,12 @@ class Pregnancy(Demographics):
         self.ti_pregnant[uids] = ti
 
         # Outcomes for pregnancies
-        dur_preg = np.full(len(uids), self.pars.dur_pregnancy / dt)
-        dur_postpartum = np.full(len(uids), self.pars.dur_postpartum / dt)
+        dur_preg = np.full(len(uids), self.pars.dur_pregnancy)  # Duration in years
+        dur_postpartum = self.pars.dur_postpartum.rvs(uids)
         dead = self.pars.maternal_death_prob.rvs(uids)
-        self.ti_delivery[uids] = ti + dur_preg # Currently assumes maternal deaths still result in a live baby
-        self.ti_postpartum[uids] = ti + dur_preg + dur_postpartum
+        self.ti_delivery[uids] = ti + dur_preg/dt # Currently assumes maternal deaths still result in a live baby
+        self.ti_postpartum[uids] = self.ti_delivery[uids] + dur_postpartum/dt
+        self.dur_postpartum[uids] = dur_postpartum
 
         if np.any(dead): # NB: 100x faster than np.sum(), 10x faster than np.count_nonzero()
             self.ti_dead[uids[dead]] = ti + dur_preg[dead]

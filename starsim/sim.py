@@ -69,7 +69,7 @@ class Sim(sc.prettyobj):
         # Initialize all the modules with the sim
         for mod in self.modules:
             mod.initialize(self)
-                
+
         # Initialize products # TODO: think about simplifying
         for mod in self.interventions:
             if hasattr(mod, 'product') and isinstance(mod.product, ss.Product):
