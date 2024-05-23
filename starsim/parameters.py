@@ -298,7 +298,7 @@ class SimPars(Pars):
     def validate_modules(self):
         """ Validate modules passed in pars"""
         
-        # Do special initializtaion on demographics
+        # Do special validation on demographics (must be before modules are created)
         self.validate_demographics()
 
         # Get all modules into a consistent list format
@@ -314,9 +314,8 @@ class SimPars(Pars):
         for modkey,modclass in modmap.items():
             self[modkey] = ss.ndict(self[modkey], type=modclass)
 
-        # Check networks
+        # Do special validation on networks (must be after modules are created)
         self.validate_networks()
-
         return
     
     def validate_demographics(self):
@@ -336,25 +335,22 @@ class SimPars(Pars):
         # Decide whether to use aging based on if demographics modules are present
         if self.use_aging is None:
             self.use_aging = True if self.demographics else False
-        
         return
 
     def validate_networks(self):
         """ Validate networks """
         # Don't allow more than one prenatal or postnatal network
-        prenatal = [nw.prenatal for nw in self.networks.values()]
-        postnatal = [nw.postnatal for nw in self.networks.values()]
-        if sum(prenatal)>1:
-            prenatal_nets = np.array([nw.name for nw in self.networks.values()])[prenatal]
-            errormsg = f'Starsim currently only supports one prenatal network; prenatal networks are: {prenatal_nets}'
+        prenatal_nets  = {k:nw for nw in self.networks.items() if nw.prenatal}
+        postnatal_nets = {k:nw for nw in self.networks.items() if nw.postnatal}
+        if len(prenatal_nets) > 1:
+            errormsg = f'Starsim currently only supports one prenatal network; prenatal networks are: {prenatal_nets.keys()}'
             raise ValueError(errormsg)
-        if sum(postnatal)>1:
-            postnatal_nets = np.array([nw.name for nw in self.networks.values()])[postnatal]
-            errormsg = f'Starsim currently only supports one postnatal network; postnatal networks are: {postnatal_nets}'
+        if len(postnatal_nets) > 1:
+            errormsg = f'Starsim currently only supports one postnatal network; postnatal networks are: {postnatal_nets.keys()}'
             raise ValueError(errormsg)
-            if not sum(prenatal):
-                errormsg = 'Starsim currently only supports adding a postnatal network if a prenatal network is present'
-                raise ValueError(errormsg)
+        if len(postnatal_nets) and not len(prenatal_nets):
+            errormsg = 'Starsim currently only supports adding a postnatal network if a prenatal network is present'
+            raise ValueError(errormsg)
         return
 
     def convert_modules(self):

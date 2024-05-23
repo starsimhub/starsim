@@ -72,7 +72,7 @@ class Network(ss.Module):
         )
         self.meta = sc.mergedicts(default_keys, key_dict)
         self.prenatal = prenatal  # Prenatal connections are added at the time of conception. Requires ss.Pregnancy()
-        self.postnatal = postnatal  # Ppstnatal connections are added at the time of delivery. Requires ss.Pregnancy()
+        self.postnatal = postnatal  # Postnatal connections are added at the time of delivery. Requires ss.Pregnancy()
 
         # Initialize the keys of the network
         self.contacts = sc.objdict()
@@ -786,7 +786,7 @@ class MaternalNet(DynamicNetwork):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
-        key_dict = sc.mergedicts({'dur': ss_float_, 'start': ss_int_, 'end': ss_int_}, key_dict)
+        key_dict = sc.mergedicts(dict(dur=ss_float_, start=ss_int_, end=ss_int_), key_dict)
         super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
         return
 
@@ -814,23 +814,19 @@ class MaternalNet(DynamicNetwork):
             if start is None: start = np.full_like(dur, fill_value=self.sim.ti)
             n = len(mother_inds)
             beta = np.ones(n)
-            end=start+sc.promotetoarray(dur)/self.sim.dt
+            end = start + sc.promotetoarray(dur) / self.sim.dt
             self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur, start=start, end=end)
             return n
 
 
 class PrenatalNet(MaternalNet):
-    """
-    Prenatal transmission network
-    """
+    """ Prenatal transmission network """
     def __init__(self, key_dict=None, prenatal=True, postnatal=False, **kwargs):
         super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
         return
 
 class PostnatalNet(MaternalNet):
-    """
-    Prenatal transmission network
-    """
+    """ Postnatal transmission network """
     def __init__(self, key_dict=None, prenatal=False, postnatal=True, **kwargs):
         super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
         return

@@ -305,7 +305,6 @@ class Pregnancy(Demographics):
 
         if sc.isnumber(self.fertility_rate_data):
             fertility_rate = pd.Series(index=uids, data=self.fertility_rate_data)
-            fertility_rate[self.pregnant.uids] = 0
 
         else:
             # Abbreviate key variables
@@ -342,10 +341,10 @@ class Pregnancy(Demographics):
             # Make array of fertility rates
             fertility_rate = pd.Series(index=uids)
             fertility_rate[uids] = new_percent[age_inds]
-            fertility_rate[pregnant_uids] = 0
 
         # Scale from rate to probability. Consider an exponential here.
         fertility_prob = fertility_rate * (self.pars.units * self.pars.rel_fertility * sim.pars.dt)
+        fertility_prob[self.pregnant.uids] = 0 # Currently pregnant women cannot become pregnant again
         fertility_prob = np.clip(fertility_prob, a_min=0, a_max=1)
 
         return fertility_prob
@@ -411,9 +410,6 @@ class Pregnancy(Demographics):
                 if not np.array_equal(new_mother_uids, deliveries.uids):
                     errormsg = f'IDs of new mothers do not match IDs of new deliveries.'
                     raise ValueError(errormsg)
-                if len(new_mother_uids) != len(new_infant_uids):
-                    errormsg = f'Number of new mothers ({len(deliveries.uids)}) does not match number of new infants ({len(new_infant_uids)})in the postnatal network.'
-                    raise ValueError(errormsg)
 
                 # Create durations and start dates, and add connections
                 durs = self.dur_postpartum[new_mother_uids]
@@ -444,6 +440,7 @@ class Pregnancy(Demographics):
         if np.any(self.pregnant[conceive_uids]):
             which_uids = conceive_uids[self.pregnant[conceive_uids]]
             errormsg = f'New conceptions registered in {len(which_uids)} pregnant agent(s) at timestep {self.sim.ti}.'
+            raise ValueError(errormsg)
 
         # Set prognoses for the pregnancies
         if len(conceive_uids) > 0:
