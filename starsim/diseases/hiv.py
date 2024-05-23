@@ -13,7 +13,7 @@ class HIV(ss.Infection):
 
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             beta = 1.0, # Placeholder value
             cd4_min = 100,
             cd4_max = 500,

@@ -60,9 +60,9 @@ class Network(ss.Module):
         network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
     """
 
-    def __init__(self, key_dict=None, prenatal=False, postnatal=False, name=None, label=None, requires=None, **kwargs):
+    def __init__(self, key_dict=None, prenatal=False, postnatal=False, name=None, label=None, **kwargs):
         # Initialize as a module
-        super().__init__(name=name, label=label, requires=requires)
+        super().__init__(name=name, label=label)
 
         # Each relationship is characterized by these default set of keys, plus any user- or network-supplied ones
         default_keys = sc.objdict(
@@ -75,13 +75,13 @@ class Network(ss.Module):
         self.postnatal = postnatal  # Postnatal connections are added at the time of delivery. Requires ss.Pregnancy()
 
         # Initialize the keys of the network
-        self.contacts = sc.objdict()
+        self.edges = sc.objdict()
         for key, dtype in self.meta.items():
-            self.contacts[key] = np.empty((0,), dtype=dtype)
+            self.edges[key] = np.empty((0,), dtype=dtype)
 
         # Set data, if provided
         for key, value in kwargs.items():
-            self.contacts[key] = np.array(value, dtype=self.meta.get(key)) # Overwrite dtype if supplied, else keep original
+            self.edges[key] = np.array(value, dtype=self.meta.get(key)) # Overwrite dtype if supplied, else keep original
             self.initialized = True
 
         # Define states using placeholder values
@@ -91,15 +91,15 @@ class Network(ss.Module):
     
     @property
     def p1(self):
-        return self.contacts['p1'] if 'p1' in self.contacts else None
+        return self.edges['p1'] if 'p1' in self.edges else None
     
     @property
     def p2(self):
-        return self.contacts['p2'] if 'p2' in self.contacts else None
+        return self.edges['p2'] if 'p2' in self.edges else None
 
     @property
     def beta(self):
-        return self.contacts['beta'] if 'beta' in self.contacts else None
+        return self.edges['beta'] if 'beta' in self.edges else None
 
     def init_vals(self, add_pairs=True):
         super().init_vals()
@@ -108,7 +108,7 @@ class Network(ss.Module):
 
     def __len__(self):
         try:
-            return len(self.contacts.p1)
+            return len(self.edges.p1)
         except:  # pragma: no cover
             return 0
 
@@ -116,7 +116,7 @@ class Network(ss.Module):
         """ Convert to a dataframe for printing """
         namestr = self.name
         labelstr = f'"{self.label}"' if self.label else '<no label>'
-        keys_str = ', '.join(self.contacts.keys())
+        keys_str = ', '.join(self.edges.keys())
         output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", p1, p2, beta)
         output += self.to_df().__repr__()
         return output
@@ -130,12 +130,12 @@ class Network(ss.Module):
 
         Returns: True if person index appears in any interactions
         """
-        return (item in self.contacts.p1) or (item in self.contacts.p2) # TODO: chek if (item in self.members) is faster
+        return (item in self.edges.p1) or (item in self.edges.p2) # TODO: chek if (item in self.members) is faster
 
     @property
     def members(self):
         """ Return sorted array of all members """
-        return np.unique([self.contacts.p1, self.contacts.p2]).view(ss.uids)
+        return np.unique([self.edges.p1, self.edges.p2]).view(ss.uids)
 
     def meta_keys(self):
         """ Return the keys for the network's meta information """
@@ -152,12 +152,12 @@ class Network(ss.Module):
     
     def validate_uids(self):
         """ Ensure that p1, p2 are both UID arrays """
-        contacts = self.contacts
+        edges = self.edges
         for key in ['p1', 'p2']:
-            if key in contacts:
-                arr = contacts[key]
+            if key in edges:
+                arr = edges[key]
                 if not isinstance(arr, ss.uids):
-                    self.contacts[key] = ss.uids(arr)
+                    self.edges[key] = ss.uids(arr)
         return
 
     def validate(self, force=True):
@@ -167,14 +167,14 @@ class Network(ss.Module):
         If dtype is incorrect, try to convert automatically; if length is incorrect,
         do not.
         """
-        n = len(self.contacts.p1)
+        n = len(self.edges.p1)
         for key, dtype in self.meta.items():
             if dtype:
-                actual = self.contacts[key].dtype
+                actual = self.edges[key].dtype
                 expected = dtype
                 if actual != expected:
-                    self.contacts[key] = np.array(self.contacts[key], dtype=expected)  # Try to convert to correct type
-            actual_n = len(self.contacts[key])
+                    self.edges[key] = np.array(self.edges[key], dtype=expected)  # Try to convert to correct type
+            actual_n = len(self.edges[key])
             if n != actual_n:
                 errormsg = f'Expecting length {n} for network key "{key}"; got {actual_n}'  # Report length mismatches
                 raise TypeError(errormsg)
@@ -190,9 +190,9 @@ class Network(ss.Module):
         """
         output = {}
         for key in self.meta_keys():
-            output[key] = self.contacts[key][inds]  # Copy to the output object
+            output[key] = self.edges[key][inds]  # Copy to the output object
             if remove:
-                self.contacts[key] = np.delete(self.contacts[key], inds)  # Remove from the original
+                self.edges[key] = np.delete(self.edges[key], inds)  # Remove from the original
                 self.validate_uids()
         return output
 
@@ -207,28 +207,28 @@ class Network(ss.Module):
         popped_inds = self.get_inds(inds, remove=True)
         return popped_inds
 
-    def append(self, contacts=None, **kwargs):
+    def append(self, edges=None, **kwargs):
         """
-        Append contacts to the current network.
+        Append edges to the current network.
 
         Args:
-            contacts (dict): a dictionary of arrays with keys p1,p2,beta, as returned from network.pop_inds()
+            edges (dict): a dictionary of arrays with keys p1,p2,beta, as returned from network.pop_inds()
         """
-        contacts = sc.mergedicts(contacts, kwargs)
+        edges = sc.mergedicts(edges, kwargs)
         for key in self.meta_keys():
-            curr_arr = self.contacts[key]
+            curr_arr = self.edges[key]
             try:
-                new_arr = contacts[key]
+                new_arr = edges[key]
             except KeyError:
-                errormsg = f'Cannot append contacts since required key "{key}" is missing'
+                errormsg = f'Cannot append edges since required key "{key}" is missing'
                 raise KeyError(errormsg)
-            self.contacts[key] = np.concatenate([curr_arr, new_arr])  # Resize to make room, preserving dtype
+            self.edges[key] = np.concatenate([curr_arr, new_arr])  # Resize to make room, preserving dtype
         self.validate_uids()
         return
 
     def to_dict(self):
         """ Convert to dictionary """
-        d = {k: self.contacts[k] for k in self.meta_keys()}
+        d = {k: self.edges[k] for k in self.meta_keys()}
         return d
 
     def to_df(self):
@@ -241,15 +241,15 @@ class Network(ss.Module):
         if keys is None:
             keys = self.meta_keys()
         for key in keys:
-            self.contacts[key] = df[key].to_numpy()
+            self.edges[key] = df[key].to_numpy()
         return self
 
-    def find_contacts(self, inds, as_array=True):
+    def find_edges(self, inds, as_array=True):
         """
-        Find all contacts of the specified people
+        Find all edges of the specified people
 
-        For some purposes (e.g. contact tracing) it's necessary to find all the contacts
-        associated with a subset of the people in this network. Since contacts are bidirectional
+        For some purposes (e.g. contact tracing) it's necessary to find all the edges
+        associated with a subset of the people in this network. Since edges are bidirectional
         it's necessary to check both p1 and p2 for the target indices. The return type is a Set
         so that there is no duplication of indices (otherwise if the Network has explicit
         symmetric interactions, they could appear multiple times). This is also for performance so
@@ -258,7 +258,7 @@ class Network(ss.Module):
         infection, e.g. exposure risk.
 
         Args:
-            inds (array): indices of people whose contacts to return
+            inds (array): indices of people whose edges to return
             as_array (bool): if true, return as sorted array (otherwise, return as unsorted set)
 
         Returns:
@@ -267,7 +267,7 @@ class Network(ss.Module):
         Example: If there were a network with
         - p1 = [1,2,3,4]
         - p2 = [2,3,1,4]
-        Then find_contacts([1,3]) would return {1,2,3}
+        Then find_edges([1,3]) would return {1,2,3}
         """
 
         # Check types
@@ -276,8 +276,8 @@ class Network(ss.Module):
         if inds.dtype != np.int64:  # pragma: no cover # This is int64 since indices often come from utils.true(), which returns int64
             inds = np.array(inds, dtype=np.int64)
 
-        # Find the contacts
-        contact_inds = ss.find_contacts(self.contacts.p1, self.contacts.p2, inds)
+        # Find the edges
+        contact_inds = ss.find_edges(self.edges.p1, self.edges.p2, inds)
         if as_array:
             contact_inds = np.fromiter(contact_inds, dtype=ss_int_)
             contact_inds.sort()
@@ -288,25 +288,21 @@ class Network(ss.Module):
         """ Define how pairs of people are formed """
         pass
 
-    def update(self):
-        """ Define how pairs/connections evolve (in time) """
-        pass
-
     def remove_uids(self, uids):
         """
         Remove interactions involving specified UIDs
         This method is typically called via `People.remove()` and
         is specifically used when removing agents from the simulation.
         """
-        keep = ~(np.isin(self.contacts.p1, uids) | np.isin(self.contacts.p2, uids))
+        keep = ~(np.isin(self.edges.p1, uids) | np.isin(self.edges.p2, uids))
         for k in self.meta_keys():
-            self.contacts[k] = self.contacts[k][keep]
+            self.edges[k] = self.edges[k][keep]
 
         return
 
-    def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
+    def beta_per_dt(self, disease_beta=None, dt=None, uids=None): # TODO: refactor into disease logic
         if uids is None: uids = Ellipsis
-        return self.contacts.beta[uids] * disease_beta * dt
+        return 
 
 
 class DynamicNetwork(Network):
@@ -321,9 +317,9 @@ class DynamicNetwork(Network):
         self.contacts.dur = self.contacts.dur - self.sim.dt
 
         # Non-alive agents are removed
-        active = (self.contacts.dur > 0) & people.alive[self.contacts.p1] & people.alive[self.contacts.p2]
+        active = (self.edges.dur > 0) & people.alive[self.edges.p1] & people.alive[self.edges.p2]
         for k in self.meta_keys():
-            self.contacts[k] = self.contacts[k][active]
+            self.edges[k] = self.edges[k][active]
         return len(active)
 
 
@@ -355,7 +351,7 @@ class SexualNetwork(DynamicNetwork):
 
     def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
         if uids is None: uids = Ellipsis
-        return self.contacts.beta[uids] * (1 - (1 - disease_beta) ** (self.contacts.acts[uids] * dt))
+        return self.edges.beta[uids] * (1 - (1 - disease_beta) ** (self.edges.acts[uids] * dt))
 
 
 # %% Specific instances of networks
@@ -387,7 +383,7 @@ class StaticNet(Network):
     def __init__(self, graph=None, pars=None, **kwargs):
         super().__init__()
         self.graph = graph
-        self.default_pars(seed=True)
+        self.define_pars(seed=True)
         self.update_pars(pars, **kwargs)
         self.dist = ss.Dist(name='StaticNet')
         return
@@ -414,7 +410,7 @@ class StaticNet(Network):
                 print(f"{str(e)}: networkx {self.graph.name} not supported. Try using ss.NullNet().")
                 raise e
         self.validate_pop(self.n_agents)
-        self.get_contacts()
+        self.get_edges()
         return
 
     def validate_pop(self, n_agents):
@@ -428,15 +424,15 @@ class StaticNet(Network):
             errmsg = f"The nx generator {self.graph.name} produced a graph with no edges"
             raise ValueError(errmsg)
 
-    def get_contacts(self):
+    def get_edges(self):
         p1s = []
         p2s = []
         for edge in self.graph.edges():
             p1, p2 = edge
             p1s.append(p1)
             p2s.append(p2)
-        contacts = dict(p1=p1s, p2=p2s, beta=np.ones_like(p1s))
-        self.append(contacts)
+        edges = dict(p1=p1s, p2=p2s, beta=np.ones_like(p1s))
+        self.append(edges)
         return
 
 
@@ -446,8 +442,8 @@ class RandomNet(DynamicNetwork):
     def __init__(self, pars=None, key_dict=None, **kwargs):
         """ Initialize """
         super().__init__(key_dict=key_dict)
-        self.default_pars(
-            n_contacts = ss.delta(10),
+        self.define_pars(
+            n_contacts = ss.const(10),
             dur = 0,
         )
         self.update_pars(pars, **kwargs)
@@ -471,25 +467,13 @@ class RandomNet(DynamicNetwork):
             count += n
         return source
 
-    def get_contacts(self, inds, n_contacts):
+    def get_edges(self, inds, n_contacts):
         """
-        Efficiently generate contacts
-
-        Note that because of the shuffling operation, each person is assigned 2N contacts
-        (i.e. if a person has 5 contacts, they appear 5 times in the 'source' array and 5
-        times in the 'target' array). Therefore, the `number_of_contacts` argument to this
-        function should be HALF of the total contacts a person is expected to have, if both
-        the source and target array outputs are used (e.g. for social contacts)
-
-        adjusted_number_of_contacts = np.round(number_of_contacts / 2).astype(cvd.default_int)
-
-        Whereas for asymmetric contacts (e.g. staff-public interactions) it might not be necessary
+        Efficiently generate edges
 
         Args:
             inds: List/array of person indices
-            number_of_contacts: List/array the same length as `inds` with the number of unidirectional
-            contacts to assign to each person. Therefore, a person will have on average TWICE this number
-            of random contacts.
+            n_contacts: List/array the same length as `inds` with the number of contacts to assign to each person.
 
         Returns: Two arrays, for source and target
         """
@@ -498,13 +482,13 @@ class RandomNet(DynamicNetwork):
         self.dist.jump() # Reset the RNG manually # TODO, think if there's a better way
         return source, target
 
-    def update(self):
+    def step(self):
         self.end_pairs()
         self.add_pairs()
         return
 
     def add_pairs(self):
-        """ Generate contacts """
+        """ Generate edges """
         people = self.sim.people
         if isinstance(self.pars.n_contacts, ss.Dist):
             number_of_contacts = self.pars.n_contacts.rvs(people.uid[people.alive])  # or people.uid?
@@ -513,7 +497,7 @@ class RandomNet(DynamicNetwork):
 
         number_of_contacts = np.round(number_of_contacts / 2).astype(ss_int_)  # One-way contacts
 
-        p1, p2 = self.get_contacts(people.uid.__array__(), number_of_contacts)
+        p1, p2 = self.get_edges(people.uid.__array__(), number_of_contacts)
         beta = np.ones(len(p1), dtype=ss_float_)
 
         if isinstance(self.pars.dur, ss.Dist):
@@ -533,7 +517,7 @@ class NullNet(Network):
 
     Guarantees there's one (1) contact per agent (themselves), and that their connection weight is zero.
 
-    For an empty network (ie, no contacts) use
+    For an empty network (ie, no edges) use
     >> import starsim as ss
     >> import networkx as nx
     >> empty_net_static = ss.StaticNet(nx.empty_graph)
@@ -555,10 +539,10 @@ class NullNet(Network):
             if self.n > popsize:
                 errormsg = f'Please ensure the size of the network ({self.n} is less than or equal to the population size ({popsize}).'
                 raise ValueError(errormsg)
-        self.get_contacts()
+        self.get_edges()
         return
 
-    def get_contacts(self):
+    def get_edges(self):
         indices = np.arange(self.n)
         self.append(dict(p1=indices, p2=indices, beta=np.zeros_like(indices)))
         return
@@ -571,7 +555,7 @@ class MFNet(SexualNetwork):
     """
     def __init__(self, pars=None, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
-        self.default_pars(
+        self.define_pars(
             duration = ss.lognorm_ex(mean=15),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
@@ -648,7 +632,7 @@ class MFNet(SexualNetwork):
 
         return len(p1)
 
-    def update(self):
+    def step(self):
         self.end_pairs()
         self.set_network_states(upper_age=self.sim.dt) # TODO: looks wrong
         self.add_pairs()
@@ -662,7 +646,7 @@ class MSMNet(SexualNetwork):
 
     def __init__(self, pars=None, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
-        self.default_pars(
+        self.define_pars(
             duration = ss.lognorm_ex(mean=15, stdev=15),
             debut = ss.normal(loc=16, scale=2),
             acts = ss.lognorm_ex(mean=80, stdev=20),
@@ -713,10 +697,10 @@ class MSMNet(SexualNetwork):
         
         return len(p1)
 
-    def update(self):
-        self.end_pairs(self.sim)
-        self.set_network_states(self.sim.people, upper_age=self.sim.dt)
-        self.add_pairs(self.sim)
+    def step(self):
+        self.end_pairs()
+        self.set_network_states(upper_age=self.sim.dt) # TODO: this looks weird
+        self.add_pairs()
         return
 
 
@@ -733,7 +717,7 @@ class EmbeddingNet(MFNet):
             male_shift is the average age that males are older than females in partnerships
         """
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             inherit = True, # The MFNet already comes with pars, we want to keep those
             embedding_func = ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
             male_shift = 5,
@@ -790,20 +774,21 @@ class MaternalNet(DynamicNetwork):
         super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
         return
 
-    def update(self):
+    def step(self):
         """
         Set beta to 0 for women who complete duration of transmission
         Keep connections for now, might want to consider removing
         """
-        inactive = self.contacts.end <= self.sim.ti
+        inactive = self.edges.end <= self.sim.ti
         self.contacts.beta[inactive] = 0
         return
 
     def end_pairs(self):
         people = self.sim.people
-        active = (self.contacts.end > self.sim.ti) & people.alive[self.contacts.p1] & people.alive[self.contacts.p2]
+        edges = self.edges
+        active = (edges.end > self.sim.ti) & people.alive[edges.p1] & people.alive[edges.p2]
         for k in self.meta_keys():
-            self.contacts[k] = self.contacts[k][active]
+            edges[k] = edges[k][active]
         return len(active)
 
     def add_pairs(self, mother_inds=None, unborn_inds=None, dur=None, start=None):
