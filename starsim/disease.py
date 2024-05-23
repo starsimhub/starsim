@@ -15,8 +15,8 @@ __all__ = ['Disease', 'Infection', 'InfectionLog']
 class Disease(ss.Module):
     """ Base module class for diseases """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.results = ss.Results(self.name)
         return
 
@@ -73,8 +73,8 @@ class Infection(Disease):
     operate on to capture co-infection
     """
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.add_states(
             ss.BoolArr('susceptible', default=True),
             ss.BoolArr('infected'),

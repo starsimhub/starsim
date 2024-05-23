@@ -7,7 +7,13 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
-Version 0.5.0 (2024-05-07)
+Version 0.5.1 (2024-05-15)
+--------------------------
+- Separates maternal transmission into prenatal and postnatal modules
+- *GitHub info*: PR `509 <https://github.com/starsimhub/starsim/pull/509>`_
+
+
+Version 0.5.0 (2024-05-14)
 --------------------------
 
 Summary
@@ -95,6 +101,7 @@ People and network changes
 
 Other changes
 ~~~~~~~~~~~~~
+- Boolean arrays have new methods ``true()``, ``false()``, and ``split()``, which return the UIDs for the ``True`` values (alias to ``arr.uids``), ``False`` values, and both sets of values, respectively. ``ss.bernoulli.split()`` has been added as an alias of ``ss.bernoulli.filter(both=True)``.
 - All inputs to a sim are now copied by default. To disable, use ``ss.Sim(..., copy_inputs=False)``.
 - There is a new ``Plugin`` class, which contains shared logic for Interventions and Analyzers. It has a ``from_func()``, which will generate an intervention/analyzer from a function.
 - Diseases no longer have a default value of ``beta=1`` assigned; beta must be defined explicitly if being used.

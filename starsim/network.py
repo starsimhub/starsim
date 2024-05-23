@@ -60,7 +60,7 @@ class Network(ss.Module):
         network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
     """
 
-    def __init__(self, key_dict=None, vertical=False, name=None, label=None, **kwargs):
+    def __init__(self, key_dict=None, prenatal=False, postnatal=False, name=None, label=None, **kwargs):
         # Initialize as a module
         super().__init__(name=name, label=label)
 
@@ -71,7 +71,8 @@ class Network(ss.Module):
             beta = ss_float_,
         )
         self.meta = sc.mergedicts(default_keys, key_dict)
-        self.vertical = vertical  # Whether transmission is bidirectional; defined in demographics.py
+        self.prenatal = prenatal  # Prenatal connections are added at the time of conception. Requires ss.Pregnancy()
+        self.postnatal = postnatal  # Postnatal connections are added at the time of delivery. Requires ss.Pregnancy()
 
         # Initialize the keys of the network
         self.edges = sc.objdict()
@@ -100,9 +101,9 @@ class Network(ss.Module):
     def beta(self):
         return self.edges['beta'] if 'beta' in self.edges else None
 
-    def init_vals(self):
+    def init_vals(self, add_pairs=True):
         super().init_vals()
-        self.add_pairs()
+        if add_pairs: self.add_pairs()
         return
 
     def __len__(self):
@@ -354,7 +355,7 @@ class SexualNetwork(DynamicNetwork):
 
 
 # %% Specific instances of networks
-__all__ += ['StaticNet', 'RandomNet', 'NullNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet']
+__all__ += ['StaticNet', 'RandomNet', 'NullNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet', 'PrenatalNet', 'PostnatalNet']
 
 
 class StaticNet(Network):
@@ -760,37 +761,57 @@ class EmbeddingNet(MFNet):
         return len(beta)
 
 
-class MaternalNet(Network):
+class MaternalNet(DynamicNetwork):
     """
-    Vertical (birth-related) transmission network
+    Base class for maternal transmission
+    Use PrenatalNet and PostnatalNet to capture transmission in different phases
     """
-    def __init__(self, key_dict=None, vertical=True, **kwargs):
+    def __init__(self, key_dict=None, prenatal=True, postnatal=False, **kwargs):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
-        key_dict = sc.mergedicts({'dur': ss_float_}, key_dict)
-        super().__init__(key_dict=key_dict, vertical=vertical, **kwargs)
+        key_dict = sc.mergedicts(dict(dur=ss_float_, start=ss_int_, end=ss_int_), key_dict)
+        super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
         return
 
     def step(self):
         """
-        Set beta to 0 for women who complete post-partum period
+        Set beta to 0 for women who complete duration of transmission
         Keep connections for now, might want to consider removing
         """
-        dt = self.sim.dt
-        # Set beta to 0 for women who complete post-partum period
-        # Keep connections for now, might want to consider removing
-        self.edges.dur = self.edges.dur - dt # TODO: this looks weird
-        inactive = self.edges.dur <= 0
-        self.edges.beta[inactive] = 0
+        inactive = self.edges.end <= self.sim.ti
+        self.contacts.beta[inactive] = 0
         return
 
-    def add_pairs(self, mother_inds=None, unborn_inds=None, dur=None):
+    def end_pairs(self):
+        people = self.sim.people
+        edges = self.edges
+        active = (edges.end > self.sim.ti) & people.alive[edges.p1] & people.alive[edges.p2]
+        for k in self.meta_keys():
+            edges[k] = edges[k][active]
+        return len(active)
+
+    def add_pairs(self, mother_inds=None, unborn_inds=None, dur=None, start=None):
         """ Add connections between pregnant women and their as-yet-unborn babies """
         if mother_inds is None:
             return 0
         else:
+            if start is None: start = np.full_like(dur, fill_value=self.sim.ti)
             n = len(mother_inds)
             beta = np.ones(n)
-            self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur)
+            end = start + sc.promotetoarray(dur) / self.sim.dt
+            self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur, start=start, end=end)
             return n
+
+
+class PrenatalNet(MaternalNet):
+    """ Prenatal transmission network """
+    def __init__(self, key_dict=None, prenatal=True, postnatal=False, **kwargs):
+        super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
+        return
+
+class PostnatalNet(MaternalNet):
+    """ Postnatal transmission network """
+    def __init__(self, key_dict=None, prenatal=False, postnatal=True, **kwargs):
+        super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
+        return
