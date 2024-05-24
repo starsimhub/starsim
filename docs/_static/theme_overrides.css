@@ -35,6 +35,12 @@ h1, h2, .rst-content .toctree-wrapper p.caption, h3, h4, h5, h6, legend {
     font-family: "Montserrat", "Lato", "Open Sans", sans-serif;
 }
 
+footer p {
+    font-size: 14px;
+    margin-top: 0px;
+    margin-bottom: 0px;
+}
+
 h1 {
     margin-top: 0.0em;
     margin-bottom: 0.5em;
