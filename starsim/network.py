@@ -811,7 +811,8 @@ class MaternalNet(DynamicNetwork):
         if mother_inds is None:
             return 0
         else:
-            if start is None: start = np.full_like(dur, fill_value=self.sim.ti)
+            if start is None:
+                start = np.full_like(dur, fill_value=self.sim.ti)
             n = len(mother_inds)
             beta = np.ones(n)
             end = start + sc.promotetoarray(dur) / self.sim.dt
