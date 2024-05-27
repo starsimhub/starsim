@@ -27,7 +27,7 @@ if options.verbose:
     print(__license__)
 
 # Double-check key requirements -- should match setup.py
-req = ['sciris>=3.1.6', 'pandas>=2.0.0', 'scipy', 'numba', 'networkx']
+reqs = ['sciris>=3.1.6', 'pandas>=2.0.0', 'scipy', 'numba', 'networkx']
 msg = f'The following dependencies for Starsim {__version__} were not met: <MISSING>.'
 sc.require(reqs, message=msg)
 del sc, reqs, msg # Don't keep this in the module
