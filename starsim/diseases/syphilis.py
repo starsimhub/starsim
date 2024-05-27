@@ -195,6 +195,7 @@ class Syphilis(ss.Infection):
         """
         Set initial prognoses for adults newly infected with syphilis
         """
+        super().set_prognoses(uids, source_uids)
         
         ti = self.sim.ti
         dt = self.sim.dt

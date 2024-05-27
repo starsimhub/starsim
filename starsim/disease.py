@@ -15,10 +15,10 @@ __all__ = ['Disease', 'Infection', 'InfectionLog']
 class Disease(ss.Module):
     """ Base module class for diseases """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, log=True, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.results = ss.Results(self.name)
-        self.log = InfectionLog()  # See below for definition
+        self.log = InfectionLog() if log else None  # See below for definition
         return
 
     @property
@@ -105,13 +105,14 @@ class Disease(ss.Module):
             uids (array): UIDs for agents to assign disease progoses to
             from_uids (array): Optionally specify the infecting agent
         """
-        sim = self.sim
-        if source_uids is None:
-            for target in uids:
-                self.log.append(np.nan, target, sim.year)
-        else:
-            for target, source in zip(uids, source_uids):
-                self.log.append(source, target, sim.year)
+        if self.log is not None:
+            sim = self.sim
+            if source_uids is None:
+                for target in uids:
+                    self.log.append(np.nan, target, sim.year)
+            else:
+                for target, source in zip(uids, source_uids):
+                    self.log.append(source, target, sim.year)
         return
 
     def update_results(self):

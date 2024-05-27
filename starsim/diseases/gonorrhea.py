@@ -34,9 +34,7 @@ class Gonorrhea(ss.Infection):
         return
 
     def init_results(self):
-        """
-        Initialize results
-        """
+        """ Initialize results """
         super().init_results()
         self.results += ss.Result(self.name, 'new_clearances', self.sim.npts, dtype=int)
         return
@@ -49,10 +47,7 @@ class Gonorrhea(ss.Infection):
         return
 
     def update_pre(self):
-        # What if something in here should depend on another module?
-        # I guess we could just check for it e.g., 'if HIV in sim.modules' or
-        # 'if 'hiv' in sim.people' or something
-        # Natural clearance
+        """ Natural clearance """
         clearances = self.ti_clearance <= self.sim.ti
         self.susceptible[clearances] = True
         self.infected[clearances] = False
@@ -62,9 +57,7 @@ class Gonorrhea(ss.Infection):
         return
 
     def set_prognoses(self, uids, source_uids=None):
-        """
-        Natural history of gonorrhea for adult infection
-        """
+        """ Natural history of gonorrhea for adult infection """
         super().set_prognoses(uids, source_uids)
         ti = self.sim.ti
 

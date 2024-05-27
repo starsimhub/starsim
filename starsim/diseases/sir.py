@@ -49,6 +49,7 @@ class SIR(ss.Infection):
 
     def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses """
+        super().set_prognoses(uids, source_uids)
         ti = self.sim.ti
         dt = self.sim.dt
         self.susceptible[uids] = False
@@ -67,7 +68,6 @@ class SIR(ss.Infection):
         rec_uids = uids[~will_die]
         self.ti_dead[dead_uids] = ti + dur_inf[will_die] / dt # Consider rand round, but not CRN safe
         self.ti_recovered[rec_uids] = ti + dur_inf[~will_die] / dt
-
         return
 
     def update_death(self, uids):
@@ -127,6 +127,7 @@ class SIS(ss.Infection):
 
     def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses """
+        super().set_prognoses(uids, source_uids)
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = self.sim.ti
