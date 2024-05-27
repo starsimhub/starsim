@@ -1,5 +1,5 @@
 """
-Test simple APIs
+Test Sim API
 """
 
 # %% Imports and settings

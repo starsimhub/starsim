@@ -107,35 +107,24 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         the raw array (``raw``) or the active agents (``values``), and to convert
         the key to array indices if needed.
         """
-        if isinstance(key, uids):
-            use_raw = True
+        if isinstance(key, (uids, int)):
+            return key
         elif isinstance(key, (BoolArr, IndexArr)):
-            use_raw = True
-            key = key.uids
-        elif isinstance(key, slice):
-            use_raw = False
+            return key.uids
         elif not np.isscalar(key) and len(key) == 0: # Handle [], np.array([]), etc.
-            use_raw = True # Doesn't matter since returning empty, but this is faster
-            key = uids()
+            return uids()
         else:
             errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.'
             raise Exception(errormsg)
-        
-        return key, use_raw
     
     def __getitem__(self, key):
-        key, use_raw = self._convert_key(key)
-        if use_raw:
-            return self.raw[key]
-        else:
-            return self.values[key]
+        key = self._convert_key(key)
+        return self.raw[key]
     
     def __setitem__(self, key, value):
-        key, use_raw = self._convert_key(key)
-        if use_raw:
-            self.raw[key] = value
-        else:
-            self.raw[self.auids[key]] = value
+        key = self._convert_key(key)
+        self.raw[key] = value
+        return
             
     def __getattr__(self, attr):
         """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
