@@ -7,8 +7,6 @@ import numpy as np
 import sciris as sc
 import starsim as ss
 
-do_plot = True
-do_save = False
 baseline_filename  = sc.thisdir(__file__, 'baseline.json')
 benchmark_filename = sc.thisdir(__file__, 'benchmark.json')
 parameters_filename = sc.thisdir(ss.__file__, 'regression', f'pars_v{ss.__version__}.json')
@@ -25,20 +23,17 @@ pars = sc.objdict(
 )
 
 
-def make_sim(ppl=None, do_run=False, **kwargs):
+def make_sim(run=False):
     """
-    Define a default simulation for testing the baseline, including
-    interventions to increase coverage. If run directly (not via pytest), also
-    plot the sim by default.
+    Define a default simulation for testing the baseline. If run directly (not 
+    via pytest), also plot the sim by default.
     """
-    # Make the sim
-    hiv = ss.HIV()
-    hiv.pars.beta = {'mf': [0.15, 0.10], 'maternal': [0.2, 0]}
-    networks = [ss.MFNet(), ss.MaternalNet()]
-    sim = ss.Sim(pars=pars, people=ppl, networks=networks, demographics=ss.Pregnancy(), diseases=hiv)
+    diseases = ['sir', 'sis']
+    networks = ['random', 'mf', 'maternal']
+    sim = ss.Sim(pars=pars, networks=networks, diseases=diseases, demographics=True)
     
     # Optionally run and plot
-    if do_run:
+    if run:
         sim.run()
         sim.plot()
 
@@ -50,20 +45,19 @@ def save_baseline():
     Refresh the baseline results. This function is not called during standard testing,
     but instead is called by the update_baseline script.
     """
+    sc.heading('Updating baseline values...')
 
-    print('Updating baseline values...')
-
-    # Export default parameters
-    s1 = make_sim(use_defaults=True)
-    s1.export_pars(filename=parameters_filename) # If not different from previous version, can safely delete
+    # Make and run sim
+    sim = make_sim()
+    sim.run()
 
     # Export results
-    s2 = make_sim(use_defaults=False)
-    s2.run()
-    s2.to_json(filename=baseline_filename, keys='summary')
+    sim.to_json(filename=baseline_filename, keys='summary')
+    
+    # CK: To restore once export_pars is fixed
+    # sim.export_pars(filename=parameters_filename) # If not different from previous version, can safely delete
 
     print('Done.')
-
     return
 
 
@@ -84,7 +78,7 @@ def test_baseline():
     return new
 
 
-def test_benchmark(do_save=do_save, repeats=1, verbose=True):
+def test_benchmark(do_save=False, repeats=1, verbose=True):
     """ Compare benchmark performance """
     
     if verbose: print('Running benchmark...')
@@ -126,7 +120,7 @@ def test_benchmark(do_save=do_save, repeats=1, verbose=True):
         
         # Time initialization
         t0 = sc.tic()
-        sim = make_sim(verbose=0)
+        sim = make_sim()
         sim.initialize()
         t_init = sc.toc(t0, output=True)
 
@@ -180,17 +174,13 @@ def test_benchmark(do_save=do_save, repeats=1, verbose=True):
     return json
 
 
-
 if __name__ == '__main__':
-
-    # Start timing and optionally enable interactive plotting
+    do_plot = True
     sc.options(interactive=do_plot)
-    T = sc.tic()
+    T = sc.timer()
 
-    json = test_benchmark(do_save=do_save, repeats=5) # Run this first so benchmarking is available even if results are different
+    json = test_benchmark() # Run this first so benchmarking is available even if results are different
     new  = test_baseline()
-    sim = make_sim(do_run=do_plot)
+    sim = make_sim(run=do_plot)
 
-    print('\n'*2)
-    sc.toc(T)
-    print('Done.')
+    T.toc()

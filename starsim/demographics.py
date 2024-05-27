@@ -36,7 +36,7 @@ class Births(Demographics):
     def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__()
         self.default_pars(
-            birth_rate = 0,
+            birth_rate = 30,
             rel_birth = 1,
             units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
         )
