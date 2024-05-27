@@ -238,7 +238,7 @@ def test_independence(do_plot=False, thresh=0.1):
         ],
         networks = [
             dict(type='random', n_contacts=ss.poisson(8)),
-            dict(type='mf', debut=ss.delta(0), participation=0.5), # To avoid age correlations
+            dict(type='mf', debut=ss.const(0), participation=0.5), # To avoid age correlations
         ]
     )
     sim.initialize()

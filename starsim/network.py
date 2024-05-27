@@ -447,7 +447,7 @@ class RandomNet(DynamicNetwork):
         """ Initialize """
         super().__init__(key_dict=key_dict)
         self.default_pars(
-            n_contacts = ss.delta(10),
+            n_contacts = ss.const(10),
             dur = 0,
         )
         self.update_pars(pars, **kwargs)
