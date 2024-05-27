@@ -1,5 +1,5 @@
 """
-Test objects from base.py
+Test Starsim features not covered by other test files
 """
 
 # %% Imports and settings
@@ -35,27 +35,6 @@ def test_people():
     ppl.add_module(ss.HIV())
 
     return ppl
-
-
-def test_networks():
-    sc.heading('Testing networks')
-
-    # Make completely abstract layers
-    n_edges = 10_000
-    n_people = medium
-    p1 = np.random.randint(n_people, size=n_edges)
-    p2 = np.random.randint(n_people, size=n_edges)
-    beta = np.ones(n_edges)
-    nw1 = ss.Network(p1=p1, p2=p2, beta=beta, label='rand')
-
-    sim = ss.Sim()
-    sim.initialize()
-    
-    nw2 = ss.MaternalNet()
-    nw2.initialize(sim)
-    nw2.add_pairs(mother_inds=[1, 2, 3], unborn_inds=[100, 101, 102], dur=[1, 1, 1])
-
-    return nw1, nw2
 
 
 def test_microsim(do_plot=False):
@@ -183,7 +162,6 @@ if __name__ == '__main__':
 
     # Run tests
     ppl = test_people()
-    nw1, nw2 = test_networks()
     sim1 = test_microsim(do_plot)
     sim2 = test_ppl_construction()
     sims = test_arrs()

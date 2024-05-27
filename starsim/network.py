@@ -387,7 +387,7 @@ class StaticNet(Network):
     def __init__(self, graph=None, pars=None, **kwargs):
         super().__init__()
         self.graph = graph
-        self.default_pars(seed=True)
+        self.default_pars(seed=True, p=None, n_contacts=10)
         self.update_pars(pars, **kwargs)
         self.dist = ss.Dist(name='StaticNet')
         return
@@ -397,10 +397,9 @@ class StaticNet(Network):
         self.n_agents = sim.pars.n_agents
         if self.graph is None:
             self.graph = nx.fast_gnp_random_graph # Fast random (Erdos-Renyi) graph creator
-            if 'p' not in self.pars and 'n_contacts' not in self.pars: # TODO: refactor
-                self.pars.n_contacts = 10
-        if 'n_contacts' in self.pars: # Convert from n_contacts to probability
-            self.pars.p = self.pars.pop('n_contacts')/self.n_agents
+        n_contacts = self.pars.pop('n_contacts') # Remove from pars dict, but use only if p is not supplied
+        if self.pars.p is None: # Convert from n_contacts to probability
+            self.pars.p = n_contacts/self.n_agents
         return
     
     def init_vals(self):
