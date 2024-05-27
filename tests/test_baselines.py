@@ -16,30 +16,21 @@ sc.options(interactive=False) # Assume not running interactively
 
 # Define the parameters
 pars = sc.objdict(
-    start         = 2000,       # Starting year
-    n_years       = 20,         # Number of years to simulate
-    dt            = 0.2,        # Timestep
-    verbose       = 0,          # Don't print details of the run
-    rand_seed     = 2,          # Set a non-default seed
+    n_agents   = 10e3, # Number of agents
+    start      = 2000, # Starting year
+    n_years    = 20,   # Number of years to simulate
+    dt         = 0.2,  # Timestep
+    verbose    = 0,    # Don't print details of the run
+    rand_seed  = 2,    # Set a non-default seed
 )
-
-def make_people():
-    ss.set_seed(pars.rand_seed)
-    n_agents = int(10e3)
-    ppl = ss.People(n_agents=n_agents)
-    return ppl
 
 
 def make_sim(ppl=None, do_run=False, **kwargs):
-    '''
+    """
     Define a default simulation for testing the baseline, including
     interventions to increase coverage. If run directly (not via pytest), also
     plot the sim by default.
-    '''
-
-    if ppl is None:
-        ppl = make_people()
-
+    """
     # Make the sim
     hiv = ss.HIV()
     hiv.pars.beta = {'mf': [0.15, 0.10], 'maternal': [0.2, 0]}
@@ -55,10 +46,10 @@ def make_sim(ppl=None, do_run=False, **kwargs):
 
 
 def save_baseline():
-    '''
+    """
     Refresh the baseline results. This function is not called during standard testing,
     but instead is called by the update_baseline script.
-    '''
+    """
 
     print('Updating baseline values...')
 
@@ -77,7 +68,7 @@ def save_baseline():
 
 
 def test_baseline():
-    ''' Compare the current default sim against the saved baseline '''
+    """ Compare the current default sim against the saved baseline """
     
     # Load existing baseline
     baseline = sc.loadjson(baseline_filename)
@@ -94,7 +85,7 @@ def test_baseline():
 
 
 def test_benchmark(do_save=do_save, repeats=1, verbose=True):
-    ''' Compare benchmark performance '''
+    """ Compare benchmark performance """
     
     if verbose: print('Running benchmark...')
     try:
@@ -102,12 +93,11 @@ def test_benchmark(do_save=do_save, repeats=1, verbose=True):
     except FileNotFoundError:
         previous = None
 
-    t_peoples = []
-    t_inits   = []
-    t_runs    = []
+    t_inits = []
+    t_runs  = []
 
     def normalize_performance():
-        ''' Normalize performance across CPUs '''
+        """ Normalize performance across CPUs """
         t_bls = []
         bl_repeats = 3
         n_outer = 10
@@ -132,16 +122,11 @@ def test_benchmark(do_save=do_save, repeats=1, verbose=True):
     # Do the actual benchmarking
     for r in range(repeats):
         
-        print("Repeat ", r)
-        
-        # Time people
-        t0 = sc.tic()
-        ppl = make_people()
-        t_people = sc.toc(t0, output=True)
+        print(f'Repeat {r}')
         
         # Time initialization
         t0 = sc.tic()
-        sim = make_sim(ppl, verbose=0)
+        sim = make_sim(verbose=0)
         sim.initialize()
         t_init = sc.toc(t0, output=True)
 
@@ -151,30 +136,25 @@ def test_benchmark(do_save=do_save, repeats=1, verbose=True):
         t_run = sc.toc(t0, output=True)
 
         # Store results
-        t_peoples.append(t_people)
         t_inits.append(t_init)
         t_runs.append(t_run)
-        
-        # print(t_people, t_init, t_run)
 
     # Test CPU performance after the run
     r2 = normalize_performance()
     ratio = (r1+r2)/2
-    t_people = min(t_peoples)*ratio
-    t_init = min(t_inits)*ratio
-    t_run  = min(t_runs)*ratio
+    t_init = ratio*min(t_inits)
+    t_run  = ratio*min(t_runs)
 
     # Construct json
     n_decimals = 3
     json = {'time': {
-                'people':     round(t_people, n_decimals),
                 'initialize': round(t_init, n_decimals),
                 'run':        round(t_run,  n_decimals),
                 },
             'parameters': {
-                'n_agents': sim.pars['n_agents'],
-                'n_years':  sim.pars['n_years'],
-                'dt':       sim.pars['dt'],
+                'n_agents': sim.pars.n_agents,
+                'n_years':  sim.pars.n_years,
+                'dt':       sim.pars.dt,
                 },
             'cpu_performance': ratio,
             }
