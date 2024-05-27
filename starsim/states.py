@@ -111,6 +111,8 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
             return key
         elif isinstance(key, (BoolArr, IndexArr)):
             return key.uids
+        elif isinstance(key, slice):
+            return self.auids[key]
         elif not np.isscalar(key) and len(key) == 0: # Handle [], np.array([]), etc.
             return uids()
         else:
