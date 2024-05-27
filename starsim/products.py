@@ -12,9 +12,9 @@ __all__ = ['Product', 'Dx', 'Tx', 'Vx']
 
 class Product(ss.Module):
     """ Generic product implementation """
-    def initialize(self, sim):
+    def init_pre(self, sim):
         if not self.initialized:
-            super().initialize(sim)
+            super().init_pre(sim)
         else:
             return
 

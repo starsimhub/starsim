@@ -104,7 +104,7 @@ class Module(sc.quickobj):
             raise Exception(errormsg)
         return
 
-    def initialize(self, sim):
+    def init_pre(self, sim):
         """
         Perform initialization steps
 
@@ -120,7 +120,7 @@ class Module(sc.quickobj):
         sim.people.add_module(self) # Connect the states to the people
         return
     
-    def init_vals(self):
+    def init_post(self):
         """ Initialize the values of the states; the last step of initialization """
         for state in self.states:
             if not state.initialized:

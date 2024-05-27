@@ -101,8 +101,8 @@ class Network(ss.Module):
     def beta(self):
         return self.contacts['beta'] if 'beta' in self.contacts else None
 
-    def init_vals(self, add_pairs=True):
-        super().init_vals()
+    def init_post(self, add_pairs=True):
+        super().init_post()
         if add_pairs: self.add_pairs()
         return
 
@@ -392,8 +392,8 @@ class StaticNet(Network):
         self.dist = ss.Dist(name='StaticNet')
         return
 
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         self.n_agents = sim.pars.n_agents
         if self.graph is None:
             self.graph = nx.fast_gnp_random_graph # Fast random (Erdos-Renyi) graph creator
@@ -402,8 +402,8 @@ class StaticNet(Network):
             self.pars.p = n_contacts/self.n_agents
         return
     
-    def init_vals(self):
-        super().init_vals()
+    def init_post(self):
+        super().init_post()
         if 'seed' in self.pars and self.pars.seed is True:
             self.pars.seed = self.dist.rng
         if callable(self.graph):
@@ -453,7 +453,7 @@ class RandomNet(DynamicNetwork):
         self.dist = ss.Dist(distname='RandomNet') # Default RNG
         return
 
-    def init_vals(self):
+    def init_post(self):
         self.add_pairs()
         return
 
@@ -545,8 +545,8 @@ class NullNet(Network):
         super().__init__(**kwargs)
         return
 
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         popsize = sim.pars['n_agents']
         if self.n is None:
             self.n = popsize
@@ -583,7 +583,7 @@ class MFNet(SexualNetwork):
         self.dist = ss.choice(name='MFNet', replace=False) # Set the array later
         return
 
-    def init_vals(self):
+    def init_post(self):
         self.set_network_states()
         self.add_pairs()
         return
@@ -670,11 +670,11 @@ class MSMNet(SexualNetwork):
         self.update_pars(pars, **kwargs)
         return
 
-    def initialize(self, sim):
+    def init_pre(self, sim):
         # Add more here in line with MF network, e.g. age of debut
         # Or if too much replication then perhaps both these networks
         # should be subclasss of a specific network type (ask LY/DK)
-        super().initialize(sim)
+        super().init_pre(sim)
         self.set_network_states(sim.people)
         self.add_pairs(sim.people, ti=0)
         return

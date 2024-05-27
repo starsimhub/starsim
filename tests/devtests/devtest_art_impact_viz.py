@@ -40,7 +40,7 @@ class stable_monogamy(ss.SexualNetwork):
         super().__init__(**kwargs)
         return
 
-    def initialize(self, sim):
+    def init_pre(self, sim):
         n = len(sim.people._uid_map)
         n_edges = n//2
         self.contacts.p1 = np.arange(0, 2*n_edges, 2) # EVEN
@@ -90,7 +90,7 @@ class GraphAnalyzer(ss.Analyzer):
         self.graphs = {}
         return
 
-    def initialize(self, sim):
+    def init_pre(self, sim):
         self.initialized = True
         self.update_results(sim, init=True)
         return

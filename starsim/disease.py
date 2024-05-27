@@ -34,8 +34,8 @@ class Disease(ss.Module):
                 yield state
         return
 
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         self.init_results()
         return
 
@@ -153,8 +153,8 @@ class Infection(Disease):
         self.rng_source = ss.random(name='source')
         return
     
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         self.validate_beta()
         return
     
@@ -189,7 +189,7 @@ class Infection(Disease):
         """
         return self.infected
 
-    def init_vals(self):
+    def init_post(self):
         """
         Set initial values for states. This could involve passing in a full set of initial conditions,
         or using init_prev, or other. Note that this is different to initialization of the Arr objects

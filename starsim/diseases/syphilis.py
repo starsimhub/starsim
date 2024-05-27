@@ -345,8 +345,8 @@ class syph_screening(ss.routine_screening):
             is_eligible = sim.people.auids  # Probably not required
         return is_eligible
 
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         self.results += [
             ss.Result('syphilis', 'n_screened', sim.npts, dtype=int, scale=True),
             ss.Result('syphilis', 'n_dx', sim.npts, dtype=int, scale=True),
@@ -369,8 +369,8 @@ class syph_treatment(ss.treat_num):
         else:
             return products[product]
 
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         self.results += ss.Result('syphilis', 'n_tx', sim.npts, dtype=int, scale=True)
         return
 

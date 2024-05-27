@@ -68,12 +68,12 @@ class Sim(sc.prettyobj):
             
         # Initialize all the modules with the sim
         for mod in self.modules:
-            mod.initialize(self)
+            mod.init_pre(self)
 
         # Initialize products # TODO: think about simplifying
         for mod in self.interventions:
             if hasattr(mod, 'product') and isinstance(mod.product, ss.Product):
-                mod.product.initialize(self)
+                mod.product.init_pre(self)
         
         # Initialize all distributions now that everything else is in place, then set states
         self.dists.initialize(obj=self, base_seed=self.pars.rand_seed, force=True)
@@ -133,7 +133,7 @@ class Sim(sc.prettyobj):
         
         # Initialize values in other modules, including networks
         for mod in self.modules:
-            mod.init_vals()
+            mod.init_post()
         return
     
     def init_results(self):

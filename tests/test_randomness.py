@@ -110,7 +110,7 @@ def test_order(n=n):
 
 class CountInf(ss.Intervention):
     """ Store every infection state in a timepoints x people array """
-    def initialize(self, sim):
+    def init_pre(self, sim):
         n_agents = len(sim.people)
         self.arr = np.zeros((sim.npts, n_agents))
         self.n_agents = n_agents
@@ -123,9 +123,9 @@ class CountInf(ss.Intervention):
 
 class OneMore(ss.Intervention):
     """ Add one additional agent and infection """
-    def initialize(self, sim):
+    def init_pre(self, sim):
         one_birth = ss.Pregnancy(name='one_birth', rel_fertility=0) # Ensure no default births
-        one_birth.initialize(sim)
+        one_birth.init_pre(sim)
         self.one_birth = one_birth
         return
     

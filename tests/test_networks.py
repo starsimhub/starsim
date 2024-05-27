@@ -29,7 +29,7 @@ def test_manual():
     sim = ss.Sim(n_agents=n_agents)
     sim.initialize()
     nw2 = ss.MaternalNet()
-    nw2.initialize(sim)
+    nw2.init_pre(sim)
     nw2.add_pairs(mother_inds=[1, 2, 3], unborn_inds=[100, 101, 102], dur=[1, 1, 1])
     
     # Tidy

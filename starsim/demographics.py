@@ -16,8 +16,8 @@ class Demographics(ss.Module):
     place at the start of the timestep, before networks are updated and before
     any disease modules are executed.
     """
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         self.init_results()
         return
 
@@ -54,9 +54,9 @@ class Births(Demographics):
         self.n_births = 0 # For results tracking
         return
 
-    def initialize(self, sim):
+    def init_pre(self, sim):
         """ Initialize with sim information """
-        super().initialize(sim)
+        super().init_pre(sim)
         if isinstance(self.pars.birth_rate, pd.DataFrame):
             br_year = self.pars.birth_rate[self.metadata.data_cols['year']]
             br_val = self.pars.birth_rate[self.metadata.data_cols['cbr']]
@@ -354,8 +354,8 @@ class Pregnancy(Demographics):
         fertility_rate = ss.standardize_data(data=self.pars.fertility_rate, metadata=self.metadata)
         return fertility_rate
 
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         low = sim.pars.n_agents + 1
         high = int(sim.pars.slot_scale*sim.pars.n_agents)
         self.choose_slots = ss.randint(low=low, high=high, sim=sim, module=self)
