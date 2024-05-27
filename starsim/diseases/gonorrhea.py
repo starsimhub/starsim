@@ -61,24 +61,24 @@ class Gonorrhea(ss.Infection):
 
         return
 
-    def set_prognoses(self, target_uids, source_uids=None):
+    def set_prognoses(self, uids, source_uids=None):
         """
         Natural history of gonorrhea for adult infection
         """
-        super().set_prognoses(target_uids, source_uids)
+        super().set_prognoses(uids, source_uids)
         ti = self.sim.ti
 
         # Set infection status
-        self.susceptible[target_uids] = False
-        self.infected[target_uids] = True
-        self.ti_infected[target_uids] = ti
+        self.susceptible[uids] = False
+        self.infected[uids] = True
+        self.ti_infected[uids] = ti
 
         # Set infection status
-        symp_uids = self.pars.p_symp.filter(target_uids)
+        symp_uids = self.pars.p_symp.filter(uids)
         self.symptomatic[symp_uids] = True
 
         # Set natural clearance
-        clear_uids = self.pars.p_clear.filter(target_uids)
+        clear_uids = self.pars.p_clear.filter(uids)
         dur = ti + self.pars.dur_inf_in_days.rvs(clear_uids)/365/self.sim.dt # Convert from days to years and then adjust for dt
         self.ti_clearance[clear_uids] = dur
         return

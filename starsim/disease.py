@@ -88,7 +88,7 @@ class Disease(ss.Module):
         """
         pass
 
-    def set_prognoses(self, target_uids, source_uids=None):
+    def set_prognoses(self, uids, source_uids=None):
         """
         Set prognoses upon infection/acquisition
 
@@ -107,10 +107,10 @@ class Disease(ss.Module):
         """
         sim = self.sim
         if source_uids is None:
-            for target in target_uids:
+            for target in uids:
                 self.log.append(np.nan, target, sim.year)
         else:
-            for target, source in zip(target_uids, source_uids):
+            for target, source in zip(uids, source_uids):
                 self.log.append(source, target, sim.year)
         return
 

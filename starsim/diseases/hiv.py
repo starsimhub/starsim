@@ -76,8 +76,8 @@ class HIV(ss.Infection):
         self.ti_infected[uids] = self.sim.ti
         return
 
-    def set_congenital(self, target_uids, source_uids):
-        return self.set_prognoses(target_uids, source_uids)
+    def set_congenital(self, uids, source_uids):
+        return self.set_prognoses(uids, source_uids)
 
 
 # %% HIV-related interventions
