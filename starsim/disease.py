@@ -257,12 +257,12 @@ class Infection(Disease):
                 break
 
             nbetas = betamap[nkey]
-            contacts = net.contacts
+            edges = net.edges
 
             rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
             rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
-            p1p2b0 = [contacts.p1, contacts.p2, nbetas[0]]
-            p2p1b1 = [contacts.p2, contacts.p1, nbetas[1]]
+            p1p2b0 = [edges.p1, edges.p2, nbetas[0]]
+            p2p1b1 = [edges.p2, edges.p1, nbetas[1]]
             for src, trg, beta in [p1p2b0, p2p1b1]:
 
                 # Skip networks with no transmission

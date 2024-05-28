@@ -402,9 +402,9 @@ class Pregnancy(Demographics):
                 prenatalnet = [nw for nw in self.sim.networks.values() if nw.prenatal][0]
 
                 # Find the prenatal connections that are ending
-                prenatal_ending = prenatalnet.contacts.end<=self.sim.ti
-                new_mother_uids = prenatalnet.contacts.p1[prenatal_ending]
-                new_infant_uids = prenatalnet.contacts.p2[prenatal_ending]
+                prenatal_ending = prenatalnet.edges.end<=self.sim.ti
+                new_mother_uids = prenatalnet.edges.p1[prenatal_ending]
+                new_infant_uids = prenatalnet.edges.p2[prenatal_ending]
 
                 # Validation
                 if not np.array_equal(new_mother_uids, deliveries.uids):

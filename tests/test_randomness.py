@@ -253,7 +253,7 @@ def test_independence(do_plot=False, thresh=0.1):
     for key,network in sim.networks.items():
         data = np.zeros(len(sim.people))
         for p in ['p1', 'p2']:
-            for uid in network.contacts[p]:
+            for uid in network.edges[p]:
                 data[uid] += 1 # Could also use a histogram
         arrs[key] = data
     
