@@ -187,9 +187,8 @@ class Sim(sc.prettyobj):
         for connector in self.connectors():
             connector.update()
 
-        # Update networks - this takes place here in case autonomous state changes at this timestep
+        # Update networks - this takes place here in case autonomous state changes at this timestep affect eligibility for contacts
         for network in self.networks():
-        # affect eligibility for contacts
             network.update()
 
         # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
