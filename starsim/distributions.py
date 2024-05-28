@@ -450,8 +450,8 @@ class Dist:
         """ Ensure the supplied dist and parameters are valid, and initialize them; called automatically """
         self._pars = sc.cp(self.pars) # The actual keywords; shallow copy, modified below for special cases
         if call:
-            self.call_pars()
-        spars = self.sync_pars()
+            self.call_pars() # Convert from function to values if needed
+        spars = self.sync_pars() # Synchronize parameters between the NumPy and SciPy distributions
         return spars
     
     def call_pars(self):
@@ -668,10 +668,11 @@ class lognorm_ex(Dist):
         parameters of the underlying (implicit) distribution, which are the form expected by NumPy's
         and SciPy's lognorm() distributions.
         """
+        self.call_pars() # Since can't work with functions
         p = self._pars
         mean = p.pop('mean')
         stdev = p.pop('stdev')
-        if mean <= 0:
+        if np.isscalar(mean) and mean <= 0:
             errormsg = f'Cannot create a lognorm_ex distribution with mean≤0 (mean={mean}); did you mean to use lognorm_im instead?'
             raise ValueError(errormsg)
         std2 = stdev**2
