@@ -200,16 +200,19 @@ def test_callable(n=n):
         return out
     
     scale = 1
-    d = ss.normal(name='callable', loc=custom_loc, scale=scale).initialize(sim=sim)
+    d1 = ss.normal(name='callable', loc=custom_loc, scale=scale).initialize(sim=sim)
+    d2 = ss.lognorm_ex(name='callable', mean=custom_loc, stdev=scale).initialize(sim=sim)
 
     uids = np.array([1, 3, 7, 9])
-    draws = d.rvs(uids)
+    draws1 = d1.rvs(uids)
+    draws2 = d2.rvs(uids)
     print(f'Input ages were: {sim.people.age[uids]}')
-    print(f'Output samples were: {draws}')
+    print(f'Output samples were: {draws1}, {draws2}')
 
-    meandiff = np.abs(sim.people.age[uids] - draws).mean()
-    assert meandiff < scale*3
-    return d
+    for draws in [draws1, draws2]:
+        meandiff = np.abs(sim.people.age[uids] - draws).mean()
+        assert meandiff < scale*3, 'Outputs should match ages'
+    return d1
 
 
 def test_array(n=n):
