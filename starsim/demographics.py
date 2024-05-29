@@ -96,7 +96,18 @@ class Births(Demographics):
 
         scaled_birth_prob = this_birth_rate * p.units * p.rel_birth * sim.pars.dt
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
-        n_new = int(np.floor(sim.people.alive.count() * scaled_birth_prob))
+         
+        ''' Select mothers for birth from people eligible to become pregnant '''      
+        age_cond = ((sim.people.age>=18) & (sim.people.age<=40))
+        demo_conds = (sim.people.female) & (sim.people.auids) & (age_cond)
+        inds_to_choose_from = sim.people.uid[demo_conds]
+        
+        self.pars.birth_rate_data = ss.bernoulli(p=scaled_birth_prob)
+        self.pars.birth_rate_data.initialize(trace='any', sim=sim, slots=None)
+        mother_inds = self.pars.birth_rate_data.filter(inds_to_choose_from)
+        sim.people.mother_uids[mother_inds]=mother_inds
+        n_new=int(len(mother_inds))
+        
         return n_new
 
     def add_births(self):
