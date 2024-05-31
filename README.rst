@@ -32,7 +32,7 @@ Starsim is most easily installed via PyPI: ``pip install starsim``.
 Starsim can also be installed locally. To do this, clone first this repository, then run ``pip install -e .`` (don't forget the dot at the end!).
 
 
-Quick Start Guide
+Quick start guide
 -----------------
 
 If everything is working, the following Python commands will run a simulation with the simplest version of a Starsim model. We’ll make a version of a classic SIR model::
@@ -98,6 +98,30 @@ The structure of the starsim folder is as follows, roughly in the order in which
 •	``version.py``: Version, date, and license information.
 
 The ``diseases`` folder within the Starsim package contains loading scripts for the epidemiological data specific to each respective disease.
+
+Other folders
+------------
+
+Please see the README in each subfolder for more information.
+
+
+API Reference
+------------
+
+A list of Starsim’s full API, including all functions and classes is available at https://docs.starsim.org.
+
+
+Tutorials
+------------
+
+This IDM Starsim Tutorials website contains demonstrations of simple Starsim usage structured as follows: 
+
+•	T1 - Getting started
+•	T2 - How to build your model
+•	T3 - Demographics
+•	T4 - Networks
+•	T5 - Diseases
+•	T6 - Interventions
 
 
 Contributing
