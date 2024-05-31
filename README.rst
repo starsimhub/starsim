@@ -116,12 +116,12 @@ Tutorials
 
 This IDM Starsim Tutorials website contains demonstrations of simple Starsim usage structured as follows: 
 
-•	T1 - Getting started
-•	T2 - How to build your model
-•	T3 - Demographics
-•	T4 - Networks
-•	T5 - Diseases
-•	T6 - Interventions
+•	`T1 - Getting started <https://docs.idmod.org/projects/starsim/en/latest/tutorials/tut_intro.html>`__
+•	`T2 - How to build your model <https://docs.idmod.org/projects/starsim/en/latest/tutorials/tut_buildsim.html>`__
+•	`T3 - Demographics <https://docs.idmod.org/projects/starsim/en/latest/tutorials/tut_demographics.html>`__
+•	`T4 - Networks <https://docs.idmod.org/projects/starsim/en/latest/tutorials/tut_networks.html>`__
+•	`T5 - Diseases <https://docs.idmod.org/projects/starsim/en/latest/tutorials/tut_diseases.html>`__
+•	`T6 - Interventions <https://docs.idmod.org/projects/starsim/en/latest/tutorials/tut_interventions.html>`__
 
 
 Contributing
