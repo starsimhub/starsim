@@ -75,6 +75,30 @@ All core model code is located in the ``starsim`` subfolder; standard usage is `
 
 The model consists of core classes including Sim, Run, People, State, Network, Connectors, Analyzers, Interventions, Results, and more. These classes contain methods for running, building simple or dynamic networks, generating random numbers, calculating results, plotting, etc.
 
+The structure of the starsim folder is as follows, roughly in the order in which the modules are imported, building from most fundamental to most complex:
+
+•	``connectors.py``: Functions that handle connections between disease modules.
+•	``demographics.py``: Functions to transform initial condition input parameters for use in building and utilizing networks.
+•	``disease.py``: Functions to manage infection rate of spread, prevalence, waning effects, and other parameters for specific diseases.
+•	``distributions.py``: Functions that handle SciPy library statistical distributions used throughout Starsim.
+•	``interventions.py``: The Intervention class, for adding interventions and dynamically modifying parameters, and classes for each of the specific interventions derived from it. The Analyzers class (for performing analyses on the sim while it’s running), and other classes and functions for analyzing simulations.
+•	``modules.py``: Functions to handle disease-specific parameters.
+•	``network.py``: Functions for creating simple and dynamic networks of people based on input parameters.
+•	``parameters.py``: Functions for creating the parameters dictionary and loading the input data.
+•	``people.py``: The People class, for handling updates of state for each person.
+•	``products.py``: Functions manage the deployment of vaccines and treatments.
+•	``results.py``: Functions to analyze and save results from simulations.
+•	``run.py``: Functions for running simulations (e.g. parallel runs and the Scenarios and MultiSim classes).
+•	``plotting.py``: Plotting scripts, including Plotly graphs for the webapp (used in other Covasim classes, and hence defined first).
+•	``samples.py``: Functions to store data from a large number of simulations.
+•	``settings.py``: User-customizable options for Starsim (e.g. default font size).
+•	``sim.py``: The Sim class, which performs most of the heavy lifting: initializing the model, running, and plotting.
+•	``states.py``: Functions to handle store and update states for people in networks in the simulation including living, mother, child, susceptible, infected, inoculated, recovered, etc.
+•	``utils.py``: Functions for choosing random numbers, many based on Numba, plus other helper functions.
+•	``version.py``: Version, date, and license information.
+
+The ``diseases`` folder within the Starsim package contains loading scripts for the epidemiological data specific to each respective disease.
+
 
 Contributing
 ------------
