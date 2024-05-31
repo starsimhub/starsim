@@ -21,7 +21,7 @@ Requirements
 
 Python 3.9-3.11 (64-bit). (Note: Python 2.7 and Python 3.12 are not supported, the latter being due to Numba not supporting Python 3.12 at the time of writing.) 
 
-We also recommend, but do not require, installing Starsim in a virtual environment. For more information, see documentation, e.g. Anaconda, Anaconda. Cloud, Google Colab, and GitHub Codespaces.
+We also recommend, but do not require, installing Starsim in a virtual environment. For more information, see documentation, e.g. `Anaconda Navigator <https://www.anaconda.com/products/navigator>`__ , `Anaconda Cloud <https://anaconda.cloud/>`__, `Google Colab <https://colab.research.google.com/>`__, or `GitHub Codespaces <https://github.com/features/codespaces>`__.
 
 
 Installation
@@ -99,14 +99,15 @@ The structure of the starsim folder is as follows, roughly in the order in which
 
 The ``diseases`` folder within the Starsim package contains loading scripts for the epidemiological data specific to each respective disease.
 
+
 Other folders
-------------
+-------------
 
 Please see the README in each subfolder for more information.
 
 
 API Reference
-------------
+-------------
 
 A list of Starsim’s full API, including all functions and classes is available at https://docs.starsim.org.
 
@@ -124,10 +125,22 @@ This IDM Starsim Tutorials website contains demonstrations of simple Starsim usa
 •	`T6 - Interventions <https://docs.idmod.org/projects/starsim/en/latest/tutorials/tut_interventions.html>`__
 
 
+Calibration
+-----------
+
+Examples of how to calibrate simulations, including `Optuna <https://optuna.org/>`__ and `Weights and Biases <https://wandb.ai/site/>`__.
+
+
+Tests
+-----
+
+Integration, development, and unit tests. While not (yet) beautifully curated, these folders contain many usage examples. See README in the tests folder for more information.
+
+
 Contributing
 ------------
 
-If you wish to contribute, please see the code of conduct and contributing documents.
+Questions or comments can be directed to `info@starsim.org <mailto:info@starsim.org>`__ , or on this project’s `GitHub <https://github.com/starsimhub/starsim>`__ page. Full information about Starsim is provided in the `documentation <https://docs.starsim.org>`__.
 
 
 Disclaimer
