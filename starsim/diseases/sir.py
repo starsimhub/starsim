@@ -168,27 +168,30 @@ __all__ += ['sir_vaccine']
 
 class sir_vaccine(ss.Vx):
     """
-    Create a vaccine product that changes susceptible people to recovered (i.e., perfect immunity)
-    The vaccine can either by all_or_nothing (people are fully protected or have no protection) or
-    can be leaky (everybody has reduced susceptibility following vaccination).
-    The vaccine has the follwing parameters:
+    Create a vaccine product that affects the probability of infection.
     
-        pars.efficacy (double)        : efficacy of the vaccine (0<=efficacy<=1)
-        pars.all_or_nothing (Boolean) : all_or_nothing vaccine (True) or leaky vaccine (False)
+    The vaccine can be either "leaky", in which everyone who receives the vaccine 
+    receives the same amount of protection (specified by the efficacy parameter) 
+    each time they are exposed to an infection. The alternative (leaky=False) is
+    that the efficacy is the probability that the vaccine "takes", in which case
+    that person is 100% protected (and the remaining people are 0% protected).
+    
+    Args:
+        efficacy (float): efficacy of the vaccine (0<=efficacy<=1)
+        leaky (bool): see above
     """
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
         self.default_pars(
-  	    efficacy       = 0.9,
-            all_or_nothing = False
+            efficacy = 0.9,
+            leaky = True
         )
         self.update_pars(pars, **kwargs)
         return
 
     def administer(self, people, uids):        
-        if self.pars.all_or_nothing == True:
-            people.sir.rel_sus[uids] *= np.random.binomial( 1, 1 - self.pars.efficacy, len( uids ) )
-        else :
+        if self.pars.leaky:
             people.sir.rel_sus[uids] *= 1-self.pars.efficacy
-
+        else:
+            people.sir.rel_sus[uids] *= np.random.binomial(1, 1-self.pars.efficacy, len(uids))
         return
