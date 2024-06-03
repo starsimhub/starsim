@@ -7,15 +7,17 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
-Version 0.5.2 (2024-05-28)
+Version 0.5.2 (2024-06-04)
 --------------------------
 - Renames ``network.contacts`` to ``network.edges``.
 - For modules (including diseases, networks, etc.), renames ``initialize()`` to ``init_pre()`` and ``init_vals()`` to ``init_post()``.
-- Renames ``ss.delta()`` to ``ss.const()``.
+- Renames ``ss.delta()`` to ``ss.constant()``.
 - Allows ``Arr`` objects to be indexed by integer (which are assumed to be UIDs).
 - Fixes bug when using callable parameters with ``ss.lognorm_ex()`` and ``ss.lognorm_im()``.
 - Fixes bug when initializing ``ss.StaticNet()``.
 - Updates default birth rate from 0 to 30 (so ``demographics=True`` is meaningful).
+- Adds ``min_age`` and ``max_age`` parameters to the ``Pregnancy`` module (with defaults 15 and 50 years).
+- Adds an option for the ``sir_vaccine`` to be all-or-nothing instead of leaky.
 - Updates baseline test from HIV to SIR + SIS.
 - Fixes issue with infection log not being populated.
 - *GitHub info*: PR `527 <https://github.com/starsimhub/starsim/pull/527>`_
