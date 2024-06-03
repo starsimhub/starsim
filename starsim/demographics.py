@@ -16,8 +16,8 @@ class Demographics(ss.Module):
     place at the start of the timestep, before networks are updated and before
     any disease modules are executed.
     """
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         self.init_results()
         return
 
@@ -36,7 +36,7 @@ class Births(Demographics):
     def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__()
         self.default_pars(
-            birth_rate = 0,
+            birth_rate = 30,
             rel_birth = 1,
             units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
         )
@@ -54,9 +54,9 @@ class Births(Demographics):
         self.n_births = 0 # For results tracking
         return
 
-    def initialize(self, sim):
+    def init_pre(self, sim):
         """ Initialize with sim information """
-        super().initialize(sim)
+        super().init_pre(sim)
         if isinstance(self.pars.birth_rate, pd.DataFrame):
             br_year = self.pars.birth_rate[self.metadata.data_cols['year']]
             br_val = self.pars.birth_rate[self.metadata.data_cols['cbr']]
@@ -265,6 +265,8 @@ class Pregnancy(Demographics):
             rel_fertility = 1,
             maternal_death_prob = ss.bernoulli(0),
             sex_ratio = ss.bernoulli(0.5), # Ratio of babies born female
+            min_age = 15, # Minimum age to become pregnant
+            max_age = 50, # Maximum age to become pregnant
             units = 1e-3, # Assumes fertility rates are per 1000. If using percentages, switch this to 1
         )
         self.update_pars(pars, **kwargs)
@@ -342,9 +344,12 @@ class Pregnancy(Demographics):
             fertility_rate = pd.Series(index=uids)
             fertility_rate[uids] = new_percent[age_inds]
 
-        # Scale from rate to probability. Consider an exponential here.
+        # Scale from rate to probability
+        age = self.sim.people.age[uids]
+        invalid_age = (age < self.pars.min_age) | (age > self.pars.max_age)
         fertility_prob = fertility_rate * (self.pars.units * self.pars.rel_fertility * sim.pars.dt)
         fertility_prob[self.pregnant.uids] = 0 # Currently pregnant women cannot become pregnant again
+        fertility_prob[uids[invalid_age]] = 0 # Women too young or old cannot become pregnant
         fertility_prob = np.clip(fertility_prob, a_min=0, a_max=1)
 
         return fertility_prob
@@ -354,8 +359,8 @@ class Pregnancy(Demographics):
         fertility_rate = ss.standardize_data(data=self.pars.fertility_rate, metadata=self.metadata)
         return fertility_rate
 
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         low = sim.pars.n_agents + 1
         high = int(sim.pars.slot_scale*sim.pars.n_agents)
         self.choose_slots = ss.randint(low=low, high=high, sim=sim, module=self)
@@ -402,9 +407,9 @@ class Pregnancy(Demographics):
                 prenatalnet = [nw for nw in self.sim.networks.values() if nw.prenatal][0]
 
                 # Find the prenatal connections that are ending
-                prenatal_ending = prenatalnet.contacts.end<=self.sim.ti
-                new_mother_uids = prenatalnet.contacts.p1[prenatal_ending]
-                new_infant_uids = prenatalnet.contacts.p2[prenatal_ending]
+                prenatal_ending = prenatalnet.edges.end<=self.sim.ti
+                new_mother_uids = prenatalnet.edges.p1[prenatal_ending]
+                new_infant_uids = prenatalnet.edges.p2[prenatal_ending]
 
                 # Validation
                 if not np.array_equal(new_mother_uids, deliveries.uids):

@@ -18,8 +18,8 @@ class Plugin(ss.Module):
     def __call__(self, *args, **kwargs):
         return self.apply(*args, **kwargs)
     
-    def initialize(self, sim):
-        return super().initialize(sim)
+    def init_pre(self, sim):
+        return super().init_pre(sim)
     
     def apply(self, sim):
         pass
@@ -115,7 +115,7 @@ class RoutineDelivery(Intervention):
         self.coverage_dist = ss.bernoulli(p=0)  # Placeholder - initialize delivery
         return
 
-    def initialize(self, sim):
+    def init_pre(self, sim):
 
         # Validate inputs
         if (self.years is not None) and (self.start_year is not None or self.end_year is not None):
@@ -173,7 +173,7 @@ class CampaignDelivery(Intervention):
         self.prob = sc.promotetoarray(prob)
         return
 
-    def initialize(self, sim):
+    def init_pre(self, sim):
         # Decide whether to apply the intervention at every timepoint throughout the year, or just once.
         self.timepoints = sc.findnearest(sim.yearvec, self.years)
 
@@ -213,8 +213,8 @@ class BaseTest(Intervention):
         self.ti_screened = ss.FloatArr('ti_screened')
         return
 
-    def initialize(self, sim):
-        Intervention.initialize(self, sim)
+    def init_pre(self, sim):
+        Intervention.init_pre(self, sim)
         self.outcomes = {k: np.array([], dtype=int) for k in self.product.hierarchy}
         return
 
@@ -296,9 +296,9 @@ class routine_screening(BaseScreening, RoutineDelivery):
         RoutineDelivery.__init__(self, prob=prob, start_year=start_year, end_year=end_year, years=years)
         return
 
-    def initialize(self, sim):
-        RoutineDelivery.initialize(self, sim)  # Initialize this first, as it ensures that prob is interpolated properly
-        BaseScreening.initialize(self, sim)  # Initialize this next
+    def init_pre(self, sim):
+        RoutineDelivery.init_pre(self, sim)  # Initialize this first, as it ensures that prob is interpolated properly
+        BaseScreening.init_pre(self, sim)  # Initialize this next
         return
 
 
@@ -319,9 +319,9 @@ class campaign_screening(BaseScreening, CampaignDelivery):
         CampaignDelivery.__init__(self, prob=prob, years=years, interpolate=interpolate)
         return
 
-    def initialize(self, sim):
-        CampaignDelivery.initialize(self, sim)
-        BaseScreening.initialize(self, sim)  # Initialize this next
+    def init_pre(self, sim):
+        CampaignDelivery.init_pre(self, sim)
+        BaseScreening.init_pre(self, sim)  # Initialize this next
         return
 
 
@@ -343,9 +343,9 @@ class routine_triage(BaseTriage, RoutineDelivery):
                                  annual_prob=annual_prob)
         return
 
-    def initialize(self, sim):
-        RoutineDelivery.initialize(self, sim)  # Initialize this first, as it ensures that prob is interpolated properly
-        BaseTriage.initialize(self, sim)  # Initialize this next
+    def init_pre(self, sim):
+        RoutineDelivery.init_pre(self, sim)  # Initialize this first, as it ensures that prob is interpolated properly
+        BaseTriage.init_pre(self, sim)  # Initialize this next
         return
 
 
@@ -366,9 +366,9 @@ class campaign_triage(BaseTriage, CampaignDelivery):
         CampaignDelivery.__init__(self, prob=prob, years=years, interpolate=interpolate, annual_prob=annual_prob)
         return
 
-    def initialize(self, sim):
-        CampaignDelivery.initialize(self, sim)
-        BaseTriage.initialize(self, sim)
+    def init_pre(self, sim):
+        CampaignDelivery.init_pre(self, sim)
+        BaseTriage.init_pre(self, sim)
         return
 
 
@@ -394,8 +394,8 @@ class BaseTreatment(Intervention):
         self.coverage_dist = ss.bernoulli(p=0)  # Placeholder
         return
 
-    def initialize(self, sim):
-        Intervention.initialize(self, sim)
+    def init_pre(self, sim):
+        Intervention.init_pre(self, sim)
         self.outcomes = {k: np.array([], dtype=int) for k in ['unsuccessful', 'successful']} # Store outcomes on each timestep
         return
 
@@ -536,9 +536,9 @@ class routine_vx(BaseVaccination, RoutineDelivery):
         RoutineDelivery.__init__(self, prob=prob, start_year=start_year, end_year=end_year, years=years)
         return
 
-    def initialize(self, sim):
-        RoutineDelivery.initialize(self, sim)  # Initialize this first, as it ensures that prob is interpolated properly
-        BaseVaccination.initialize(self, sim)  # Initialize this next
+    def init_pre(self, sim):
+        RoutineDelivery.init_pre(self, sim)  # Initialize this first, as it ensures that prob is interpolated properly
+        BaseVaccination.init_pre(self, sim)  # Initialize this next
         return
 
 
@@ -555,7 +555,7 @@ class campaign_vx(BaseVaccination, CampaignDelivery):
         CampaignDelivery.__init__(self, prob=prob, years=years, interpolate=interpolate)
         return
 
-    def initialize(self, sim):
-        CampaignDelivery.initialize(self, sim) # Initialize this first, as it ensures that prob is interpolated properly
-        BaseVaccination.initialize(self, sim) # Initialize this next
+    def init_pre(self, sim):
+        CampaignDelivery.init_pre(self, sim) # Initialize this first, as it ensures that prob is interpolated properly
+        BaseVaccination.init_pre(self, sim) # Initialize this next
         return

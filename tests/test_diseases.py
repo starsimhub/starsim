@@ -37,11 +37,6 @@ def test_sir():
     sim = ss.Sim(people=ppl, diseases=sir, networks=networks)
     sim.run()
 
-    # CK: parameters changed
-    # assert len(sir.log.out_edges(np.nan)) == sir.pars.initial # Log should match initial infections
-    df = sir.log.line_list  # Check generation of line-list # TODO: fix
-    # assert df.source.isna().sum() == sir.pars.initial # Check seed infections in line list
-
     plt.figure()
     res = sim.results
     plt.stackplot(

@@ -76,8 +76,8 @@ class HIV(ss.Infection):
         self.ti_infected[uids] = self.sim.ti
         return
 
-    def set_congenital(self, target_uids, source_uids):
-        return self.set_prognoses(target_uids, source_uids)
+    def set_congenital(self, uids, source_uids):
+        return self.set_prognoses(uids, source_uids)
 
 
 # %% HIV-related interventions
@@ -94,8 +94,8 @@ class ART(ss.Intervention):
         self.prob_art_at_infection = ss.bernoulli(p=lambda self, sim, uids: np.interp(sim.year, self.year, self.coverage))
         return
 
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         self.results += ss.Result(self.name, 'n_art', sim.npts, dtype=int)
         self.initialized = True
         return
@@ -129,8 +129,8 @@ class CD4_analyzer(ss.Analyzer):
         self.cd4 = None
         return
 
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         self.cd4 = np.zeros((sim.npts, sim.people.n), dtype=int)
         return
 

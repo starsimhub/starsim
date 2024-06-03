@@ -15,10 +15,10 @@ __all__ = ['Disease', 'Infection', 'InfectionLog']
 class Disease(ss.Module):
     """ Base module class for diseases """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, log=True, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.results = ss.Results(self.name)
-        self.log = InfectionLog()  # See below for definition
+        self.log = InfectionLog() if log else None  # See below for definition
         return
 
     @property
@@ -34,8 +34,9 @@ class Disease(ss.Module):
                 yield state
         return
 
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        """ Link the disease to the sim, create objects, and initialize results; see Module.init_pre() for details """
+        super().init_pre(sim)
         self.init_results()
         return
 
@@ -88,7 +89,7 @@ class Disease(ss.Module):
         """
         pass
 
-    def set_prognoses(self, target_uids, source_uids=None):
+    def set_prognoses(self, uids, source_uids=None):
         """
         Set prognoses upon infection/acquisition
 
@@ -105,13 +106,14 @@ class Disease(ss.Module):
             uids (array): UIDs for agents to assign disease progoses to
             from_uids (array): Optionally specify the infecting agent
         """
-        sim = self.sim
-        if source_uids is None:
-            for target in target_uids:
-                self.log.append(np.nan, target, sim.year)
-        else:
-            for target, source in zip(target_uids, source_uids):
-                self.log.append(source, target, sim.year)
+        if self.log is not None:
+            sim = self.sim
+            if source_uids is None:
+                for target in uids:
+                    self.log.append(np.nan, target, sim.year)
+            else:
+                for target, source in zip(uids, source_uids):
+                    self.log.append(source, target, sim.year)
         return
 
     def update_results(self):
@@ -152,8 +154,8 @@ class Infection(Disease):
         self.rng_source = ss.random(name='source')
         return
     
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         self.validate_beta()
         return
     
@@ -188,7 +190,7 @@ class Infection(Disease):
         """
         return self.infected
 
-    def init_vals(self):
+    def init_post(self):
         """
         Set initial values for states. This could involve passing in a full set of initial conditions,
         or using init_prev, or other. Note that this is different to initialization of the Arr objects
@@ -256,12 +258,12 @@ class Infection(Disease):
                 break
 
             nbetas = betamap[nkey]
-            contacts = net.contacts
+            edges = net.edges
 
             rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
             rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
-            p1p2b0 = [contacts.p1, contacts.p2, nbetas[0]]
-            p2p1b1 = [contacts.p2, contacts.p1, nbetas[1]]
+            p1p2b0 = [edges.p1, edges.p2, nbetas[0]]
+            p2p1b1 = [edges.p2, edges.p1, nbetas[1]]
             for src, trg, beta in [p1p2b0, p2p1b1]:
 
                 # Skip networks with no transmission

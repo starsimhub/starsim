@@ -110,7 +110,7 @@ def test_order(n=n):
 
 class CountInf(ss.Intervention):
     """ Store every infection state in a timepoints x people array """
-    def initialize(self, sim):
+    def init_pre(self, sim):
         n_agents = len(sim.people)
         self.arr = np.zeros((sim.npts, n_agents))
         self.n_agents = n_agents
@@ -123,9 +123,9 @@ class CountInf(ss.Intervention):
 
 class OneMore(ss.Intervention):
     """ Add one additional agent and infection """
-    def initialize(self, sim):
+    def init_pre(self, sim):
         one_birth = ss.Pregnancy(name='one_birth', rel_fertility=0) # Ensure no default births
-        one_birth.initialize(sim)
+        one_birth.init_pre(sim)
         self.one_birth = one_birth
         return
     
@@ -238,7 +238,7 @@ def test_independence(do_plot=False, thresh=0.1):
         ],
         networks = [
             dict(type='random', n_contacts=ss.poisson(8)),
-            dict(type='mf', debut=ss.delta(0), participation=0.5), # To avoid age correlations
+            dict(type='mf', debut=ss.constant(0), participation=0.5), # To avoid age correlations
         ]
     )
     sim.initialize()
@@ -253,7 +253,7 @@ def test_independence(do_plot=False, thresh=0.1):
     for key,network in sim.networks.items():
         data = np.zeros(len(sim.people))
         for p in ['p1', 'p2']:
-            for uid in network.contacts[p]:
+            for uid in network.edges[p]:
                 data[uid] += 1 # Could also use a histogram
         arrs[key] = data
     
