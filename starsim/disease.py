@@ -35,6 +35,7 @@ class Disease(ss.Module):
         return
 
     def init_pre(self, sim):
+        """ Link the disease to the sim, create objects, and initialize results; see Module.init_pre() for details """
         super().init_pre(sim)
         self.init_results()
         return

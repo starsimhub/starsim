@@ -109,8 +109,11 @@ class Module(sc.quickobj):
         Perform initialization steps
 
         This method is called once, as part of initializing a Sim. Note: after
-        initialization, initialized=False until init_vals() is called (which is after
+        initialization, initialized=False until init_post() is called (which is after
         distributions are initialized).
+        
+        Note: distributions cannot be used here because they aren't initialized 
+        until after init_pre() is called. Use init_post() instead.
         """
         self.check_requires(sim)
         self.sim = sim # Link back to the sim object
@@ -121,7 +124,7 @@ class Module(sc.quickobj):
         return
     
     def init_post(self):
-        """ Initialize the values of the states; the last step of initialization """
+        """ Initialize the values of the states, including calling distributions; the last step of initialization """
         for state in self.states:
             if not state.initialized:
                 state.init_vals()
