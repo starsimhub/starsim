@@ -587,7 +587,7 @@ class Dist:
 
 # Add common distributions so they can be imported directly; assigned to a variable since used in help messages
 dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
-             'poisson', 'weibull', 'const', 'randint', 'bernoulli', 'choice']
+             'poisson', 'weibull', 'constant', 'randint', 'bernoulli', 'choice']
 __all__ += dist_list
 
 
@@ -729,7 +729,7 @@ class weibull(Dist):
         return rvs
 
 
-class const(Dist):
+class constant(Dist):
     """ Constant (delta) distribution: equivalent to np.full() """
     def __init__(self, v=0, **kwargs):
         super().__init__(distname='const', v=v, **kwargs)
