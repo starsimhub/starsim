@@ -265,6 +265,8 @@ class Pregnancy(Demographics):
             rel_fertility = 1,
             maternal_death_prob = ss.bernoulli(0),
             sex_ratio = ss.bernoulli(0.5), # Ratio of babies born female
+            min_age = 15, # Minimum age to become pregnant
+            max_age = 50, # Maximum age to become pregnant
             units = 1e-3, # Assumes fertility rates are per 1000. If using percentages, switch this to 1
         )
         self.update_pars(pars, **kwargs)
@@ -342,10 +344,12 @@ class Pregnancy(Demographics):
             fertility_rate = pd.Series(index=uids)
             fertility_rate[uids] = new_percent[age_inds]
 
-        # Scale from rate to probability. Consider an exponential here.
+        # Scale from rate to probability
+        age = self.sim.people.age[uids]
+        invalid_age = (age < self.pars.min_age) | (age > self.pars.max_age)
         fertility_prob = fertility_rate * (self.pars.units * self.pars.rel_fertility * sim.pars.dt)
         fertility_prob[self.pregnant.uids] = 0 # Currently pregnant women cannot become pregnant again
-        fertility_prob[uids[self.sim.people.age[uids] <= 0]] = 0 # Unborn babies cannot become pregnant
+        fertility_prob[uids[invalid_age]] = 0 # Women too young or old cannot become pregnant
         fertility_prob = np.clip(fertility_prob, a_min=0, a_max=1)
 
         return fertility_prob
