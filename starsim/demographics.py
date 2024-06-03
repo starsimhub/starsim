@@ -345,6 +345,7 @@ class Pregnancy(Demographics):
         # Scale from rate to probability. Consider an exponential here.
         fertility_prob = fertility_rate * (self.pars.units * self.pars.rel_fertility * sim.pars.dt)
         fertility_prob[self.pregnant.uids] = 0 # Currently pregnant women cannot become pregnant again
+        fertility_prob[uids[self.sim.people.age[uids] <= 0]] = 0 # Unborn babies cannot become pregnant
         fertility_prob = np.clip(fertility_prob, a_min=0, a_max=1)
 
         return fertility_prob
