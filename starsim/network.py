@@ -728,26 +728,24 @@ class EmbeddingNet(MFNet):
         """
         Create a sexual network from a 1D embedding based on age
 
-        Args:
-            male_shift is the average age that males are older than females in partnerships
+        male_shift is the average age that males are older than females in partnerships
+        std is the standard deviation of noise added to the age of each individual when seeking a pair. Larger values will created more diversity in age gaps.
+        
         """
-        super().__init__()
-        self.default_pars(
-            inherit = True, # The MFNet already comes with pars, we want to keep those
-            embedding_func = ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
-            male_shift = 5,
-        )
-        self.update_pars(pars, **kwargs)
+        pars = ss.omerge({
+            'embedding_func': ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
+            'male_shift': 5,
+        }, pars)
+        super().__init__(pars, **kwargs)
         return
 
     @staticmethod
     def embedding_loc(module, sim, uids):
-        loc = sim.people.age[uids]
+        loc = sim.people.age[uids].values
         loc[sim.people.female[uids]] += module.pars.male_shift  # Shift females so they will be paired with older men
         return loc
 
-    def add_pairs(self):
-        people = self.sim.people
+    def add_pairs(self, people, ti=None):
         available_m = self.available(people, 'male')
         available_f = self.available(people, 'female')
 
@@ -756,23 +754,65 @@ class EmbeddingNet(MFNet):
                 print('No pairs to add')
             return 0
 
-        available = ss.uids.cat(available_m, available_f)
+        available = np.concatenate((available_m, available_f))
         loc = self.pars.embedding_func.rvs(available)
         loc_f = loc[people.female[available]]
         loc_m = loc[~people.female[available]]
 
-        dist_mat = spsp.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
-        ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
+        dist_mat = spsp.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])        
+        dist_mat_area=dist_mat.shape[0]*dist_mat.shape[1]
+        split_n=99_999 # distance matrix area split divisor that determines the number of distance matrix partitions
+
+        if(dist_mat_area>split_n):
+            splits=int(round(dist_mat_area/split_n,0))
+            partitions=np.array_split(dist_mat,splits)
+
+            i = 0
+            level_one=partitions[0].shape[0]
+            level=[] 
+
+            for p in partitions:
+                if(i==0):
+                    level.append(p.shape[0]-level_one)
+                    i+=1
+                else:
+                    level.append(level[i-1]+p.shape[0])
+                    i+=1
+
+            count=0	
+
+            for partition in partitions:
+                if(count==0):
+                    ind_m, ind_f=spo.linear_sum_assignment(partition)
+                    count+=1
+                else:
+                    x, y=spo.linear_sum_assignment(partition)
+                    x=x+level[count]
+                    ind_m=np.hstack((ind_m,x))
+                    ind_f=np.hstack((ind_f,y))
+                    count+=1
+
+            u, indices = np.unique(ind_f, return_index=True)
+            ind_m=ind_m[indices]
+            ind_f=ind_f[indices]
+
+        else:
+            ind_m, ind_f=spo.linear_sum_assignment(dist_mat)
+       
         n_pairs = len(ind_f)
 
-        # Finalize pairs
+        beta = np.ones(n_pairs)
+
+        # Figure out durations
         p1 = available_m[ind_m]
-        p2 = available_f[ind_f]
-        beta = np.ones(n_pairs) # TODO: Allow custom beta
         dur_vals = self.pars.duration.rvs(p1)
         act_vals = self.pars.acts.rvs(p1)
 
-        self.append(p1=p1, p2=p2, beta=beta, dur=dur_vals, acts=act_vals)
+        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
+        self.contacts.p2 = np.concatenate([self.contacts.p2, available_f[ind_f]])
+        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
+        self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
+        self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
         return len(beta)
 
 
