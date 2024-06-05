@@ -718,7 +718,6 @@ class MSMNet(SexualNetwork):
         self.add_pairs(self.sim)
         return
 
-
 class EmbeddingNet(MFNet):
     """
     Heterosexual age-assortative network based on a one-dimensional embedding. Could be made more generic.
@@ -728,20 +727,21 @@ class EmbeddingNet(MFNet):
         """
         Create a sexual network from a 1D embedding based on age
 
-        male_shift is the average age that males are older than females in partnerships
-        std is the standard deviation of noise added to the age of each individual when seeking a pair. Larger values will created more diversity in age gaps.
-        
+        Args:
+            male_shift is the average age that males are older than females in partnerships
         """
-        pars = ss.omerge({
-            'embedding_func': ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
-            'male_shift': 5,
-        }, pars)
-        super().__init__(pars, **kwargs)
+        super().__init__()
+        self.default_pars(
+            inherit = True, # The MFNet already comes with pars, we want to keep those
+            embedding_func = ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
+            male_shift = 5,
+        )
+        self.update_pars(pars, **kwargs)
         return
 
     @staticmethod
     def embedding_loc(module, sim, uids):
-        loc = sim.people.age[uids].values
+        loc = sim.people.age[uids]
         loc[sim.people.female[uids]] += module.pars.male_shift  # Shift females so they will be paired with older men
         return loc
 
