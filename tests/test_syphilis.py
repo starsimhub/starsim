@@ -28,12 +28,7 @@ def make_syph_sim(dt=1, n_agents=500):
     ppl = ss.People(n_agents, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
 
     # Marital
-    mf = ss.MFNet(
-        pars = dict(
-            duration = ss.lognorm_ex(mean=1/24, stdev=0.5),
-            acts = ss.lognorm_ex(mean=80, stdev=30),
-        )
-    )
+    mf = ss.MFNet(duration=1/24)
     maternal = ss.MaternalNet()
 
     sim_kwargs = dict(

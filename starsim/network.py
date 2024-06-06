@@ -60,7 +60,7 @@ class Network(ss.Module):
         network2 = ss.Network(**network, index=index, self_conn=self_conn, label=network.label)
     """
 
-    def __init__(self, key_dict=None, vertical=False, name=None, label=None, requires=None, **kwargs):
+    def __init__(self, key_dict=None, prenatal=False, postnatal=False, name=None, label=None, requires=None, **kwargs):
         # Initialize as a module
         super().__init__(name=name, label=label, requires=requires)
 
@@ -71,16 +71,17 @@ class Network(ss.Module):
             beta = ss_float_,
         )
         self.meta = sc.mergedicts(default_keys, key_dict)
-        self.vertical = vertical  # Whether transmission is bidirectional
+        self.prenatal = prenatal  # Prenatal connections are added at the time of conception. Requires ss.Pregnancy()
+        self.postnatal = postnatal  # Postnatal connections are added at the time of delivery. Requires ss.Pregnancy()
 
         # Initialize the keys of the network
-        self.contacts = sc.objdict()
+        self.edges = sc.objdict()
         for key, dtype in self.meta.items():
-            self.contacts[key] = np.empty((0,), dtype=dtype)
+            self.edges[key] = np.empty((0,), dtype=dtype)
 
         # Set data, if provided
         for key, value in kwargs.items():
-            self.contacts[key] = np.array(value, dtype=self.meta.get(key)) # Overwrite dtype if supplied, else keep original
+            self.edges[key] = np.array(value, dtype=self.meta.get(key)) # Overwrite dtype if supplied, else keep original
             self.initialized = True
 
         # Define states using placeholder values
@@ -90,24 +91,24 @@ class Network(ss.Module):
     
     @property
     def p1(self):
-        return self.contacts['p1'] if 'p1' in self.contacts else None
+        return self.edges['p1'] if 'p1' in self.edges else None
     
     @property
     def p2(self):
-        return self.contacts['p2'] if 'p2' in self.contacts else None
+        return self.edges['p2'] if 'p2' in self.edges else None
 
     @property
     def beta(self):
-        return self.contacts['beta'] if 'beta' in self.contacts else None
+        return self.edges['beta'] if 'beta' in self.edges else None
 
-    def init_vals(self, add_pairs=True):
-        super().init_vals()
+    def init_post(self, add_pairs=True):
+        super().init_post()
         if add_pairs: self.add_pairs()
         return
 
     def __len__(self):
         try:
-            return len(self.contacts.p1)
+            return len(self.edges.p1)
         except:  # pragma: no cover
             return 0
 
@@ -115,7 +116,7 @@ class Network(ss.Module):
         """ Convert to a dataframe for printing """
         namestr = self.name
         labelstr = f'"{self.label}"' if self.label else '<no label>'
-        keys_str = ', '.join(self.contacts.keys())
+        keys_str = ', '.join(self.edges.keys())
         output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", p1, p2, beta)
         output += self.to_df().__repr__()
         return output
@@ -129,12 +130,12 @@ class Network(ss.Module):
 
         Returns: True if person index appears in any interactions
         """
-        return (item in self.contacts.p1) or (item in self.contacts.p2) # TODO: chek if (item in self.members) is faster
+        return (item in self.edges.p1) or (item in self.edges.p2) # TODO: chek if (item in self.members) is faster
 
     @property
     def members(self):
         """ Return sorted array of all members """
-        return np.unique([self.contacts.p1, self.contacts.p2]).view(ss.uids)
+        return np.unique([self.edges.p1, self.edges.p2]).view(ss.uids)
 
     def meta_keys(self):
         """ Return the keys for the network's meta information """
@@ -151,12 +152,12 @@ class Network(ss.Module):
     
     def validate_uids(self):
         """ Ensure that p1, p2 are both UID arrays """
-        contacts = self.contacts
+        edges = self.edges
         for key in ['p1', 'p2']:
-            if key in contacts:
-                arr = contacts[key]
+            if key in edges:
+                arr = edges[key]
                 if not isinstance(arr, ss.uids):
-                    self.contacts[key] = ss.uids(arr)
+                    self.edges[key] = ss.uids(arr)
         return
 
     def validate(self, force=True):
@@ -166,14 +167,14 @@ class Network(ss.Module):
         If dtype is incorrect, try to convert automatically; if length is incorrect,
         do not.
         """
-        n = len(self.contacts.p1)
+        n = len(self.edges.p1)
         for key, dtype in self.meta.items():
             if dtype:
-                actual = self.contacts[key].dtype
+                actual = self.edges[key].dtype
                 expected = dtype
                 if actual != expected:
-                    self.contacts[key] = np.array(self.contacts[key], dtype=expected)  # Try to convert to correct type
-            actual_n = len(self.contacts[key])
+                    self.edges[key] = np.array(self.edges[key], dtype=expected)  # Try to convert to correct type
+            actual_n = len(self.edges[key])
             if n != actual_n:
                 errormsg = f'Expecting length {n} for network key "{key}"; got {actual_n}'  # Report length mismatches
                 raise TypeError(errormsg)
@@ -189,9 +190,9 @@ class Network(ss.Module):
         """
         output = {}
         for key in self.meta_keys():
-            output[key] = self.contacts[key][inds]  # Copy to the output object
+            output[key] = self.edges[key][inds]  # Copy to the output object
             if remove:
-                self.contacts[key] = np.delete(self.contacts[key], inds)  # Remove from the original
+                self.edges[key] = np.delete(self.edges[key], inds)  # Remove from the original
                 self.validate_uids()
         return output
 
@@ -215,19 +216,19 @@ class Network(ss.Module):
         """
         contacts = sc.mergedicts(contacts, kwargs)
         for key in self.meta_keys():
-            curr_arr = self.contacts[key]
+            curr_arr = self.edges[key]
             try:
                 new_arr = contacts[key]
             except KeyError:
                 errormsg = f'Cannot append contacts since required key "{key}" is missing'
                 raise KeyError(errormsg)
-            self.contacts[key] = np.concatenate([curr_arr, new_arr])  # Resize to make room, preserving dtype
+            self.edges[key] = np.concatenate([curr_arr, new_arr])  # Resize to make room, preserving dtype
         self.validate_uids()
         return
 
     def to_dict(self):
         """ Convert to dictionary """
-        d = {k: self.contacts[k] for k in self.meta_keys()}
+        d = {k: self.edges[k] for k in self.meta_keys()}
         return d
 
     def to_df(self):
@@ -240,7 +241,7 @@ class Network(ss.Module):
         if keys is None:
             keys = self.meta_keys()
         for key in keys:
-            self.contacts[key] = df[key].to_numpy()
+            self.edges[key] = df[key].to_numpy()
         return self
 
     def find_contacts(self, inds, as_array=True):
@@ -276,7 +277,7 @@ class Network(ss.Module):
             inds = np.array(inds, dtype=np.int64)
 
         # Find the contacts
-        contact_inds = ss.find_contacts(self.contacts.p1, self.contacts.p2, inds)
+        contact_inds = ss.find_contacts(self.edges.p1, self.edges.p2, inds)
         if as_array:
             contact_inds = np.fromiter(contact_inds, dtype=ss_int_)
             contact_inds.sort()
@@ -297,15 +298,15 @@ class Network(ss.Module):
         This method is typically called via `People.remove()` and
         is specifically used when removing agents from the simulation.
         """
-        keep = ~(np.isin(self.contacts.p1, uids) | np.isin(self.contacts.p2, uids))
+        keep = ~(np.isin(self.edges.p1, uids) | np.isin(self.edges.p2, uids))
         for k in self.meta_keys():
-            self.contacts[k] = self.contacts[k][keep]
+            self.edges[k] = self.edges[k][keep]
 
         return
 
     def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
         if uids is None: uids = Ellipsis
-        return self.contacts.beta[uids] * disease_beta * dt
+        return self.edges.beta[uids] * disease_beta * dt
 
 
 class DynamicNetwork(Network):
@@ -317,12 +318,12 @@ class DynamicNetwork(Network):
 
     def end_pairs(self):
         people = self.sim.people
-        self.contacts.dur = self.contacts.dur - self.sim.dt
+        self.edges.dur = self.edges.dur - self.sim.dt
 
         # Non-alive agents are removed
-        active = (self.contacts.dur > 0) & people.alive[self.contacts.p1] & people.alive[self.contacts.p2]
+        active = (self.edges.dur > 0) & people.alive[self.edges.p1] & people.alive[self.edges.p2]
         for k in self.meta_keys():
-            self.contacts[k] = self.contacts[k][active]
+            self.edges[k] = self.edges[k][active]
         return len(active)
 
 
@@ -354,11 +355,11 @@ class SexualNetwork(DynamicNetwork):
 
     def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
         if uids is None: uids = Ellipsis
-        return self.contacts.beta[uids] * (1 - (1 - disease_beta) ** (self.contacts.acts[uids] * dt))
+        return self.edges.beta[uids] * (1 - (1 - disease_beta) ** (self.edges.acts[uids] * dt))
 
 
 # %% Specific instances of networks
-__all__ += ['StaticNet', 'RandomNet', 'NullNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet']
+__all__ += ['StaticNet', 'RandomNet', 'NullNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet', 'PrenatalNet', 'PostnatalNet']
 
 
 class StaticNet(Network):
@@ -386,24 +387,23 @@ class StaticNet(Network):
     def __init__(self, graph=None, pars=None, **kwargs):
         super().__init__()
         self.graph = graph
-        self.default_pars(seed=True)
+        self.default_pars(seed=True, p=None, n_contacts=10)
         self.update_pars(pars, **kwargs)
         self.dist = ss.Dist(name='StaticNet')
         return
 
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         self.n_agents = sim.pars.n_agents
         if self.graph is None:
             self.graph = nx.fast_gnp_random_graph # Fast random (Erdos-Renyi) graph creator
-            if 'p' not in self.pars and 'n_contacts' not in self.pars: # TODO: refactor
-                self.pars.n_contacts = 10
-        if 'n_contacts' in self.pars: # Convert from n_contacts to probability
-            self.pars.p = self.pars.pop('n_contacts')/self.n_agents
+        n_contacts = self.pars.pop('n_contacts') # Remove from pars dict, but use only if p is not supplied
+        if self.pars.p is None: # Convert from n_contacts to probability
+            self.pars.p = n_contacts/self.n_agents
         return
     
-    def init_vals(self):
-        super().init_vals()
+    def init_post(self):
+        super().init_post()
         if 'seed' in self.pars and self.pars.seed is True:
             self.pars.seed = self.dist.rng
         if callable(self.graph):
@@ -446,14 +446,14 @@ class RandomNet(DynamicNetwork):
         """ Initialize """
         super().__init__(key_dict=key_dict)
         self.default_pars(
-            n_contacts = ss.delta(10),
+            n_contacts = ss.constant(10),
             dur = 0,
         )
         self.update_pars(pars, **kwargs)
         self.dist = ss.Dist(distname='RandomNet') # Default RNG
         return
 
-    def init_vals(self):
+    def init_post(self):
         self.add_pairs()
         return
 
@@ -545,8 +545,8 @@ class NullNet(Network):
         super().__init__(**kwargs)
         return
 
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         popsize = sim.pars['n_agents']
         if self.n is None:
             self.n = popsize
@@ -583,7 +583,7 @@ class MFNet(SexualNetwork):
         self.dist = ss.choice(name='MFNet', replace=False) # Set the array later
         return
 
-    def init_vals(self):
+    def init_post(self):
         self.set_network_states()
         self.add_pairs()
         return
@@ -670,11 +670,11 @@ class MSMNet(SexualNetwork):
         self.update_pars(pars, **kwargs)
         return
 
-    def initialize(self, sim):
+    def init_pre(self, sim):
         # Add more here in line with MF network, e.g. age of debut
         # Or if too much replication then perhaps both these networks
         # should be subclasss of a specific network type (ask LY/DK)
-        super().initialize(sim)
+        super().init_pre(sim)
         self.set_network_states(sim.people)
         self.add_pairs(sim.people, ti=0)
         return
@@ -776,35 +776,57 @@ class EmbeddingNet(MFNet):
         return len(beta)
 
 
-class MaternalNet(Network):
+class MaternalNet(DynamicNetwork):
     """
-    Vertical (birth-related) transmission network
+    Base class for maternal transmission
+    Use PrenatalNet and PostnatalNet to capture transmission in different phases
     """
-    def __init__(self, key_dict=None, vertical=True, **kwargs):
+    def __init__(self, key_dict=None, prenatal=True, postnatal=False, **kwargs):
         """
         Initialized empty and filled with pregnancies throughout the simulation
         """
-        key_dict = sc.mergedicts({'dur': ss_float_}, key_dict)
-        super().__init__(key_dict=key_dict, vertical=vertical, **kwargs)
+        key_dict = sc.mergedicts(dict(dur=ss_float_, start=ss_int_, end=ss_int_), key_dict)
+        super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
         return
 
     def update(self):
         """
-        Set beta to 0 for women who complete post-partum period
+        Set beta to 0 for women who complete duration of transmission
         Keep connections for now, might want to consider removing
         """
-        dt = self.sim.dt
-        self.contacts.dur = self.contacts.dur - dt
-        inactive = self.contacts.dur <= 0
-        self.contacts.beta[inactive] = 0
+        inactive = self.edges.end <= self.sim.ti
+        self.edges.beta[inactive] = 0
         return
 
-    def add_pairs(self, mother_inds=None, unborn_inds=None, dur=None):
+    def end_pairs(self):
+        people = self.sim.people
+        active = (self.edges.end > self.sim.ti) & people.alive[self.edges.p1] & people.alive[self.edges.p2]
+        for k in self.meta_keys():
+            self.edges[k] = self.edges[k][active]
+        return len(active)
+
+    def add_pairs(self, mother_inds=None, unborn_inds=None, dur=None, start=None):
         """ Add connections between pregnant women and their as-yet-unborn babies """
         if mother_inds is None:
             return 0
         else:
+            if start is None:
+                start = np.full_like(dur, fill_value=self.sim.ti)
             n = len(mother_inds)
             beta = np.ones(n)
-            self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur)
+            end = start + sc.promotetoarray(dur) / self.sim.dt
+            self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur, start=start, end=end)
             return n
+
+
+class PrenatalNet(MaternalNet):
+    """ Prenatal transmission network """
+    def __init__(self, key_dict=None, prenatal=True, postnatal=False, **kwargs):
+        super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
+        return
+
+class PostnatalNet(MaternalNet):
+    """ Postnatal transmission network """
+    def __init__(self, key_dict=None, prenatal=False, postnatal=True, **kwargs):
+        super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
+        return

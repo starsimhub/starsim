@@ -92,10 +92,17 @@ class Dists(sc.prettyobj):
         if obj is None:
             errormsg = 'Must supply a container that contains one or more Dist objects, typically the sim'
             raise ValueError(errormsg)
-        self.dists = find_dists(obj)
+            
+        # Do not look for distributions in the people states, since they shadow the "real" states
+        skip = id(sim.people._states) if sim is not None else None
+        
+        # Find and initialize the distributions
+        self.dists = find_dists(obj, skip=skip)
         for trace,dist in self.dists.items():
             if not dist.initialized or force:
                 dist.initialize(trace=trace, seed=base_seed, sim=sim, force=force)
+        
+        # Confirm the seeds are unique
         self.check_seeds()
         self.initialized = True
         return self
@@ -450,8 +457,8 @@ class Dist:
         """ Ensure the supplied dist and parameters are valid, and initialize them; called automatically """
         self._pars = sc.cp(self.pars) # The actual keywords; shallow copy, modified below for special cases
         if call:
-            self.call_pars()
-        spars = self.sync_pars()
+            self.call_pars() # Convert from function to values if needed
+        spars = self.sync_pars() # Synchronize parameters between the NumPy and SciPy distributions
         return spars
     
     def call_pars(self):
@@ -587,7 +594,7 @@ class Dist:
 
 # Add common distributions so they can be imported directly; assigned to a variable since used in help messages
 dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
-             'poisson', 'weibull', 'delta', 'randint', 'bernoulli', 'choice']
+             'poisson', 'weibull', 'constant', 'randint', 'bernoulli', 'choice']
 __all__ += dist_list
 
 
@@ -668,10 +675,11 @@ class lognorm_ex(Dist):
         parameters of the underlying (implicit) distribution, which are the form expected by NumPy's
         and SciPy's lognorm() distributions.
         """
+        self.call_pars() # Since can't work with functions
         p = self._pars
         mean = p.pop('mean')
         stdev = p.pop('stdev')
-        if mean <= 0:
+        if np.isscalar(mean) and mean <= 0:
             errormsg = f'Cannot create a lognorm_ex distribution with mean≤0 (mean={mean}); did you mean to use lognorm_im instead?'
             raise ValueError(errormsg)
         std2 = stdev**2
@@ -728,10 +736,10 @@ class weibull(Dist):
         return rvs
 
 
-class delta(Dist):
-    """ Delta distribution: equivalent to np.full() """
+class constant(Dist):
+    """ Constant (delta) distribution: equivalent to np.full() """
     def __init__(self, v=0, **kwargs):
-        super().__init__(distname='delta', v=v, **kwargs)
+        super().__init__(distname='const', v=v, **kwargs)
         return
     
     def make_rvs(self):

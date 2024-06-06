@@ -38,14 +38,14 @@ class NCD(ss.Disease):
     def not_at_risk(self):
         return ~self.at_risk
 
-    def init_vals(self):
+    def init_post(self):
         """
         Set initial values for states. This could involve passing in a full set of initial conditions,
         or using init_prev, or other. Note that this is different to initialization of the State objects
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
-        super().init_vals()
+        super().init_post()
         initial_risk = self.pars['initial_risk'].filter()
         self.at_risk[initial_risk] = True
         self.ti_affected[initial_risk] = self.sim.ti + sc.randround(self.pars['dur_risk'].rvs(initial_risk) / self.sim.dt)

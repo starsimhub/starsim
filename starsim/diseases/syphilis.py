@@ -195,6 +195,7 @@ class Syphilis(ss.Infection):
         """
         Set initial prognoses for adults newly infected with syphilis
         """
+        super().set_prognoses(uids, source_uids)
         
         ti = self.sim.ti
         dt = self.sim.dt
@@ -256,7 +257,7 @@ class Syphilis(ss.Infection):
 
         return
 
-    def set_congenital(self, target_uids, source_uids=None):
+    def set_congenital(self, uids, source_uids=None):
         """ Natural history of syphilis for congenital infection """
         sim = self.sim
 
@@ -264,18 +265,18 @@ class Syphilis(ss.Infection):
         for state in ['active', 'latent']:
 
             source_state_inds = getattr(self, state)[source_uids].nonzero()[0]
-            uids = target_uids[source_state_inds]
+            state_uids = uids[source_state_inds]
 
-            if len(uids) > 0:
+            if len(state_uids) > 0:
 
                 # Birth outcomes must be modified to add probability of susceptible birth
                 birth_outcomes = self.pars.birth_outcomes[state]
-                assigned_outcomes = birth_outcomes.rvs(len(uids))
+                assigned_outcomes = birth_outcomes.rvs(len(state_uids))
                 time_to_birth = -sim.people.age.raw # TODO: make nicer
 
                 # Schedule events
                 for oi, outcome in enumerate(self.pars.birth_outcome_keys):
-                    o_uids = uids[assigned_outcomes == oi]
+                    o_uids = state_uids[assigned_outcomes == oi]
                     if len(o_uids) > 0:
                         ti_outcome = f'ti_{outcome}'
                         vals = getattr(self, ti_outcome)
@@ -344,8 +345,8 @@ class syph_screening(ss.routine_screening):
             is_eligible = sim.people.auids  # Probably not required
         return is_eligible
 
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         self.results += [
             ss.Result('syphilis', 'n_screened', sim.npts, dtype=int, scale=True),
             ss.Result('syphilis', 'n_dx', sim.npts, dtype=int, scale=True),
@@ -368,8 +369,8 @@ class syph_treatment(ss.treat_num):
         else:
             return products[product]
 
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         self.results += ss.Result('syphilis', 'n_tx', sim.npts, dtype=int, scale=True)
         return
 

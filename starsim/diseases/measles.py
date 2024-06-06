@@ -59,8 +59,7 @@ class Measles(SIR):
 
     def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses for those who get infected """
-        # Do not call set_prognosis on parent
-        # super().set_prognoses(sim, uids, source_uids)
+        super().set_prognoses(uids, source_uids)
         ti = self.sim.ti
         dt = self.sim.dt
 

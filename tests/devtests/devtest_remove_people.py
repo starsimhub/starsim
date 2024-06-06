@@ -10,8 +10,8 @@ import numpy as np
 import sciris as sc
 
 class agent_analyzer(ss.Analyzer):
-    def initialize(self, sim):
-        super().initialize(sim)
+    def init_pre(self, sim):
+        super().init_pre(sim)
         self.n_agents = np.zeros(sim.npts)
 
     def update_results(self, sim):

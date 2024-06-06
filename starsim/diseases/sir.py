@@ -20,7 +20,7 @@ class SIR(ss.Infection):
     def __init__(self, pars=None, **kwargs):
         super().__init__()
         self.default_pars(
-            beta = 0.5,
+            beta = 0.1,
             init_prev = ss.bernoulli(p=0.01),
             dur_inf = ss.lognorm_ex(mean=6),
             p_death = ss.bernoulli(p=0.01),
@@ -49,6 +49,7 @@ class SIR(ss.Infection):
 
     def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses """
+        super().set_prognoses(uids, source_uids)
         ti = self.sim.ti
         dt = self.sim.dt
         self.susceptible[uids] = False
@@ -67,7 +68,6 @@ class SIR(ss.Infection):
         rec_uids = uids[~will_die]
         self.ti_dead[dead_uids] = ti + dur_inf[will_die] / dt # Consider rand round, but not CRN safe
         self.ti_recovered[rec_uids] = ti + dur_inf[~will_die] / dt
-
         return
 
     def update_death(self, uids):
@@ -127,6 +127,7 @@ class SIS(ss.Infection):
 
     def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses """
+        super().set_prognoses(uids, source_uids)
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = self.sim.ti
@@ -167,14 +168,30 @@ __all__ += ['sir_vaccine']
 
 class sir_vaccine(ss.Vx):
     """
-    Create a vaccine product that changes susceptible people to recovered (i.e., perfect immunity)
+    Create a vaccine product that affects the probability of infection.
+    
+    The vaccine can be either "leaky", in which everyone who receives the vaccine 
+    receives the same amount of protection (specified by the efficacy parameter) 
+    each time they are exposed to an infection. The alternative (leaky=False) is
+    that the efficacy is the probability that the vaccine "takes", in which case
+    that person is 100% protected (and the remaining people are 0% protected).
+    
+    Args:
+        efficacy (float): efficacy of the vaccine (0<=efficacy<=1)
+        leaky (bool): see above
     """
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
-        self.default_pars(efficacy=0.9)
+        self.default_pars(
+            efficacy = 0.9,
+            leaky = True
+        )
         self.update_pars(pars, **kwargs)
         return
 
-    def administer(self, people, uids):
-        people.sir.rel_sus[uids] *= 1-self.pars.efficacy
+    def administer(self, people, uids):        
+        if self.pars.leaky:
+            people.sir.rel_sus[uids] *= 1-self.pars.efficacy
+        else:
+            people.sir.rel_sus[uids] *= np.random.binomial(1, 1-self.pars.efficacy, len(uids))
         return
