@@ -7,6 +7,12 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 0.5.3 (2024-06-06)
+--------------------------
+- Reverts transmission behavior back to "acquisition-based" method instead of "modulo" method to avoid unwanted correlations
+- - *GitHub info*: PR `507 <https://github.com/starsimhub/starsim/pull/507>`_
+
+
 Version 0.5.2 (2024-06-04)
 --------------------------
 - Renames ``network.contacts`` to ``network.edges``.
