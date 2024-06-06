@@ -308,8 +308,6 @@ class Infection(Disease):
         infection source.
         """
         people = self.sim.people
-        n = len(people.uid)  # TODO: possibly could be shortened to just the people who are alive
-        p_acq_node = np.zeros(n)
         betamap = self._check_betas()
 
         src_vec = []
@@ -320,13 +318,18 @@ class Infection(Disease):
                 break
 
             nbetas = betamap[nkey]
-            contacts = net.contacts
+            edges = net.edges
 
-            rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
-            rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
+            # asnew is nice because we can work in Arr by UIDs, but it is slow
+            #rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans) # asnew makes a FloatArr rather than a numpy array, as needed for uid indexing
+            #rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
 
-            p1p2b0 = [contacts.p1, contacts.p2, nbetas[0]]
-            p2p1b1 = [contacts.p2, contacts.p1, nbetas[1]]
+            # So let's use raw instead, which gives full-length numpy arrays
+            rel_trans = self.infectious.raw * self.rel_trans.raw
+            rel_sus   = self.susceptible.raw * self.rel_sus.raw
+
+            p1p2b0 = [edges.p1, edges.p2, nbetas[0]]
+            p2p1b1 = [edges.p2, edges.p1, nbetas[1]]
             for src, trg, beta in [p1p2b0, p2p1b1]:
 
                 # Skip networks with no transmission
@@ -334,8 +337,8 @@ class Infection(Disease):
                     continue
 
                 # Calculate probability of a->b transmission.
-                #a, b, beta_arr = contacts[src], contacts[trg], contacts.beta
-                nzi = (rel_trans[src] > 0) & (rel_sus[trg] > 0) & (contacts.beta > 0)
+                # non-zero indices
+                nzi = (rel_trans[src] > 0) & (rel_sus[trg] > 0) & (edges.beta > 0)
                 src_vec.append(src[nzi])
                 trg_vec.append(trg[nzi])
 
@@ -360,8 +363,8 @@ class Infection(Disease):
 
         # Pre-draw random numbers
         slots = people.slot[p2uniq]  # Slots for the possible infectee
-        r = self.rng_target.rvs(n=np.max(slots) + 1)
-        q = self.rng_source.rvs(n=np.max(slots) + 1)
+        r = self.rng_target.rvs(n=int(np.max(slots) + 1)) # Convert from uid to int so n is interpreted correctly
+        q = self.rng_source.rvs(n=int(np.max(slots) + 1))
 
         # Now address nodes with multiple possible infectees
         degrees = np.unique(p2cnt)
@@ -369,38 +372,52 @@ class Infection(Disease):
         sources = []
         for deg in degrees:
             if deg == 1:
-                # UIDs that only appear once
+                # p2 UIDs that only appear once
                 cnt1 = p2cnt == 1
-                uids = p2uniq[cnt1]
-                idx = p2idx[cnt1]
-                p_acq_node = dfp[idx]
-                cases = r[people.slot[uids]] < p_acq_node
+                uids = p2uniq[cnt1] # p2 uids that only have one possible p1 infector
+                idx = p2idx[cnt1] # get original index, dfp2[idx] should match uids (above)
+                p_acq_node = dfp[idx] # acquisition probability
+                cases = r[people.slot[uids]] < p_acq_node # determine if p2 acquires from p1
                 if cases.any():
-                    s = dfp1[idx][cases]
+                    s = dfp1[idx][cases] # Only one possible source for each case because degree is one
             else:
+                # p2 UIDs that appear degree times
                 dups = np.argwhere(p2cnt==deg).flatten()
                 uids = p2uniq[dups]
+                
+                # Get indices where p2 is repeated
+                #  dfp2[inds] should have degree repeated values on each row
+                #  dfp1[inds] and dfp[inds] will contain the corresponding sources and transmission probabilities, respectively
                 inds = [np.argwhere(np.isin(p2inv, d)).flatten() for d in dups]
                 probs = dfp[inds]
-                p_acq_node = 1-np.prod(1-probs, axis=1)
+                p_acq_node = 1-np.prod(1-probs, axis=1) # Compute the overall acquisition probability for each susceptible node that is at risk of acquisition
 
-                cases = r[people.slot[uids]] < p_acq_node
+                cases = r[people.slot[uids]] < p_acq_node # determine if p2 acquires from any of the possible p1s
                 if cases.any():
-                    # Vectorized roulette wheel
+                    # Vectorized roulette wheel to pick from amongst the possible sources for each new case, with probability weighting
+                    # First form the normalized cumsum
                     cumsum = probs[cases].cumsum(axis=1)
                     cumsum /= cumsum[:,-1][:,np.newaxis]
+                    # Use slotted q to make the choice
                     ix = np.argmax(cumsum >= q[people.slot[uids[cases]]][:,np.newaxis], axis=1)
+                    # And finally identify the source uid
                     s = np.take_along_axis(dfp1[inds][cases], ix[:,np.newaxis], axis=1).flatten()#dfp1[inds][cases][np.arange(len(cases)),ix]
 
             if cases.any():
                 new_cases.append(uids[cases])
                 sources.append(s)
 
-        if len(new_cases) == 0:
-            return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
+        # Tidy up
+        if len(new_cases) and len(sources):
+            new_cases = ss.uids.cat(new_cases)
+            sources = ss.uids.cat(sources)
+        else:
+            new_cases = np.empty(0, dtype=int)
+            sources = np.empty(0, dtype=int)
+            
+        if len(new_cases):
+            self._set_cases(new_cases, sources)
 
-        new_cases = np.concatenate(new_cases)
-        sources = np.concatenate(sources)
         return new_cases, sources
 
     def _set_cases(self, target_uids, source_uids=None):

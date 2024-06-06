@@ -123,7 +123,7 @@ def test_connectors(do_plot=False):
         pl.title('Syphilis infections')
         pl.xlabel('Year')
         pl.ylabel('Count')
-        pl.axvline(2020)
+        pl.axvline(2020, color='k', ls=':')
         pl.legend()
         
         pl.subplot(2,1,2)
@@ -132,7 +132,7 @@ def test_connectors(do_plot=False):
         pl.title('HIV infections')
         pl.xlabel('Year')
         pl.ylabel('Count')
-        pl.axvline(2020)
+        pl.axvline(2020, color='k', ls=':')
         pl.legend()
         
         sc.figlayout()
