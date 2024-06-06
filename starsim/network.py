@@ -804,16 +804,14 @@ class EmbeddingNet(MFNet):
 
         beta = np.ones(n_pairs)
 
-        # Figure out durations
+        # Finalize pairs
         p1 = available_m[ind_m]
+        p2 = available_f[ind_f]
+        beta = np.ones(n_pairs) # TODO: Allow custom beta
         dur_vals = self.pars.duration.rvs(p1)
         act_vals = self.pars.acts.rvs(p1)
 
-        self.contacts.p1 = np.concatenate([self.contacts.p1, p1])
-        self.contacts.p2 = np.concatenate([self.contacts.p2, available_f[ind_f]])
-        self.contacts.beta = np.concatenate([self.contacts.beta, beta])
-        self.contacts.dur = np.concatenate([self.contacts.dur, dur_vals])
-        self.contacts.acts = np.concatenate([self.contacts.acts, act_vals])
+        self.append(p1=p1, p2=p2, beta=beta, dur=dur_vals, acts=act_vals)
         return len(beta)
 
 
