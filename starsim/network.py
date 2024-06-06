@@ -802,8 +802,6 @@ class EmbeddingNet(MFNet):
        
         n_pairs = len(ind_f)
 
-        beta = np.ones(n_pairs)
-
         # Finalize pairs
         p1 = available_m[ind_m]
         p2 = available_f[ind_f]
