@@ -92,10 +92,17 @@ class Dists(sc.prettyobj):
         if obj is None:
             errormsg = 'Must supply a container that contains one or more Dist objects, typically the sim'
             raise ValueError(errormsg)
-        self.dists = find_dists(obj)
+            
+        # Do not look for distributions in the people states, since they shadow the "real" states
+        skip = id(sim.people._states) if sim is not None else None
+        
+        # Find and initialize the distributions
+        self.dists = find_dists(obj, skip=skip)
         for trace,dist in self.dists.items():
             if not dist.initialized or force:
                 dist.initialize(trace=trace, seed=base_seed, sim=sim, force=force)
+        
+        # Confirm the seeds are unique
         self.check_seeds()
         self.initialized = True
         return self
