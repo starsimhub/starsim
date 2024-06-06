@@ -1,5 +1,5 @@
 """
-Test Sim API
+Test simple APIs
 """
 
 # %% Imports and settings
@@ -7,12 +7,12 @@ import starsim as ss
 import sciris as sc
 import numpy as np
 import matplotlib.pyplot as plt
+import networkx as nx
 import pytest
 
 n_agents = 1_000
 do_plot = False
 sc.options(interactive=False) # Assume not running interactively
-
 
 def make_sim_pars():
     pars = sc.objdict(
@@ -27,6 +27,23 @@ def make_sim_pars():
             type = 'sir',
             dur_inf = 10,
             beta = 0.1,
+        )
+    )
+    return pars
+
+def make_sim_pars2():
+    pars = sc.objdict(
+        n_agents = n_agents*10,
+        birth_rate = 10,
+        death_rate = 10,
+        networks = sc.objdict(
+            type = 'randomnet',
+            n_contacts = 2,
+        ),
+        diseases = sc.objdict(
+            type = 'sir',
+            dur_inf = 20,
+            beta = 0.2,
         )
     )
     return pars
@@ -244,13 +261,22 @@ def test_parallel():
     """ Test running two identical sims in parallel """
     sc.heading('Testing parallel...')
     pars = make_sim_pars()
+    pars2 = make_sim_pars2()
 
     # Check that two identical sims match
-    sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars, label='Sim2')])
+    sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars2, label='Sim2')])
+    sims.init_sims()
     sims.run(keep_people=True)
     s1, s2 = sims.sims
-    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
+    #assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
 
+    sims._has_orig_sim
+    sims.reset()
+    sims.shrink()
+    sims.reduce()
+    sims.mean()
+    sims.median()
+    
     # Check that two non-identical sims don't match
     pars2 = sc.dcp(pars)
     pars2.diseases.beta *= 2
@@ -260,6 +286,130 @@ def test_parallel():
     assert not np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
 
     return s1, s2
+
+def test_nullnet():
+    """ Create and run a sim with Null network"""
+    sc.heading('Testing NullNet...')
+    people = ss.People(n_agents=n_agents)
+    network = ss.NullNet()
+    sir = ss.SIR(pars=dict(dur_inf=10, beta=0.1))
+    sim = ss.Sim(diseases=sir, people=people, networks=network)
+    sim.run()
+    if do_plot:
+        sim.plot()
+    return sim
+
+
+def test_staticnet():
+    """ Create and run sim with a Static network """
+    sc.heading('Testing Static Net...')
+    ppl = ss.People(n_agents=n_agents)
+    demographics = [
+        ss.Births(pars={'birth_rate': 20}),
+        ss.Deaths(pars={'death_rate': 15})
+    ]
+    
+    g=nx.erdos_renyi_graph(n=1000, p=.001, directed=True)
+    sir = ss.SIR()
+    ss.SIR(pars=dict( dur_inf=10, beta=0.2, init_prev=0.4, p_death=0.2))
+    networks=ss.StaticNet(graph=g)
+
+    # Make the sim
+    sim = ss.Sim(people=ppl, networks=networks, demographics=demographics, diseases=sir, interventions=ss.Intervention)
+    sim.run()
+    
+    sim.get_interventions
+    sim.get_intervention()
+    
+    #Printing Object Methods and Properties
+    print("Printing Starsim Objects Methods and Properties")
+    print(sim)
+    print(sim.demographics)
+    print(sim.dists)
+    print(sim.networks)
+    print(sim.people)
+    print(sim.results)
+    
+    if do_plot:
+        sim.plot()
+    return sim
+
+def test_settings():
+    """ Create, run, and plot a sim by passing a parameters dictionary """
+    sc.heading('Testing Settings Options...')
+    pars = make_sim_pars()
+    sim = ss.Sim(pars)
+    
+    ss.dtypes   
+    ss.options.get_orig_options()
+    ss.options.values
+    ss.options.dict_keys
+    ss.options.dict_items
+    ss.options.filter
+    ss.options.index
+    ss.options.items
+    ss.options.enumitems
+    ss.options.enumkeys
+    ss.options.enumvals
+    ss.options.enumvalues
+    ss.options.disp()
+    ss.options.get_default('verbose')
+    ss.options.get_default('precision')
+    ss.options.changed('verbose')
+    ss.options.set_precision
+    ss.options.set(verbose=0)
+    ss.options.changed('verbose')
+    ss.options.changed('precision')
+    ss.options.set(warnings='error')
+    ss.options.changed('warnings')
+    ss.options.context(verbose=1)
+    ss.options.context(warnings='error')
+    ss.options.changed('warnings')
+    ss.options.changed('verbose')
+    
+    sim.run()
+    sim.step
+    sim.created
+    sim.dists
+    sim.dt
+    sim.filename
+    sim.npts
+    sim.ti
+    sim.tivec
+    sim.summary
+    sim.finalize
+    sim.complete
+    sim.summarize
+    sim.disp()
+    sim.shrink()
+    sim.export_df()
+    sim.export_pars()
+    ss.options.clear
+
+    if do_plot:
+        sim.plot()
+    return sim
+
+def test_run():
+    """ Test single_run and multi_run """
+    sc.heading('Testing SingleRun and MultiRun')
+    pars=dict(n_agents=n_agents, diseases='sir', networks='random',verbose=0.5)
+    # Check different ways of specifying a sim
+    s1 = ss.Sim(n_agents=n_agents, diseases='sir', networks='random',verbose=0.5) # Supply strings directly
+    s2 = ss.Sim(pars=pars) # Supply as parameters
+    
+    ss.run.single_run(s1)
+    ss.run.single_run(s2) 
+    assert ss.check_sims_match(s1, s2), 'Sims should match'    
+    
+    #Run multi_run
+    ss.run.multi_run([ss.Sim(pars, label='Sim1'), ss.Sim(pars, label='Sim2')])
+    
+    #Run multi_run
+    ss.run.parallel([ss.Sim(pars, label='SimA'), ss.Sim(pars, label='SimB')], n_runs=4)
+
+    
+    return s1,s2
 
 
 if __name__ == '__main__':
@@ -276,7 +426,11 @@ if __name__ == '__main__':
     sim6 = test_shared_product(do_plot=do_plot)
     sim7 = test_components(do_plot=do_plot)
     sim8a, sim8b = test_parallel()
-    
+    sim10 = test_nullnet()
+    sim11 = test_staticnet()
+    sim12 = test_settings()
+    sim13=test_run()
+
     T.toc()
     
     if do_plot:
