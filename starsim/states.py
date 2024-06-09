@@ -246,6 +246,14 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         new.raw[new.auids] = arr
         return new
 
+    def true(self):
+        """ Efficiently convert truthy values to UIDs """
+        return self.auids[np.nonzero(self.values)[0]]
+
+    def false(self):
+        """ Reverse of true(); return UIDs of values that are false """
+        return self.auids[np.nonzero(~self.values)[0]]
+
 
 class FloatArr(Arr):
     """ Subclass of Arr with defaults for floats """
@@ -284,16 +292,8 @@ class BoolArr(Arr):
     
     @property
     def uids(self):
-        """ Efficiently convert True values to UIDs """
-        return self.auids[np.nonzero(self.values)[0]]
-
-    def true(self):
-        """ Alias to BoolArr.uids """
-        return self.uids
-
-    def false(self):
-        """ Reverse of true(); return UIDs of values that are false """
-        return self.auids[np.nonzero(~self.values)[0]]
+        """ Alias to Arr.true """
+        return self.true()
 
     def split(self):
         """ Return UIDs of values that are true and false as separate arrays """
