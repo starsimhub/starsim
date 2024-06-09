@@ -8,6 +8,7 @@ import starsim as ss
 import networkx as nx
 from operator import itemgetter
 import pandas as pd
+import numba as nb
 
 __all__ = ['Disease', 'Infection', 'InfectionLog']
 
@@ -130,6 +131,16 @@ class Disease(ss.Module):
         return
 
 
+@nb.njit
+def calc_trans(p_transmit, trg, n):
+        ip_trans = 1 - p_transmit
+        trans_arr = np.ones(n)
+        for e_trg, e_tra in zip(trg, ip_trans):
+            trans_arr[e_trg] *= e_tra
+        trans_arr = 1 - trans_arr
+        return trans_arr
+
+
 class Infection(Disease):
     """
     Base class for infectious diseases used in Starsim
@@ -241,184 +252,6 @@ class Infection(Disease):
                         errormsg = f'No network for beta parameter "{bkey}"; your beta should match network keys:\n{sc.newlinejoin(netkeys)}'
                         raise ValueError(errormsg)
         return betamap
-
-    '''
-    def make_new_cases(self):
-        """
-        Add new cases of module, through transmission, incidence, etc.
-        
-        Common-random-number-safe transmission code works by mapping edges onto
-        slots.
-        """
-        new_cases = []
-        sources = []
-        betamap = self._check_betas()
-
-        for nkey,net in self.sim.networks.items():
-            if not len(net):
-                break
-
-            nbetas = betamap[nkey]
-            edges = net.edges
-
-            rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
-            rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
-            p1p2b0 = [edges.p1, edges.p2, nbetas[0]]
-            p2p1b1 = [edges.p2, edges.p1, nbetas[1]]
-            for src, trg, beta in [p1p2b0, p2p1b1]:
-
-                # Skip networks with no transmission
-                if beta == 0:
-                    continue
-
-                # Calculate probability of a->b transmission.
-                beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
-                p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
-
-                # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
-                rvs_s = self.rng_source.rvs(src)
-                rvs_t = self.rng_target.rvs(trg)
-                rvs = rvs_s + rvs_t
-                inds = np.where(rvs>1.0)[0]
-                rvs[inds] -= 1
-                
-                new_cases_bool = rvs < p_transmit
-                new_cases.append(trg[new_cases_bool])
-                sources.append(src[new_cases_bool])
-                
-        # Tidy up
-        if len(new_cases) and len(sources):
-            new_cases = ss.uids.cat(new_cases)
-            sources = ss.uids.cat(sources)
-        else:
-            new_cases = np.empty(0, dtype=int)
-            sources = np.empty(0, dtype=int)
-            
-        if len(new_cases):
-            self._set_cases(new_cases, sources)
-            
-        return new_cases, sources
-    '''
-    # def make_new_cases(self):
-    #     """
-    #     Common-random-number-safe transmission code works by computing the
-    #     probability of each _node_ acquiring a case rather than checking if each
-    #     _edge_ transmits.
-    #     Subsequent step uses a roulette wheel with slotted RNG to determine
-    #     infection source.
-    #     """
-    #     people = self.sim.people
-    #     betamap = self._check_betas()
-
-    #     src_vec = []
-    #     trg_vec = []
-    #     prb_vec = []
-    #     for nkey, net in self.sim.networks.items():
-    #         if not len(net):
-    #             break
-
-    #         nbetas = betamap[nkey]
-    #         edges = net.edges
-
-    #         # asnew is nice because we can work in Arr by UIDs, but it is slow
-    #         #rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans) # asnew makes a FloatArr rather than a numpy array, as needed for uid indexing
-    #         #rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
-
-    #         # So let's use raw instead, which gives full-length numpy arrays
-    #         rel_trans = self.infectious.raw * self.rel_trans.raw
-    #         rel_sus   = self.susceptible.raw * self.rel_sus.raw
-
-    #         p1p2b0 = [edges.p1, edges.p2, nbetas[0]]
-    #         p2p1b1 = [edges.p2, edges.p1, nbetas[1]]
-    #         for src, trg, beta in [p1p2b0, p2p1b1]:
-
-    #             # Skip networks with no transmission
-    #             if beta == 0:
-    #                 continue
-
-    #             # Calculate probability of a->b transmission.
-    #             # non-zero indices
-    #             nzi = (rel_trans[src] > 0) & (rel_sus[trg] > 0) & (edges.beta > 0)
-    #             src_vec.append(src[nzi])
-    #             trg_vec.append(trg[nzi])
-
-    #             # TODO: Check alignment of slices with uids
-    #             beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt, uids=nzi)
-    #             trans_arr = rel_trans[src[nzi]]
-    #             sus_arr = rel_sus[trg[nzi]]
-    #             new_pvec = trans_arr * sus_arr * beta_per_dt
-    #             prb_vec.append(new_pvec)
-
-    #     if len(src_vec):
-    #         dfp1 = np.concatenate(src_vec)
-    #         dfp2 = np.concatenate(trg_vec)
-    #         dfp = np.concatenate(prb_vec)
-    #     else:
-    #         return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
-
-    #     if len(dfp) == 0:
-    #         return np.empty((0,), dtype=int), np.empty((0,), dtype=int)
-
-    #     p2uniq, p2idx, p2inv, p2cnt = np.unique(ss.uids(dfp2), return_index=True, return_inverse=True, return_counts=True)
-
-    #     # Pre-draw random numbers
-    #     slots = people.slot[p2uniq]  # Slots for the possible infectee
-    #     r = self.rng_target.rvs(n=int(np.max(slots) + 1)) # Convert from uid to int so n is interpreted correctly
-    #     q = self.rng_source.rvs(n=int(np.max(slots) + 1))
-
-    #     # Now address nodes with multiple possible infectees
-    #     degrees = np.unique(p2cnt)
-    #     new_cases = []
-    #     sources = []
-    #     for deg in degrees:
-    #         if deg == 1:
-    #             # p2 UIDs that only appear once
-    #             cnt1 = p2cnt == 1
-    #             uids = p2uniq[cnt1] # p2 uids that only have one possible p1 infector
-    #             idx = p2idx[cnt1] # get original index, dfp2[idx] should match uids (above)
-    #             p_acq_node = dfp[idx] # acquisition probability
-    #             cases = r[people.slot[uids]] < p_acq_node # determine if p2 acquires from p1
-    #             if cases.any():
-    #                 s = dfp1[idx][cases] # Only one possible source for each case because degree is one
-    #         else:
-    #             # p2 UIDs that appear degree times
-    #             dups = np.argwhere(p2cnt==deg).flatten()
-    #             uids = p2uniq[dups]
-                
-    #             # Get indices where p2 is repeated
-    #             #  dfp2[inds] should have degree repeated values on each row
-    #             #  dfp1[inds] and dfp[inds] will contain the corresponding sources and transmission probabilities, respectively
-    #             inds = [np.argwhere(np.isin(p2inv, d)).flatten() for d in dups]
-    #             probs = dfp[inds]
-    #             p_acq_node = 1-np.prod(1-probs, axis=1) # Compute the overall acquisition probability for each susceptible node that is at risk of acquisition
-
-    #             cases = r[people.slot[uids]] < p_acq_node # determine if p2 acquires from any of the possible p1s
-    #             if cases.any():
-    #                 # Vectorized roulette wheel to pick from amongst the possible sources for each new case, with probability weighting
-    #                 # First form the normalized cumsum
-    #                 cumsum = probs[cases].cumsum(axis=1)
-    #                 cumsum /= cumsum[:,-1][:,np.newaxis]
-    #                 # Use slotted q to make the choice
-    #                 ix = np.argmax(cumsum >= q[people.slot[uids[cases]]][:,np.newaxis], axis=1)
-    #                 # And finally identify the source uid
-    #                 s = np.take_along_axis(dfp1[inds][cases], ix[:,np.newaxis], axis=1).flatten()#dfp1[inds][cases][np.arange(len(cases)),ix]
-
-    #         if cases.any():
-    #             new_cases.append(uids[cases])
-    #             sources.append(s)
-
-    #     # Tidy up
-    #     if len(new_cases) and len(sources):
-    #         new_cases = ss.uids.cat(new_cases)
-    #         sources = ss.uids.cat(sources)
-    #     else:
-    #         new_cases = np.empty(0, dtype=int)
-    #         sources = np.empty(0, dtype=int)
-            
-    #     if len(new_cases):
-    #         self._set_cases(new_cases, sources)
-
-    #     return new_cases, sources
     
     def make_new_cases(self):
         """
@@ -430,6 +263,7 @@ class Infection(Disease):
         new_cases = []
         sources = []
         betamap = self._check_betas()
+        n = self.sim.people.uid[-1] + 1 # TODO: should be a better way
     
         for nkey,net in self.sim.networks.items():
             if not len(net):
@@ -445,29 +279,19 @@ class Infection(Disease):
             
             for src, trg, beta in [p1p2b0, p2p1b1]:
                 
-                unique_trg = np.unique(trg)
-                
-                n_trans = len(unique_trg)
-                trans_arr = np.ones(n_trans)
-    
                 # Skip networks with no transmission
                 if beta == 0:
                     continue
-    
+                
                 # Calculate probability of a->b transmission.
                 beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
                 p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
-                ip_trans = 1 - p_transmit
-                
-                for e_trg, e_tra in zip(trg, ip_trans):
-                    trans_arr[e_trg] *= e_tra
-                
-                trans_arr = 1 - trans_arr
+                trans_arr = calc_trans(p_transmit, trg, n)
     
                 # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
-                rvs = self.rng_target.rvs(ss.uids(unique_trg))
+                rvs = self.rng_target.rvs(ss.uids(np.arange(n)))
                 new_cases_bool = trans_arr > rvs
-                new_cases.append(unique_trg[new_cases_bool])
+                new_cases.append(sc.findinds(new_cases_bool))
                 # sources.append(src[new_cases_bool])
                 
         # Tidy up
