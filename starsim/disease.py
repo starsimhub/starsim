@@ -133,12 +133,13 @@ class Disease(ss.Module):
 
 @nb.njit
 def calc_trans(p_transmit, trg, n):
-        ip_trans = 1 - p_transmit
-        trans_arr = np.ones(n)
-        for e_trg, e_tra in zip(trg, ip_trans):
-            trans_arr[e_trg] *= e_tra
-        trans_arr = 1 - trans_arr
-        return trans_arr
+    """ Calculate transmission per agent based on transmission per edge """
+    inv_p_trans = 1 - p_transmit
+    trans_arr = np.ones(n)
+    for e_trg, e_tra in zip(trg, inv_p_trans):
+        trans_arr[e_trg] *= e_tra
+    trans_arr = 1 - trans_arr
+    return trans_arr
 
 
 class Infection(Disease):
@@ -263,7 +264,7 @@ class Infection(Disease):
         new_cases = []
         sources = []
         betamap = self._check_betas()
-        n = self.sim.people.uid[-1] + 1 # TODO: should be a better way
+        n = self.sim.people.uid.raw[-1] + 1 # TODO: should be a better way, figure out the maximum UID
     
         for nkey,net in self.sim.networks.items():
             if not len(net):
@@ -291,7 +292,7 @@ class Infection(Disease):
                 rvs = self.rng_target.rvs(ss.uids(np.arange(n)))
                 new_cases_bool = trans_arr > rvs
                 new_cases.append(sc.findinds(new_cases_bool))
-                # sources.append(src[new_cases_bool]) # TODO: add check to add if needed
+                # sources.append(src[new_cases_bool]) # TODO: implement this calculation, but only do as needed
                 
         # Tidy up
         if len(new_cases) and len(sources):
