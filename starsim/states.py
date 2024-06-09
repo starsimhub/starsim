@@ -248,11 +248,11 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
 
     def true(self):
         """ Efficiently convert truthy values to UIDs """
-        return self.auids[np.nonzero(self.values)[0]]
+        return uids(self.auids[np.nonzero(self.values)[0]])
 
     def false(self):
         """ Reverse of true(); return UIDs of values that are false """
-        return self.auids[np.nonzero(~self.values)[0]]
+        return uids(self.auids[np.nonzero(~self.values)[0]])
 
 
 class FloatArr(Arr):
