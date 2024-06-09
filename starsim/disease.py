@@ -288,11 +288,10 @@ class Infection(Disease):
                 p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
                 trans_arr = calc_trans(p_transmit, trg, n)
     
-                # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
                 rvs = self.rng_target.rvs(ss.uids(np.arange(n)))
                 new_cases_bool = trans_arr > rvs
                 new_cases.append(sc.findinds(new_cases_bool))
-                # sources.append(src[new_cases_bool])
+                # sources.append(src[new_cases_bool]) # TODO: add check to add if needed
                 
         # Tidy up
         if len(new_cases) and len(sources):
