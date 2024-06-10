@@ -349,9 +349,10 @@ class SexualNetwork(DynamicNetwork):
         # contact networks
         right_sex = people[sex]
         is_active = self.active(people)
-        is_available = (right_sex & is_active).uids
-        still_available = is_available.remove(self.members)
-        return still_available
+        is_member = np.zeros_like(people.uid.raw).astype(bool)
+        is_member[self.members]=True
+        is_member = ss.BoolArr('is_member', raw=is_member, people=people, skip_init=True)
+        return (right_sex & is_active & (~is_member)).uids
 
     def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
         if uids is None: uids = Ellipsis
