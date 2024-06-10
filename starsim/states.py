@@ -187,7 +187,15 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         """ Shortcut function to set values to NaN """
         self.raw[uids] = self.nan
         return
-    
+
+    @property
+    def isnan(self):
+        return self.asnew(self.values == self.nan, cls=BoolArr)
+
+    @property
+    def notnan(self):
+        return self.asnew(self.values != self.nan, cls=BoolArr)
+
     def grow(self, new_uids=None, new_vals=None):
         """
         Add new agents to an Arr
@@ -251,7 +259,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         return uids(self.auids[np.nonzero(self.values)[0]])
 
     def false(self):
-        """ Reverse of true(); return UIDs of values that are false """
+        """ Reverse of true(); return UIDs of falsy values """
         return uids(self.auids[np.nonzero(~self.values)[0]])
 
 
@@ -260,16 +268,16 @@ class FloatArr(Arr):
     def __init__(self, name, default=None, nan=np.nan, label=None, skip_init=False):
         super().__init__(name=name, dtype=ss_float, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
         return
-    
+
     @property
     def isnan(self):
-        """ Return indices that are NaN """
-        return np.nonzero(np.isnan(self.values))[0]
+        """ Return BoolArr for NaN values """
+        return self.asnew(np.isnan(self.values), cls=BoolArr)
 
     @property
     def notnan(self):
-        """ Return indices that are not-NaN """
-        return np.nonzero(~np.isnan(self.values))[0]
+        """ Return BoolArr for non-NaN values """
+        return self.asnew(~np.isnan(self.values), cls=BoolArr)
     
     @property
     def notnanvals(self):
@@ -313,14 +321,7 @@ class IndexArr(Arr):
     def uids(self):
         """ Alias to self.values, to allow Arr.uids like BoolArr """
         return self.values
-    
-    @property
-    def isnan(self):
-        return np.nonzero(self.values == self.nan)[0]
 
-    @property
-    def notnan(self):
-        return np.nonzero(self.values != self.nan)[0]
     
     def grow(self, new_uids=None, new_vals=None):
         """ Change the size of the array """
