@@ -297,7 +297,16 @@ class BoolArr(Arr):
     def __or__(self, other):  return self.asnew(self.values | other)
     def __xor__(self, other): return self.asnew(self.values ^ other)
     def __invert__(self):     return self.asnew(~self.values)
-    
+
+    # BoolArr cannot store NaNs so report all entries as being not-NaN
+    @property
+    def isnan(self):
+        return self.asnew(np.full_like(self.values, fill_value=False), cls=BoolArr)
+
+    @property
+    def notnan(self):
+        return self.asnew(np.full_like(self.values, fill_value=True), cls=BoolArr)
+
     @property
     def uids(self):
         """ Alias to Arr.true """
