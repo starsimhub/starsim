@@ -371,16 +371,27 @@ class uids(np.ndarray):
     
     def remove(self, other, **kw):
         """ Remove provided UIDs from current array"""
-        return np.setdiff1d(self, other, assume_unique=True, **kw).view(self.__class__)
+        return np.setdiff1d(self, other, **kw).view(self.__class__)
     
     def intersect(self, other, **kw):
-        """ Keep only UIDs that match other array """
-        return np.intersect1d(self, other, assume_unique=True, **kw).view(self.__class__)
-    
+        """ Keep only UIDs that are also present in the other array """
+        return np.intersect1d(self, other, **kw).view(self.__class__)
+
+    def union(self, other, **kw):
+        """ Return all UIDs present in both arrays """
+        return np.union1d(self, other, **kw).view(self.__class__)
+
     def to_numpy(self):
         """ Convert to a standard NumPy array """
         return np.array(self)
-    
+
+    # Implement collection of operators
+    def __and__(self, other): return self.intersect(other)
+    def __or__(self, other):  return self.union(other)
+    def __sub__(self, other): return self.remove(other)
+    def __xor__(self, other): return np.setxor1d(self, other).view(self.__class__)
+    def __invert__(self):     raise Exception(f"Cannot invert an instance of {self.__class__.__name__}. One possible cause is attempting `~x.uids` - use `x.false()` or `(~x).uids` instead")
+
 
 class BooleanOperationError(NotImplementedError):
     """ Raised when a logical operation is performed on a non-logical array """
