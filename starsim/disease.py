@@ -242,63 +242,6 @@ class Infection(Disease):
                         raise ValueError(errormsg)
         return betamap
 
-    '''
-    def make_new_cases(self):
-        """
-        Add new cases of module, through transmission, incidence, etc.
-        
-        Common-random-number-safe transmission code works by mapping edges onto
-        slots.
-        """
-        new_cases = []
-        sources = []
-        betamap = self._check_betas()
-
-        for nkey,net in self.sim.networks.items():
-            if not len(net):
-                break
-
-            nbetas = betamap[nkey]
-            edges = net.edges
-
-            rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
-            rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
-            p1p2b0 = [edges.p1, edges.p2, nbetas[0]]
-            p2p1b1 = [edges.p2, edges.p1, nbetas[1]]
-            for src, trg, beta in [p1p2b0, p2p1b1]:
-
-                # Skip networks with no transmission
-                if beta == 0:
-                    continue
-
-                # Calculate probability of a->b transmission.
-                beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
-                p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
-
-                # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
-                rvs_s = self.rng_source.rvs(src)
-                rvs_t = self.rng_target.rvs(trg)
-                rvs = rvs_s + rvs_t
-                inds = np.where(rvs>1.0)[0]
-                rvs[inds] -= 1
-                
-                new_cases_bool = rvs < p_transmit
-                new_cases.append(trg[new_cases_bool])
-                sources.append(src[new_cases_bool])
-                
-        # Tidy up
-        if len(new_cases) and len(sources):
-            new_cases = ss.uids.cat(new_cases)
-            sources = ss.uids.cat(sources)
-        else:
-            new_cases = np.empty(0, dtype=int)
-            sources = np.empty(0, dtype=int)
-            
-        if len(new_cases):
-            self._set_cases(new_cases, sources)
-            
-        return new_cases, sources
-    '''
     def make_new_cases(self):
         """
         Common-random-number-safe transmission code works by computing the
