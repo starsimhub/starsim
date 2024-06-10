@@ -348,7 +348,8 @@ class SexualNetwork(DynamicNetwork):
         # which could incorporate information about membership in other
         # contact networks
         available = people[sex] & self.active(people)
-        available[self.members] = False
+        available[self.edges.p1] = False
+        available[self.edges.p2] = False
         return available.uids
 
     def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
