@@ -72,7 +72,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         coerce (bool): Whether to ensure the the data is one of the supported data types
         skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
     """
-    def __init__(self, name, dtype=None, default=None, nan=None, raw=None, label=None, coerce=True, skip_init=False):
+    def __init__(self, name, dtype=None, default=None, nan=None, raw=None, label=None, coerce=True, skip_init=False, people=None):
         if coerce:
             dtype = check_dtype(dtype, default)
         
@@ -85,7 +85,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         
         # Properties that are initialized later
         self.raw = np.empty(0, dtype=dtype)
-        self.people = None # Used solely for accessing people.auids
+        self.people = people # Used solely for accessing people.auids
         self.len_used = 0
         self.len_tot = 0
         self.initialized = skip_init
@@ -256,17 +256,17 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
 
     def true(self):
         """ Efficiently convert truthy values to UIDs """
-        return uids(self.auids[self.values.astype(bool)])
+        return self.auids[self.values.astype(bool)]
 
     def false(self):
         """ Reverse of true(); return UIDs of falsy values """
-        return uids(self.auids[~self.values.astype(bool)])
+        return self.auids[~self.values.astype(bool)]
 
 
 class FloatArr(Arr):
     """ Subclass of Arr with defaults for floats """
-    def __init__(self, name, default=None, nan=np.nan, label=None, skip_init=False):
-        super().__init__(name=name, dtype=ss_float, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
+    def __init__(self, name, nan=np.nan, **kwargs):
+        super().__init__(name=name, dtype=ss_float, nan=nan, coerce=False, **kwargs)
         return
 
     @property
@@ -286,11 +286,11 @@ class FloatArr(Arr):
         out = vals[np.nonzero(~np.isnan(vals))[0]]
         return out
 
-    
+
 class BoolArr(Arr):
     """ Subclass of Arr with defaults for booleans """
-    def __init__(self, name, default=None, nan=False, label=None, skip_init=False): # No good NaN equivalent for bool arrays
-        super().__init__(name=name, dtype=ss_bool, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
+    def __init__(self, name, nan=False, **kwargs): # No good NaN equivalent for bool arrays
+        super().__init__(name=name, dtype=ss_bool, nan=nan, coerce=False, **kwargs)
         return
     
     def __and__(self, other): return self.asnew(self.values & other)
