@@ -6,6 +6,7 @@ Test the Dists object from distributions.py
 import numpy as np
 import sciris as sc
 import starsim as ss
+import scipy.stats as sps
 import matplotlib.pyplot as pl
 
 n = 5 # Default number of samples
@@ -295,12 +296,17 @@ def test_combine_rands(do_plot=False):
     c = ss.combine_rands(a, b)
     if do_plot:
         pl.figure()
-        for i,v in enumerate([a,b,c]):
+        for i,k,v in sc.objdict(a=a,b=b,combined=c).enumitems():
             pl.subplot(3,1,i+1)
             pl.hist(v)
+            pl.title(k)
+        sc.figlayout()
+        pl.show()
     for v in a,b,c:
         mean = v.mean()
         assert np.isclose(mean, target, atol=atol), f'Expected value to be 0.5±{atol}, not {mean}'
+    ks = sps.kstest(c, sps.uniform(0,1).cdf)
+    assert ks.pvalue > 0.05, f'Distribution does not seem to be uniform, p={ks.pvalue}>0.05'
     return c
 
 
