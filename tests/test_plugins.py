@@ -50,7 +50,7 @@ class hiv_syph(ss.Connector):
 
 class Penicillin(ss.Intervention):
     """ Create a penicillin (BPG) intervention for treating syphilis """
-    def __init__(self, year=2020, prob=0.5):
+    def __init__(self, year=2020, prob=0.8):
         super().__init__() # Initialize the intervention
         self.prob = prob # Store the probability of treatment
         self.year = year
@@ -76,7 +76,7 @@ class Penicillin(ss.Intervention):
 
 def make_args():
     """ Make people, HIV, syphilis, and network """
-    pars = dict(n_agents=1000, verbose=0)
+    pars = dict(n_agents=2000, verbose=0)
     mf = ss.MFNet(duration=ss.lognorm_ex(mean=5, stdev=0.5))
     hiv = ss.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2)
     syph = ss.Syphilis(beta={'mf': [0.1, 0.05]}, init_prev=0.05)
