@@ -306,7 +306,7 @@ def test_combine_rands(do_plot=False):
         mean = v.mean()
         assert np.isclose(mean, target, atol=atol), f'Expected value to be 0.5±{atol}, not {mean}'
     ks = sps.kstest(c, sps.uniform(0,1).cdf)
-    assert ks.pvalue > 0.05, f'Distribution does not seem to be uniform, p={ks.pvalue}>0.05'
+    assert ks.pvalue > 0.05, f'Distribution does not seem to be uniform, p={ks.pvalue}<0.05'
     return c
 
 
