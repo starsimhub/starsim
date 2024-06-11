@@ -309,13 +309,14 @@ def combine_rands(a, b):
     Returns:
         A new array of random numbers the same size as a and b
     """
-    a1 = (a*1e9).astype(np.int32)
-    b1 = (b*1e9).astype(np.int32)
+    a1 = (a*1e9).astype(np.uint32)
+    b1 = (b*1e9).astype(np.uint32)
     c = np.bitwise_xor(a1*b1, a1-b1)
     c = c.astype(float)
     old_range = c.max() - c.min()
     new_range = a.max() - a.min()
     c -= c.min()
-    c *= new_range/old_range
+    if old_range > 0:
+        c *= new_range/old_range
     c += a.min()
     return c
