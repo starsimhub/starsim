@@ -274,7 +274,7 @@ class Infection(Disease):
                 beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
                 p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
 
-                # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
+                # Generate a new random number based on the two other random numbers
                 rvs_s = self.rng_source.rvs(src)
                 rvs_t = self.rng_target.rvs(trg)
                 rvs = ss.combine_rands(rvs_s, rvs_t)
