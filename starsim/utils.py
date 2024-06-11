@@ -12,7 +12,7 @@ import pandas as pd
 # %% Helper functions
 
 # What functions are externally visible -- note, this gets populated in each section below
-__all__ = ['ndict', 'warn', 'unique', 'find_contacts']
+__all__ = ['ndict', 'warn', 'unique', 'find_contacts', 'combine_rands']
 
 
 class ndict(sc.objdict):
@@ -295,3 +295,23 @@ def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
         raise ValueError(errormsg)
         
     return df
+
+
+def combine_rands(a, b):
+    """
+    Efficient algorithm for combining two arrays of random numbers into one
+    
+    Args:
+        a (array): array of random numbers between 0 and 1
+        b (array): ditto, same size as a
+        
+    Returns:
+        A new array of random numbers the same size as a and b
+    """
+    a1 = (a*1e9).astype(int)
+    b1 = (b*1e9).astype(int)
+    c = np.bitwise_xor(a1*b1, a1-b1)
+    c = c.astype(float)
+    c = c - c.min()
+    c = c/c.max()
+    return c
