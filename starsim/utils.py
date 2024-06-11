@@ -308,8 +308,8 @@ def combine_rands(a, b):
     Returns:
         A new array of random numbers the same size as a and b
     """
-    a1 = (a*1e9).astype(int)
-    b1 = (b*1e9).astype(int)
+    a1 = (a*1e9).astype(np.int32)
+    b1 = (b*1e9).astype(np.int32)
     c = np.bitwise_xor(a1*b1, a1-b1)
     c = c.astype(float)
     c = c - c.min()

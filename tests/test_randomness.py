@@ -289,17 +289,18 @@ def test_combine_rands(do_plot=False):
     n = int(1e6)
     atol = 1e-3
     target = 0.5
+    np.random.seed(2)
     a = np.random.rand(n)
     b = np.random.rand(n)
     c = ss.combine_rands(a, b)
-    for v in a,b,c:
-        mean = v.mean()
-        assert np.isclose(mean, target, atol=atol), f'Expected value to be 0.5±{atol}, not {mean}'
     if do_plot:
         pl.figure()
         for i,v in enumerate([a,b,c]):
             pl.subplot(3,1,i+1)
             pl.hist(v)
+    for v in a,b,c:
+        mean = v.mean()
+        assert np.isclose(mean, target, atol=atol), f'Expected value to be 0.5±{atol}, not {mean}'
     return c
 
 
