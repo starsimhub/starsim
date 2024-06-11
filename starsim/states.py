@@ -72,7 +72,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         coerce (bool): Whether to ensure the the data is one of the supported data types
         skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
     """
-    def __init__(self, name, dtype=None, default=None, nan=None, raw=None, label=None, coerce=True, skip_init=False):
+    def __init__(self, name, dtype=None, default=None, nan=None, raw=None, label=None, coerce=True, skip_init=False, people=None):
         if coerce:
             dtype = check_dtype(dtype, default)
         
@@ -85,7 +85,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         
         # Properties that are initialized later
         self.raw = np.empty(0, dtype=dtype)
-        self.people = None # Used solely for accessing people.auids
+        self.people = people # Used solely for accessing people.auids
         self.len_used = 0
         self.len_tot = 0
         self.initialized = skip_init
@@ -187,7 +187,15 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         """ Shortcut function to set values to NaN """
         self.raw[uids] = self.nan
         return
-    
+
+    @property
+    def isnan(self):
+        return self.asnew(self.values == self.nan, cls=BoolArr)
+
+    @property
+    def notnan(self):
+        return self.asnew(self.values != self.nan, cls=BoolArr)
+
     def grow(self, new_uids=None, new_vals=None):
         """
         Add new agents to an Arr
@@ -246,22 +254,30 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         new.raw[new.auids] = arr
         return new
 
+    def true(self):
+        """ Efficiently convert truthy values to UIDs """
+        return self.auids[self.values.astype(bool)]
+
+    def false(self):
+        """ Reverse of true(); return UIDs of falsy values """
+        return self.auids[~self.values.astype(bool)]
+
 
 class FloatArr(Arr):
     """ Subclass of Arr with defaults for floats """
-    def __init__(self, name, default=None, nan=np.nan, label=None, skip_init=False):
-        super().__init__(name=name, dtype=ss_float, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
+    def __init__(self, name, nan=np.nan, **kwargs):
+        super().__init__(name=name, dtype=ss_float, nan=nan, coerce=False, **kwargs)
         return
-    
+
     @property
     def isnan(self):
-        """ Return indices that are NaN """
-        return np.nonzero(np.isnan(self.values))[0]
+        """ Return BoolArr for NaN values """
+        return self.asnew(np.isnan(self.values), cls=BoolArr)
 
     @property
     def notnan(self):
-        """ Return indices that are not-NaN """
-        return np.nonzero(~np.isnan(self.values))[0]
+        """ Return BoolArr for non-NaN values """
+        return self.asnew(~np.isnan(self.values), cls=BoolArr)
     
     @property
     def notnanvals(self):
@@ -270,30 +286,31 @@ class FloatArr(Arr):
         out = vals[np.nonzero(~np.isnan(vals))[0]]
         return out
 
-    
+
 class BoolArr(Arr):
     """ Subclass of Arr with defaults for booleans """
-    def __init__(self, name, default=None, nan=False, label=None, skip_init=False): # No good NaN equivalent for bool arrays
-        super().__init__(name=name, dtype=ss_bool, default=default, nan=nan, label=label, coerce=False, skip_init=skip_init)
+    def __init__(self, name, nan=False, **kwargs): # No good NaN equivalent for bool arrays
+        super().__init__(name=name, dtype=ss_bool, nan=nan, coerce=False, **kwargs)
         return
     
     def __and__(self, other): return self.asnew(self.values & other)
     def __or__(self, other):  return self.asnew(self.values | other)
     def __xor__(self, other): return self.asnew(self.values ^ other)
     def __invert__(self):     return self.asnew(~self.values)
-    
+
+    # BoolArr cannot store NaNs so report all entries as being not-NaN
+    @property
+    def isnan(self):
+        return self.asnew(np.full_like(self.values, fill_value=False), cls=BoolArr)
+
+    @property
+    def notnan(self):
+        return self.asnew(np.full_like(self.values, fill_value=True), cls=BoolArr)
+
     @property
     def uids(self):
-        """ Efficiently convert True values to UIDs """
-        return self.auids[np.nonzero(self.values)[0]]
-
-    def true(self):
-        """ Alias to BoolArr.uids """
-        return self.uids
-
-    def false(self):
-        """ Reverse of true(); return UIDs of values that are false """
-        return self.auids[np.nonzero(~self.values)[0]]
+        """ Alias to Arr.true """
+        return self.true()
 
     def split(self):
         """ Return UIDs of values that are true and false as separate arrays """
@@ -313,14 +330,7 @@ class IndexArr(Arr):
     def uids(self):
         """ Alias to self.values, to allow Arr.uids like BoolArr """
         return self.values
-    
-    @property
-    def isnan(self):
-        return np.nonzero(self.values == self.nan)[0]
 
-    @property
-    def notnan(self):
-        return np.nonzero(self.values != self.nan)[0]
     
     def grow(self, new_uids=None, new_vals=None):
         """ Change the size of the array """
@@ -361,16 +371,27 @@ class uids(np.ndarray):
     
     def remove(self, other, **kw):
         """ Remove provided UIDs from current array"""
-        return np.setdiff1d(self, other, assume_unique=True, **kw).view(self.__class__)
+        return np.setdiff1d(self, other, **kw).view(self.__class__)
     
     def intersect(self, other, **kw):
-        """ Keep only UIDs that match other array """
-        return np.intersect1d(self, other, assume_unique=True, **kw).view(self.__class__)
-    
+        """ Keep only UIDs that are also present in the other array """
+        return np.intersect1d(self, other, **kw).view(self.__class__)
+
+    def union(self, other, **kw):
+        """ Return all UIDs present in both arrays """
+        return np.union1d(self, other, **kw).view(self.__class__)
+
     def to_numpy(self):
         """ Convert to a standard NumPy array """
         return np.array(self)
-    
+
+    # Implement collection of operators
+    def __and__(self, other): return self.intersect(other)
+    def __or__(self, other):  return self.union(other)
+    def __sub__(self, other): return self.remove(other)
+    def __xor__(self, other): return np.setxor1d(self, other).view(self.__class__)
+    def __invert__(self):     raise Exception(f"Cannot invert an instance of {self.__class__.__name__}. One possible cause is attempting `~x.uids` - use `x.false()` or `(~x).uids` instead")
+
 
 class BooleanOperationError(NotImplementedError):
     """ Raised when a logical operation is performed on a non-logical array """

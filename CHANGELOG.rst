@@ -6,6 +6,12 @@ What's new
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
+Version 0.5.3 (2024-06-10)
+--------------------------
+- ``ss.uids`` class implements set operators to facilitate combining or otherwise operating on collections of UIDs
+- ``FloatArr.isnan`` and ``FloatArr.notnan`` return ``BoolArr`` instances rather than UIDs (so as to facilitate logical operations with other ``BoolArr`` instances, and to align more closely with `np.isnan`)
+- ``Arr.true()`` and ``Arr.false()`` are supported for all ``Arr`` subclasses
+- ``BoolArr.isnan`` and ``Boolarr.notnan`` are also implemented (although since ``BoolArr`` cannot store NaN values, these always return ``False`` and ``True``, respectively)
 
 Version 0.5.2 (2024-06-04)
 --------------------------
