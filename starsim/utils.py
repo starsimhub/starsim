@@ -299,7 +299,8 @@ def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
 
 def combine_rands(a, b):
     """
-    Efficient algorithm for combining two arrays of random numbers into one
+    Efficient algorithm for combining two arrays of random numbers into one, keeping
+    the same minimum and maximum values as a
     
     Args:
         a (array): array of random numbers between 0 and 1
@@ -312,6 +313,9 @@ def combine_rands(a, b):
     b1 = (b*1e9).astype(np.int32)
     c = np.bitwise_xor(a1*b1, a1-b1)
     c = c.astype(float)
-    c = c - c.min()
-    c = c/c.max()
+    old_range = c.max() - c.min()
+    new_range = a.max() - a.min()
+    c -= c.min()
+    c *= new_range/old_range
+    c += a.min()
     return c
