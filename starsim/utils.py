@@ -299,8 +299,7 @@ def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
 
 def combine_rands(a, b):
     """
-    Efficient algorithm for combining two arrays of random numbers into one, keeping
-    the same minimum and maximum values as a
+    Efficient algorithm for combining two arrays of random numbers into one
     
     Args:
         a (array): array of random numbers between 0 and 1
