@@ -175,6 +175,7 @@ class Deaths(Demographics):
     def standardize_death_data(self):
         """ Standardize/validate death rates - handled in an external file due to shared functionality """
         death_rate = ss.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
+        death_rate = death_rate.set_index([self.metadata.data_cols['year'], self.metadata.data_cols['sex'], self.metadata.data_cols['age']])
         return death_rate
 
     @staticmethod # Needs to be static since called externally, although it sure looks like a class method!
@@ -194,19 +195,34 @@ class Deaths(Demographics):
             val_label  = data_cols.value
             sex_keys = self.metadata.sex_keys
 
-            available_years = self.death_rate_data[year_label].unique()
+            # Find the nearest year
+            available_years = drd.index.get_level_values(year_label)
             year_ind = sc.findnearest(available_years, sim.year)
             nearest_year = available_years[year_ind]
 
+            # Bin the ages
+
+#             x=ppl.female.uids
+# PyDev console: using IPython 8.23.0
+# %timeit uids & ppl.female.uids
+# 452 µs ± 4.94 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+# %timeit uids & x
+# 394 µs ± 1.45 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+
+
+            df = drd[data_cols.value].unstack().loc[nearest_year,sex_keys['f']]
+            binned_ages = np.digitize(ppl.age[uids], df.index) - 1
+
+
             df = self.death_rate_data.loc[self.death_rate_data[year_label] == nearest_year]
-            age_bins = df[age_label].unique()
+
 
             f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
             m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
 
             # Initialize
             death_rate_df = pd.Series(index=uids)
-            f_uids = uids.intersect(ppl.female.uids) # TODO: reduce duplication
+            f_uids = uids & ppl.female.uids # TODO: reduce duplication
             m_uids = uids.intersect(ppl.male.uids)
             f_age_inds = np.digitize(ppl.age[f_uids], age_bins) - 1
             m_age_inds = np.digitize(ppl.age[m_uids], age_bins) - 1
@@ -307,7 +323,6 @@ class Pregnancy(Demographics):
 
         if sc.isnumber(self.fertility_rate_data):
             fertility_rate = pd.Series(index=uids, data=self.fertility_rate_data)
-
         else:
             # Abbreviate key variables
             data_cols = sc.objdict(self.metadata.data_cols)
