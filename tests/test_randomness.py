@@ -291,8 +291,8 @@ def test_combine_rands(do_plot=False):
     atol = 1e-3
     target = 0.5
     np.random.seed(2)
-    a = np.random.rand(n)
-    b = np.random.rand(n)
+    a = np.random.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=n)
+    b = np.random.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=n)
     c = ss.combine_rands(a, b)
     if do_plot:
         pl.figure()
@@ -302,9 +302,9 @@ def test_combine_rands(do_plot=False):
             pl.title(k)
         sc.figlayout()
         pl.show()
-    for v in a,b,c:
-        mean = v.mean()
-        assert np.isclose(mean, target, atol=atol), f'Expected value to be 0.5±{atol}, not {mean}'
+    
+    mean = c.mean()
+    assert np.isclose(mean, target, atol=atol), f'Expected value to be 0.5±{atol}, not {mean}'
     ks = sps.kstest(c, sps.uniform(0,1).cdf)
     assert ks.pvalue > 0.05, f'Distribution does not seem to be uniform, p={ks.pvalue}<0.05'
     return c

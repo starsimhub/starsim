@@ -302,15 +302,12 @@ def combine_rands(a, b):
     Efficient algorithm for combining two arrays of random numbers into one
     
     Args:
-        a (array): array of random numbers between 0 and 1
+        a (array): array of random integers between np.iinfo(np.int64).min and np.iinfo(np.int64).max
         b (array): ditto, same size as a
         
     Returns:
         A new array of random numbers the same size as a and b
     """
-    maxval = np.iinfo(np.uint32).max + 2 # +2 to ensure values can never be identically zero
-    a1 = (a*1e9).astype(np.uint32)
-    b1 = (b*1e9).astype(np.uint32)
-    c = np.bitwise_xor(a1*b1, a1-b1)
-    c = (1+c.astype(float))/maxval
-    return c
+    c = np.bitwise_xor(a*b, a-b).astype(np.uint64)
+    u = c / np.iinfo(np.uint64).max
+    return u

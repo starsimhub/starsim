@@ -473,7 +473,7 @@ class Dist:
         for key,val in self._pars.items():
             
             # If the parameter is callable, then call it
-            if callable(val): 
+            if callable(val) and not isinstance(val, type): # Types can appear as callable
                 size_par = uids if uids is not None else size
                 out = val(self.module, self.sim, size_par) # TODO: swap order to sim, module, size?
                 val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
@@ -717,12 +717,26 @@ class poisson(Dist):
         return spars
 
 
+'''
 class randint(Dist):
     """ Random integers, values on the interval [low, high-1] (i.e. "high" is excluded) """
     def __init__(self, low=0, high=2,  **kwargs):
         super().__init__(distname='integers', dist=sps.randint, low=low, high=high, **kwargs)
         return
+'''
+
+class randint(Dist):
+    """ Randint distribution, integer values on interval [low, high) using numpy.random.Generator.integers """
+    def __init__(self, low=0, high=1, dtype=int, **kwargs):
+        # integers instead of randint because interfacing a numpy.random.Generator
+        super().__init__(distname='integers', low=low, high=high, dtype=dtype, **kwargs)
+        return
     
+    def ppf(self, rands):
+        p = self._pars
+        rvs = rands * (p.high + 1 - p.low) + p.low
+        rvs = rvs.astype(self.pars['dtype'])
+        return rvs
 
 class weibull(Dist):
     """ Weibull distribution -- NB, uses SciPy rather than NumPy """
