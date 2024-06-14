@@ -69,9 +69,9 @@ def combine_hash(G):
     src = nx.get_node_attributes(G, 'infected')
     infected = []
     tx = []
-    r1 = np.random.rand(n)
-    r2 = np.random.rand(n)
     el = list(G.edges())
+    r1 = np.random.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=n)
+    r2 = np.random.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=n)
     np.random.shuffle(el)
     for (n1,n2) in el:
         # n1 --> n2

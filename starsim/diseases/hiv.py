@@ -105,7 +105,7 @@ class ART(ss.Intervention):
             return
 
         ti_delay = 1 # 1 time step delay TODO
-        recently_infected = ss.true((sim.people.hiv.ti_infected == sim.ti-ti_delay) & sim.people.alive)
+        recently_infected = (sim.people.hiv.ti_infected == sim.ti-ti_delay).uids
 
         n_added = 0
         if len(recently_infected) > 0:
@@ -115,7 +115,7 @@ class ART(ss.Intervention):
             n_added = len(inds)
 
         # Add result
-        self.results['n_art'][sim.ti] = np.count_nonzero(sim.people.alive & sim.people.hiv.on_art)
+        self.results['n_art'][sim.ti] = np.count_nonzero(sim.people.hiv.on_art)
 
         return n_added
 
