@@ -6,6 +6,12 @@ What's new
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
+Version 0.5.3 (2024-06-14)
+--------------------------
+- Adjusting ``RandomNet`` to avoid connections to unborn agents and use random rounding for half edges
+- Adds ``get_analyzers`` and ``get_analyzer``
+- *GitHub info*: PR `547 <https://github.com/starsimhub/starsim/pull/547>`_
+
 
 Version 0.5.2 (2024-06-04)
 --------------------------
