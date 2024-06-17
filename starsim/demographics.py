@@ -313,7 +313,7 @@ class Pregnancy(Demographics):
             # Assign agents to age bins
             age_bins = self.fertility_rate_data.columns.values
             age_bin_all = np.digitize(age, age_bins) - 1
-            new_rate = self.fertility_rate_data.loc[nearest_year].values*self.pars.units  # Initialize array with new rates
+            new_rate = self.fertility_rate_data.loc[nearest_year].values  # Initialize array with new rates
 
             if self.pregnant.any():
                 # Scale the new rate to convert the denominator from all women to non-pregnant women
@@ -329,13 +329,12 @@ class Pregnancy(Demographics):
                 num_to_make = new_rate * age_counts  # Number that we need to make pregnant
                 new_denom = age_counts - pregnant_age_counts  # New denominator for rates
                 new_rate = np.divide(num_to_make, new_denom, where=new_denom>0, out=new_rate)
-                new_rate = new_rate
 
             fertility_rate[uids] = new_rate[age_bin_all]
 
         # Scale from rate to probability
         invalid_age = (age < self.pars.min_age) | (age > self.pars.max_age)
-        fertility_prob = fertility_rate * (self.pars.rel_fertility * sim.pars.dt)
+        fertility_prob = fertility_rate * (self.pars.units * self.pars.rel_fertility * sim.pars.dt)
         fertility_prob[self.pregnant.uids] = 0 # Currently pregnant women cannot become pregnant again
         fertility_prob[uids[invalid_age]] = 0 # Women too young or old cannot become pregnant
         fertility_prob = np.clip(fertility_prob[uids], a_min=0, a_max=1)
