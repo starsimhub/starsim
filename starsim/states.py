@@ -362,28 +362,40 @@ class uids(np.ndarray):
         elif isinstance(arr, int): # Convert e.g. ss.uids(0) to ss.uids([0])
             arr = [arr]
         return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
-    
+
     def concat(self, other, **kw): # TODO: why can't they both be called cat()?
         """ Equivalent to np.concatenate(), but return correct type """
         return np.concatenate([self, other], **kw).view(self.__class__)
-    
+
     @classmethod
     def cat(cls, *args, **kw):
         """ Equivalent to np.concatenate(), but return correct type """
         arrs = args[0] if len(args) == 1 else args
         return np.concatenate(arrs, **kw).view(cls)
-    
+
     def remove(self, other, **kw):
         """ Remove provided UIDs from current array"""
+        if isinstance(other, BoolArr):
+            other = other.uids
         return np.setdiff1d(self, other, **kw).view(self.__class__)
-    
+
     def intersect(self, other, **kw):
         """ Keep only UIDs that are also present in the other array """
+        if isinstance(other, BoolArr):
+            other = other.uids
         return np.intersect1d(self, other, **kw).view(self.__class__)
 
     def union(self, other, **kw):
         """ Return all UIDs present in both arrays """
+        if isinstance(other, BoolArr):
+            other = other.uids
         return np.union1d(self, other, **kw).view(self.__class__)
+
+    def xor(self, other, **kw):
+        """ Return UIDs present in only one of the arrays """
+        if isinstance(other, BoolArr):
+            other = other.uids
+        return np.setxor1d(self, other, **kw).view(self.__class__)
 
     def to_numpy(self):
         """ Convert to a standard NumPy array """
@@ -391,10 +403,10 @@ class uids(np.ndarray):
 
     # Implement collection of operators
     def __and__(self, other): return self.intersect(other)
-    def __or__(self, other):  return self.union(other)
+    def __or__(self, other) : return self.union(other)
     def __sub__(self, other): return self.remove(other)
-    def __xor__(self, other): return np.setxor1d(self, other).view(self.__class__)
-    def __invert__(self):     raise Exception(f"Cannot invert an instance of {self.__class__.__name__}. One possible cause is attempting `~x.uids` - use `x.false()` or `(~x).uids` instead")
+    def __xor__(self, other): return self.xor(other)
+    def __invert__(self)    : raise Exception(f"Cannot invert an instance of {self.__class__.__name__}. One possible cause is attempting `~x.uids` - use `x.false()` or `(~x).uids` instead")
 
 
 class BooleanOperationError(NotImplementedError):
