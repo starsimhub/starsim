@@ -92,15 +92,18 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         if raw is not None:
             self.grow(new_uids=uids(np.arange(len(raw))), new_vals=raw)
         return
-    
+
     def __repr__(self):
         arr_str = np.array2string(self.values, max_line_width=200)
-        string = f'<{self.__class__.__name__} "{str(self.name)}", len={len(self)}, {arr_str}>'
+        if self.name:
+            string = f'<{self.__class__.__name__} "{str(self.name)}", len={len(self)}, {arr_str}>'
+        else:
+            string = f'<{self.__class__.__name__}, len={len(self)}, {arr_str}>'
         return string
-    
+
     def __len__(self):
         return len(self.auids)
-    
+
     def _convert_key(self, key):
         """
         Used for getitem and setitem to determine whether the key is indexing
@@ -241,7 +244,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         self.initialized = True
         return
 
-    def asnew(self, arr=None, cls=None):
+    def asnew(self, arr=None, cls=None, name=None):
         """ Duplicate and copy (rather than link) data, optionally resetting the array """
         if cls is None:
             cls = self.__class__
@@ -250,6 +253,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         new = object.__new__(cls) # Create a new Arr instance
         new.__dict__ = self.__dict__.copy() # Copy pointers
         new.dtype = arr.dtype # Set to correct dtype
+        new.name = name # In most cases, the asnew Arr has different values to the original Arr so the original name no longer makes sense
         new.raw = np.empty_like(new.raw, dtype=new.dtype) # Copy values, breaking reference
         new.raw[new.auids] = arr
         return new
