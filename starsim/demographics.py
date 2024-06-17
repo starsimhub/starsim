@@ -7,6 +7,9 @@ import starsim as ss
 import sciris as sc
 import pandas as pd
 
+ss_float_ = ss.dtypes.float
+ss_int_ = ss.dtypes.int
+
 __all__ = ['Demographics', 'Births', 'Deaths', 'Pregnancy']
 
 
@@ -160,7 +163,7 @@ class Deaths(Demographics):
         self.metadata = sc.mergedicts(
             sc.objdict(
                 data_cols = dict(year='Time', sex='Sex', age='AgeGrpStart', value='mx'),
-                sex_keys = dict(f='Female', m='Male'),
+                sex_keys = {'Female':'f', 'Male':'m'},
             ),
             metadata
         )
@@ -175,7 +178,8 @@ class Deaths(Demographics):
     def standardize_death_data(self):
         """ Standardize/validate death rates - handled in an external file due to shared functionality """
         death_rate = ss.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
-        death_rate = death_rate.set_index([self.metadata.data_cols['year'], self.metadata.data_cols['sex'], self.metadata.data_cols['age']])
+        death_rate = death_rate.unstack(level='age')
+        assert not death_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
         return death_rate
 
     @staticmethod # Needs to be static since called externally, although it sure looks like a class method!
@@ -183,55 +187,29 @@ class Deaths(Demographics):
         """ Take in the module, sim, and uids, and return the probability of death for each UID on this timestep """
 
         drd = self.death_rate_data
-        if sc.isnumber(drd) or isinstance(drd, ss.Dist):
+        if sc.isnumber(drd):
             death_rate = drd
-
         else:
-            ppl = sim.people
-            data_cols = sc.objdict(self.metadata.data_cols)
-            year_label = data_cols.year
-            age_label  = data_cols.age
-            sex_label  = data_cols.sex
-            val_label  = data_cols.value
-            sex_keys = self.metadata.sex_keys
 
-            # Find the nearest year
-            available_years = drd.index.get_level_values(year_label)
+            ppl = sim.people
+
+            # Performance optimization - the Deaths module checks for deaths for all agents
+            # Therefore the UIDs requested should match all UIDs
+            assert len(uids) == len(ppl.auids)
+
+            available_years = drd.index.get_level_values('year')
             year_ind = sc.findnearest(available_years, sim.year)
             nearest_year = available_years[year_ind]
 
-            # Bin the ages
+            death_rate = np.empty(uids.shape, dtype=ss_float_)
 
-#             x=ppl.female.uids
-# PyDev console: using IPython 8.23.0
-# %timeit uids & ppl.female.uids
-# 452 µs ± 4.94 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
-# %timeit uids & x
-# 394 µs ± 1.45 µs per loop (mean ± std. dev. of 7 runs, 1,000 loops each)
+            s = drd.loc[nearest_year, 'f']
+            binned_ages = np.digitize(ppl.age[ppl.female], s.index) # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
+            death_rate[ppl.female] = s.values[binned_ages]
 
-
-            df = drd[data_cols.value].unstack().loc[nearest_year,sex_keys['f']]
-            binned_ages = np.digitize(ppl.age[uids], df.index) - 1
-
-
-            df = self.death_rate_data.loc[self.death_rate_data[year_label] == nearest_year]
-
-
-            f_arr = df[val_label].loc[df[sex_label] == sex_keys['f']].values
-            m_arr = df[val_label].loc[df[sex_label] == sex_keys['m']].values
-
-            # Initialize
-            death_rate_df = pd.Series(index=uids)
-            f_uids = uids & ppl.female.uids # TODO: reduce duplication
-            m_uids = uids.intersect(ppl.male.uids)
-            f_age_inds = np.digitize(ppl.age[f_uids], age_bins) - 1
-            m_age_inds = np.digitize(ppl.age[m_uids], age_bins) - 1
-            death_rate_df[f_uids] = f_arr[f_age_inds]
-            death_rate_df[m_uids] = m_arr[m_age_inds]
-            unborn_inds = uids.intersect((sim.people.age < 0).uids)
-            death_rate_df[unborn_inds] = 0  # Don't use background death rates for unborn babies
-
-            death_rate = death_rate_df.values
+            s = drd.loc[nearest_year, 'm']
+            binned_ages = np.digitize(ppl.age[ppl.male], s.index) # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
+            death_rate[ppl.male] = s.values[binned_ages]
 
         # Scale from rate to probability. Consider an exponential here.
         death_prob = death_rate * (self.pars.units * self.pars.rel_death * sim.pars.dt)
@@ -321,57 +299,57 @@ class Pregnancy(Demographics):
     def make_fertility_prob_fn(self, sim, uids):
         """ Take in the module, sim, and uids, and return the conception probability for each UID on this timestep """
 
-        if sc.isnumber(self.fertility_rate_data):
-            fertility_rate = pd.Series(index=uids, data=self.fertility_rate_data)
+        age = sim.people.age[uids]
+
+        frd = self.fertility_rate_data
+        fertility_rate = np.empty(len(sim.people.uid.raw), dtype=ss_float_)
+
+        if sc.isnumber(frd):
+            fertility_rate[uids] = self.fertility_rate_data
         else:
-            # Abbreviate key variables
-            data_cols = sc.objdict(self.metadata.data_cols)
-            year_label = data_cols.year
-            age_label  = data_cols.age
-            val_label  = data_cols.value
+            year_ind = sc.findnearest(frd.index, sim.year-self.pars.dur_pregnancy)
+            nearest_year = frd.index[year_ind]
 
-            available_years = self.fertility_rate_data[year_label].unique()
-            year_ind = sc.findnearest(available_years, sim.year-self.pars.dur_pregnancy)
-            nearest_year = available_years[year_ind]
+            # Assign agents to age bins
+            age_bins = self.fertility_rate_data.columns.values
+            age_bin_all = np.digitize(age, age_bins) - 1
+            new_rate = self.fertility_rate_data.loc[nearest_year].values*self.pars.units  # Initialize array with new rates
 
-            df = self.fertility_rate_data.loc[self.fertility_rate_data[year_label] == nearest_year]
-            df_arr = df[val_label].values  # Pull out dataframe values
-            df_arr = np.append(df_arr, 0)  # Add zeros for those outside data range
+            if self.pregnant.any():
+                # Scale the new rate to convert the denominator from all women to non-pregnant women
+                v, c = np.unique(age_bin_all, return_counts=True)
+                age_counts = np.zeros(len(age_bins))
+                age_counts[v] = c
 
-            # Process age data
-            age_bins = df[age_label].unique()
-            age_bins = np.append(age_bins, age_bins[-1]+1) # WARNING: Assumes one year age bins! TODO: More robust handling.
-            age_inds = np.digitize(sim.people.age[uids], age_bins) - 1
-            age_inds[age_inds == len(age_bins)-1] = -1  # This ensures women outside the data range will get a value of 0
+                age_bin_pw = np.digitize(sim.people.age[self.pregnant], age_bins) - 1
+                v, c = np.unique(age_bin_pw, return_counts=True)
+                pregnant_age_counts = np.zeros(len(age_bins))
+                pregnant_age_counts[v] = c
 
-            # Adjust rates: rates are based on the entire population, but we need to remove
-            # anyone already pregnant and then inflate the rates for the remainder
-            pregnant_uids = self.pregnant.uids # Find agents who are already pregnant
-            pregnant_age_counts, _ = np.histogram(sim.people.age[pregnant_uids], age_bins)  # Count them by age
-            age_counts, _ = np.histogram(sim.people.age[uids], age_bins)  # Count overall number per age bin
-            new_denom = age_counts - pregnant_age_counts  # New denominator for rates
-            num_to_make = df_arr[:-1]*age_counts  # Number that we need to make pregnant
-            new_percent = sc.dcp(df_arr)  # Initialize array with new rates
-            inds_to_rescale = new_denom > 0  # Rescale any non-zero age bins
-            new_percent[:-1][inds_to_rescale] = num_to_make[inds_to_rescale] / new_denom[inds_to_rescale]  # New rates
+                num_to_make = new_rate * age_counts  # Number that we need to make pregnant
+                new_denom = age_counts - pregnant_age_counts  # New denominator for rates
+                new_rate = np.divide(num_to_make, new_denom, where=new_denom>0, out=new_rate)
+                new_rate = new_rate
 
-            # Make array of fertility rates
-            fertility_rate = pd.Series(index=uids)
-            fertility_rate[uids] = new_percent[age_inds]
+            fertility_rate[uids] = new_rate[age_bin_all]
 
         # Scale from rate to probability
-        age = self.sim.people.age[uids]
         invalid_age = (age < self.pars.min_age) | (age > self.pars.max_age)
-        fertility_prob = fertility_rate * (self.pars.units * self.pars.rel_fertility * sim.pars.dt)
+        fertility_prob = fertility_rate * (self.pars.rel_fertility * sim.pars.dt)
         fertility_prob[self.pregnant.uids] = 0 # Currently pregnant women cannot become pregnant again
         fertility_prob[uids[invalid_age]] = 0 # Women too young or old cannot become pregnant
-        fertility_prob = np.clip(fertility_prob, a_min=0, a_max=1)
-
+        fertility_prob = np.clip(fertility_prob[uids], a_min=0, a_max=1)
         return fertility_prob
 
     def standardize_fertility_data(self):
-        """ Standardize/validate fertility rates - handled in an external file due to shared functionality """
+        """
+        Standardize/validate fertility rates
+        """
         fertility_rate = ss.standardize_data(data=self.pars.fertility_rate, metadata=self.metadata)
+        fertility_rate = fertility_rate.unstack()
+        max_age = fertility_rate.columns.max()
+        fertility_rate[max_age+1] = 0
+        assert not fertility_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
         return fertility_rate
 
     def init_pre(self, sim):
