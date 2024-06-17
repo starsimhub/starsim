@@ -204,11 +204,11 @@ class Deaths(Demographics):
             death_rate = np.empty(uids.shape, dtype=ss_float_)
 
             s = drd.loc[nearest_year, 'f']
-            binned_ages = np.digitize(ppl.age[ppl.female], s.index) # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
+            binned_ages = np.digitize(ppl.age[ppl.female], s.index)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
             death_rate[ppl.female] = s.values[binned_ages]
 
             s = drd.loc[nearest_year, 'm']
-            binned_ages = np.digitize(ppl.age[ppl.male], s.index) # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
+            binned_ages = np.digitize(ppl.age[ppl.male], s.index)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
             death_rate[ppl.male] = s.values[binned_ages]
 
         # Scale from rate to probability. Consider an exponential here.
