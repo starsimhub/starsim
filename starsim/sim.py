@@ -659,6 +659,7 @@ class Sim(sc.prettyobj):
             fig, axs = sc.getrowscols(len(flat), make=True)
             for ax, (k, v) in zip(axs.flatten(), flat.items()):
                 ax.plot(yearvec, v)
+                # get label or use the key
                 ax.set_title(getattr(v, 'label', k))
                 ax.set_xlabel('Year')
         return fig
