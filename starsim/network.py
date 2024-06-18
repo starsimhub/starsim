@@ -504,14 +504,15 @@ class RandomNet(DynamicNetwork):
     def add_pairs(self):
         """ Generate contacts """
         people = self.sim.people
+        born = people.alive & (people.age > 0)
         if isinstance(self.pars.n_contacts, ss.Dist):
-            number_of_contacts = self.pars.n_contacts.rvs(people.uid[people.alive])  # or people.uid?
+            number_of_contacts = self.pars.n_contacts.rvs(born.uids)  # or people.uid?
         else:
             number_of_contacts = np.full(len(people), self.pars.n_contacts)
 
-        number_of_contacts = np.round(number_of_contacts / 2).astype(ss_int_)  # One-way contacts
+        number_of_contacts = sc.randround(number_of_contacts / 2).astype(ss_int_)  # One-way contacts
 
-        p1, p2 = self.get_contacts(people.uid.__array__(), number_of_contacts)
+        p1, p2 = self.get_contacts(born.uids, number_of_contacts)
         beta = np.ones(len(p1), dtype=ss_float_)
 
         if isinstance(self.pars.dur, ss.Dist):
