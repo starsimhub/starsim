@@ -9,6 +9,8 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 Version 0.5.4 (2024-06-18)
 --------------------------
+- Adjusted ``RandomNet`` to avoid connections to unborn agents and use random rounding for half edges
+- Adds ``get_analyzers`` and ``get_analyzer``
 - Refactor how data is pre-processed for births/pregnancy/death rates, giving about a 10% decrease in run time for the STIsim HIV model
 - ``BoolArr.uids`` is automatically called when doing set operations on ``uids`` with a ``BoolArr``
 - 
