@@ -203,13 +203,17 @@ class Deaths(Demographics):
 
             death_rate = np.empty(uids.shape, dtype=ss_float_)
 
-            s = drd.loc[nearest_year, 'f']
-            binned_ages = np.digitize(ppl.age[ppl.female], s.index)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
-            death_rate[ppl.female] = s.values[binned_ages]
-
-            s = drd.loc[nearest_year, 'm']
-            binned_ages = np.digitize(ppl.age[ppl.male], s.index)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
-            death_rate[ppl.male] = s.values[binned_ages]
+            if 'sex' in drd.index.names:
+                s = drd.loc[nearest_year, 'f']
+                binned_ages = np.digitize(ppl.age[ppl.female], s.index)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
+                death_rate[ppl.female] = s.values[binned_ages]
+                s = drd.loc[nearest_year, 'm']
+                binned_ages = np.digitize(ppl.age[ppl.male], s.index)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
+                death_rate[ppl.male] = s.values[binned_ages]
+            else:
+                s = drd.loc[nearest_year]
+                binned_ages = np.digitize(ppl.age, s.index)-1 # Negative ages will be in the first bin - do *not* subtract 1 so that this bin is 0
+                death_rate[:] = s.values[binned_ages]
 
         # Scale from rate to probability. Consider an exponential here.
         death_prob = death_rate * (self.pars.units * self.pars.rel_death * sim.pars.dt)
