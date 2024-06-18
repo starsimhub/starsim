@@ -13,7 +13,6 @@ Version 0.5.4 (2024-06-18)
 - Adds ``get_analyzers`` and ``get_analyzer``
 - Refactor how data is pre-processed for births/pregnancy/death rates, giving about a 10% decrease in run time for the STIsim HIV model
 - ``BoolArr.uids`` is automatically called when doing set operations on ``uids`` with a ``BoolArr``
-- 
 - *GitHub info*: PR `555 <https://github.com/starsimhub/starsim/pull/555>`_
 
 
