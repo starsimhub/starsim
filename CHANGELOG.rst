@@ -13,6 +13,23 @@ Version 0.5.3 (2024-06-14)
 - *GitHub info*: PR `550 <https://github.com/starsimhub/starsim/pull/550>`_
 
 
+Version 0.5.4 (2024-06-18)
+--------------------------
+- Refactor how data is pre-processed for births/pregnancy/death rates, giving about a 10% decrease in run time for the STIsim HIV model
+- ``BoolArr.uids`` is automatically called when doing set operations on ``uids`` with a ``BoolArr``
+- 
+- *GitHub info*: PR `555 <https://github.com/starsimhub/starsim/pull/555>`_
+
+
+Version 0.5.3 (2024-06-10)
+--------------------------
+- ``ss.uids`` class implements set operators to facilitate combining or otherwise operating on collections of UIDs
+- ``FloatArr.isnan`` and ``FloatArr.notnan`` return ``BoolArr`` instances rather than UIDs (so as to facilitate logical operations with other ``BoolArr`` instances, and to align more closely with `np.isnan`)
+- ``Arr.true()`` and ``Arr.false()`` are supported for all ``Arr`` subclasses
+- ``BoolArr.isnan`` and ``Boolarr.notnan`` are also implemented (although since ``BoolArr`` cannot store NaN values, these always return ``False`` and ``True``, respectively)
+- *GitHub info*: PR `544 <https://github.com/starsimhub/starsim/pull/544>`_
+
+
 Version 0.5.2 (2024-06-04)
 --------------------------
 - Renames ``network.contacts`` to ``network.edges``.

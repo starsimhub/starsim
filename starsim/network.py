@@ -347,11 +347,10 @@ class SexualNetwork(DynamicNetwork):
         # This property could also be overwritten by a NetworkConnector
         # which could incorporate information about membership in other
         # contact networks
-        right_sex = people[sex]
-        is_active = self.active(people)
-        is_available = (right_sex & is_active).uids
-        still_available = is_available.remove(self.members)
-        return still_available
+        available = people[sex] & self.active(people)
+        available[self.edges.p1] = False
+        available[self.edges.p2] = False
+        return available.uids
 
     def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
         if uids is None: uids = Ellipsis

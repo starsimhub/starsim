@@ -284,7 +284,7 @@ class People(sc.prettyobj):
                 network.remove_uids(uids) # TODO: only run once every nth timestep
                 
             # Calculate the indices to keep
-            self.auids = self.auids.remove(uids)
+            self.auids = self.auids[np.isin(self.auids, np.unique(uids), assume_unique=True, invert=True, kind='sort')]
 
         return
     
