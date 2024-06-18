@@ -49,7 +49,7 @@ class Disease(ss.Module):
         Result for 'n_susceptible'
         """
         for state in self._boolean_states:
-            self.results += ss.Result(self.name, f'n_{state.name}', self.sim.npts, dtype=int, scale=True)
+            self.results += ss.Result(self.name, f'n_{state.name}', self.sim.npts, dtype=int, scale=True, label=state.label)
         return
 
     def update_pre(self):
@@ -142,11 +142,11 @@ class Infection(Disease):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.add_states(
-            ss.BoolArr('susceptible', default=True),
-            ss.BoolArr('infected'),
-            ss.FloatArr('rel_sus', default=1.0),
-            ss.FloatArr('rel_trans', default=1.0),
-            ss.FloatArr('ti_infected'),
+            ss.BoolArr('susceptible', default=True, label='Susceptible'),
+            ss.BoolArr('infected', label='Infectious'),
+            ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
+            ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
+            ss.FloatArr('ti_infected', label='Time of infection' ),
         )
 
         # Define random number generators for make_new_cases
@@ -211,9 +211,9 @@ class Infection(Disease):
         super().init_results()
         sim = self.sim
         self.results += [
-            ss.Result(self.name, 'prevalence',     sim.npts, dtype=float, scale=False),
-            ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cum_infections', sim.npts, dtype=int, scale=True),
+            ss.Result(self.name, 'prevalence',     sim.npts, dtype=float, scale=False, label='Prevalence'),
+            ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True, label='New infections'),
+            ss.Result(self.name, 'cum_infections', sim.npts, dtype=int, scale=True, label='Cumulative infections'),
         ]
         return
 
