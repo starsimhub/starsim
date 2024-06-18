@@ -281,7 +281,7 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
 
     # Extract the values and index columns
     assert 'value' in metadata['data_cols'], 'The metadata is missing a column name for "value", which must be provided if the input data is in the form of a DataFrame, Series, or dict'
-    values = data[metadata['data_cols']['value']]
+    values = sc.promotetoarray(data[metadata['data_cols']['value']])
     index = sc.objdict()
     for k, col in metadata['data_cols'].items():
         if k != 'value':
