@@ -172,7 +172,7 @@ def unique(arr):
     counts = counts[unique]
     return unique, counts
 
-# @nb.njit
+@nb.njit
 def find_contacts(p1, p2, inds):  # pragma: no cover
     """
     Variation on Network.find_contacts() that avoids sorting.
