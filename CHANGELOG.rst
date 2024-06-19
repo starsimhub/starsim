@@ -7,6 +7,12 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 0.5.x (2024-xx-xx)
+--------------------------
+- If a `People` object is provided to the ``Arr`` constructor, the arrays will be pre-initialized to index the current UIDs in the ``People`` object. This enables construction of temporary ``Arr`` instances that can be used to perform intermediate calculations (e.g., inside ``Intervention.apply()`` or within a module update step)
+- Deprecated `Arr(raw=...)` argument to simplify initialization, as in practice the ``raw`` variable is not directly set, and this update also introduces a new pathway for initializating the `raw` attribute
+
+
 Version 0.5.4 (2024-06-18)
 --------------------------
 - Adjusted ``RandomNet`` to avoid connections to unborn agents and use random rounding for half edges
