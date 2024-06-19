@@ -7,6 +7,14 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 0.5.5 (2024-06-19)
+--------------------------
+- Added labels to ``Result`` and state (``Arr``) objects.
+- Added Numba decorator to ``find_contacts`` to significantly increase performance.
+- Fixed bug when comparing ``uids`` and ``BoolArr`` objects.
+- *GitHub info*: PR `562 <https://github.com/starsimhub/starsim/pull/555>`_
+
+
 Version 0.5.4 (2024-06-18)
 --------------------------
 - Adjusted ``RandomNet`` to avoid connections to unborn agents and use random rounding for half edges
