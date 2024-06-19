@@ -274,12 +274,12 @@ class Pregnancy(Demographics):
             ss.BoolArr('infertile', label='Infertile'),  # Applies to girls and women outside the fertility window
             ss.BoolArr('fecund', default=True, label='Female of childbearing age'),
             ss.BoolArr('pregnant', label='Pregnant'),  # Currently pregnant
-            ss.BoolArr('postpartum', label="Currently Post-partum"),  # Currently post-partum
-            ss.FloatArr('dur_postpartum', label='Post-partum Duration'),  # Duration of postpartum phase
-            ss.FloatArr('ti_pregnant', label='Time of Pregnant'),  # Time pregnancy begins
-            ss.FloatArr('ti_delivery', label='Time of Delivery'),  # Time of delivery
-            ss.FloatArr('ti_postpartum', label='Time of Post-partum'),  # Time postpartum ends
-            ss.FloatArr('ti_dead', label='Maternal Time of Death'),  # Maternal mortality
+            ss.BoolArr('postpartum', label="Post-partum"),  # Currently post-partum
+            ss.FloatArr('dur_postpartum', label='Post-partum duration'),  # Duration of postpartum phase
+            ss.FloatArr('ti_pregnant', label='Time of pregnancy'),  # Time pregnancy begins
+            ss.FloatArr('ti_delivery', label='Time of delivery'),  # Time of delivery
+            ss.FloatArr('ti_postpartum', label='Time post-partum ends'),  # Time postpartum ends
+            ss.FloatArr('ti_dead', label='Time of maternal death'),  # Maternal mortality
         )
 
         # Process metadata. Defaults here are the labels used by UN data

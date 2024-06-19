@@ -12,6 +12,14 @@ __all__ = ['Result', 'Results']
 
 class Result(np.ndarray):
     
+    # Define the custom attributes
+    _custom_attrs = [
+        'name', # The name of the result (e.g. n_infections)
+        'module', # The name of the module (e.g. hiv)
+        'scale', # Whether or not the result scales with population size (e.g. True)
+        'label', # The human-readable label for the result (e.g. Number of infections)
+    ]
+    
     def __new__(cls, module=None, name=None, shape=None, dtype=None, scale=None, label=None):
         arr = np.zeros(shape=shape, dtype=dtype).view(cls)
         arr.name = name
@@ -31,10 +39,9 @@ class Result(np.ndarray):
     def __array_finalize__(self, obj):
         if obj is None:
             return
-        self.name   = getattr(obj, 'name',   None)
-        self.module = getattr(obj, 'module', None)
-        self.scale  = getattr(obj, 'scale',  None)
-        self.label  = getattr(obj, 'label',  None)
+        for attr in self._custom_attrs:
+            value = getattr(obj, attr, None)
+            setattr(self, attr, value)
         return
 
     def __array_wrap__(self, obj, **kwargs):

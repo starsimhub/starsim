@@ -80,8 +80,8 @@ class SIR(ss.Infection):
     def plot(self):
         """ Default plot for SIR model """
         fig = pl.figure()
-        for rkey in ['susceptible', 'infected', 'recovered']:
-            pl.plot(self.results['n_'+rkey], label=self.results['n_'+rkey].label)
+        for rkey in ['n_susceptible', 'n_infected', 'n_recovered']:
+            pl.plot(self.results[rkey], label=self.results[rkey].label)
         pl.legend()
         return fig
     
@@ -156,8 +156,8 @@ class SIS(ss.Infection):
     def plot(self):
         """ Default plot for SIS model """
         fig = pl.figure()
-        for rkey in ['susceptible', 'infected']:
-            pl.plot(self.results['n_'+rkey], label=self.results['n_'+rkey].label)
+        for rkey in ['n_susceptible', 'n_infected']:
+            pl.plot(self.results[rkey], label=self.results[rkey].label)
         pl.legend()
         return fig
 
