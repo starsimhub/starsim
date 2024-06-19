@@ -134,6 +134,10 @@ def test_ncd():
         ncd.results.n_affected,
         sim.results.new_deaths.cumsum(),
     )
+    assert ncd.results.n_not_at_risk.label == 'Not at risk'
+    assert ncd.results.n_at_risk.label == 'At risk'
+    assert ncd.results.n_affected.label == 'Affected'
+    assert sim.results.new_deaths.label == 'Deaths'
     plt.legend(['Not at risk', 'At risk', 'Affected', 'Dead'])
     plt.xlabel('Year')
     plt.title('NCD')

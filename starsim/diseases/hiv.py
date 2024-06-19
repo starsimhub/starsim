@@ -28,10 +28,10 @@ class HIV(ss.Infection):
 
         # States
         self.add_states(
-            ss.BoolArr('on_art'),
-            ss.FloatArr('ti_art'),
-            ss.FloatArr('ti_dead'), # Time of HIV-cause death
-            ss.FloatArr('cd4', default=500),
+            ss.BoolArr('on_art', label='On ART'),
+            ss.FloatArr('ti_art', label='Time of ART initiation'),
+            ss.FloatArr('ti_dead', label='Time of Death'), # Time of HIV-cause death
+            ss.FloatArr('cd4', default=500, label='CD4 count'),
         )
         return
 
@@ -60,7 +60,7 @@ class HIV(ss.Infection):
     def init_results(self):
         """ Initialize results """
         super().init_results()
-        self.results += ss.Result(self.name, 'new_deaths', self.sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'new_deaths', self.sim.npts, dtype=int, label='Deaths')
         return
 
     def update_results(self):

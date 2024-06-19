@@ -75,9 +75,9 @@ class Births(Demographics):
     def init_results(self):
         npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'new', npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cumulative', npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cbr', npts, dtype=int, scale=False),
+            ss.Result(self.name, 'new', npts, dtype=int, scale=True, label='New births'),
+            ss.Result(self.name, 'cumulative', npts, dtype=int, scale=True, label='Cumulative births'),
+            ss.Result(self.name, 'cbr', npts, dtype=int, scale=False, label='Crude birth rate'),
         ]
         return
 
@@ -224,9 +224,9 @@ class Deaths(Demographics):
     def init_results(self):
         npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'new', npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cumulative', npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cmr', npts, dtype=int, scale=False),
+            ss.Result(self.name, 'new', npts, dtype=int, scale=True, label='Deaths'),
+            ss.Result(self.name, 'cumulative', npts, dtype=int, scale=True, label='Cumulative deaths'),
+            ss.Result(self.name, 'cmr', npts, dtype=int, scale=False, label='Crude mortality rate'),
         ]
         return
 
@@ -271,15 +271,15 @@ class Pregnancy(Demographics):
         
         # Other, e.g. postpartum, on contraception...
         self.add_states(
-            ss.BoolArr('infertile'),  # Applies to girls and women outside the fertility window
-            ss.BoolArr('fecund', default=True),  # Applies to girls and women inside the fertility window
-            ss.BoolArr('pregnant'),  # Currently pregnant
-            ss.BoolArr('postpartum'),  # Currently post-partum
-            ss.FloatArr('dur_postpartum'),  # Duration of postpartum phase
-            ss.FloatArr('ti_pregnant'),  # Time pregnancy begins
-            ss.FloatArr('ti_delivery'),  # Time of delivery
-            ss.FloatArr('ti_postpartum'),  # Time postpartum ends
-            ss.FloatArr('ti_dead'),  # Maternal mortality
+            ss.BoolArr('infertile', label='Infertile'),  # Applies to girls and women outside the fertility window
+            ss.BoolArr('fecund', default=True, label='Female of childbearing age'),
+            ss.BoolArr('pregnant', label='Pregnant'),  # Currently pregnant
+            ss.BoolArr('postpartum', label="Currently Post-partum"),  # Currently post-partum
+            ss.FloatArr('dur_postpartum', label='Post-partum Duration'),  # Duration of postpartum phase
+            ss.FloatArr('ti_pregnant', label='Time of Pregnant'),  # Time pregnancy begins
+            ss.FloatArr('ti_delivery', label='Time of Delivery'),  # Time of delivery
+            ss.FloatArr('ti_postpartum', label='Time of Post-partum'),  # Time postpartum ends
+            ss.FloatArr('ti_dead', label='Maternal Time of Death'),  # Maternal mortality
         )
 
         # Process metadata. Defaults here are the labels used by UN data
@@ -370,9 +370,9 @@ class Pregnancy(Demographics):
         """
         npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'pregnancies', npts, dtype=int, scale=True),
-            ss.Result(self.name, 'births', npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cbr', npts, dtype=int, scale=False),
+            ss.Result(self.name, 'pregnancies', npts, dtype=int, scale=True, label='New pregnancies'),
+            ss.Result(self.name, 'births', npts, dtype=int, scale=True, label='New births'),
+            ss.Result(self.name, 'cbr', npts, dtype=int, scale=False, label='Crude birth rate'),
         ]
         return
 
