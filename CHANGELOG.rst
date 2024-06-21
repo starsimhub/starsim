@@ -7,7 +7,7 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
-Version 0.5.x (2024-xx-xx)
+Version 0.5.6 (2024-06-22)
 --------------------------
 - If a `People` object is provided to the ``Arr`` constructor, the arrays will be pre-initialized to index the current UIDs in the ``People`` object. This enables construction of temporary ``Arr`` instances that can be used to perform intermediate calculations (e.g., inside ``Intervention.apply()`` or within a module update step)
 - Deprecated `Arr(raw=...)` argument to simplify initialization, as in practice the ``raw`` variable is not directly set, and this update also introduces a new pathway for initializating the `raw` attribute
