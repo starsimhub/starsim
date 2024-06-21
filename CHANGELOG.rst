@@ -13,6 +13,14 @@ Version 0.5.x (2024-xx-xx)
 - Deprecated `Arr(raw=...)` argument to simplify initialization, as in practice the ``raw`` variable is not directly set, and this update also introduces a new pathway for initializating the `raw` attribute
 
 
+Version 0.5.5 (2024-06-19)
+--------------------------
+- Added labels to ``Result`` and state (``Arr``) objects.
+- Added Numba decorator to ``find_contacts`` to significantly increase performance.
+- Fixed bug when comparing ``uids`` and ``BoolArr`` objects.
+- *GitHub info*: PR `562 <https://github.com/starsimhub/starsim/pull/555>`_
+
+
 Version 0.5.4 (2024-06-18)
 --------------------------
 - Adjusted ``RandomNet`` to avoid connections to unborn agents and use random rounding for half edges

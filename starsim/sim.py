@@ -139,9 +139,9 @@ class Sim(sc.prettyobj):
     def init_results(self):
         """ Create initial results that are present in all simulations """
         self.results += [ # TODO: refactor with self.add_results()
-            ss.Result(None, 'n_alive',    self.npts, ss.dtypes.int, scale=True),
-            ss.Result(None, 'new_deaths', self.npts, ss.dtypes.int, scale=True),
-            ss.Result(None, 'cum_deaths', self.npts, ss.dtypes.int, scale=True),
+            ss.Result(None, 'n_alive',    self.npts, ss.dtypes.int, scale=True, label='Number alive'),
+            ss.Result(None, 'new_deaths', self.npts, ss.dtypes.int, scale=True, label='Deaths'),
+            ss.Result(None, 'cum_deaths', self.npts, ss.dtypes.int, scale=True, label='Cumulative deaths'),
         ]
         return
 
@@ -687,7 +687,8 @@ class Sim(sc.prettyobj):
             fig, axs = sc.getrowscols(len(flat), make=True)
             for ax, (k, v) in zip(axs.flatten(), flat.items()):
                 ax.plot(yearvec, v)
-                ax.set_title(k)
+                # get label or use the key
+                ax.set_title(getattr(v, 'label', k))
                 ax.set_xlabel('Year')
         return fig
 
