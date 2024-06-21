@@ -124,6 +124,8 @@ class Pars(sc.objdict):
                 else:
                     dist = ss.make_dist(new)
                     self[key] = dist
+        else:
+            raise Exception(f'Parameter {key} was a Dist, unsure what to do with new value of type {type(new)}')
         return
 
     def check_key_mismatch(self, pars):

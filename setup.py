@@ -25,6 +25,9 @@ CLASSIFIERS = [
     "Programming Language :: Python :: 3.12",
 ]
 
+from setuptools import Extension
+
+
 setup(
     name="starsim",
     version=version,
@@ -37,6 +40,7 @@ setup(
     classifiers=CLASSIFIERS,
     packages=find_packages(),
     include_package_data=True,
+    ext_modules=[Extension('midsq', ['midsq.c'])],
     install_requires=[ # NB: remember to update __init__.py if these requirements change
         'numpy',
         'scipy',

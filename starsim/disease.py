@@ -150,8 +150,8 @@ class Infection(Disease):
         )
 
         # Define random number generators for make_new_cases
-        self.rng_target = ss.randint(low=np.iinfo(np.int64).min, high=np.iinfo(np.int64).max, dtype=np.int64, name='target')
-        self.rng_source = ss.randint(low=np.iinfo(np.int64).min, high=np.iinfo(np.int64).max, dtype=np.int64, name='source')
+        self.rng_target = ss.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, name='target')
+        self.rng_source = ss.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, name='source')
         return
     
     def init_pre(self, sim):
@@ -252,6 +252,10 @@ class Infection(Disease):
         new_cases = []
         sources = []
         betamap = self._check_betas()
+
+        # Draw random numbers for transmission
+        rvs_s_Vec = self.rng_source.rvs()
+        rvs_t = self.rng_target.rvs()
 
         for nkey,net in self.sim.networks.items():
             if not len(net):

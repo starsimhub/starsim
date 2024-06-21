@@ -296,18 +296,125 @@ def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
         
     return df
 
+import ctypes
+# load the library
+mylib = ctypes.CDLL("libms.so")
 
-def combine_rands(a, b):
+def combine_rands(x, y):
+    if np.isscalar(x):
+        x = np.array([x], dtype=np.uint64)
+    if np.isscalar(y):
+        y = np.array([y], dtype=np.uint64)
+
+    #import glob
+
+    # find the shared library, the path depends on the platform and Python version
+    #import os
+    #print(os.getcwd())
+    #mylib = glob.glob('build/*/midsq*.so')[0]
+
+    mylib.midsq.argtypes = [ctypes.POINTER(ctypes.c_uint64), ctypes.POINTER(ctypes.c_uint64),  ctypes.c_size_t]
+    
+    mylib.midsq.restype = ctypes.POINTER(ctypes.c_uint32 * len(x))
+
+    # call function
+    xi = x.ctypes.data_as(ctypes.POINTER(ctypes.c_uint64))
+    yi = y.ctypes.data_as(ctypes.POINTER(ctypes.c_uint64))
+    zo = mylib.midsq(xi, yi, x.size)
+    z = np.frombuffer(zo.contents, dtype=np.uint32) / np.iinfo(np.uint32).max
+
+    # free buffer
+    mylib.freeArray.argtypes = [ctypes.POINTER(ctypes.c_uint32 * len(z))]
+    mylib.freeArray(zo)
+
+    return z
+
+def combine_rands_orig(a, b):
     """
-    Efficient algorithm for combining two arrays of random numbers into one
+    Efficient algorithm for deterministically combining two arrays of random numbers into one
     
     Args:
-        a (array): array of random integers between np.iinfo(np.int64).min and np.iinfo(np.int64).max
+        a (array): array of random uint64 integers between 0 and np.iinfo(np.uint64).max
         b (array): ditto, same size as a
         
     Returns:
         A new array of random numbers the same size as a and b
     """
-    c = np.bitwise_xor(a*b, a-b).astype(np.uint64)
-    u = c / np.iinfo(np.uint64).max
+    #c = np.bitwise_xor(a, b).astype(np.uint64) # astype not necessary if inputs are uint64
+    #d = np.bitwise_xor(a*b, b-a).astype(np.uint64) # astype not necessary if inputs are uint64
+    #c = b.byteswap() # swap bytes in b for asymmetry. b and c will be correlated, but that's okay as they are never compared.
+    #c = np.invert(b)
+    #d = np.bitwise_xor(a, b).astype(np.uint64) # astype not necessary if inputs are uint64
+    #u = d / np.iinfo(np.uint64).max
+
+    x = a * b
+    y = x.copy()
+    z = y + b
+
+    # round 1
+    x = x*x + y
+    x = x.byteswap()
+
+    # round 2
+    x = x*x + z
+    x = x.byteswap()
+
+    u = x / np.iinfo(np.uint64).max
+
     return u
+
+
+def squares32(a,b):
+    # Implementation of the "Squares32" algorithm using byteswap in place of low/high swap: x = (x>>32) | (x<<32);
+    x = a * b
+    y = x.copy()
+    z = y + b
+
+    # round 1
+    x = x*x + y
+    x = x.byteswap()
+
+    # round 2
+    x = x*x + z
+    x = x.byteswap()
+    
+    # round 3
+    x = x*x + y
+    x = x.byteswap()
+    
+    #round 4
+    r = (x*x + z)
+    r = r.byteswap()
+
+    return r / np.iinfo('uint64').max
+
+def squares64(a,b):
+    # Implementation of the "Squares64" algorithm using byteswap in place of low/high swap: x = (x>>32) | (x<<32);
+    x = a * b
+    y = x.copy()
+    z = y + b
+
+    # round 1
+    x = x*x + y
+    x = x.byteswap()
+
+    # round 2
+    x = x*x + z
+    x = x.byteswap()
+    
+    # round 3
+    x = x*x + y
+    x = x.byteswap()
+    
+    # round 4
+    x = x*x + z
+    x = x.byteswap()
+    t = x.copy()
+
+    # round 5
+    x = x*x + y
+    x = x.byteswap()
+
+    r = t ^ x
+
+    return r / np.iinfo('uint64').max

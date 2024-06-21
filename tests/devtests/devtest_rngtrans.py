@@ -7,18 +7,22 @@ from pandas.util import hash_pandas_object
 import hashlib
 import sciris as sc
 
-from starsim.utils import combine_rands
+from starsim.utils import combine_rands, squares32, squares64
 
-import warnings
-warnings.filterwarnings("ignore", "overflow encountered in scalar subtract")
-warnings.filterwarnings("ignore", "overflow encountered in scalar multiply")
- 
+#import warnings
+#warnings.filterwarnings('ignore', message='RuntimeWarning: overflow encountered in scalar add')
+#warnings.filterwarnings('ignore', message='RuntimeWarning: overflow encountered in scalar multiply')
+#warnings.simplefilter('ignore')
+
+#np.random.seed(0)
+
 n = 8 # Number of nodes
 n_sources = 2 # Number of sources (seed infections)
-reps = 1_000_000
+
+reps = 1_000
 edge_prob = 0.7 # Edge probability
 trans_prob = 0.4
-seed = 1
+seed = 2
 
 def hash(df):
     #return int(hashlib.sha256(hash_pandas_object(df, index=True).values).hexdigest(), 16)
@@ -35,11 +39,14 @@ def random(G):
 
     for (n1,n2) in el:
         # n1 --> n2
-        if src[n1] and (not src[n2]) and (n2 not in infected) and (np.random.rand() < trans_prob):
+        r = np.random.rand()
+        if src[n1] and (not src[n2]) and (n2 not in infected) and (r < trans_prob):
             tx.append((n1, n2))
             infected.append(n2)
+
         # n2 --> n1
-        if src[n2] and (not src[n1]) and (n1 not in infected) and (np.random.rand() < trans_prob):
+        r = np.random.rand()
+        if src[n2] and (not src[n1]) and (n1 not in infected) and (r < trans_prob):
             tx.append((n2, n1))
             infected.append(n1)
     return tx
@@ -70,9 +77,10 @@ def combine_hash(G):
     infected = []
     tx = []
     el = list(G.edges())
-    r1 = np.random.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=n)
-    r2 = np.random.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=n)
+    r1 = np.random.randint(low=np.iinfo(np.uint64).min, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=n)
+    r2 = np.random.randint(low=np.iinfo(np.uint64).min, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=n)
     np.random.shuffle(el)
+
     for (n1,n2) in el:
         # n1 --> n2
         r = combine_rands(r1[n1], r2[n2])
@@ -122,22 +130,27 @@ def transmit(G, trans_fn):
 
 # Build the graph
 G = nx.random_graphs.erdos_renyi_graph(n=n, p=edge_prob, seed=seed)
+#G = nx.Graph()
+#G.add_nodes_from([0,1,2,3])
+#G.add_edges_from([(0,1), (1, 2), (2, 3), (3,0)])
 
 # Seed infections
 infected = {i:False for i in range(n)}
 sources = np.random.choice(a=range(n), size=n_sources, replace=False)
+#sources = [0,2] ##
+#sources = [0] ##
 for source in sources:
     infected[source] = True
 nx.set_node_attributes(G, infected, 'infected')
  
 # Do transmissions via each method in parallel
-results = sc.parallelize(transmit, iterkwargs=[{'trans_fn':random}, {'trans_fn':modulo}, {'trans_fn':combine_hash}, {'trans_fn':roulette}], kwargs={'G':G}, die=True, serial=False)
+results = sc.parallelize(transmit, iterkwargs=[{'trans_fn':random}, {'trans_fn':combine_hash}], kwargs={'G':G}, die=True, serial=False) # {'trans_fn':modulo}, {'trans_fn':roulette}
 tx, cnt = zip(*results)
 
 df = pd.concat(cnt, axis=1) \
     .fillna(0) \
     .astype(int)
-df.columns = ['Random', 'Modulo', 'CombineHash', 'Roulette']
+df.columns = ['Random', 'CombineHash'] # 'Modulo', 'Roulette', 
 
 # Manipulate results
 df.reset_index(inplace=True)

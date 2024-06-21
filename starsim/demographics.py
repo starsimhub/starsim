@@ -259,9 +259,9 @@ class Pregnancy(Demographics):
     def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__()
         self.default_pars(
-            dur_pregnancy = 0.75,   # Duration for pre-natal transmission
-            dur_postpartum = ss.lognorm_ex(0.5, 0.5),   # Duration for post-natal transmission (e.g. via breastfeeding)
-            fertility_rate = 0,     # See make_fertility_prob_function
+            dur_pregnancy = 0.75, # Duration for pre-natal transmission
+            dur_postpartum = ss.lognorm_ex(0.5, 0.5), # Duration for post-natal transmission (e.g. via breastfeeding)
+            fertility_rate = 0, # Can be a number of Pandas DataFrame
             rel_fertility = 1,
             maternal_death_prob = ss.bernoulli(0),
             sex_ratio = ss.bernoulli(0.5), # Ratio of babies born female
@@ -270,6 +270,8 @@ class Pregnancy(Demographics):
             units = 1e-3, # Assumes fertility rates are per 1000. If using percentages, switch this to 1
         )
         self.update_pars(pars, **kwargs)
+
+        self.pars.p_fertility = ss.bernoulli(p=0) # Placeholder, see make_fertility_prob_fn
         
         # Other, e.g. postpartum, on contraception...
         self.add_states(
@@ -290,11 +292,6 @@ class Pregnancy(Demographics):
             metadata,
         )
         self.choose_slots = None # Distribution for choosing slots; set in self.initialize()
-
-        # Process data, which may be provided as a number, dict, dataframe, or series
-        # If it's a number it's left as-is; otherwise it's converted to a dataframe
-        self.fertility_rate_data = self.standardize_fertility_data()
-        self.pars.fertility_rate = ss.bernoulli(self.make_fertility_prob_fn)
 
         # For results tracking
         self.n_pregnancies = 0
@@ -361,6 +358,14 @@ class Pregnancy(Demographics):
 
     def init_pre(self, sim):
         super().init_pre(sim)
+
+        # Process data, which may be provided as a number, dict, dataframe, or series
+        # If it's a number it's left as-is; otherwise it's converted to a dataframe
+        self.fertility_rate_data = self.standardize_fertility_data()
+        #self.pars.p_fertility = ss.bernoulli(p=self.make_fertility_prob_fn)
+        #self.pars.p_fertility.pars['p'] = self.make_fertility_prob_fn
+        self.pars.p_fertility.set(p=self.make_fertility_prob_fn)
+
         low = sim.pars.n_agents + 1
         high = int(sim.pars.slot_scale*sim.pars.n_agents)
         self.choose_slots = ss.randint(low=low, high=high, sim=sim, module=self)
@@ -439,7 +444,7 @@ class Pregnancy(Demographics):
         # People eligible to become pregnant. We don't remove pregnant people here, these
         # are instead handled in the fertility_dist logic as the rates need to be adjusted
         eligible_uids = self.sim.people.female.uids
-        conceive_uids = self.pars.fertility_rate.filter(eligible_uids)
+        conceive_uids = self.pars.p_fertility.filter(eligible_uids)
 
         # Validation
         if np.any(self.pregnant[conceive_uids]):
