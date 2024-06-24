@@ -9,6 +9,8 @@ import networkx as nx
 from operator import itemgetter
 import pandas as pd
 
+ss_int_ = ss.dtypes.int
+
 __all__ = ['Disease', 'Infection', 'InfectionLog']
 
 
@@ -251,9 +253,10 @@ class Infection(Disease):
         """
         new_cases = []
         sources = []
+        networks = []
         betamap = self._check_betas()
 
-        for nkey,net in self.sim.networks.items():
+        for i, (nkey,net) in enumerate(self.sim.networks.items()):
             if not len(net):
                 break
 
@@ -284,19 +287,22 @@ class Infection(Disease):
                 new_cases_bool = rvs < p_transmit
                 new_cases.append(trg[new_cases_bool])
                 sources.append(src[new_cases_bool])
+                networks.append(np.full(np.count_nonzero(new_cases_bool), dtype=ss_int_, fill_value=i))
                 
         # Tidy up
         if len(new_cases) and len(sources):
             new_cases = ss.uids.cat(new_cases)
             sources = ss.uids.cat(sources)
+            networks = np.concatenate(networks)
         else:
             new_cases = np.empty(0, dtype=int)
             sources = np.empty(0, dtype=int)
-            
+            networks = np.empty(0, dtype=int)
+
         if len(new_cases):
             self._set_cases(new_cases, sources)
             
-        return new_cases, sources
+        return new_cases, sources, networks
 
     def _set_cases(self, target_uids, source_uids=None):
         sim = self.sim

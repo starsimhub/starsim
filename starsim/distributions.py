@@ -772,6 +772,9 @@ class bernoulli(Dist):
         """ Return UIDs that correspond to True, or optionally return both True and False """
         if uids is None:
             uids = self.sim.people.auids # All active UIDs
+        elif isinstance(uids, ss.BoolArr):
+            uids = uids.uids
+
         bools = self.rvs(uids)
         if both:
             return uids[bools], uids[~bools]
