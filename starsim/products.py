@@ -5,7 +5,7 @@ Define products
 import starsim as ss
 import sciris as sc
 import numpy as np
-
+import pandas as pd
 
 __all__ = ['Product', 'Dx', 'Tx', 'Vx']
 
@@ -59,7 +59,7 @@ class Dx(Product):
         """
 
         # Pre-fill with the default value, which is set to be the last value in the hierarchy
-        results = sc.dataframe({'uids': uids, 'result': self.default_value})
+        results = pd.Series(self.default_value,index=uids)
 
         for disease in self.diseases:
             for state in self.health_states:
@@ -75,16 +75,14 @@ class Dx(Product):
 
                 # Sort people into one of the possible result states and then update their overall results
                 this_result = self.result_dist.rvs(these_uids)
-                row_inds = sc.findinds(results.uids.isin(these_uids))
-                results.loc[row_inds, 'result'] = np.minimum(this_result, results.loc[row_inds, 'result'])
+                results.loc[these_uids] = np.minimum(this_result, results.loc[these_uids])
 
-            if return_format == 'dict':
-                output = {self.hierarchy[i]: results[results.result == i].uids.values for i in range(len(self.hierarchy))}
-            elif return_format == 'array':
-                output = results
-
-        return output
-
+        if return_format == 'dict':
+            return {k: ss.uids(results.index[results == i]) for i, k in enumerate(self.hierarchy)}
+        elif return_format == 'array':
+            return results
+        else:
+            raise Exception('Unknown return format')
 
 class Tx(Product):
     """

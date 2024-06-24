@@ -67,12 +67,12 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         - A callable, with a single argument for the number of values to produce
         - A ``ss.Dist`` instance
         nan (any): the value to use to represent NaN (not a number); also used as the default value if not supplied
-        raw (arr): if supplied, the raw values to use
         label (str): The human-readable name for the state
         coerce (bool): Whether to ensure the the data is one of the supported data types
         skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
+        people (ss.People): Optionally specify an initialized People object, used to construct temporary Arr instances
     """
-    def __init__(self, name, dtype=None, default=None, nan=None, raw=None, label=None, coerce=True, skip_init=False, people=None):
+    def __init__(self, name, dtype=None, default=None, nan=None, label=None, coerce=True, skip_init=False, people=None):
         if coerce:
             dtype = check_dtype(dtype, default)
         
@@ -82,15 +82,25 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         self.default = default
         self.nan = nan
         self.dtype = dtype
-        
-        # Properties that are initialized later
-        self.raw = np.empty(0, dtype=dtype)
         self.people = people # Used solely for accessing people.auids
-        self.len_used = 0
-        self.len_tot = 0
-        self.initialized = skip_init
-        if raw is not None:
-            self.grow(new_uids=uids(np.arange(len(raw))), new_vals=raw)
+
+        if self.people is None:
+            # This Arr is being defined in advance (e.g., as a module state) and we want a bidirectional link
+            # with a People instance for dynamic growth. These properties will be initialized later when the
+            # People/Sim are initialized
+            self.len_used = 0
+            self.len_tot = 0
+            self.initialized = skip_init
+            self.raw = np.empty(0, dtype=dtype)
+        else:
+            # This Arr is a temporary object used for intermediate calculations when we want to index an array
+            # by UID (e.g., inside an update() method). We allow this state to reference an existing, initialized
+            # People object, but do not register it for dynamic growth
+            self.len_used = self.people.uid.len_used
+            self.len_tot = self.people.uid.len_tot
+            self.initialized = True
+            self.raw = np.full(self.len_tot, dtype=self.dtype, fill_value=self.nan)
+
         return
 
     def __repr__(self):
@@ -357,6 +367,8 @@ class uids(np.ndarray):
             return arr.astype(ss_int).view(cls)
         elif isinstance(arr, BoolArr): # Shortcut for arr.uids
             return arr.uids
+        elif isinstance(arr, set):
+            return np.fromiter(arr, dtype=ss_int).view(cls)
         elif arr is None: # Shortcut to return empty
             return np.empty(0, dtype=ss_int).view(cls)
         elif isinstance(arr, int): # Convert e.g. ss.uids(0) to ss.uids([0])
@@ -398,8 +410,8 @@ class uids(np.ndarray):
         return np.setxor1d(self, other, **kw).view(self.__class__)
 
     def to_numpy(self):
-        """ Convert to a standard NumPy array """
-        return np.array(self)
+        """ Return a view as a standard NumPy array """
+        return self.view(np.ndarray)
 
     # Implement collection of operators
     def __and__(self, other): return self.intersect(other)
