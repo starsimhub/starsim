@@ -306,7 +306,7 @@ class Pregnancy(Demographics):
         age = sim.people.age[uids]
 
         frd = self.fertility_rate_data
-        fertility_rate = np.empty(len(sim.people.uid.raw), dtype=ss_float_)
+        fertility_rate = np.zeros(len(sim.people.uid.raw), dtype=ss_float_)
 
         if sc.isnumber(frd):
             fertility_rate[uids] = self.fertility_rate_data
