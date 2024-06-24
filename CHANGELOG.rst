@@ -9,10 +9,11 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 Version 0.5.6 (2024-06-22)
 --------------------------
-- If a `People` object is provided to the ``Arr`` constructor, the arrays will be pre-initialized to index the current UIDs in the ``People`` object. This enables construction of temporary ``Arr`` instances that can be used to perform intermediate calculations (e.g., inside ``Intervention.apply()`` or within a module update step)
-- Deprecated `Arr(raw=...)` argument to simplify initialization, as in practice the ``raw`` variable is not directly set, and this update also introduces a new pathway for initializating the `raw` attribute
-- `ss.uids.to_numpy()` now returns a view rather than a copy
-- `ss.bernoulli.filter()` now supports `ss.BoolArr` as an input, where the filtering will operate on the `uids` returned by `ss.BoolArr.uids`
+- If a ``People` object is provided to the ``Arr`` constructor, the arrays will be pre-initialized to index the current UIDs in the ``People`` object. This enables construction of temporary ``Arr`` instances that can be used to perform intermediate calculations (e.g., inside ``Intervention.apply()`` or within a module update step)
+- Deprecated ``Arr(raw=...)`` argument to simplify initialization, as in practice the ``raw`` variable is not directly set, and this update also introduces a new pathway for initializating the `raw` attribute
+- ``ss.uids.to_numpy()`` now returns a view rather than a copy
+- ``ss.bernoulli.filter()`` now supports ``ss.BoolArr`` as an input, where the filtering will operate on the ``uids`` returned by ``ss.BoolArr.uids``
+- ``ss.uids()`` supports construction from ``set`` objects (via ``np.fromiter()``)
 
 Version 0.5.5 (2024-06-19)
 --------------------------

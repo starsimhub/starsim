@@ -367,6 +367,8 @@ class uids(np.ndarray):
             return arr.astype(ss_int).view(cls)
         elif isinstance(arr, BoolArr): # Shortcut for arr.uids
             return arr.uids
+        elif isinstance(arr, set):
+            return np.fromiter(arr, dtype=ss_int).view(cls)
         elif arr is None: # Shortcut to return empty
             return np.empty(0, dtype=ss_int).view(cls)
         elif isinstance(arr, int): # Convert e.g. ss.uids(0) to ss.uids([0])
