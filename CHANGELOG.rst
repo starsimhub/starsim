@@ -11,7 +11,7 @@ Version 0.5.6 (2024-06-22)
 --------------------------
 - If a `People` object is provided to the ``Arr`` constructor, the arrays will be pre-initialized to index the current UIDs in the ``People`` object. This enables construction of temporary ``Arr`` instances that can be used to perform intermediate calculations (e.g., inside ``Intervention.apply()`` or within a module update step)
 - Deprecated `Arr(raw=...)` argument to simplify initialization, as in practice the ``raw`` variable is not directly set, and this update also introduces a new pathway for initializating the `raw` attribute
-
+- `ss.uids.to_numpy()` now returns a view rather than a copy
 
 Version 0.5.5 (2024-06-19)
 --------------------------

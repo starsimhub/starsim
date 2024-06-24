@@ -408,8 +408,8 @@ class uids(np.ndarray):
         return np.setxor1d(self, other, **kw).view(self.__class__)
 
     def to_numpy(self):
-        """ Convert to a standard NumPy array """
-        return np.array(self)
+        """ Return a view as a standard NumPy array """
+        return self.view(np.ndarray)
 
     # Implement collection of operators
     def __and__(self, other): return self.intersect(other)
