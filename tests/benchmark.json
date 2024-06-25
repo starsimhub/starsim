@@ -1,12 +1,12 @@
 {
   "time": {
-    "initialize": 0.017,
-    "run": 1.105
+    "initialize": 0.015,
+    "run": 1.064
   },
   "parameters": {
     "n_agents": 10000,
     "n_years": 20,
     "dt": 0.2
   },
-  "cpu_performance": 0.8165349792321172
+  "cpu_performance": 0.7701991642663737
 }
