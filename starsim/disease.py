@@ -150,8 +150,8 @@ class Infection(Disease):
         )
 
         # Define random number generators for make_new_cases
-        self.rng_target = ss.randint(low=np.iinfo(np.int64).min, high=np.iinfo(np.int64).max, dtype=np.int64, name='target')
-        self.rng_source = ss.randint(low=np.iinfo(np.int64).min, high=np.iinfo(np.int64).max, dtype=np.int64, name='source')
+        self.rng_target = ss.randint(name='target')
+        self.rng_source = ss.randint(name='source')
         return
     
     def init_pre(self, sim):

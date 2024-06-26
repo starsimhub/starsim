@@ -727,7 +727,7 @@ class randint(Dist):
 
 class randint(Dist):
     """ Randint distribution, integer values on interval [low, high) using numpy.random.Generator.integers """
-    def __init__(self, low=0, high=1, dtype=int, **kwargs):
+    def __init__(self, low=0, high=np.iinfo(ss.dtypes.int).max, dtype=int, **kwargs):
         if ss.options._centralized:
             # randint because we're accessing via numpy.random
             super().__init__(distname='randint', low=low, high=high, dtype=dtype, **kwargs)
