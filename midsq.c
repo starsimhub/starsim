@@ -18,7 +18,7 @@ void printbits(uint64_t n) {
     printf("\n");
 }
 
-uint32_t* mid_sq(uint64_t *a, uint64_t *b, size_t n)
+uint32_t* weyl_mid_sq(uint64_t *a, uint64_t *b, size_t n)
 {
     uint64_t x, y, z;
     uint32_t* ret = (uint32_t*) malloc(n * sizeof(uint32_t));
@@ -56,7 +56,25 @@ uint32_t* mid_sq(uint64_t *a, uint64_t *b, size_t n)
     return ret;
 }
 
-void freeArray(uint64_t *b) {
+uint32_t* midsq(uint64_t *a, uint64_t *b, size_t n)
+{
+    uint64_t x;
+    uint32_t* ret = (uint32_t*) malloc(n * sizeof(uint32_t));
+
+    for (size_t i = 0; i < n; i++)
+    {
+        // Multiply
+        x = a[i] * b[i];
+
+        // Shift
+        x = x>>32;
+
+        ret[i] = x;
+    }
+    return ret;
+}
+
+void freeArray(uint32_t *b) {
     free(b);
 }
 

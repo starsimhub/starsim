@@ -8,6 +8,11 @@ import sciris as sc
 import starsim as ss
 import numba as nb
 import pandas as pd
+import ctypes
+
+# Load the library
+mylib = ctypes.CDLL("libms.so")
+
 
 # %% Helper functions
 
@@ -296,22 +301,11 @@ def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
         
     return df
 
-import ctypes
-# load the library
-mylib = ctypes.CDLL("libms.so")
-
 def combine_rands(x, y):
     if np.isscalar(x):
         x = np.array([x], dtype=np.uint64)
     if np.isscalar(y):
         y = np.array([y], dtype=np.uint64)
-
-    #import glob
-
-    # find the shared library, the path depends on the platform and Python version
-    #import os
-    #print(os.getcwd())
-    #mylib = glob.glob('build/*/midsq*.so')[0]
 
     mylib.midsq.argtypes = [ctypes.POINTER(ctypes.c_uint64), ctypes.POINTER(ctypes.c_uint64),  ctypes.c_size_t]
     
