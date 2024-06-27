@@ -178,8 +178,9 @@ class Deaths(Demographics):
     def standardize_death_data(self):
         """ Standardize/validate death rates - handled in an external file due to shared functionality """
         death_rate = ss.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
-        death_rate = death_rate.unstack(level='age')
-        assert not death_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
+        if isinstance(death_rate, pd.Series) or isinstance(death_rate, pd.DataFrame):
+            death_rate = death_rate.unstack(level='age')
+            assert not death_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
         return death_rate
 
     @staticmethod # Needs to be static since called externally, although it sure looks like a class method!
@@ -346,10 +347,9 @@ class Pregnancy(Demographics):
         Standardize/validate fertility rates
         """
         fertility_rate = ss.standardize_data(data=self.pars.fertility_rate, metadata=self.metadata)
-        fertility_rate = fertility_rate.unstack()
-        max_age = fertility_rate.columns.max()
-        fertility_rate[max_age+1] = 0
-        assert not fertility_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
+        if isinstance(fertility_rate, pd.Series) or isinstance(fertility_rate, pd.DataFrame):
+            fertility_rate = fertility_rate.unstack()
+            assert not fertility_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
         return fertility_rate
 
     def init_pre(self, sim):
