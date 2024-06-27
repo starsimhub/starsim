@@ -67,12 +67,12 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         - A callable, with a single argument for the number of values to produce
         - A ``ss.Dist`` instance
         nan (any): the value to use to represent NaN (not a number); also used as the default value if not supplied
-        raw (arr): if supplied, the raw values to use
         label (str): The human-readable name for the state
         coerce (bool): Whether to ensure the the data is one of the supported data types
         skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
+        people (ss.People): Optionally specify an initialized People object, used to construct temporary Arr instances
     """
-    def __init__(self, name, dtype=None, default=None, nan=None, raw=None, label=None, coerce=True, skip_init=False, people=None):
+    def __init__(self, name, dtype=None, default=None, nan=None, label=None, coerce=True, skip_init=False, people=None):
         if coerce:
             dtype = check_dtype(dtype, default)
         
@@ -82,25 +82,38 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         self.default = default
         self.nan = nan
         self.dtype = dtype
-        
-        # Properties that are initialized later
-        self.raw = np.empty(0, dtype=dtype)
         self.people = people # Used solely for accessing people.auids
-        self.len_used = 0
-        self.len_tot = 0
-        self.initialized = skip_init
-        if raw is not None:
-            self.grow(new_uids=uids(np.arange(len(raw))), new_vals=raw)
+
+        if self.people is None:
+            # This Arr is being defined in advance (e.g., as a module state) and we want a bidirectional link
+            # with a People instance for dynamic growth. These properties will be initialized later when the
+            # People/Sim are initialized
+            self.len_used = 0
+            self.len_tot = 0
+            self.initialized = skip_init
+            self.raw = np.empty(0, dtype=dtype)
+        else:
+            # This Arr is a temporary object used for intermediate calculations when we want to index an array
+            # by UID (e.g., inside an update() method). We allow this state to reference an existing, initialized
+            # People object, but do not register it for dynamic growth
+            self.len_used = self.people.uid.len_used
+            self.len_tot = self.people.uid.len_tot
+            self.initialized = True
+            self.raw = np.full(self.len_tot, dtype=self.dtype, fill_value=self.nan)
+
         return
-    
+
     def __repr__(self):
         arr_str = np.array2string(self.values, max_line_width=200)
-        string = f'<{self.__class__.__name__} "{str(self.name)}", len={len(self)}, {arr_str}>'
+        if self.name:
+            string = f'<{self.__class__.__name__} "{str(self.name)}", len={len(self)}, {arr_str}>'
+        else:
+            string = f'<{self.__class__.__name__}, len={len(self)}, {arr_str}>'
         return string
-    
+
     def __len__(self):
         return len(self.auids)
-    
+
     def _convert_key(self, key):
         """
         Used for getitem and setitem to determine whether the key is indexing
@@ -241,7 +254,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         self.initialized = True
         return
 
-    def asnew(self, arr=None, cls=None):
+    def asnew(self, arr=None, cls=None, name=None):
         """ Duplicate and copy (rather than link) data, optionally resetting the array """
         if cls is None:
             cls = self.__class__
@@ -250,7 +263,8 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         new = object.__new__(cls) # Create a new Arr instance
         new.__dict__ = self.__dict__.copy() # Copy pointers
         new.dtype = arr.dtype # Set to correct dtype
-        new.raw = np.empty_like(new.raw, dtype=new.dtype) # Copy values, breaking reference
+        new.name = name # In most cases, the asnew Arr has different values to the original Arr so the original name no longer makes sense
+        new.raw = np.empty(new.raw.shape, dtype=new.dtype) # Copy values, breaking reference
         new.raw[new.auids] = arr
         return new
 
@@ -353,44 +367,58 @@ class uids(np.ndarray):
             return arr.astype(ss_int).view(cls)
         elif isinstance(arr, BoolArr): # Shortcut for arr.uids
             return arr.uids
+        elif isinstance(arr, set):
+            return np.fromiter(arr, dtype=ss_int).view(cls)
         elif arr is None: # Shortcut to return empty
             return np.empty(0, dtype=ss_int).view(cls)
         elif isinstance(arr, int): # Convert e.g. ss.uids(0) to ss.uids([0])
             arr = [arr]
         return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
-    
+
     def concat(self, other, **kw): # TODO: why can't they both be called cat()?
         """ Equivalent to np.concatenate(), but return correct type """
         return np.concatenate([self, other], **kw).view(self.__class__)
-    
+
     @classmethod
     def cat(cls, *args, **kw):
         """ Equivalent to np.concatenate(), but return correct type """
         arrs = args[0] if len(args) == 1 else args
         return np.concatenate(arrs, **kw).view(cls)
-    
+
     def remove(self, other, **kw):
         """ Remove provided UIDs from current array"""
+        if isinstance(other, BoolArr):
+            other = other.uids
         return np.setdiff1d(self, other, **kw).view(self.__class__)
-    
+
     def intersect(self, other, **kw):
         """ Keep only UIDs that are also present in the other array """
+        if isinstance(other, BoolArr):
+            other = other.uids
         return np.intersect1d(self, other, **kw).view(self.__class__)
 
     def union(self, other, **kw):
         """ Return all UIDs present in both arrays """
+        if isinstance(other, BoolArr):
+            other = other.uids
         return np.union1d(self, other, **kw).view(self.__class__)
 
+    def xor(self, other, **kw):
+        """ Return UIDs present in only one of the arrays """
+        if isinstance(other, BoolArr):
+            other = other.uids
+        return np.setxor1d(self, other, **kw).view(self.__class__)
+
     def to_numpy(self):
-        """ Convert to a standard NumPy array """
-        return np.array(self)
+        """ Return a view as a standard NumPy array """
+        return self.view(np.ndarray)
 
     # Implement collection of operators
     def __and__(self, other): return self.intersect(other)
-    def __or__(self, other):  return self.union(other)
+    def __or__(self, other) : return self.union(other)
     def __sub__(self, other): return self.remove(other)
-    def __xor__(self, other): return np.setxor1d(self, other).view(self.__class__)
-    def __invert__(self):     raise Exception(f"Cannot invert an instance of {self.__class__.__name__}. One possible cause is attempting `~x.uids` - use `x.false()` or `(~x).uids` instead")
+    def __xor__(self, other): return self.xor(other)
+    def __invert__(self)    : raise Exception(f"Cannot invert an instance of {self.__class__.__name__}. One possible cause is attempting `~x.uids` - use `x.false()` or `(~x).uids` instead")
 
 
 class BooleanOperationError(NotImplementedError):

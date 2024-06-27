@@ -28,9 +28,9 @@ class SIR(ss.Infection):
         self.update_pars(pars, **kwargs)
 
         self.add_states(
-            ss.BoolArr('recovered'),
-            ss.FloatArr('ti_recovered'),
-            ss.FloatArr('ti_dead'),
+            ss.BoolArr('recovered', label='Recovered'),
+            ss.FloatArr('ti_recovered', label='Time of recovery'),
+            ss.FloatArr('ti_dead', label='Time of death'),
         )
         return
 
@@ -80,8 +80,8 @@ class SIR(ss.Infection):
     def plot(self):
         """ Default plot for SIR model """
         fig = pl.figure()
-        for rkey in ['susceptible', 'infected', 'recovered']:
-            pl.plot(self.results['n_'+rkey], label=rkey.title())
+        for rkey in ['n_susceptible', 'n_infected', 'n_recovered']:
+            pl.plot(self.results[rkey], label=self.results[rkey].label)
         pl.legend()
         return fig
     
@@ -144,7 +144,7 @@ class SIS(ss.Infection):
     def init_results(self):
         """ Initialize results """
         super().init_results()
-        self.results += ss.Result(self.name, 'rel_sus', self.sim.npts, dtype=float)
+        self.results += ss.Result(self.name, 'rel_sus', self.sim.npts, dtype=float, label='Relative susceptibility')
         return
 
     def update_results(self):
@@ -156,8 +156,8 @@ class SIS(ss.Infection):
     def plot(self):
         """ Default plot for SIS model """
         fig = pl.figure()
-        for rkey in ['susceptible', 'infected']:
-            pl.plot(self.results['n_'+rkey], label=rkey.title())
+        for rkey in ['n_susceptible', 'n_infected']:
+            pl.plot(self.results[rkey], label=self.results[rkey].label)
         pl.legend()
         return fig
 

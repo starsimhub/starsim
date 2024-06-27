@@ -717,14 +717,6 @@ class poisson(Dist):
         return spars
 
 
-'''
-class randint(Dist):
-    """ Random integers, values on the interval [low, high-1] (i.e. "high" is excluded) """
-    def __init__(self, low=0, high=2,  **kwargs):
-        super().__init__(distname='integers', dist=sps.randint, low=low, high=high, **kwargs)
-        return
-'''
-
 class randint(Dist):
     """ Randint distribution, integer values on interval [low, high) using numpy.random.Generator.integers """
     def __init__(self, low=0, high=np.iinfo(ss.dtypes.int).max, dtype=int, **kwargs):
@@ -790,6 +782,9 @@ class bernoulli(Dist):
         """ Return UIDs that correspond to True, or optionally return both True and False """
         if uids is None:
             uids = self.sim.people.auids # All active UIDs
+        elif isinstance(uids, ss.BoolArr):
+            uids = uids.uids
+
         bools = self.rvs(uids)
         if both:
             return uids[bools], uids[~bools]

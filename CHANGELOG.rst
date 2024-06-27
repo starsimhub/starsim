@@ -6,10 +6,39 @@ What's new
 
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
-Version 0.5.4 (2024-06-11)
+
+Version 0.5.7 (2024-06-27)
 --------------------------
 - Implemented a new ``ss.combine_rands()`` function based on a bitwise-XOR, since the previous modulo-based approach could introduce correlations between pairs of agents.
-- *GitHub info*: PR `546 <https://github.com/starsimhub/starsim/pull/546>`_
+- *GitHub info*: PR `546 <https://github.com/starsimhub/starsim/pull/546>`
+
+
+Version 0.5.6 (2024-06-22)
+--------------------------
+- ``ss.Infection.make_new_cases()`` now returns the index of the network associated with each transmission event
+- If a ``People` object is provided to the ``Arr`` constructor, the arrays will be pre-initialized to index the current UIDs in the ``People`` object. This enables construction of temporary ``Arr`` instances that can be used to perform intermediate calculations (e.g., inside ``Intervention.apply()`` or within a module update step)
+- Deprecated ``Arr(raw=...)`` argument to simplify initialization, as in practice the ``raw`` variable is not directly set, and this update also introduces a new pathway for initializating the `raw` attribute
+- ``ss.uids.to_numpy()`` now returns a view rather than a copy
+- ``ss.bernoulli.filter()`` now supports ``ss.BoolArr`` as an input, where the filtering will operate on the ``uids`` returned by ``ss.BoolArr.uids``
+- ``ss.uids()`` supports construction from ``set`` objects (via ``np.fromiter()``)
+- *GitHub info*: PR `565 <https://github.com/starsimhub/starsim/pull/555>`_
+
+
+Version 0.5.5 (2024-06-19)
+--------------------------
+- Added labels to ``Result`` and state (``Arr``) objects.
+- Added Numba decorator to ``find_contacts`` to significantly increase performance.
+- Fixed bug when comparing ``uids`` and ``BoolArr`` objects.
+- *GitHub info*: PR `562 <https://github.com/starsimhub/starsim/pull/555>`_
+
+
+Version 0.5.4 (2024-06-18)
+--------------------------
+- Adjusted ``RandomNet`` to avoid connections to unborn agents and use random rounding for half edges
+- Adds ``get_analyzers`` and ``get_analyzer``
+- Refactor how data is pre-processed for births/pregnancy/death rates, giving about a 10% decrease in run time for the STIsim HIV model
+- ``BoolArr.uids`` is automatically called when doing set operations on ``uids`` with a ``BoolArr``
+- *GitHub info*: PR `555 <https://github.com/starsimhub/starsim/pull/555>`_
 
 
 Version 0.5.3 (2024-06-10)
