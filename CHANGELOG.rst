@@ -7,6 +7,12 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 0.5.7 (2024-06-27)
+--------------------------
+- Implemented a new ``ss.combine_rands()`` function based on a bitwise-XOR, since the previous modulo-based approach could introduce correlations between pairs of agents.
+- *GitHub info*: PR `546 <https://github.com/starsimhub/starsim/pull/546>`
+
+
 Version 0.5.6 (2024-06-22)
 --------------------------
 - ``ss.Infection.make_new_cases()`` now returns the index of the network associated with each transmission event
@@ -15,6 +21,8 @@ Version 0.5.6 (2024-06-22)
 - ``ss.uids.to_numpy()`` now returns a view rather than a copy
 - ``ss.bernoulli.filter()`` now supports ``ss.BoolArr`` as an input, where the filtering will operate on the ``uids`` returned by ``ss.BoolArr.uids``
 - ``ss.uids()`` supports construction from ``set`` objects (via ``np.fromiter()``)
+- *GitHub info*: PR `565 <https://github.com/starsimhub/starsim/pull/555>`_
+
 
 Version 0.5.5 (2024-06-19)
 --------------------------
