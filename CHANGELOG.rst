@@ -7,6 +7,11 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 0.5.7 (2024-06-29)
+--------------------------
+- When binned age data is provided to specify the initial ages for new agents, the ages are now distributed throughout the year/bin rather than new agents being assigned integer ages
+- Initial age data is now accepted as a ``pd.Series`` rather than a ``pd.DataFrame`` where the index corresponds to the age values, thereby avoiding the need for specific dataframe column names to be used to specify the age and value
+
 Version 0.5.6 (2024-06-22)
 --------------------------
 - ``ss.Infection.make_new_cases()`` now returns the index of the network associated with each transmission event
