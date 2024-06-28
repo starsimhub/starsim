@@ -11,7 +11,7 @@ Version 0.5.8 (2024-06-29)
 --------------------------
 - When binned age data is provided to specify the initial ages for new agents, the ages are now distributed throughout the year/bin rather than new agents being assigned integer ages
 - Initial age data is now accepted as a ``pd.Series`` rather than a ``pd.DataFrame`` where the index corresponds to the age values, thereby avoiding the need for specific dataframe column names to be used to specify the age and value
-- *GitHub info*: PR `546 <https://github.com/starsimhub/starsim/pull/546>`
+- *GitHub info*: PR `572 <https://github.com/starsimhub/starsim/pull/572>`
 
 
 Version 0.5.7 (2024-06-27)
