@@ -26,7 +26,7 @@ def make_syph_sim(dt=1, n_agents=500):
 
     # Make people and networks
     ss.set_seed(1)
-    ppl = ss.People(n_agents, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv'))
+    ppl = ss.People(n_agents, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv', index_col='age')['value'])
 
     # Marital
     mf = ss.MFNet(duration=1/24)

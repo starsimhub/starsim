@@ -41,7 +41,7 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, do_plot=False):
     # Make people
     n_agents = 5_000
     nga_pop_1995 = 106819805
-    age_data = pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv')
+    age_data = pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv', index_col='age')['value']
     ppl = ss.People(n_agents, age_data=age_data)
 
     sim = ss.Sim(
