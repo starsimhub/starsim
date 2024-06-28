@@ -7,10 +7,18 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
-Version 0.5.7 (2024-06-29)
+Version 0.5.8 (2024-06-29)
 --------------------------
 - When binned age data is provided to specify the initial ages for new agents, the ages are now distributed throughout the year/bin rather than new agents being assigned integer ages
 - Initial age data is now accepted as a ``pd.Series`` rather than a ``pd.DataFrame`` where the index corresponds to the age values, thereby avoiding the need for specific dataframe column names to be used to specify the age and value
+- *GitHub info*: PR `546 <https://github.com/starsimhub/starsim/pull/546>`
+
+
+Version 0.5.7 (2024-06-27)
+--------------------------
+- Implemented a new ``ss.combine_rands()`` function based on a bitwise-XOR, since the previous modulo-based approach could introduce correlations between pairs of agents.
+- *GitHub info*: PR `546 <https://github.com/starsimhub/starsim/pull/546>`
+
 
 Version 0.5.6 (2024-06-22)
 --------------------------
@@ -20,6 +28,8 @@ Version 0.5.6 (2024-06-22)
 - ``ss.uids.to_numpy()`` now returns a view rather than a copy
 - ``ss.bernoulli.filter()`` now supports ``ss.BoolArr`` as an input, where the filtering will operate on the ``uids`` returned by ``ss.BoolArr.uids``
 - ``ss.uids()`` supports construction from ``set`` objects (via ``np.fromiter()``)
+- *GitHub info*: PR `565 <https://github.com/starsimhub/starsim/pull/555>`_
+
 
 Version 0.5.5 (2024-06-19)
 --------------------------

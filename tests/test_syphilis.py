@@ -4,8 +4,9 @@ Run syphilis
 
 # %% Imports and settings
 import numpy as np
-import starsim as ss
 import pandas as pd
+import sciris as sc
+import starsim as ss
 import matplotlib.pyplot as plt
 
 quick_run = True
@@ -83,7 +84,7 @@ class check_states(ss.Analyzer):
         return
 
 
-def test_syph(dt=1, n_agents=500):
+def test_syph(dt=1, n_agents=500, do_plot=False):
 
     sim_kwargs = make_syph_sim(dt=dt, n_agents=n_agents)
     sim = ss.Sim(analyzers=check_states(), **sim_kwargs)
@@ -92,32 +93,33 @@ def test_syph(dt=1, n_agents=500):
     # Check plots
     burnin = 0
     pi = int(burnin/sim.dt)
-
-    fig, ax = plt.subplots(2, 2)
-    ax = ax.ravel()
-    ax[0].stackplot(
-        sim.yearvec[pi:],
-        # sim.results.syphilis.n_susceptible[pi:],
-        sim.results.syphilis.n_congenital[pi:],
-        sim.results.syphilis.n_exposed[pi:],
-        sim.results.syphilis.n_primary[pi:],
-        sim.results.syphilis.n_secondary[pi:],
-        (sim.results.syphilis.n_latent_temp[pi:]+sim.results.syphilis.n_latent_long[pi:]),
-        sim.results.syphilis.n_tertiary[pi:],
-    )
-    ax[0].legend(['Congenital', 'Exposed', 'Primary', 'Secondary', 'Latent', 'Tertiary'], loc='lower right')
-
-    ax[1].plot(sim.yearvec[pi:], sim.results.syphilis.prevalence[pi:])
-    ax[1].set_title('Syphilis prevalence')
-
-    ax[2].plot(sim.yearvec[pi:], sim.results.n_alive[pi:])
-    ax[2].set_title('Population')
-
-    ax[3].plot(sim.yearvec[pi:], sim.results.syphilis.new_infections[pi:])
-    ax[3].set_title('New infections')
-
-    fig.tight_layout()
-    plt.show()
+    
+    if do_plot:
+        fig, ax = plt.subplots(2, 2)
+        ax = ax.ravel()
+        ax[0].stackplot(
+            sim.yearvec[pi:],
+            # sim.results.syphilis.n_susceptible[pi:],
+            sim.results.syphilis.n_congenital[pi:],
+            sim.results.syphilis.n_exposed[pi:],
+            sim.results.syphilis.n_primary[pi:],
+            sim.results.syphilis.n_secondary[pi:],
+            (sim.results.syphilis.n_latent_temp[pi:]+sim.results.syphilis.n_latent_long[pi:]),
+            sim.results.syphilis.n_tertiary[pi:],
+        )
+        ax[0].legend(['Congenital', 'Exposed', 'Primary', 'Secondary', 'Latent', 'Tertiary'], loc='lower right')
+    
+        ax[1].plot(sim.yearvec[pi:], sim.results.syphilis.prevalence[pi:])
+        ax[1].set_title('Syphilis prevalence')
+    
+        ax[2].plot(sim.yearvec[pi:], sim.results.n_alive[pi:])
+        ax[2].set_title('Population')
+    
+        ax[3].plot(sim.yearvec[pi:], sim.results.syphilis.new_infections[pi:])
+        ax[3].set_title('New infections')
+    
+        fig.tight_layout()
+        plt.show()
 
     return sim
 
@@ -171,10 +173,14 @@ def test_syph_intvs(dt=1, n_agents=500, do_plot=False):
 
 
 if __name__ == '__main__':
+    T = sc.timer()
+    do_plot = True
 
     dt = [1/12, 1][quick_run]
     n_agents = [20e3, 500][quick_run]
 
-    sim = test_syph(dt=dt, n_agents=n_agents)
+    sim = test_syph(dt=dt, n_agents=n_agents, do_plot=do_plot)
     sim_base, sim_intv = test_syph_intvs(dt=dt, n_agents=n_agents, do_plot=True)
+    
+    T.toc()
 

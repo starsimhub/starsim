@@ -152,8 +152,8 @@ class Infection(Disease):
         )
 
         # Define random number generators for make_new_cases
-        self.rng_target = ss.random(name='target')
-        self.rng_source = ss.random(name='source')
+        self.rng_target = ss.randint(name='target')
+        self.rng_source = ss.randint(name='source')
         return
     
     def init_pre(self, sim):
@@ -277,12 +277,10 @@ class Infection(Disease):
                 beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
                 p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
 
-                # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
+                # Generate a new random number based on the two other random numbers
                 rvs_s = self.rng_source.rvs(src)
                 rvs_t = self.rng_target.rvs(trg)
-                rvs = rvs_s + rvs_t
-                inds = np.where(rvs>1.0)[0]
-                rvs[inds] -= 1
+                rvs = ss.combine_rands(rvs_s, rvs_t)
                 
                 new_cases_bool = rvs < p_transmit
                 new_cases.append(trg[new_cases_bool])

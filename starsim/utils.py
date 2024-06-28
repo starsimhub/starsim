@@ -9,12 +9,10 @@ import starsim as ss
 import numba as nb
 import pandas as pd
 
-ss_float_ = ss.dtypes.float
-
 # %% Helper functions
 
 # What functions are externally visible -- note, this gets populated in each section below
-__all__ = ['ndict', 'warn', 'unique', 'find_contacts']
+__all__ = ['ndict', 'warn', 'unique', 'find_contacts', 'combine_rands']
 
 
 class ndict(sc.objdict):
@@ -289,9 +287,9 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
 
     # Add defaults for year and age
     if 'year' not in index:
-        index['year'] = np.full(values.shape, fill_value=default_year, dtype=ss_float_)
+        index['year'] = np.full(values.shape, fill_value=default_year, dtype=ss.dtypes.float)
     if 'age' not in index:
-        index['age'] = np.full(values.shape, fill_value=default_age, dtype=ss_float_)
+        index['age'] = np.full(values.shape, fill_value=default_age, dtype=ss.dtypes.float)
 
     # Reorder the index so that it starts with age first
     index.insert(0, 'age', index.pop('age'))
@@ -318,3 +316,19 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     output = output.sort_index()
 
     return output
+
+
+def combine_rands(a, b):
+    """
+    Efficient algorithm for combining two arrays of random numbers into one
+    
+    Args:
+        a (array): array of random integers between np.iinfo(np.int64).min and np.iinfo(np.int64).max
+        b (array): ditto, same size as a
+        
+    Returns:
+        A new array of random numbers the same size as a and b
+    """
+    c = np.bitwise_xor(a*b, a-b).astype(np.uint64)
+    u = c / np.iinfo(np.uint64).max
+    return u
