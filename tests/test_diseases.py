@@ -118,7 +118,7 @@ def test_sis(do_plot=do_plot):
 
 def test_ncd():
     ppl = ss.People(n_agents)
-    ncd = ss.NCD()
+    ncd = ss.NCD(pars={'log':True})
     sim = ss.Sim(people=ppl, diseases=ncd, copy_inputs=False) # Since using ncd directly below
     sim.run()
 
