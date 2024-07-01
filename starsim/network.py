@@ -358,7 +358,7 @@ class SexualNetwork(DynamicNetwork):
 
 
 # %% Specific instances of networks
-__all__ += ['StaticNet', 'RandomNet', 'NullNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet', 'PrenatalNet', 'PostnatalNet']
+__all__ += ['StaticNet', 'RandomNet', 'ErdosRenyiNet', 'DiskNet', 'NullNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet', 'PrenatalNet', 'PostnatalNet']
 
 
 class StaticNet(Network):
@@ -524,7 +524,7 @@ class RandomNet(DynamicNetwork):
         return
 
 
-class ErdosRenyi(DynamicNetwork):
+class ErdosRenyiNet(DynamicNetwork):
     """ Random connectivity between agents """
 
     def __init__(self, pars=None, key_dict=None, **kwargs):
@@ -535,7 +535,7 @@ class ErdosRenyi(DynamicNetwork):
             dur = 0, # Duration of zero ensures that new random edges are formed on each time step
         )
         self.update_pars(pars, **kwargs)
-        self.randint = ss.randint(low=np.iinfo('int64').min, high=np.iinfo('int64').max, dtype=np.int64, distname='ErdosRenyi') # Used to draw a random number for each agent as part of creating edges
+        self.randint = ss.randint(low=np.iinfo('int64').min, high=np.iinfo('int64').max, dtype=np.int64) # Used to draw a random number for each agent as part of creating edges
 
     def init_post(self):
         self.add_pairs()
@@ -550,21 +550,21 @@ class ErdosRenyi(DynamicNetwork):
         """ Generate contacts """
         people = self.sim.people
         born_uids = (people.alive & (people.age > 0)).uids
-        
+
         # Sample integers
         ints = self.randint.rvs(born_uids)
 
         # All possible edges are upper triangle of complete matrix
-        inds = np.triu_indices(n=len(born_uids))
-
-        i1 = ints[]
-        i2 = ints[]
+        idx1, idx2 = np.triu_indices(n=len(born_uids), k=1)
 
         # Use integers to create random numbers per edge
-        ss.combine_rands(i1, i2)
+        i1 = ints[idx1]
+        i2 = ints[idx2]
+        r = ss.combine_rands(i1, i2)
+        edge = r <= self.pars.p
 
-
-        p1, p2 = self.get_contacts(born.uids, number_of_contacts)
+        p1 = idx1[edge]
+        p2 = idx2[edge]
         beta = np.ones(len(p1), dtype=ss_float_)
 
         if isinstance(self.pars.dur, ss.Dist):
@@ -573,6 +573,89 @@ class ErdosRenyi(DynamicNetwork):
             dur = np.full(len(p1), self.pars.dur)
         
         self.append(p1=p1, p2=p2, beta=beta, dur=dur)
+        return
+
+
+class DiskNet(Network):
+    """
+    Disk graph in which edges are made between agents located within a user-defined radius.
+
+    Interactions take place within a square with edge length of 1. Agents are
+    initialized to have a random position and orientation within this square. On
+    each time step, agents advance v*dt in the direction they are pointed. When
+    encountering a wall, agents are reflected.
+
+    Edged are formed between two agents if they are within r distance of each other.
+    """
+
+    def __init__(self, pars=None, key_dict=None, **kwargs):
+        """ Initialize """
+        super().__init__(key_dict=key_dict)
+        self.default_pars(
+            r = 0.1, # Radius
+            v = 0.05, # Velocity
+        )
+        self.update_pars(pars, **kwargs)
+        self.add_states(
+            ss.FloatArr('px', default=ss.random(), label='X position'),
+            ss.FloatArr('py', default=ss.random(), label='Y position'),
+            ss.FloatArr('theta', default=ss.uniform(high=2*np.pi), label='Heading'),
+        )
+        return
+
+    def init_post(self):
+        self.add_pairs()
+        return
+
+    def update(self):
+
+        # Motion step
+        vdt = self.pars.v * self.sim.dt
+        self.px[:] = self.px + vdt * np.cos(self.theta)
+        self.py[:] = self.py + vdt * np.sin(self.theta)
+
+        # Wall bounce
+
+        # Right edge
+        inds = (self.px > 1).uids
+        self.px[inds] = 2 - self.px[inds]
+        self.theta[inds] = np.pi - self.theta[inds]
+
+        # Left edge
+        inds = (self.px < 0).uids
+        self.px[inds] =  -self.px[inds]
+        self.theta[inds] = np.pi - self.theta[inds]
+
+        # Top edge
+        inds = (self.py > 1).uids
+        self.py[inds] = 2 - self.py[inds]
+        self.theta[inds] = - self.theta[inds]
+
+        # Bottom edge
+        inds = (self.py < 0).uids
+        self.py[inds] = -self.py[inds]
+        self.theta[inds] = - self.theta[inds]
+
+        self.theta[:] = np.mod(self.theta, 2*np.pi)
+
+        self.add_pairs()
+        return
+
+    def add_pairs(self):
+        """ Generate contacts """
+        people = self.sim.people
+        born_uids = (people.alive & (people.age > 0)).uids
+
+        pos = np.vstack([self.px, self.py]).T
+        dist_mat = spsp.distance_matrix(pos, pos)
+
+        p1, p2 = np.triu_indices_from(dist_mat, k=1)
+        edge = dist_mat[p1, p2] < self.pars.r
+
+        self.edges['p1'] = ss.uids(p1[edge])
+        self.edges['p2'] = ss.uids(p2[edge])
+        self.edges['beta'] = np.ones(len(self.p1), dtype=ss_float_)
+
         return
 
 
