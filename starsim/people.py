@@ -119,7 +119,6 @@ class People(sc.prettyobj):
                 age_props = age_data['value'].values
             
             # Convert to a histogram
-            age_props /= age_props.sum()
             dist = ss.histogram(values=age_props, bins=age_bins, name='Age distribution')
         
         return dist
