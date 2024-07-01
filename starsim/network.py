@@ -524,6 +524,58 @@ class RandomNet(DynamicNetwork):
         return
 
 
+class ErdosRenyi(DynamicNetwork):
+    """ Random connectivity between agents """
+
+    def __init__(self, pars=None, key_dict=None, **kwargs):
+        """ Initialize """
+        super().__init__(key_dict=key_dict)
+        self.default_pars(
+            p = 0.1, # Probability of each edge
+            dur = 0, # Duration of zero ensures that new random edges are formed on each time step
+        )
+        self.update_pars(pars, **kwargs)
+        self.randint = ss.randint(low=np.iinfo('int64').min, high=np.iinfo('int64').max, dtype=np.int64, distname='ErdosRenyi') # Used to draw a random number for each agent as part of creating edges
+
+    def init_post(self):
+        self.add_pairs()
+        return
+
+    def update(self):
+        self.end_pairs()
+        self.add_pairs()
+        return
+
+    def add_pairs(self):
+        """ Generate contacts """
+        people = self.sim.people
+        born_uids = (people.alive & (people.age > 0)).uids
+        
+        # Sample integers
+        ints = self.randint.rvs(born_uids)
+
+        # All possible edges are upper triangle of complete matrix
+        inds = np.triu_indices(n=len(born_uids))
+
+        i1 = ints[]
+        i2 = ints[]
+
+        # Use integers to create random numbers per edge
+        ss.combine_rands(i1, i2)
+
+
+        p1, p2 = self.get_contacts(born.uids, number_of_contacts)
+        beta = np.ones(len(p1), dtype=ss_float_)
+
+        if isinstance(self.pars.dur, ss.Dist):
+            dur = self.pars.dur.rvs(p1)
+        else:
+            dur = np.full(len(p1), self.pars.dur)
+        
+        self.append(p1=p1, p2=p2, beta=beta, dur=dur)
+        return
+
+
 class NullNet(Network):
     """
     A convenience class for a network of size n that only has self-connections with a weight of 0.
