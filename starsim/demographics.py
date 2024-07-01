@@ -70,7 +70,9 @@ class Births(Demographics):
     def standardize_birth_data(self):
         """ Standardize/validate birth rates - handled in an external file due to shared functionality """
         birth_rate = ss.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
-        return birth_rate.xs(0,level='age')
+        if isinstance(birth_rate, pd.Series) or isinstance(birth_rate, pd.DataFrame):
+            return birth_rate.xs(0,level='age')
+        return birth_rate
 
     def init_results(self):
         npts = self.sim.npts
@@ -93,10 +95,14 @@ class Births(Demographics):
         sim = self.sim
         p = self.pars
 
-        available_years = p.birth_rate.index
-        year_ind = sc.findnearest(available_years, sim.year)
-        nearest_year = available_years[year_ind]
-        this_birth_rate = p.birth_rate.loc[nearest_year]
+        if isinstance(p.birth_rate, pd.Series) or isinstance(p.birth_rate, pd.DataFrame):
+            available_years = p.birth_rate.index
+            year_ind = sc.findnearest(available_years, sim.year)
+            nearest_year = available_years[year_ind]
+            this_birth_rate = p.birth_rate.loc[nearest_year]
+        else:
+            this_birth_rate = p.birth_rate
+
         scaled_birth_prob = this_birth_rate * p.units * p.rel_birth * sim.pars.dt
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
         n_new = int(np.floor(sim.people.alive.count() * scaled_birth_prob))
