@@ -9,6 +9,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 
 Version 0.5.9 (2024-06-30)
 --------------------------
+- Added a ``ss.histogram()`` distribution, which allows generating new random values from an empirical histogram.
 - When binned age data is provided to specify the initial ages for new agents, the ages are now distributed throughout the year/bin rather than new agents being assigned integer ages
 - Initial age data is now accepted as a ``pd.Series`` rather than a ``pd.DataFrame`` where the index corresponds to the age values, thereby avoiding the need for specific dataframe column names to be used to specify the age and value
 - *GitHub info*: PR `572 <https://github.com/starsimhub/starsim/pull/572>`
