@@ -760,7 +760,7 @@ class randint(Dist):
         low (int): the lower bound of the distribution (default 0)
         high (int): the upper bound of the distribution (default of maximum integer size: 9,223,372,036,854,775,807)
     """
-    def __init__(self, *args, low=None, high=None, dtype=int, **kwargs):
+    def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.int, **kwargs):
         # Handle input arguments
         if len(args):
             if len(args) == 1:
