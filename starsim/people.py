@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
-from scipy.stats import rv_histogram
+from pathlib import Path
 
 __all__ = ['People', 'Person']
 
@@ -102,12 +102,19 @@ class People(sc.prettyobj):
                          assumed to correspond to probability densitiy if the sum of the histogram values is equal to 1, otherwise
                          it will be assumed to correspond to counts.
         
+        Note: age_data can also be provided as a string
+        
         Returns:
             An ``ss.Dist`` instance that returns an age for newly created agents
         """
         if age_data is None:
             dist = ss.uniform(low=0, high=100, name='Age distribution')
         else:
+            # Try loading from file
+            if isinstance(age_data, str) or isinstance(age_data, Path):
+                age_data = pd.read_csv(age_data)
+                
+            # Process
             if isinstance(age_data, np.ndarray): # TODO: accept output of np.histogram()
                 age_bins = age_data[:,0]
                 age_props = age_data[:,1]
