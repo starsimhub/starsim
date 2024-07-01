@@ -80,31 +80,48 @@ class People(sc.prettyobj):
         """
         Return an age distribution based on provided data
 
-        The data should be provided in the form of a Pandas series with age as the index and counts/probability
-        as the value e.g.,
+        The data should be provided in the form of either an Nx2 array, a pandas series
+        with age as the index and counts/probability as the value, or a pandas DataFrame
+        with "age" and "value" as columns. Each of these should look like e.g.:
 
-            age
+            age      value
             0      220.548
             1      206.188
             2      195.792
             3      187.442
 
-        The ages will be interpreted as lower bin edges. An upper bin edge will automatically be added based on the final
-        age + 1. To explicitly control the width of the upper age bin, add an extra entry to the ``age_data`` with a value
-        of 0 and an age value corresponding to the desired upper age bound.
-
-        :param age_data: A pd.Series with an index corresponding to age values, and a value corresponding to histogram counts
+        The ages will be interpreted as lower bin edges. An upper bin edge will 
+        automatically be added based on the final age plus the difference of the 
+        last two bins. To explicitly control the width of the upper age bin, add 
+        an extra entry to the ``age_data`` with a value of 0 and an age value 
+        corresponding to the desired upper age bound.
+        
+        Args:
+            age_data: An array/series/dataframe with an index corresponding to age values, and a value corresponding to histogram counts
                          or relative proportions. A distribution will be estimated based on the histogram. The histogram will be
                          assumed to correspond to probability densitiy if the sum of the histogram values is equal to 1, otherwise
                          it will be assumed to correspond to counts.
-        :return: An ``ss.Dist`` instance that returns an age for newly created agents
+        
+        Returns:
+            An ``ss.Dist`` instance that returns an age for newly created agents
         """
         if age_data is None:
             dist = ss.uniform(low=0, high=100, name='Age distribution')
         else:
-            age_bins = age_data.index
-            age_props = age_data.values
-            dist = ss.Dist(rv_histogram((age_props,np.append(age_bins, age_bins[-1]+1)), density=age_props.sum() == 1), name='Age distribution')
+            if isinstance(age_data, np.ndarray): # TODO: accept output of np.histogram()
+                age_bins = age_data[:,0]
+                age_props = age_data[:,1]
+            elif isinstance(age_data, pd.Series):
+                age_bins = age_data.index
+                age_props = age_data.values
+            elif isinstance(age_data, pd.DataFrame):
+                age_bins = age_data['age'].values
+                age_props = age_data['value'].values
+                return ss.choice(a=age_bins, p=age_props)
+            
+            # Convert to a histogram
+            dist = ss.histogram(age_props, age_bins, name='Age distribution')
+        
         return dist
 
     def link_sim(self, sim):
