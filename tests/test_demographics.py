@@ -12,7 +12,7 @@ import pytest
 
 
 sc.options(interactive=False) # Assume not running interactively
-datadir = ss.root/'tests/test_data'
+datadir = ss.root / 'tests/test_data'
 
 
 def test_nigeria(which='births', dt=1, start=1995, n_years=15, do_plot=False):

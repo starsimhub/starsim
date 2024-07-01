@@ -10,6 +10,7 @@ import starsim as ss
 import matplotlib.pyplot as plt
 
 quick_run = True
+datadir = ss.root / 'tests/test_data'
 
 
 def make_syph_sim(dt=1, n_agents=500):
@@ -19,14 +20,14 @@ def make_syph_sim(dt=1, n_agents=500):
     syph.pars.init_prev = ss.bernoulli(p=0.1)
 
     # Make demographic modules
-    fertility_rates = {'fertility_rate': pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')}
+    fertility_rates = {'fertility_rate': pd.read_csv(datadir/'nigeria_asfr.csv')}
     pregnancy = ss.Pregnancy(pars=fertility_rates)
-    death_rates = {'death_rate': pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv'), 'units': 1}
+    death_rates = {'death_rate': pd.read_csv(datadir/'nigeria_deaths.csv'), 'units': 1}
     death = ss.Deaths(death_rates)
 
     # Make people and networks
     ss.set_seed(1)
-    ppl = ss.People(n_agents, age_data=pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv', index_col='age')['value'])
+    ppl = ss.People(n_agents, age_data=datadir/'nigeria_age.csv')
 
     # Marital
     mf = ss.MFNet(duration=1/24)
