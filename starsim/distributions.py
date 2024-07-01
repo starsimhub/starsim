@@ -942,14 +942,16 @@ class histogram(Dist):
             kw = {'bins':bins} if bins is not None else {} # Hack to not overwrite default bins value
             values, bins = np.histogram(data, **kw)
         else:
+            if values is None:
+                values = [1.0] # Uniform distribution
             values = sc.toarray(values)
             if bins is None:
                 bins = np.arange(len(values)+1)
             bins = sc.toarray(bins)
         if len(bins) == len(values): # Append a final bin, if necessary
             delta = bins[-1] - bins[-2]
-            np.append(bins, bins[-1]+delta)
-        is_density = np.isclose(values.sum(), 1.0) # Check if a density is provided
+            bins = np.append(bins, bins[-1]+delta)
+        is_density = values.sum() == 1.0 # Check if a density is provided
         dist = sps.rv_histogram((values, bins), density=is_density) # Create the SciPy distribution
         super().__init__(dist=dist, distname='histogram', **kwargs)
         self.dynamic_pars = False # Set to false since array arguments don't imply dynamic pars here
