@@ -910,6 +910,7 @@ class histogram(Dist):
     Args:
         values (array): the probability (or count) of each bin
         bins (array): the edges of each bin
+        density (bool): treat the histogram as a density instead of counts; only matters with unequal bin widths, see numpy.histogram and scipy.stats.rv_histogram for more information
         data (array): if supplied, compute the values and bin edges using this data and np.histogram() instead
         
     Note: if the length of bins is equal to the length of values, they will be
@@ -934,7 +935,7 @@ class histogram(Dist):
         h2 = ss.histogram(data=data, strict=False)
         h2.plot_hist(bins=100)
     """
-    def __init__(self, values=None, bins=None, data=None, **kwargs):
+    def __init__(self, values=None, bins=None, density=False, data=None, **kwargs):
         if data is not None:
             if values is not None:
                 errormsg = 'You can supply values or data, but not both'
@@ -951,8 +952,10 @@ class histogram(Dist):
         if len(bins) == len(values): # Append a final bin, if necessary
             delta = bins[-1] - bins[-2]
             bins = np.append(bins, bins[-1]+delta)
-        is_density = values.sum() == 1.0 # Check if a density is provided
-        dist = sps.rv_histogram((values, bins), density=is_density) # Create the SciPy distribution
+        vsum = values.sum()
+        if vsum != 1.0:
+            values /= vsum
+        dist = sps.rv_histogram((values, bins), density=density) # Create the SciPy distribution
         super().__init__(dist=dist, distname='histogram', **kwargs)
         self.dynamic_pars = False # Set to false since array arguments don't imply dynamic pars here
         return

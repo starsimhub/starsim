@@ -117,10 +117,10 @@ class People(sc.prettyobj):
             elif isinstance(age_data, pd.DataFrame):
                 age_bins = age_data['age'].values
                 age_props = age_data['value'].values
-                return ss.choice(a=age_bins, p=age_props)
             
             # Convert to a histogram
-            dist = ss.histogram(age_props, age_bins, name='Age distribution')
+            age_props /= age_props.sum()
+            dist = ss.histogram(values=age_props, bins=age_bins, name='Age distribution')
         
         return dist
 
