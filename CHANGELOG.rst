@@ -7,6 +7,14 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 0.5.8 (2024-06-30)
+--------------------------
+- Revert to making infection logging disabled by default. However, the infection log will now always be created so disease subclasses can override logging behaviour where required (e.g., to capture additional metadata)
+
+**Backwards-compatibility notes**
+
+- Logging has been moved from an argument to ``Disease`` to ``pars``. Existing code such as ``Disease(log=True)`` should be changed to ``Disease(pars={'log':True})``. The 'log' option can be added to the pars passed to any subclass e.g., ``ss.HIV(pars={...,log=True})``.
+
 Version 0.5.7 (2024-06-27)
 --------------------------
 - Implemented a new ``ss.combine_rands()`` function based on a bitwise-XOR, since the previous modulo-based approach could introduce correlations between pairs of agents.

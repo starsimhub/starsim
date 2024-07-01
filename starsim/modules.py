@@ -62,7 +62,7 @@ class Module(sc.quickobj):
         self.requires = sc.mergelists(requires)
         return
     
-    def default_pars(self, inherit=False, **kwargs):
+    def default_pars(self, inherit=True, **kwargs):
         """ Create or merge Pars objects """
         if inherit: # Merge with existing
             self.pars.update(**kwargs, create=True)
