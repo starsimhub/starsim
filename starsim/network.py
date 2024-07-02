@@ -624,8 +624,8 @@ class DiskNet(Network):
 
         # Motion step
         vdt = self.pars.v * self.sim.dt
-        self.x += vdt * np.cos(self.theta)
-        self.y += vdt * np.sin(self.theta)
+        self.x[:] = self.x + vdt * np.cos(self.theta)
+        self.y[:] = self.y + vdt * np.sin(self.theta)
 
         # Wall bounce
 

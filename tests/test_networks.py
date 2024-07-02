@@ -8,7 +8,7 @@ import numpy as np
 import starsim as ss
 import scipy.stats as sps
 
-sc.options(interactive=True) # Assume not running interactively
+sc.options(interactive=False) # Assume not running interactively
 
 small = 100
 medium = 1000
@@ -117,10 +117,10 @@ def test_disk():
 
         cmap = mpl.colormaps['plasma']
         colors = cmap(np.linspace(0, 1, s1.pars.n_agents))
-        ax.scatter(nw1.px, nw1.py, s=50, c=colors)
+        ax.scatter(nw1.x, nw1.y, s=50, c=colors)
         for i in range(s1.pars.n_years):
             ax.plot([0,1,1,0,0], [0,0,1,1,0], 'k-', lw=1)
-            ax.quiver(nw1.px, nw1.py, vdt * np.cos(nw1.theta), vdt * np.sin(nw1.theta), color=colors)
+            ax.quiver(nw1.x, nw1.y, vdt * np.cos(nw1.theta), vdt * np.sin(nw1.theta), color=colors)
             ax.set_aspect('equal', adjustable='box') #ax.set_xlim([0,1]); ax.set_ylim([0,1])
             s1.step()
 
