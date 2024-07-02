@@ -525,7 +525,20 @@ class RandomNet(DynamicNetwork):
 
 
 class ErdosRenyiNet(DynamicNetwork):
-    """ Random connectivity between agents """
+    """
+    In the Erdos-Renyi network, every possible edge has a probability, p, of
+    being created on each time step.
+
+    The degree of each node will have a binomial distribution, considering each
+    of the N-1 possible edges connection this node to the others will be created
+    with probability p.
+
+    Please be careful with the `dur` parameter. When set to 0, new edges will be
+    created on each time step. If positive, edges will persist for `dur` years.
+    Note that the existence of edges from previous time steps will not prevent
+    or otherwise alter the creation of new edges on each time step, edges will
+    accumulate over time.
+    """
 
     def __init__(self, pars=None, key_dict=None, **kwargs):
         """ Initialize """
@@ -549,7 +562,7 @@ class ErdosRenyiNet(DynamicNetwork):
     def add_pairs(self):
         """ Generate contacts """
         people = self.sim.people
-        born_uids = (people.alive & (people.age > 0)).uids
+        born_uids = (people.age > 0).uids
 
         # Sample integers
         ints = self.randint.rvs(born_uids)
@@ -597,8 +610,8 @@ class DiskNet(Network):
         )
         self.update_pars(pars, **kwargs)
         self.add_states(
-            ss.FloatArr('px', default=ss.random(), label='X position'),
-            ss.FloatArr('py', default=ss.random(), label='Y position'),
+            ss.FloatArr('x', default=ss.random(), label='X position'),
+            ss.FloatArr('y', default=ss.random(), label='Y position'),
             ss.FloatArr('theta', default=ss.uniform(high=2*np.pi), label='Heading'),
         )
         return
@@ -611,29 +624,29 @@ class DiskNet(Network):
 
         # Motion step
         vdt = self.pars.v * self.sim.dt
-        self.px[:] = self.px + vdt * np.cos(self.theta)
-        self.py[:] = self.py + vdt * np.sin(self.theta)
+        self.x += vdt * np.cos(self.theta)
+        self.y += vdt * np.sin(self.theta)
 
         # Wall bounce
 
         # Right edge
-        inds = (self.px > 1).uids
-        self.px[inds] = 2 - self.px[inds]
+        inds = (self.x > 1).uids
+        self.x[inds] = 2 - self.x[inds]
         self.theta[inds] = np.pi - self.theta[inds]
 
         # Left edge
-        inds = (self.px < 0).uids
-        self.px[inds] =  -self.px[inds]
+        inds = (self.x < 0).uids
+        self.x[inds] =  -self.x[inds]
         self.theta[inds] = np.pi - self.theta[inds]
 
         # Top edge
-        inds = (self.py > 1).uids
-        self.py[inds] = 2 - self.py[inds]
+        inds = (self.y > 1).uids
+        self.y[inds] = 2 - self.y[inds]
         self.theta[inds] = - self.theta[inds]
 
         # Bottom edge
-        inds = (self.py < 0).uids
-        self.py[inds] = -self.py[inds]
+        inds = (self.y < 0).uids
+        self.y[inds] = -self.y[inds]
         self.theta[inds] = - self.theta[inds]
 
         self.theta[:] = np.mod(self.theta, 2*np.pi)
@@ -644,9 +657,9 @@ class DiskNet(Network):
     def add_pairs(self):
         """ Generate contacts """
         people = self.sim.people
-        born_uids = (people.alive & (people.age > 0)).uids
+        born_uids = (people.age > 0).uids
 
-        pos = np.vstack([self.px, self.py]).T
+        pos = np.column_stack([self.x, self.y])
         dist_mat = spsp.distance_matrix(pos, pos)
 
         p1, p2 = np.triu_indices_from(dist_mat, k=1)
