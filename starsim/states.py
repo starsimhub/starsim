@@ -72,7 +72,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
         people (ss.People): Optionally specify an initialized People object, used to construct temporary Arr instances
     """
-    def __init__(self, name, dtype=None, default=None, nan=None, label=None, coerce=True, skip_init=False, people=None):
+    def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, coerce=True, skip_init=False, people=None):
         if coerce:
             dtype = check_dtype(dtype, default)
         
@@ -279,7 +279,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
 
 class FloatArr(Arr):
     """ Subclass of Arr with defaults for floats """
-    def __init__(self, name, nan=np.nan, **kwargs):
+    def __init__(self, name=None, nan=np.nan, **kwargs):
         super().__init__(name=name, dtype=ss_float, nan=nan, coerce=False, **kwargs)
         return
 
@@ -303,7 +303,7 @@ class FloatArr(Arr):
 
 class BoolArr(Arr):
     """ Subclass of Arr with defaults for booleans """
-    def __init__(self, name, nan=False, **kwargs): # No good NaN equivalent for bool arrays
+    def __init__(self, name=None, nan=False, **kwargs): # No good NaN equivalent for bool arrays
         super().__init__(name=name, dtype=ss_bool, nan=nan, coerce=False, **kwargs)
         return
     
@@ -335,7 +335,7 @@ class BoolArr(Arr):
     
 class IndexArr(Arr):
     """ A special class of IndexArr used for UIDs and RNG IDs """
-    def __init__(self, name, label=None):
+    def __init__(self, name=None, label=None):
         super().__init__(name=name, dtype=ss_int, default=None, nan=-1, label=label, coerce=False, skip_init=True)
         self.raw = uids(self.raw)
         return
