@@ -159,12 +159,27 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     def __or__(self, other):  raise BooleanOperationError(self)
     def __xor__(self, other): raise BooleanOperationError(self)
     def __invert__(self):     raise BooleanOperationError(self)
-    
-    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
-        """ For almost everything else, behave like a normal NumPy array on Arr.values """
-        inputs = [x.values if isinstance(x, Arr) else x for x in inputs]
-        return getattr(ufunc, method)(*inputs, **kwargs)
-    
+
+    def __array_ufunc__(self, *args, **kwargs):
+        if args[1] != '__call__':
+            # This is a catch-all for ufuncs that are not being applied with '__call__' (e.g., operations returning a scalar like 'np.sum()' use reduce instead)
+            args = [(x if x is not self else self.values) for x in args]
+            kwargs = {k: v if v is not self else self.values for k, v in kwargs.items()}
+            return self.values.__array_ufunc__(*args, **kwargs)
+        else:
+            args = [(x if x is not self else self.values) for x in args] # Convert any operands that are Arr instances to their value arrays
+            if 'out' in kwargs and kwargs['out'][0] is self:
+                # In-place operations like += applied to the entire Arr instance
+                # use this branch. Therefore, we perform our computation on a new
+                # array with the same size as self.values, and then write it back
+                # to the appropriate entries in `self.raw` via `self[:]`
+                del kwargs['out']
+                self[:] = args[0](*args[2:], **kwargs)
+                return self
+            else:
+                # Otherwise, just run the ufunc
+                return args[0](*args[2:], **kwargs)
+
     @property
     def auids(self):
         """ Link to the indices of active agents -- sim.people.auids """
