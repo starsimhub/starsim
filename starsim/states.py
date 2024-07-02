@@ -171,7 +171,8 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         try:
             return self.people.auids
         except:
-            ss.warn('Trying to access non-initialized States object')
+            if not self.initialized:
+                ss.warn('Trying to access non-initialized States object')
             return uids(np.arange(len(self.raw)))
     
     def count(self):
