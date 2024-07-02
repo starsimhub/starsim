@@ -145,7 +145,7 @@ def test_disk():
 
     # Simulate SIR on a DiskNet
     nw2 = ss.DiskNet(r=0.15, v=0.05)
-    s2 = ss.Sim(n_agents=small, networks=nw2, diseases=[ss.SIR()], copy_inputs=False).initialize() # This initializes the network
+    s2 = ss.Sim(n_agents=small, networks=nw2, diseases='sir').initialize() # This initializes the network
     s2.run()
 
     if sc.options.interactive:
