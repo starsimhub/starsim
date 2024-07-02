@@ -219,8 +219,6 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
             new_uids: Numpy array of UIDs for the new agents being added
             new_vals: If provided, assign these state values to the new UIDs
         """
-        if new_uids is None and new_vals is not None: # Used as a shortcut to avoid needing to supply twice
-            new_uids = new_vals
         orig_len = self.len_used
         n_new = len(new_uids)
         self.len_used += n_new  # Increase the count of the number of agents by `n` (the requested number of new agents)
@@ -348,6 +346,8 @@ class IndexArr(Arr):
     
     def grow(self, new_uids=None, new_vals=None):
         """ Change the size of the array """
+        if new_uids is None and new_vals is not None: # Used as a shortcut to avoid needing to supply twice
+            new_uids = new_vals
         super().grow(new_uids=new_uids, new_vals=new_vals)
         self.raw = uids(self.raw)
         return
