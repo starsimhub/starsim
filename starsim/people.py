@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+from pathlib import Path
 
 __all__ = ['People', 'Person']
 
@@ -76,16 +77,58 @@ class People(sc.prettyobj):
 
     @staticmethod
     def get_age_dist(age_data):
-        """ Return an age distribution based on provided data """
+        """
+        Return an age distribution based on provided data
+
+        The data should be provided in the form of either an Nx2 array, a pandas series
+        with age as the index and counts/probability as the value, or a pandas DataFrame
+        with "age" and "value" as columns. Each of these should look like e.g.:
+
+            age      value
+            0      220.548
+            1      206.188
+            2      195.792
+            3      187.442
+
+        The ages will be interpreted as lower bin edges. An upper bin edge will 
+        automatically be added based on the final age plus the difference of the 
+        last two bins. To explicitly control the width of the upper age bin, add 
+        an extra entry to the ``age_data`` with a value of 0 and an age value 
+        corresponding to the desired upper age bound.
+        
+        Args:
+            age_data: An array/series/dataframe with an index corresponding to age values, and a value corresponding to histogram counts
+                         or relative proportions. A distribution will be estimated based on the histogram. The histogram will be
+                         assumed to correspond to probability densitiy if the sum of the histogram values is equal to 1, otherwise
+                         it will be assumed to correspond to counts.
+        
+        Note: age_data can also be provided as a string
+        
+        Returns:
+            An ``ss.Dist`` instance that returns an age for newly created agents
+        """
         if age_data is None:
             dist = ss.uniform(low=0, high=100, name='Age distribution')
-            return dist
-
-        if sc.checktype(age_data, pd.DataFrame):
-            age_bins = age_data['age'].values
-            age_props = age_data['value'].values
-            age_props = age_props / age_props.sum()
-            return ss.choice(a=age_bins, p=age_props)
+        else:
+            # Try loading from file
+            if isinstance(age_data, str) or isinstance(age_data, Path):
+                age_data = pd.read_csv(age_data)
+                
+            # Process
+            if isinstance(age_data, np.ndarray): # TODO: accept output of np.histogram()
+                age_bins = age_data[:,0]
+                age_props = age_data[:,1]
+            elif isinstance(age_data, pd.Series):
+                age_bins = age_data.index
+                age_props = age_data.values
+            elif isinstance(age_data, pd.DataFrame):
+                age_bins = age_data['age'].values
+                age_props = age_data['value'].values
+            
+            # Convert to a histogram
+            dist = ss.histogram(values=age_props, bins=age_bins, name='Age distribution')
+        
+        return dist
 
     def link_sim(self, sim):
         """ Initialization """

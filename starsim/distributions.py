@@ -594,12 +594,13 @@ class Dist:
 
 # Add common distributions so they can be imported directly; assigned to a variable since used in help messages
 dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
-             'poisson', 'weibull', 'constant', 'randint', 'bernoulli', 'choice']
+             'poisson', 'weibull', 'constant', 'randint', 'bernoulli', 'choice',
+             'histogram']
 __all__ += dist_list
 
 
 class random(Dist):
-    """ Random distribution, values on interval (0,1) """
+    """ Random distribution, with values on the interval (0, 1) """
     def __init__(self, **kwargs):
         super().__init__(distname='random', **kwargs)
         return
@@ -609,7 +610,13 @@ class random(Dist):
 
 
 class uniform(Dist):
-    """ Uniform distribution, values on interval (low, high) """
+    """
+    Uniform distribution, values on interval (low, high)
+    
+    Args:
+        low (float): the lower bound of the distribution (default 0.0)
+        high (float): the upper bound of the distribution (default 1.0)
+    """
     def __init__(self, low=0.0, high=1.0, **kwargs):
         super().__init__(distname='uniform', low=low, high=high, **kwargs)
         return
@@ -621,7 +628,14 @@ class uniform(Dist):
 
 
 class normal(Dist):
-    """ Normal distribution, with mean=loc and stdev=scale """
+    """
+    Normal distribution
+    
+    Args:
+        loc (float): the mean of the distribution (default 0.0)
+        scale (float) the standard deviation of the distribution (default 1.0)
+    
+    """
     def __init__(self, loc=0.0, scale=1.0, **kwargs):
         super().__init__(distname='normal', dist=sps.norm, loc=loc, scale=scale, **kwargs)
         return
@@ -635,9 +649,13 @@ class lognorm_im(Dist):
     Note: the "loc" parameter here does *not* correspond to the mean of the resulting
     random variates!
     
+    Args:
+        mean (float): the mean of the underlying normal distribution (not this distribution) (default 0.0)
+        sigma (float): the standard deviation of the underlying normal distribution (not this distribution) (default 1.0)
+    
     **Example**::
         
-        ss.lognorm_im(mean=2, sigma=1).rvs(1000).mean() # Should be roughly 10
+        ss.lognorm_im(mean=2, sigma=1, strict=False).rvs(1000).mean() # Should be roughly 10
     """
     def __init__(self, mean=0.0, sigma=1.0, **kwargs):
         super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
@@ -657,11 +675,17 @@ class lognorm_im(Dist):
 class lognorm_ex(Dist):
     """
     Lognormal distribution, parameterized in terms of the "explicit" (lognormal)
-    distribution, with mean=mean and stdev=stdev (see lognorm_im for comparison).
+    distribution, with mean=mean and stdev=stdev for this distribution (see lognorm_im for comparison).
+    Note that a mean ≤ 0.0 is impossible, since this is the parameter of the distribution
+    after the log transform.
+    
+    Args:
+        mean (float): the mean of this distribution (not the underlying distribution) (default 1.0)
+        stdev (float): the standard deviation of this distribution (not the underlying distribution) (default 1.0)
     
     **Example**::
         
-        ss.lognorm_ex(mean=2, stdev=1).rvs(1000).mean() # Should be close to 2
+        ss.lognorm_ex(mean=2, stdev=1, strict=False).rvs(1000).mean() # Should be close to 2
     """
     def __init__(self, mean=1.0, stdev=1.0, **kwargs):
         super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, stdev=stdev, **kwargs)
@@ -698,14 +722,25 @@ class lognorm_ex(Dist):
     
 
 class expon(Dist):
-    """ Exponential distribution """
+    """
+    Exponential distribution
+    
+    Args:
+        scale (float): the scale of the distribution (default 1.0)
+    
+    """
     def __init__(self, scale=1.0, **kwargs):
         super().__init__(distname='exponential', dist=sps.expon, scale=scale, **kwargs)
         return
 
 
 class poisson(Dist):
-    """ Exponential distribution """
+    """
+    Poisson distribution
+    
+    Args:
+        lam (float): the scale of the distribution (default 1.0)
+    """
     def __init__(self, lam=1.0, **kwargs):
         super().__init__(distname='poisson', dist=sps.poisson, lam=lam, **kwargs)
         return
@@ -718,13 +753,31 @@ class poisson(Dist):
 
 
 class randint(Dist):
-    """ Randint distribution, integer values on interval [low, high) using numpy.random.Generator.integers """
-    def __init__(self, low=0, high=np.iinfo(ss.dtypes.int).max, dtype=int, **kwargs):
-        if ss.options._centralized:
-            # randint because we're accessing via numpy.random
+    """
+    Random integer distribution, on the interval [low, high)
+    
+    Args:
+        low (int): the lower bound of the distribution (default 0)
+        high (int): the upper bound of the distribution (default of maximum integer size: 9,223,372,036,854,775,807)
+    """
+    def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.int, **kwargs):
+        # Handle input arguments
+        if len(args):
+            if len(args) == 1:
+                high = args[0]
+            elif len(args) == 2:
+                low,high = args
+            else:
+                errormsg = f'ss.randint() takes one or two arguments, not {len(args)}'
+                raise ValueError(errormsg)
+        if low is None:
+            low = 0
+        if high is None:
+            high = np.iinfo(ss.dtypes.int).max
+            
+        if ss.options._centralized: # randint because we're accessing via numpy.random
             super().__init__(distname='randint', low=low, high=high, dtype=dtype, **kwargs)
-        else:
-            # integers instead of randint because interfacing a numpy.random.Generator
+        else: # integers instead of randint because interfacing a numpy.random.Generator
             super().__init__(distname='integers', low=low, high=high, dtype=dtype, **kwargs)
         return
     
@@ -734,9 +787,17 @@ class randint(Dist):
         rvs = rvs.astype(self.pars['dtype'])
         return rvs
 
+
 class weibull(Dist):
-    """ Weibull distribution -- NB, uses SciPy rather than NumPy """
-    def __init__(self, c=1, loc=0, scale=1,  **kwargs):
+    """
+    Weibull distribution (specifically, scipy.stats.weibull_min)
+    
+    Args:
+        c (float): the shape parameter, sometimes called k (default 1.0)
+        loc (float): the location parameter, which shifts the position of the distribution (default 0.0)
+        scale (float): the scale parameter, sometimes called λ (default 1.0)
+    """
+    def __init__(self, c=1.0, loc=0.0, scale=1.0, **kwargs):
         super().__init__(distname='weibull', dist=sps.weibull_min, c=c, loc=loc, scale=scale, **kwargs)
         return
     
@@ -747,8 +808,13 @@ class weibull(Dist):
 
 
 class constant(Dist):
-    """ Constant (delta) distribution: equivalent to np.full() """
-    def __init__(self, v=0, **kwargs):
+    """
+    Constant (delta) distribution: equivalent to np.full()
+    
+    Args:
+        v (float): the value to return
+    """
+    def __init__(self, v=0.0, **kwargs):
         super().__init__(distname='const', v=v, **kwargs)
         return
     
@@ -765,6 +831,9 @@ class bernoulli(Dist):
     
     Unlike other distributions, Bernoulli distributions have a filter() method,
     which returns elements of the array that return True.
+    
+    Args:
+        p (float): the probability of returning True (default 0.5)
     """
     def __init__(self, p=0.5, **kwargs):
         super().__init__(distname='bernoulli', p=p, **kwargs)
@@ -798,15 +867,22 @@ class bernoulli(Dist):
 
 class choice(Dist):
     """
-    Random choice between discrete options
+    Random choice between discrete options (note: dynamic parameters not supported)
+    
+    Args:
+        a (int or array): the number of choices, or the choices themselves (default 2)
+        p (array): if supplied, the probability of each choice (default, 1/a for a choices)
     
     **Examples**::
         
         # Simulate 10 die rolls
-        ss.choice(6)(10) + 1 
+        ss.choice(6, strict=False)(10) + 1 
         
         # Choose between specified options each with a specified probability (must sum to 1)
-        ss.choice(a=[30, 70], p=[0.3, 0.7])(10)
+        ss.choice(a=[30, 70], p=[0.3, 0.7], strict=False)(10)
+    
+    Note: although Bernoulli trials can be generated using a=2, it is much faster
+    to use ss.bernoulli() instead.
     """
     def __init__(self, a=2, p=None, **kwargs):
         super().__init__(distname='choice', a=a, p=p, **kwargs)
@@ -824,12 +900,73 @@ class choice(Dist):
         return rvs
 
 
+class histogram(Dist):
+    """
+    Sample from a histogram with defined bins
+    
+    Note: unlike other distributions, the parameters of this distribution can't
+    be modified after creation.
+    
+    Args:
+        values (array): the probability (or count) of each bin
+        bins (array): the edges of each bin
+        density (bool): treat the histogram as a density instead of counts; only matters with unequal bin widths, see numpy.histogram and scipy.stats.rv_histogram for more information
+        data (array): if supplied, compute the values and bin edges using this data and np.histogram() instead
+        
+    Note: if the length of bins is equal to the length of values, they will be
+    interpreted as left bin edges, and one additional right-bin edge will be added
+    based on the difference between the last two bins (e.g. if the last two bins are
+    40 and 50, the final right edge will be added at 60). If no bins are supplied,
+    then they will be created as integers matching the length of the values.
+    
+    The values can be supplied in either normalized (sum to 1) or un-normalized
+    format.
+    
+    **Examples**::
+        
+        # Sample from an age distribution
+        age_bins = [0,    10,  20,  40,  65, 100]
+        age_vals = [0.1, 0.1, 0.3, 0.3, 0.2]
+        h1 = ss.histogram(values=age_vals, bins=age_bins, strict=False)
+        h1.plot_hist()
+        
+        # Create a histogram from data
+        data = np.random.randn(10_000)*2+5
+        h2 = ss.histogram(data=data, strict=False)
+        h2.plot_hist(bins=100)
+    """
+    def __init__(self, values=None, bins=None, density=False, data=None, **kwargs):
+        if data is not None:
+            if values is not None:
+                errormsg = 'You can supply values or data, but not both'
+                raise ValueError(errormsg)
+            kw = {'bins':bins} if bins is not None else {} # Hack to not overwrite default bins value
+            values, bins = np.histogram(data, **kw)
+        else:
+            if values is None:
+                values = [1.0] # Uniform distribution
+            values = sc.toarray(values)
+            if bins is None:
+                bins = np.arange(len(values)+1)
+            bins = sc.toarray(bins)
+        if len(bins) == len(values): # Append a final bin, if necessary
+            delta = bins[-1] - bins[-2]
+            bins = np.append(bins, bins[-1]+delta)
+        vsum = values.sum()
+        if vsum != 1.0:
+            values /= vsum
+        dist = sps.rv_histogram((values, bins), density=density) # Create the SciPy distribution
+        super().__init__(dist=dist, distname='histogram', **kwargs)
+        self.dynamic_pars = False # Set to false since array arguments don't imply dynamic pars here
+        return
+        
+
 #%% Dist exceptions
 
 class DistNotInitializedError(RuntimeError):
     """ Raised when Dist object is called when not initialized. """
     def __init__(self, dist):
-        msg = f'{dist} has not been initialized; please call dist.initialize()'
+        msg = f'{dist} has not been initialized; please set strict=False when creating the distribution, or call dist.initialize()'
         super().__init__(msg)
         return
 

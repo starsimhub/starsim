@@ -7,6 +7,20 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 0.5.9 (2024-06-30)
+--------------------------
+- Added a ``ss.histogram()`` distribution, which allows generating new random values from an empirical histogram.
+- When binned age data is provided to specify the initial ages for new agents, the ages are now distributed throughout the year/bin rather than new agents being assigned integer ages
+- Initial age data is now accepted as a ``pd.Series`` rather than a ``pd.DataFrame`` where the index corresponds to the age values, thereby avoiding the need for specific dataframe column names to be used to specify the age and value
+- *GitHub info*: PR `572 <https://github.com/starsimhub/starsim/pull/572>`
+
+
+Version 0.5.8 (2024-06-30)
+--------------------------
+- Revert to making infection logging disabled by default. However, the infection log will now always be created so disease subclasses can override logging behaviour where required (e.g., to capture additional metadata)
+- **Backwards-compatibility notes:** Logging has been moved from an argument to ``Disease`` to ``pars``. Existing code such as ``Disease(log=True)`` should be changed to ``Disease(pars={'log':True})``. The 'log' option can be added to the pars passed to any subclass e.g., ``ss.HIV(pars={...,log=True})``.
+- *GitHub info*: PR `573 <https://github.com/starsimhub/starsim/pull/573>`
+
 Version 0.5.7 (2024-06-27)
 --------------------------
 - Implemented a new ``ss.combine_rands()`` function based on a bitwise-XOR, since the previous modulo-based approach could introduce correlations between pairs of agents.
