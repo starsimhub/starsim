@@ -7,6 +7,12 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 0.5.10 (2024-07-03)
+---------------------------
+- Adds two new common-random-number-safe networks. The first is an Erdős-Rényi network that is similar to ``RandomNet`` but parameterized differently. The second is a 2D spatial network with connectivity between agents within a given radius; these agents can also optionally move.
+- *GitHub info*: PR `575 <https://github.com/starsimhub/starsim/pull/575>`
+
+
 Version 0.5.9 (2024-06-30)
 --------------------------
 - Added a ``ss.histogram()`` distribution, which allows generating new random values from an empirical histogram.
