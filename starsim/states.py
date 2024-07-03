@@ -120,7 +120,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         the raw array (``raw``) or the active agents (``values``), and to convert
         the key to array indices if needed.
         """
-        if isinstance(key, (uids, int)):
+        if isinstance(key, (uids, int, ss_int)):
             return key
         elif isinstance(key, (BoolArr, IndexArr)):
             return key.uids
