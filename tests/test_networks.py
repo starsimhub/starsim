@@ -8,7 +8,7 @@ import numpy as np
 import starsim as ss
 import scipy.stats as sps
 
-sc.options(interactive=True) # Assume not running interactively
+sc.options(interactive=False) # Assume not running interactively
 
 small = 100
 medium = 1000
@@ -65,16 +65,35 @@ def test_random():
 def test_erdosrenyi():
     sc.heading('Testing Erdos-Renyi network')
 
-    def test_ER(n, p, nw):
-        p12 = np.concatenate([nw.edges['p1'], nw.edges['p2']])
-        upper = sps.binom.ppf(n=n, p=p, q=0.999)
-        bins = np.arange(upper+1)
-        counts = np.histogram(p12, bins=np.arange(n+1))[0]
-        f_obs = np.histogram(counts, bins=bins)[0]
-        pp = sps.binom.pmf(bins[:-1], n=n, p=p)
-        f_exp = f_obs.sum()*pp / pp.sum()
-        assert not sps.chisquare(f_obs, f_exp).pvalue < 0.01
-        return
+    def test_ER(n, p, nw, alpha=0.01):
+        """
+        Because each edge exists i.i.d. with probability p, the degree
+        distribution of an Erdos-Renyi network should be Binomally distributed.
+        Here, we test if the observed degree distribution, f_obs, matches the
+        expected distribution, f_exp, which comes from the binomial probabiltiy
+        mass function from the scipy stats library.
+
+        Args:
+            n (int): number of agents
+            p (float): edge probability
+            nw (Network): The network to test
+            alpha (float): The test significance level
+
+        Returns:
+            Chi-Squared p-value and asserts if the statistical test fails,
+            indicating that the observed degree distribution is unlikely to come
+            from the the correct binomial.
+        """
+        p12 = np.concatenate([nw.edges['p1'], nw.edges['p2']]) # p1 and p2 are the UIDs of agents, used here to determine degree
+        upper = sps.binom.ppf(n=n-1, p=p, q=0.999) # Figure out the 99.9th percentile expected upper bound on the degree
+        bins = np.arange(upper+1) # Create bins
+        counts = np.histogram(p12, bins=np.arange(n+1))[0] # Count how many times each agent is connected
+        f_obs = np.histogram(counts, bins=bins)[0] # Form the degree distribution
+        pp = sps.binom.pmf(bins[:-1], n=n, p=p) # Computed the theoretical probability distribution
+        f_exp = f_obs.sum()*pp / pp.sum() # Scale
+        p_value = sps.chisquare(f_obs, f_exp).pvalue # Compute the X2 p-value
+        assert not p_value < alpha
+        return p_value
 
     # Manual creation
     p = 0.1
@@ -117,16 +136,16 @@ def test_disk():
 
         cmap = mpl.colormaps['plasma']
         colors = cmap(np.linspace(0, 1, s1.pars.n_agents))
-        ax.scatter(nw1.px, nw1.py, s=50, c=colors)
+        ax.scatter(nw1.x, nw1.y, s=50, c=colors)
         for i in range(s1.pars.n_years):
             ax.plot([0,1,1,0,0], [0,0,1,1,0], 'k-', lw=1)
-            ax.quiver(nw1.px, nw1.py, vdt * np.cos(nw1.theta), vdt * np.sin(nw1.theta), color=colors)
+            ax.quiver(nw1.x, nw1.y, vdt * np.cos(nw1.theta), vdt * np.sin(nw1.theta), color=colors)
             ax.set_aspect('equal', adjustable='box') #ax.set_xlim([0,1]); ax.set_ylim([0,1])
             s1.step()
 
     # Simulate SIR on a DiskNet
     nw2 = ss.DiskNet(r=0.15, v=0.05)
-    s2 = ss.Sim(n_agents=small, networks=nw2, diseases=[ss.SIR()], copy_inputs=False).initialize() # This initializes the network
+    s2 = ss.Sim(n_agents=small, networks=nw2, diseases='sir').initialize() # This initializes the network
     s2.run()
 
     if sc.options.interactive:
