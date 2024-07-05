@@ -52,12 +52,17 @@ def test_multisim():
     msim = ss.MultiSim(ss.Sim(pars))
     msim.run(n_runs=4)
     
-    msim.reset()
-    msim.shrink()
-    msim.reduce()
+    # Plot individual sims
+    msim.plot()
+    
+    # Reduce and plot mean
     msim.mean()
+    msim.plot()
+    
+    # Reduce and plot median
     msim.median()
-    # msim.plot()
+    msim.plot()
+
     return msim
 
 
@@ -66,7 +71,7 @@ if __name__ == '__main__':
     sc.options(interactive=do_plot)
     T = sc.timer()
 
-    s1, s2 = test_parallel()
+    # s1, s2 = test_parallel()
     msim = test_multisim()
 
     T.toc()

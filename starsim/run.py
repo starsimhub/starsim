@@ -227,6 +227,47 @@ class MultiSim(sc.prettyobj):
             kwargs (dict): passed to reduce()
         """
         return self.reduce(use_mean=False, quantiles=quantiles, **kwargs)
+    
+    def plot(self, key=None, fig=None, fig_kw=None, plot_kw=None, fill_kw=None):
+        """ 
+        Plot all results in the MultiSim object.
+        
+        If the MultiSim object has been reduced (i.e. mean or median), then plot
+        the best value and uncertainty bound. Otherwise, plot individual sims.
+        
+        Args:
+            key (str): the results key to plot (by default, all)
+            fig (Figure): if provided, plot results into an existing figure
+            fig_kw (dict): passed to ``plt.subplots()``
+            plot_kw (dict): passed to ``plt.plot()``
+            fill_kw (dict): passed to ``plt.fill_between()``
+        """
+        # Has not been reduced yet, plot individual sim
+        if self.which is None:
+            fig = None
+            for sim in self.sims:
+                fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw)
+        
+        # Has been reduced, plot with uncertainty bounds
+        else:
+            fig_kw = sc.mergedicts(fig_kw)
+            fill_kw = sc.mergedicts({'alpha':0.2}, fill_kw)
+            plot_kw = sc.mergedicts({'lw':2, 'alpha':0.8}, plot_kw)
+            with sc.options.with_style('simple'):
+                flat = self.results
+                yearvec = flat.pop('yearvec')
+                if key is not None:
+                    flat = {k:v for k,v in flat.items() if k.startswith(key)}
+                fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
+                    
+                # Do the plotting
+                for ax, (key, res) in zip(axs.flatten(), flat.items()):
+                    ax.fill_between(yearvec, res.low, res.high, **fill_kw)
+                    ax.plot(yearvec, res, **plot_kw)
+                    ax.set_title(getattr(res, 'label', key)) 
+                    ax.set_xlabel('Year')
+                
+        return fig
 
 
 def single_run(sim, ind=0, reseed=True, keep_people=False, run_args=None, sim_args=None,

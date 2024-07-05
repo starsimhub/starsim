@@ -82,7 +82,7 @@ class Module(sc.quickobj):
         self.pars.update(matches)
                 
         # Update module attributes
-        metadata = {key:pars.pop(key, None) for key in ['name', 'label', 'requires']}
+        metadata = {key:pars.pop(key, getattr(self, key, None)) for key in ['name', 'label', 'requires']}
         self.set_metadata(**metadata)
         
         # Should be no remaining pars

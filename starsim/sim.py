@@ -678,18 +678,39 @@ class Sim(sc.prettyobj):
 
         return output
     
-    def plot(self, key=None):
-        with sc.options.with_style('fancy'):
+    def plot(self, key=None, fig=None, style='fancy', fig_kw=None, plot_kw=None):
+        """ 
+        Plot all results in the Sim object
+        
+        Args:
+            key (str): the results key to plot (by default, all)
+            fig (Figure): if provided, plot results into an existing figure
+            style (str): the plotting style to use (default "fancy"; other options are "simple", None, or any Matplotlib style)
+            fig_kw (dict): passed to ``plt.subplots()``
+            plot_kw (dict): passed to ``plt.plot()``
+        
+        """
+        fig_kw = sc.mergedicts(fig_kw)
+        plot_kw = sc.mergedicts({'lw':2}, plot_kw)
+        with sc.options.with_style(style):
             flat = self.results.flatten()
             yearvec = flat.pop('yearvec')
             if key is not None:
                 flat = {k:v for k,v in flat.items() if k.startswith(key)}
-            fig, axs = sc.getrowscols(len(flat), make=True)
-            for ax, (k, v) in zip(axs.flatten(), flat.items()):
-                ax.plot(yearvec, v)
-                # get label or use the key
-                ax.set_title(getattr(v, 'label', k))
+            
+            # Get the figure
+            if fig is None:
+                fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
+                axs = axs.flatten()
+            else:
+                axs = fig.axes
+                
+            # Do the plotting
+            for ax, (key, res) in zip(axs, flat.items()):
+                ax.plot(yearvec, res, **plot_kw)
+                ax.set_title(getattr(res, 'label', key)) 
                 ax.set_xlabel('Year')
+                
         return fig
 
 
