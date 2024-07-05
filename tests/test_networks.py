@@ -188,8 +188,6 @@ def test_null():
     sir = ss.SIR(pars=dict(dur_inf=10, beta=0.1))
     sim = ss.Sim(diseases=sir, people=people, networks=network)
     sim.run()
-    if do_plot:
-        sim.plot()
     return sim
 
 

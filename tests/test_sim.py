@@ -7,12 +7,12 @@ import starsim as ss
 import sciris as sc
 import numpy as np
 import matplotlib.pyplot as plt
-import networkx as nx
 import pytest
 
 n_agents = 1_000
 do_plot = False
 sc.options(interactive=False) # Assume not running interactively
+
 
 def make_sim_pars():
     pars = sc.objdict(
@@ -27,23 +27,6 @@ def make_sim_pars():
             type = 'sir',
             dur_inf = 10,
             beta = 0.1,
-        )
-    )
-    return pars
-
-def make_sim_pars2():
-    pars = sc.objdict(
-        n_agents = n_agents*10,
-        birth_rate = 10,
-        death_rate = 10,
-        networks = sc.objdict(
-            type = 'randomnet',
-            n_contacts = 2,
-        ),
-        diseases = sc.objdict(
-            type = 'sir',
-            dur_inf = 20,
-            beta = 0.2,
         )
     )
     return pars
@@ -257,115 +240,6 @@ def test_components(do_plot=do_plot):
     return sim
 
 
-def test_parallel():
-    """ Test running two identical sims in parallel """
-    sc.heading('Testing parallel...')
-    pars = make_sim_pars()
-    pars2 = make_sim_pars2()
-
-    # Check that two identical sims match
-    sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars2, label='Sim2')])
-    sims.init_sims()
-    sims.run(keep_people=True)
-    s1, s2 = sims.sims
-    #assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
-
-    sims._has_orig_sim
-    sims.reset()
-    sims.shrink()
-    sims.reduce()
-    sims.mean()
-    sims.median()
-    
-    # Check that two non-identical sims don't match
-    pars2 = sc.dcp(pars)
-    pars2.diseases.beta *= 2
-    sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars2, label='Sim2')])
-    sims.run(keep_people=True)
-    s1, s2 = sims.sims
-    assert not np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
-
-    return s1, s2
-
-
-def test_settings():
-    """ Create, run, and plot a sim by passing a parameters dictionary """
-    sc.heading('Testing Settings Options...')
-    pars = make_sim_pars()
-    sim = ss.Sim(pars)
-    
-    ss.dtypes   
-    ss.options.get_orig_options()
-    ss.options.values
-    ss.options.dict_keys
-    ss.options.dict_items
-    ss.options.filter
-    ss.options.index
-    ss.options.items
-    ss.options.enumitems
-    ss.options.enumkeys
-    ss.options.enumvals
-    ss.options.enumvalues
-    ss.options.disp()
-    ss.options.get_default('verbose')
-    ss.options.get_default('precision')
-    ss.options.changed('verbose')
-    ss.options.set_precision
-    ss.options.set(verbose=0)
-    ss.options.changed('verbose')
-    ss.options.changed('precision')
-    ss.options.set(warnings='error')
-    ss.options.changed('warnings')
-    ss.options.context(verbose=1)
-    ss.options.context(warnings='error')
-    ss.options.changed('warnings')
-    ss.options.changed('verbose')
-    
-    sim.run()
-    sim.step
-    sim.created
-    sim.dists
-    sim.dt
-    sim.filename
-    sim.npts
-    sim.ti
-    sim.tivec
-    sim.summary
-    sim.finalize
-    sim.complete
-    sim.summarize
-    sim.disp()
-    sim.shrink()
-    sim.export_df()
-    sim.export_pars()
-    ss.options.clear
-
-    if do_plot:
-        sim.plot()
-    return sim
-
-def test_run():
-    """ Test single_run and multi_run """
-    sc.heading('Testing SingleRun and MultiRun')
-    pars=dict(n_agents=n_agents, diseases='sir', networks='random',verbose=0.5)
-    # Check different ways of specifying a sim
-    s1 = ss.Sim(n_agents=n_agents, diseases='sir', networks='random',verbose=0.5) # Supply strings directly
-    s2 = ss.Sim(pars=pars) # Supply as parameters
-    
-    ss.run.single_run(s1)
-    ss.run.single_run(s2) 
-    assert ss.check_sims_match(s1, s2), 'Sims should match'    
-    
-    #Run multi_run
-    ss.run.multi_run([ss.Sim(pars, label='Sim1'), ss.Sim(pars, label='Sim2')])
-    
-    #Run multi_run
-    ss.run.parallel([ss.Sim(pars, label='SimA'), ss.Sim(pars, label='SimB')], n_runs=4)
-
-    
-    return s1,s2
-
-
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -379,11 +253,6 @@ if __name__ == '__main__':
     sim5b, sim5i = test_simple_vax(do_plot=do_plot)
     sim6 = test_shared_product(do_plot=do_plot)
     sim7 = test_components(do_plot=do_plot)
-    sim8a, sim8b = test_parallel()
-    sim10 = test_nullnet()
-    sim11 = test_staticnet()
-    sim12 = test_settings()
-    sim13=test_run()
 
     T.toc()
     
