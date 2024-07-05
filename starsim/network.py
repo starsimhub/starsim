@@ -549,6 +549,7 @@ class ErdosRenyiNet(DynamicNetwork):
         )
         self.update_pars(pars, **kwargs)
         self.randint = ss.randint(low=np.iinfo('int64').min, high=np.iinfo('int64').max, dtype=np.int64) # Used to draw a random number for each agent as part of creating edges
+        return
 
     def init_post(self):
         self.add_pairs()
@@ -649,21 +650,14 @@ class DiskNet(Network):
         self.y[inds] = -self.y[inds]
         self.theta[inds] = - self.theta[inds]
 
-        self.theta[:] = np.mod(self.theta, 2*np.pi)
-
         self.add_pairs()
         return
 
     def add_pairs(self):
         """ Generate contacts """
-        people = self.sim.people
-        born_uids = (people.age > 0).uids
-
-        pos = np.column_stack([self.x, self.y])
-        dist_mat = spsp.distance_matrix(pos, pos)
-
-        p1, p2 = np.triu_indices_from(dist_mat, k=1)
-        edge = dist_mat[p1, p2] < self.pars.r
+        p1, p2 = np.triu_indices(n=len(self.x), k=1)
+        d12_sq = (self.x.raw[p2]-self.x.raw[p1])**2 + (self.y.raw[p2]-self.y.raw[p1])**2
+        edge = d12_sq < self.pars.r**2
 
         self.edges['p1'] = ss.uids(p1[edge])
         self.edges['p2'] = ss.uids(p2[edge])
