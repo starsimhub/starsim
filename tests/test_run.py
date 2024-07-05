@@ -16,17 +16,9 @@ sc.options(interactive=False) # Assume not running interactively
 def make_sim_pars():
     pars = sc.objdict(
         n_agents = n_agents,
-        birth_rate = 20,
-        death_rate = 15,
-        networks = sc.objdict(
-            type = 'randomnet',
-            n_contacts = 4,
-        ),
-        diseases = sc.objdict(
-            type = 'sir',
-            dur_inf = 10,
-            beta = 0.1,
-        )
+        demographics = True,
+        networks = 'random',
+        diseases = 'sir',
     )
     return pars
 
