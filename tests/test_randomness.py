@@ -6,6 +6,7 @@ Test the Dists object from distributions.py
 import numpy as np
 import sciris as sc
 import starsim as ss
+import scipy.stats as sps
 import matplotlib.pyplot as pl
 
 n = 5 # Default number of samples
@@ -285,6 +286,29 @@ def test_independence(do_plot=False, thresh=0.1):
     return sim
     
 
+def test_combine_rands(do_plot=False):
+    n = int(1e6)
+    atol = 1e-3
+    target = 0.5
+    np.random.seed(2)
+    a = np.random.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=n)
+    b = np.random.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=n)
+    c = ss.combine_rands(a, b)
+    if do_plot:
+        pl.figure()
+        for i,k,v in sc.objdict(a=a,b=b,combined=c).enumitems():
+            pl.subplot(3,1,i+1)
+            pl.hist(v)
+            pl.title(k)
+        sc.figlayout()
+        pl.show()
+    
+    mean = c.mean()
+    assert np.isclose(mean, target, atol=atol), f'Expected value to be 0.5±{atol}, not {mean}'
+    ks = sps.kstest(c, sps.uniform(0,1).cdf)
+    assert ks.pvalue > 0.05, f'Distribution does not seem to be uniform, p={ks.pvalue}<0.05'
+    return c
+
 
 # %% Run as a script
 if __name__ == '__main__':
@@ -297,6 +321,7 @@ if __name__ == '__main__':
     o4 = test_order(n)
     o5 = test_worlds(do_plot=do_plot)
     o6 = test_independence(do_plot=do_plot)
+    o7 = test_combine_rands(do_plot=do_plot)
 
     T.toc()
 

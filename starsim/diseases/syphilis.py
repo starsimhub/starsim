@@ -56,28 +56,28 @@ class Syphilis(ss.Infection):
 
         self.add_states(
             # Adult syphilis states
-            ss.BoolArr('exposed'),  # AKA incubating. Free of symptoms, not transmissible
-            ss.BoolArr('primary'),  # Primary chancres
-            ss.BoolArr('secondary'),  # Inclusive of those who may still have primary chancres
-            ss.BoolArr('latent_temp'),  # Relapses to secondary (~1y)
-            ss.BoolArr('latent_long'),  # Can progress to tertiary or remain here
-            ss.BoolArr('tertiary'),  # Includes complications (cardio/neuro/disfigurement)
-            ss.BoolArr('immune'),  # After effective treatment people may acquire temp immunity
-            ss.BoolArr('ever_exposed'),  # Anyone ever exposed - stays true after treatment
-            ss.BoolArr('congenital'),  # Congenital syphilis states
+            ss.BoolArr('exposed', label='Exposed'),  # AKA incubating. Free of symptoms, not transmissible
+            ss.BoolArr('primary', label='Primary'),  # Primary chancres
+            ss.BoolArr('secondary', label="Secondary"),  # Inclusive of those who may still have primary chancres
+            ss.BoolArr('latent_temp', label="Latent temporary"),  # Relapses to secondary (~1y)
+            ss.BoolArr('latent_long', label="Latent long"),  # Can progress to tertiary or remain here
+            ss.BoolArr('tertiary', label="Tertiary"),  # Includes complications (cardio/neuro/disfigurement)
+            ss.BoolArr('immune', label="Immune"),  # After effective treatment people may acquire temp immunity
+            ss.BoolArr('ever_exposed', label="Ever exposed"),  # Anyone ever exposed - stays true after treatment
+            ss.BoolArr('congenital', label="Congenital"),  # Congenital syphilis states
     
             # Timestep of state changes
-            ss.FloatArr('ti_exposed'),
-            ss.FloatArr('ti_primary'),
-            ss.FloatArr('ti_secondary'),
-            ss.FloatArr('ti_latent_temp'),
-            ss.FloatArr('ti_latent_long'),
-            ss.FloatArr('ti_tertiary'),
-            ss.FloatArr('ti_immune'),
-            ss.FloatArr('ti_miscarriage'),
-            ss.FloatArr('ti_nnd'),
-            ss.FloatArr('ti_stillborn'),
-            ss.FloatArr('ti_congenital'),
+            ss.FloatArr('ti_exposed', label='Time of exposure'),
+            ss.FloatArr('ti_primary', label='Time of primary'),
+            ss.FloatArr('ti_secondary', label='Time of secondary'),
+            ss.FloatArr('ti_latent_temp', label='Time of latent_temp'),
+            ss.FloatArr('ti_latent_long', label='Time of latent_long'),
+            ss.FloatArr('ti_tertiary', label='Time of tertiary'),
+            ss.FloatArr('ti_immune', label='Time of immunity'),
+            ss.FloatArr('ti_miscarriage', label='Time of miscarriage'),
+            ss.FloatArr('ti_nnd', label='Time of neonatal death'),
+            ss.FloatArr('ti_stillborn', label='Time of stillborn'),
+            ss.FloatArr('ti_congenital', label='Time of congenital syphilis'),
         )
 
         return
@@ -112,9 +112,9 @@ class Syphilis(ss.Infection):
         super().init_results()
         npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'new_nnds',       npts, dtype=int, scale=True),
-            ss.Result(self.name, 'new_stillborns', npts, dtype=int, scale=True),
-            ss.Result(self.name, 'new_congenital', npts, dtype=int, scale=True),
+            ss.Result(self.name, 'new_nnds',       npts, dtype=int, scale=True, label='New neonatal deaths'),
+            ss.Result(self.name, 'new_stillborns', npts, dtype=int, scale=True, label='New stillborns'),
+            ss.Result(self.name, 'new_congenital', npts, dtype=int, scale=True, label='New congenital syphilis'),
         ]
         return
 
@@ -348,8 +348,8 @@ class syph_screening(ss.routine_screening):
     def init_pre(self, sim):
         super().init_pre(sim)
         self.results += [
-            ss.Result('syphilis', 'n_screened', sim.npts, dtype=int, scale=True),
-            ss.Result('syphilis', 'n_dx', sim.npts, dtype=int, scale=True),
+            ss.Result('syphilis', 'n_screened', sim.npts, dtype=int, scale=True, label='Number screened'),
+            ss.Result('syphilis', 'n_dx', sim.npts, dtype=int, scale=True, label='Number diagnosed'),
         ]
         return
 
@@ -371,7 +371,7 @@ class syph_treatment(ss.treat_num):
 
     def init_pre(self, sim):
         super().init_pre(sim)
-        self.results += ss.Result('syphilis', 'n_tx', sim.npts, dtype=int, scale=True)
+        self.results += ss.Result('syphilis', 'n_tx', sim.npts, dtype=int, scale=True, label='Number treated')
         return
 
     def apply(self, sim):

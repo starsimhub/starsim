@@ -9,16 +9,22 @@ import networkx as nx
 from operator import itemgetter
 import pandas as pd
 
+ss_int_ = ss.dtypes.int
+
 __all__ = ['Disease', 'Infection', 'InfectionLog']
 
 
 class Disease(ss.Module):
     """ Base module class for diseases """
 
-    def __init__(self, log=True, *args, **kwargs):
+    def __init__(self, pars=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.default_pars(
+            log = False,
+        )
+        self.update_pars(pars, **kwargs)
         self.results = ss.Results(self.name)
-        self.log = InfectionLog() if log else None  # See below for definition
+        self.log = InfectionLog()
         return
 
     @property
@@ -49,7 +55,7 @@ class Disease(ss.Module):
         Result for 'n_susceptible'
         """
         for state in self._boolean_states:
-            self.results += ss.Result(self.name, f'n_{state.name}', self.sim.npts, dtype=int, scale=True)
+            self.results += ss.Result(self.name, f'n_{state.name}', self.sim.npts, dtype=int, scale=True, label=state.label)
         return
 
     def update_pre(self):
@@ -95,10 +101,11 @@ class Disease(ss.Module):
 
         This function assigns state values upon infection or acquisition of
         the disease. It would normally be called somewhere towards the end of
-        `Disease.make_new_cases()`. Infections will automatically be added to
-        the log as part of this operation.
+        `Disease.make_new_cases()`. Infections will optionally be added to
+        the log as part of this operation if logging is enabled (in the
+        `Disease` parameters)
 
-        The from_uids are relevant for infectious diseases, but would be left
+        The `from_uids` are relevant for infectious diseases, but would be left
         as `None` for NCDs.
 
         Args:
@@ -106,7 +113,7 @@ class Disease(ss.Module):
             uids (array): UIDs for agents to assign disease progoses to
             from_uids (array): Optionally specify the infecting agent
         """
-        if self.log is not None:
+        if self.pars.log:
             sim = self.sim
             if source_uids is None:
                 for target in uids:
@@ -142,16 +149,16 @@ class Infection(Disease):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.add_states(
-            ss.BoolArr('susceptible', default=True),
-            ss.BoolArr('infected'),
-            ss.FloatArr('rel_sus', default=1.0),
-            ss.FloatArr('rel_trans', default=1.0),
-            ss.FloatArr('ti_infected'),
+            ss.BoolArr('susceptible', default=True, label='Susceptible'),
+            ss.BoolArr('infected', label='Infectious'),
+            ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
+            ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
+            ss.FloatArr('ti_infected', label='Time of infection' ),
         )
 
         # Define random number generators for make_new_cases
-        self.rng_target = ss.random(name='target')
-        self.rng_source = ss.random(name='source')
+        self.rng_target = ss.randint(name='target')
+        self.rng_source = ss.randint(name='source')
         return
     
     def init_pre(self, sim):
@@ -211,9 +218,9 @@ class Infection(Disease):
         super().init_results()
         sim = self.sim
         self.results += [
-            ss.Result(self.name, 'prevalence',     sim.npts, dtype=float, scale=False),
-            ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True),
-            ss.Result(self.name, 'cum_infections', sim.npts, dtype=int, scale=True),
+            ss.Result(self.name, 'prevalence',     sim.npts, dtype=float, scale=False, label='Prevalence'),
+            ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True, label='New infections'),
+            ss.Result(self.name, 'cum_infections', sim.npts, dtype=int, scale=True, label='Cumulative infections'),
         ]
         return
 
@@ -251,9 +258,10 @@ class Infection(Disease):
         """
         new_cases = []
         sources = []
+        networks = []
         betamap = self._check_betas()
 
-        for nkey,net in self.sim.networks.items():
+        for i, (nkey,net) in enumerate(self.sim.networks.items()):
             if not len(net):
                 break
 
@@ -274,29 +282,30 @@ class Infection(Disease):
                 beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
                 p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
 
-                # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
+                # Generate a new random number based on the two other random numbers
                 rvs_s = self.rng_source.rvs(src)
                 rvs_t = self.rng_target.rvs(trg)
-                rvs = rvs_s + rvs_t
-                inds = np.where(rvs>1.0)[0]
-                rvs[inds] -= 1
+                rvs = ss.combine_rands(rvs_s, rvs_t)
                 
                 new_cases_bool = rvs < p_transmit
                 new_cases.append(trg[new_cases_bool])
                 sources.append(src[new_cases_bool])
+                networks.append(np.full(np.count_nonzero(new_cases_bool), dtype=ss_int_, fill_value=i))
                 
         # Tidy up
         if len(new_cases) and len(sources):
             new_cases = ss.uids.cat(new_cases)
             sources = ss.uids.cat(sources)
+            networks = np.concatenate(networks)
         else:
             new_cases = np.empty(0, dtype=int)
             sources = np.empty(0, dtype=int)
-            
+            networks = np.empty(0, dtype=int)
+
         if len(new_cases):
             self._set_cases(new_cases, sources)
             
-        return new_cases, sources
+        return new_cases, sources, networks
 
     def _set_cases(self, target_uids, source_uids=None):
         sim = self.sim

@@ -7,6 +7,69 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 0.5.10 (2024-07-03)
+---------------------------
+- Adds two new common-random-number-safe networks. The first is an Erdős-Rényi network that is similar to ``RandomNet`` but parameterized differently. The second is a 2D spatial network with connectivity between agents within a given radius; these agents can also optionally move.
+- *GitHub info*: PR `575 <https://github.com/starsimhub/starsim/pull/575>`
+
+
+Version 0.5.9 (2024-06-30)
+--------------------------
+- Added a ``ss.histogram()`` distribution, which allows generating new random values from an empirical histogram.
+- When binned age data is provided to specify the initial ages for new agents, the ages are now distributed throughout the year/bin rather than new agents being assigned integer ages
+- Initial age data is now accepted as a ``pd.Series`` rather than a ``pd.DataFrame`` where the index corresponds to the age values, thereby avoiding the need for specific dataframe column names to be used to specify the age and value
+- *GitHub info*: PR `572 <https://github.com/starsimhub/starsim/pull/572>`
+
+
+Version 0.5.8 (2024-06-30)
+--------------------------
+- Revert to making infection logging disabled by default. However, the infection log will now always be created so disease subclasses can override logging behaviour where required (e.g., to capture additional metadata)
+- **Backwards-compatibility notes:** Logging has been moved from an argument to ``Disease`` to ``pars``. Existing code such as ``Disease(log=True)`` should be changed to ``Disease(pars={'log':True})``. The 'log' option can be added to the pars passed to any subclass e.g., ``ss.HIV(pars={...,log=True})``.
+- *GitHub info*: PR `573 <https://github.com/starsimhub/starsim/pull/573>`
+
+Version 0.5.7 (2024-06-27)
+--------------------------
+- Implemented a new ``ss.combine_rands()`` function based on a bitwise-XOR, since the previous modulo-based approach could introduce correlations between pairs of agents.
+- *GitHub info*: PR `546 <https://github.com/starsimhub/starsim/pull/546>`
+
+
+Version 0.5.6 (2024-06-22)
+--------------------------
+- ``ss.Infection.make_new_cases()`` now returns the index of the network associated with each transmission event
+- If a ``People` object is provided to the ``Arr`` constructor, the arrays will be pre-initialized to index the current UIDs in the ``People`` object. This enables construction of temporary ``Arr`` instances that can be used to perform intermediate calculations (e.g., inside ``Intervention.apply()`` or within a module update step)
+- Deprecated ``Arr(raw=...)`` argument to simplify initialization, as in practice the ``raw`` variable is not directly set, and this update also introduces a new pathway for initializating the `raw` attribute
+- ``ss.uids.to_numpy()`` now returns a view rather than a copy
+- ``ss.bernoulli.filter()`` now supports ``ss.BoolArr`` as an input, where the filtering will operate on the ``uids`` returned by ``ss.BoolArr.uids``
+- ``ss.uids()`` supports construction from ``set`` objects (via ``np.fromiter()``)
+- *GitHub info*: PR `565 <https://github.com/starsimhub/starsim/pull/555>`_
+
+
+Version 0.5.5 (2024-06-19)
+--------------------------
+- Added labels to ``Result`` and state (``Arr``) objects.
+- Added Numba decorator to ``find_contacts`` to significantly increase performance.
+- Fixed bug when comparing ``uids`` and ``BoolArr`` objects.
+- *GitHub info*: PR `562 <https://github.com/starsimhub/starsim/pull/555>`_
+
+
+Version 0.5.4 (2024-06-18)
+--------------------------
+- Adjusted ``RandomNet`` to avoid connections to unborn agents and use random rounding for half edges
+- Adds ``get_analyzers`` and ``get_analyzer``
+- Refactor how data is pre-processed for births/pregnancy/death rates, giving about a 10% decrease in run time for the STIsim HIV model
+- ``BoolArr.uids`` is automatically called when doing set operations on ``uids`` with a ``BoolArr``
+- *GitHub info*: PR `555 <https://github.com/starsimhub/starsim/pull/555>`_
+
+
+Version 0.5.3 (2024-06-10)
+--------------------------
+- ``ss.uids`` class implements set operators to facilitate combining or otherwise operating on collections of UIDs
+- ``FloatArr.isnan`` and ``FloatArr.notnan`` return ``BoolArr`` instances rather than UIDs (so as to facilitate logical operations with other ``BoolArr`` instances, and to align more closely with `np.isnan`)
+- ``Arr.true()`` and ``Arr.false()`` are supported for all ``Arr`` subclasses
+- ``BoolArr.isnan`` and ``Boolarr.notnan`` are also implemented (although since ``BoolArr`` cannot store NaN values, these always return ``False`` and ``True``, respectively)
+- *GitHub info*: PR `544 <https://github.com/starsimhub/starsim/pull/544>`_
+
+
 Version 0.5.2 (2024-06-04)
 --------------------------
 - Renames ``network.contacts`` to ``network.edges``.

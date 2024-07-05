@@ -139,9 +139,9 @@ class Sim(sc.prettyobj):
     def init_results(self):
         """ Create initial results that are present in all simulations """
         self.results += [ # TODO: refactor with self.add_results()
-            ss.Result(None, 'n_alive',    self.npts, ss.dtypes.int, scale=True),
-            ss.Result(None, 'new_deaths', self.npts, ss.dtypes.int, scale=True),
-            ss.Result(None, 'cum_deaths', self.npts, ss.dtypes.int, scale=True),
+            ss.Result(None, 'n_alive',    self.npts, ss.dtypes.int, scale=True, label='Number alive'),
+            ss.Result(None, 'new_deaths', self.npts, ss.dtypes.int, scale=True, label='Deaths'),
+            ss.Result(None, 'cum_deaths', self.npts, ss.dtypes.int, scale=True, label='Cumulative deaths'),
         ]
         return
 
@@ -475,6 +475,34 @@ class Sim(sc.prettyobj):
         return self._get_ia('interventions', label=label, partial=partial, first=first, die=die, as_inds=False,
                             as_list=False)
 
+    def get_analyzers(self, label=None, partial=False, as_inds=False):
+        """
+        Find the matching analyzer(s) by label, index, or type. If None, return
+        all analyzers. If the label provided is "summary", then print a summary
+        of the analyzers (index, label, type).
+
+        Args:
+            label (str, int, Analyzer, list): the label, index, or type of analyzer to get; if a list, iterate over one of those types
+            partial (bool): if true, return partial matches (e.g. 'beta' will match all beta analyzers)
+            as_inds (bool): if true, return matching indices instead of the actual analyzers
+        """
+        return self._get_ia('analyzers', label=label, partial=partial, as_inds=as_inds, as_list=True)
+
+    def get_analyzer(self, label=None, partial=False, first=False, die=True):
+        """
+        Find the matching analyzer(s) by label, index, or type.
+        If more than one analyzer matches, return the last by default.
+        If no label is provided, return the last analyzer in the list.
+
+        Args:
+            label (str, int, Analyzer, list): the label, index, or type of analyzer to get; if a list, iterate over one of those types
+            partial (bool): if true, return partial matches
+            first (bool): if true, return first matching analyzer (otherwise, return last)
+            die (bool): whether to raise an exception if no analyzer is found
+        """
+        return self._get_ia('analyzers', label=label, partial=partial, first=first, die=die, as_inds=False,
+                            as_list=False)
+
     def export_df(self):
         """
         Export results as a Pandas dataframe
@@ -659,7 +687,8 @@ class Sim(sc.prettyobj):
             fig, axs = sc.getrowscols(len(flat), make=True)
             for ax, (k, v) in zip(axs.flatten(), flat.items()):
                 ax.plot(yearvec, v)
-                ax.set_title(k)
+                # get label or use the key
+                ax.set_title(getattr(v, 'label', k))
                 ax.set_xlabel('Year')
         return fig
 
