@@ -677,10 +677,10 @@ class Sim(sc.prettyobj):
             output = sc.savejson(filename=filename, obj=d, indent=indent, *args, **kwargs)
 
         return output
-
+    
     def plot(self, key=None):
         with sc.options.with_style('fancy'):
-            flat = sc.flattendict(self.results, sep=': ')
+            flat = self.results.flatten()
             yearvec = flat.pop('yearvec')
             if key is not None:
                 flat = {k:v for k,v in flat.items() if k.startswith(key)}
