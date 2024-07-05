@@ -10,7 +10,7 @@ import starsim as ss
 import scipy.optimize as spo
 import scipy.spatial as spsp
 
-# CK: need to remove this, but slows down the code otherwise
+# This has a significant impact on runtime, surprisingly
 ss_float_ = ss.dtypes.float
 ss_int_ = ss.dtypes.int
 
@@ -908,15 +908,14 @@ class EmbeddingNet(MFNet):
         loc = self.pars.embedding_func.rvs(available)
         loc_f = loc[people.female[available]]
         loc_m = loc[~people.female[available]]
-
+        
         dist_mat = spsp.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
         ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
-        n_pairs = len(ind_f)
 
         # Finalize pairs
         p1 = available_m[ind_m]
         p2 = available_f[ind_f]
-        beta = np.ones(n_pairs) # TODO: Allow custom beta
+        beta = np.ones(len(p1)) # TODO: Allow custom beta
         dur_vals = self.pars.duration.rvs(p1)
         act_vals = self.pars.acts.rvs(p1)
 
