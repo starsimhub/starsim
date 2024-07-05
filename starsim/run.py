@@ -129,7 +129,6 @@ class MultiSim(sc.prettyobj):
         self.results = None
         return
 
-    
     def reduce(self, quantiles=None, use_mean=False, bounds=None, output=False):
         """
         Combine multiple sims into a single sim statistically: by default, use
@@ -150,9 +149,6 @@ class MultiSim(sc.prettyobj):
             msim.reduce()
             msim.summarize()
         """
-        # Quantiles dictionary for numpy quantile method
-        quantiles={'low' : 0.1, 'high' : 0.9}
-
         if use_mean:
             if bounds is None:
                 bounds = 2
@@ -175,47 +171,30 @@ class MultiSim(sc.prettyobj):
 
         # Perform the statistics
         raw = {}
-        
+
         rkeys = reduced_sim.results.keys()
-        #List with multidimensional results that need further iteration
-        multi_dim_results=['births', 'deaths', 'sir']
-        
+
         for rkey in rkeys:
-            raw[rkey] = np.zeros((reduced_sim.npts, len(self.sims)))
+            raw[rkey] = np.zeros((reduced_sim.res_npts, len(self.sims)))
             for s, sim in enumerate(self.sims):
-                if(type(sim.results[rkey]).__module__==np.__name__):
-                    vals = sim.results[rkey]
-                    raw[rkey][:,s] = vals
-                else:
-                    vals = sim.results[rkey]
-                    for k in range(0,len(vals)):
-                        vals = sim.results[rkey][k]
-                        raw[rkey][:,s] = vals
-        
+                vals = sim.results[rkey].values
+                raw[rkey][:, s] = vals
+
         for rkey in rkeys:
             results = reduced_sim.results
-            if (use_mean & (type(results[rkey]).__module__==np.__name__)):
+            if use_mean:
                 r_mean = np.mean(raw[rkey], axis=1)
                 r_std = np.std(raw[rkey], axis=1)
-                results[rkey] = r_mean
-                lower  = r_mean - bounds * r_std
-                higher = r_mean + bounds * r_std
-                results[rkey]=np.append(results[rkey],{'low': lower, 'high': higher})
+                results[rkey].values[:] = r_mean
+                results[rkey].low = r_mean - bounds * r_std
+                results[rkey].high = r_mean + bounds * r_std
             else:
-                if(np.isin(rkey,multi_dim_results)):
-                    for k in range(0, len(results[rkey])):
-                        results[rkey][k] = np.quantile(raw[rkey], q=0.5, axis=1)
-                        lower = np.quantile(raw[rkey], q=quantiles['low'], axis=1)
-                        higher = np.quantile(raw[rkey], q=quantiles['high'], axis=1)
-                        results[rkey][k]=np.append(results[rkey][k],{'low': lower, 'high': higher})
-                else:
-                    results[rkey] = np.quantile(raw[rkey], q=0.5, axis=1)
-                    lower = np.quantile(raw[rkey], q=quantiles['low'], axis=1)
-                    higher = np.quantile(raw[rkey], q=quantiles['high'], axis=1)
-                    results[rkey]=np.append(results[rkey],{'low': lower, 'high': higher})
+                results[rkey].values[:] = np.quantile(raw[rkey], q=0.5, axis=1)
+                results[rkey].low = np.quantile(raw[rkey], q=quantiles['low'], axis=1)
+                results[rkey].high = np.quantile(raw[rkey], q=quantiles['high'], axis=1)
 
         # Compute and store final results
-        reduced_sim.summarize()
+        reduced_sim.compute_summary()
         self.orig_base_sim = self.base_sim
         self.base_sim = reduced_sim
         self.results = reduced_sim.results
