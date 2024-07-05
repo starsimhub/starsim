@@ -62,6 +62,7 @@ def test_random():
     o = sc.objdict(nw1=nw1, nw2=nw2, nw3=nw3)
     return o
 
+
 def test_erdosrenyi():
     sc.heading('Testing Erdos-Renyi network')
 
@@ -98,7 +99,7 @@ def test_erdosrenyi():
     # Manual creation
     p = 0.1
     nw1 = ss.ErdosRenyiNet(p=p)
-    s1 = ss.Sim(n_agents=small, networks=nw1, copy_inputs=False).initialize() # This initializes the network
+    ss.Sim(n_agents=small, networks=nw1, copy_inputs=False).initialize() # This initializes the network
     test_ER(small, p, nw1)
 
     # Automatic creation as part of sim
@@ -118,6 +119,7 @@ def test_erdosrenyi():
     # Tidy
     o = sc.objdict(nw1=nw1, nw2=nw2, nw3=nw3)
     return o
+
 
 def test_disk():
     sc.heading('Testing Disk network')
@@ -179,20 +181,31 @@ def test_static():
     return o
 
 
+def test_null():
+    sc.heading('Testing NullNet...')
+    people = ss.People(n_agents=small)
+    network = ss.NullNet()
+    sir = ss.SIR(pars=dict(dur_inf=10, beta=0.1))
+    sim = ss.Sim(diseases=sir, people=people, networks=network)
+    sim.run()
+    if do_plot:
+        sim.plot()
+    return sim
+
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
-
-    # Start timing
-    T = sc.tic()
+    T = sc.timer()
 
     # Run tests
-    man = test_manual()
-    rnd = test_random()
-    sta = test_static()
-    er = test_erdosrenyi()
-    d = test_disk()
+    man  = test_manual()
+    rand = test_random()
+    stat = test_static()
+    erdo = test_erdosrenyi()
+    disk = test_disk()
+    null = test_null()
 
-    sc.toc(T)
-    print('Done.')
+    T.toc()

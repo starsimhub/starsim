@@ -287,52 +287,6 @@ def test_parallel():
 
     return s1, s2
 
-def test_nullnet():
-    """ Create and run a sim with Null network"""
-    sc.heading('Testing NullNet...')
-    people = ss.People(n_agents=n_agents)
-    network = ss.NullNet()
-    sir = ss.SIR(pars=dict(dur_inf=10, beta=0.1))
-    sim = ss.Sim(diseases=sir, people=people, networks=network)
-    sim.run()
-    if do_plot:
-        sim.plot()
-    return sim
-
-
-def test_staticnet():
-    """ Create and run sim with a Static network """
-    sc.heading('Testing Static Net...')
-    ppl = ss.People(n_agents=n_agents)
-    demographics = [
-        ss.Births(pars={'birth_rate': 20}),
-        ss.Deaths(pars={'death_rate': 15})
-    ]
-    
-    g=nx.erdos_renyi_graph(n=1000, p=.001, directed=True)
-    sir = ss.SIR()
-    ss.SIR(pars=dict( dur_inf=10, beta=0.2, init_prev=0.4, p_death=0.2))
-    networks=ss.StaticNet(graph=g)
-
-    # Make the sim
-    sim = ss.Sim(people=ppl, networks=networks, demographics=demographics, diseases=sir, interventions=ss.Intervention)
-    sim.run()
-    
-    sim.get_interventions
-    sim.get_intervention()
-    
-    #Printing Object Methods and Properties
-    print("Printing Starsim Objects Methods and Properties")
-    print(sim)
-    print(sim.demographics)
-    print(sim.dists)
-    print(sim.networks)
-    print(sim.people)
-    print(sim.results)
-    
-    if do_plot:
-        sim.plot()
-    return sim
 
 def test_settings():
     """ Create, run, and plot a sim by passing a parameters dictionary """
