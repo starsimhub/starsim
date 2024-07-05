@@ -392,12 +392,12 @@ class uids(np.ndarray):
         return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
 
     def concat(self, other, **kw): # TODO: why can't they both be called cat()?
-        """ Equivalent to np.concatenate(), but return correct type """
+        """ Equivalent to np.concatenate(), but return correct type; see ss.uids.cat() for the class method """
         return np.concatenate([self, other], **kw).view(self.__class__)
 
     @classmethod
     def cat(cls, *args, **kw):
-        """ Equivalent to np.concatenate(), but return correct type """
+        """ Equivalent to np.concatenate(), but return correct type; see ss.uids.concat() for the instance method """
         arrs = args[0] if len(args) == 1 else args
         return np.concatenate(arrs, **kw).view(cls)
 
@@ -428,6 +428,15 @@ class uids(np.ndarray):
     def to_numpy(self):
         """ Return a view as a standard NumPy array """
         return self.view(np.ndarray)
+    
+    def unique(self, return_index=False):
+        """ Return unique UIDs; equivalent to np.unique() """
+        if return_index:
+            arr, index = np.unique(self, return_index=True)
+            return arr.view(self.__class__), index
+        else:
+            arr = np.unique(self).view(self.__class__)
+            return arr
 
     # Implement collection of operators
     def __and__(self, other): return self.intersect(other)
