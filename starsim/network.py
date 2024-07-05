@@ -10,7 +10,7 @@ import starsim as ss
 import scipy.optimize as spo
 import scipy.spatial as spsp
 
-# CK: need to remove this, but slows down the code otherwise
+# This has a significant impact on runtime, surprisingly
 ss_float_ = ss.dtypes.float
 ss_int_ = ss.dtypes.int
 
@@ -866,6 +866,7 @@ class MSMNet(SexualNetwork):
         self.add_pairs(self.sim)
         return
 
+
 class EmbeddingNet(MFNet):
     """
     Heterosexual age-assortative network based on a one-dimensional embedding. Could be made more generic.
@@ -907,53 +908,14 @@ class EmbeddingNet(MFNet):
         loc = self.pars.embedding_func.rvs(available)
         loc_f = loc[people.female[available]]
         loc_m = loc[~people.female[available]]
-
-        dist_mat = spsp.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])        
-        dist_mat_area=dist_mat.shape[0]*dist_mat.shape[1]
-        split_n=99_999 # distance matrix area split divisor that determines the number of distance matrix partitions
-
-        if(dist_mat_area>split_n):
-            splits=int(round(dist_mat_area/split_n,0))
-            partitions=np.array_split(dist_mat,splits)
-
-            i = 0
-            level_one=partitions[0].shape[0]
-            level=[] 
-
-            for p in partitions:
-                if(i==0):
-                    level.append(p.shape[0]-level_one)
-                    i+=1
-                else:
-                    level.append(level[i-1]+p.shape[0])
-                    i+=1
-
-            count=0	
-
-            for partition in partitions:
-                if(count==0):
-                    ind_m, ind_f=spo.linear_sum_assignment(partition)
-                    count+=1
-                else:
-                    x, y=spo.linear_sum_assignment(partition)
-                    x=x+level[count]
-                    ind_m=np.hstack((ind_m,x))
-                    ind_f=np.hstack((ind_f,y))
-                    count+=1
-
-            u, indices = np.unique(ind_f, return_index=True)
-            ind_m=ind_m[indices]
-            ind_f=ind_f[indices]
-
-        else:
-            ind_m, ind_f=spo.linear_sum_assignment(dist_mat)
-       
-        n_pairs = len(ind_f)
+        
+        dist_mat = spsp.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
+        ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
 
         # Finalize pairs
         p1 = available_m[ind_m]
         p2 = available_f[ind_f]
-        beta = np.ones(n_pairs) # TODO: Allow custom beta
+        beta = np.ones(len(p1)) # TODO: Allow custom beta
         dur_vals = self.pars.duration.rvs(p1)
         act_vals = self.pars.acts.rvs(p1)
 
