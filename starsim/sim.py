@@ -690,10 +690,15 @@ class Sim(sc.prettyobj):
             plot_kw (dict): passed to ``plt.plot()``
         
         """
-        fig_kw = sc.mergedicts(fig_kw)
+        flat = self.results.flatten()
+        n_cols = np.ceil(np.sqrt(len(flat))) # Number of columns of axes
+        default_figsize = np.array([8, 6])
+        figsize_factor = np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size based on the number of rows and columns
+        figsize = default_figsize*figsize_factor
+        fig_kw = sc.mergedicts({'figsize':figsize}, fig_kw)
         plot_kw = sc.mergedicts({'lw':2}, plot_kw)
         with sc.options.with_style(style):
-            flat = self.results.flatten()
+            
             yearvec = flat.pop('yearvec')
             if key is not None:
                 flat = {k:v for k,v in flat.items() if k.startswith(key)}
@@ -708,8 +713,13 @@ class Sim(sc.prettyobj):
             # Do the plotting
             for ax, (key, res) in zip(axs, flat.items()):
                 ax.plot(yearvec, res, **plot_kw)
-                ax.set_title(getattr(res, 'label', key)) 
+                title = getattr(res, 'label', key)
+                if res.module != 'sim':
+                    title = f'{res.module}: {title}'
+                ax.set_title(title) 
                 ax.set_xlabel('Year')
+            
+        sc.figlayout(fig=fig)
                 
         return fig
 

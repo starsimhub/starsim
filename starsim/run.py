@@ -245,17 +245,24 @@ class MultiSim(sc.prettyobj):
         # Has not been reduced yet, plot individual sim
         if self.which is None:
             fig = None
+            alpha = 0.7 if len(self.sims) < 5 else 0.5
+            plot_kw = sc.mergedicts({'alpha':alpha}, plot_kw)
             for sim in self.sims:
                 fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw)
         
         # Has been reduced, plot with uncertainty bounds
         else:
+            flat = self.results
+            yearvec = flat.pop('yearvec')
+            n_cols = np.ceil(np.sqrt(len(flat))) # TODO: remove duplication with sim.plot()
+            default_figsize = np.array([8, 6])
+            figsize_factor = np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size based on the number of rows and columns
+            figsize = default_figsize*figsize_factor
+            fig_kw = sc.mergedicts({'figsize':figsize}, fig_kw)
             fig_kw = sc.mergedicts(fig_kw)
             fill_kw = sc.mergedicts({'alpha':0.2}, fill_kw)
             plot_kw = sc.mergedicts({'lw':2, 'alpha':0.8}, plot_kw)
             with sc.options.with_style('simple'):
-                flat = self.results
-                yearvec = flat.pop('yearvec')
                 if key is not None:
                     flat = {k:v for k,v in flat.items() if k.startswith(key)}
                 fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
