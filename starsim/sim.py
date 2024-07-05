@@ -12,7 +12,7 @@ import matplotlib.pyplot as pl
 __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
 
 
-class Sim(sc.prettyobj):
+class Sim:
 
     def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, networks=None,
                  interventions=None, analyzers=None, connectors=None, copy_inputs=True, **kwargs):
@@ -43,6 +43,36 @@ class Sim(sc.prettyobj):
     def __setitem__(self, key, value):
         """ Allow dict-like access, e.g. sim['created'] = sc.now() """
         return setattr(self, key, value)
+    
+    def __repr__(self):
+        """ Show a quick version of the sim """
+        # Try a more custom repr first
+        try:
+            n = int(self.pars.n_agents)
+            moddict = {}
+            for modkey in ss.module_map().keys():
+                if hasattr(self, modkey):
+                    thismodtype = self[modkey]
+                elif modkey in self.pars:
+                    thismodtype = self.pars[modkey]
+                else:
+                    thismodtype = {}
+                if len(thismodtype):
+                    moddict[modkey] = sc.strjoin(thismodtype.keys())
+            if len(moddict):
+                modulestr = ''
+                for k,mstr in moddict.items():
+                    modulestr += f'; {k}={mstr}'
+            else:
+                modulestr = 'no modules'
+            string = f'Sim(n={n:n}{modulestr})'
+        
+        # Or just use default
+        except Exception as E:
+            ss.warn(f'Error displaying custom sim repr, falling back to default: {E}')
+            string = sc.prepr(self, vals=False)
+            
+        return string
     
     def initialize(self, **kwargs):
         """ Perform all initializations for the sim; most heavy lifting is done by the parameters """
@@ -147,7 +177,7 @@ class Sim(sc.prettyobj):
 
     @property
     def modules(self):
-        # Return iterator over all Module instances (stored in standard places) in the Sim
+        """ Return iterator over all Module instances (stored in standard places) in the Sim """
         products = [intv.product for intv in self.interventions.values() if
                     hasattr(intv, 'product') and isinstance(intv.product, ss.Product)]
         return itertools.chain(
@@ -354,7 +384,8 @@ class Sim(sc.prettyobj):
         return summary
     
     def disp(self):
-        print(self.summary)
+        """ Print a full version of the sim """
+        sc.pr(self)
         return
     
     def shrink(self, skip_attrs=None, in_place=True):
