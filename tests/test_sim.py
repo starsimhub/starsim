@@ -1,11 +1,10 @@
 """
-Test simple APIs
+Test Sim API
 """
 
 # %% Imports and settings
 import starsim as ss
 import sciris as sc
-import numpy as np
 import matplotlib.pyplot as plt
 import pytest
 
