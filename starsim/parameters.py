@@ -64,8 +64,10 @@ class Pars(sc.objdict):
                     self._update_module(key, old, new)
                 elif isinstance(old, ss.Dist): # Update a distribution
                     self._update_dist(key, old, new)
+                elif callable(old): # It's a function: update directly
+                    self[key] = new
                 else: # Everything else; not used currently but could be
-                    warnmsg = 'No known mechanism for handling {type(old)} → {type(new)}; using default'
+                    warnmsg = f'No known mechanism for handling {type(old)} → {type(new)}; using default'
                     ss.warn(warnmsg)
                     self[key] = new
         return self

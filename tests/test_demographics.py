@@ -12,6 +12,7 @@ import pytest
 
 
 sc.options(interactive=False) # Assume not running interactively
+datadir = ss.root / 'tests/test_data'
 
 
 def test_nigeria(which='births', dt=1, start=1995, n_years=15, do_plot=False):
@@ -25,23 +26,23 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, do_plot=False):
     demographics = sc.autolist()
 
     if which == 'births':
-        birth_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_births.csv')
+        birth_rates = pd.read_csv(datadir/'nigeria_births.csv')
         births = ss.Births(pars={'birth_rate': birth_rates})
         demographics += births
 
     elif which == 'pregnancy':
-        fertility_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')
+        fertility_rates = pd.read_csv(datadir/'nigeria_asfr.csv')
         pregnancy = ss.Pregnancy(pars={'fertility_rate': fertility_rates, 'rel_fertility': 1})  # 4/3
         demographics += pregnancy
 
-    death_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')
+    death_rates = pd.read_csv(datadir/'nigeria_deaths.csv')
     death = ss.Deaths(pars={'death_rate': death_rates, 'units': 1})
     demographics += death
 
     # Make people
     n_agents = 5_000
     nga_pop_1995 = 106819805
-    age_data = pd.read_csv(ss.root / 'tests/test_data/nigeria_age.csv')
+    age_data = pd.read_csv(datadir/'nigeria_age.csv')
     ppl = ss.People(n_agents, age_data=age_data)
 
     sim = ss.Sim(
@@ -66,13 +67,13 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, do_plot=False):
     sim.run()
 
     end = start + n_years
-    nigeria_popsize = pd.read_csv(ss.root / 'tests/test_data/nigeria_popsize.csv')
+    nigeria_popsize = pd.read_csv(datadir/'nigeria_popsize.csv')
     data = nigeria_popsize[(nigeria_popsize.year >= start) & (nigeria_popsize.year <= end)]
 
-    nigeria_cbr = pd.read_csv(ss.root / 'tests/test_data/nigeria_births.csv')
+    nigeria_cbr = pd.read_csv(datadir/'nigeria_births.csv')
     cbr_data = nigeria_cbr[(nigeria_cbr.Year >= start) & (nigeria_cbr.Year <= end)]
 
-    nigeria_cmr = pd.read_csv(ss.root / 'tests/test_data/nigeria_cmr.csv')
+    nigeria_cmr = pd.read_csv(datadir/'nigeria_cmr.csv')
     cmr_data = nigeria_cmr[(nigeria_cmr.Year >= start) & (nigeria_cmr.Year <= end)]
 
     # Tests

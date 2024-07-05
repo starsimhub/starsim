@@ -43,15 +43,15 @@ class Cholera(ss.Infection):
         # Boolean states
         self.add_states(
             # Susceptible & infected are added automatically, here we add the rest
-            ss.BoolArr('exposed'),
-            ss.BoolArr('symptomatic'),
-            ss.BoolArr('recovered'),
+            ss.BoolArr('exposed', label='Exposed'),
+            ss.BoolArr('symptomatic', label='Symptomatic'),
+            ss.BoolArr('recovered', label='Recovered'),
     
             # Timepoint states
-            ss.FloatArr('ti_exposed'),
-            ss.FloatArr('ti_symptomatic'),
-            ss.FloatArr('ti_recovered'),
-            ss.FloatArr('ti_dead'),
+            ss.FloatArr('ti_exposed', label='Time of exposure'),
+            ss.FloatArr('ti_symptomatic', label='Time of symptoms'),
+            ss.FloatArr('ti_recovered', label='Time of recovery'),
+            ss.FloatArr('ti_dead', label='Time of death'),
         )
         return
 
@@ -70,10 +70,10 @@ class Cholera(ss.Infection):
         super().init_results()
         npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'new_deaths', npts, dtype=int),
-            ss.Result(self.name, 'cum_deaths', npts, dtype=int),
-            ss.Result(self.name, 'env_prev', npts, dtype=float),
-            ss.Result(self.name, 'env_conc', npts, dtype=float),
+            ss.Result(self.name, 'new_deaths', npts, dtype=int, label='Deaths'),
+            ss.Result(self.name, 'cum_deaths', npts, dtype=int, label='Cumulative deaths'),
+            ss.Result(self.name, 'env_prev', npts, dtype=float, label='Environmental prevalence'),
+            ss.Result(self.name, 'env_conc', npts, dtype=float, label='Environmental concentration'),
         ]
         return
 

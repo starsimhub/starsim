@@ -27,10 +27,10 @@ class NCD(ss.Disease):
         self.update_pars(pars=pars, **kwargs)
         
         self.add_states(
-            ss.BoolArr('at_risk'),
-            ss.BoolArr('affected'),
-            ss.FloatArr('ti_affected'),
-            ss.FloatArr('ti_dead'),
+            ss.BoolArr('at_risk', label='At risk'),
+            ss.BoolArr('affected', label='Affected'),
+            ss.FloatArr('ti_affected', label='Time of becoming affected'),
+            ss.FloatArr('ti_dead', label='Time of death'),
         )
         return
 
@@ -75,9 +75,9 @@ class NCD(ss.Disease):
         super().init_results()
         npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'n_not_at_risk', npts, dtype=int),
-            ss.Result(self.name, 'prevalence', npts, dtype=float),
-            ss.Result(self.name, 'new_deaths', npts, dtype=int),
+            ss.Result(self.name, 'n_not_at_risk', npts, dtype=int, label='Not at risk'),
+            ss.Result(self.name, 'prevalence', npts, dtype=float, label='Prevalence'),
+            ss.Result(self.name, 'new_deaths', npts, dtype=int, label='Deaths'),
         ]
         return
 

@@ -30,7 +30,7 @@ def test_series_death_rate():
     ppl = ss.People(1000)
     death_rate = ss.standardize_data(data=series_death, metadata=ss.omerge({
         'data_cols': {'year': 'Time', 'sex': 'Sex', 'age': 'AgeGrpStart', 'value': 'mx'},
-        'sex_keys': {'f': 'Female', 'm': 'Male'},
+        'sex_keys': {'Female':'f', 'Male':'m'},
     }))
     bdm2 = ss.Deaths(pars={'death_rate': death_rate})
     sim2 = ss.Sim(people=ppl, demographics=bdm2, label='Using age-specific data from a pandas series')

@@ -12,7 +12,7 @@ import pandas as pd
 # %% Helper functions
 
 # What functions are externally visible -- note, this gets populated in each section below
-__all__ = ['ndict', 'warn', 'unique', 'find_contacts']
+__all__ = ['ndict', 'warn', 'unique', 'find_contacts', 'combine_rands']
 
 
 class ndict(sc.objdict):
@@ -170,7 +170,7 @@ def unique(arr):
     counts = counts[unique]
     return unique, counts
 
-
+@nb.njit
 def find_contacts(p1, p2, inds):  # pragma: no cover
     """
     Variation on Network.find_contacts() that avoids sorting.
@@ -227,71 +227,108 @@ def set_seed(seed=None):
 __all__ += ['standardize_data']
 
 
-def standardize_data(data=None, metadata=None, max_age=120, min_year=1800):
+def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, default_age=0, default_year=2024):
     """
+    Standardize formats of input data
+
+    Input data can arrive in many different forms. This function accepts a variety of data
+    structures, and converts them into a Pandas Series containing one variable, based on
+    specified metadata, or an ``ss.Dist`` if the data is already an ``ss.Dist`` object.
+
+    The metadata is a dictionary that defines columns of the dataframe or keys
+    of the dictionary to use as indices in the output Series. It should contain
+
+    - ``metadata['data_cols']['value']`` specifying the name of the column/key to draw values from
+    - ``metadata['data_cols']['year']`` optionally specifying the column containing year values; otherwise the default year will be used
+    - ``metadata['data_cols']['age']`` optionally specifying the column containing age values; otherwise the default age will be used
+    - ``metadata['data_cols'][<arbitrary>]`` optionally specifying any other columns to use as indices. These will form part of the multiindex
+                                         for the standardized Series output.
+
+    If a ``sex`` column is part of the index, the metadata can also optionally specify a string mapping to convert
+    the sex labels in the input data into the 'm'/'f' labels used by Starsim. In that case, the metadata can contain
+    an additional key like ``metadata['sex_keys'] = {'Female':'f','Male':'m'}`` which in this case would map the strings
+    'Female' and 'Male' in the original data into 'm'/'f' for Starsim.
+
     Args:
-        data (pandas.DataFrame, pandas.Series, dict, int, float): An associative array  or a number, with the
-        input data to be standardized.
-        metadata (dict): The metadata containing information about the columns of the data.
-        max_age (float): The maximum age allowed in the data. Default is 120 years.
-        min_year (float): The minimum year allowed in the data. Default is 1800.
+        data (pandas.DataFrame, pandas.Series, dict, int, float): An associative array  or a number, with the input data to be standardized.
+        metadata (dict): Dictionary specifiying index columns, the value column, and optionally mapping for sex labels
+        min_year (float): Optionally specify a minimum year allowed in the data. Default is 1800.
+        out_of_range (float): Value to use for negative ages - typically 0 is a reasonable choice but other values (e.g., np.inf or np.nan)
+                              may be useful depending on the calculation. This will automatically be added to the dataframe with an age of
+                              ``-np.inf``
 
     Returns:
-        df (pandas.DataFrame or sciris.dataframe): The standardized data
-
-    Raises:
-        ValueError: If the columns in `data` do not match the column names in metadata.data_cols
-        or if the index of the data series is not understood.
+        - A `pd.Series` for all supported formats of `data` *except* an ``ss.Dist``. This series will contain index columns for 'year'
+          and 'age' (in that order) and then subsequent index columns for any other variables specified in the metadata, in the order
+          they appeared in the metadata (except for year and age appearing first).
+        - An ``ss.Dist`` instance - if the ``data`` input is an ``ss.Dist``, that same object will be returned by this function
     """
-    metadata = sc.objdict(metadata)
 
-    if isinstance(data, pd.DataFrame):
-        if not set(metadata.data_cols.values()).issubset(data.columns):
-            errormsg = 'Please ensure the columns of the data match the values in metadata.data_cols.'
-            raise ValueError(errormsg)
-        df = data
+    if isinstance(data, ss.Dist):
+        return data
+    elif sc.isnumber(data):
+        index = pd.MultiIndex.from_arrays([[default_year, default_year], [-np.inf, 0]], names=['year','age'])
+        return pd.Series(index=index, data=[out_of_range, data])
 
-    elif isinstance(data, pd.Series):
-        if metadata.data_cols.get('age'):
-            if (data.index <= max_age).all():  # Assume index is age bins
-                df = sc.dataframe({
-                    metadata.data_cols['year']: 2000,
-                    metadata.data_cols['age']: data.index.values,
-                    metadata.data_cols['value']: data.values,
-                })
-            elif (data.index >= min_year).all():  # Assume index year
-                df = sc.dataframe({
-                    metadata.data_cols['year']: data.index.values,
-                    metadata.data_cols['age']: 0,
-                    metadata.data_cols['value']: data.values,
-                })
-            else:
-                errormsg = 'Could not understand index of data series: should be age (all values less than 120) or year (all values greater than 1900).'
-                raise ValueError(errormsg)
-        else:
-            df = sc.dataframe({
-                metadata.data_cols['year']: data.index.values,
-                metadata.data_cols['value']: data.values,
-            })
+    # Convert series and dataframe inputs into dicts
+    if isinstance(data, pd.Series) or isinstance(data, pd.DataFrame):
+        data = data.reset_index().to_dict(orient='list')
 
-        if metadata.data_cols.get('sex'):
-            df = pd.concat([df, df])
-            df[metadata.data_cols['sex']] = np.repeat(list(metadata.sex_keys.values()), len(data))
+    # Check that the input is now a dict (scalar types have already been handled above
+    assert isinstance(data, dict), 'Supported inputs are ss.Dict, scalar numbers, DataFrames, Series, or dictionaries'
 
-    elif isinstance(data, dict):
-        if not set(metadata.data_cols.values()).issubset(data.keys()):
-            errormsg = 'Please ensure the keys of the data dict match the values in metadata.data_cols.'
-            raise ValueError(errormsg)
-        new_data = dict()
-        for sim_name, col_name in metadata.data_cols.items():
-            new_data[sim_name] = sc.tolist(data[col_name])
-        df = sc.dataframe(new_data)
+    # Extract the values and index columns
+    assert 'value' in metadata['data_cols'], 'The metadata is missing a column name for "value", which must be provided if the input data is in the form of a DataFrame, Series, or dict'
+    values = sc.promotetoarray(data[metadata['data_cols']['value']])
+    index = sc.objdict()
+    for k, col in metadata['data_cols'].items():
+        if k != 'value':
+            index[k] = data[col]
 
-    elif sc.isnumber(data) or isinstance(data, ss.Dist):
-        df = data  # Just return it as-is
+    # Add defaults for year and age
+    if 'year' not in index:
+        index['year'] = np.full(values.shape, fill_value=default_year, dtype=ss.dtypes.float)
+    if 'age' not in index:
+        index['age'] = np.full(values.shape, fill_value=default_age, dtype=ss.dtypes.float)
 
-    else:
-        errormsg = f'Data type {type(data)} not understood.'
-        raise ValueError(errormsg)
+    # Reorder the index so that it starts with age first
+    index.insert(0, 'age', index.pop('age'))
+    index.insert(0, 'year', index.pop('year'))
+
+    # Map sex values
+    if 'sex' in index:
+        if 'sex_keys' in metadata:
+            index['sex'] = [metadata['sex_keys'][x] for x in index['sex']]
+        assert set(index['sex']) == {'f','m'}, 'If standardized data contains a "sex" column, it should use "m" and "f" to specify the sex.'
+
+    # Create the series
+    output = pd.Series(data=values, index=pd.MultiIndex.from_arrays(index.values(), names=index.keys()))
+
+    # Add an entry for negative ages
+    new_entries = output.index.set_codes([0] * len(output), level=1).set_levels([-np.inf], level=1).unique()
+    new = pd.Series(data=out_of_range, index=new_entries)
+    output = pd.concat([output, new])
+
+    # Truncate years
+    output = output.loc[output.index.get_level_values('year')>min_year]
+
+    # Perform a final sort to prevent "indexing past lexsort depth" warnings
+    output = output.sort_index()
+
+    return output
+
+
+def combine_rands(a, b):
+    """
+    Efficient algorithm for combining two arrays of random numbers into one
+    
+    Args:
+        a (array): array of random integers between np.iinfo(np.int64).min and np.iinfo(np.int64).max
+        b (array): ditto, same size as a
         
-    return df
+    Returns:
+        A new array of random numbers the same size as a and b
+    """
+    c = np.bitwise_xor(a*b, a-b).astype(np.uint64)
+    u = c / np.iinfo(np.uint64).max
+    return u
