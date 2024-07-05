@@ -169,35 +169,37 @@ class MultiSim(sc.prettyobj):
         reduced_sim.metadata = dict(parallelized=True, combined=False, n_runs=n_runs, quantiles=quantiles,
                                     use_mean=use_mean, bounds=bounds)  # Store how this was parallelized
 
-        # Perform the statistics
+        # Calculate the statistics
         raw = {}
+        exclude = ['yearvec'] # Exclude things that we don't want to include
 
-        rkeys = reduced_sim.results.keys()
+        rflat = reduced_sim.results.flatten()
+        rkeys = list(rflat.keys())
+        rkeys = [k for k in rkeys if k not in exclude]
 
         for rkey in rkeys:
-            raw[rkey] = np.zeros((reduced_sim.res_npts, len(self.sims)))
+            raw[rkey] = np.zeros((reduced_sim.npts, len(self.sims)))
             for s, sim in enumerate(self.sims):
-                vals = sim.results[rkey].values
-                raw[rkey][:, s] = vals
+                flat = sim.results.flatten()
+                raw[rkey][:, s] = flat[rkey]
 
         for rkey in rkeys:
-            results = reduced_sim.results
             if use_mean:
                 r_mean = np.mean(raw[rkey], axis=1)
                 r_std = np.std(raw[rkey], axis=1)
-                results[rkey].values[:] = r_mean
-                results[rkey].low = r_mean - bounds * r_std
-                results[rkey].high = r_mean + bounds * r_std
+                rflat[rkey][:] = r_mean
+                rflat[rkey].low = r_mean - bounds * r_std
+                rflat[rkey].high = r_mean + bounds * r_std
             else:
-                results[rkey].values[:] = np.quantile(raw[rkey], q=0.5, axis=1)
-                results[rkey].low = np.quantile(raw[rkey], q=quantiles['low'], axis=1)
-                results[rkey].high = np.quantile(raw[rkey], q=quantiles['high'], axis=1)
+                rflat[rkey][:] = np.quantile(raw[rkey], q=0.5, axis=1)
+                rflat[rkey].low = np.quantile(raw[rkey], q=quantiles['low'], axis=1)
+                rflat[rkey].high = np.quantile(raw[rkey], q=quantiles['high'], axis=1)
 
         # Compute and store final results
-        reduced_sim.compute_summary()
+        reduced_sim.summarize()
         self.orig_base_sim = self.base_sim
         self.base_sim = reduced_sim
-        self.results = reduced_sim.results
+        self.results = rflat
         self.summary = reduced_sim.summary
         self.which = 'reduced'
 
