@@ -18,14 +18,18 @@ class Result(np.ndarray):
         'module', # The name of the module (e.g. hiv)
         'scale', # Whether or not the result scales with population size (e.g. True)
         'label', # The human-readable label for the result (e.g. Number of infections)
+        'low', # The lower bound for the values (used with MultiSim)
+        'high', # The upper bound for the values
     ]
     
-    def __new__(cls, module=None, name=None, shape=None, dtype=None, scale=None, label=None):
+    def __new__(cls, module=None, name=None, shape=None, dtype=None, scale=None, label=None, low=None, high=None):
         arr = np.zeros(shape=shape, dtype=dtype).view(cls)
         arr.name = name
         arr.module = module
         arr.scale = scale
         arr.label = label
+        arr.low = low
+        arr.high = high
         return arr
     
     
@@ -51,7 +55,13 @@ class Result(np.ndarray):
             return super().__array_wrap__(obj, **kwargs)
     
     def to_df(self):
-        return sc.dataframe({self.name:self})
+        data = {self.name:self}
+        if self.low is not None:
+            data['low']  = self.low
+        if self.high is not None:
+            data['high'] = self.high
+        df = sc.dataframe(data)
+        return df
     
 
 class Results(ss.ndict):
@@ -75,6 +85,9 @@ class Results(ss.ndict):
         
         super().append(result, key=key)
         return
+    
+    def flatten(self, sep='_'):
+        return sc.objdict(sc.flattendict(self, sep=sep))
     
     def to_df(self):
         pass

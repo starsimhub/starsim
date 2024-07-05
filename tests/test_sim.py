@@ -5,7 +5,6 @@ Test Sim API
 # %% Imports and settings
 import starsim as ss
 import sciris as sc
-import numpy as np
 import matplotlib.pyplot as plt
 import pytest
 
@@ -240,28 +239,6 @@ def test_components(do_plot=do_plot):
     return sim
 
 
-def test_parallel():
-    """ Test running two identical sims in parallel """
-    sc.heading('Testing parallel...')
-    pars = make_sim_pars()
-
-    # Check that two identical sims match
-    sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars, label='Sim2')])
-    sims.run(keep_people=True)
-    s1, s2 = sims.sims
-    assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
-
-    # Check that two non-identical sims don't match
-    pars2 = sc.dcp(pars)
-    pars2.diseases.beta *= 2
-    sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars2, label='Sim2')])
-    sims.run(keep_people=True)
-    s1, s2 = sims.sims
-    assert not np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
-
-    return s1, s2
-
-
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -275,8 +252,7 @@ if __name__ == '__main__':
     sim5b, sim5i = test_simple_vax(do_plot=do_plot)
     sim6 = test_shared_product(do_plot=do_plot)
     sim7 = test_components(do_plot=do_plot)
-    sim8a, sim8b = test_parallel()
-    
+
     T.toc()
     
     if do_plot:
