@@ -18,7 +18,7 @@ def make_sim_pars():
         n_agents = n_agents,
         demographics = True,
         networks = 'random',
-        diseases = 'sir',
+        diseases = sc.objdict(type='sir', beta=0.1), # To allow for modification later
     )
     return pars
 
