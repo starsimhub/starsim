@@ -187,7 +187,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
             return self.people.auids
         except:
             if not self.initialized:
-                ss.warn('Trying to access non-initialized States object')
+                ss.warn('Trying to access non-initialized Arr object; in most cases, Arr objects need to be initialized with a Sim object, but set skip_init=True if this is intentional.')
             return uids(np.arange(len(self.raw)))
     
     def count(self):
