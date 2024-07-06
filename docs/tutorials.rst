@@ -20,4 +20,5 @@ Developer tutorials
     :maxdepth: 1
 
     tutorials/dev_tut_diseases.ipynb
+    tutorials/dev_tut_abm.ipynb
     

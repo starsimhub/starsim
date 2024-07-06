@@ -237,4 +237,5 @@ class Connector(Module):
     Because connectors can do anything, they have no specified structure: it is
     up to the user to define how they behave.    
     """
-    pass
+    def update(self, sim):
+        pass
