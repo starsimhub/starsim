@@ -1,13 +1,13 @@
 Starsim
 =======
 
-**Warning! Starsim is still in the early stages of development. It is being shared solely for transparency and to facilitate collaborative development. It is not ready to be used for real research or policy questions.**
+Starsim is an agent-based modeling framework for simulating the spread of diseases among agents via dynamic transmission networks. Starsim supports the co-transmission of multiple diseases at once, capturing how they interact biologically and behaviorally. Users can also include non-infectious diseases either on their own or as factors affecting infectious diseases. Starsim allows detailed modeling of mother-child relationships from conception to study birth-related diseases. Additionally, Starsim lets users compare different intervention strategies, like vaccines or treatments, to see their impact through various delivery methods such as mass campaigns or targeted outreach.
 
-Starsim is an agent-based modeling framework in which users can design and configure simulations of diseases (or other health states) that progress over time within each agent and pass from one agent to the next along dynamic transmission networks. The framework explicitly supports co-transmission of multiple pathogens, allowing users to concurrently simulate several diseases while capturing behavioral and biological interactions. Non-communicable diseases can be included as well, either as a co-factor for transmissible pathogens or as an independent exploration. Detailed modeling of mother-child relationships can be simulated from the timepoint of conception, enabling study of congenital diseases and associated birth outcomes. Finally, Starsim facilitates the comparison of one or more intervention scenarios to a baseline scenario in evaluating the impact of various products like vaccines, therapeutics, and novel diagnostics delivered via flexible routes including mass campaigns, screen and treat, and targeted outreach.
+Examples of diseases that have already been implemented in Starsim include sexually transmitted infections (HIV, HPV, syphilis, gonorrhea, and chlamydia, including co-transmission), respiratory infections (tuberculosis and RSV), plus other diseases (Ebola and cholera) and underlying determinants of health (such as malnutrition).
 
-The framework is appropriate for simulating sexually transmitted infections (including syphilis, gonorrhea, chlamydia, HPV, and HIV, including co-transmission), respiratory infections (like RSV and tuberculosis), and other diseases and underlying determinants (such as Ebola, diabetes, and malnutrition).
+Note: Starsim is part of the same suite of tools as `Covasim <https://covasim.org>`_, `HPVsim <https://hpvsim.org>`_, and `FPsim <https://fpsim.org>`_, which are collectively known as the "Starism suite".
 
-Starsim is a general-purpose modeling framework that is part of the same suite of tools as `Covasim <https://covasim.org>`_, `HPVsim <https://hpvsim.org>`_, and `FPsim <https://fpsim.org>`_.
+For more information, please see the `documentation <https://docs.starsim.org>`__.
 
 
 Requirements
@@ -29,32 +29,38 @@ Starsim can also be installed locally. To do this, clone first this repository, 
 Usage and documentation
 -----------------------
 
-Documentation, including tutorials and an API reference, is available at https://docs.starsim.org. 
+Full documentation, including tutorials and an API reference, is available at https://docs.starsim.org. 
 
-If everything is working, the following Python commands will run a simulation with the simplest version of a Starsim model. We'll make a version of a classic SIR model::
+If everything is working, you can run a simple demo via::
 
   import starsim as ss
-  
+  ss.demo()
+
+Here is a slightly more realistic example of an SIR model with random connections between agents::
+
+  import starsim as ss
+
   # Define the parameters
   pars = dict(
-    n_agents = 5_000,   # Number of agents to simulate
-    networks = dict(    # *Networks* add detail on how agents interact w/ each other
-      type = 'random',  # Here, we use a 'random' network
-      n_contacts = 10   # Each person has an average of 10 contacts w/ other people  
-    ),
-    diseases = dict(    # *Diseases* add detail on what diseases to model
-      type = 'sir',     # Here, we're creating an SIR disease
-      init_prev = 0.1,  # Proportion of the population initially infected
-      beta = 0.5,       # Probability of transmission between contacts
-    )
+      n_agents = 5_000,     # Number of agents to simulate
+      networks = dict(      # Networks define how agents interact w/ each other
+          type = 'random',  # Here, we use a 'random' network
+          n_contacts = 10   # Each person has an average of 10 contacts w/ other people  
+      ),
+      diseases = dict(      # *Diseases* add detail on what diseases to model
+          type = 'sir',     # Here, we're creating an SIR disease
+          init_prev = 0.01, # Proportion of the population initially infected
+          beta = 0.05,      # Probability of transmission between contacts
+      )
   )
-  
+
   # Make the sim, run and plot
   sim = ss.Sim(pars)
   sim.run()
-  sim.plot()
+  sim.plot() # Plot all the sim results
+  sim.diseases.sir.plot() # Plot the standard SIR curves
 
-More usage examples are available in the ``tests`` folder.
+More usage examples are available in the tutorials, as well as the ``tests`` folder.
 
 
 Model structure
@@ -66,6 +72,7 @@ The model consists of core classes including Sim, Run, People, State, Network, C
 
 The structure of the starsim folder is as follows, roughly in the order in which the modules are imported, building from most fundamental to most complex:
 
+• ``calibration.py``: Class to handle automated calibration of the model to data.
 •	``demographics.py``: Classes to transform initial condition input parameters for use in building and utilizing networks.
 •	``disease.py``: Classes to manage infection rate of spread, prevalence, waning effects, and other parameters for specific diseases.
 •	``distributions.py``: Classes that handle statistical distributions used throughout Starsim.
@@ -84,7 +91,7 @@ The structure of the starsim folder is as follows, roughly in the order in which
 •	``utils.py``: Helper functions.
 •	``version.py``: Version, date, and license information.
 
-The ``diseases`` folder within the Starsim package contains loading scripts for the epidemiological data specific to each respective disease.
+The ``diseases`` folder within the Starsim package contains definitions of different types of diseases, including STIs, Ebola, and cholera.
 
 
 Contributing
@@ -96,6 +103,4 @@ Questions or comments can be directed to `info@starsim.org <mailto:info@starsim.
 Disclaimer
 ----------
 
-The code in this repository was developed by IDM, the Burnet Institute, and other collaborators to support our joint research on flexible agent-based modeling. We've made it publicly available under the MIT License to provide others with a better understanding of our research and an opportunity to build upon it for their own work. We make no representations that the code works as intended or that we will provide support, address issues that are found, or accept pull requests. You are welcome to create your own fork and modify the code to suit your own modeling needs as permitted under the MIT License.
-
-
+The code in this repository was developed by `IDM <https://idmod.org>`_, the `Burnet Institute <https://burnet.edu.au>`_, and other collaborators to support our joint research on flexible agent-based modeling. We've made it publicly available under the MIT License to provide others with a better understanding of our research and an opportunity to build upon it for their own work. We make no representations that the code works as intended or that we will provide support, address issues that are found, or accept pull requests. You are welcome to create your own fork and modify the code to suit your own modeling needs as permitted under the MIT License.
