@@ -292,7 +292,13 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
 
 
 class FloatArr(Arr):
-    """ Subclass of Arr with defaults for floats """
+    """
+    Subclass of Arr with defaults for floats and ints.
+    
+    Note: Starsim does not support integer arrays by default since they introduce
+    ambiguity in dealing with NaNs, and float arrays are suitable for most purposes.
+    If you really want an integer array, you can use the default Arr class instead.    
+    """
     def __init__(self, name=None, nan=np.nan, **kwargs):
         super().__init__(name=name, dtype=ss_float, nan=nan, coerce=False, **kwargs)
         return
@@ -348,7 +354,7 @@ class BoolArr(Arr):
 
     
 class IndexArr(Arr):
-    """ A special class of IndexArr used for UIDs and RNG IDs """
+    """ A special class of Arr used for UIDs and RNG IDs; not to be used as an integer array (for that, use FloatArr) """
     def __init__(self, name=None, label=None):
         super().__init__(name=name, dtype=ss_int, default=None, nan=-1, label=label, coerce=False, skip_init=True)
         self.raw = uids(self.raw)
