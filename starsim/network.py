@@ -574,8 +574,7 @@ class ErdosRenyiNet(DynamicNetwork):
         # Use integers to create random numbers per edge
         i1 = ints[idx1]
         i2 = ints[idx2]
-        r = ss.combine_rands(i1, i2)
-        edge = r <= self.pars.p
+        edge = ss.combine_rands(i1, i2) <= self.pars.p
 
         p1 = idx1[edge]
         p2 = idx2[edge]
@@ -653,16 +652,18 @@ class DiskNet(Network):
         self.add_pairs()
         return
 
+    @staticmethod
+    @nb.njit(cache=True)
+    def compute_pairs(x, y, r2):
+        p1, p2 = np.triu_indices(n=len(x), k=1)
+        edge = (x[p2]-x[p1])**2 + (y[p2]-y[p1])**2 < r2
+        return p1[edge], p2[edge]
+
     def add_pairs(self):
-        """ Generate contacts """
-        p1, p2 = np.triu_indices(n=len(self.x), k=1)
-        d12_sq = (self.x.raw[p2]-self.x.raw[p1])**2 + (self.y.raw[p2]-self.y.raw[p1])**2
-        edge = d12_sq < self.pars.r**2
-
-        self.edges['p1'] = ss.uids(p1[edge])
-        self.edges['p2'] = ss.uids(p2[edge])
+        p1, p2 = self.compute_pairs(self.x.raw, self.y.raw, self.pars.r**2)
+        self.edges['p1'] = ss.uids(p1)
+        self.edges['p2'] = ss.uids(p2)
         self.edges['beta'] = np.ones(len(self.p1), dtype=ss_float_)
-
         return
 
 
