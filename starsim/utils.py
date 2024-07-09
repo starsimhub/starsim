@@ -267,8 +267,7 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     if isinstance(data, ss.Dist):
         return data
     elif sc.isnumber(data):
-        index = pd.MultiIndex.from_arrays([[default_year, default_year], [-np.inf, 0]], names=['year','age'])
-        return pd.Series(index=index, data=[out_of_range, data])
+        return data
 
     # Convert series and dataframe inputs into dicts
     if isinstance(data, pd.Series) or isinstance(data, pd.DataFrame):
