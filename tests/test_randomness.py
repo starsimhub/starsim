@@ -291,8 +291,8 @@ def test_combine_rands(do_plot=False):
     atol = 1e-3
     target = 0.5
     np.random.seed(2)
-    a = np.random.randint(low=np.iinfo(np.int64).min, high=np.iinfo(np.int64).max, dtype=np.int64, size=n)
-    b = np.random.randint(low=np.iinfo(np.int64).min, high=np.iinfo(np.int64).max, dtype=np.int64, size=n)
+    a = np.random.randint(np.iinfo(np.int64).max, size=n)
+    b = np.random.randint(np.iinfo(np.int64).max, size=n)
     c = ss.combine_rands(a, b)
     if do_plot:
         pl.figure()

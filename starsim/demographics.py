@@ -70,7 +70,7 @@ class Births(Demographics):
     def standardize_birth_data(self):
         """ Standardize/validate birth rates - handled in an external file due to shared functionality """
         birth_rate = ss.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
-        if isinstance(birth_rate, pd.Series) or isinstance(birth_rate, pd.DataFrame):
+        if isinstance(birth_rate, (pd.Series, pd.DataFrame)):
             return birth_rate.xs(0,level='age')
         return birth_rate
 
@@ -95,7 +95,7 @@ class Births(Demographics):
         sim = self.sim
         p = self.pars
 
-        if isinstance(p.birth_rate, pd.Series) or isinstance(p.birth_rate, pd.DataFrame):
+        if isinstance(p.birth_rate, (pd.Series, pd.DataFrame)):
             available_years = p.birth_rate.index
             year_ind = sc.findnearest(available_years, sim.year)
             nearest_year = available_years[year_ind]
@@ -184,7 +184,7 @@ class Deaths(Demographics):
     def standardize_death_data(self):
         """ Standardize/validate death rates - handled in an external file due to shared functionality """
         death_rate = ss.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
-        if isinstance(death_rate, pd.Series) or isinstance(death_rate, pd.DataFrame):
+        if isinstance(death_rate, (pd.Series, pd.DataFrame)):
             death_rate = death_rate.unstack(level='age')
             assert not death_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
         return death_rate
@@ -353,7 +353,7 @@ class Pregnancy(Demographics):
         Standardize/validate fertility rates
         """
         fertility_rate = ss.standardize_data(data=self.pars.fertility_rate, metadata=self.metadata)
-        if isinstance(fertility_rate, pd.Series) or isinstance(fertility_rate, pd.DataFrame):
+        if isinstance(fertility_rate, (pd.Series, pd.DataFrame)):
             fertility_rate = fertility_rate.unstack()
             assert not fertility_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
         return fertility_rate
@@ -364,8 +364,6 @@ class Pregnancy(Demographics):
         # Process data, which may be provided as a number, dict, dataframe, or series
         # If it's a number it's left as-is; otherwise it's converted to a dataframe
         self.fertility_rate_data = self.standardize_fertility_data()
-        #self.pars.p_fertility = ss.bernoulli(p=self.make_fertility_prob_fn)
-        #self.pars.p_fertility.pars['p'] = self.make_fertility_prob_fn
         self.pars.p_fertility.set(p=self.make_fertility_prob_fn)
 
         low = sim.pars.n_agents + 1
@@ -420,7 +418,7 @@ class Pregnancy(Demographics):
 
                 # Validation
                 if not np.array_equal(new_mother_uids, deliveries.uids):
-                    errormsg = f'IDs of new mothers do not match IDs of new deliveries.'
+                    errormsg = 'IDs of new mothers do not match IDs of new deliveries'
                     raise ValueError(errormsg)
 
                 # Create durations and start dates, and add connections
