@@ -317,7 +317,7 @@ class Pregnancy(Demographics):
             # Assign agents to age bins
             age_bins = self.fertility_rate_data.columns.values
             age_bin_all = np.digitize(age, age_bins) - 1
-            new_rate = self.fertility_rate_data.loc[nearest_year].values  # Initialize array with new rates
+            new_rate = self.fertility_rate_data.loc[nearest_year].values.copy()  # Initialize array with new rates
 
             if self.pregnant.any():
                 # Scale the new rate to convert the denominator from all women to non-pregnant women
