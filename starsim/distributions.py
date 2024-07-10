@@ -664,7 +664,7 @@ class lognorm_im(Dist):
     def sync_pars(self, call=True):
         """ Translate between NumPy and SciPy parameters """
         if call:
-            self.call_pars() # Since can't work with functions
+            self.call_pars()
         p = self._pars
         spars = sc.dictobj()
         spars.s = p.sigma

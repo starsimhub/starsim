@@ -902,7 +902,7 @@ class EmbeddingNet(MFNet):
         loc = self.pars.embedding_func.rvs(available)
         loc_f = loc[people.female[available]]
         loc_m = loc[~people.female[available]]
-        
+
         dist_mat = spsp.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
         ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
 
