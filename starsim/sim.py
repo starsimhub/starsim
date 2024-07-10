@@ -57,14 +57,16 @@ class Sim:
                     thismodtype = self.pars[modkey]
                 else:
                     thismodtype = {}
-                if len(thismodtype):
+                if sc.isiterable(thismodtype) and len(thismodtype):
                     moddict[modkey] = sc.strjoin(thismodtype.keys())
             if len(moddict):
                 modulestr = ''
                 for k,mstr in moddict.items():
                     modulestr += f'; {k}={mstr}'
             else:
-                modulestr = 'no modules'
+                modulestr = ''
+            if not self.initialized:
+                modulestr += '; not initialized'
             string = f'Sim(n={n:n}{modulestr})'
         
         # Or just use default
