@@ -16,6 +16,7 @@ from .disease       import *
 from .diseases      import *
 from .sim           import *
 from .run           import *
+from .calibration   import *
 from .samples       import *
 
 # Assign the root folder

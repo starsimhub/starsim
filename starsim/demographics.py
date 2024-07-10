@@ -70,7 +70,9 @@ class Births(Demographics):
     def standardize_birth_data(self):
         """ Standardize/validate birth rates - handled in an external file due to shared functionality """
         birth_rate = ss.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
-        return birth_rate.xs(0,level='age')
+        if isinstance(birth_rate, (pd.Series, pd.DataFrame)):
+            return birth_rate.xs(0,level='age')
+        return birth_rate
 
     def init_results(self):
         npts = self.sim.npts
@@ -93,10 +95,14 @@ class Births(Demographics):
         sim = self.sim
         p = self.pars
 
-        available_years = p.birth_rate.index
-        year_ind = sc.findnearest(available_years, sim.year)
-        nearest_year = available_years[year_ind]
-        this_birth_rate = p.birth_rate.loc[nearest_year]
+        if isinstance(p.birth_rate, (pd.Series, pd.DataFrame)):
+            available_years = p.birth_rate.index
+            year_ind = sc.findnearest(available_years, sim.year)
+            nearest_year = available_years[year_ind]
+            this_birth_rate = p.birth_rate.loc[nearest_year]
+        else:
+            this_birth_rate = p.birth_rate
+
         scaled_birth_prob = this_birth_rate * p.units * p.rel_birth * sim.pars.dt
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
         n_new = int(np.floor(sim.people.alive.count() * scaled_birth_prob))
@@ -178,8 +184,9 @@ class Deaths(Demographics):
     def standardize_death_data(self):
         """ Standardize/validate death rates - handled in an external file due to shared functionality """
         death_rate = ss.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
-        death_rate = death_rate.unstack(level='age')
-        assert not death_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
+        if isinstance(death_rate, (pd.Series, pd.DataFrame)):
+            death_rate = death_rate.unstack(level='age')
+            assert not death_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
         return death_rate
 
     @staticmethod # Needs to be static since called externally, although it sure looks like a class method!
@@ -257,9 +264,9 @@ class Pregnancy(Demographics):
     def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__()
         self.default_pars(
-            dur_pregnancy = 0.75,   # Duration for pre-natal transmission
-            dur_postpartum = ss.lognorm_ex(0.5, 0.5),   # Duration for post-natal transmission (e.g. via breastfeeding)
-            fertility_rate = 0,     # See make_fertility_prob_function
+            dur_pregnancy = 0.75, # Duration for pre-natal transmission
+            dur_postpartum = ss.lognorm_ex(0.5, 0.5), # Duration for post-natal transmission (e.g. via breastfeeding)
+            fertility_rate = 0, # Can be a number of Pandas DataFrame
             rel_fertility = 1,
             maternal_death_prob = ss.bernoulli(0),
             sex_ratio = ss.bernoulli(0.5), # Ratio of babies born female
@@ -268,6 +275,8 @@ class Pregnancy(Demographics):
             units = 1e-3, # Assumes fertility rates are per 1000. If using percentages, switch this to 1
         )
         self.update_pars(pars, **kwargs)
+
+        self.pars.p_fertility = ss.bernoulli(p=0) # Placeholder, see make_fertility_prob_fn
         
         # Other, e.g. postpartum, on contraception...
         self.add_states(
@@ -288,11 +297,6 @@ class Pregnancy(Demographics):
             metadata,
         )
         self.choose_slots = None # Distribution for choosing slots; set in self.initialize()
-
-        # Process data, which may be provided as a number, dict, dataframe, or series
-        # If it's a number it's left as-is; otherwise it's converted to a dataframe
-        self.fertility_rate_data = self.standardize_fertility_data()
-        self.pars.fertility_rate = ss.bernoulli(self.make_fertility_prob_fn)
 
         # For results tracking
         self.n_pregnancies = 0
@@ -349,14 +353,19 @@ class Pregnancy(Demographics):
         Standardize/validate fertility rates
         """
         fertility_rate = ss.standardize_data(data=self.pars.fertility_rate, metadata=self.metadata)
-        fertility_rate = fertility_rate.unstack()
-        max_age = fertility_rate.columns.max()
-        fertility_rate[max_age+1] = 0
-        assert not fertility_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
+        if isinstance(fertility_rate, (pd.Series, pd.DataFrame)):
+            fertility_rate = fertility_rate.unstack()
+            assert not fertility_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
         return fertility_rate
 
     def init_pre(self, sim):
         super().init_pre(sim)
+
+        # Process data, which may be provided as a number, dict, dataframe, or series
+        # If it's a number it's left as-is; otherwise it's converted to a dataframe
+        self.fertility_rate_data = self.standardize_fertility_data()
+        self.pars.p_fertility.set(p=self.make_fertility_prob_fn)
+
         low = sim.pars.n_agents + 1
         high = int(sim.pars.slot_scale*sim.pars.n_agents)
         self.choose_slots = ss.randint(low=low, high=high, sim=sim, module=self)
@@ -409,7 +418,7 @@ class Pregnancy(Demographics):
 
                 # Validation
                 if not np.array_equal(new_mother_uids, deliveries.uids):
-                    errormsg = f'IDs of new mothers do not match IDs of new deliveries.'
+                    errormsg = 'IDs of new mothers do not match IDs of new deliveries'
                     raise ValueError(errormsg)
 
                 # Create durations and start dates, and add connections
@@ -435,7 +444,7 @@ class Pregnancy(Demographics):
         # People eligible to become pregnant. We don't remove pregnant people here, these
         # are instead handled in the fertility_dist logic as the rates need to be adjusted
         eligible_uids = self.sim.people.female.uids
-        conceive_uids = self.pars.fertility_rate.filter(eligible_uids)
+        conceive_uids = self.pars.p_fertility.filter(eligible_uids)
 
         # Validation
         if np.any(self.pregnant[conceive_uids]):

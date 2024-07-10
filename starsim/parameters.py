@@ -177,7 +177,6 @@ class SimPars(Pars):
         self.slot_scale = 5      # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
 
         # Demographic parameters
-        self.location   = None  #  NOT CURRENTLY FUNCTIONAL - what demographics to use
         self.birth_rate = None
         self.death_rate = None
         self.use_aging  = None # True if demographics, false otherwise
@@ -244,7 +243,7 @@ class SimPars(Pars):
     
     def validate_total_pop(self):
         """ Ensure one but not both of total_pop and pop_scale are defined """
-        if self.total_pop is not None:  # If no pop_scale has been provided, try to get it from the location
+        if self.total_pop is not None:  # In future, if no pop_scale has been provided, try to get it from the location
             if self.pop_scale is not None:
                 errormsg = f'You can define total_pop ({self.total_pop}) or pop_scale ({self.pop_scale}), but not both, since one is calculated from the other'
                 raise ValueError(errormsg)

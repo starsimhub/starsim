@@ -7,6 +7,19 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 1.0.0 (2024-07-10)
+---------------------------
+- Official release of Starsim!
+- Adds a ``Calibration`` class, based on `Optuna <https://optuna.org>`_, to facilitate the calibration of Starsim models.
+- Adds ``mean()``, ``median()``, and ``plot()`` methods to ``MultiSim``.
+- Adds ``low`` and ``high`` attributes to ``Result`` objects.
+- Adds a ``flatten()`` method to ``Results``, allowing nested ``Results`` objects to be turned into flat dictionaries.
+- Removes duplicate UIDs among new infections, and adds a ``unique()`` method to ``ss.uids``.
+- Fixes a bug that prevented ``ss.lognorm_im()`` from using callable parameters.
+- Updates the default ``Sim`` string representation to be a single line; the more verbose version is available via ``sim.disp()``.
+- *GitHub info*: PR `581 <https://github.com/starsimhub/starsim/pull/581>`
+
+
 Version 0.5.10 (2024-07-03)
 ---------------------------
 - Adds two new common-random-number-safe networks. The first is an Erdős-Rényi network that is similar to ``RandomNet`` but parameterized differently. The second is a 2D spatial network with connectivity between agents within a given radius; these agents can also optionally move.

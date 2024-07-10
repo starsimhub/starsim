@@ -295,8 +295,9 @@ class Infection(Disease):
         # Tidy up
         if len(new_cases) and len(sources):
             new_cases = ss.uids.cat(new_cases)
-            sources = ss.uids.cat(sources)
-            networks = np.concatenate(networks)
+            new_cases, inds = new_cases.unique(return_index=True)
+            sources = ss.uids.cat(sources)[inds]
+            networks = np.concatenate(networks)[inds]
         else:
             new_cases = np.empty(0, dtype=int)
             sources = np.empty(0, dtype=int)
