@@ -3,6 +3,7 @@ Define SIR and SIS disease modules
 """
 
 import numpy as np
+import sciris as sc
 import matplotlib.pyplot as pl
 import starsim as ss
 
@@ -78,12 +79,17 @@ class SIR(ss.Infection):
         self.recovered[uids] = False
         return
 
-    def plot(self):
+    def plot(self, plot_kw=None):
         """ Default plot for SIR model """
         fig = pl.figure()
+        plot_kw = sc.mergedicts(dict(lw=2, alpha=0.8), plot_kw)
         for rkey in ['n_susceptible', 'n_infected', 'n_recovered']:
-            pl.plot(self.results[rkey], label=self.results[rkey].label)
-        pl.legend()
+            pl.plot(self.sim.results.yearvec, self.results[rkey], label=self.results[rkey].label, **plot_kw)
+        pl.legend(frameon=False)
+        pl.xlabel('Year')
+        pl.ylabel('Number of people')
+        sc.boxoff()
+        sc.commaticks()
         return fig
     
 

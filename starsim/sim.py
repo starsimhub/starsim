@@ -737,13 +737,16 @@ class Sim:
             # Get the figure
             if fig is None:
                 fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
-                axs = axs.flatten()
+                if isinstance(axs, np.ndarray):
+                    axs = axs.flatten()
             else:
                 axs = fig.axes
+            if not sc.isiterable(axs):
+                axs = [axs]
                 
             # Do the plotting
             for ax, (key, res) in zip(axs, flat.items()):
-                ax.plot(yearvec, res, **plot_kw)
+                ax.plot(yearvec, res, **plot_kw, label=self.label)
                 title = getattr(res, 'label', key)
                 if res.module != 'sim':
                     title = f'{res.module}: {title}'

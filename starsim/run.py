@@ -4,6 +4,7 @@ Utilities for running in parallel
 
 import numpy as np
 import sciris as sc
+import pylab as pl
 import starsim as ss
 
 __all__ = ['MultiSim', 'single_run', 'multi_run', 'parallel']
@@ -249,6 +250,7 @@ class MultiSim(sc.prettyobj):
             plot_kw = sc.mergedicts({'alpha':alpha}, plot_kw)
             for sim in self.sims:
                 fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw)
+            pl.legend()
         
         # Has been reduced, plot with uncertainty bounds
         else:
