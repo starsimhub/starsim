@@ -7,7 +7,7 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
-Version 1.0.0 (2024-07-08)
+Version 1.0.0 (2024-07-10)
 ---------------------------
 - Official release of Starsim!
 - Adds a ``Calibration`` class, based on `Optuna <https://optuna.org>`_, to facilitate the calibration of Starsim models.
