@@ -350,6 +350,7 @@ class Pregnancy(Demographics):
         """
         fertility_rate = ss.standardize_data(data=self.pars.fertility_rate, metadata=self.metadata)
         fertility_rate = fertility_rate.unstack()
+        # Interpolate to 1 year increments
         fertility_rate = fertility_rate.reindex(np.arange(fertility_rate.index.min(), fertility_rate.index.max() + 1)).interpolate()
         max_age = fertility_rate.columns.max()
         fertility_rate[max_age+1] = 0
