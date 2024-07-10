@@ -721,6 +721,8 @@ class Sim:
             plot_kw (dict): passed to ``plt.plot()``
         
         """
+        
+        # Configuration
         flat = self.results.flatten()
         n_cols = np.ceil(np.sqrt(len(flat))) # Number of columns of axes
         default_figsize = np.array([8, 6])
@@ -728,6 +730,9 @@ class Sim:
         figsize = default_figsize*figsize_factor
         fig_kw = sc.mergedicts({'figsize':figsize}, fig_kw)
         plot_kw = sc.mergedicts({'lw':2}, plot_kw)
+        modmap = {m.name:m for m in self.modules} # Find modules
+        
+        # Do the plotting
         with sc.options.with_style(style):
             
             yearvec = flat.pop('yearvec')
@@ -749,7 +754,13 @@ class Sim:
                 ax.plot(yearvec, res, **plot_kw, label=self.label)
                 title = getattr(res, 'label', key)
                 if res.module != 'sim':
-                    title = f'{res.module}: {title}'
+                    try:
+                        mod = modmap[res.module]
+                        modtitle = mod.__class__.__name__
+                        assert res.module == modtitle.lower() # Only use the class name if the module name is the default
+                    except:
+                        modtitle = res.module
+                    title = f'{modtitle}: {title}'
                 ax.set_title(title) 
                 ax.set_xlabel('Year')
             

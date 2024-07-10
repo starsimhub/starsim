@@ -39,7 +39,7 @@ def find_modules(key=None):
             except:
                 pass
     return modules if key is None else modules[key]
-    
+
 
 class Module(sc.quickobj):
 

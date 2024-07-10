@@ -20,7 +20,6 @@ class SIR(ss.Infection):
     """
     def __init__(self, pars=None, **kwargs):
         super().__init__()
-        self.label = 'SIR'
         self.default_pars(
             beta = 0.1,
             init_prev = ss.bernoulli(p=0.01),
