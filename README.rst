@@ -3,7 +3,7 @@ Starsim
 
 Starsim is an agent-based modeling framework for simulating the spread of diseases among agents via dynamic transmission networks. Starsim supports the co-transmission of multiple diseases at once, capturing how they interact biologically and behaviorally. Users can also include non-infectious diseases either on their own or as factors affecting infectious diseases. Starsim allows detailed modeling of mother-child relationships from conception to study birth-related diseases. Additionally, Starsim lets users compare different intervention strategies, like vaccines or treatments, to see their impact through various delivery methods such as mass campaigns or targeted outreach.
 
-Examples of diseases that have already been implemented in Starsim include sexually transmitted infections (HIV, HPV, syphilis, gonorrhea, and chlamydia, including co-transmission), respiratory infections (tuberculosis and RSV), plus other diseases (Ebola and cholera) and underlying determinants of health (such as malnutrition).
+Examples of diseases that have already been implemented in Starsim include sexually transmitted infections (HIV, HPV, and syphilis, including co-transmission), respiratory infections (tuberculosis and RSV), plus other diseases (Ebola and cholera) and underlying determinants of health (such as malnutrition).
 
 Note: Starsim is part of the same suite of tools as `Covasim <https://covasim.org>`_, `HPVsim <https://hpvsim.org>`_, and `FPsim <https://fpsim.org>`_, which are collectively known as the "Starism suite".
 
