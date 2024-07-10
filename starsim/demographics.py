@@ -350,6 +350,7 @@ class Pregnancy(Demographics):
         """
         fertility_rate = ss.standardize_data(data=self.pars.fertility_rate, metadata=self.metadata)
         fertility_rate = fertility_rate.unstack()
+        fertility_rate = fertility_rate.reindex(np.arange(fertility_rate.index.min(), fertility_rate.index.max() + 1)).interpolate()
         max_age = fertility_rate.columns.max()
         fertility_rate[max_age+1] = 0
         assert not fertility_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
