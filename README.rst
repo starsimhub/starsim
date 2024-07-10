@@ -31,7 +31,7 @@ Usage and documentation
 
 Full documentation, including tutorials and an API reference, is available at https://docs.starsim.org. 
 
-If everything is working, you can run a simple demo via::
+You can run a simple demo via::
 
   import starsim as ss
   ss.demo()
@@ -45,7 +45,7 @@ Here is a slightly more realistic example of an SIR model with random connection
       n_agents = 5_000,     # Number of agents to simulate
       networks = dict(      # Networks define how agents interact w/ each other
           type = 'random',  # Here, we use a 'random' network
-          n_contacts = 10   # Each person has an average of 10 contacts w/ other people  
+          n_contacts = 10   # Each person has 10 contacts with other people  
       ),
       diseases = dict(      # *Diseases* add detail on what diseases to model
           type = 'sir',     # Here, we're creating an SIR disease
