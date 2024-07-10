@@ -332,7 +332,7 @@ class Pregnancy(Demographics):
 
                 num_to_make = new_rate * age_counts  # Number that we need to make pregnant
                 new_denom = age_counts - pregnant_age_counts  # New denominator for rates
-                new_rate = np.divide(num_to_make, new_denom, where=new_denom>0, out=new_rate)
+                np.divide(num_to_make, new_denom, where=new_denom>0, out=new_rate)
 
             fertility_rate[uids] = new_rate[age_bin_all]
 
