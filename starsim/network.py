@@ -599,7 +599,7 @@ class DiskNet(Network):
     each time step, agents advance v*dt in the direction they are pointed. When
     encountering a wall, agents are reflected.
 
-    Edged are formed between two agents if they are within r distance of each other.
+    Edges are formed between two agents if they are within r distance of each other.
     """
 
     def __init__(self, pars=None, key_dict=None, **kwargs):
