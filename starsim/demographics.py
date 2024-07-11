@@ -321,7 +321,7 @@ class Pregnancy(Demographics):
             # Assign agents to age bins
             age_bins = self.fertility_rate_data.columns.values
             age_bin_all = np.digitize(age, age_bins) - 1
-            new_rate = self.fertility_rate_data.loc[nearest_year].values  # Initialize array with new rates
+            new_rate = self.fertility_rate_data.loc[nearest_year].values.copy()  # Initialize array with new rates
 
             if self.pregnant.any():
                 # Scale the new rate to convert the denominator from all women to non-pregnant women
@@ -336,7 +336,7 @@ class Pregnancy(Demographics):
 
                 num_to_make = new_rate * age_counts  # Number that we need to make pregnant
                 new_denom = age_counts - pregnant_age_counts  # New denominator for rates
-                new_rate = np.divide(num_to_make, new_denom, where=new_denom>0, out=new_rate)
+                np.divide(num_to_make, new_denom, where=new_denom>0, out=new_rate)
 
             fertility_rate[uids] = new_rate[age_bin_all]
 
@@ -353,9 +353,12 @@ class Pregnancy(Demographics):
         Standardize/validate fertility rates
         """
         fertility_rate = ss.standardize_data(data=self.pars.fertility_rate, metadata=self.metadata)
-        if isinstance(fertility_rate, (pd.Series, pd.DataFrame)):
-            fertility_rate = fertility_rate.unstack()
-            assert not fertility_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
+        fertility_rate = fertility_rate.unstack()
+        # Interpolate to 1 year increments
+        fertility_rate = fertility_rate.reindex(np.arange(fertility_rate.index.min(), fertility_rate.index.max() + 1)).interpolate()
+        max_age = fertility_rate.columns.max()
+        fertility_rate[max_age+1] = 0
+        assert not fertility_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
         return fertility_rate
 
     def init_pre(self, sim):
