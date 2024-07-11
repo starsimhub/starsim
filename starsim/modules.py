@@ -39,7 +39,7 @@ def find_modules(key=None):
             except:
                 pass
     return modules if key is None else modules[key]
-    
+
 
 class Module(sc.quickobj):
 
@@ -62,7 +62,7 @@ class Module(sc.quickobj):
         self.requires = sc.mergelists(requires)
         return
     
-    def default_pars(self, inherit=False, **kwargs):
+    def default_pars(self, inherit=True, **kwargs):
         """ Create or merge Pars objects """
         if inherit: # Merge with existing
             self.pars.update(**kwargs, create=True)
@@ -82,7 +82,7 @@ class Module(sc.quickobj):
         self.pars.update(matches)
                 
         # Update module attributes
-        metadata = {key:pars.pop(key, None) for key in ['name', 'label', 'requires']}
+        metadata = {key:pars.pop(key, getattr(self, key, None)) for key in ['name', 'label', 'requires']}
         self.set_metadata(**metadata)
         
         # Should be no remaining pars
@@ -237,4 +237,5 @@ class Connector(Module):
     Because connectors can do anything, they have no specified structure: it is
     up to the user to define how they behave.    
     """
-    pass
+    def update(self, sim):
+        pass

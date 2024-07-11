@@ -17,10 +17,14 @@ __all__ = ['Disease', 'Infection', 'InfectionLog']
 class Disease(ss.Module):
     """ Base module class for diseases """
 
-    def __init__(self, log=True, *args, **kwargs):
+    def __init__(self, pars=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.default_pars(
+            log = False,
+        )
+        self.update_pars(pars, **kwargs)
         self.results = ss.Results(self.name)
-        self.log = InfectionLog() if log else None  # See below for definition
+        self.log = InfectionLog()
         return
 
     @property
@@ -97,10 +101,11 @@ class Disease(ss.Module):
 
         This function assigns state values upon infection or acquisition of
         the disease. It would normally be called somewhere towards the end of
-        `Disease.make_new_cases()`. Infections will automatically be added to
-        the log as part of this operation.
+        `Disease.make_new_cases()`. Infections will optionally be added to
+        the log as part of this operation if logging is enabled (in the
+        `Disease` parameters)
 
-        The from_uids are relevant for infectious diseases, but would be left
+        The `from_uids` are relevant for infectious diseases, but would be left
         as `None` for NCDs.
 
         Args:
@@ -108,7 +113,7 @@ class Disease(ss.Module):
             uids (array): UIDs for agents to assign disease progoses to
             from_uids (array): Optionally specify the infecting agent
         """
-        if self.log is not None:
+        if self.pars.log:
             sim = self.sim
             if source_uids is None:
                 for target in uids:
@@ -290,8 +295,9 @@ class Infection(Disease):
         # Tidy up
         if len(new_cases) and len(sources):
             new_cases = ss.uids.cat(new_cases)
-            sources = ss.uids.cat(sources)
-            networks = np.concatenate(networks)
+            new_cases, inds = new_cases.unique(return_index=True)
+            sources = ss.uids.cat(sources)[inds]
+            networks = np.concatenate(networks)[inds]
         else:
             new_cases = np.empty(0, dtype=int)
             sources = np.empty(0, dtype=int)

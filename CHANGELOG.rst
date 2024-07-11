@@ -7,16 +7,49 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 1.0.0 (2024-07-10)
+---------------------------
+- Official release of Starsim!
+- Adds a ``Calibration`` class, based on `Optuna <https://optuna.org>`_, to facilitate the calibration of Starsim models.
+- Adds ``mean()``, ``median()``, and ``plot()`` methods to ``MultiSim``.
+- Adds ``low`` and ``high`` attributes to ``Result`` objects.
+- Adds a ``flatten()`` method to ``Results``, allowing nested ``Results`` objects to be turned into flat dictionaries.
+- Removes duplicate UIDs among new infections, and adds a ``unique()`` method to ``ss.uids``.
+- Fixes a bug that prevented ``ss.lognorm_im()`` from using callable parameters.
+- Updates the default ``Sim`` string representation to be a single line; the more verbose version is available via ``sim.disp()``.
+- *GitHub info*: PR `581 <https://github.com/starsimhub/starsim/pull/581>`_
+
+
+Version 0.5.10 (2024-07-03)
+---------------------------
+- Adds two new common-random-number-safe networks. The first is an Erdős-Rényi network that is similar to ``RandomNet`` but parameterized differently. The second is a 2D spatial network with connectivity between agents within a given radius; these agents can also optionally move.
+- *GitHub info*: PR `575 <https://github.com/starsimhub/starsim/pull/575>`_
+
+
+Version 0.5.9 (2024-06-30)
+--------------------------
+- Added a ``ss.histogram()`` distribution, which allows generating new random values from an empirical histogram.
+- When binned age data is provided to specify the initial ages for new agents, the ages are now distributed throughout the year/bin rather than new agents being assigned integer ages
+- Initial age data is now accepted as a ``pd.Series`` rather than a ``pd.DataFrame`` where the index corresponds to the age values, thereby avoiding the need for specific dataframe column names to be used to specify the age and value
+- *GitHub info*: PR `572 <https://github.com/starsimhub/starsim/pull/572>`_
+
+
+Version 0.5.8 (2024-06-30)
+--------------------------
+- Revert to making infection logging disabled by default. However, the infection log will now always be created so disease subclasses can override logging behaviour where required (e.g., to capture additional metadata)
+- **Backwards-compatibility notes:** Logging has been moved from an argument to ``Disease`` to ``pars``. Existing code such as ``Disease(log=True)`` should be changed to ``Disease(pars={'log':True})``. The 'log' option can be added to the pars passed to any subclass e.g., ``ss.HIV(pars={...,log=True})``.
+- *GitHub info*: PR `573 <https://github.com/starsimhub/starsim/pull/573>`_
+
 Version 0.5.7 (2024-06-27)
 --------------------------
 - Implemented a new ``ss.combine_rands()`` function based on a bitwise-XOR, since the previous modulo-based approach could introduce correlations between pairs of agents.
-- *GitHub info*: PR `546 <https://github.com/starsimhub/starsim/pull/546>`
+- *GitHub info*: PR `546 <https://github.com/starsimhub/starsim/pull/546>`_
 
 
 Version 0.5.6 (2024-06-22)
 --------------------------
 - ``ss.Infection.make_new_cases()`` now returns the index of the network associated with each transmission event
-- If a ``People` object is provided to the ``Arr`` constructor, the arrays will be pre-initialized to index the current UIDs in the ``People`` object. This enables construction of temporary ``Arr`` instances that can be used to perform intermediate calculations (e.g., inside ``Intervention.apply()`` or within a module update step)
+- If a ``People`` object is provided to the ``Arr`` constructor, the arrays will be pre-initialized to index the current UIDs in the ``People`` object. This enables construction of temporary ``Arr`` instances that can be used to perform intermediate calculations (e.g., inside ``Intervention.apply()`` or within a module update step)
 - Deprecated ``Arr(raw=...)`` argument to simplify initialization, as in practice the ``raw`` variable is not directly set, and this update also introduces a new pathway for initializating the `raw` attribute
 - ``ss.uids.to_numpy()`` now returns a view rather than a copy
 - ``ss.bernoulli.filter()`` now supports ``ss.BoolArr`` as an input, where the filtering will operate on the ``uids`` returned by ``ss.BoolArr.uids``

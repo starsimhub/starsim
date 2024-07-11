@@ -10,7 +10,7 @@ import starsim as ss
 import scipy.optimize as spo
 import scipy.spatial as spsp
 
-# CK: need to remove this, but slows down the code otherwise
+# This has a significant impact on runtime, surprisingly
 ss_float_ = ss.dtypes.float
 ss_int_ = ss.dtypes.int
 
@@ -358,7 +358,7 @@ class SexualNetwork(DynamicNetwork):
 
 
 # %% Specific instances of networks
-__all__ += ['StaticNet', 'RandomNet', 'NullNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet', 'PrenatalNet', 'PostnatalNet']
+__all__ += ['StaticNet', 'RandomNet', 'ErdosRenyiNet', 'DiskNet', 'NullNet', 'MFNet', 'MSMNet', 'EmbeddingNet', 'MaternalNet', 'PrenatalNet', 'PostnatalNet']
 
 
 class StaticNet(Network):
@@ -521,6 +521,148 @@ class RandomNet(DynamicNetwork):
             dur = np.full(len(p1), self.pars.dur)
         
         self.append(p1=p1, p2=p2, beta=beta, dur=dur)
+        return
+
+
+class ErdosRenyiNet(DynamicNetwork):
+    """
+    In the Erdos-Renyi network, every possible edge has a probability, p, of
+    being created on each time step.
+
+    The degree of each node will have a binomial distribution, considering each
+    of the N-1 possible edges connection this node to the others will be created
+    with probability p.
+
+    Please be careful with the `dur` parameter. When set to 0, new edges will be
+    created on each time step. If positive, edges will persist for `dur` years.
+    Note that the existence of edges from previous time steps will not prevent
+    or otherwise alter the creation of new edges on each time step, edges will
+    accumulate over time.
+    """
+
+    def __init__(self, pars=None, key_dict=None, **kwargs):
+        """ Initialize """
+        super().__init__(key_dict=key_dict)
+        self.default_pars(
+            p = 0.1, # Probability of each edge
+            dur = 0, # Duration of zero ensures that new random edges are formed on each time step
+        )
+        self.update_pars(pars, **kwargs)
+        self.randint = ss.randint(low=np.iinfo('int64').min, high=np.iinfo('int64').max, dtype=np.int64) # Used to draw a random number for each agent as part of creating edges
+        return
+
+    def init_post(self):
+        self.add_pairs()
+        return
+
+    def update(self):
+        self.end_pairs()
+        self.add_pairs()
+        return
+
+    def add_pairs(self):
+        """ Generate contacts """
+        people = self.sim.people
+        born_uids = (people.age > 0).uids
+
+        # Sample integers
+        ints = self.randint.rvs(born_uids)
+
+        # All possible edges are upper triangle of complete matrix
+        idx1, idx2 = np.triu_indices(n=len(born_uids), k=1)
+
+        # Use integers to create random numbers per edge
+        i1 = ints[idx1]
+        i2 = ints[idx2]
+        r = ss.combine_rands(i1, i2)
+        edge = r <= self.pars.p
+
+        p1 = idx1[edge]
+        p2 = idx2[edge]
+        beta = np.ones(len(p1), dtype=ss_float_)
+
+        if isinstance(self.pars.dur, ss.Dist):
+            dur = self.pars.dur.rvs(p1)
+        else:
+            dur = np.full(len(p1), self.pars.dur)
+        
+        self.append(p1=p1, p2=p2, beta=beta, dur=dur)
+        return
+
+
+class DiskNet(Network):
+    """
+    Disk graph in which edges are made between agents located within a user-defined radius.
+
+    Interactions take place within a square with edge length of 1. Agents are
+    initialized to have a random position and orientation within this square. On
+    each time step, agents advance v*dt in the direction they are pointed. When
+    encountering a wall, agents are reflected.
+
+    Edged are formed between two agents if they are within r distance of each other.
+    """
+
+    def __init__(self, pars=None, key_dict=None, **kwargs):
+        """ Initialize """
+        super().__init__(key_dict=key_dict)
+        self.default_pars(
+            r = 0.1, # Radius
+            v = 0.05, # Velocity
+        )
+        self.update_pars(pars, **kwargs)
+        self.add_states(
+            ss.FloatArr('x', default=ss.random(), label='X position'),
+            ss.FloatArr('y', default=ss.random(), label='Y position'),
+            ss.FloatArr('theta', default=ss.uniform(high=2*np.pi), label='Heading'),
+        )
+        return
+
+    def init_post(self):
+        self.add_pairs()
+        return
+
+    def update(self):
+
+        # Motion step
+        vdt = self.pars.v * self.sim.dt
+        self.x[:] = self.x + vdt * np.cos(self.theta)
+        self.y[:] = self.y + vdt * np.sin(self.theta)
+
+        # Wall bounce
+
+        # Right edge
+        inds = (self.x > 1).uids
+        self.x[inds] = 2 - self.x[inds]
+        self.theta[inds] = np.pi - self.theta[inds]
+
+        # Left edge
+        inds = (self.x < 0).uids
+        self.x[inds] =  -self.x[inds]
+        self.theta[inds] = np.pi - self.theta[inds]
+
+        # Top edge
+        inds = (self.y > 1).uids
+        self.y[inds] = 2 - self.y[inds]
+        self.theta[inds] = - self.theta[inds]
+
+        # Bottom edge
+        inds = (self.y < 0).uids
+        self.y[inds] = -self.y[inds]
+        self.theta[inds] = - self.theta[inds]
+
+        self.add_pairs()
+        return
+
+    def add_pairs(self):
+        """ Generate contacts """
+        p1, p2 = np.triu_indices(n=len(self.x), k=1)
+        d12_sq = (self.x.raw[p2]-self.x.raw[p1])**2 + (self.y.raw[p2]-self.y.raw[p1])**2
+        edge = d12_sq < self.pars.r**2
+
+        self.edges['p1'] = ss.uids(p1[edge])
+        self.edges['p2'] = ss.uids(p2[edge])
+        self.edges['beta'] = np.ones(len(self.p1), dtype=ss_float_)
+
         return
 
 
@@ -763,12 +905,11 @@ class EmbeddingNet(MFNet):
 
         dist_mat = spsp.distance_matrix(loc_m[:, np.newaxis], loc_f[:, np.newaxis])
         ind_m, ind_f = spo.linear_sum_assignment(dist_mat)
-        n_pairs = len(ind_f)
 
         # Finalize pairs
         p1 = available_m[ind_m]
         p2 = available_f[ind_f]
-        beta = np.ones(n_pairs) # TODO: Allow custom beta
+        beta = np.ones(len(p1)) # TODO: Allow custom beta
         dur_vals = self.pars.duration.rvs(p1)
         act_vals = self.pars.acts.rvs(p1)
 

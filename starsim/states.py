@@ -72,7 +72,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
         people (ss.People): Optionally specify an initialized People object, used to construct temporary Arr instances
     """
-    def __init__(self, name, dtype=None, default=None, nan=None, label=None, coerce=True, skip_init=False, people=None):
+    def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, coerce=True, skip_init=False, people=None):
         if coerce:
             dtype = check_dtype(dtype, default)
         
@@ -120,7 +120,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         the raw array (``raw``) or the active agents (``values``), and to convert
         the key to array indices if needed.
         """
-        if isinstance(key, (uids, int)):
+        if isinstance(key, (uids, int, ss_int)):
             return key
         elif isinstance(key, (BoolArr, IndexArr)):
             return key.uids
@@ -159,19 +159,35 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     def __or__(self, other):  raise BooleanOperationError(self)
     def __xor__(self, other): raise BooleanOperationError(self)
     def __invert__(self):     raise BooleanOperationError(self)
-    
-    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
-        """ For almost everything else, behave like a normal NumPy array on Arr.values """
-        inputs = [x.values if isinstance(x, Arr) else x for x in inputs]
-        return getattr(ufunc, method)(*inputs, **kwargs)
-    
+
+    def __array_ufunc__(self, *args, **kwargs):
+        if args[1] != '__call__':
+            # This is a catch-all for ufuncs that are not being applied with '__call__' (e.g., operations returning a scalar like 'np.sum()' use reduce instead)
+            args = [(x if x is not self else self.values) for x in args]
+            kwargs = {k: v if v is not self else self.values for k, v in kwargs.items()}
+            return self.values.__array_ufunc__(*args, **kwargs)
+        else:
+            args = [(x if x is not self else self.values) for x in args] # Convert any operands that are Arr instances to their value arrays
+            if 'out' in kwargs and kwargs['out'][0] is self:
+                # In-place operations like += applied to the entire Arr instance
+                # use this branch. Therefore, we perform our computation on a new
+                # array with the same size as self.values, and then write it back
+                # to the appropriate entries in `self.raw` via `self[:]`
+                del kwargs['out']
+                self[:] = args[0](*args[2:], **kwargs)
+                return self
+            else:
+                # Otherwise, just run the ufunc
+                return args[0](*args[2:], **kwargs)
+
     @property
     def auids(self):
         """ Link to the indices of active agents -- sim.people.auids """
         try:
             return self.people.auids
         except:
-            ss.warn('Trying to access non-initialized States object')
+            if not self.initialized:
+                ss.warn('Trying to access non-initialized Arr object; in most cases, Arr objects need to be initialized with a Sim object, but set skip_init=True if this is intentional.')
             return uids(np.arange(len(self.raw)))
     
     def count(self):
@@ -219,8 +235,6 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
             new_uids: Numpy array of UIDs for the new agents being added
             new_vals: If provided, assign these state values to the new UIDs
         """
-        if new_uids is None and new_vals is not None: # Used as a shortcut to avoid needing to supply twice
-            new_uids = new_vals
         orig_len = self.len_used
         n_new = len(new_uids)
         self.len_used += n_new  # Increase the count of the number of agents by `n` (the requested number of new agents)
@@ -278,8 +292,14 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
 
 
 class FloatArr(Arr):
-    """ Subclass of Arr with defaults for floats """
-    def __init__(self, name, nan=np.nan, **kwargs):
+    """
+    Subclass of Arr with defaults for floats and ints.
+    
+    Note: Starsim does not support integer arrays by default since they introduce
+    ambiguity in dealing with NaNs, and float arrays are suitable for most purposes.
+    If you really want an integer array, you can use the default Arr class instead.    
+    """
+    def __init__(self, name=None, nan=np.nan, **kwargs):
         super().__init__(name=name, dtype=ss_float, nan=nan, coerce=False, **kwargs)
         return
 
@@ -303,7 +323,7 @@ class FloatArr(Arr):
 
 class BoolArr(Arr):
     """ Subclass of Arr with defaults for booleans """
-    def __init__(self, name, nan=False, **kwargs): # No good NaN equivalent for bool arrays
+    def __init__(self, name=None, nan=False, **kwargs): # No good NaN equivalent for bool arrays
         super().__init__(name=name, dtype=ss_bool, nan=nan, coerce=False, **kwargs)
         return
     
@@ -334,8 +354,8 @@ class BoolArr(Arr):
 
     
 class IndexArr(Arr):
-    """ A special class of IndexArr used for UIDs and RNG IDs """
-    def __init__(self, name, label=None):
+    """ A special class of Arr used for UIDs and RNG IDs; not to be used as an integer array (for that, use FloatArr) """
+    def __init__(self, name=None, label=None):
         super().__init__(name=name, dtype=ss_int, default=None, nan=-1, label=label, coerce=False, skip_init=True)
         self.raw = uids(self.raw)
         return
@@ -348,6 +368,8 @@ class IndexArr(Arr):
     
     def grow(self, new_uids=None, new_vals=None):
         """ Change the size of the array """
+        if new_uids is None and new_vals is not None: # Used as a shortcut to avoid needing to supply twice
+            new_uids = new_vals
         super().grow(new_uids=new_uids, new_vals=new_vals)
         self.raw = uids(self.raw)
         return
@@ -376,12 +398,12 @@ class uids(np.ndarray):
         return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
 
     def concat(self, other, **kw): # TODO: why can't they both be called cat()?
-        """ Equivalent to np.concatenate(), but return correct type """
+        """ Equivalent to np.concatenate(), but return correct type; see ss.uids.cat() for the class method """
         return np.concatenate([self, other], **kw).view(self.__class__)
 
     @classmethod
     def cat(cls, *args, **kw):
-        """ Equivalent to np.concatenate(), but return correct type """
+        """ Equivalent to np.concatenate(), but return correct type; see ss.uids.concat() for the instance method """
         arrs = args[0] if len(args) == 1 else args
         return np.concatenate(arrs, **kw).view(cls)
 
@@ -412,6 +434,15 @@ class uids(np.ndarray):
     def to_numpy(self):
         """ Return a view as a standard NumPy array """
         return self.view(np.ndarray)
+    
+    def unique(self, return_index=False):
+        """ Return unique UIDs; equivalent to np.unique() """
+        if return_index:
+            arr, index = np.unique(self, return_index=True)
+            return arr.view(self.__class__), index
+        else:
+            arr = np.unique(self).view(self.__class__)
+            return arr
 
     # Implement collection of operators
     def __and__(self, other): return self.intersect(other)
