@@ -594,8 +594,8 @@ class Dist:
 
 # Add common distributions so they can be imported directly; assigned to a variable since used in help messages
 dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
-             'poisson', 'weibull', 'constant', 'randint', 'rand_uint64', 'bernoulli', 'choice']
-             'histogram']
+             'poisson', 'weibull', 'constant', 'randint', 'rand_uint64', 'bernoulli',
+             'choice', 'histogram']
 __all__ += dist_list
 
 
