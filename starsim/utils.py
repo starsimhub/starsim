@@ -329,6 +329,6 @@ def combine_rands(a, b):
     Returns:
         A new array of random numbers the same size as a and b
     """
-    c = np.bitwise_xor(a*b, a-b).astype(np.uint64)
+    c = np.bitwise_xor(a*b, a-b)
     u = c / np.iinfo(np.uint64).max
     return u

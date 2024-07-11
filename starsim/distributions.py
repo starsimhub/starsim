@@ -594,7 +594,7 @@ class Dist:
 
 # Add common distributions so they can be imported directly; assigned to a variable since used in help messages
 dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
-             'poisson', 'weibull', 'constant', 'randint', 'bernoulli', 'choice']
+             'poisson', 'weibull', 'constant', 'randint', 'rand_uint64', 'bernoulli', 'choice']
 __all__ += dist_list
 
 
@@ -719,7 +719,7 @@ class poisson(Dist):
 
 class randint(Dist):
     """ Randint distribution, integer values on interval [low, high) using numpy.random.Generator.integers """
-    def __init__(self, low=0, high=np.iinfo(ss.dtypes.int).max, dtype=int, **kwargs):
+    def __init__(self, low=0, high=np.iinfo(ss.dtypes.int).max, dtype=ss.dtypes.int, **kwargs):
         if ss.options._centralized:
             # randint because we're accessing via numpy.random
             super().__init__(distname='randint', low=low, high=high, dtype=dtype, **kwargs)
@@ -733,6 +733,11 @@ class randint(Dist):
         rvs = rands * (p.high + 1 - p.low) + p.low
         rvs = rvs.astype(self.pars['dtype'])
         return rvs
+
+class rand_uint64(Dist):
+    def make_rvs(self):
+        # The bit generator random_raw function is specified as returning uint64
+        return self.bitgen.random_raw(self._size)
 
 class weibull(Dist):
     """ Weibull distribution -- NB, uses SciPy rather than NumPy """
