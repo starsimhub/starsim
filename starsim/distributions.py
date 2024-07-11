@@ -661,8 +661,10 @@ class lognorm_im(Dist):
         super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
         return
     
-    def sync_pars(self):
+    def sync_pars(self, call=True):
         """ Translate between NumPy and SciPy parameters """
+        if call:
+            self.call_pars()
         p = self._pars
         spars = sc.dictobj()
         spars.s = p.sigma
@@ -717,7 +719,7 @@ class lognorm_ex(Dist):
     def sync_pars(self):
         """ Convert from overlying to underlying parameters, then translate to SciPy """
         self.convert_ex_to_im()
-        spars = lognorm_im.sync_pars(self) # Borrow sync_pars from lognorm_im
+        spars = lognorm_im.sync_pars(self, call=False) # Borrow sync_pars from lognorm_im
         return spars
     
 

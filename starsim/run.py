@@ -4,6 +4,7 @@ Utilities for running in parallel
 
 import numpy as np
 import sciris as sc
+import pylab as pl
 import starsim as ss
 
 __all__ = ['MultiSim', 'single_run', 'multi_run', 'parallel']
@@ -149,7 +150,6 @@ class MultiSim(sc.prettyobj):
             msim.reduce()
             msim.summarize()
         """
-
         if use_mean:
             if bounds is None:
                 bounds = 2
@@ -170,35 +170,37 @@ class MultiSim(sc.prettyobj):
         reduced_sim.metadata = dict(parallelized=True, combined=False, n_runs=n_runs, quantiles=quantiles,
                                     use_mean=use_mean, bounds=bounds)  # Store how this was parallelized
 
-        # Perform the statistics
+        # Calculate the statistics
         raw = {}
+        exclude = ['yearvec'] # Exclude things that we don't want to include
 
-        rkeys = reduced_sim.results.keys()
+        rflat = reduced_sim.results.flatten()
+        rkeys = list(rflat.keys())
+        rkeys = [k for k in rkeys if k not in exclude]
 
         for rkey in rkeys:
-            raw[rkey] = np.zeros((reduced_sim.res_npts, len(self.sims)))
+            raw[rkey] = np.zeros((reduced_sim.npts, len(self.sims)))
             for s, sim in enumerate(self.sims):
-                vals = sim.results[rkey].values
-                raw[rkey][:, s] = vals
+                flat = sim.results.flatten()
+                raw[rkey][:, s] = flat[rkey]
 
         for rkey in rkeys:
-            results = reduced_sim.results
             if use_mean:
                 r_mean = np.mean(raw[rkey], axis=1)
                 r_std = np.std(raw[rkey], axis=1)
-                results[rkey].values[:] = r_mean
-                results[rkey].low = r_mean - bounds * r_std
-                results[rkey].high = r_mean + bounds * r_std
+                rflat[rkey][:] = r_mean
+                rflat[rkey].low = r_mean - bounds * r_std
+                rflat[rkey].high = r_mean + bounds * r_std
             else:
-                results[rkey].values[:] = np.quantile(raw[rkey], q=0.5, axis=1)
-                results[rkey].low = np.quantile(raw[rkey], q=quantiles['low'], axis=1)
-                results[rkey].high = np.quantile(raw[rkey], q=quantiles['high'], axis=1)
+                rflat[rkey][:] = np.quantile(raw[rkey], q=0.5, axis=1)
+                rflat[rkey].low = np.quantile(raw[rkey], q=quantiles['low'], axis=1)
+                rflat[rkey].high = np.quantile(raw[rkey], q=quantiles['high'], axis=1)
 
         # Compute and store final results
-        reduced_sim.compute_summary()
+        reduced_sim.summarize()
         self.orig_base_sim = self.base_sim
         self.base_sim = reduced_sim
-        self.results = reduced_sim.results
+        self.results = rflat
         self.summary = reduced_sim.summary
         self.which = 'reduced'
 
@@ -226,6 +228,55 @@ class MultiSim(sc.prettyobj):
             kwargs (dict): passed to reduce()
         """
         return self.reduce(use_mean=False, quantiles=quantiles, **kwargs)
+    
+    def plot(self, key=None, fig=None, fig_kw=None, plot_kw=None, fill_kw=None):
+        """ 
+        Plot all results in the MultiSim object.
+        
+        If the MultiSim object has been reduced (i.e. mean or median), then plot
+        the best value and uncertainty bound. Otherwise, plot individual sims.
+        
+        Args:
+            key (str): the results key to plot (by default, all)
+            fig (Figure): if provided, plot results into an existing figure
+            fig_kw (dict): passed to ``plt.subplots()``
+            plot_kw (dict): passed to ``plt.plot()``
+            fill_kw (dict): passed to ``plt.fill_between()``
+        """
+        # Has not been reduced yet, plot individual sim
+        if self.which is None:
+            fig = None
+            alpha = 0.7 if len(self.sims) < 5 else 0.5
+            plot_kw = sc.mergedicts({'alpha':alpha}, plot_kw)
+            for sim in self.sims:
+                fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw)
+            pl.legend()
+        
+        # Has been reduced, plot with uncertainty bounds
+        else:
+            flat = self.results
+            yearvec = flat.pop('yearvec')
+            n_cols = np.ceil(np.sqrt(len(flat))) # TODO: remove duplication with sim.plot()
+            default_figsize = np.array([8, 6])
+            figsize_factor = np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size based on the number of rows and columns
+            figsize = default_figsize*figsize_factor
+            fig_kw = sc.mergedicts({'figsize':figsize}, fig_kw)
+            fig_kw = sc.mergedicts(fig_kw)
+            fill_kw = sc.mergedicts({'alpha':0.2}, fill_kw)
+            plot_kw = sc.mergedicts({'lw':2, 'alpha':0.8}, plot_kw)
+            with sc.options.with_style('simple'):
+                if key is not None:
+                    flat = {k:v for k,v in flat.items() if k.startswith(key)}
+                fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
+                    
+                # Do the plotting
+                for ax, (key, res) in zip(axs.flatten(), flat.items()):
+                    ax.fill_between(yearvec, res.low, res.high, **fill_kw)
+                    ax.plot(yearvec, res, **plot_kw)
+                    ax.set_title(getattr(res, 'label', key)) 
+                    ax.set_xlabel('Year')
+                
+        return fig
 
 
 def single_run(sim, ind=0, reseed=True, keep_people=False, run_args=None, sim_args=None,

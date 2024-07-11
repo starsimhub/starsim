@@ -187,7 +187,7 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
             return self.people.auids
         except:
             if not self.initialized:
-                ss.warn('Trying to access non-initialized States object')
+                ss.warn('Trying to access non-initialized Arr object; in most cases, Arr objects need to be initialized with a Sim object, but set skip_init=True if this is intentional.')
             return uids(np.arange(len(self.raw)))
     
     def count(self):
@@ -292,7 +292,13 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
 
 
 class FloatArr(Arr):
-    """ Subclass of Arr with defaults for floats """
+    """
+    Subclass of Arr with defaults for floats and ints.
+    
+    Note: Starsim does not support integer arrays by default since they introduce
+    ambiguity in dealing with NaNs, and float arrays are suitable for most purposes.
+    If you really want an integer array, you can use the default Arr class instead.    
+    """
     def __init__(self, name=None, nan=np.nan, **kwargs):
         super().__init__(name=name, dtype=ss_float, nan=nan, coerce=False, **kwargs)
         return
@@ -348,7 +354,7 @@ class BoolArr(Arr):
 
     
 class IndexArr(Arr):
-    """ A special class of IndexArr used for UIDs and RNG IDs """
+    """ A special class of Arr used for UIDs and RNG IDs; not to be used as an integer array (for that, use FloatArr) """
     def __init__(self, name=None, label=None):
         super().__init__(name=name, dtype=ss_int, default=None, nan=-1, label=label, coerce=False, skip_init=True)
         self.raw = uids(self.raw)
@@ -392,12 +398,12 @@ class uids(np.ndarray):
         return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
 
     def concat(self, other, **kw): # TODO: why can't they both be called cat()?
-        """ Equivalent to np.concatenate(), but return correct type """
+        """ Equivalent to np.concatenate(), but return correct type; see ss.uids.cat() for the class method """
         return np.concatenate([self, other], **kw).view(self.__class__)
 
     @classmethod
     def cat(cls, *args, **kw):
-        """ Equivalent to np.concatenate(), but return correct type """
+        """ Equivalent to np.concatenate(), but return correct type; see ss.uids.concat() for the instance method """
         arrs = args[0] if len(args) == 1 else args
         return np.concatenate(arrs, **kw).view(cls)
 
@@ -428,6 +434,15 @@ class uids(np.ndarray):
     def to_numpy(self):
         """ Return a view as a standard NumPy array """
         return self.view(np.ndarray)
+    
+    def unique(self, return_index=False):
+        """ Return unique UIDs; equivalent to np.unique() """
+        if return_index:
+            arr, index = np.unique(self, return_index=True)
+            return arr.view(self.__class__), index
+        else:
+            arr = np.unique(self).view(self.__class__)
+            return arr
 
     # Implement collection of operators
     def __and__(self, other): return self.intersect(other)
