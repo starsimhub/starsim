@@ -793,7 +793,7 @@ class rand_uint64(Dist):
     def make_rvs(self):
         # The bit generator random_raw function is specified as returning uint64
         if ss.options._centralized:
-            return self.rng._bit_generator.random_raw(self._size)
+            return self.rng.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=self._size)
         return self.bitgen.random_raw(self._size)
 
 
