@@ -594,7 +594,7 @@ class Dist:
 
 # Add common distributions so they can be imported directly; assigned to a variable since used in help messages
 dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
-             'poisson', 'weibull', 'constant', 'randint', 'rand_uint64', 'bernoulli',
+             'poisson', 'weibull', 'constant', 'randint', 'rand_raw', 'bernoulli',
              'choice', 'histogram']
 __all__ += dist_list
 
@@ -789,12 +789,16 @@ class randint(Dist):
         rvs = rvs.astype(self.pars['dtype'])
         return rvs
 
-class rand_uint64(Dist):
+class rand_raw(Dist):
+    """
+    Directly sample raw integers (uint64) from the random number generator.
+    Typicaly only used with ss.combine_rands().
+    """
     def make_rvs(self):
-        # The bit generator random_raw function is specified as returning uint64
         if ss.options._centralized:
             return self.rng.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=self._size)
-        return self.bitgen.random_raw(self._size)
+        else:
+            return self.bitgen.random_raw(self._size)
 
 
 class weibull(Dist):

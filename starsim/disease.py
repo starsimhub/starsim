@@ -157,8 +157,8 @@ class Infection(Disease):
         )
 
         # Define random number generators for make_new_cases
-        self.rng_target = ss.rand_uint64(name='target')
-        self.rng_source = ss.rand_uint64(name='source')
+        self.rng_target = ss.rand_raw(name='target')
+        self.rng_source = ss.rand_raw(name='source')
         return
     
     def init_pre(self, sim):
