@@ -84,17 +84,18 @@ class HIV(ss.Infection):
 
 class ART(ss.Intervention):
 
-    def __init__(self, year: np.array, coverage: np.array, pars=None, **kwargs):
+    def __init__(self, year, coverage, pars=None, **kwargs):
         self.requires = HIV
-        self.year = sc.promotetoarray(year)
-        self.coverage = sc.promotetoarray(coverage)
+        self.year = sc.toarray(year)
+        self.coverage = sc.toarray(coverage)
         super().__init__()
         self.default_pars(
             art_delay = ss.constant(v=1) # Value in years
         )
         self.update_pars(pars=pars, **kwargs)
 
-        self.prob_art_at_infection = ss.bernoulli(p=lambda self, sim, uids: np.interp(sim.year, self.year, self.coverage))
+        prob_art = lambda self, sim, uids: np.interp(sim.year, self.year, self.coverage)
+        self.prob_art_at_infection = ss.bernoulli(p=prob_art)
         return
 
     def init_pre(self, sim):
