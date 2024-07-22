@@ -84,14 +84,18 @@ class HIV(ss.Infection):
 
 class ART(ss.Intervention):
 
-    def __init__(self, year: np.array, coverage: np.array, **kwargs):
+    def __init__(self, year, coverage, pars=None, **kwargs):
         self.requires = HIV
-        self.year = sc.promotetoarray(year)
-        self.coverage = sc.promotetoarray(coverage)
+        self.year = sc.toarray(year)
+        self.coverage = sc.toarray(coverage)
+        super().__init__()
+        self.default_pars(
+            art_delay = ss.constant(v=1) # Value in years
+        )
+        self.update_pars(pars=pars, **kwargs)
 
-        super().__init__(**kwargs)
-
-        self.prob_art_at_infection = ss.bernoulli(p=lambda self, sim, uids: np.interp(sim.year, self.year, self.coverage))
+        prob_art = lambda self, sim, uids: np.interp(sim.year, self.year, self.coverage)
+        self.prob_art_at_infection = ss.bernoulli(p=prob_art)
         return
 
     def init_pre(self, sim):
@@ -104,18 +108,20 @@ class ART(ss.Intervention):
         if sim.year < self.year[0]:
             return
 
-        ti_delay = 1 # 1 time step delay TODO
-        recently_infected = (sim.people.hiv.ti_infected == sim.ti-ti_delay).uids
+        hiv = sim.people.hiv
+        infected = hiv.infected.uids
+        ti_delay = np.round(self.pars.art_delay.rvs(infected)/sim.dt).astype(int)
+        recently_infected = infected[hiv.ti_infected[infected] == sim.ti-ti_delay]
 
         n_added = 0
         if len(recently_infected) > 0:
             inds = self.prob_art_at_infection.filter(recently_infected)
-            sim.people.hiv.on_art[inds] = True
-            sim.people.hiv.ti_art[inds] = sim.ti
+            hiv.on_art[inds] = True
+            hiv.ti_art[inds] = sim.ti
             n_added = len(inds)
 
         # Add result
-        self.results['n_art'][sim.ti] = np.count_nonzero(sim.people.hiv.on_art)
+        self.results['n_art'][sim.ti] = np.count_nonzero(hiv.on_art)
 
         return n_added
 
