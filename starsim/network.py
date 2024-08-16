@@ -560,7 +560,7 @@ class ErdosRenyiNet(DynamicNetwork):
         self.add_pairs()
         return
 
-    def add_pairs(self):
+    def add_pairs(self, chunk_size=10_000): # TODO: 10_000?
         """ Generate contacts """
         people = self.sim.people
         born_uids = (people.age > 0).uids
@@ -568,17 +568,74 @@ class ErdosRenyiNet(DynamicNetwork):
         # Sample integers
         ints = self.randint.rvs(born_uids)
 
-        # All possible edges are upper triangle of complete matrix
-        idx1, idx2 = np.triu_indices(n=len(born_uids), k=1)
+        N = len(born_uids)
+        if N <= chunk_size:
+            # All possible edges are upper triangle of complete matrix
+            idx1, idx2 = np.triu_indices(n=len(born_uids), k=1)
 
-        # Use integers to create random numbers per edge
-        i1 = ints[idx1]
-        i2 = ints[idx2]
-        r = ss.combine_rands(i1, i2)
-        edge = r <= self.pars.p
+            # Use integers to create random numbers per edge
+            i1 = ints[idx1]
+            i2 = ints[idx2]
+            edge = ss.combine_rands(i1, i2) <= self.pars.p
 
-        p1 = idx1[edge]
-        p2 = idx2[edge]
+            p1 = idx1[edge]
+            p2 = idx2[edge]
+        else:
+            p1 = []
+            p2 = []
+
+            chunks = int(np.ceil(N/chunk_size))
+            last = np.mod(N, chunk_size)
+            tri1, tri2 = np.triu_indices(n=chunk_size, k=1)
+            ful1, ful2 = np.meshgrid(np.arange(chunk_size), np.arange(chunk_size))
+            ful1f = ful1.flatten()
+            ful2f = ful2.flatten()
+
+            lastrow1 = ful1[:,:last].flatten()
+            lastrow2 = ful2[:,:last].flatten()
+
+            lastcol1 = ful1[:last,:].flatten()
+            lastcol2 = ful2[:last,:].flatten()
+
+            for row in np.arange(chunks):
+                for col in np.arange(row, chunks):
+                    if row == col:
+                        if row == chunks-1:
+                            # on last
+                            idx1, idx2 = np.triu_indices(n=last, k=1)
+                            idx1 += row * chunk_size
+                            idx2 += col * chunk_size
+                        else:
+                            # Use triu indices
+                            idx1 = tri1 + row * chunk_size
+                            idx2 = tri2 + col * chunk_size
+                    else:
+                        # Use full indices
+                        if row < chunks-1 and col < chunks-1:
+                            idx1 = ful1f + row * chunk_size
+                            idx2 = ful2f + col * chunk_size
+                        elif row == chunks-1 and col < chunks-1:
+                            # Truncate row
+                            idx1 = lastrow1 + row * chunk_size
+                            idx2 = lastrow2 + col * chunk_size
+                        elif col == chunks-1 and row < chunks-1:
+                            # Truncate col
+                            idx1 = lastcol1 + row * chunk_size
+                            idx2 = lastcol2 + col * chunk_size
+                        else:
+                            # Truncate col
+                            idx1 = ful1[:last,:last].flatten() + row * chunk_size
+                            idx2 = ful2[:last,:last].flatten() + col * chunk_size
+
+                    i1 = ints[idx1]
+                    i2 = ints[idx2]
+                    edge = ss.combine_rands(i1, i2) <= self.pars.p
+                    p1.append(idx1[edge])
+                    p2.append(idx2[edge])
+
+            p1 = np.concatenate(p1)
+            p2 = np.concatenate(p2)
+
         beta = np.ones(len(p1), dtype=ss_float_)
 
         if isinstance(self.pars.dur, ss.Dist):
@@ -653,16 +710,18 @@ class DiskNet(Network):
         self.add_pairs()
         return
 
+    @staticmethod
+    @nb.njit(cache=True)
+    def compute_pairs(x, y, r2):
+        p1, p2 = np.triu_indices(n=len(x), k=1)
+        edge = (x[p2]-x[p1])**2 + (y[p2]-y[p1])**2 < r2
+        return p1[edge], p2[edge]
+
     def add_pairs(self):
-        """ Generate contacts """
-        p1, p2 = np.triu_indices(n=len(self.x), k=1)
-        d12_sq = (self.x.raw[p2]-self.x.raw[p1])**2 + (self.y.raw[p2]-self.y.raw[p1])**2
-        edge = d12_sq < self.pars.r**2
-
-        self.edges['p1'] = ss.uids(p1[edge])
-        self.edges['p2'] = ss.uids(p2[edge])
+        p1, p2 = self.compute_pairs(self.x.raw, self.y.raw, self.pars.r**2)
+        self.edges['p1'] = ss.uids(p1)
+        self.edges['p2'] = ss.uids(p2)
         self.edges['beta'] = np.ones(len(self.p1), dtype=ss_float_)
-
         return
 
 
