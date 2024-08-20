@@ -130,7 +130,7 @@ class Network(ss.Module):
 
         Returns: True if person index appears in any interactions
         """
-        return (item in self.edges.p1) or (item in self.edges.p2) # TODO: chek if (item in self.members) is faster
+        return (item in self.edges.p1) or (item in self.edges.p2) # TODO: check if (item in self.members) is faster
 
     @property
     def members(self):
@@ -560,7 +560,7 @@ class ErdosRenyiNet(DynamicNetwork):
         self.add_pairs()
         return
 
-    def add_pairs(self, chunk_size=10_000): # TODO: 10_000?
+    def add_pairs(self, chunk_size=10_000):
         """ Generate contacts """
         people = self.sim.people
         born_uids = (people.age > 0).uids
@@ -711,14 +711,81 @@ class DiskNet(Network):
         return
 
     @staticmethod
-    @nb.njit(cache=True)
-    def compute_pairs(x, y, r2):
-        p1, p2 = np.triu_indices(n=len(x), k=1)
-        edge = (x[p2]-x[p1])**2 + (y[p2]-y[p1])**2 < r2
-        return p1[edge], p2[edge]
+    def compute_pairs(x, y, r2, chunk_size):
+        N = len(x)
 
-    def add_pairs(self):
-        p1, p2 = self.compute_pairs(self.x.raw, self.y.raw, self.pars.r**2)
+        #p1, p2 = np.triu_indices(n=len(x), k=1)
+        #edge = (x[p2]-x[p1])**2 + (y[p2]-y[p1])**2 < r2
+        #return p1[edge], p2[edge]
+
+        if N <= chunk_size:
+            # All possible edges are upper triangle of complete matrix
+            idx1, idx2 = np.triu_indices(n=N, k=1)
+
+            # Use integers to create random numbers per edge
+            edge = (x[idx2]-x[idx1])**2 + (y[idx2]-y[idx1])**2 < r2
+
+            p1 = idx1[edge]
+            p2 = idx2[edge]
+        else:
+            p1 = []
+            p2 = []
+
+            chunks = int(np.ceil(N/chunk_size))
+            last = np.mod(N, chunk_size)
+            tri1, tri2 = np.triu_indices(n=chunk_size, k=1)
+            ful1, ful2 = np.meshgrid(np.arange(chunk_size), np.arange(chunk_size))
+            ful1f = ful1.flatten()
+            ful2f = ful2.flatten()
+
+            lastrow1 = ful1[:,:last].flatten()
+            lastrow2 = ful2[:,:last].flatten()
+
+            lastcol1 = ful1[:last,:].flatten()
+            lastcol2 = ful2[:last,:].flatten()
+
+            for row in np.arange(chunks):
+                for col in np.arange(row, chunks):
+                    if row == col:
+                        if row == chunks-1:
+                            # on last
+                            idx1, idx2 = np.triu_indices(n=last, k=1)
+                            idx1 += row * chunk_size
+                            idx2 += col * chunk_size
+                        else:
+                            # Use triu indices
+                            idx1 = tri1 + row * chunk_size
+                            idx2 = tri2 + col * chunk_size
+                    else:
+                        # Use full indices
+                        if row < chunks-1 and col < chunks-1:
+                            idx1 = ful1f + row * chunk_size
+                            idx2 = ful2f + col * chunk_size
+                        elif row == chunks-1 and col < chunks-1:
+                            # Truncate row
+                            idx1 = lastrow1 + row * chunk_size
+                            idx2 = lastrow2 + col * chunk_size
+                        elif col == chunks-1 and row < chunks-1:
+                            # Truncate col
+                            idx1 = lastcol1 + row * chunk_size
+                            idx2 = lastcol2 + col * chunk_size
+                        else:
+                            # Truncate col
+                            idx1 = ful1[:last,:last].flatten() + row * chunk_size
+                            idx2 = ful2[:last,:last].flatten() + col * chunk_size
+
+
+                    edge = (x[idx2]-x[idx1])**2 + (y[idx2]-y[idx1])**2 < r2
+                    p1.append(idx1[edge])
+                    p2.append(idx2[edge])
+
+            p1 = np.concatenate(p1)
+            p2 = np.concatenate(p2)
+
+        return p1, p2
+
+    def add_pairs(self, chunk_size=10_000):
+        p1, p2 = self.compute_pairs(self.x.raw, self.y.raw, self.pars.r**2, chunk_size)
         self.edges['p1'] = ss.uids(p1)
         self.edges['p2'] = ss.uids(p2)
         self.edges['beta'] = np.ones(len(self.p1), dtype=ss_float_)

@@ -1,0 +1,741 @@
+{
+  "label": "",
+  "verbose": 0,
+  "n_agents": 10000.0,
+  "total_pop": null,
+  "pop_scale": null,
+  "unit": "year",
+  "start": 2000,
+  "end": null,
+  "n_years": 20,
+  "dt": 0.2,
+  "rand_seed": 2,
+  "slot_scale": 5,
+  "location": null,
+  "birth_rate": null,
+  "death_rate": null,
+  "use_aging": null,
+  "networks": [
+    {
+      "type": "MFNet",
+      "name": "mfnet",
+      "label": "mfnet",
+      "pars": {
+        "duration": {
+          "python_class": "<class 'starsim.distributions.lognorm_ex'>",
+          "dist": {
+            "python_class": "<class 'scipy.stats._continuous_distns.lognorm_gen'>",
+            "_stats_has_moments": false,
+            "_random_state": {
+              "py/reduce": [
+                {
+                  "py/function": "numpy.random._pickle.__randomstate_ctor"
+                },
+                {
+                  "py/tuple": [
+                    "MT19937",
+                    {
+                      "py/function": "numpy.random._pickle.__bit_generator_ctor"
+                    }
+                  ]
+                },
+                {
+                  "bit_generator": "MT19937",
+                  "state": {
+                    "key": {
+                      "py/object": "numpy.ndarray",
+                      "values": "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",
+                      "shape": [
+                        624
+                      ],
+                      "dtype": "uint32",
+                      "byteorder": "<"
+                    },
+                    "pos": 624
+                  },
+                  "has_gauss": 0,
+                  "gauss": 0.0
+                }
+              ]
+            },
+            "_ctor_param": {
+              "momtype": 1,
+              "a": 0.0,
+              "b": null,
+              "xtol": 1e-14,
+              "badvalue": null,
+              "name": "lognorm",
+              "longname": null,
+              "shapes": null,
+              "seed": null
+            },
+            "badvalue": null,
+            "name": "lognorm",
+            "a": 0.0,
+            "b": Infinity,
+            "xtol": 1e-14,
+            "moment_type": 1,
+            "shapes": "s",
+            "_parse_arg_template": "\ndef _parse_args(self, s,  loc=0, scale=1):\n    return (s, ), loc, scale\n\ndef _parse_args_rvs(self, s,  loc=0, scale=1, size=None):\n    return self._argcheck_rvs(s,  loc, scale, size=size)\n\ndef _parse_args_stats(self, s,  loc=0, scale=1, moments='mv'):\n    return (s, ), loc, scale, moments\n",
+            "numargs": 1,
+            "__doc__": "A lognormal continuous random variable.\n\n    As an instance of the `rv_continuous` class, `lognorm` object inherits from it\n    a collection of generic methods (see below for the full list),\n    and completes them with details specific for this particular distribution.\n    \n    Methods\n    -------\n    rvs(s, loc=0, scale=1, size=1, random_state=None)\n        Random variates.\n    pdf(x, s, loc=0, scale=1)\n        Probability density function.\n    logpdf(x, s, loc=0, scale=1)\n        Log of the probability density function.\n    cdf(x, s, loc=0, scale=1)\n        Cumulative distribution function.\n    logcdf(x, s, loc=0, scale=1)\n        Log of the cumulative distribution function.\n    sf(x, s, loc=0, scale=1)\n        Survival function  (also defined as ``1 - cdf``, but `sf` is sometimes more accurate).\n    logsf(x, s, loc=0, scale=1)\n        Log of the survival function.\n    ppf(q, s, loc=0, scale=1)\n        Percent point function (inverse of ``cdf`` --- percentiles).\n    isf(q, s, loc=0, scale=1)\n        Inverse survival function (inverse of ``sf``).\n    moment(order, s, loc=0, scale=1)\n        Non-central moment of the specified order.\n    stats(s, loc=0, scale=1, moments='mv')\n        Mean('m'), variance('v'), skew('s'), and/or kurtosis('k').\n    entropy(s, loc=0, scale=1)\n        (Differential) entropy of the RV.\n    fit(data)\n        Parameter estimates for generic data.\n        See `scipy.stats.rv_continuous.fit <https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.rv_continuous.fit.html#scipy.stats.rv_continuous.fit>`__ for detailed documentation of the\n        keyword arguments.\n    expect(func, args=(s,), loc=0, scale=1, lb=None, ub=None, conditional=False, **kwds)\n        Expected value of a function (of one argument) with respect to the distribution.\n    median(s, loc=0, scale=1)\n        Median of the distribution.\n    mean(s, loc=0, scale=1)\n        Mean of the distribution.\n    var(s, loc=0, scale=1)\n        Variance of the distribution.\n    std(s, loc=0, scale=1)\n        Standard deviation of the distribution.\n    interval(confidence, s, loc=0, scale=1)\n        Confidence interval with equal areas around the median.\n\n    Notes\n    -----\n    The probability density function for `lognorm` is:\n\n    .. math::\n\n        f(x, s) = \\frac{1}{s x \\sqrt{2\\pi}}\n                  \\exp\\left(-\\frac{\\log^2(x)}{2s^2}\\right)\n\n    for :math:`x > 0`, :math:`s > 0`.\n\n    `lognorm` takes ``s`` as a shape parameter for :math:`s`.\n\n    The probability density above is defined in the \"standardized\" form. To shift\n    and/or scale the distribution use the ``loc`` and ``scale`` parameters.\n    Specifically, ``lognorm.pdf(x, s, loc, scale)`` is identically\n    equivalent to ``lognorm.pdf(y, s) / scale`` with\n    ``y = (x - loc) / scale``. Note that shifting the location of a distribution\n    does not make it a \"noncentral\" distribution; noncentral generalizations of\n    some distributions are available in separate classes.\n\n    Suppose a normally distributed random variable ``X`` has  mean ``mu`` and\n    standard deviation ``sigma``. Then ``Y = exp(X)`` is lognormally\n    distributed with ``s = sigma`` and ``scale = exp(mu)``.\n\n    Examples\n    --------\n    >>> import numpy as np\n    >>> from scipy.stats import lognorm\n    >>> import matplotlib.pyplot as plt\n    >>> fig, ax = plt.subplots(1, 1)\n    \n    Calculate the first four moments:\n    \n    >>> s = 0.954\n    >>> mean, var, skew, kurt = lognorm.stats(s, moments='mvsk')\n    \n    Display the probability density function (``pdf``):\n    \n    >>> x = np.linspace(lognorm.ppf(0.01, s),\n    ...                 lognorm.ppf(0.99, s), 100)\n    >>> ax.plot(x, lognorm.pdf(x, s),\n    ...        'r-', lw=5, alpha=0.6, label='lognorm pdf')\n    \n    Alternatively, the distribution object can be called (as a function)\n    to fix the shape, location and scale parameters. This returns a \"frozen\"\n    RV object holding the given parameters fixed.\n    \n    Freeze the distribution and display the frozen ``pdf``:\n    \n    >>> rv = lognorm(s)\n    >>> ax.plot(x, rv.pdf(x), 'k-', lw=2, label='frozen pdf')\n    \n    Check accuracy of ``cdf`` and ``ppf``:\n    \n    >>> vals = lognorm.ppf([0.001, 0.5, 0.999], s)\n    >>> np.allclose([0.001, 0.5, 0.999], lognorm.cdf(vals, s))\n    True\n    \n    Generate random numbers:\n    \n    >>> r = lognorm.rvs(s, size=1000)\n    \n    And compare the histogram:\n    \n    >>> ax.hist(r, density=True, bins='auto', histtype='stepfilled', alpha=0.2)\n    >>> ax.set_xlim([x[0], x[-1]])\n    >>> ax.legend(loc='best', frameon=False)\n    >>> plt.show()\n    \n\n    ",
+            "_parse_args": {
+              "python_class": "<class 'method'>"
+            },
+            "_parse_args_stats": {
+              "python_class": "<class 'method'>"
+            },
+            "_parse_args_rvs": {
+              "python_class": "<class 'method'>"
+            },
+            "_ppfvec": {
+              "python_class": "<class 'numpy.vectorize'>",
+              "pyfunc": {
+                "python_class": "<class 'method'>"
+              },
+              "cache": false,
+              "signature": null,
+              "__name__": "_ppf_single",
+              "_ufunc": {},
+              "_doc": null,
+              "__doc__": null,
+              "otypes": "d",
+              "excluded": [],
+              "_in_and_out_core_dims": null,
+              "nin": 2
+            },
+            "vecentropy": {
+              "python_class": "<class 'numpy.vectorize'>",
+              "pyfunc": {
+                "python_class": "<class 'method'>"
+              },
+              "cache": false,
+              "signature": null,
+              "__name__": "_entropy",
+              "_ufunc": {},
+              "_doc": null,
+              "__doc__": null,
+              "otypes": "d",
+              "excluded": [],
+              "_in_and_out_core_dims": null
+            },
+            "_cdfvec": {
+              "python_class": "<class 'numpy.vectorize'>",
+              "pyfunc": {
+                "python_class": "<class 'method'>"
+              },
+              "cache": false,
+              "signature": null,
+              "__name__": "_cdf_single",
+              "_ufunc": {},
+              "_doc": null,
+              "__doc__": null,
+              "otypes": "d",
+              "excluded": [],
+              "_in_and_out_core_dims": null,
+              "nin": 2
+            },
+            "generic_moment": {
+              "python_class": "<class 'numpy.vectorize'>",
+              "pyfunc": {
+                "python_class": "<class 'method'>"
+              },
+              "cache": false,
+              "signature": null,
+              "__name__": "_mom1_sc",
+              "_ufunc": {},
+              "_doc": null,
+              "__doc__": null,
+              "otypes": "d",
+              "excluded": [],
+              "_in_and_out_core_dims": null,
+              "nin": 2
+            }
+          },
+          "distname": "lognormal",
+          "name": null,
+          "pars": {
+            "mean": 15,
+            "stdev": 1.0
+          },
+          "seed": null,
+          "offset": null,
+          "module": null,
+          "sim": null,
+          "slots": null,
+          "strict": true,
+          "auto": true,
+          "debug": false,
+          "rvs_func": null,
+          "dynamic_pars": null,
+          "_pars": null,
+          "_n": null,
+          "_size": null,
+          "_uids": null,
+          "_slots": null,
+          "rng": null,
+          "trace": null,
+          "ind": 0,
+          "called": 0,
+          "history": [],
+          "ready": true,
+          "initialized": false
+        },
+        "participation": {
+          "python_class": "<class 'starsim.distributions.bernoulli'>",
+          "dist": null,
+          "distname": "bernoulli",
+          "name": null,
+          "pars": {
+            "p": 0.9
+          },
+          "seed": null,
+          "offset": null,
+          "module": null,
+          "sim": null,
+          "slots": null,
+          "strict": true,
+          "auto": true,
+          "debug": false,
+          "rvs_func": null,
+          "dynamic_pars": null,
+          "_pars": null,
+          "_n": null,
+          "_size": null,
+          "_uids": null,
+          "_slots": null,
+          "rng": null,
+          "trace": null,
+          "ind": 0,
+          "called": 0,
+          "history": [],
+          "ready": true,
+          "initialized": false
+        },
+        "debut": {
+          "python_class": "<class 'starsim.distributions.normal'>",
+          "dist": {
+            "python_class": "<class 'scipy.stats._continuous_distns.norm_gen'>",
+            "_stats_has_moments": false,
+            "_random_state": {
+              "py/reduce": [
+                {
+                  "py/function": "numpy.random._pickle.__randomstate_ctor"
+                },
+                {
+                  "py/tuple": [
+                    "MT19937",
+                    {
+                      "py/function": "numpy.random._pickle.__bit_generator_ctor"
+                    }
+                  ]
+                },
+                {
+                  "bit_generator": "MT19937",
+                  "state": {
+                    "key": {
+                      "py/object": "numpy.ndarray",
+                      "values": "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",
+                      "shape": [
+                        624
+                      ],
+                      "dtype": "uint32",
+                      "byteorder": "<"
+                    },
+                    "pos": 624
+                  },
+                  "has_gauss": 0,
+                  "gauss": 0.0
+                }
+              ]
+            },
+            "_ctor_param": {
+              "momtype": 1,
+              "a": null,
+              "b": null,
+              "xtol": 1e-14,
+              "badvalue": null,
+              "name": "norm",
+              "longname": null,
+              "shapes": null,
+              "seed": null
+            },
+            "badvalue": null,
+            "name": "norm",
+            "a": -Infinity,
+            "b": Infinity,
+            "xtol": 1e-14,
+            "moment_type": 1,
+            "shapes": null,
+            "_parse_arg_template": "\ndef _parse_args(self,  loc=0, scale=1):\n    return (), loc, scale\n\ndef _parse_args_rvs(self,  loc=0, scale=1, size=None):\n    return self._argcheck_rvs( loc, scale, size=size)\n\ndef _parse_args_stats(self,  loc=0, scale=1, moments='mv'):\n    return (), loc, scale, moments\n",
+            "numargs": 0,
+            "__doc__": "A normal continuous random variable.\n\n    The location (``loc``) keyword specifies the mean.\n    The scale (``scale``) keyword specifies the standard deviation.\n\n    As an instance of the `rv_continuous` class, `norm` object inherits from it\n    a collection of generic methods (see below for the full list),\n    and completes them with details specific for this particular distribution.\n    \n    Methods\n    -------\n    rvs(loc=0, scale=1, size=1, random_state=None)\n        Random variates.\n    pdf(x, loc=0, scale=1)\n        Probability density function.\n    logpdf(x, loc=0, scale=1)\n        Log of the probability density function.\n    cdf(x, loc=0, scale=1)\n        Cumulative distribution function.\n    logcdf(x, loc=0, scale=1)\n        Log of the cumulative distribution function.\n    sf(x, loc=0, scale=1)\n        Survival function  (also defined as ``1 - cdf``, but `sf` is sometimes more accurate).\n    logsf(x, loc=0, scale=1)\n        Log of the survival function.\n    ppf(q, loc=0, scale=1)\n        Percent point function (inverse of ``cdf`` --- percentiles).\n    isf(q, loc=0, scale=1)\n        Inverse survival function (inverse of ``sf``).\n    moment(order, loc=0, scale=1)\n        Non-central moment of the specified order.\n    stats(loc=0, scale=1, moments='mv')\n        Mean('m'), variance('v'), skew('s'), and/or kurtosis('k').\n    entropy(loc=0, scale=1)\n        (Differential) entropy of the RV.\n    fit(data)\n        Parameter estimates for generic data.\n        See `scipy.stats.rv_continuous.fit <https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.rv_continuous.fit.html#scipy.stats.rv_continuous.fit>`__ for detailed documentation of the\n        keyword arguments.\n    expect(func, args=(), loc=0, scale=1, lb=None, ub=None, conditional=False, **kwds)\n        Expected value of a function (of one argument) with respect to the distribution.\n    median(loc=0, scale=1)\n        Median of the distribution.\n    mean(loc=0, scale=1)\n        Mean of the distribution.\n    var(loc=0, scale=1)\n        Variance of the distribution.\n    std(loc=0, scale=1)\n        Standard deviation of the distribution.\n    interval(confidence, loc=0, scale=1)\n        Confidence interval with equal areas around the median.\n\n    Notes\n    -----\n    The probability density function for `norm` is:\n\n    .. math::\n\n        f(x) = \\frac{\\exp(-x^2/2)}{\\sqrt{2\\pi}}\n\n    for a real number :math:`x`.\n\n    The probability density above is defined in the \"standardized\" form. To shift\n    and/or scale the distribution use the ``loc`` and ``scale`` parameters.\n    Specifically, ``norm.pdf(x, loc, scale)`` is identically\n    equivalent to ``norm.pdf(y) / scale`` with\n    ``y = (x - loc) / scale``. Note that shifting the location of a distribution\n    does not make it a \"noncentral\" distribution; noncentral generalizations of\n    some distributions are available in separate classes.\n\n    Examples\n    --------\n    >>> import numpy as np\n    >>> from scipy.stats import norm\n    >>> import matplotlib.pyplot as plt\n    >>> fig, ax = plt.subplots(1, 1)\n    \n    Calculate the first four moments:\n    \n    \n    >>> mean, var, skew, kurt = norm.stats(moments='mvsk')\n    \n    Display the probability density function (``pdf``):\n    \n    >>> x = np.linspace(norm.ppf(0.01),\n    ...                 norm.ppf(0.99), 100)\n    >>> ax.plot(x, norm.pdf(x),\n    ...        'r-', lw=5, alpha=0.6, label='norm pdf')\n    \n    Alternatively, the distribution object can be called (as a function)\n    to fix the shape, location and scale parameters. This returns a \"frozen\"\n    RV object holding the given parameters fixed.\n    \n    Freeze the distribution and display the frozen ``pdf``:\n    \n    >>> rv = norm()\n    >>> ax.plot(x, rv.pdf(x), 'k-', lw=2, label='frozen pdf')\n    \n    Check accuracy of ``cdf`` and ``ppf``:\n    \n    >>> vals = norm.ppf([0.001, 0.5, 0.999])\n    >>> np.allclose([0.001, 0.5, 0.999], norm.cdf(vals))\n    True\n    \n    Generate random numbers:\n    \n    >>> r = norm.rvs(size=1000)\n    \n    And compare the histogram:\n    \n    >>> ax.hist(r, density=True, bins='auto', histtype='stepfilled', alpha=0.2)\n    >>> ax.set_xlim([x[0], x[-1]])\n    >>> ax.legend(loc='best', frameon=False)\n    >>> plt.show()\n    \n\n    ",
+            "_parse_args": {
+              "python_class": "<class 'method'>"
+            },
+            "_parse_args_stats": {
+              "python_class": "<class 'method'>"
+            },
+            "_parse_args_rvs": {
+              "python_class": "<class 'method'>"
+            },
+            "_ppfvec": {
+              "python_class": "<class 'numpy.vectorize'>",
+              "pyfunc": {
+                "python_class": "<class 'method'>"
+              },
+              "cache": false,
+              "signature": null,
+              "__name__": "_ppf_single",
+              "_ufunc": {},
+              "_doc": null,
+              "__doc__": null,
+              "otypes": "d",
+              "excluded": [],
+              "_in_and_out_core_dims": null,
+              "nin": 1
+            },
+            "vecentropy": {
+              "python_class": "<class 'numpy.vectorize'>",
+              "pyfunc": {
+                "python_class": "<class 'method'>"
+              },
+              "cache": false,
+              "signature": null,
+              "__name__": "_entropy",
+              "_ufunc": {},
+              "_doc": null,
+              "__doc__": null,
+              "otypes": "d",
+              "excluded": [],
+              "_in_and_out_core_dims": null
+            },
+            "_cdfvec": {
+              "python_class": "<class 'numpy.vectorize'>",
+              "pyfunc": {
+                "python_class": "<class 'method'>"
+              },
+              "cache": false,
+              "signature": null,
+              "__name__": "_cdf_single",
+              "_ufunc": {},
+              "_doc": null,
+              "__doc__": null,
+              "otypes": "d",
+              "excluded": [],
+              "_in_and_out_core_dims": null,
+              "nin": 1
+            },
+            "generic_moment": {
+              "python_class": "<class 'numpy.vectorize'>",
+              "pyfunc": {
+                "python_class": "<class 'method'>"
+              },
+              "cache": false,
+              "signature": null,
+              "__name__": "_mom1_sc",
+              "_ufunc": {},
+              "_doc": null,
+              "__doc__": null,
+              "otypes": "d",
+              "excluded": [],
+              "_in_and_out_core_dims": null,
+              "nin": 1
+            }
+          },
+          "distname": "normal",
+          "name": null,
+          "pars": {
+            "loc": 16,
+            "scale": 1.0
+          },
+          "seed": null,
+          "offset": null,
+          "module": null,
+          "sim": null,
+          "slots": null,
+          "strict": true,
+          "auto": true,
+          "debug": false,
+          "rvs_func": null,
+          "dynamic_pars": null,
+          "_pars": null,
+          "_n": null,
+          "_size": null,
+          "_uids": null,
+          "_slots": null,
+          "rng": null,
+          "trace": null,
+          "ind": 0,
+          "called": 0,
+          "history": [],
+          "ready": true,
+          "initialized": false
+        },
+        "acts": {
+          "python_class": "<class 'starsim.distributions.poisson'>",
+          "dist": {
+            "python_class": "<class 'scipy.stats._discrete_distns.poisson_gen'>",
+            "_stats_has_moments": false,
+            "_random_state": {
+              "py/reduce": [
+                {
+                  "py/function": "numpy.random._pickle.__randomstate_ctor"
+                },
+                {
+                  "py/tuple": [
+                    "MT19937",
+                    {
+                      "py/function": "numpy.random._pickle.__bit_generator_ctor"
+                    }
+                  ]
+                },
+                {
+                  "bit_generator": "MT19937",
+                  "state": {
+                    "key": {
+                      "py/object": "numpy.ndarray",
+                      "values": "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",
+                      "shape": [
+                        624
+                      ],
+                      "dtype": "uint32",
+                      "byteorder": "<"
+                    },
+                    "pos": 624
+                  },
+                  "has_gauss": 0,
+                  "gauss": 0.0
+                }
+              ]
+            },
+            "_ctor_param": {
+              "a": 0,
+              "b": Infinity,
+              "name": "poisson",
+              "badvalue": null,
+              "moment_tol": 1e-08,
+              "values": null,
+              "inc": 1,
+              "longname": "A Poisson",
+              "shapes": null,
+              "seed": null
+            },
+            "badvalue": null,
+            "a": 0,
+            "b": Infinity,
+            "moment_tol": 1e-08,
+            "inc": 1,
+            "shapes": "mu",
+            "_parse_arg_template": "\ndef _parse_args(self, mu,  loc=0):\n    return (mu, ), loc, 1\n\ndef _parse_args_rvs(self, mu,  loc=0, size=None):\n    return self._argcheck_rvs(mu,  loc, 1, size=size)\n\ndef _parse_args_stats(self, mu,  loc=0, moments='mv'):\n    return (mu, ), loc, 1, moments\n",
+            "numargs": 1,
+            "vecentropy": {
+              "python_class": "<class 'numpy.vectorize'>",
+              "pyfunc": {
+                "python_class": "<class 'method'>"
+              },
+              "cache": false,
+              "signature": null,
+              "__name__": "_entropy",
+              "_ufunc": {},
+              "_doc": null,
+              "__doc__": null,
+              "otypes": null,
+              "excluded": [],
+              "_in_and_out_core_dims": null
+            },
+            "name": "poisson",
+            "__doc__": "A Poisson discrete random variable.\n\n    As an instance of the `rv_discrete` class, `poisson` object inherits from it\n    a collection of generic methods (see below for the full list),\n    and completes them with details specific for this particular distribution.\n    \n    Methods\n    -------\n    rvs(mu, loc=0, size=1, random_state=None)\n        Random variates.\n    pmf(k, mu, loc=0)\n        Probability mass function.\n    logpmf(k, mu, loc=0)\n        Log of the probability mass function.\n    cdf(k, mu, loc=0)\n        Cumulative distribution function.\n    logcdf(k, mu, loc=0)\n        Log of the cumulative distribution function.\n    sf(k, mu, loc=0)\n        Survival function  (also defined as ``1 - cdf``, but `sf` is sometimes more accurate).\n    logsf(k, mu, loc=0)\n        Log of the survival function.\n    ppf(q, mu, loc=0)\n        Percent point function (inverse of ``cdf`` --- percentiles).\n    isf(q, mu, loc=0)\n        Inverse survival function (inverse of ``sf``).\n    stats(mu, loc=0, moments='mv')\n        Mean('m'), variance('v'), skew('s'), and/or kurtosis('k').\n    entropy(mu, loc=0)\n        (Differential) entropy of the RV.\n    expect(func, args=(mu,), loc=0, lb=None, ub=None, conditional=False)\n        Expected value of a function (of one argument) with respect to the distribution.\n    median(mu, loc=0)\n        Median of the distribution.\n    mean(mu, loc=0)\n        Mean of the distribution.\n    var(mu, loc=0)\n        Variance of the distribution.\n    std(mu, loc=0)\n        Standard deviation of the distribution.\n    interval(confidence, mu, loc=0)\n        Confidence interval with equal areas around the median.\n\n    Notes\n    -----\n    The probability mass function for `poisson` is:\n\n    .. math::\n\n        f(k) = \\exp(-\\mu) \\frac{\\mu^k}{k!}\n\n    for :math:`k \\ge 0`.\n\n    `poisson` takes :math:`\\mu \\geq 0` as shape parameter.\n    When :math:`\\mu = 0`, the ``pmf`` method\n    returns ``1.0`` at quantile :math:`k = 0`.\n\n    The probability mass function above is defined in the \"standardized\" form.\n    To shift distribution use the ``loc`` parameter.\n    Specifically, ``poisson.pmf(k, mu, loc)`` is identically\n    equivalent to ``poisson.pmf(k - loc, mu)``.\n\n    Examples\n    --------\n    >>> import numpy as np\n    >>> from scipy.stats import poisson\n    >>> import matplotlib.pyplot as plt\n    >>> fig, ax = plt.subplots(1, 1)\n    \n    Calculate the first four moments:\n    \n    >>> mu = 0.6\n    >>> mean, var, skew, kurt = poisson.stats(mu, moments='mvsk')\n    \n    Display the probability mass function (``pmf``):\n    \n    >>> x = np.arange(poisson.ppf(0.01, mu),\n    ...               poisson.ppf(0.99, mu))\n    >>> ax.plot(x, poisson.pmf(x, mu), 'bo', ms=8, label='poisson pmf')\n    >>> ax.vlines(x, 0, poisson.pmf(x, mu), colors='b', lw=5, alpha=0.5)\n    \n    Alternatively, the distribution object can be called (as a function)\n    to fix the shape and location. This returns a \"frozen\" RV object holding\n    the given parameters fixed.\n    \n    Freeze the distribution and display the frozen ``pmf``:\n    \n    >>> rv = poisson(mu)\n    >>> ax.vlines(x, 0, rv.pmf(x), colors='k', linestyles='-', lw=1,\n    ...         label='frozen pmf')\n    >>> ax.legend(loc='best', frameon=False)\n    >>> plt.show()\n    \n    Check accuracy of ``cdf`` and ``ppf``:\n    \n    >>> prob = poisson.cdf(x, mu)\n    >>> np.allclose(x, poisson.ppf(prob, mu))\n    True\n    \n    Generate random numbers:\n    \n    >>> r = poisson.rvs(mu, size=1000)\n\n    ",
+            "_cdfvec": {
+              "python_class": "<class 'numpy.vectorize'>",
+              "pyfunc": {
+                "python_class": "<class 'method'>"
+              },
+              "cache": false,
+              "signature": null,
+              "__name__": "_cdf_single",
+              "_ufunc": {},
+              "_doc": null,
+              "__doc__": null,
+              "otypes": "d",
+              "excluded": [],
+              "_in_and_out_core_dims": null,
+              "nin": 2
+            },
+            "_parse_args": {
+              "python_class": "<class 'method'>"
+            },
+            "_parse_args_stats": {
+              "python_class": "<class 'method'>"
+            },
+            "_parse_args_rvs": {
+              "python_class": "<class 'method'>"
+            },
+            "generic_moment": {
+              "python_class": "<class 'method'>",
+              "pyfunc": {
+                "python_class": "<class 'function'>"
+              },
+              "cache": false,
+              "signature": null,
+              "__name__": "_drv2_moment",
+              "_ufunc": {},
+              "_doc": null,
+              "__doc__": "Non-central moment of discrete distribution.",
+              "otypes": "d",
+              "excluded": [],
+              "_in_and_out_core_dims": null,
+              "nin": 3
+            },
+            "_ppfvec": {
+              "python_class": "<class 'method'>",
+              "pyfunc": {
+                "python_class": "<class 'function'>"
+              },
+              "cache": false,
+              "signature": null,
+              "__name__": "_drv2_ppfsingle",
+              "_ufunc": {},
+              "_doc": null,
+              "__doc__": null,
+              "otypes": "d",
+              "excluded": [],
+              "_in_and_out_core_dims": null,
+              "nin": 3
+            }
+          },
+          "distname": "poisson",
+          "name": null,
+          "pars": {
+            "lam": 80
+          },
+          "seed": null,
+          "offset": null,
+          "module": null,
+          "sim": null,
+          "slots": null,
+          "strict": true,
+          "auto": true,
+          "debug": false,
+          "rvs_func": null,
+          "dynamic_pars": null,
+          "_pars": null,
+          "_n": null,
+          "_size": null,
+          "_uids": null,
+          "_slots": null,
+          "rng": null,
+          "trace": null,
+          "ind": 0,
+          "called": 0,
+          "history": [],
+          "ready": true,
+          "initialized": false
+        },
+        "rel_part_rates": 1.0
+      }
+    },
+    {
+      "type": "MaternalNet",
+      "name": "maternalnet",
+      "label": "maternalnet",
+      "pars": {}
+    }
+  ],
+  "demographics": {
+    "type": "Pregnancy",
+    "name": "pregnancy",
+    "label": "pregnancy",
+    "pars": {
+      "dur_pregnancy": 0.75,
+      "dur_postpartum": 0.5,
+      "fertility_rate": {
+        "python_class": "<class 'starsim.distributions.bernoulli'>",
+        "dist": null,
+        "distname": "bernoulli",
+        "name": null,
+        "pars": {
+          "p": {
+            "python_class": "<class 'function'>"
+          }
+        },
+        "seed": null,
+        "offset": null,
+        "module": null,
+        "sim": null,
+        "slots": null,
+        "strict": true,
+        "auto": true,
+        "debug": false,
+        "rvs_func": null,
+        "dynamic_pars": null,
+        "_pars": null,
+        "_n": null,
+        "_size": null,
+        "_uids": null,
+        "_slots": null,
+        "rng": null,
+        "trace": null,
+        "ind": 0,
+        "called": 0,
+        "history": [],
+        "ready": true,
+        "initialized": false
+      },
+      "rel_fertility": 1,
+      "maternal_death_prob": {
+        "python_class": "<class 'starsim.distributions.bernoulli'>",
+        "dist": null,
+        "distname": "bernoulli",
+        "name": null,
+        "pars": {
+          "p": 0
+        },
+        "seed": null,
+        "offset": null,
+        "module": null,
+        "sim": null,
+        "slots": null,
+        "strict": true,
+        "auto": true,
+        "debug": false,
+        "rvs_func": null,
+        "dynamic_pars": null,
+        "_pars": null,
+        "_n": null,
+        "_size": null,
+        "_uids": null,
+        "_slots": null,
+        "rng": null,
+        "trace": null,
+        "ind": 0,
+        "called": 0,
+        "history": [],
+        "ready": true,
+        "initialized": false
+      },
+      "sex_ratio": {
+        "python_class": "<class 'starsim.distributions.bernoulli'>",
+        "dist": null,
+        "distname": "bernoulli",
+        "name": null,
+        "pars": {
+          "p": 0.5
+        },
+        "seed": null,
+        "offset": null,
+        "module": null,
+        "sim": null,
+        "slots": null,
+        "strict": true,
+        "auto": true,
+        "debug": false,
+        "rvs_func": null,
+        "dynamic_pars": null,
+        "_pars": null,
+        "_n": null,
+        "_size": null,
+        "_uids": null,
+        "_slots": null,
+        "rng": null,
+        "trace": null,
+        "ind": 0,
+        "called": 0,
+        "history": [],
+        "ready": true,
+        "initialized": false
+      },
+      "units": 0.001
+    }
+  },
+  "diseases": {
+    "type": "HIV",
+    "name": "hiv",
+    "label": "hiv",
+    "pars": {
+      "beta": {
+        "mf": [
+          0.15,
+          0.1
+        ],
+        "maternal": [
+          0.2,
+          0
+        ]
+      },
+      "cd4_min": 100,
+      "cd4_max": 500,
+      "cd4_rate": 5,
+      "eff_condoms": 0.7,
+      "art_efficacy": 0.96,
+      "init_prev": {
+        "python_class": "<class 'starsim.distributions.bernoulli'>",
+        "dist": null,
+        "distname": "bernoulli",
+        "name": null,
+        "pars": {
+          "p": 0.05
+        },
+        "seed": null,
+        "offset": null,
+        "module": null,
+        "sim": null,
+        "slots": null,
+        "strict": true,
+        "auto": true,
+        "debug": false,
+        "rvs_func": null,
+        "dynamic_pars": null,
+        "_pars": null,
+        "_n": null,
+        "_size": null,
+        "_uids": null,
+        "_slots": null,
+        "rng": null,
+        "trace": null,
+        "ind": 0,
+        "called": 0,
+        "history": [],
+        "ready": true,
+        "initialized": false
+      },
+      "death_dist": {
+        "python_class": "<class 'starsim.distributions.bernoulli'>",
+        "dist": null,
+        "distname": "bernoulli",
+        "name": null,
+        "pars": {
+          "p": {
+            "python_class": "<class 'function'>"
+          }
+        },
+        "seed": null,
+        "offset": null,
+        "module": null,
+        "sim": null,
+        "slots": null,
+        "strict": true,
+        "auto": true,
+        "debug": false,
+        "rvs_func": null,
+        "dynamic_pars": null,
+        "_pars": null,
+        "_n": null,
+        "_size": null,
+        "_uids": null,
+        "_slots": null,
+        "rng": null,
+        "trace": null,
+        "ind": 0,
+        "called": 0,
+        "history": [],
+        "ready": true,
+        "initialized": false
+      },
+      "p_death": 0.05
+    }
+  },
+  "connectors": [],
+  "interventions": [],
+  "analyzers": []
+}
