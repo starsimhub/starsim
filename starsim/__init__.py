@@ -18,6 +18,7 @@ from .sim           import *
 from .run           import *
 from .calibration   import *
 from .samples       import *
+from .enums.timestep  import TimeStep
 
 # Assign the root folder
 import sciris as sc
