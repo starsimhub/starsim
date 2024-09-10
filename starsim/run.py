@@ -267,7 +267,10 @@ class MultiSim(sc.prettyobj):
             with sc.options.with_style('simple'):
                 if key is not None:
                     flat = {k:v for k,v in flat.items() if k.startswith(key)}
-                fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
+                if fig is None:
+                    fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
+                else:
+                    axs = sc.toarray(fig.axes)
                     
                 # Do the plotting
                 for ax, (key, res) in zip(axs.flatten(), flat.items()):
