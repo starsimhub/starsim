@@ -20,6 +20,26 @@ class TimeStep(Enum):
         __repr__() -> str: Returns a string representation of the enum member, which is its name.
         __float__() -> float: Returns the value of the enum member as a float.
         __str__() -> str: Returns a string representation of the value of the enum member.
+        
+    Examples:    
+        
+        from starsim import TimeStep
+
+        # Example: Using the describe property
+        print(TimeStep.DAY.describe)  # Output: ('DAY', 0.0027397260273972603)
+        
+        # Example: Using the Name method
+        print(TimeStep.DAY.Name())  # Output: 'DAY'
+        
+        # Example: Accessing enum members
+        print(TimeStep.DAY)  # Output: 0.0027397260273972603
+
+        # Example: Getting the value as a float
+        print(float(TimeStep.DAY))  # Output: 0.0027397260273972603
+
+        # Example: Getting the string representation of the value
+        print(str(TimeStep.DAY))  # Output: '0.0027397260273972603'
+
     """
     _order_ = 'DAY WEEK MONTH YEAR'
     DAY = 1/365
@@ -73,4 +93,7 @@ class TimeStep(Enum):
         """
         return '{0}'.format(self.value)
 
+
+if __name__ == '__main__':
+    help(TimeStep)
 
