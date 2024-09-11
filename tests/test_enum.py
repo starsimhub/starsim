@@ -1,5 +1,5 @@
 import pytest
-from starsim.enums.timestep import TimeStep
+from starsim import TimeStep
 
 def test_timestep_values():
     assert TimeStep.DAY.value == 1/365
@@ -40,3 +40,5 @@ def test_timestep_str():
     
 if __name__ == '__main__':
     pytest.main()
+
+    
