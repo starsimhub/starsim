@@ -53,6 +53,10 @@ class Module(sc.quickobj):
     def __bool__(self):
         """ Ensure that zero-length modules (e.g. networks) are still truthy """
         return True
+    
+    def __call__(self, *args, **kwargs):
+        """ Allow modules to be called like functions """
+        return self.step(*args, **kwargs)
 
     def disp(self, output=False):
         """ Display the full object """
@@ -194,6 +198,14 @@ class Module(sc.quickobj):
                 return subcls(*args, **kwargs)
         else:
             raise KeyError(f'Module "{name}" did not match any known Starsim modules')
+            
+    @classmethod
+    def from_func(cls, func):
+        """ Create an module from a function """
+        name = func.__name__
+        new = cls(name=name)
+        new.step = func
+        return new
             
     def to_json(self):
         """ Export to a JSON-compatible format """

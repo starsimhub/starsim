@@ -6,37 +6,10 @@ import starsim as ss
 import sciris as sc
 import numpy as np
 
-__all__ = ['Plugin', 'Analyzer', 'Intervention']
+__all__ = ['Analyzer', 'Intervention']
 
 
-class Plugin(ss.Module):
-    """ Base class for interventions and analyzers """
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        return
-    
-    def __call__(self, *args, **kwargs):
-        return self.step(*args, **kwargs)
-    
-    def init_pre(self, sim):
-        return super().init_pre(sim)
-    
-    def step(self, sim):
-        pass
-
-    def finalize(self):
-        return super().finalize()
-    
-    @classmethod
-    def from_func(cls, func):
-        """ Create an intervention or analyzer from a function """
-        name = func.__name__
-        new = cls(name=name)
-        new.step = func
-        return new
-
-
-class Analyzer(Plugin):
+class Analyzer(ss.Module):
     """
     Base class for analyzers. Analyzers are used to provide more detailed information 
     about a simulation than is available by default -- for example, pulling states 
@@ -50,7 +23,7 @@ class Analyzer(Plugin):
     pass
 
 
-class Intervention(Plugin):
+class Intervention(ss.Module):
     """
     Base class for interventions.
     
