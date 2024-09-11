@@ -208,7 +208,7 @@ class Infection(Disease):
             return
 
         initial_cases = self.pars.init_prev.filter()
-        self.set_prognoses(initial_cases)  # TODO: sentinel value to indicate seeds?
+        if len(initial_cases): self.set_prognoses(initial_cases)  # TODO: sentinel value to indicate seeds?
         return
 
     def init_results(self):

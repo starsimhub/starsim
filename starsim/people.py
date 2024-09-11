@@ -72,7 +72,7 @@ class People(sc.prettyobj):
             self.states.append(state, overwrite=False)
             setattr(self, state.name, state)
             state.link_people(self)
-            
+
         return
 
     @staticmethod

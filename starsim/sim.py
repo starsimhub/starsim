@@ -106,13 +106,13 @@ class Sim:
         for mod in self.interventions:
             if hasattr(mod, 'product') and isinstance(mod.product, ss.Product):
                 mod.product.init_pre(self)
-        
+
         # Initialize all distributions now that everything else is in place, then set states
         self.dists.initialize(obj=self, base_seed=self.pars.rand_seed, force=True)
-        
+
         # Initialize the values in all of the states and networks
         self.init_vals()
-        
+
         # Initialize the results
         self.init_results()
 

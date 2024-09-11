@@ -112,7 +112,7 @@ def compute_gof(actual, predicted, normalize=True, use_frac=False, use_squared=F
 
 class Calibration(sc.prettyobj):
     """
-    A class to handle calibration of STIsim simulations. Uses the Optuna hyperparameter
+    A class to handle calibration of Starsim simulations. Uses the Optuna hyperparameter
     optimization library (optuna.org), which must be installed separately (via
     pip install optuna).
     Args:
@@ -120,7 +120,6 @@ class Calibration(sc.prettyobj):
         data         (df)   : pandas dataframe
         calib_pars   (dict) : a dictionary of the parameters to calibrate of the format dict(key1=[best, low, high])
         fit_args     (dict) : a dictionary of options that are passed to sim.compute_fit() to calculate the goodness-of-fit
-        par_samplers (dict) : an optional mapping from parameters to the Optuna sampler to use for choosing new points for each; by default, suggest_float
         n_trials     (int)  : the number of trials per worker
         n_workers    (int)  : the number of parallel workers (default: maximum
         total_trials (int)  : if n_trials is not supplied, calculate by dividing this number by n_workers)
@@ -132,12 +131,12 @@ class Calibration(sc.prettyobj):
         label        (str)  : a label for this calibration object
         die          (bool) : whether to stop if an exception is encountered (default: false)
         verbose      (bool) : whether to print details of the calibration
-        kwargs       (dict) : passed to hpv.Calibration()
+        kwargs       (dict) : passed to Calibration()
 
     Returns:
         A Calibration object
     """
-    def __init__(self, sim, data, calib_pars=None, weights=None, fit_args=None, par_samplers=None, n_trials=None, n_workers=None,
+    def __init__(self, sim, data, calib_pars, randomize_seeds=True, weights=None, fit_args=None, n_trials=None, n_workers=None,
                 total_trials=None, name=None, db_name=None, estimator=None, keep_db=None, storage=None, rand_seed=None,
                  sampler=None, label=None, die=False, verbose=True):
 
@@ -155,15 +154,15 @@ class Calibration(sc.prettyobj):
                                      keep_db=keep_db, storage=storage, rand_seed=rand_seed, sampler=sampler)
 
         # Handle other inputs
-        self.label          = label
-        self.sim            = sim
-        self.calib_pars     = calib_pars
-        self.weights        = weights
-        self.fit_args       = sc.mergedicts(fit_args)
-        self.par_samplers   = sc.mergedicts(par_samplers)
-        self.die            = die
-        self.verbose        = verbose
-        self.calibrated     = False
+        self.label           = label
+        self.sim             = sim
+        self.calib_pars      = calib_pars
+        self.randomize_seeds = randomize_seeds
+        self.weights         = weights
+        self.fit_args        = sc.mergedicts(fit_args)
+        self.die             = die
+        self.verbose         = verbose
+        self.calibrated      = False
 
         # Load data -- this is expecting a dataframe with a column for 'year' and other columns for to sim results
         if not isinstance(data, pd.DataFrame):
@@ -207,17 +206,35 @@ class Calibration(sc.prettyobj):
     @staticmethod
     def translate_pars(sim=None, calib_pars=None):
         """ Take the nested dict of calibration pars and modify the sim """
-        for modtype in calib_pars.keys():
-            for dkey, dpars in calib_pars[modtype].items():
-                for dparkey, dparval in dpars.items():
-                    targetpar = sim[modtype][dkey].pars[dparkey]
-                    if sc.isnumber(targetpar):
-                        sim[modtype][dkey].pars[dparkey] = dparval
-                    elif isinstance(targetpar, ss.Dist):
-                        sim[modtype][dkey].pars[dparkey].set(dparval)
-                    else:
-                        errormsg = 'Type not implemented'
-                        raise ValueError(errormsg)
+
+        if 'rand_seed' in calib_pars:
+            sim.pars['rand_seed'] = calib_pars['rand_seed']
+
+        for parname, spec in calib_pars.items():
+            if parname == 'rand_seed':
+                continue
+
+            if 'path' not in spec:
+                raise Exception(f'Cannot map {parname} because "path" is missing from the parameter configuration.')
+
+            p = spec['path']
+
+            if len(p) != 3:
+                raise Exception(f'Cannot map {parname} because "path" must be a tuple of length 3.')
+
+            modtype = p[0]
+            dkey = p[1]
+            dparkey = p[2]
+            dparval = spec['value']
+            targetpar = sim[modtype][dkey].pars[dparkey]
+
+            if sc.isnumber(targetpar):
+                sim[modtype][dkey].pars[dparkey] = dparval
+            elif isinstance(targetpar, ss.Dist):
+                sim[modtype][dkey].pars[dparkey].set(dparval)
+            else:
+                errormsg = 'Type not implemented'
+                raise ValueError(errormsg)
 
         return sim
 
@@ -229,48 +246,38 @@ class Calibration(sc.prettyobj):
             - pardict is self.initial_pars, i.e. {'diseases':{'hiv':{'art_efficacy':[0.96, 0.9, 0.99]}}}, pull 1st vals
             - pardict is self.best_pars, i.e. {'diseases':{'hiv':{'art_efficacy':0.96786}}}, pull single vals
         """
+
         pars = sc.dcp(pardict)
-        flattened_inputs = sc.flattendict(pars)
+        for parname, spec in pars.items():
 
-        structured_outputs = sc.dcp(self.calib_pars)
-        flattened_outputs = sc.flattendict(structured_outputs)
+            if 'value' in spec:
+                # Already have a value, likely running initial or final values as part of checking the fit
+                continue
 
-        for key in flattened_outputs.keys():
-            sampler_key = '_'.join(key)
-
-            if key in flattened_inputs.keys():
-                val = flattened_inputs[key]
+            if 'sampler' in spec:
+                sampler = spec.pop('sampler')
+                sampler_fn = getattr(trial, sampler)
             else:
-                val = pars[sampler_key]
+                sampler_fn = trial.suggest_float
 
-            if sc.isnumber(val) and trial is None:
-                sc.setnested(structured_outputs, list(key), val)
+            path = spec.pop('path', None) # remove path
+            guess = spec.pop('guess', None) # remove guess
+            spec['value'] = sampler_fn(name=parname, **spec) # Sample!
+            spec['path'] = path
+            spec['guess'] = guess
 
-            else:
-                low, high = val[1], val[2]
-                step = val[3] if len(val) > 3 else None
+        return pars
 
-                if trial is not None:
-                    if key in self.par_samplers:  # If a custom sampler is used, get it now (Not working properly for now)
-                        try:
-                            sampler_fn = getattr(trial, self.par_samplers[key])
-                        except Exception as E:
-                            errormsg = 'The requested sampler function is not found: ensure it is a valid attribute of an Optuna Trial object'
-                            raise AttributeError(errormsg) from E
-                    else:
-                        sampler_fn = trial.suggest_float
-                    sc.setnested(structured_outputs, list(key), sampler_fn(sampler_key, low, high, step=step))
-                else:
-                    sc.setnested(structured_outputs, list(key), val[0])
-
-        return structured_outputs
-
-    def run_trial(self, trial, save=True):
+    def run_trial(self, trial, save=False):
         """ Define the objective for Optuna """
         if self.calib_pars is not None:
             calib_pars = self.trial_to_sim_pars(self.calib_pars, trial)
         else:
             calib_pars = None
+
+        if self.randomize_seeds:
+            calib_pars['rand_seed'] = trial.suggest_int('rand_seed', 0, 1_000_000) # Choose a random rand_seed
+
         sim = self.run_sim(calib_pars)
 
         # Export results
@@ -373,7 +380,7 @@ class Calibration(sc.prettyobj):
         output = op.create_study(storage=self.run_args.storage, study_name=self.run_args.name, sampler=sampler)
         return output
 
-    def calibrate(self, calib_pars=None, confirm_fit=False, load=True, tidyup=True, **kwargs):
+    def calibrate(self, calib_pars=None, confirm_fit=False, load=False, tidyup=True, **kwargs):
         """
         Perform calibration.
         Args:
@@ -421,8 +428,9 @@ class Calibration(sc.prettyobj):
                     print(errormsg)
 
         # Compare the results
-        self.initial_pars = self.trial_to_sim_pars(pardict=self.calib_pars)
         self.parse_study(study)
+
+        print('Best pars:', self.best_pars)
 
         # Tidy up
         self.calibrated = True
@@ -437,12 +445,29 @@ class Calibration(sc.prettyobj):
     
     def confirm_fit(self):
         """ Run before and after simulations to validate the fit """
-        before_pars = self.initial_pars
-        after_pars  = self.trial_to_sim_pars(pardict=self.best_pars)
+
+        print('\nConfirming fit...')
+
+        before_pars = sc.dcp(self.calib_pars)
+        for spec in before_pars.values():
+            spec['value'] = spec['guess'] # Use guess values
+
+        after_pars = sc.dcp(self.calib_pars)
+        for parname, spec in after_pars.items():
+            spec['value'] = self.best_pars[parname]
+
         self.before_sim = self.run_sim(calib_pars=before_pars, label='Before calibration')
         self.after_sim  = self.run_sim(calib_pars=after_pars, label='After calibration')
         self.before_fit = self.compute_fit(self.before_sim)
         self.after_fit  = self.compute_fit(self.after_sim)
+
+        print(f'Fit with original pars: {self.before_fit:n}')
+        print(f'Fit with best-fit pars: {self.after_fit:n}')
+        if self.after_fit <= self.before_fit:
+            print('✓ Calibration improved fit')
+        else:
+            print('✗ Calibration did not improve fit, but this sometimes happens stochastically and is not necessarily an error')
+
         return self.before_fit, self.after_fit
 
     def parse_study(self, study):

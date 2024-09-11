@@ -92,16 +92,16 @@ class Dists(sc.prettyobj):
         if obj is None:
             errormsg = 'Must supply a container that contains one or more Dist objects, typically the sim'
             raise ValueError(errormsg)
-            
+
         # Do not look for distributions in the people states, since they shadow the "real" states
         skip = id(sim.people._states) if sim is not None else None
-        
+
         # Find and initialize the distributions
         self.dists = find_dists(obj, skip=skip)
         for trace,dist in self.dists.items():
             if not dist.initialized or force:
                 dist.initialize(trace=trace, seed=base_seed, sim=sim, force=force)
-        
+
         # Confirm the seeds are unique
         self.check_seeds()
         self.initialized = True
@@ -337,21 +337,21 @@ class Dist:
     
     def initialize(self, trace=None, seed=None, module=None, sim=None, slots=None, force=False):
         """ Calculate the starting seed and create the RNG """
-        
+
         if self.initialized is True and not force: # Don't warn if we have a partially initialized distribution
             msg = f'Distribution {self} is already initialized, use force=True if intentional'
             ss.warn(msg)
-        
+
         # Calculate the offset (starting seed)
         self.process_seed(trace, seed)
-        
+
         # Create the actual RNG
         if ss.options._centralized:
             self.rng = np.random.mtrand._rand # If _centralized, return the centralized numpy random number instance
         else:
             self.rng = np.random.default_rng(seed=self.seed)
         self.make_history(reset=True)
-        
+
         # Handle the sim, module, and slots
         self.link_sim(sim)
         self.link_module(module)
@@ -363,7 +363,7 @@ class Dist:
                 ss.warn(warnmsg)
         if slots is not None:
             self.slots = slots
-            
+
         # Initialize the distribution and finalize
         self.process_dist()
         self.process_pars(call=False)
@@ -384,13 +384,13 @@ class Dist:
         if (not self.sim or overwrite) and sim is not None:
             self.sim = sim
         return
-    
+
     def link_module(self, module=None, overwrite=False):
         """ Shortcut for linking the module """
         if (not self.module or overwrite) and module is not None:
             self.module = module
         return
-    
+
     def process_seed(self, trace=None, seed=None):
         """ Obtain the seed offset by hashing the path to this distribution; called automatically """
         unique_name = trace or self.trace or self.name
@@ -406,29 +406,29 @@ class Dist:
     
     def process_dist(self):
         """ Ensure the distribution works """
-        
+
         # Handle a SciPy distribution, if provided
         if self.dist is not None:
-            
+
             # Pull out parameters of an already-frozen distribution
             if isinstance(self.dist, sps._distn_infrastructure.rv_frozen):
                 if not self.initialized: # Don't do this more than once
                     self.pars = sc.dictobj(sc.mergedicts(self.pars, self.dist.kwds))
-            
+
             # Convert to a frozen distribution
             if isinstance(self.dist, sps._distn_infrastructure.rv_generic):
                 spars = self.process_pars(call=False)
                 self.dist = self.dist(**spars) 
-                
+
             # Override the default random state with the correct one
             self.dist.random_state = self.rng 
-            
+
         # Set the default function for getting the rvs
         if self.distname is not None and hasattr(self.rng, self.distname): # Don't worry if it doesn't, it's probably being manually overridden
             self.rvs_func = self.distname # e.g. self.rng.uniform -- can't use the actual function because can become linked to the wrong RNG
-        
+
         return
-    
+
     def process_size(self, n=1):
         """ Handle an input of either size or UIDs and calculate size, UIDs, and slots """
         if np.isscalar(n) or isinstance(n, tuple):  # If passing a non-scalar size, interpret as dimension rather than UIDs iff a tuple
@@ -488,18 +488,18 @@ class Dist:
         """ Perform any necessary synchronizations or transformations on distribution parameters """
         self.update_dist_pars()
         return self._pars
-    
+
     def update_dist_pars(self, pars=None):
         """ Update SciPy distribution parameters """
         if self.dist is not None:
             pars = pars if pars is not None else self._pars
             self.dist.kwds = pars
         return
-    
+
     def rand(self, size):
         """ Simple way to get simple random numbers """
         return self.rng.random(size)
-    
+
     def make_rvs(self):
         """ Return default random numbers for scalar parameters """
         if self.rvs_func is not None:
@@ -594,7 +594,7 @@ class Dist:
 
 # Add common distributions so they can be imported directly; assigned to a variable since used in help messages
 dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
-             'poisson', 'weibull', 'constant', 'randint', 'rand_raw', 'bernoulli',
+             'poisson', 'weibull', 'gamma', 'constant', 'randint', 'rand_raw', 'bernoulli',
              'choice', 'histogram']
 __all__ += dist_list
 
@@ -604,7 +604,7 @@ class random(Dist):
     def __init__(self, **kwargs):
         super().__init__(distname='random', **kwargs)
         return
-    
+
     def ppf(self, rands):
         return rands
 
@@ -620,7 +620,7 @@ class uniform(Dist):
     def __init__(self, low=0.0, high=1.0, **kwargs):
         super().__init__(distname='uniform', low=low, high=high, **kwargs)
         return
-    
+
     def ppf(self, rands):
         p = self._pars
         rvs = rands * (p.high - p.low) + p.low
@@ -813,7 +813,26 @@ class weibull(Dist):
     def __init__(self, c=1.0, loc=0.0, scale=1.0, **kwargs):
         super().__init__(distname='weibull', dist=sps.weibull_min, c=c, loc=loc, scale=scale, **kwargs)
         return
+
+    def make_rvs(self):
+        """ Use SciPy rather than NumPy to include the scale parameter """
+        rvs = self.dist.rvs(self._size)
+        return rvs
+
+
+class gamma(Dist):
+    """
+    Gamma distribution
     
+    Args:
+        a (float): the shape parameter, sometimes called k (default 1.0)
+        loc (float): the location parameter, which shifts the position of the distribution (default 0.0)
+        scale (float): the scale parameter, sometimes called θ (default 1.0)
+    """
+    def __init__(self, a=1.0, loc=0.0, scale=1.0, **kwargs):
+        super().__init__(distname='gamma', dist=sps.gamma, a=a, loc=loc, scale=scale, **kwargs)
+        return
+
     def make_rvs(self):
         """ Use SciPy rather than NumPy to include the scale parameter """
         rvs = self.dist.rvs(self._size)
