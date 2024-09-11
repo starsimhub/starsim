@@ -5,7 +5,7 @@ General module class -- base class for diseases, interventions, etc.
 import sciris as sc
 import starsim as ss
 
-__all__ = ['module_map', 'find_modules', 'Module', 'Connector']
+__all__ = ['module_map', 'find_modules', 'Module']
 
 
 def module_map(key=None):
@@ -16,7 +16,6 @@ def module_map(key=None):
         diseases      = ss.Disease,
         interventions = ss.Intervention,
         analyzers     = ss.Analyzer,
-        connectors    = ss.Connector,
     )
     return module_map if key is None else module_map[key]
 
@@ -39,12 +38,12 @@ def find_modules(key=None):
             except:
                 pass
     return modules if key is None else modules[key]
-
+    
 
 class Module(sc.quickobj):
 
-    def __init__(self, name=None, label=None, requires=None):
-        self.set_metadata(name, label, requires) # Usually reset as part of self.update_pars()
+    def __init__(self, name=None, label=None):
+        self.set_metadata(name, label) # Usually reset as part of self.update_pars()
         self.pars = ss.Pars() # Usually populated via self.default_pars()
         self.results = ss.Results(self.name)
         self.initialized = False
@@ -54,15 +53,22 @@ class Module(sc.quickobj):
     def __bool__(self):
         """ Ensure that zero-length modules (e.g. networks) are still truthy """
         return True
+
+    def disp(self, output=False):
+        """ Display the full object """
+        out = sc.prepr(self)
+        if not output:
+            print(out)
+        else:
+            return out
     
-    def set_metadata(self, name, label, requires):
+    def set_metadata(self, name, label):
         """ Set metadata for the module """
         self.name = sc.ifelse(name, getattr(self, 'name', self.__class__.__name__.lower())) # Default name is the class name
         self.label = sc.ifelse(label, getattr(self, 'label', self.name))
-        self.requires = sc.mergelists(requires)
         return
     
-    def default_pars(self, inherit=True, **kwargs):
+    def define_pars(self, inherit=False, **kwargs):
         """ Create or merge Pars objects """
         if inherit: # Merge with existing
             self.pars.update(**kwargs, create=True)
@@ -82,7 +88,7 @@ class Module(sc.quickobj):
         self.pars.update(matches)
                 
         # Update module attributes
-        metadata = {key:pars.pop(key, getattr(self, key, None)) for key in ['name', 'label', 'requires']}
+        metadata = {key:pars.pop(key, None) for key in ['name', 'label']}
         self.set_metadata(**metadata)
         
         # Should be no remaining pars
@@ -91,31 +97,14 @@ class Module(sc.quickobj):
             raise ValueError(errormsg)
         return
     
-    def check_requires(self, sim):
-        """ Check that the module's requirements (of other modules) are met """
-        errs = sc.autolist()
-        all_names = [m.__class__ for m in sim.modules] + [m.name for m in sim.modules if hasattr(m, 'name')]
-        for req in self.requires:
-            if req not in all_names:
-                errs += req
-        if len(errs):
-            errormsg = f'{self.name} (label={self.label}) requires the following module(s), but the Sim does not contain them.'
-            errormsg += sc.newlinejoin(errs)
-            raise Exception(errormsg)
-        return
-
     def init_pre(self, sim):
         """
         Perform initialization steps
 
         This method is called once, as part of initializing a Sim. Note: after
-        initialization, initialized=False until init_post() is called (which is after
+        initialization, initialized=False until init_vals() is called (which is after
         distributions are initialized).
-        
-        Note: distributions cannot be used here because they aren't initialized 
-        until after init_pre() is called. Use init_post() instead.
         """
-        self.check_requires(sim)
         self.sim = sim # Link back to the sim object
         ss.link_dists(self, sim, skip=ss.Sim) # Link the distributions to sim and module
         sim.pars[self.name] = self.pars
@@ -124,22 +113,19 @@ class Module(sc.quickobj):
         return
     
     def init_post(self):
-        """ Initialize the values of the states, including calling distributions; the last step of initialization """
+        """ Initialize the values of the states; the last step of initialization """
         for state in self.states:
             if not state.initialized:
                 state.init_vals()
         self.initialized = True
         return
     
-    def disp(self, output=False):
-        """ Display the full object """
-        out = sc.prepr(self)
-        if not output:
-            print(out)
-        else:
-            return out
+    def step(self):
+        """ Define how the module updates over time """
+        pass
 
     def finalize(self):
+        """ Perform any final operations, such as removing unneeded data """
         self.finalize_results()
         self.finalized = True
         return
@@ -228,14 +214,3 @@ class Module(sc.quickobj):
                 ax.set_title(k)
                 ax.set_xlabel('Year')
         return fig
-
-
-class Connector(Module):
-    """
-    Define a Connector, which mediates interactions between disease modules
-    
-    Because connectors can do anything, they have no specified structure: it is
-    up to the user to define how they behave.    
-    """
-    def update(self, sim):
-        pass

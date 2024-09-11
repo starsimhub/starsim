@@ -20,18 +20,29 @@ class SIR(ss.Infection):
     """
     def __init__(self, pars=None, **kwargs):
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             beta = 0.1,
             init_prev = ss.bernoulli(p=0.01),
             dur_inf = ss.lognorm_ex(mean=6),
             p_death = ss.bernoulli(p=0.01),
         )
         self.update_pars(pars, **kwargs)
+        
+        self.define_states(
+            ss.State('susceptible', True),
+            ss.State('infected'),
+            ss.State('recovered'),
+        )
+        
+        self.define_events(
+            ss.Event('susceptible -> infected', func=self.infect,  reskey='infections'),
+            ss.Event('infected -> recovered',   func=self.recover, reskey='recoveries'),
+            ss.Event('infected -> dead',        func=self.die,     reskey='deaths'),
+        )
 
-        self.add_states(
-            ss.BoolArr('recovered', label='Recovered'),
-            ss.FloatArr('ti_recovered', label='Time of recovery'),
-            ss.FloatArr('ti_dead', label='Time of death'),
+        self.add_props(
+            ss.FloatArr('rel_sus',   default=1.0),
+            ss.FloatArr('rel_trans', default=1.0),
         )
         return
 
@@ -48,9 +59,8 @@ class SIR(ss.Infection):
             sim.people.request_death(deaths)
         return
 
-    def set_prognoses(self, uids, source_uids=None):
+    def set_outcomes(self, uids, source_uids=None):
         """ Set prognoses """
-        super().set_prognoses(uids, source_uids)
         ti = self.sim.ti
         dt = self.sim.dt
         self.susceptible[uids] = False
@@ -102,7 +112,7 @@ class SIS(ss.Infection):
     """
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             beta = 0.05,
             init_prev = ss.bernoulli(p=0.01),
             dur_inf = ss.lognorm_ex(mean=10),
@@ -188,7 +198,7 @@ class sir_vaccine(ss.Vx):
     """
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             efficacy = 0.9,
             leaky = True
         )

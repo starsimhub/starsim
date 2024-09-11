@@ -15,7 +15,7 @@ class Syphilis(ss.Infection):
     def __init__(self, pars=None, **kwargs):
         # Parameters
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             # Initial conditions
             beta = 1.0, # Placeholder
             init_prev = ss.bernoulli(p=0.03),
@@ -56,30 +56,35 @@ class Syphilis(ss.Infection):
 
         self.add_states(
             # Adult syphilis states
-            ss.BoolArr('exposed', label='Exposed'),  # AKA incubating. Free of symptoms, not transmissible
-            ss.BoolArr('primary', label='Primary'),  # Primary chancres
-            ss.BoolArr('secondary', label="Secondary"),  # Inclusive of those who may still have primary chancres
-            ss.BoolArr('latent_temp', label="Latent temporary"),  # Relapses to secondary (~1y)
-            ss.BoolArr('latent_long', label="Latent long"),  # Can progress to tertiary or remain here
-            ss.BoolArr('tertiary', label="Tertiary"),  # Includes complications (cardio/neuro/disfigurement)
-            ss.BoolArr('immune', label="Immune"),  # After effective treatment people may acquire temp immunity
-            ss.BoolArr('ever_exposed', label="Ever exposed"),  # Anyone ever exposed - stays true after treatment
-            ss.BoolArr('congenital', label="Congenital"),  # Congenital syphilis states
+            ss.State('susceptible', label='Susceptible', default=True),
+            ss.State('exposed', label='Exposed'),  # AKA incubating. Free of symptoms, not transmissible
+            ss.State('primary', label='Primary'),  # Primary chancres
+            ss.State('secondary', label='Secondary'),  # Inclusive of those who may still have primary chancres
+            ss.State('latent_temp', label="Latent temporary"),  # Relapses to secondary (~1y)
+            ss.State('latent_long', label="Latent long"),  # Can progress to tertiary or remain here
+            ss.State('tertiary', label="Tertiary"),  # Includes complications (cardio/neuro/disfigurement)
+            ss.State('immune', label="Immune"),  # After effective treatment people may acquire temp immunity
+            ss.State('ever_exposed', label="Ever exposed", track_time=False),  # Anyone ever exposed - stays true after treatment
+            ss.State('congenital'),  # Congenital syphilis states
+        )
+        
+        self.define_events(
+            ss.Event(src='susceptible', dest=['exposed', 'infected', 'ever_exposed'], func=self.infect),
+            ss.Event('exposed -> primary', func=self.to_primary),
+            ss.Event('primary -> secondary', func=self.to_secondary),
+            ss.Event('latent_temp -> secondary', func=self.to_secondary_latent),
+            ss.Event('secondary -> latent_temp', func=self.to_latent_temp),
+            ss.Event('secondary -> latent_long', func=self.to_latent_long),
+            ss.Event('latent_long -> tertiary', func=self.to_tertiary),
+        )
     
-            # Timestep of state changes
-            ss.FloatArr('ti_exposed', label='Time of exposure'),
-            ss.FloatArr('ti_primary', label='Time of primary'),
-            ss.FloatArr('ti_secondary', label='Time of secondary'),
-            ss.FloatArr('ti_latent_temp', label='Time of latent_temp'),
-            ss.FloatArr('ti_latent_long', label='Time of latent_long'),
-            ss.FloatArr('ti_tertiary', label='Time of tertiary'),
-            ss.FloatArr('ti_immune', label='Time of immunity'),
+        # Timestep of state changes
+        self.add_props(
             ss.FloatArr('ti_miscarriage', label='Time of miscarriage'),
-            ss.FloatArr('ti_nnd', label='Time of neonatal death'),
+            ss.FloatArr('ti_nnd' label='Time of neonatal death'),
             ss.FloatArr('ti_stillborn', label='Time of stillborn'),
             ss.FloatArr('ti_congenital', label='Time of congenital syphilis'),
         )
-
         return
 
     @property
@@ -195,7 +200,6 @@ class Syphilis(ss.Infection):
         """
         Set initial prognoses for adults newly infected with syphilis
         """
-        super().set_prognoses(uids, source_uids)
         
         ti = self.sim.ti
         dt = self.sim.dt

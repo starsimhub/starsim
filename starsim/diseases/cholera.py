@@ -17,7 +17,7 @@ class Cholera(ss.Infection):
     def __init__(self, pars=None, *args, **kwargs):
         """ Initialize with parameters """
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             # Initial conditions and beta
             beta = 1.0, # Placeholder value
             init_prev = ss.bernoulli(0.005),
