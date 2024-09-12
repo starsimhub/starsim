@@ -81,7 +81,7 @@ class Syphilis(ss.Infection):
         # Timestep of state changes
         self.add_props(
             ss.FloatArr('ti_miscarriage', label='Time of miscarriage'),
-            ss.FloatArr('ti_nnd' label='Time of neonatal death'),
+            ss.FloatArr('ti_nnd', label='Time of neonatal death'),
             ss.FloatArr('ti_stillborn', label='Time of stillborn'),
             ss.FloatArr('ti_congenital', label='Time of congenital syphilis'),
         )
