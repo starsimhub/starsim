@@ -244,7 +244,7 @@ if __name__ == '__main__':
     sc.options(interactive=do_plot)
     T = sc.timer()
     
-    # sim0 = test_demo(do_plot=do_plot)
+    sim0 = test_demo(do_plot=do_plot)
     sim1 = test_default(do_plot=do_plot)
     sim2 = test_simple(do_plot=do_plot)
     sim3 = test_api()

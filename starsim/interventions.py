@@ -220,10 +220,11 @@ class BaseScreening(BaseTest):
         """
         raise NotImplementedError
 
-    def step(self, sim, module=None):
+    def step(self):
         """
         Perform screening by finding who's eligible, finding who accepts, and applying the product.
         """
+        sim = self.sim
         accept_uids = ss.uids()
         if sim.ti in self.timepoints:
             accept_uids = self.deliver(sim)
@@ -372,7 +373,7 @@ class BaseTreatment(Intervention):
         self.outcomes = {k: np.array([], dtype=int) for k in ['unsuccessful', 'successful']} # Store outcomes on each timestep
         return
 
-    def get_accept_inds(self, sim):
+    def get_accept_inds(self, sim): # TODO: do not pass sim
         """
         Get indices of people who will acccept treatment; these people are then added to a queue or scheduled for receiving treatment
         """
@@ -389,10 +390,11 @@ class BaseTreatment(Intervention):
         """
         raise NotImplementedError
 
-    def step(self, sim):
+    def step(self):
         """
         Perform treatment by getting candidates, checking their eligibility, and then treating them.
         """
+        sim = self.sim
         # Get indices of who will get treated
         treat_candidates = self.get_candidates(sim)  # NB, this needs to be implemented by derived classes
         still_eligible = self.check_eligibility(sim)
@@ -435,13 +437,14 @@ class treat_num(BaseTreatment):
                 treat_candidates = self.queue[:self.max_capacity]
         return ss.uids(treat_candidates) # TODO: Check
 
-    def step(self, sim):
+    def step(self):
         """
         Apply treatment. On each timestep, this method will add eligible people who are willing to accept treatment to a
         queue, and then will treat as many people in the queue as there is capacity for.
         """
+        sim = self.sim
         self.add_to_queue(sim)
-        treat_inds = BaseTreatment.step(self, sim) # Apply method from BaseTreatment class
+        treat_inds = BaseTreatment.step(self) # Apply method from BaseTreatment class
         self.queue = [e for e in self.queue if e not in treat_inds] # Recreate the queue, removing people who were treated
         return treat_inds
 

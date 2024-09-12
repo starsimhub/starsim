@@ -113,7 +113,7 @@ class Sim:
         # Initialize products # TODO: think about moving with other modules
         for intv in self.interventions():
             if hasattr(intv, 'product'): # TODO: simplify
-                intv.product.initialize(self)
+                intv.product.init_pre(self)
         
         # Initialize all distributions now that everything else is in place, then set states
         self.dists.initialize(obj=self, base_seed=self.pars.rand_seed, force=True)
