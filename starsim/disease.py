@@ -246,10 +246,11 @@ class Infection(Disease):
         betamap = self.validate_beta()
         
         for nkey,net in self.sim.networks.items():
+            nk = ss.standardize_netkey(nkey) # TEMP
             if len(net): # Skip networks with no edges
                 edges = net.edges
-                p1p2b0 = [edges.p1, edges.p2, betamap[nkey][0]]
-                p2p1b1 = [edges.p2, edges.p1, betamap[nkey][1]]
+                p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]]
+                p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]]
                 for src, trg, beta in [p1p2b0, p2p1b1]:
                     if beta: # Skip networks with no transmission
     
