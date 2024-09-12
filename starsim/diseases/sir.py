@@ -35,12 +35,20 @@ class SIR(ss.Infection):
             ss.State('recovered'),
         )
         
+        # Option 1 for defining events -- using objects
         self.define_events(
-            ss.Event('susceptible -> infected', func=self.infect,  reskey='infections'),
-            ss.Event('infected -> recovered',   func=self.recover, reskey='recoveries'),
-            ss.Event('infected -> dead',        func=self.die,     reskey='deaths'),
+            ss.Event(self.susceptible, self.infected, func=self.infect,  reskey='infections'),
+            ss.Event(self.infected, self.recovered,   func=self.recover, reskey='recoveries'),
+            ss.Event(self.infected, self.dead,        func=self.die,     reskey='deaths'),
         )
-
+        
+        # Option 2 for defining events -- using strings
+        self.define_events(
+            ss.Event('susceptible -> infected', self.infect,  reskey='infections'),
+            ss.Event('infected -> recovered',   self.recover, reskey='recoveries'),
+            ss.Event('infected -> dead',        self.die,     reskey='deaths'),
+        )
+        
         self.define_attrs(
             ss.FloatArr('rel_sus',   default=1.0),
             ss.FloatArr('rel_trans', default=1.0),
