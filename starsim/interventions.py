@@ -475,10 +475,11 @@ class BaseVaccination(Intervention):
         self.coverage_dist = ss.bernoulli(p=0)  # Placeholder
         return
 
-    def apply(self, sim):
+    def step(self):
         """
         Deliver the diagnostics by finding who's eligible, finding who accepts, and applying the product.
         """
+        sim = self.sim
         accept_uids = np.array([])
         if sim.ti in self.timepoints:
 

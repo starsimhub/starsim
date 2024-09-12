@@ -128,6 +128,10 @@ class Module(sc.quickobj):
     def step(self):
         """ Define how the module updates over time """
         pass
+    
+    def update_results(self):
+        """ Perform any results updates on each timestep """
+        pass
 
     def finalize(self):
         """ Perform any final operations, such as removing unneeded data """

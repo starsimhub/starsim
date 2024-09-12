@@ -56,13 +56,11 @@ class check_states(ss.Analyzer):
         self.okay = True
         return
 
-    def update_results(self, sim):
-        return self.apply(sim)
-
-    def apply(self, sim):
+    def update_results(self):
         """
         Checks states that should be mutually exlusive and collectively exhaustive
         """
+        sim = self.sim
         sppl = sim.diseases.syphilis
 
         # Infection states: people must be exactly one of these

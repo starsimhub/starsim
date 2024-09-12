@@ -57,7 +57,8 @@ class Penicillin(ss.Intervention):
         self.year = year
         return
 
-    def apply(self, sim):
+    def step(self):
+        sim = self.sim
         if sim.year > self.year:
             syphilis = sim.diseases.syphilis
 

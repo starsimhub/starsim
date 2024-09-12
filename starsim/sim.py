@@ -241,14 +241,10 @@ class Sim:
         for disease in self.diseases():
             disease.die(uids)
 
-        # Update results -- TEMP
+        # Update results
         self.people.update_results()
-
-        for dem in self.demographics():
-            dem.update_results()
-
-        for disease in self.diseases():
-            disease.update_results()
+        for mod in self.modules:
+            mod.update_results()
 
         # Apply analyzers
         for ana in self.analyzers():
