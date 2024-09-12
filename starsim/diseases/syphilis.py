@@ -12,7 +12,7 @@ __all__ = ['Syphilis']
 
 class Syphilis(ss.Infection):
 
-    def __init__(self, pars=None, **kwargs):
+    def __future_init__(self, pars=None, **kwargs):
         # Parameters
         super().__init__()
         self.define_pars(
@@ -85,6 +85,76 @@ class Syphilis(ss.Infection):
             ss.FloatArr('ti_stillborn', label='Time of stillborn'),
             ss.FloatArr('ti_congenital', label='Time of congenital syphilis'),
         )
+        return
+    
+    def __init__(self, pars=None, **kwargs):
+        # Parameters
+        super().__init__()
+        self.define_pars(
+            # Initial conditions
+            beta = 1.0, # Placeholder
+            init_prev = ss.bernoulli(p=0.03),
+            
+            # Adult syphilis natural history, all specified in years
+            dur_exposed = ss.lognorm_ex(mean=1 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_primary = ss.lognorm_ex(mean=1.5 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_secondary = ss.normal(loc=3.6 / 12, scale=1.5 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_temp = ss.lognorm_ex(mean=1, stdev=6 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_long = ss.lognorm_ex(mean=20, stdev=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            p_latent_temp = ss.bernoulli(p=0.25),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            p_tertiary = ss.bernoulli(p=0.35),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
+    
+            # Transmission by stage
+            rel_trans = dict(
+                exposed=1,
+                primary=1,
+                secondary=1,
+                latent_temp=0.075,
+                latent_long=0.075,
+                tertiary=0.05,
+            ),
+    
+            # Congenital syphilis outcomes
+            # Birth outcomes coded as:
+            #   0: Neonatal death
+            #   1: Stillborn
+            #   2: Congenital syphilis
+            #   3: Live birth without syphilis-related complications
+            # Source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5973824/)
+            birth_outcomes = sc.objdict(
+                active = ss.choice(a=5, p=np.array([0.125, 0.125, 0.20, 0.35, 0.200])), # Probabilities of active by birth outcome
+                latent = ss.choice(a=5, p=np.array([0.050, 0.075, 0.10, 0.05, 0.725])), # Probabilities of latent
+            ),
+            birth_outcome_keys = ['miscarriage', 'nnd', 'stillborn', 'congenital'],
+        )
+        self.update_pars(pars, **kwargs)
+    
+        self.define_states(
+            # Adult syphilis states
+            ss.BoolArr('exposed', label='Exposed'),  # AKA incubating. Free of symptoms, not transmissible
+            ss.BoolArr('primary', label='Primary'),  # Primary chancres
+            ss.BoolArr('secondary', label="Secondary"),  # Inclusive of those who may still have primary chancres
+            ss.BoolArr('latent_temp', label="Latent temporary"),  # Relapses to secondary (~1y)
+            ss.BoolArr('latent_long', label="Latent long"),  # Can progress to tertiary or remain here
+            ss.BoolArr('tertiary', label="Tertiary"),  # Includes complications (cardio/neuro/disfigurement)
+            ss.BoolArr('immune', label="Immune"),  # After effective treatment people may acquire temp immunity
+            ss.BoolArr('ever_exposed', label="Ever exposed"),  # Anyone ever exposed - stays true after treatment
+            ss.BoolArr('congenital', label="Congenital"),  # Congenital syphilis states
+    
+            # Timestep of state changes
+            ss.FloatArr('ti_exposed', label='Time of exposure'),
+            ss.FloatArr('ti_primary', label='Time of primary'),
+            ss.FloatArr('ti_secondary', label='Time of secondary'),
+            ss.FloatArr('ti_latent_temp', label='Time of latent_temp'),
+            ss.FloatArr('ti_latent_long', label='Time of latent_long'),
+            ss.FloatArr('ti_tertiary', label='Time of tertiary'),
+            ss.FloatArr('ti_immune', label='Time of immunity'),
+            ss.FloatArr('ti_miscarriage', label='Time of miscarriage'),
+            ss.FloatArr('ti_nnd', label='Time of neonatal death'),
+            ss.FloatArr('ti_stillborn', label='Time of stillborn'),
+            ss.FloatArr('ti_congenital', label='Time of congenital syphilis'),
+        )
+    
         return
 
     @property

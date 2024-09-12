@@ -11,7 +11,7 @@ import matplotlib.pyplot as pl
 __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
 
 
-class Sim(ss.CallDebug):
+class Sim:
     """
     The Sim object
     
@@ -111,8 +111,8 @@ class Sim(ss.CallDebug):
             mod.init_pre(self)
                 
         # Initialize products # TODO: think about moving with other modules
-        for intv in self.interventions:
-            if intv.product:
+        for intv in self.interventions():
+            if hasattr(intv, 'product'): # TODO: simplify
                 intv.product.initialize(self)
         
         # Initialize all distributions now that everything else is in place, then set states
@@ -193,7 +193,7 @@ class Sim(ss.CallDebug):
             self.networks(),
             self.diseases(),
             self.interventions(),
-            [intv.product for intv in self.interventions() if isinstance(intv.product, ss.Product)],
+            [intv.product for intv in self.interventions() if hasattr(intv, 'product')], # TODO: simplify
             self.analyzers(),
         )
     
@@ -228,8 +228,8 @@ class Sim(ss.CallDebug):
 
         # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
         # interventions, by running them at this point
-        for intervention in self.interventions():
-            intervention(self) # Interventions and analyzers get the sim as an argument in case they're functions
+        for intv in self.interventions():
+            intv.step()
         
         # Carry out autonomous state changes in the disease modules, including transmission (but excluding deaths)
         for disease in self.diseases():
@@ -244,15 +244,15 @@ class Sim(ss.CallDebug):
         # Update results -- TEMP
         self.people.update_results()
 
-        for dem_mod in self.demographics():
-            dem_mod.update_results()
+        for dem in self.demographics():
+            dem.update_results()
 
         for disease in self.diseases():
             disease.update_results()
 
         # Apply analyzers
-        for analyzer in self.analyzers():
-            analyzer(self)
+        for ana in self.analyzers():
+            ana.step()
             
         # Clean up dead agents and perform other housekeeping tasks
         self.people.finish_step()

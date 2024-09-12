@@ -13,8 +13,9 @@ sc.options(interactive=False) # Assume not running interactively
 class hiv_syph(ss.Module):
     """ Simple connector whereby rel_sus to NG doubles if CD4 count is <200"""
     def __init__(self, pars=None, **kwargs):
-        super().__init__(label='HIV-Syphilis', requires=[ss.HIV, ss.Syphilis])
-        self.default_pars(
+        super().__init__()
+        self.define_pars(
+            label = 'HIV-Syphilis',
             rel_sus_syph_hiv    = 2,   # People with HIV are 2x more likely to acquire syphilis
             rel_sus_syph_aids   = 5,   # People with AIDS are 5x more likely to acquire syphilis
             rel_trans_syph_hiv  = 1.5, # People with HIV are 1.5x more likely to transmit syphilis

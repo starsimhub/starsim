@@ -20,7 +20,7 @@ ss_float = ss.dtypes.float
 ss_int   = ss.dtypes.int
 ss_bool  = ss.dtypes.bool
 
-__all__ = ['check_dtype', 'Arr', 'FloatArr', 'BoolArr', 'IndexArr', 'uids']
+__all__ = ['check_dtype', 'Arr', 'FloatArr', 'BoolArr', 'State', 'IndexArr', 'uids']
 
 
 def check_dtype(dtype, default=None):

@@ -40,7 +40,7 @@ def find_modules(key=None):
     return modules if key is None else modules[key]
     
 
-class Module(ss.CallDebug):
+class Module(sc.quickobj):
 
     def __init__(self, name=None, label=None):
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
