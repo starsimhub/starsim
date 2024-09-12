@@ -448,7 +448,8 @@ class syph_treatment(ss.treat_num):
         self.results += ss.Result('syphilis', 'n_tx', sim.npts, dtype=int, scale=True, label='Number treated')
         return
 
-    def apply(self, sim):
-        treat_inds = super().apply(sim)
+    def step(self):
+        sim = self.sim
+        treat_inds = super().step()
         sim.people.syphilis.infected[treat_inds] = False
         self.results['n_tx'][sim.ti] += len(treat_inds)
