@@ -131,7 +131,7 @@ class Ebola(SIR):
         self.rel_trans[unburied_uids] = self.pars['unburied_factor']  # Change for unburied
         return
 
-    def update_death(self, uids):
+    def die(self, uids):
         # Reset infected/recovered flags for dead agents
         for state in ['susceptible', 'exposed', 'infected', 'severe', 'recovered']:
             self.statesdict[state][uids] = False

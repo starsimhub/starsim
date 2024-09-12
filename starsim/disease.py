@@ -66,7 +66,7 @@ class Disease(ss.Module):
         """
         pass
 
-    def update_death(self, uids):
+    def die(self, uids):
         """
         Carry out state changes upon death
 

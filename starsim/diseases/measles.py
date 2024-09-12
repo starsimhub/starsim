@@ -85,7 +85,7 @@ class Measles(SIR):
 
         return
 
-    def update_death(self, uids):
+    def die(self, uids):
         # Reset infected/recovered flags for dead agents
         for state in ['susceptible', 'exposed', 'infected', 'recovered']:
             self.statesdict[state][uids] = False

@@ -173,7 +173,7 @@ class Cholera(ss.Infection):
             self.set_prognoses(new_cases, source_uids=None)
         return
 
-    def update_death(self, uids):
+    def die(self, uids):
         """ Reset infected/recovered flags for dead agents """
         for state in ['susceptible', 'exposed', 'infected', 'symptomatic', 'recovered']:
             self.statesdict[state][uids] = False
