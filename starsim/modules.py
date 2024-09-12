@@ -4,6 +4,7 @@ General module class -- base class for diseases, interventions, etc.
 
 import sciris as sc
 import starsim as ss
+from functools import partial
 
 __all__ = ['module_map', 'find_modules', 'Module']
 
@@ -202,10 +203,13 @@ class Module(sc.quickobj):
     @classmethod
     def from_func(cls, func):
         """ Create an module from a function """
+        def step(mod): # TODO: see if this can be done more simply
+            return mod.func(mod.sim)
         name = func.__name__
-        new = cls(name=name)
-        new.step = func
-        return new
+        mod = cls(name=name)
+        mod.func = func
+        mod.step = partial(step, mod)
+        return mod
             
     def to_json(self):
         """ Export to a JSON-compatible format """
