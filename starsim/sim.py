@@ -25,8 +25,8 @@ class Sim:
         args = dict(label=label, people=people, demographics=demographics, diseases=diseases, networks=networks, 
                     interventions=interventions, analyzers=analyzers, connectors=connectors)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
-        self.orig_pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs) # TODO: check if copying here is OK
-        self.pars.update(self.orig_pars)  # Update the parameters
+        input_pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs) # TODO: check if copying here is OK
+        self.pars.update(input_pars)  # Update the parameters
         
         # Set attributes; see also sim.initialize() for more
         self.label = label # Usually overwritten during initialization by the parameters
