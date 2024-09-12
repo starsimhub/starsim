@@ -46,7 +46,7 @@ class Gonorrhea(ss.Infection):
         self.results.new_clearances[ti] = np.count_nonzero(self.ti_clearance == ti)
         return
 
-    def update_pre(self):
+    def step_pre(self):
         """ Natural clearance """
         clearances = self.ti_clearance <= self.sim.ti
         self.susceptible[clearances] = True

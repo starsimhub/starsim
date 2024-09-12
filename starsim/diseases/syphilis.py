@@ -193,7 +193,7 @@ class Syphilis(ss.Infection):
         ]
         return
 
-    def update_pre(self):
+    def step_pre(self):
         """ Updates prior to interventions """
 
         # Primary

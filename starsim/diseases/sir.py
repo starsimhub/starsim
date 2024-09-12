@@ -159,7 +159,7 @@ class SIS(ss.Infection):
         )
         return
 
-    def update_pre(self):
+    def step_pre(self):
         """ Progress infectious -> recovered """
         recovered = (self.infected & (self.ti_recovered <= self.sim.ti)).uids
         self.infected[recovered] = False

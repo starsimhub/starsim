@@ -39,7 +39,7 @@ class Measles(SIR):
     def infectious(self):
         return self.infected | self.exposed
 
-    def update_pre(self):
+    def step_pre(self):
         # Progress exposed -> infected
         ti = self.sim.ti
         infected = (self.exposed & (self.ti_infected <= ti)).uids

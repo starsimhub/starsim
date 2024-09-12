@@ -42,7 +42,7 @@ class HIV(ss.Infection):
         out = np.array(out)
         return out
 
-    def update_pre(self):
+    def step_pre(self):
         """ Update CD4 """
         people = self.sim.people
         self.cd4[people.alive & self.infected & self.on_art] += (self.pars.cd4_max - self.cd4[people.alive & self.infected & self.on_art])/self.pars.cd4_rate
@@ -104,7 +104,8 @@ class ART(ss.Intervention):
         self.initialized = True
         return
 
-    def apply(self, sim):
+    def step(self):
+        sim = self.sim
         if sim.year < self.year[0]:
             return
 
@@ -140,6 +141,7 @@ class CD4_analyzer(ss.Analyzer):
         self.cd4 = np.zeros((sim.npts, sim.people.n), dtype=int)
         return
 
-    def apply(self, sim):
+    def step(self):
+        sim = self.sim
         self.cd4[sim.t] = sim.people.hiv.cd4
         return

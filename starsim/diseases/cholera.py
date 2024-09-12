@@ -77,7 +77,7 @@ class Cholera(ss.Infection):
         ]
         return
 
-    def update_pre(self):
+    def step_pre(self):
         """
         Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/cholera.py
         Original version by Dom Delport

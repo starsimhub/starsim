@@ -16,17 +16,17 @@ class hiv_syph(ss.Module):
         super().__init__()
         self.define_pars(
             label = 'HIV-Syphilis',
-            rel_sus_syph_hiv    = 2,   # People with HIV are 2x more likely to acquire syphilis
-            rel_sus_syph_aids   = 5,   # People with AIDS are 5x more likely to acquire syphilis
-            rel_trans_syph_hiv  = 1.5, # People with HIV are 1.5x more likely to transmit syphilis
-            rel_trans_syph_aids = 3,   # People with AIDS are 3x more likely to transmit syphilis
-            rel_sus_hiv_syph    = 2.7, # People with syphilis are 2.7x more likely to acquire HIV
-            rel_trans_hiv_syph  = 2.7, # People with syphilis are 2.7x more likely to transmit HIV
+            rel_sus_syph_hiv    = 2*10,   # People with HIV are 2x more likely to acquire syphilis
+            rel_sus_syph_aids   = 5*10,   # People with AIDS are 5x more likely to acquire syphilis
+            rel_trans_syph_hiv  = 1.5*10, # People with HIV are 1.5x more likely to transmit syphilis
+            rel_trans_syph_aids = 3*10,   # People with AIDS are 3x more likely to transmit syphilis
+            rel_sus_hiv_syph    = 2.7*10, # People with syphilis are 2.7x more likely to acquire HIV
+            rel_trans_hiv_syph  = 2.7*10, # People with syphilis are 2.7x more likely to transmit HIV
         )
         self.update_pars(pars, **kwargs)
         return
 
-    def update(self):
+    def step(self):
         """ Specify HIV-syphilis interactions """
         diseases = self.sim.diseases
         syph = diseases.syphilis
@@ -46,6 +46,8 @@ class hiv_syph(ss.Module):
 
         # People with syphilis are more likely to transmit HIV
         hiv.rel_trans[syph.active] = self.pars.rel_trans_hiv_syph
+        
+        print('HIIIII', self.sim.label, syph.rel_sus.mean())
         return
 
 
