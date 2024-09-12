@@ -420,7 +420,7 @@ class SimPars(Pars):
                             mod = expected_cls.from_func(mod)
                     
                     # Do final check
-                    if not isinstance(mod, (expected_cls, ss.Plugin)):
+                    if not isinstance(mod, (expected_cls, ss.Module)): # TEMP: check if this check still works?
                         errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls} or Plugin, but was {type(mod)} instead'
                         raise TypeError(errormsg)
                     modlist[i] = mod

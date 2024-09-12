@@ -150,7 +150,7 @@ class Infection(Disease):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.add_states(
+        self.define_states(
             ss.BoolArr('susceptible', default=True, label='Susceptible'),
             ss.BoolArr('infected', label='Infectious'),
             ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
@@ -202,8 +202,9 @@ class Infection(Disease):
         ]
         return
         
-    def validate_beta(self, sim):
+    def validate_beta(self):
         """ Validate beta and return as a map to match the networks """
+        sim = self.sim
         
         if 'beta' not in self.pars:
             errormsg = f'Disease {self.name} is missing beta; pars are: {sc.strjoin(self.pars.keys())}'
