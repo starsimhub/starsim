@@ -193,7 +193,7 @@ class Sim:
             self.networks(),
             self.diseases(),
             self.interventions(),
-            [intv.product for intv in self.interventions() if hasattr(intv, 'product')], # TODO: simplify
+            [intv.product for intv in self.interventions() if hasattr(intv, 'product') and intv.product is not None], # TODO: simplify
             self.analyzers(),
         )
     

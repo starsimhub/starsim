@@ -34,7 +34,6 @@ class Intervention(ss.Module):
     def __init__(self, eligibility=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.eligibility = eligibility
-        self.product = None
         return
 
     def _parse_product(self, product):
