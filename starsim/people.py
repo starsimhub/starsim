@@ -309,7 +309,7 @@ class People(sc.prettyobj):
         self.ti_dead[uids] = self.sim.ti
         return
 
-    def resolve_deaths(self):
+    def check_deaths(self):
         """ Carry out any deaths that took place this timestep """
         death_uids = (self.ti_dead <= self.sim.ti).uids
         self.alive[death_uids] = False
@@ -350,9 +350,9 @@ class People(sc.prettyobj):
         return
     
     def finish_step(self):
-        self.people.update_results()
-        self.people.remove_dead()
-        self.people.update_post()
+        self.update_results()
+        self.remove_dead()
+        self.update_post()
         return
     
     def person(self, ind):
