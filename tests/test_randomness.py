@@ -293,7 +293,7 @@ def test_combine_rands(do_plot=False):
     np.random.seed(2)
     a = np.random.randint(np.iinfo(np.uint64).max, size=n, dtype=np.uint64)
     b = np.random.randint(np.iinfo(np.uint64).max, size=n, dtype=np.uint64)
-    c = ss.combine_rands(a, b)
+    c = ss.utils.combine_rands(a, b)
     if do_plot:
         pl.figure()
         for i,k,v in sc.objdict(a=a,b=b,combined=c).enumitems():

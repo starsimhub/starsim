@@ -570,7 +570,7 @@ class ErdosRenyiNet(DynamicNetwork):
         # Use integers to create random numbers per edge
         i1 = ints[idx1]
         i2 = ints[idx2]
-        r = ss.combine_rands(i1, i2)
+        r = ss.utils.combine_rands(i1, i2) # TODO: use ss.multi_rand()
         edge = r <= self.pars.p
 
         p1 = idx1[edge]
