@@ -11,7 +11,7 @@ import matplotlib.pyplot as pl
 __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
 
 
-class Sim:
+class Sim(ss.CallDebug):
     """
     The Sim object
     

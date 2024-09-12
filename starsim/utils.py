@@ -15,6 +15,36 @@ import starsim as ss
 __all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'standardize_netkey', 'standardize_data']
 
 
+
+# TEMP
+
+# Dictionary to store the call counts for methods
+call_counts = {}
+
+def call_counter(func, callclass='noclass'):
+    def wrapper(*args, **kwargs):
+        method_name = callclass + '_' + func.__name__
+        if method_name not in call_counts:
+            call_counts[method_name] = 0
+        call_counts[method_name] += 1
+        print(f"{method_name} has been called {call_counts[method_name]} times")
+        return func(*args, **kwargs)
+    
+    return wrapper
+
+class CallDebug:
+    def __init_subclass__(cls, **kwargs):
+        # Iterate over all class attributes
+        for attr_name, attr_value in cls.__dict__.items():
+            # If the attribute is a function, wrap it with call_counter
+            if callable(attr_value) and not attr_name.startswith("__"):
+                setattr(cls, attr_name, call_counter(attr_value, cls.__name__))
+        super().__init_subclass__(**kwargs)
+
+__all__ += ['CallDebug']
+
+
+
 class ndict(sc.objdict):
     """
     A dictionary-like class that provides additional functionalities for handling named items.
