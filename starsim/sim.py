@@ -219,7 +219,8 @@ class Sim:
         # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
         # to be applied to newly created agents
         for disease in self.diseases():
-            disease.step_pre()
+            if isinstance(disease, ss.Disease): # Could be a connector instead -- TODO, rethink this
+                disease.step_pre()
 
         # Update networks - this takes place here in case autonomous state changes at this timestep
         # affect eligibility for contacts
@@ -239,7 +240,8 @@ class Sim:
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
         uids = self.people.check_deaths()
         for disease in self.diseases():
-            disease.die(uids)
+            if isinstance(disease, ss.Disease):
+                disease.die(uids)
 
         # Update results
         self.people.update_results()
