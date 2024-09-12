@@ -19,12 +19,13 @@ class Disease(ss.Module):
 
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.default_pars(
+        self.define_pars(
             log = False,
         )
         self.update_pars(pars, **kwargs)
         self.results = ss.Results(self.name)
-        self.log = InfectionLog()
+        if self.pars.log:
+            self.log = InfectionLog()
         return
 
     @property
@@ -58,9 +59,10 @@ class Disease(ss.Module):
             self.results += ss.Result(self.name, f'n_{state.name}', self.sim.npts, dtype=int, scale=True, label=state.label)
         return
 
-    def update_pre(self):
+    def step_pre(self):
         """
-        Carry out autonomous updates at the start of the timestep (prior to transmission)
+        Carry out updates at the start of the timestep (prior to transmission);
+        these are typically state changes
         """
         pass
 
@@ -81,9 +83,9 @@ class Disease(ss.Module):
         """
         pass
 
-    def make_new_cases(self):
+    def step(self):
         """
-        Add new cases of the disease
+        Handle the main disease updates, e.g. add new cases
 
         This method is agnostic as to the mechanism by which new cases occur. This
         could be through transmission (parametrized in different ways, which may or
@@ -156,7 +158,7 @@ class Infection(Disease):
             ss.FloatArr('ti_infected', label='Time of infection' ),
         )
 
-        # Define random number generators for make_new_cases
+        # Define random number generators for step()
         self.rng = ss.multi_random('target', 'source')
         return
     
@@ -242,7 +244,7 @@ class Infection(Disease):
         sources = []
         betamap = self.validate_beta()
         
-        for nkey,net in sim.networks.items():
+        for nkey,net in self.sim.networks.items():
             if len(net): # Skip networks with no edges
                 edges = net.edges
                 p1p2b0 = [edges.p1, edges.p2, betamap[nkey][0]]
@@ -251,7 +253,7 @@ class Infection(Disease):
                     if beta: # Skip networks with no transmission
     
                         # Calculate probability of a->b transmission.
-                        beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=sim.dt)
+                        beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
         
                         # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
                         randvals = self.rng.rvs(src, trg)
@@ -262,6 +264,7 @@ class Infection(Disease):
         # Tidy up
         new_cases = ss.uids.cat(new_cases)
         sources = ss.uids.cat(sources)
+        networks = None # TEMP
         if len(new_cases):
             self.set_outcomes(new_cases, sources)
             
@@ -349,7 +352,6 @@ class InfectionLog(nx.MultiDiGraph):
         self.add_edge(source, target, key=t, **kwargs)
         return
 
-    @property
     def line_list(self):
         """
         Return a tabular representation of the log

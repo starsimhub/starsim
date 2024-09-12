@@ -40,7 +40,7 @@ class SIR(ss.Infection):
             ss.Event('infected -> dead',        func=self.die,     reskey='deaths'),
         )
 
-        self.add_props(
+        self.define_attrs(
             ss.FloatArr('rel_sus',   default=1.0),
             ss.FloatArr('rel_trans', default=1.0),
         )
@@ -59,7 +59,7 @@ class SIR(ss.Infection):
             sim.people.request_death(deaths)
         return
 
-    def set_outcomes(self, uids, source_uids=None):
+    def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses """
         ti = self.sim.ti
         dt = self.sim.dt

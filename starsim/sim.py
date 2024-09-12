@@ -214,6 +214,11 @@ class Sim:
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
         for dem in self.demographics():
             dem.step()
+            
+        # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
+        # to be applied to newly created agents
+        for disease in self.diseases():
+            disease.step_pre()
 
         # Update networks - this takes place here in case autonomous state changes at this timestep
         # affect eligibility for contacts
