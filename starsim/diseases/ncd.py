@@ -59,7 +59,7 @@ class NCD(ss.Disease):
         self.results.new_deaths[ti] = len(deaths) # Log deaths attributable to this module
         return
 
-    def make_new_cases(self):
+    def step(self):
         ti = self.sim.ti
         new_cases = (self.ti_affected == ti).uids
         self.affected[new_cases] = True

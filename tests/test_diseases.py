@@ -123,7 +123,7 @@ def test_ncd():
     sim.run()
 
     assert len(ncd.log.out_edges) == ncd.log.number_of_edges()
-    df = ncd.log.line_list  # Check generation of line-list
+    df = ncd.log.line_list()  # Check generation of line-list
     assert df.source.isna().all()
 
     plt.figure()

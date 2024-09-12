@@ -24,8 +24,6 @@ class Disease(ss.Module):
         )
         self.update_pars(pars, **kwargs)
         self.results = ss.Results(self.name)
-        if self.pars.log:
-            self.log = InfectionLog()
         return
 
     @property
@@ -45,6 +43,8 @@ class Disease(ss.Module):
         """ Link the disease to the sim, create objects, and initialize results; see Module.init_pre() for details """
         super().init_pre(sim)
         self.init_results()
+        if self.pars.log:
+            self.log = InfectionLog()
         return
 
     def init_results(self):
@@ -97,7 +97,7 @@ class Disease(ss.Module):
         """
         pass
 
-    def set_prognoses(self, uids, source_uids=None):
+    def set_prognoses(self, uids, sources=None):
         """
         Set prognoses upon infection/acquisition
 
@@ -115,6 +115,19 @@ class Disease(ss.Module):
             uids (array): UIDs for agents to assign disease progoses to
             from_uids (array): Optionally specify the infecting agent
         """
+        # Track infections
+        if self.pars.log:
+            self.log_infections(uids, sources)
+        return
+
+    def log_infections(self, uids, sources=None):
+        sim = self.sim
+        if sources is None:
+            for target in uids:
+                self.log.append(np.nan, target, sim.year)
+        else:
+            for target, source in zip(uids, sources):
+                self.log.append(source, target, sim.year)
         return
 
     def update_results(self):
@@ -230,15 +243,11 @@ class Infection(Disease):
         Perform key infection updates, including infection and setting prognoses
         """
         # Create new cases
-        new_cases, sources, networks = self.infect() # TODO: store in class or use object rather than 3 returns
+        new_cases, sources, networks = self.infect() # TODO: store outputs in self or use objdict rather than 3 returns
         
         # Set prognoses
         if len(new_cases):
             self.set_outcomes(new_cases, sources)
-            
-        # Track infections
-        if self.pars.log:
-            self.log_infections(new_cases, sources)
         
         return new_cases, sources, networks
 
@@ -294,16 +303,6 @@ class Infection(Disease):
     def set_congenital(self, target_uids, source_uids=None):
         pass
     
-    def log_infections(self, new_cases, sources=None):
-        sim = self.sim
-        if sources is None:
-            for target in new_cases:
-                self.log.append(np.nan, target, sim.year)
-        else:
-            for target, source in zip(new_cases, sources):
-                self.log.append(source, target, sim.year)
-        return
-
     def update_results(self):
         super().update_results()
         res = self.results
