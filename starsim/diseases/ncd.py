@@ -26,7 +26,7 @@ class NCD(ss.Disease):
         )
         self.update_pars(pars=pars, **kwargs)
         
-        self.add_states(
+        self.define_states(
             ss.BoolArr('at_risk', label='At risk'),
             ss.BoolArr('affected', label='Affected'),
             ss.FloatArr('ti_affected', label='Time of becoming affected'),

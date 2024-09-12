@@ -28,7 +28,7 @@ class Measles(SIR):
         self.update_pars(pars=pars, **kwargs)
 
         # SIR are added automatically, here we add E
-        self.add_states(
+        self.define_states(
             ss.BoolArr('exposed', label='Exposed'),
             ss.FloatArr('ti_exposed', label='Time of exposure'),
         )

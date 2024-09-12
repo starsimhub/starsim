@@ -37,7 +37,7 @@ class Ebola(SIR):
         self.update_pars(pars=pars, **kwargs)
         
         # Boolean states
-        self.add_states(
+        self.define_states(
             # SIR are added automatically, here we add E
             ss.BoolArr('exposed', label='Exposed'),
             ss.BoolArr('severe', label='Severe'),

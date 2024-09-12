@@ -153,7 +153,7 @@ class SIS(ss.Infection):
         )
         self.update_pars(pars=pars, *args, **kwargs)
 
-        self.add_states(
+        self.define_states(
             ss.FloatArr('ti_recovered'),
             ss.FloatArr('immunity', default=0.0),
         )

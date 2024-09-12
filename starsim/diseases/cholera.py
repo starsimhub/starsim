@@ -41,7 +41,7 @@ class Cholera(ss.Infection):
         self.update_pars(pars, **kwargs)
 
         # Boolean states
-        self.add_states(
+        self.define_states(
             # Susceptible & infected are added automatically, here we add the rest
             ss.BoolArr('exposed', label='Exposed'),
             ss.BoolArr('symptomatic', label='Symptomatic'),
