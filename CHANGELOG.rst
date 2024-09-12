@@ -7,6 +7,32 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 2.0.0 (2024-09-30)
+--------------------------
+
+Summary
+~~~~~~~
+This version contains several major breaking changes. These include: module-specific timesteps and time-aware parameters (including a day/year ``unit`` flag for modules, and  ``ss.dur()`` and ``ss.rate()`` classes for parameters), as well as changes to module types and integration (removing ``ss.Connector`` and renaming ``update()`` and ``apply()`` methods to ``step()``).
+
+Time-aware parameters
+~~~~~~~~~~~~~~~~~~~~~
+Coming soon!
+
+Module changes
+~~~~~~~~~~~~~~
+temp
+
+New integration process
+~~~~~~~~~~~~~~~~~~~~~~~
+temp
+
+Regression information
+~~~~~~~~~~~~~~~~~~~~~~
+- 
+- *GitHub info*: PR `593 <https://github.com/starsimhub/starsim/pull/593>`_
+
+
+
 Version 1.0.1 (2024-07-22)
 ---------------------------
 - Adds a new distribution, ``ss.rand_raw()``, that samples raw integers from the random number bit generator, for use with calculating transmission. This version is roughly 20-30% faster than the previous implementation.
