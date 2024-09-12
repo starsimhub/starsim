@@ -1012,7 +1012,7 @@ class multi_random(sc.prettyobj):
         # Generate the random numbers
         rvs = self.dists[0].rvs(args[0]) # Get the initial random numbers
         for i,uids in enumerate(args[1:]):
-            rvs += self.dists[i+1].rvs[uids]
+            rvs += self.dists[i+1].rvs(uids)
     
         # Convert to a value between 0 and 1 efficiently
         inds = np.where(rvs>1.0)[0]
