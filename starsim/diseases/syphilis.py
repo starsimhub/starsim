@@ -54,7 +54,7 @@ class Syphilis(ss.Infection):
         )
         self.update_pars(pars, **kwargs)
 
-        self.add_states(
+        self.define_states(
             # Adult syphilis states
             ss.State('susceptible', label='Susceptible', default=True),
             ss.State('exposed', label='Exposed'),  # AKA incubating. Free of symptoms, not transmissible
@@ -78,8 +78,8 @@ class Syphilis(ss.Infection):
             ss.Event('latent_long -> tertiary', func=self.to_tertiary),
         )
     
-        # Timestep of state changes
-        self.add_props(
+        # Timestep of state changes -- not all will be needed in future
+        self.define_attrs(
             ss.FloatArr('ti_miscarriage', label='Time of miscarriage'),
             ss.FloatArr('ti_nnd', label='Time of neonatal death'),
             ss.FloatArr('ti_stillborn', label='Time of stillborn'),
