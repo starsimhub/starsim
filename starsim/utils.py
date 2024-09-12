@@ -16,7 +16,7 @@ __all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'stan
 
 
 
-# TEMP
+# START_TEMP
 
 # Dictionary to store the call counts for methods
 call_counts = {}
@@ -37,11 +37,14 @@ class CallDebug:
         # Iterate over all class attributes
         for attr_name, attr_value in cls.__dict__.items():
             # If the attribute is a function, wrap it with call_counter
-            if callable(attr_value) and not attr_name.startswith("__"):
+            if callable(attr_value) and not attr_name.startswith("__") and not isinstance(attr_value, staticmethod):
                 setattr(cls, attr_name, call_counter(attr_value, cls.__name__))
         super().__init_subclass__(**kwargs)
 
 __all__ += ['CallDebug']
+
+
+# END_TEMP
 
 
 

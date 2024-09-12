@@ -453,7 +453,7 @@ class RandomNet(DynamicNetwork):
         return
 
     @staticmethod
-    @nb.njit(cache=True)
+    # @nb.njit(cache=True) # TEMPPPP
     def get_source(inds, n_contacts):
         """ Optimized helper function for getting contacts """
         total_number_of_half_edges = np.sum(n_contacts)
