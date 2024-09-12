@@ -72,7 +72,7 @@ class Module(ss.CallDebug):
         self.label = sc.ifelse(label, getattr(self, 'label', self.name))
         return
     
-    def define_pars(self, inherit=False, **kwargs):
+    def define_pars(self, inherit=True, **kwargs): # TODO: think if inherit should default to true or false
         """ Create or merge Pars objects """
         if inherit: # Merge with existing
             self.pars.update(**kwargs, create=True)
