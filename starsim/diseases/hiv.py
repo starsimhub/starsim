@@ -27,7 +27,7 @@ class HIV(ss.Infection):
         self.update_pars(pars=pars, **kwargs)
 
         # States
-        self.add_states(
+        self.define_states(
             ss.BoolArr('on_art', label='On ART'),
             ss.FloatArr('ti_art', label='Time of ART initiation'),
             ss.FloatArr('ti_dead', label='Time of death'), # Time of HIV-caused death
@@ -89,7 +89,7 @@ class ART(ss.Intervention):
         self.year = sc.toarray(year)
         self.coverage = sc.toarray(coverage)
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             art_delay = ss.constant(v=1) # Value in years
         )
         self.update_pars(pars=pars, **kwargs)

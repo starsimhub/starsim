@@ -44,7 +44,7 @@ class Module(ss.CallDebug):
 
     def __init__(self, name=None, label=None):
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
-        self.pars = ss.Pars() # Usually populated via self.default_pars()
+        self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.results = ss.Results(self.name)
         self.initialized = False
         self.finalized = False

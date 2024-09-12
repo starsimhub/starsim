@@ -539,7 +539,7 @@ class ErdosRenyiNet(DynamicNetwork):
     def __init__(self, pars=None, key_dict=None, **kwargs):
         """ Initialize """
         super().__init__(key_dict=key_dict)
-        self.default_pars(
+        self.define_pars(
             p = 0.1, # Probability of each edge
             dur = 0, # Duration of zero ensures that new random edges are formed on each time step
         )
