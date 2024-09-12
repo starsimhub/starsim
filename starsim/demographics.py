@@ -76,11 +76,6 @@ class Births(Demographics):
         ]
         return
 
-    def step(self):
-        new_uids = self.add_births()
-        self.n_births = len(new_uids)
-        return new_uids
-
     def get_births(self):
         """
         Extract the right birth rates to use and translate it into a number of people to add.
@@ -101,6 +96,11 @@ class Births(Demographics):
         n_new = int(np.floor(sim.people.alive.count() * scaled_birth_prob))
         return n_new
 
+    def step(self):
+        new_uids = self.add_births()
+        self.n_births = len(new_uids)
+        return new_uids
+
     def add_births(self):
         """ Add n_new births to each state in the sim """
         people = self.sim.people
@@ -116,8 +116,8 @@ class Births(Demographics):
     def finalize(self):
         super().finalize()
         res = self.sim.results
-        self.results.cumulative = np.cumsum(self.results.new)
-        self.results.cbr = 1/self.pars.units*np.divide(self.results.new/self.sim.dt, res.n_alive, where=res.n_alive>0)
+        self.results.cumulative[:] = np.cumsum(self.results.new)
+        self.results.cbr[:] = 1/self.pars.units*np.divide(self.results.new/self.sim.dt, res.n_alive, where=res.n_alive>0)
         return
 
 
@@ -234,8 +234,9 @@ class Deaths(Demographics):
         """ Select people to die """
         death_uids = self.pars.death_rate.filter()
         self.sim.people.request_death(death_uids)
-        return len(death_uids)
-
+        self.n_deaths = len(death_uids)
+        return self.n_deaths
+    
     def update_results(self):
         self.results['new'][self.sim.ti] = self.n_deaths
         return
@@ -243,8 +244,8 @@ class Deaths(Demographics):
     def finalize(self):
         super().finalize()
         n_alive = self.sim.results.n_alive
-        self.results.cumulative = np.cumsum(self.results.new)
-        self.results.cmr = 1/self.pars.units*np.divide(self.results.new / self.sim.dt, n_alive, where=n_alive>0)
+        self.results.cumulative[:] = np.cumsum(self.results.new)
+        self.results.cmr[:] = 1/self.pars.units*np.divide(self.results.new / self.sim.dt, n_alive, where=n_alive>0)
         return
 
 

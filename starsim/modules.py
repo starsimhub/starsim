@@ -144,7 +144,7 @@ class Module(sc.quickobj):
         self.finalized = True
         return
 
-    def finalize_results(self):
+    def finalize_results(self): # TODO: this is confusing, needs to be not redefined by the user, or called after a custom finalize_results()
         """ Finalize results """
         # Scale results
         for reskey, res in self.results.items():
