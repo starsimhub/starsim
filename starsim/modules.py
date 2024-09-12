@@ -142,7 +142,7 @@ class Module(sc.quickobj):
                 self.results[reskey] = self.results[reskey]*self.sim.pars.pop_scale
         return
     
-    def add_states(self, *args, check=True):
+    def define_states(self, *args, check=True):
         """
         Add states to the module with the same attribute name as the state
         

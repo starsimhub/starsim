@@ -103,7 +103,7 @@ class SIR(ss.Infection):
         self.ti_recovered[rec_uids] = ti + dur_inf[~will_die] / dt
         return
 
-    def update_death(self, uids):
+    def die(self, uids):
         """ Reset infected/recovered flags for dead agents """
         self.susceptible[uids] = False
         self.infected[uids] = False

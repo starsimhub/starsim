@@ -107,7 +107,7 @@ class Disease(ss.Module):
         the log as part of this operation if logging is enabled (in the
         `Disease` parameters)
 
-        The `from_uids` are relevant for infectious diseases, but would be left
+        The `source_uids` are relevant for infectious diseases, but would be left
         as `None` for NCDs.
 
         Args:
@@ -233,7 +233,7 @@ class Infection(Disease):
         return betamap
 
 
-    def transmit(self):
+    def step(self):
         """
         Add new cases of module, through transmission, incidence, etc.
         
