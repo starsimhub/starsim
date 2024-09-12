@@ -363,6 +363,6 @@ class Person(sc.objdict):
     """ A simple class to hold all attributes of a person """
     def to_df(self):
         """ Convert to a dataframe """
-        df = sc.dataframe.from_dict(self, orient='index', columns='value')
+        df = sc.dataframe.from_dict(self, orient='index', columns=['value'])
         df.index.name = 'key'
         return df
