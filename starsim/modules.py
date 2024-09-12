@@ -115,7 +115,12 @@ class Module(sc.quickobj):
         sim.pars[self.name] = self.pars
         sim.results[self.name] = self.results
         sim.people.add_module(self) # Connect the states to the people
+        self.init_results()
         return
+    
+    def init_results(self):
+        """ Initialize any results required; part of init_pre() """
+        pass
     
     def init_post(self):
         """ Initialize the values of the states; the last step of initialization """

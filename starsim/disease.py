@@ -42,7 +42,6 @@ class Disease(ss.Module):
     def init_pre(self, sim):
         """ Link the disease to the sim, create objects, and initialize results; see Module.init_pre() for details """
         super().init_pre(sim)
-        self.init_results()
         if self.pars.log:
             self.log = InfectionLog()
         return
@@ -187,6 +186,7 @@ class Infection(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
+        super().init_post()
         if self.pars.init_prev is None:
             return
 

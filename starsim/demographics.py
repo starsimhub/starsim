@@ -21,16 +21,9 @@ class Demographics(ss.Module):
     """
     def init_pre(self, sim):
         super().init_pre(sim)
-        self.init_results()
         return
 
     def init_results(self):
-        pass
-
-    def update(self):
-        pass
-
-    def update_results(self):
         pass
 
 
@@ -83,7 +76,7 @@ class Births(Demographics):
         ]
         return
 
-    def update(self):
+    def step(self):
         new_uids = self.add_births()
         self.n_births = len(new_uids)
         return new_uids
@@ -237,11 +230,7 @@ class Deaths(Demographics):
         ]
         return
 
-    def update(self):
-        self.n_deaths = self.apply_deaths()
-        return
-
-    def apply_deaths(self):
+    def step(self):
         """ Select people to die """
         death_uids = self.pars.death_rate.filter()
         self.sim.people.request_death(death_uids)
@@ -389,7 +378,7 @@ class Pregnancy(Demographics):
         ]
         return
 
-    def update(self):
+    def step(self):
         """ Perform all updates """
         self.update_states()
         conceive_uids = self.make_pregnancies()
