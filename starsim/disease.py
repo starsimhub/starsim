@@ -245,6 +245,9 @@ class Infection(Disease):
         sources = []
         betamap = self.validate_beta()
         
+        rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
+        rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
+        
         for nkey,net in self.sim.networks.items():
             nk = ss.standardize_netkey(nkey) # TEMP
             if len(net): # Skip networks with no edges
@@ -256,10 +259,11 @@ class Infection(Disease):
     
                         # Calculate probability of a->b transmission.
                         beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
+                        p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
         
                         # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
                         randvals = self.rng.rvs(src, trg)
-                        transmitted = beta_per_dt > randvals
+                        transmitted = p_transmit > randvals
                         new_cases.append(trg[transmitted])
                         sources.append(src[transmitted])
                 
