@@ -25,7 +25,7 @@ class Sim:
         args = dict(label=label, people=people, demographics=demographics, diseases=diseases, networks=networks, 
                     interventions=interventions, analyzers=analyzers, connectors=connectors)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
-        self.orig_pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs)
+        self.orig_pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs) # TODO: check if copying here is OK
         self.pars.update(self.orig_pars)  # Update the parameters
         
         # Set attributes; see also sim.initialize() for more
@@ -33,6 +33,7 @@ class Sim:
         self.created = sc.now()  # The datetime the sim was created
         self.version = ss.__version__ # The Starsim version
         self.gitinfo = sc.gitinfo(path=__file__, verbose=False)
+        self.dists = ss.Dists(obj=self) # Initialize the random number generator container
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running
         self.results_ready = False  # Whether results are ready
