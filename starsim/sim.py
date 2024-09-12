@@ -241,6 +241,15 @@ class Sim(ss.CallDebug):
         for disease in self.diseases():
             disease.die(uids)
 
+        # Update results -- TEMP
+        self.people.update_results()
+
+        for dem_mod in self.demographics():
+            dem_mod.update_results()
+
+        for disease in self.diseases():
+            disease.update_results()
+
         # Apply analyzers
         for analyzer in self.analyzers():
             analyzer(self)
