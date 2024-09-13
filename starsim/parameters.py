@@ -168,12 +168,12 @@ class SimPars(Pars):
         self.pop_scale = None  # How much to scale the population
 
         # Simulation parameters
-        self.unit       = 'year' # The time unit to use (NOT YET IMPLEMENTED)
+        self.unit       = 'year' # The time unit to use; options are None, 'year' (default), and 'day'
         self.start      = 2000   # Start of the simulation
         self.end        = None   # End of the simulation
-        self.n_years    = 50     # Number of years to run, if end isn't specified. Note that this includes burn-in
-        self.dt         = 1.0    # Timestep
-        self.rand_seed  = 1      # Random seed, if None, don't reset
+        self.dur        = 50     # Duration of time to run, if end isn't specified
+        self.dt         = 1.0    # Timestep (in units of self.unit)
+        self.rand_seed  = 1      # Random seed; if None, don't reset
         self.slot_scale = 5      # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
 
         # Demographic parameters
@@ -212,7 +212,7 @@ class SimPars(Pars):
         self.validate_verbose()
         self.validate_agents()
         self.validate_total_pop()
-        self.validate_start_end()
+        self.validate_time()
         self.validate_dt()
         return
     
@@ -257,23 +257,56 @@ class SimPars(Pars):
             self.pop_scale = total_pop / self.n_agents
         return
     
-    def validate_start_end(self):
-        """ Ensure at least one of n_years and end is defined, but not both """
-        if self.end is not None:
-            if self.is_default('n_years'):
-                self.n_years = self.end - self.start
+    def int_to_date(self, x):
+        """ Convert an integer to a date """
+        if self.unit == 'year':
+            date = sc.date(f'{x}-01-01')
+        else:
+            raise NotImplementedError
+        return date
+            
+    def date_add(self, start, dur):
+        """ Add two dates (or integers) together """
+        if sc.isnumber(start):
+            end = start + dur
+        else:
+            if self.unit == 'year':
+                end = sc.datedelta(start, years=dur) # TODO: allow non-integer amounts
+            elif self.unit == 'day':
+                end = sc.datedelta(start, days=dur)
             else:
-                errormsg = f'You can supply either end ({self.end}) or n_years ({self.n_years}) but not both, since one is calculated from the other'
+                raise NotImplementedError
+        return end
+            
+    def date_diff(self, start, end):
+        """ Find the difference between two dates (or integers) """
+        if sc.isnumber(start) and sc.isnumber(end):
+            dur = end - start
+        else:
+            if self.unit == 'year':
+                dur = sc.datetoyear(end) - sc.datetoyear(start) # TODO: allow non-integer amounts
+            elif self.unit == 'day':
+                dur = (end - start).days
+            else:
+                raise NotImplementedError
+        return dur
+        
+    def validate_time(self):
+        """ Ensure at least one of dur and end is defined, but not both """
+        if self.end is not None:
+            if self.is_default('dur'):
+                self.dur = self.date_diff(self.start, self.end)
+            else:
+                errormsg = f'You can supply either end ({self.end}) or dur ({self.dur}) but not both, since one is calculated from the other'
                 raise ValueError(errormsg)
-            if self.n_years <= 0:
-                errormsg = f"Number of years must be >0, but you supplied start={str(self.start)} and " \
-                           f"end={str(self.end)}, which gives n_years={self.n_years}"
+            if self.dur <= 0:
+                errormsg = f"Duration must be >0, but you supplied start={str(self.start)} and end={str(self.end)}, which gives dur={self.dur}"
                 raise ValueError(errormsg)
         else:
-            if self.n_years is not None:
-                self.end = self.start + self.n_years
+            if self.dur is not None:
+                self.end = self.date_add(self.start, self.dur)
             else:
-                errormsg = 'You must supply one of n_years and end."'
+                errormsg = 'You must supply either "dur" or "end".'
                 raise ValueError(errormsg)
         return
 
@@ -282,17 +315,17 @@ class SimPars(Pars):
         Check that 1/dt is an integer value, otherwise results and time vectors will have mismatching shapes.
         init_results explicitly makes this assumption by casting resfrequency = int(1/dt).
         """
-        if self.unit == 'year': # TODO: implement properly
-            dt = self.dt
-            reciprocal = 1.0 / dt  # Compute the reciprocal of dt
-            if not reciprocal.is_integer():  # Check if reciprocal is not a whole (integer) number
-                # Round the reciprocal
-                reciprocal = int(reciprocal)
-                rounded_dt = 1.0 / reciprocal
-                self.dt = rounded_dt
-                if self.verbose:
-                    warnmsg = f'Warning: Provided time step dt={dt} resulted in a non-integer number of steps per year. Rounded to {rounded_dt}.'
-                    ss.warn(warnmsg)
+        dt = self.dt
+        reciprocal = 1.0 / dt  # Compute the reciprocal of dt
+        if not reciprocal.is_integer():  # Check if reciprocal is not a whole (integer) number
+            reciprocal = int(reciprocal) # Round the reciprocal
+            rounded_dt = 1.0 / reciprocal
+            self.dt = rounded_dt
+            if self.verbose:
+                warnmsg = f'Warning: Provided time step dt={dt} resulted in a non-integer number of steps per {self.unit}. Rounded to {rounded_dt}.'
+                if self.unit == 'year':
+                    warnmsg += '\nConsider using unit="day" instead?'
+                ss.warn(warnmsg)
         return
     
     def validate_modules(self):
