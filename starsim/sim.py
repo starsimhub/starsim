@@ -131,7 +131,8 @@ class Sim:
     def init_time_attrs(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
         self.dt = self.pars.dt # Shortcut to dt since used a lot
-        self.yearvec = np.arange(start=self.pars.start, stop=self.pars.end + self.pars.dt, step=self.pars.dt) # The time points of the sim
+        stop = self.pars.date_add(self.pars.end, self.pars.dt) # Potentially convert to a date
+        self.yearvec = np.arange(start=self.pars.start, stop=stop, step=self.pars.dt) # The time points of the sim
         self.results.yearvec = self.yearvec # Store the yearvec in the results for plotting
         self.npts = len(self.yearvec) # The number of points in the sim
         self.tivec = np.arange(self.npts) # The vector of time indices
@@ -287,7 +288,9 @@ class Sim:
             elapsed = T.toc(output=True)
             if verbose: # Print progress
                 simlabel = f'"{self.label}": ' if self.label else ''
-                string = f'  Running {simlabel}{self.yearvec[self.ti]:0.1f} ({self.ti:2.0f}/{self.npts}) ({elapsed:0.2f} s) '
+                timepoint = self.yearvec[self.ti]
+                timelabel = f'{timepoint:0.1f}' if isinstance(timepoint, float) else str(timepoint) # TODO: fix
+                string = f'  Running {simlabel}{timelabel} ({self.ti:2.0f}/{self.npts}) ({elapsed:0.2f} s) '
                 if verbose >= 2:
                     sc.heading(string)
                 elif verbose > 0:

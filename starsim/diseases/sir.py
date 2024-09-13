@@ -145,10 +145,11 @@ class SIS(ss.Infection):
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
         self.define_pars(
-            beta = 0.05,
+            unit = 'year',
+            beta = ss.rate(0.05),
             init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=10),
-            waning = 0.05,
+            dur_inf = ss.dur(ss.lognorm_ex(mean=10)),
+            waning = ss.rate(0.05),
             imm_boost = 1.0,
         )
         self.update_pars(pars=pars, *args, **kwargs)

@@ -293,6 +293,10 @@ class SimPars(Pars):
         
     def validate_time(self):
         """ Ensure at least one of dur and end is defined, but not both """
+        if isinstance(self.start, str):
+            self.start = sc.date(self.start)
+        if isinstance(self.end, str):
+            self.end = sc.date(self.end)
         if self.end is not None:
             if self.is_default('dur'):
                 self.dur = self.date_diff(self.start, self.end)
