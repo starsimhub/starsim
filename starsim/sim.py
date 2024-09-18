@@ -202,7 +202,11 @@ class Sim:
         return self.yearvec[self.ti]
 
     def step(self):
-        """ Step through time and update values """
+        """
+        Step through time and update values
+        
+        TODO: assemble every method called during integration in a list, and then call them sequentially        
+        """
 
         # Set the time and if we have reached the end of the simulation, then do nothing
         if self.complete:
