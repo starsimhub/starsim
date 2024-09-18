@@ -186,6 +186,7 @@ class SimPars(Pars):
         self.networks      = ss.ndict()
         self.demographics  = ss.ndict()
         self.diseases      = ss.ndict()
+        self.connectors    = ss.ndict()
         self.interventions = ss.ndict()
         self.analyzers     = ss.ndict()
 
@@ -362,8 +363,9 @@ class SimPars(Pars):
         - networks,
         - demographics,
         - diseases,
-        - analyzers, and
-        - interventions
+        - analyzers,
+        - interventions, and
+        - connectors.
         """
         modmap = ss.module_map() # List of modules and parent module classes, e.g. ss.Disease
         modules = ss.find_modules() # Each individual module class option, e.g. ss.SIR

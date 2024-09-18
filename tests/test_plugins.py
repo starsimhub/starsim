@@ -10,7 +10,7 @@ import starsim as ss
 sc.options(interactive=False) # Assume not running interactively
 
 
-class hiv_syph(ss.Module):
+class hiv_syph(ss.Connector):
     """ Simple connector whereby rel_sus to NG doubles if CD4 count is <200"""
     def __init__(self, pars=None, **kwargs):
         super().__init__()
@@ -95,7 +95,7 @@ def test_connectors(do_plot=False):
     sims = sc.objdict() # List of sims
     
     # Make a sim with a connector, and run
-    sims.con = ss.Sim(label='With connector', interventions=hiv_syph(), **args)
+    sims.con = ss.Sim(label='With connector', connectors=hiv_syph(), **args)
     sims.con.run()
     
     # Make a sim without a connector, and run
@@ -103,7 +103,7 @@ def test_connectors(do_plot=False):
     sims.nocon.run()
     
     # Make a sim with a connector and syph treatment, and run
-    sims.treat = ss.Sim(label='With treatment', interventions=[hiv_syph(), Penicillin()], **args)
+    sims.treat = ss.Sim(label='With treatment', connectors=hiv_syph(), interventions=Penicillin(), **args)
     sims.treat.run()
     
     # Parse results

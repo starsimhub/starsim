@@ -1,26 +1,12 @@
 """
-Define interventions (and analyzers)
+Define interventions
 """
 
 import starsim as ss
 import sciris as sc
 import numpy as np
 
-__all__ = ['Analyzer', 'Intervention']
-
-
-class Analyzer(ss.Module):
-    """
-    Base class for analyzers. Analyzers are used to provide more detailed information 
-    about a simulation than is available by default -- for example, pulling states 
-    out of sim.people on a particular timestep before they get updated on the next step.
-    
-    The key method of the analyzer is ``step()``, which is called with the sim
-    on each timestep.
-    
-    To retrieve a particular analyzer from a sim, use sim.get_analyzer().
-    """
-    pass
+__all__ = ['Intervention']
 
 
 class Intervention(ss.Module):
