@@ -980,10 +980,17 @@ class multi_random(sc.prettyobj):
     A class for holding two or more ss.random() distributions, and generating
     random numbers linked to each of them. Useful for e.g. pairwise transmission
     probabilities.
+    
+    See ss.combine_rands() for the manual version; in almost all cases this class
+    should be used instead.
+    
+    Usage:
+        multi = ss.multi_random('source', 'target')
+        rvs = multi.rvs(source_uids, target_uids)
     """
     def __init__(self, names, *args, **kwargs):
         names = sc.mergelists(names, args)
-        self.dists = [ss.random(name=name, **kwargs) for name in names]
+        self.dists = [ss.rand_raw(name=name, **kwargs) for name in names]
         return
     
     def __len__(self):
@@ -1011,16 +1018,15 @@ class multi_random(sc.prettyobj):
             raise ValueError(errormsg)
         
         # Generate the random numbers
-        rvs = self.dists[0].rvs(args[0]) # Get the initial random numbers
-        for i,uids in enumerate(args[1:]):
-            rvs += self.dists[i+1].rvs(uids)
-    
-        # Convert to a value between 0 and 1 efficiently
-        inds = np.where(rvs>1.0)[0]
-        if n_dists == 2: # Optimization for common use case
-            rvs[inds] -= 1
-        else:
-            rvs[inds] = rvs[inds] % 1.0 # Slower, but handles values over 2.0
+        rvs_list = [dist.rvs(arg) for dist,arg in zip(self.dists, args)]
+        
+        # Combine using bitwise-or
+        rand_ints = rvs_list[0]
+        for rand_ints2 in rvs_list[1:]:
+            rand_ints = np.bitwise_xor(rand_ints*rand_ints2, rand_ints-rand_ints2)
+            
+        # Normalize
+        rvs = rand_ints / np.iinfo(np.uint64).max
         return rvs
 
     
