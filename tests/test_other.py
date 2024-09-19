@@ -19,7 +19,7 @@ def test_people():
     sc.heading('Testing people object')
 
     # Base people contains only the states defined in base.base_states
-    ppl = ss.People(small)  # BasePeople
+    ppl = ss.People(small)
     del ppl
 
     # Possible to initialize people with extra states, e.g. a geolocation
