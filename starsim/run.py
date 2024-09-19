@@ -267,7 +267,10 @@ class MultiSim(sc.prettyobj):
             with sc.options.with_style('simple'):
                 if key is not None:
                     flat = {k:v for k,v in flat.items() if k.startswith(key)}
-                fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
+                if fig is None:
+                    fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
+                else:
+                    axs = sc.toarray(fig.axes)
                     
                 # Do the plotting
                 for ax, (key, res) in zip(axs.flatten(), flat.items()):
@@ -331,7 +334,9 @@ def single_run(sim, ind=0, reseed=True, keep_people=False, run_args=None, sim_ar
         if key in sim.pars.keys():
             if verbose >= 1:
                 print(f'Setting key {key} from {sim[key]} to {val}')
-                sim[key] = val
+            sim.pars[key] = val
+            if key == 'rand_seed':
+                ss.set_seed()
         else:
             raise sc.KeyNotFoundError(f'Could not set key {key}: not a valid parameter name')
 
