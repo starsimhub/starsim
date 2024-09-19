@@ -260,17 +260,18 @@ class Infection(Disease):
         """
         new_cases = []
         sources = []
+        networks = []
         betamap = self.validate_beta()
         
         rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
         rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
         
-        for nkey,net in self.sim.networks.items():
+        for i, (nkey,net) in enumerate(self.sim.networks.items()):
             nk = ss.standardize_netkey(nkey) # TEMP
             if len(net): # Skip networks with no edges
                 edges = net.edges
-                p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]]
-                p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]]
+                p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
+                p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1
                 for src, trg, beta in [p1p2b0, p2p1b1]:
                     if beta: # Skip networks with no transmission
     
@@ -278,16 +279,25 @@ class Infection(Disease):
                         beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
                         p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
         
-                        # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
+                        # Generate a new random number based on the two other random numbers
                         randvals = self.trans_rng.rvs(src, trg)
                         transmitted = p_transmit > randvals
-                        new_cases.append(trg[transmitted])
-                        sources.append(src[transmitted])
+                        target_uids = trg[transmitted]
+                        source_uids = src[transmitted]
+                        new_cases.append(target_uids)
+                        sources.append(source_uids)
+                        networks.append(np.full(len(target_uids), dtype=ss_int_, fill_value=i))
                 
-        # Tidy up
-        new_cases = ss.uids.cat(new_cases)
-        sources = ss.uids.cat(sources)
-        networks = None # TEMP, NEED TO FIX
+        # Finalize
+        if len(new_cases) and len(sources):
+            new_cases = ss.uids.cat(new_cases)
+            new_cases, inds = new_cases.unique(return_index=True)
+            sources = ss.uids.cat(sources)[inds]
+            networks = np.concatenate(networks)[inds]
+        else:
+            new_cases = ss.uids()
+            sources = ss.uids()
+            networks = np.empty(0, dtype=ss_int_)
         return new_cases, sources, networks
 
     def set_outcomes(self, uids, sources=None):
