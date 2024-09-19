@@ -106,7 +106,7 @@ class Disease(ss.Module):
         the log as part of this operation if logging is enabled (in the
         `Disease` parameters)
 
-        The `source_uids` are relevant for infectious diseases, but would be left
+        The `sources` are relevant for infectious diseases, but would be left
         as `None` for NCDs.
 
         Args:
@@ -290,17 +290,17 @@ class Infection(Disease):
         networks = None # TEMP, NEED TO FIX
         return new_cases, sources, networks
 
-    def set_outcomes(self, target_uids, source_uids=None):
+    def set_outcomes(self, uids, sources=None):
         sim = self.sim
-        congenital = sim.people.age[target_uids] <= 0
+        congenital = sim.people.age[uids] <= 0
         if np.count_nonzero(congenital):
-            src_c = source_uids[congenital] if source_uids is not None else None
-            self.set_congenital(target_uids[congenital], src_c)
-        src_p = source_uids[~congenital] if source_uids is not None else None
-        self.set_prognoses(target_uids[~congenital], src_p)
+            src_c = sources[congenital] if sources is not None else None
+            self.set_congenital(uids[congenital], src_c)
+        src_p = sources[~congenital] if sources is not None else None
+        self.set_prognoses(uids[~congenital], src_p)
         return
 
-    def set_congenital(self, target_uids, source_uids=None):
+    def set_congenital(self, uids, sources=None):
         pass
     
     def update_results(self):
@@ -341,12 +341,12 @@ class InfectionLog(nx.MultiDiGraph):
 
     A table of outcomes can be returned using `InfectionLog.line_list()`
     """
-    def add_entries(self, sim, target_uids, source_uids=None): # TODO: reconcile with other methods
-        if source_uids is None:
-            for target in target_uids:
+    def add_entries(self, sim, uids, sources=None): # TODO: reconcile with other methods
+        if sources is None:
+            for target in uids:
                 self.log.append(np.nan, target, sim.year)
         else:
-            for target, source in zip(target_uids, source_uids):
+            for target, source in zip(uids, sources):
                 self.log.append(source, target, sim.year)
         return
 
