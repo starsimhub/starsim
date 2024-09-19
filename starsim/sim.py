@@ -250,7 +250,7 @@ class Sim:
         uids = self.people.check_deaths()
         for disease in self.diseases():
             if isinstance(disease, ss.Disease):
-                disease.die(uids)
+                disease.step_die(uids)
 
         # Update results
         self.people.update_results()

@@ -65,7 +65,7 @@ class Disease(ss.Module):
         """
         pass
 
-    def die(self, uids):
+    def step_die(self, uids):
         """
         Carry out state changes upon death
 
