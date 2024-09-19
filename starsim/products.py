@@ -48,7 +48,7 @@ class Dx(Product):
     def default_value(self):
         return len(self.hierarchy) - 1
 
-    def administer(self, sim, uids, return_format='dict'):
+    def administer(self, uids, return_format='dict'):
         """
         Administer a testing product.
         
@@ -63,7 +63,7 @@ class Dx(Product):
 
         for disease in self.diseases:
             for state in self.health_states:
-                this_state = getattr(sim.diseases[disease], state)
+                this_state = getattr(self.sim.diseases[disease], state)
                 true_uids = this_state.uids # Find people for which this state is true
                 these_uids = true_uids.intersect(uids) # Find intersection of people in this state and the supplied UIDs
 
@@ -96,7 +96,7 @@ class Tx(Product):
         self.efficacy_dist = ss.bernoulli(p=0)
         return
 
-    def administer(self, sim, uids, return_format='dict'):
+    def administer(self, uids, return_format='dict'):
         """
         Loop over treatment states to determine those who are successfully treated and clear infection
         """
@@ -105,7 +105,7 @@ class Tx(Product):
 
         for disease_name in self.diseases:
 
-            disease = sim.diseases[disease_name]
+            disease = self.sim.diseases[disease_name]
 
             for state in self.health_states:
 
@@ -122,7 +122,7 @@ class Tx(Product):
                     self.efficacy_dist.set(p=thisdf.efficacy.values[0])
 
                     # HACK to reset the efficacy_dist as it is called multiple times per timestep. TODO: Refactor
-                    self.efficacy_dist.jump(sim.ti+1)
+                    self.efficacy_dist.jump(self.sim.ti+1)
                     eff_treat_inds = self.efficacy_dist.filter(these_uids)
 
                     post_tx_state_name = thisdf.post_state.values[0]

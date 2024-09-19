@@ -88,8 +88,9 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, do_plot=False):
             assert np.array_equal(sim.results.pregnancy.pregnancies, sim.results.pregnancy.births)
             print('✓ (births == pregnancies)')
 
-    print("Check final pop size within 5% of data")
-    assert np.isclose(data.n_alive.values[-1], sim.results.n_alive[-1], rtol=0.05)
+    rtol = 0.05
+    print(f'Check final pop size within {rtol*100:n}% of data')
+    assert np.isclose(data.n_alive.values[-1], sim.results.n_alive[-1], rtol=rtol), f'Final population size not within {rtol*100:n}% of data'
     print(f'✓ (simulated/data={sim.results.n_alive[-1] / data.n_alive.values[-1]:.2f})')
 
     # Plots

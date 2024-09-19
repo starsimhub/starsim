@@ -21,16 +21,9 @@ class Demographics(ss.Module):
     """
     def init_pre(self, sim):
         super().init_pre(sim)
-        self.init_results()
         return
 
     def init_results(self):
-        pass
-
-    def update(self):
-        pass
-
-    def update_results(self):
         pass
 
 
@@ -38,7 +31,7 @@ class Births(Demographics):
     """ Create births based on rates, rather than based on pregnancy """
     def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             birth_rate = 30,
             rel_birth = 1,
             units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
@@ -83,11 +76,6 @@ class Births(Demographics):
         ]
         return
 
-    def update(self):
-        new_uids = self.add_births()
-        self.n_births = len(new_uids)
-        return new_uids
-
     def get_births(self):
         """
         Extract the right birth rates to use and translate it into a number of people to add.
@@ -108,6 +96,11 @@ class Births(Demographics):
         n_new = int(np.floor(sim.people.alive.count() * scaled_birth_prob))
         return n_new
 
+    def step(self):
+        new_uids = self.add_births()
+        self.n_births = len(new_uids)
+        return new_uids
+
     def add_births(self):
         """ Add n_new births to each state in the sim """
         people = self.sim.people
@@ -123,8 +116,8 @@ class Births(Demographics):
     def finalize(self):
         super().finalize()
         res = self.sim.results
-        self.results.cumulative = np.cumsum(self.results.new)
-        self.results.cbr = 1/self.pars.units*np.divide(self.results.new/self.sim.dt, res.n_alive, where=res.n_alive>0)
+        self.results.cumulative[:] = np.cumsum(self.results.new)
+        self.results.cbr[:] = 1/self.pars.units*np.divide(self.results.new/self.sim.dt, res.n_alive, where=res.n_alive>0)
         return
 
 
@@ -158,7 +151,7 @@ class Deaths(Demographics):
                 corresponding column name in data. Similar for "sex_keys". Finally,
         """
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             rel_death = 1,
             death_rate = 20,  # Default = a fixed rate of 2%/year, overwritten if data provided
             units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
@@ -237,16 +230,13 @@ class Deaths(Demographics):
         ]
         return
 
-    def update(self):
-        self.n_deaths = self.apply_deaths()
-        return
-
-    def apply_deaths(self):
+    def step(self):
         """ Select people to die """
         death_uids = self.pars.death_rate.filter()
         self.sim.people.request_death(death_uids)
-        return len(death_uids)
-
+        self.n_deaths = len(death_uids)
+        return self.n_deaths
+    
     def update_results(self):
         self.results['new'][self.sim.ti] = self.n_deaths
         return
@@ -254,8 +244,8 @@ class Deaths(Demographics):
     def finalize(self):
         super().finalize()
         n_alive = self.sim.results.n_alive
-        self.results.cumulative = np.cumsum(self.results.new)
-        self.results.cmr = 1/self.pars.units*np.divide(self.results.new / self.sim.dt, n_alive, where=n_alive>0)
+        self.results.cumulative[:] = np.cumsum(self.results.new)
+        self.results.cmr[:] = 1/self.pars.units*np.divide(self.results.new / self.sim.dt, n_alive, where=n_alive>0)
         return
 
 
@@ -263,7 +253,7 @@ class Pregnancy(Demographics):
     """ Create births via pregnancies """
     def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             dur_pregnancy = 0.75, # Duration for pre-natal transmission
             dur_postpartum = ss.lognorm_ex(0.5, 0.5), # Duration for post-natal transmission (e.g. via breastfeeding)
             fertility_rate = 0, # Can be a number of Pandas DataFrame
@@ -279,7 +269,7 @@ class Pregnancy(Demographics):
         self.pars.p_fertility = ss.bernoulli(p=0) # Placeholder, see make_fertility_prob_fn
         
         # Other, e.g. postpartum, on contraception...
-        self.add_states(
+        self.define_states(
             ss.BoolArr('infertile', label='Infertile'),  # Applies to girls and women outside the fertility window
             ss.BoolArr('fecund', default=True, label='Female of childbearing age'),
             ss.BoolArr('pregnant', label='Pregnant'),  # Currently pregnant
@@ -389,7 +379,7 @@ class Pregnancy(Demographics):
         ]
         return
 
-    def update(self):
+    def step(self):
         """ Perform all updates """
         self.update_states()
         conceive_uids = self.make_pregnancies()

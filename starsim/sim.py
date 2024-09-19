@@ -2,7 +2,6 @@
 Define core Sim classes
 """
 
-# Imports
 import itertools
 import numpy as np
 import sciris as sc
@@ -13,27 +12,36 @@ __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
 
 
 class Sim:
-
+    """
+    The Sim object
+    
+    All Starsim simulations run via the Sim class. It is responsible for initializing
+    and running all modules and generating results.
+    """
     def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, networks=None,
                  interventions=None, analyzers=None, connectors=None, copy_inputs=True, **kwargs):
-
         # Make default parameters (using values from parameters.py)
         self.pars = ss.make_pars() # Start with default pars
         args = dict(label=label, people=people, demographics=demographics, diseases=diseases, networks=networks, 
                     interventions=interventions, analyzers=analyzers, connectors=connectors)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
-        self.pars.update(sc.mergedicts(pars, args, kwargs, _copy=copy_inputs))  # Update the parameters
+        input_pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs) # TODO: check if copying here is OK
+        self.pars.update(input_pars)  # Update the parameters
         
-        # Set attributes
+        # Set attributes; see also sim.initialize() for more
         self.label = label # Usually overwritten during initialization by the parameters
         self.created = sc.now()  # The datetime the sim was created
-        self.initialized = False  # Whether initialization is complete
-        self.complete = False  # Whether a simulation has completed running # TODO: replace with finalized?
-        self.results_ready = False  # Whether results are ready
+        self.version = ss.__version__ # The Starsim version
+        self.gitinfo = sc.gitinfo(path=__file__, verbose=False)
         self.dists = ss.Dists(obj=self) # Initialize the random number generator container
+        self.initialized = False  # Whether initialization is complete
+        self.complete = False  # Whether a simulation has completed running
+        self.results_ready = False  # Whether results are ready
         self.results = ss.Results(module='sim')  # For storing results
+        self.elapsed = None # The time required to run
         self.summary = None  # For storing a summary of the results
         self.filename = None # Store the filename, if saved
+
         return
     
     def __getitem__(self, key):
@@ -101,11 +109,11 @@ class Sim:
         # Initialize all the modules with the sim
         for mod in self.modules:
             mod.init_pre(self)
-
-        # Initialize products # TODO: think about simplifying
-        for mod in self.interventions:
-            if hasattr(mod, 'product') and isinstance(mod.product, ss.Product):
-                mod.product.init_pre(self)
+                
+        # Initialize products # TODO: think about moving with other modules
+        for intv in self.interventions():
+            if hasattr(intv, 'product'): # TODO: simplify
+                intv.product.init_pre(self)
         
         # Initialize all distributions now that everything else is in place, then set states
         self.dists.initialize(obj=self, base_seed=self.pars.rand_seed, force=True)
@@ -180,87 +188,86 @@ class Sim:
     @property
     def modules(self):
         """ Return iterator over all Module instances (stored in standard places) in the Sim """
-        products = [intv.product for intv in self.interventions.values() if
-                    hasattr(intv, 'product') and isinstance(intv.product, ss.Product)]
         return itertools.chain(
-            self.demographics.values(),
-            self.networks.values(),
-            self.diseases.values(),
-            self.connectors.values(),
-            self.interventions.values(),
-            products,
-            self.analyzers.values(),
+            self.demographics(),
+            self.networks(),
+            self.diseases(),
+            self.connectors(),
+            self.interventions(),
+            [intv.product for intv in self.interventions() if hasattr(intv, 'product') and intv.product is not None], # TODO: simplify
+            self.analyzers(),
         )
     
     @property
-    def year(self):
+    def year(self): # TODO: remove when we do the time refactor
         return self.yearvec[self.ti]
 
     def step(self):
-        """ Step through time and update values """
+        """
+        Step through time and update values
+        
+        TODO: assemble every method called during integration in a list, and then call them sequentially        
+        """
 
         # Set the time and if we have reached the end of the simulation, then do nothing
         if self.complete:
-            raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
+            errormsg = 'Simulation already complete (call sim.initialize() to re-run)'
+            raise AlreadyRunError(errormsg)
 
         # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
         self.dists.jump(to=self.ti+1)  # +1 offset because ti=0 is used on initialization
 
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
-        for dem_mod in self.demographics():
-            dem_mod.update()
-
+        for dem in self.demographics():
+            dem.step()
+            
         # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
         # to be applied to newly created agents
         for disease in self.diseases():
-            disease.update_pre()
+            if isinstance(disease, ss.Disease): # Could be a connector instead -- TODO, rethink this
+                disease.step_state()
 
         # Update connectors -- TBC where this appears in the ordering
         for connector in self.connectors():
-            connector.update()
+            connector.step()
 
-        # Update networks - this takes place here in case autonomous state changes at this timestep affect eligibility for contacts
+        # Update networks - this takes place here in case autonomous state changes at this timestep
+        # affect eligibility for contacts
         for network in self.networks():
-            network.update()
+            network.step()
 
         # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
         # interventions, by running them at this point
-        for intervention in self.interventions():
-            intervention(self)
-
-        # Carry out transmission/new cases
+        for intv in self.interventions():
+            intv.step()
+        
+        # Carry out autonomous state changes in the disease modules, including transmission (but excluding deaths)
         for disease in self.diseases():
-            disease.make_new_cases()
+            disease.step()
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
-        uids = self.people.resolve_deaths()
+        uids = self.people.check_deaths()
         for disease in self.diseases():
-            disease.update_death(uids)
+            if isinstance(disease, ss.Disease):
+                disease.step_die(uids)
 
         # Update results
         self.people.update_results()
+        for mod in self.modules:
+            mod.update_results()
 
-        for dem_mod in self.demographics():
-            dem_mod.update_results()
-
-        for disease in self.diseases():
-            disease.update_results()
-
-        for analyzer in self.analyzers():
-            analyzer(self)
+        # Apply analyzers
+        for ana in self.analyzers():
+            ana.step()
             
-        # Clean up dead agents
-        self.people.remove_dead()
+        # Clean up dead agents and perform other housekeeping tasks
+        self.people.finish_step()
 
         # Tidy up
         self.ti += 1
-        self.people.ti = self.ti
-        self.people.update_post()
-
         if self.ti == self.npts:
             self.complete = True
-
         return
 
     def run(self, until=None, verbose=None):
@@ -270,14 +277,11 @@ class Sim:
         T = sc.timer()
         if not self.initialized:
             self.initialize()
-            self._orig_pars = sc.dcp(self.pars)  # Create a copy of the parameters to restore after the run
-
-        if verbose is None:
-            verbose = self.pars.verbose
+        verbose = sc.ifelse(verbose, self.pars.verbose)
 
         # Check for AlreadyRun errors
         errormsg = None
-        if until is None: until = self.npts
+        until = sc.ifelse(until, self.npts)
         if until > self.npts:
             errormsg = f'Requested to run until t={until} but the simulation end is ti={self.npts}'
         if self.ti >= until:  # NB. At the start, self.t is None so this check must occur after initialization
@@ -289,12 +293,8 @@ class Sim:
 
         # Main simulation loop
         while self.ti < until:
-
-            # Check if we were asked to stop
             elapsed = T.toc(output=True)
-
-            # Print progress
-            if verbose:
+            if verbose: # Print progress
                 simlabel = f'"{self.label}": ' if self.label else ''
                 string = f'  Running {simlabel}{self.yearvec[self.ti]:0.1f} ({self.ti:2.0f}/{self.npts}) ({elapsed:0.2f} s) '
                 if verbose >= 2:
@@ -303,19 +303,19 @@ class Sim:
                     if not (self.ti % int(1.0 / verbose)):
                         sc.progressbar(self.ti + 1, self.npts, label=string, length=20, newline=True)
 
-            # Actually run the model
+            # Actually run the model -- lots happens on the next line!
             self.step()
 
         # If simulation reached the end, finalize the results
         if self.complete:
-            self.finalize(verbose=verbose)
+            self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
+            self.elapsed = elapsed
+            self.finalize()
             sc.printv(f'Run finished after {elapsed:0.2f} s.\n', 1, verbose)
+        return self # Allows e.g. ss.Sim().run().plot()
 
-        return self
-
-    def finalize(self, verbose=None):
+    def finalize(self):
         """ Compute final results """
-
         if self.results_ready:
             # Because the results are rescaled in-place, finalizing the sim cannot be run more than once or
             # otherwise the scale factor will be applied multiple times
@@ -323,27 +323,26 @@ class Sim:
 
         # Scale the results
         for reskey, res in self.results.items():
-            if isinstance(res, ss.Result) and res.scale:
+            if isinstance(res, ss.Result) and res.scale: # NB: disease-specific results are scaled in module.finalize() below
                 self.results[reskey] = self.results[reskey] * self.pars.pop_scale
+        self.results_ready = True # Results are ready to use
 
+        # Finalize each module
         for module in self.modules:
             module.finalize()
 
-        self.summarize()
-        self.results_ready = True  # Set this first so self.summary() knows to print the results
-        self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
+        # Generate the summary and finish up
+        self.summarize() # Create summary
         return
 
     def summarize(self, how='default'):
         """
-        Provide a quick summary of the sim
+        Provide a quick summary of the sim; returns the last entry for count and 
+        cumulative results, and the mean otherwise.
         
         Args:
             how (str): how to summarize: can be 'mean', 'median', 'last', or a mapping of result keys to those
-        
-        Returns the last entry for count and cumulative results, and the mean otherwise
         """
-        
         def get_func(key, how, default='mean'):
             """
             Find the right function by matching the "how" key with the result key
@@ -404,9 +403,9 @@ class Sim:
         Returns:
             shrunken (Sim): a Sim object with the listed attributes removed
         """
-        # By default, skip people (~90% of memory), popdict, and _orig_pars (which is just a backup)
+        # By default, skip people
         if skip_attrs is None:
-            skip_attrs = ['people']
+            skip_attrs = ['people'] # TODO: think about skipping all states in all modules
 
         # Create the new object, and copy original dict, skipping the skipped attributes
         if in_place:
@@ -423,127 +422,8 @@ class Sim:
         else:
             return shrunken
 
-    def _get_ia(self, which, label=None, partial=False, as_list=False, as_inds=False, die=True, first=False):
-        """ Helper method for get_interventions() and get_analyzers(); see get_interventions() docstring """
-
-        # Handle inputs
-        if which not in ['interventions', 'analyzers']:  # pragma: no cover
-            errormsg = f'This method is only defined for interventions and analyzers, not "{which}"'
-            raise ValueError(errormsg)
-
-        ia_ndict = self.analyzers if which == 'analyzers' else self.interventions  # List of interventions or analyzers
-        n_ia = len(ia_ndict)  # Number of interventions/analyzers
-
-        position = 0 if first else -1  # Choose either the first or last element
-        if label is None:  # Get all interventions if no label is supplied, e.g. sim.get_interventions()
-            label = np.arange(n_ia)
-        if isinstance(label, np.ndarray):  # Allow arrays to be provided
-            label = label.tolist()
-        labels = sc.promotetolist(label)
-
-        # Calculate the matches
-        matches = []
-        match_inds = []
-
-        for label in labels:
-            if sc.isnumber(label):
-                matches.append(ia_ndict[label])
-                label = n_ia + label if label < 0 else label  # Convert to a positive number
-                match_inds.append(label)
-            elif sc.isstring(label) or isinstance(label, type):
-                for ind, ia_key, ia_obj in ia_ndict.enumitems():
-                    if sc.isstring(label) and ia_obj.label == label or (partial and (label in str(ia_obj.label))):
-                        matches.append(ia_obj)
-                        match_inds.append(ind)
-                    elif isinstance(label, type) and isinstance(ia_obj, label):
-                        matches.append(ia_obj)
-                        match_inds.append(ind)
-            else:  # pragma: no cover
-                errormsg = f'Could not interpret label type "{type(label)}": should be str, int, list, or {which} class'
-                raise TypeError(errormsg)
-
-        # Parse the output options
-        if as_inds:
-            output = match_inds
-        elif as_list:  # Used by get_interventions()
-            output = matches
-        else:
-            if len(matches) == 0:  # pragma: no cover
-                if die:
-                    errormsg = f'No {which} matching "{label}" were found'
-                    raise ValueError(errormsg)
-                else:
-                    output = None
-            else:
-                output = matches[
-                    position]  # Return either the first or last match (usually), used by get_intervention()
-
-        return output
-
-    def get_interventions(self, label=None, partial=False, as_inds=False):
-        """
-        Find the matching intervention(s) by label, index, or type. If None, return
-        all interventions. If the label provided is "summary", then print a summary
-        of the interventions (index, label, type).
-
-        Args:
-            label (str, int, Intervention, list): the label, index, or type of intervention to get; if a list, iterate over one of those types
-            partial (bool): if true, return partial matches (e.g. 'beta' will match all beta interventions)
-            as_inds (bool): if true, return matching indices instead of the actual interventions
-        """
-        return self._get_ia('interventions', label=label, partial=partial, as_inds=as_inds, as_list=True)
-
-    def get_intervention(self, label=None, partial=False, first=False, die=True):
-        """
-        Find the matching intervention(s) by label, index, or type.
-        If more than one intervention matches, return the last by default.
-        If no label is provided, return the last intervention in the list.
-
-        Args:
-            label (str, int, Intervention, list): the label, index, or type of intervention to get; if a list, iterate over one of those types
-            partial (bool): if true, return partial matches
-            first (bool): if true, return first matching intervention (otherwise, return last)
-            die (bool): whether to raise an exception if no intervention is found
-        """
-        return self._get_ia('interventions', label=label, partial=partial, first=first, die=die, as_inds=False,
-                            as_list=False)
-
-    def get_analyzers(self, label=None, partial=False, as_inds=False):
-        """
-        Find the matching analyzer(s) by label, index, or type. If None, return
-        all analyzers. If the label provided is "summary", then print a summary
-        of the analyzers (index, label, type).
-
-        Args:
-            label (str, int, Analyzer, list): the label, index, or type of analyzer to get; if a list, iterate over one of those types
-            partial (bool): if true, return partial matches (e.g. 'beta' will match all beta analyzers)
-            as_inds (bool): if true, return matching indices instead of the actual analyzers
-        """
-        return self._get_ia('analyzers', label=label, partial=partial, as_inds=as_inds, as_list=True)
-
-    def get_analyzer(self, label=None, partial=False, first=False, die=True):
-        """
-        Find the matching analyzer(s) by label, index, or type.
-        If more than one analyzer matches, return the last by default.
-        If no label is provided, return the last analyzer in the list.
-
-        Args:
-            label (str, int, Analyzer, list): the label, index, or type of analyzer to get; if a list, iterate over one of those types
-            partial (bool): if true, return partial matches
-            first (bool): if true, return first matching analyzer (otherwise, return last)
-            die (bool): whether to raise an exception if no analyzer is found
-        """
-        return self._get_ia('analyzers', label=label, partial=partial, first=first, die=die, as_inds=False,
-                            as_list=False)
-
     def export_df(self):
-        """
-        Export results as a Pandas dataframe
-
-        :return:
-
-        """
-
+        """ Export results as a Pandas dataframe """
         if not self.results_ready:  # pragma: no cover
             errormsg = 'Please run the sim before exporting the results'
             raise RuntimeError(errormsg)
@@ -559,7 +439,6 @@ class Sim:
 
         resdict = flatten_results(self.results)
         resdict['t'] = self.yearvec
-
         df = sc.dataframe.from_dict(resdict).set_index('t')
         return df
 
@@ -600,13 +479,11 @@ class Sim:
         else:
             obj = self
         sc.save(filename=filename, obj=obj)
-
         return filename
 
     @staticmethod
     def load(filename, *args, **kwargs):
-        """ Load from disk from a gzipped pickle.  """
-
+        """ Load from disk from a gzipped pickle """
         sim = sc.load(filename, *args, **kwargs)
         if not isinstance(sim, Sim):  # pragma: no cover
             errormsg = f'Cannot load object of {type(sim)} as a Sim object'
@@ -676,27 +553,27 @@ class Sim:
         keys = sc.promotetolist(keys)
 
         # Convert to JSON-compatible format
-        d = {}
+        d = sc.objdict()
         for key in keys:
             if key == 'results':
                 if self.results_ready:
-                    resdict = self.export_results(for_json=True)
-                    d['results'] = resdict
+                    resdict = self.export_results(for_json=True) # TODO: not implemented
+                    d.results = resdict
                 else:
-                    d['results'] = 'Results not available (Sim has not yet been run)'
+                    d.results = 'Results not available (Sim has not yet been run)'
             elif key in ['pars', 'parameters']:
                 pardict = self.export_pars()
-                d['parameters'] = pardict
+                d.parameters = pardict
             elif key == 'summary':
                 if self.results_ready:
-                    d['summary'] = dict(sc.dcp(self.summary))
+                    d.summary = dict(sc.dcp(self.summary))
                 else:
-                    d['summary'] = 'Summary not available (Sim has not yet been run)'
+                    d.summary = 'Summary not available (Sim has not yet been run)'
             elif key == 'short_summary':
                 if self.results_ready:
-                    d['short_summary'] = dict(sc.dcp(self.short_summary))
+                    d.short_summary = dict(sc.dcp(self.short_summary))
                 else:
-                    d['short_summary'] = 'Full summary not available (Sim has not yet been run)'
+                    d.short_summary = 'Full summary not available (Sim has not yet been run)'
             else:  # pragma: no cover
                 try:
                     d[key] = sc.sanitizejson(getattr(self, key))
@@ -772,12 +649,7 @@ class Sim:
 
 
 class AlreadyRunError(RuntimeError):
-    """
-    This error is raised if a simulation is run in such a way that no timesteps
-    will be taken. This error is a distinct type so that it can be safely caught
-    and ignored if required, but it is anticipated that most of the time, calling
-    :py:func:`Sim.run` and not taking any timesteps, would be an inadvertent error.
-    """
+    """ Raised if trying to re-run an already-run sim without re-initializing """
     pass
 
 
@@ -888,33 +760,25 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
                 abs_ratio = max(this_ratio, 1.0 / this_ratio)
 
                 # Set the character to use
-                if abs_ratio < small_change:
-                    change_char = '≈'
-                elif new > old:
-                    change_char = '↑'
-                elif new < old:
-                    change_char = '↓'
-                elif new == old:
-                    change_char = '='
+                approx_eq = abs_ratio < small_change
+                if approx_eq:    change_char = '≈'
+                elif new > old:  change_char = '↑'
+                elif new < old:  change_char = '↓'
+                elif new == old: change_char = '='
                 else:
                     errormsg = f'Could not determine relationship between sim1={old} and sim2={new}'
                     raise ValueError(errormsg)
 
                 # Set how many repeats it should have
                 repeats = 1
-                if abs_ratio == 0:
-                    repeats = 0
-                if abs_ratio >= 1.1:
-                    repeats = 2
-                if abs_ratio >= 2:
-                    repeats = 3
-                if abs_ratio >= 10:
-                    repeats = 4
-
+                if abs_ratio == 0:   repeats = 0
+                if abs_ratio >= 1.1: repeats = 2
+                if abs_ratio >= 2:   repeats = 3
+                if abs_ratio >= 10:  repeats = 4
                 this_change = change_char * repeats
             else:  # pragma: no cover
-                this_diff = np.nan
-                this_ratio = np.nan
+                this_diff =  np.nan
+                this_ratio  = np.nan
                 this_change = 'N/A'
 
             diff.append(this_diff)
@@ -945,11 +809,27 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
 
 
 def check_sims_match(*args, full=False):
-    """ Shortcut to using ss.diff_sims() to check if multiple sims match """
-    s1 = args[0]
+    """
+    Shortcut to using ss.diff_sims() to check if multiple sims match
+    
+    Args:
+        args (list): a list of 2 or more sims to compare
+        full (bool): if True, return whether each sim matches the first 
+    
+    **Example**::
+        
+        s1 = ss.Sim(diseases='sir', networks='random')
+        s2 = ss.Sim(pars=dict(diseases='sir', networks='random'))
+        s3 = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet())
+        assert ss.check_sims_match(s1, s2, s3)
+    """
+    if len(args) < 2:
+        errormsg = 'Must compare at least 2 sims'
+        raise ValueError(errormsg)
+    base = args[0]
     matches = []
-    for s2 in args[1:]:
-        diff = diff_sims(s1, s2, full=False, output=False, die=False)
+    for other in args[1:]:
+        diff = diff_sims(base, other, full=False, output=False, die=False)
         matches.append(not(diff)) # Return the opposite of the diff
     if full:
         return matches

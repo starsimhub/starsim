@@ -16,7 +16,7 @@ class Ebola(SIR):
     def __init__(self, pars=None, *args, **kwargs):
         """ Initialize with parameters """
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             # Initial conditions and beta
             init_prev       = ss.bernoulli(p=0.005),
             beta            = 1.0, # Placeholder value
@@ -37,7 +37,7 @@ class Ebola(SIR):
         self.update_pars(pars=pars, **kwargs)
         
         # Boolean states
-        self.add_states(
+        self.define_states(
             # SIR are added automatically, here we add E
             ss.BoolArr('exposed', label='Exposed'),
             ss.BoolArr('severe', label='Severe'),
@@ -57,7 +57,7 @@ class Ebola(SIR):
     def infectious(self):
         return self.infected | self.exposed
 
-    def update_pre(self):
+    def step_state(self):
 
         # Progress exposed -> infected
         ti = self.sim.ti
@@ -131,7 +131,7 @@ class Ebola(SIR):
         self.rel_trans[unburied_uids] = self.pars['unburied_factor']  # Change for unburied
         return
 
-    def update_death(self, uids):
+    def step_die(self, uids):
         # Reset infected/recovered flags for dead agents
         for state in ['susceptible', 'exposed', 'infected', 'severe', 'recovered']:
             self.statesdict[state][uids] = False

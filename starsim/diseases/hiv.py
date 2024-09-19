@@ -13,7 +13,7 @@ class HIV(ss.Infection):
 
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             beta = 1.0, # Placeholder value
             cd4_min = 100,
             cd4_max = 500,
@@ -27,7 +27,7 @@ class HIV(ss.Infection):
         self.update_pars(pars=pars, **kwargs)
 
         # States
-        self.add_states(
+        self.define_states(
             ss.BoolArr('on_art', label='On ART'),
             ss.FloatArr('ti_art', label='Time of ART initiation'),
             ss.FloatArr('ti_dead', label='Time of death'), # Time of HIV-caused death
@@ -42,7 +42,7 @@ class HIV(ss.Infection):
         out = np.array(out)
         return out
 
-    def update_pre(self):
+    def step_state(self):
         """ Update CD4 """
         people = self.sim.people
         self.cd4[people.alive & self.infected & self.on_art] += (self.pars.cd4_max - self.cd4[people.alive & self.infected & self.on_art])/self.pars.cd4_rate
@@ -89,7 +89,7 @@ class ART(ss.Intervention):
         self.year = sc.toarray(year)
         self.coverage = sc.toarray(coverage)
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             art_delay = ss.constant(v=1) # Value in years
         )
         self.update_pars(pars=pars, **kwargs)
@@ -104,7 +104,8 @@ class ART(ss.Intervention):
         self.initialized = True
         return
 
-    def apply(self, sim):
+    def step(self):
+        sim = self.sim
         if sim.year < self.year[0]:
             return
 
@@ -140,6 +141,7 @@ class CD4_analyzer(ss.Analyzer):
         self.cd4 = np.zeros((sim.npts, sim.people.n), dtype=int)
         return
 
-    def apply(self, sim):
+    def step(self):
+        sim = self.sim
         self.cd4[sim.t] = sim.people.hiv.cd4
         return

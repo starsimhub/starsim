@@ -19,14 +19,14 @@ class NCD(ss.Disease):
     """
     def __init__(self, pars=None, **kwargs):
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             initial_risk = ss.bernoulli(p=0.3), # Initial prevalence of risk factors
             dur_risk = ss.expon(scale=10),
             prognosis = ss.weibull(c=2, scale=5), # Time in years between first becoming affected and death
         )
         self.update_pars(pars=pars, **kwargs)
         
-        self.add_states(
+        self.define_states(
             ss.BoolArr('at_risk', label='At risk'),
             ss.BoolArr('affected', label='Affected'),
             ss.FloatArr('ti_affected', label='Time of becoming affected'),
@@ -51,7 +51,7 @@ class NCD(ss.Disease):
         self.ti_affected[initial_risk] = self.sim.ti + sc.randround(self.pars['dur_risk'].rvs(initial_risk) / self.sim.dt)
         return initial_risk
 
-    def update_pre(self):
+    def step_state(self):
         ti = self.sim.ti
         deaths = (self.ti_dead == ti).uids
         self.sim.people.request_death(deaths)
@@ -59,7 +59,7 @@ class NCD(ss.Disease):
         self.results.new_deaths[ti] = len(deaths) # Log deaths attributable to this module
         return
 
-    def make_new_cases(self):
+    def step(self):
         ti = self.sim.ti
         new_cases = (self.ti_affected == ti).uids
         self.affected[new_cases] = True

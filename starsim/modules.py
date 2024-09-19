@@ -1,11 +1,13 @@
 """
-General module class -- base class for diseases, interventions, etc.
+General module class -- base class for diseases, interventions, etc. Also
+defines Analyzers and Connectors.
 """
 
 import sciris as sc
 import starsim as ss
+from functools import partial
 
-__all__ = ['module_map', 'find_modules', 'Module', 'Connector']
+__all__ = ['module_map', 'find_modules', 'Module', 'Analyzer', 'Connector']
 
 
 def module_map(key=None):
@@ -39,13 +41,13 @@ def find_modules(key=None):
             except:
                 pass
     return modules if key is None else modules[key]
-
+    
 
 class Module(sc.quickobj):
 
-    def __init__(self, name=None, label=None, requires=None):
-        self.set_metadata(name, label, requires) # Usually reset as part of self.update_pars()
-        self.pars = ss.Pars() # Usually populated via self.default_pars()
+    def __init__(self, name=None, label=None):
+        self.set_metadata(name, label) # Usually reset as part of self.update_pars()
+        self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.results = ss.Results(self.name)
         self.initialized = False
         self.finalized = False
@@ -55,14 +57,25 @@ class Module(sc.quickobj):
         """ Ensure that zero-length modules (e.g. networks) are still truthy """
         return True
     
-    def set_metadata(self, name, label, requires):
+    def __call__(self, *args, **kwargs):
+        """ Allow modules to be called like functions """
+        return self.step(*args, **kwargs)
+
+    def disp(self, output=False):
+        """ Display the full object """
+        out = sc.prepr(self)
+        if not output:
+            print(out)
+        else:
+            return out
+    
+    def set_metadata(self, name, label):
         """ Set metadata for the module """
         self.name = sc.ifelse(name, getattr(self, 'name', self.__class__.__name__.lower())) # Default name is the class name
         self.label = sc.ifelse(label, getattr(self, 'label', self.name))
-        self.requires = sc.mergelists(requires)
         return
     
-    def default_pars(self, inherit=True, **kwargs):
+    def define_pars(self, inherit=True, **kwargs): # TODO: think if inherit should default to true or false
         """ Create or merge Pars objects """
         if inherit: # Merge with existing
             self.pars.update(**kwargs, create=True)
@@ -82,7 +95,7 @@ class Module(sc.quickobj):
         self.pars.update(matches)
                 
         # Update module attributes
-        metadata = {key:pars.pop(key, getattr(self, key, None)) for key in ['name', 'label', 'requires']}
+        metadata = {key:pars.pop(key, None) for key in ['name', 'label']}
         self.set_metadata(**metadata)
         
         # Should be no remaining pars
@@ -91,60 +104,49 @@ class Module(sc.quickobj):
             raise ValueError(errormsg)
         return
     
-    def check_requires(self, sim):
-        """ Check that the module's requirements (of other modules) are met """
-        errs = sc.autolist()
-        all_names = [m.__class__ for m in sim.modules] + [m.name for m in sim.modules if hasattr(m, 'name')]
-        for req in self.requires:
-            if req not in all_names:
-                errs += req
-        if len(errs):
-            errormsg = f'{self.name} (label={self.label}) requires the following module(s), but the Sim does not contain them.'
-            errormsg += sc.newlinejoin(errs)
-            raise Exception(errormsg)
-        return
-
     def init_pre(self, sim):
         """
         Perform initialization steps
 
         This method is called once, as part of initializing a Sim. Note: after
-        initialization, initialized=False until init_post() is called (which is after
+        initialization, initialized=False until init_vals() is called (which is after
         distributions are initialized).
-        
-        Note: distributions cannot be used here because they aren't initialized 
-        until after init_pre() is called. Use init_post() instead.
         """
-        self.check_requires(sim)
         self.sim = sim # Link back to the sim object
         ss.link_dists(self, sim, skip=ss.Sim) # Link the distributions to sim and module
         sim.pars[self.name] = self.pars
         sim.results[self.name] = self.results
         sim.people.add_module(self) # Connect the states to the people
+        self.init_results()
         return
     
+    def init_results(self):
+        """ Initialize any results required; part of init_pre() """
+        pass
+    
     def init_post(self):
-        """ Initialize the values of the states, including calling distributions; the last step of initialization """
+        """ Initialize the values of the states; the last step of initialization """
         for state in self.states:
             if not state.initialized:
                 state.init_vals()
         self.initialized = True
         return
     
-    def disp(self, output=False):
-        """ Display the full object """
-        out = sc.prepr(self)
-        if not output:
-            print(out)
-        else:
-            return out
+    def step(self):
+        """ Define how the module updates over time """
+        pass
+    
+    def update_results(self):
+        """ Perform any results updates on each timestep """
+        pass
 
     def finalize(self):
+        """ Perform any final operations, such as removing unneeded data """
         self.finalize_results()
         self.finalized = True
         return
 
-    def finalize_results(self):
+    def finalize_results(self): # TODO: this is confusing, needs to be not redefined by the user, or called after a custom finalize_results()
         """ Finalize results """
         # Scale results
         for reskey, res in self.results.items():
@@ -152,7 +154,7 @@ class Module(sc.quickobj):
                 self.results[reskey] = self.results[reskey]*self.sim.pars.pop_scale
         return
     
-    def add_states(self, *args, check=True):
+    def define_states(self, *args, check=True):
         """
         Add states to the module with the same attribute name as the state
         
@@ -209,6 +211,17 @@ class Module(sc.quickobj):
         else:
             raise KeyError(f'Module "{name}" did not match any known Starsim modules')
             
+    @classmethod
+    def from_func(cls, func):
+        """ Create an module from a function """
+        def step(mod): # TODO: see if this can be done more simply
+            return mod.func(mod.sim)
+        name = func.__name__
+        mod = cls(name=name)
+        mod.func = func
+        mod.step = partial(step, mod)
+        return mod
+            
     def to_json(self):
         """ Export to a JSON-compatible format """
         out = sc.objdict()
@@ -230,12 +243,25 @@ class Module(sc.quickobj):
         return fig
 
 
+class Analyzer(Module):
+    """
+    Base class for Analyzers. Analyzers are used to provide more detailed information 
+    about a simulation than is available by default -- for example, pulling states 
+    out of sim.people on a particular timestep before they get updated on the next step.
+    
+    The key method of the analyzer is ``step()``, which is called with the sim
+    on each timestep.
+    
+    To retrieve a particular analyzer from a sim, use sim.get_analyzer().
+    """
+    pass
+
+
 class Connector(Module):
     """
-    Define a Connector, which mediates interactions between disease modules
+    Base class for Connectors, which mediate interactions between disease (or other) modules
     
     Because connectors can do anything, they have no specified structure: it is
     up to the user to define how they behave.    
     """
-    def update(self, sim):
-        pass
+    pass

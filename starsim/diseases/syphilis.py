@@ -12,10 +12,10 @@ __all__ = ['Syphilis']
 
 class Syphilis(ss.Infection):
 
-    def __init__(self, pars=None, **kwargs):
+    def __future_init__(self, pars=None, **kwargs):
         # Parameters
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             # Initial conditions
             beta = 1.0, # Placeholder
             init_prev = ss.bernoulli(p=0.03),
@@ -54,7 +54,82 @@ class Syphilis(ss.Infection):
         )
         self.update_pars(pars, **kwargs)
 
-        self.add_states(
+        self.define_states(
+            # Adult syphilis states
+            ss.State('susceptible', label='Susceptible', default=True),
+            ss.State('exposed', label='Exposed'),  # AKA incubating. Free of symptoms, not transmissible
+            ss.State('primary', label='Primary'),  # Primary chancres
+            ss.State('secondary', label='Secondary'),  # Inclusive of those who may still have primary chancres
+            ss.State('latent_temp', label="Latent temporary"),  # Relapses to secondary (~1y)
+            ss.State('latent_long', label="Latent long"),  # Can progress to tertiary or remain here
+            ss.State('tertiary', label="Tertiary"),  # Includes complications (cardio/neuro/disfigurement)
+            ss.State('immune', label="Immune"),  # After effective treatment people may acquire temp immunity
+            ss.State('ever_exposed', label="Ever exposed", track_time=False),  # Anyone ever exposed - stays true after treatment
+            ss.State('congenital'),  # Congenital syphilis states
+        )
+        
+        self.define_events(
+            ss.Event(src='susceptible', dest=['exposed', 'infected', 'ever_exposed'], func=self.infect),
+            ss.Event('exposed -> primary', func=self.to_primary),
+            ss.Event('primary -> secondary', func=self.to_secondary),
+            ss.Event('latent_temp -> secondary', func=self.to_secondary_latent),
+            ss.Event('secondary -> latent_temp', func=self.to_latent_temp),
+            ss.Event('secondary -> latent_long', func=self.to_latent_long),
+            ss.Event('latent_long -> tertiary', func=self.to_tertiary),
+        )
+    
+        # Timestep of state changes -- not all will be needed in future
+        self.define_attrs(
+            ss.FloatArr('ti_miscarriage', label='Time of miscarriage'),
+            ss.FloatArr('ti_nnd', label='Time of neonatal death'),
+            ss.FloatArr('ti_stillborn', label='Time of stillborn'),
+            ss.FloatArr('ti_congenital', label='Time of congenital syphilis'),
+        )
+        return
+    
+    def __init__(self, pars=None, **kwargs):
+        # Parameters
+        super().__init__()
+        self.define_pars(
+            # Initial conditions
+            beta = 1.0, # Placeholder
+            init_prev = ss.bernoulli(p=0.03),
+            
+            # Adult syphilis natural history, all specified in years
+            dur_exposed = ss.lognorm_ex(mean=1 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_primary = ss.lognorm_ex(mean=1.5 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_secondary = ss.normal(loc=3.6 / 12, scale=1.5 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_temp = ss.lognorm_ex(mean=1, stdev=6 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_long = ss.lognorm_ex(mean=20, stdev=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            p_latent_temp = ss.bernoulli(p=0.25),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            p_tertiary = ss.bernoulli(p=0.35),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
+    
+            # Transmission by stage
+            rel_trans = dict(
+                exposed=1,
+                primary=1,
+                secondary=1,
+                latent_temp=0.075,
+                latent_long=0.075,
+                tertiary=0.05,
+            ),
+    
+            # Congenital syphilis outcomes
+            # Birth outcomes coded as:
+            #   0: Neonatal death
+            #   1: Stillborn
+            #   2: Congenital syphilis
+            #   3: Live birth without syphilis-related complications
+            # Source: https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5973824/)
+            birth_outcomes = sc.objdict(
+                active = ss.choice(a=5, p=np.array([0.125, 0.125, 0.20, 0.35, 0.200])), # Probabilities of active by birth outcome
+                latent = ss.choice(a=5, p=np.array([0.050, 0.075, 0.10, 0.05, 0.725])), # Probabilities of latent
+            ),
+            birth_outcome_keys = ['miscarriage', 'nnd', 'stillborn', 'congenital'],
+        )
+        self.update_pars(pars, **kwargs)
+    
+        self.define_states(
             # Adult syphilis states
             ss.BoolArr('exposed', label='Exposed'),  # AKA incubating. Free of symptoms, not transmissible
             ss.BoolArr('primary', label='Primary'),  # Primary chancres
@@ -79,7 +154,7 @@ class Syphilis(ss.Infection):
             ss.FloatArr('ti_stillborn', label='Time of stillborn'),
             ss.FloatArr('ti_congenital', label='Time of congenital syphilis'),
         )
-
+    
         return
 
     @property
@@ -118,7 +193,7 @@ class Syphilis(ss.Infection):
         ]
         return
 
-    def update_pre(self):
+    def step_state(self):
         """ Updates prior to interventions """
 
         # Primary
@@ -195,7 +270,6 @@ class Syphilis(ss.Infection):
         """
         Set initial prognoses for adults newly infected with syphilis
         """
-        super().set_prognoses(uids, source_uids)
         
         ti = self.sim.ti
         dt = self.sim.dt
@@ -334,11 +408,12 @@ class syph_screening(ss.routine_screening):
         else:
             return products[product]
 
-    def check_eligibility(self, sim):
+    def check_eligibility(self):
         """
         Return an array of indices of agents eligible for screening at time t, i.e. sexually active
         females in age range, plus any additional user-defined eligibility
         """
+        sim = self.sim
         if self.eligibility is not None:
             is_eligible = self.eligibility(sim)
         else:
@@ -374,7 +449,8 @@ class syph_treatment(ss.treat_num):
         self.results += ss.Result('syphilis', 'n_tx', sim.npts, dtype=int, scale=True, label='Number treated')
         return
 
-    def apply(self, sim):
-        treat_inds = super().apply(sim)
+    def step(self):
+        sim = self.sim
+        treat_inds = super().step()
         sim.people.syphilis.infected[treat_inds] = False
         self.results['n_tx'][sim.ti] += len(treat_inds)

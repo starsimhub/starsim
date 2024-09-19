@@ -597,6 +597,7 @@ dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
              'poisson', 'weibull', 'constant', 'randint', 'rand_raw', 'bernoulli',
              'choice', 'histogram']
 __all__ += dist_list
+__all__ += ['multi_random'] # Not a dist in the same sense as the others
 
 
 class random(Dist):
@@ -972,7 +973,64 @@ class histogram(Dist):
         super().__init__(dist=dist, distname='histogram', **kwargs)
         self.dynamic_pars = False # Set to false since array arguments don't imply dynamic pars here
         return
+
+
+class multi_random(sc.prettyobj):
+    """
+    A class for holding two or more ss.random() distributions, and generating
+    random numbers linked to each of them. Useful for e.g. pairwise transmission
+    probabilities.
+    
+    See ss.combine_rands() for the manual version; in almost all cases this class
+    should be used instead.
+    
+    Usage:
+        multi = ss.multi_random('source', 'target')
+        rvs = multi.rvs(source_uids, target_uids)
+    """
+    def __init__(self, names, *args, **kwargs):
+        names = sc.mergelists(names, args)
+        self.dists = [ss.rand_raw(name=name, **kwargs) for name in names]
+        return
+    
+    def __len__(self):
+        return len(self.dists)
         
+    def initialize(self, *args, **kwargs):
+        for dist in self.dists: dist.initialize(*args, **kwargs)
+        return
+    
+    def reset(self, *args, **kwargs):
+        for dist in self.dists: dist.reset(*args, **kwargs)
+        return
+    
+    def jump(self, *args, **kwargs):
+        for dist in self.dists: dist.jump(*args, **kwargs)
+        return
+    
+    def rvs(self, *args):
+        """ Get random variates from each of the underlying distributions and combine them efficiently """
+        # Validation
+        n_args = len(args)
+        n_dists = len(self)
+        if n_args != len(self):
+            errormsg = f'Number of UID lists supplied ({n_args}) does not match number of distributions ({n_dists})'
+            raise ValueError(errormsg)
+        
+        # Generate the random numbers
+        rvs_list = [dist.rvs(arg) for dist,arg in zip(self.dists, args)]
+        
+        # Combine using bitwise-or
+        rand_ints = rvs_list[0]
+        for rand_ints2 in rvs_list[1:]:
+            rand_ints = np.bitwise_xor(rand_ints*rand_ints2, rand_ints-rand_ints2)
+            
+        # Normalize
+        rvs = rand_ints / np.iinfo(np.uint64).max
+        return rvs
+
+    
+
 
 #%% Dist exceptions
 

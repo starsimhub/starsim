@@ -17,7 +17,7 @@ class Cholera(ss.Infection):
     def __init__(self, pars=None, *args, **kwargs):
         """ Initialize with parameters """
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             # Initial conditions and beta
             beta = 1.0, # Placeholder value
             init_prev = ss.bernoulli(0.005),
@@ -41,7 +41,7 @@ class Cholera(ss.Infection):
         self.update_pars(pars, **kwargs)
 
         # Boolean states
-        self.add_states(
+        self.define_states(
             # Susceptible & infected are added automatically, here we add the rest
             ss.BoolArr('exposed', label='Exposed'),
             ss.BoolArr('symptomatic', label='Symptomatic'),
@@ -77,7 +77,7 @@ class Cholera(ss.Infection):
         ]
         return
 
-    def update_pre(self):
+    def step_state(self):
         """
         Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/cholera.py
         Original version by Dom Delport
@@ -173,7 +173,7 @@ class Cholera(ss.Infection):
             self.set_prognoses(new_cases, source_uids=None)
         return
 
-    def update_death(self, uids):
+    def step_die(self, uids):
         """ Reset infected/recovered flags for dead agents """
         for state in ['susceptible', 'exposed', 'infected', 'symptomatic', 'recovered']:
             self.statesdict[state][uids] = False

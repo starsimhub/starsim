@@ -1,5 +1,15 @@
 """
 Define array-handling classes, including agent states
+
+an event:
+- handles setting states true/false
+- gets uids automatically
+- generates ti_arrays
+- generates results
+
+get working without events/transitions
+define events as scheduling things, then transitions as making them happen
+consider function decorators
 """
 
 import numpy as np
@@ -10,7 +20,7 @@ ss_float = ss.dtypes.float
 ss_int   = ss.dtypes.int
 ss_bool  = ss.dtypes.bool
 
-__all__ = ['check_dtype', 'Arr', 'FloatArr', 'BoolArr', 'IndexArr', 'uids']
+__all__ = ['check_dtype', 'Arr', 'FloatArr', 'BoolArr', 'State', 'IndexArr', 'uids']
 
 
 def check_dtype(dtype, default=None):
@@ -352,6 +362,11 @@ class BoolArr(Arr):
         f_uids = self.false()
         return t_uids, f_uids
 
+
+class State(BoolArr):
+    """ A boolean array being used as a state """
+    pass
+
     
 class IndexArr(Arr):
     """ A special class of Arr used for UIDs and RNG IDs; not to be used as an integer array (for that, use FloatArr) """
@@ -396,15 +411,17 @@ class uids(np.ndarray):
         elif isinstance(arr, int): # Convert e.g. ss.uids(0) to ss.uids([0])
             arr = [arr]
         return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
-
-    def concat(self, other, **kw): # TODO: why can't they both be called cat()?
-        """ Equivalent to np.concatenate(), but return correct type; see ss.uids.cat() for the class method """
+    
+    def concat(self, other, **kw): # Class and instance methods can't share a name
+        """ Equivalent to np.concatenate(), but return correct type """
         return np.concatenate([self, other], **kw).view(self.__class__)
-
+    
     @classmethod
     def cat(cls, *args, **kw):
-        """ Equivalent to np.concatenate(), but return correct type; see ss.uids.concat() for the instance method """
-        arrs = args[0] if len(args) == 1 else args
+        """ Equivalent to np.concatenate(), but return correct type """
+        if len(args) == 0 or (len(args) == 1 and (args[0] is None or not len(args[0]))):
+            return uids()
+        arrs = args[0] if len(args) == 1 else args # TODO: handle one-array case
         return np.concatenate(arrs, **kw).view(cls)
 
     def remove(self, other, **kw):

@@ -18,24 +18,67 @@ class SIR(ss.Infection):
     infected/infectious, and recovered. It also includes deaths, and basic
     results.
     """
-    def __init__(self, pars=None, **kwargs):
+    def __future_init__(self, pars=None, **kwargs):
+        """ The plan for implementing events """
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             beta = 0.1,
             init_prev = ss.bernoulli(p=0.01),
             dur_inf = ss.lognorm_ex(mean=6),
             p_death = ss.bernoulli(p=0.01),
         )
         self.update_pars(pars, **kwargs)
-
-        self.add_states(
+        
+        self.define_states(
+            ss.State('susceptible', default=True),
+            ss.State('infected'),
+            ss.State('recovered'),
+        )
+        
+        # Option 1 for defining events -- using objects
+        self.define_events(
+            ss.Event(self.susceptible, self.infected, func=self.infect,  reskey='infections'),
+            ss.Event(self.infected, self.recovered,   func=self.recover, reskey='recoveries'),
+            ss.Event(self.infected, self.dead,        func=self.step_die,     reskey='deaths'),
+        )
+        
+        # Option 2 for defining events -- using strings
+        self.define_events(
+            ss.Event('susceptible -> infected', self.infect,  reskey='infections'),
+            ss.Event('infected -> recovered',   self.recover, reskey='recoveries'),
+            ss.Event('infected -> dead',        self.step_die,     reskey='deaths'),
+        )
+        
+        self.define_attrs(
+            ss.FloatArr('rel_sus',   default=1.0),
+            ss.FloatArr('rel_trans', default=1.0),
+        )
+        return
+    
+    def __init__(self, pars=None, **kwargs):
+        """ The current implementation """
+        super().__init__()
+        self.define_pars(
+            beta = 0.1,
+            init_prev = ss.bernoulli(p=0.01),
+            dur_inf = ss.lognorm_ex(mean=6),
+            p_death = ss.bernoulli(p=0.01),
+        )
+        self.update_pars(pars, **kwargs)
+        
+        self.define_states(
+            ss.BoolArr('susceptible', default=True, label='Susceptible'),
+            ss.BoolArr('infected', label='Infectious'),
             ss.BoolArr('recovered', label='Recovered'),
+            ss.FloatArr('ti_infected', label='Time of infection'),
             ss.FloatArr('ti_recovered', label='Time of recovery'),
             ss.FloatArr('ti_dead', label='Time of death'),
+            ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
+            ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
         )
         return
 
-    def update_pre(self):
+    def step_state(self):
         # Progress infectious -> recovered
         sim = self.sim
         recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
@@ -50,7 +93,6 @@ class SIR(ss.Infection):
 
     def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses """
-        super().set_prognoses(uids, source_uids)
         ti = self.sim.ti
         dt = self.sim.dt
         self.susceptible[uids] = False
@@ -71,7 +113,7 @@ class SIR(ss.Infection):
         self.ti_recovered[rec_uids] = ti + dur_inf[~will_die] / dt
         return
 
-    def update_death(self, uids):
+    def step_die(self, uids):
         """ Reset infected/recovered flags for dead agents """
         self.susceptible[uids] = False
         self.infected[uids] = False
@@ -102,7 +144,7 @@ class SIS(ss.Infection):
     """
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             beta = 0.05,
             init_prev = ss.bernoulli(p=0.01),
             dur_inf = ss.lognorm_ex(mean=10),
@@ -111,13 +153,13 @@ class SIS(ss.Infection):
         )
         self.update_pars(pars=pars, *args, **kwargs)
 
-        self.add_states(
+        self.define_states(
             ss.FloatArr('ti_recovered'),
             ss.FloatArr('immunity', default=0.0),
         )
         return
 
-    def update_pre(self):
+    def step_state(self):
         """ Progress infectious -> recovered """
         recovered = (self.infected & (self.ti_recovered <= self.sim.ti)).uids
         self.infected[recovered] = False
@@ -188,7 +230,7 @@ class sir_vaccine(ss.Vx):
     """
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             efficacy = 0.9,
             leaky = True
         )

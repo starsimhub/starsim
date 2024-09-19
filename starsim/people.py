@@ -309,7 +309,7 @@ class People(sc.prettyobj):
         self.ti_dead[uids] = self.sim.ti
         return
 
-    def resolve_deaths(self):
+    def check_deaths(self):
         """ Carry out any deaths that took place this timestep """
         death_uids = (self.ti_dead <= self.sim.ti).uids
         self.alive[death_uids] = False
@@ -347,6 +347,12 @@ class People(sc.prettyobj):
         res.n_alive[ti] = np.count_nonzero(self.alive)
         res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
+        return
+    
+    def finish_step(self):
+        self.update_results()
+        self.remove_dead()
+        self.update_post()
         return
     
     def person(self, ind):

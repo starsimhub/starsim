@@ -19,12 +19,11 @@ class Disease(ss.Module):
 
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.default_pars(
+        self.define_pars(
             log = False,
         )
         self.update_pars(pars, **kwargs)
         self.results = ss.Results(self.name)
-        self.log = InfectionLog()
         return
 
     @property
@@ -43,7 +42,8 @@ class Disease(ss.Module):
     def init_pre(self, sim):
         """ Link the disease to the sim, create objects, and initialize results; see Module.init_pre() for details """
         super().init_pre(sim)
-        self.init_results()
+        if self.pars.log:
+            self.log = InfectionLog()
         return
 
     def init_results(self):
@@ -58,13 +58,14 @@ class Disease(ss.Module):
             self.results += ss.Result(self.name, f'n_{state.name}', self.sim.npts, dtype=int, scale=True, label=state.label)
         return
 
-    def update_pre(self):
+    def step_state(self):
         """
-        Carry out autonomous updates at the start of the timestep (prior to transmission)
+        Carry out updates at the start of the timestep (prior to transmission);
+        these are typically state changes
         """
         pass
 
-    def update_death(self, uids):
+    def step_die(self, uids):
         """
         Carry out state changes upon death
 
@@ -81,9 +82,9 @@ class Disease(ss.Module):
         """
         pass
 
-    def make_new_cases(self):
+    def step(self):
         """
-        Add new cases of the disease
+        Handle the main disease updates, e.g. add new cases
 
         This method is agnostic as to the mechanism by which new cases occur. This
         could be through transmission (parametrized in different ways, which may or
@@ -95,7 +96,7 @@ class Disease(ss.Module):
         """
         pass
 
-    def set_prognoses(self, uids, source_uids=None):
+    def set_prognoses(self, uids, sources=None):
         """
         Set prognoses upon infection/acquisition
 
@@ -105,7 +106,7 @@ class Disease(ss.Module):
         the log as part of this operation if logging is enabled (in the
         `Disease` parameters)
 
-        The `from_uids` are relevant for infectious diseases, but would be left
+        The `sources` are relevant for infectious diseases, but would be left
         as `None` for NCDs.
 
         Args:
@@ -113,14 +114,19 @@ class Disease(ss.Module):
             uids (array): UIDs for agents to assign disease progoses to
             from_uids (array): Optionally specify the infecting agent
         """
+        # Track infections
         if self.pars.log:
-            sim = self.sim
-            if source_uids is None:
-                for target in uids:
-                    self.log.append(np.nan, target, sim.year)
-            else:
-                for target, source in zip(uids, source_uids):
-                    self.log.append(source, target, sim.year)
+            self.log_infections(uids, sources)
+        return
+
+    def log_infections(self, uids, sources=None):
+        sim = self.sim
+        if sources is None:
+            for target in uids:
+                self.log.append(np.nan, target, sim.year)
+        else:
+            for target, source in zip(uids, sources):
+                self.log.append(source, target, sim.year)
         return
 
     def update_results(self):
@@ -148,7 +154,7 @@ class Infection(Disease):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.add_states(
+        self.define_states(
             ss.BoolArr('susceptible', default=True, label='Susceptible'),
             ss.BoolArr('infected', label='Infectious'),
             ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
@@ -156,37 +162,13 @@ class Infection(Disease):
             ss.FloatArr('ti_infected', label='Time of infection' ),
         )
 
-        # Define random number generators for make_new_cases
-        self.rng_target = ss.rand_raw(name='target')
-        self.rng_source = ss.rand_raw(name='source')
+        # Define random number generator for determining transmission
+        self.trans_rng = ss.multi_random('source', 'target')
         return
     
     def init_pre(self, sim):
         super().init_pre(sim)
         self.validate_beta()
-        return
-    
-    def validate_beta(self):
-        """
-        Perform any parameter validation
-        """
-        networks = self.sim.networks
-        if networks is not None and len(networks) > 0:
-            
-            if 'beta' not in self.pars:
-                errormsg = f'Disease {self.name} is missing beta; pars are: {sc.strjoin(self.pars.keys())}'
-                raise sc.KeyNotFoundError(errormsg)
-
-            # If beta is a scalar, apply this bi-directionally to all networks
-            if sc.isnumber(self.pars.beta):
-                β = self.pars.beta
-                self.pars.beta = sc.objdict({k:[β,β] for k in networks.keys()})
-
-            # If beta is a dict, check all entries are bi-directional
-            elif isinstance(self.pars.beta, dict):
-                for k,β in self.pars.beta.items():
-                    if sc.isnumber(β):
-                        self.pars.beta[k] = [β,β]
         return
 
     @property
@@ -204,6 +186,7 @@ class Infection(Disease):
         i.e., creating their dynamic array, linking them to a People instance. That should have already
         taken place by the time this method is called.
         """
+        super().init_post()
         if self.pars.init_prev is None:
             return
 
@@ -223,33 +206,52 @@ class Infection(Disease):
             ss.Result(self.name, 'cum_infections', sim.npts, dtype=int, scale=True, label='Cumulative infections'),
         ]
         return
+        
+    def validate_beta(self):
+        """ Validate beta and return as a map to match the networks """
+        sim = self.sim
+        
+        if 'beta' not in self.pars:
+            errormsg = f'Disease {self.name} is missing beta; pars are: {sc.strjoin(self.pars.keys())}'
+            raise sc.KeyNotFoundError(errormsg)
 
-    def _check_betas(self):
-        """ Check that there's a network for each beta key """
-        # Ensure keys are lowercase
-        if isinstance(self.pars.beta, dict): # TODO: check if needed
-            self.pars.beta = {k.lower(): v for k, v in self.pars.beta.items()}
+        # If beta is a scalar, apply this bi-directionally to all networks
+        β = self.pars.beta
+        if sc.isnumber(β):
+            betamap = {ss.standardize_netkey(k):[β,β] for k in sim.networks.keys()}
 
-        # Create a mapping between beta and networks, and populate it
-        betapars = self.pars.beta
-        betamap = sc.objdict()
-        netkeys = list(self.sim.networks.keys())
-        if netkeys: # Skip if no networks
-            for bkey in betapars.keys():
-                orig_bkey = bkey[:]
-                if bkey in netkeys: # TODO: CK: could tidy up logic
-                    betamap[bkey] = betapars[orig_bkey]
+        # If beta is a dict, check all entries are bi-directional
+        elif isinstance(β, dict):
+            betamap = dict()
+            for k,thisbeta in β.items():
+                nkey = ss.standardize_netkey(k)
+                if sc.isnumber(thisbeta):
+                    betamap[nkey] = [thisbeta, thisbeta]
                 else:
-                    if 'net' not in bkey:
-                        bkey += 'net'  # Add 'net' suffix if not already there
-                    if bkey in netkeys:
-                        betamap[bkey] = betapars[orig_bkey]
-                    else:
-                        errormsg = f'No network for beta parameter "{bkey}"; your beta should match network keys:\n{sc.newlinejoin(netkeys)}'
-                        raise ValueError(errormsg)
-        return betamap
+                    betamap[nkey] = thisbeta
+        
+        # Check that it matches the network
+        netkeys = [ss.standardize_netkey(k) for k in list(sim.networks.keys())]
+        if set(betamap.keys()) != set(netkeys):
+            errormsg = f'Network keys ({netkeys}) and beta keys ({betamap.keys()}) do not match'
+            raise ValueError(errormsg)
 
-    def make_new_cases(self):
+        return betamap
+    
+    def step(self):
+        """
+        Perform key infection updates, including infection and setting prognoses
+        """
+        # Create new cases
+        new_cases, sources, networks = self.infect() # TODO: store outputs in self or use objdict rather than 3 returns
+        
+        # Set prognoses
+        if len(new_cases):
+            self.set_outcomes(new_cases, sources)
+        
+        return new_cases, sources, networks
+
+    def infect(self):
         """
         Add new cases of module, through transmission, incidence, etc.
         
@@ -259,68 +261,58 @@ class Infection(Disease):
         new_cases = []
         sources = []
         networks = []
-        betamap = self._check_betas()
-
+        betamap = self.validate_beta()
+        
+        rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
+        rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
+        
         for i, (nkey,net) in enumerate(self.sim.networks.items()):
-            if not len(net):
-                break
-
-            nbetas = betamap[nkey]
-            edges = net.edges
-
-            rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
-            rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
-            p1p2b0 = [edges.p1, edges.p2, nbetas[0]]
-            p2p1b1 = [edges.p2, edges.p1, nbetas[1]]
-            for src, trg, beta in [p1p2b0, p2p1b1]:
-
-                # Skip networks with no transmission
-                if beta == 0:
-                    continue
-
-                # Calculate probability of a->b transmission.
-                beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
-                p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
-
-                # Generate a new random number based on the two other random numbers
-                rvs_s = self.rng_source.rvs(src)
-                rvs_t = self.rng_target.rvs(trg)
-                rvs = ss.combine_rands(rvs_s, rvs_t)
+            nk = ss.standardize_netkey(nkey) # TEMP
+            if len(net): # Skip networks with no edges
+                edges = net.edges
+                p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
+                p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1
+                for src, trg, beta in [p1p2b0, p2p1b1]:
+                    if beta: # Skip networks with no transmission
+    
+                        # Calculate probability of a->b transmission.
+                        beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
+                        p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
+        
+                        # Generate a new random number based on the two other random numbers
+                        randvals = self.trans_rng.rvs(src, trg)
+                        transmitted = p_transmit > randvals
+                        target_uids = trg[transmitted]
+                        source_uids = src[transmitted]
+                        new_cases.append(target_uids)
+                        sources.append(source_uids)
+                        networks.append(np.full(len(target_uids), dtype=ss_int_, fill_value=i))
                 
-                new_cases_bool = rvs < p_transmit
-                new_cases.append(trg[new_cases_bool])
-                sources.append(src[new_cases_bool])
-                networks.append(np.full(np.count_nonzero(new_cases_bool), dtype=ss_int_, fill_value=i))
-                
-        # Tidy up
+        # Finalize
         if len(new_cases) and len(sources):
             new_cases = ss.uids.cat(new_cases)
             new_cases, inds = new_cases.unique(return_index=True)
             sources = ss.uids.cat(sources)[inds]
             networks = np.concatenate(networks)[inds]
         else:
-            new_cases = np.empty(0, dtype=int)
-            sources = np.empty(0, dtype=int)
-            networks = np.empty(0, dtype=int)
-
-        if len(new_cases):
-            self._set_cases(new_cases, sources)
-            
+            new_cases = ss.uids()
+            sources = ss.uids()
+            networks = np.empty(0, dtype=ss_int_)
         return new_cases, sources, networks
 
-    def _set_cases(self, target_uids, source_uids=None):
+    def set_outcomes(self, uids, sources=None):
         sim = self.sim
-        congenital = sim.people.age[target_uids] <= 0
+        congenital = sim.people.age[uids] <= 0
         if np.count_nonzero(congenital):
-            src_c = source_uids[congenital] if source_uids is not None else None
-            self.set_congenital(target_uids[congenital], src_c)
-        src_p = source_uids[~congenital] if source_uids is not None else None
-        self.set_prognoses(target_uids[~congenital], src_p)
+            src_c = sources[congenital] if sources is not None else None
+            self.set_congenital(uids[congenital], src_c)
+        src_p = sources[~congenital] if sources is not None else None
+        self.set_prognoses(uids[~congenital], src_p)
         return
 
-    def set_congenital(self, target_uids, source_uids=None):
+    def set_congenital(self, uids, sources=None):
         pass
-
+    
     def update_results(self):
         super().update_results()
         res = self.results
@@ -359,9 +351,14 @@ class InfectionLog(nx.MultiDiGraph):
 
     A table of outcomes can be returned using `InfectionLog.line_list()`
     """
-
-    # Add entries
-    # Add items to the most recent infection for an agent
+    def add_entries(self, sim, uids, sources=None): # TODO: reconcile with other methods
+        if sources is None:
+            for target in uids:
+                self.log.append(np.nan, target, sim.year)
+        else:
+            for target, source in zip(uids, sources):
+                self.log.append(source, target, sim.year)
+        return
 
     def add_data(self, uids, **kwargs):
         """
@@ -370,8 +367,9 @@ class InfectionLog(nx.MultiDiGraph):
         This method can be used to add data to an existing transmission event.
         The most recent transmission event will be used
 
-        :param uid: The UID of the target node (the agent that was infected)
-        :param kwargs: Remaining arguments are stored as edge data
+        Args:
+            uid: The UID of the target node (the agent that was infected)
+            kwargs: Remaining arguments are stored as edge data
         """
         for uid in sc.promotetoarray(uids):
             source, target, key = max(self.in_edges(uid, keys=True),
@@ -384,7 +382,6 @@ class InfectionLog(nx.MultiDiGraph):
         self.add_edge(source, target, key=t, **kwargs)
         return
 
-    @property
     def line_list(self):
         """
         Return a tabular representation of the log

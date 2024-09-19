@@ -15,7 +15,7 @@ class Measles(SIR):
     def __init__(self, pars=None, *args, **kwargs):
         """ Initialize with parameters """
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             # Initial conditions and beta
             beta = 1.0, # Placeholder value
             init_prev = ss.bernoulli(p=0.005),
@@ -28,7 +28,7 @@ class Measles(SIR):
         self.update_pars(pars=pars, **kwargs)
 
         # SIR are added automatically, here we add E
-        self.add_states(
+        self.define_states(
             ss.BoolArr('exposed', label='Exposed'),
             ss.FloatArr('ti_exposed', label='Time of exposure'),
         )
@@ -39,7 +39,7 @@ class Measles(SIR):
     def infectious(self):
         return self.infected | self.exposed
 
-    def update_pre(self):
+    def step_state(self):
         # Progress exposed -> infected
         ti = self.sim.ti
         infected = (self.exposed & (self.ti_infected <= ti)).uids
@@ -85,7 +85,7 @@ class Measles(SIR):
 
         return
 
-    def update_death(self, uids):
+    def step_die(self, uids):
         # Reset infected/recovered flags for dead agents
         for state in ['susceptible', 'exposed', 'infected', 'recovered']:
             self.statesdict[state][uids] = False

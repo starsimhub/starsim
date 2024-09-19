@@ -56,13 +56,11 @@ class check_states(ss.Analyzer):
         self.okay = True
         return
 
-    def update_results(self, sim):
-        return self.apply(sim)
-
-    def apply(self, sim):
+    def update_results(self):
         """
         Checks states that should be mutually exlusive and collectively exhaustive
         """
+        sim = self.sim
         sppl = sim.diseases.syphilis
 
         # Infection states: people must be exactly one of these
@@ -138,7 +136,7 @@ def test_syph_intvs(dt=1, n_agents=500, do_plot=False):
         label='syph_screening',
     )
 
-    treat_eligible = lambda sim: ss.uids(sim.get_intervention('syph_screening').outcomes['positive'])
+    treat_eligible = lambda sim: ss.uids(sim.interventions['syph_screening'].outcomes['positive'])
     bpg = ss.syph_treatment(
         prob=0.9,
         product='bpg',
