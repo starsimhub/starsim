@@ -968,7 +968,7 @@ class histogram(Dist):
             bins = np.append(bins, bins[-1]+delta)
         vsum = values.sum()
         if vsum != 1.0:
-            values /= vsum
+            values = values / vsum
         dist = sps.rv_histogram((values, bins), density=density) # Create the SciPy distribution
         super().__init__(dist=dist, distname='histogram', **kwargs)
         self.dynamic_pars = False # Set to false since array arguments don't imply dynamic pars here

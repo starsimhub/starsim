@@ -334,7 +334,9 @@ def single_run(sim, ind=0, reseed=True, keep_people=False, run_args=None, sim_ar
         if key in sim.pars.keys():
             if verbose >= 1:
                 print(f'Setting key {key} from {sim[key]} to {val}')
-                sim[key] = val
+            sim.pars[key] = val
+            if key == 'rand_seed':
+                ss.set_seed()
         else:
             raise sc.KeyNotFoundError(f'Could not set key {key}: not a valid parameter name')
 
