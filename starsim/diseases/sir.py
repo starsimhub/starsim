@@ -78,7 +78,7 @@ class SIR(ss.Infection):
         )
         return
 
-    def step_pre(self):
+    def step_state(self):
         # Progress infectious -> recovered
         sim = self.sim
         recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
@@ -159,7 +159,7 @@ class SIS(ss.Infection):
         )
         return
 
-    def step_pre(self):
+    def step_state(self):
         """ Progress infectious -> recovered """
         recovered = (self.infected & (self.ti_recovered <= self.sim.ti)).uids
         self.infected[recovered] = False

@@ -225,7 +225,7 @@ class Sim:
         # to be applied to newly created agents
         for disease in self.diseases():
             if isinstance(disease, ss.Disease): # Could be a connector instead -- TODO, rethink this
-                disease.step_pre()
+                disease.step_state()
 
         # Update connectors -- TBC where this appears in the ordering
         for connector in self.connectors():

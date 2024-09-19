@@ -51,7 +51,7 @@ class NCD(ss.Disease):
         self.ti_affected[initial_risk] = self.sim.ti + sc.randround(self.pars['dur_risk'].rvs(initial_risk) / self.sim.dt)
         return initial_risk
 
-    def step_pre(self):
+    def step_state(self):
         ti = self.sim.ti
         deaths = (self.ti_dead == ti).uids
         self.sim.people.request_death(deaths)

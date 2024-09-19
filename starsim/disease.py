@@ -58,7 +58,7 @@ class Disease(ss.Module):
             self.results += ss.Result(self.name, f'n_{state.name}', self.sim.npts, dtype=int, scale=True, label=state.label)
         return
 
-    def step_pre(self):
+    def step_state(self):
         """
         Carry out updates at the start of the timestep (prior to transmission);
         these are typically state changes
