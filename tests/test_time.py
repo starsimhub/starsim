@@ -12,6 +12,20 @@ sc.options(interactive=False)
 
 
 # %% Define the tests
+def test_ratio():
+    sc.heading('Test behavior of time_ratio()')
+    
+    assert ss.time_ratio() == 1.0
+    assert ss.time_ratio(dt1=1.0, dt2=0.1) == 10.0
+    assert ss.time_ratio(dt1=0.5, dt2=5) == 0.1
+    assert ss.time_ratio(dt1=0.5, dt2=5) == 0.1
+    
+    assert ss.time_ratio(unit1='year', unit2='day') == 365
+    assert ss.time_ratio(unit1='day', unit2='year') == 1/365
+    
+    return
+
+
 def test_classes():
     sc.heading('Test behavior of dur() and rate()')
     
@@ -19,6 +33,7 @@ def test_classes():
     d2 = ss.dur(3)
     d3 = ss.dur(2, dt=0.1)
     d4 = ss.dur(3, dt=0.2)
+    for d in [d1,d2,d3,d4]: d.initialize()
     
     assert d1 + d2 == 5
     assert d3 + d4 == 35
@@ -29,11 +44,19 @@ def test_classes():
     r2 = ss.rate(3)
     r3 = ss.rate(2, dt=0.1)
     r4 = ss.rate(3, dt=0.2)
+    for r in [r1,r2,r3,r4]: r.initialize()
     
     assert r1 + r2 == 5
     assert r3 + r4 == 0.8
     assert r3 * 2 == 0.4
     assert r3 / 2 == 0.1
+    
+    d5 = ss.dur(2, unit='year', dt=1).initialize(base_unit='day')
+    d6 = ss.dur(3, unit='day', dt=1).initialize(base_unit='day')
+    assert d5 + d6 == 2*365+3
+    
+    r5 = ss.rate(0.7, unit='week', dt=1).initialize(base_unit='day')
+    assert np.isclose(r5.x, 0.1) # A limitation of this approach, not exact!
     
     return d3, d4, r3, r4
     
@@ -68,8 +91,8 @@ if __name__ == '__main__':
     
     T = sc.timer()
     
-    o1 = test_classes()
-    # o2 = test_units()
-    
+    o1 = test_ratio()
+    o2 = test_classes()
+    # o3 = test_units()
     
     T.toc()
