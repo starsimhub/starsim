@@ -36,7 +36,7 @@ Other changes
 - Fixed a bug in how the ``InfectionLog`` is added to disease modules.
 - ``Infection.validate_beta()`` is now applied on every timestep, so changes to beta during the simulation are now honored.
 - ``sim.get_intervention()`` and ``sim.get_analyzer()`` have been removed; use built-in ``ndict`` operations (e.g., the label) to find the object you're after.
-- ``requires`` has been removed from modules, but ``ss.check_requires()`` is still available if needed.
+- ``requires`` has been removed from modules, but ``ss.check_requires()`` is still available if needed. Call it manually from ``init_pre()`` if desired, e.g. ``ss.check_requires(self.sim, self.requires)``.
 - For networks, ``contacts`` has been renamed ``edges`` except in cases where it refers to an *agent's* contacts. For example, ``network.contacts`` has been renamed ``network.edges``, but ``ss.find_contacts()`` remains the same.
 - ``Sim._orig_pars`` has been removed.
 - ``ss.unique()`` has been removed.
