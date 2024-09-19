@@ -408,11 +408,12 @@ class syph_screening(ss.routine_screening):
         else:
             return products[product]
 
-    def check_eligibility(self, sim):
+    def check_eligibility(self):
         """
         Return an array of indices of agents eligible for screening at time t, i.e. sexually active
         females in age range, plus any additional user-defined eligibility
         """
+        sim = self.sim
         if self.eligibility is not None:
             is_eligible = self.eligibility(sim)
         else:
