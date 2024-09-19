@@ -234,15 +234,16 @@ class Sim:
 
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
-        uids = self.people.resolve_deaths()
+        death_uids = self.people.resolve_deaths()
         for disease in self.diseases():
-            disease.update_death(uids)
+            disease.update_death(death_uids)
 
         # Update results
         self.people.update_results()
 
         for dem_mod in self.demographics():
             dem_mod.update_results()
+            dem_mod.update_death(death_uids)
 
         for disease in self.diseases():
             disease.update_results()

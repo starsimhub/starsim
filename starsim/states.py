@@ -359,13 +359,12 @@ class IndexArr(Arr):
         super().__init__(name=name, dtype=ss_int, default=None, nan=-1, label=label, coerce=False, skip_init=True)
         self.raw = uids(self.raw)
         return
-    
+
     @property
     def uids(self):
         """ Alias to self.values, to allow Arr.uids like BoolArr """
         return self.values
 
-    
     def grow(self, new_uids=None, new_vals=None):
         """ Change the size of the array """
         if new_uids is None and new_vals is not None: # Used as a shortcut to avoid needing to supply twice

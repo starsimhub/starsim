@@ -52,8 +52,10 @@ class People(sc.prettyobj):
         self.auids = uids.copy() # This tracks all active UIDs (in practice, agents who are alive)
         self.uid = ss.IndexArr('uid')  # This variable tracks all UIDs
         self.slot = ss.IndexArr('slot') # A slot is a special state managed internally
+        self.parent = ss.IndexArr('parent', label='UID of parent')  # UID of parent, if any, IndexArray?
         self.uid.grow(new_vals=uids)
         self.slot.grow(new_vals=uids)
+        self.parent.grow(new_uids=uids, new_vals=np.full(len(uids), self.parent.nan))
         for state in [self.uid, self.slot]:
             state.people = self # Manually link to people since we don't want to link to states
         
@@ -227,6 +229,8 @@ class People(sc.prettyobj):
         new_slots = new_slots if new_slots is not None else new_uids
         self.slot.grow(new_uids, new_vals=new_slots)
 
+        self.parent.grow(new_uids, new_vals=self.parent.nan) # Grow parent array
+
         # Grow the states
         for state in self._states.values():
             state.grow(new_uids)
@@ -314,7 +318,12 @@ class People(sc.prettyobj):
         death_uids = (self.ti_dead <= self.sim.ti).uids
         self.alive[death_uids] = False
         return death_uids
-    
+
+    def resolve_births(self):
+        """ Identify births that took place on this time step """
+        births_uids = (self.sim.people.age <= self.sim.ti).uids
+        return birth_uids
+
     def remove_dead(self):
         """
         Remove dead agents

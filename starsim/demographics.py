@@ -394,7 +394,7 @@ class Pregnancy(Demographics):
         self.update_states()
         conceive_uids = self.make_pregnancies()
         self.n_pregnancies = len(conceive_uids)
-        self.make_embryos(conceive_uids)
+        new_uids = self.make_embryos(conceive_uids)
         return
 
     def update_states(self):
@@ -477,6 +477,7 @@ class Pregnancy(Demographics):
             people.age[new_uids] = -self.pars.dur_pregnancy
             people.slot[new_uids] = new_slots  # Before sampling female_dist
             people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
+            people.parent[new_uids] = conceive_uids
 
             # Add connections to any prenatal transmission layers
             for lkey, layer in self.sim.networks.items():
