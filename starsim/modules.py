@@ -122,7 +122,7 @@ class Module(sc.quickobj):
         sim.results[self.name] = self.results
         sim.people.add_module(self) # Connect the states to the people
         return
-    
+
     def init_post(self):
         """ Initialize the values of the states, including calling distributions; the last step of initialization """
         for state in self.states:
@@ -130,7 +130,24 @@ class Module(sc.quickobj):
                 state.init_vals()
         self.initialized = True
         return
-    
+
+    def update_death(self, uids):
+        """
+        Carry out state changes upon death
+
+        This function is triggered after deaths are resolved, and before analyzers are run.
+        See the SIR example model for a typical use case - deaths are requested as an autonomous
+        update, to take effect after transmission on the same timestep. State changes that occur
+        upon death (e.g., clearing an `infected` flag) are executed in this function. That also
+        allows an intervention to avert a death scheduled on the same timestep, without having
+        to undo any state changes that have already been applied (because they only run via this
+        function if the death actually occurs).
+
+        Depending on the module and the results it produces, it may or may not be necessary
+        to implement this.
+        """
+        pass
+
     def disp(self, output=False):
         """ Display the full object """
         out = sc.prepr(self)

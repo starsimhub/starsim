@@ -319,11 +319,6 @@ class People(sc.prettyobj):
         self.alive[death_uids] = False
         return death_uids
 
-    def resolve_births(self):
-        """ Identify births that took place on this time step """
-        births_uids = (self.sim.people.age <= self.sim.ti).uids
-        return birth_uids
-
     def remove_dead(self):
         """
         Remove dead agents

@@ -269,10 +269,12 @@ class Pregnancy(Demographics):
             fertility_rate = 0, # Can be a number of Pandas DataFrame
             rel_fertility = 1,
             maternal_death_prob = ss.bernoulli(0),
+            p_neonataldeath_on_maternaldeath = ss.bernoulli(0),
             sex_ratio = ss.bernoulli(0.5), # Ratio of babies born female
             min_age = 15, # Minimum age to become pregnant
             max_age = 50, # Maximum age to become pregnant
             units = 1e-3, # Assumes fertility rates are per 1000. If using percentages, switch this to 1
+            burnin = True, # Should we seed pregnancies that would have happened before the start of the simulation?
         )
         self.update_pars(pars, **kwargs)
 
@@ -284,6 +286,7 @@ class Pregnancy(Demographics):
             ss.BoolArr('fecund', default=True, label='Female of childbearing age'),
             ss.BoolArr('pregnant', label='Pregnant'),  # Currently pregnant
             ss.BoolArr('postpartum', label="Post-partum"),  # Currently post-partum
+            ss.FloatArr('child_uids', label='UID of children, from embryo through postpartum'),
             ss.FloatArr('dur_postpartum', label='Post-partum duration'),  # Duration of postpartum phase
             ss.FloatArr('ti_pregnant', label='Time of pregnancy'),  # Time pregnancy begins
             ss.FloatArr('ti_delivery', label='Time of delivery'),  # Time of delivery
@@ -343,7 +346,7 @@ class Pregnancy(Demographics):
         # Scale from rate to probability
         invalid_age = (age < self.pars.min_age) | (age > self.pars.max_age)
         fertility_prob = fertility_rate * (self.pars.units * self.pars.rel_fertility * sim.pars.dt)
-        fertility_prob[self.pregnant.uids] = 0 # Currently pregnant women cannot become pregnant again
+        fertility_prob[(~self.fecund).uids] = 0 # Currently infecund women cannot become pregnant
         fertility_prob[uids[invalid_age]] = 0 # Women too young or old cannot become pregnant
         fertility_prob = np.clip(fertility_prob[uids], a_min=0, a_max=1)
         return fertility_prob
@@ -390,6 +393,17 @@ class Pregnancy(Demographics):
         return
 
     def update(self):
+        if self.sim.ti == 0 and self.pars.burnin:
+            dtis = np.arange(np.ceil(-1 * self.pars.dur_pregnancy / self.sim.dt), 0, 1).astype(int)
+            for dti in dtis:
+                self.sim.ti = dti
+                self.do_update()
+            self.sim.ti = 0
+        self.do_update()
+
+        return
+
+    def do_update(self):
         """ Perform all updates """
         self.update_states()
         conceive_uids = self.make_pregnancies()
@@ -437,6 +451,7 @@ class Pregnancy(Demographics):
         postpartum = ~self.pregnant & (self.ti_postpartum <= ti)
         self.postpartum[postpartum] = False
         self.fecund[postpartum] = True
+        self.child_uids[postpartum] = np.nan
 
         # Maternal deaths
         maternal_deaths = (self.ti_dead <= ti).uids
@@ -478,6 +493,7 @@ class Pregnancy(Demographics):
             people.slot[new_uids] = new_slots  # Before sampling female_dist
             people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
             people.parent[new_uids] = conceive_uids
+            self.child_uids[conceive_uids] = new_uids
 
             # Add connections to any prenatal transmission layers
             for lkey, layer in self.sim.networks.items():
@@ -485,6 +501,9 @@ class Pregnancy(Demographics):
                     durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy)
                     start = np.full(n_unborn, fill_value=self.sim.ti)
                     layer.add_pairs(conceive_uids, new_uids, dur=durs, start=start)
+
+        if self.sim.ti < 0:
+            people.age[new_uids] += -self.sim.ti * self.sim.dt # Age to ti=0
 
         return new_uids
 
@@ -513,6 +532,30 @@ class Pregnancy(Demographics):
 
         if np.any(dead): # NB: 100x faster than np.sum(), 10x faster than np.count_nonzero()
             self.ti_dead[uids[dead]] = ti + dur_preg[dead]
+        return
+
+    def update_death(self, death_uids):
+        # Any pregnant? Consider death of the neonate
+        mother_uids = death_uids[self.pregnant[death_uids]]
+        if len(mother_uids):
+            neonate_uids = ss.uids(self.child_uids[mother_uids])
+            neonataldeath_uids = self.pars.p_neonataldeath_on_maternaldeath.filter(neonate_uids)
+            if len(neonataldeath_uids):
+                self.sim.people.request_death(neonataldeath_uids)
+
+        # Any prenatal? Handle changes to pregnancy
+        is_prenatal = self.sim.people.age[death_uids] < 0
+        neonate_uids = death_uids[is_prenatal]
+        if len(neonate_uids):
+            mother_uids = self.sim.people.parent[neonate_uids]
+            # Baby lost, mother no longer pregnant
+            self.pregnant[neonate_uids] = False
+            self.fecund[neonate_uids] = True # Or wait?
+            self.postpartum[neonate_uids] = False
+            self.child_uids[neonate_uids] = np.nan
+            self.ti_delivery[neonate_uids] = np.nan
+            self.ti_postpartum[neonate_uids] = np.nan
+            # Keep ti_dead
         return
 
     def update_results(self):
