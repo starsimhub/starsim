@@ -12,7 +12,7 @@ Version 2.0.0 (2024-09-30)
 
 Summary
 ~~~~~~~
-This version contains several major breaking changes. These include: module-specific timesteps and time-aware parameters (including a day/year ``unit`` flag for modules, and  ``ss.dur()`` and ``ss.rate()`` classes for parameters), new ``ss.State`` and ``ss.Event`` classes that simplify disease logic; as well as changes to module types and integration (removing ``ss.Connector`` and renaming ``update()`` and ``apply()`` methods to ``step()``).
+This version contains several major breaking changes. These include: module-specific timesteps and time-aware parameters (including a day/year ``unit`` flag for modules, and  ``ss.dur()`` and ``ss.rate()`` classes for parameters), new ``ss.State`` and ``ss.Event`` classes that simplify disease logic; as well as changes to module types and integration (renaming ``update()`` and ``apply()`` methods to ``step()``).
 
 Time-aware parameters
 ~~~~~~~~~~~~~~~~~~~~~
@@ -25,9 +25,9 @@ Coming soon!
 Module changes
 ~~~~~~~~~~~~~~
 - Functionality has been moved from ``ss.Plugin`` to ``ss.Module``, and the former has been removed.
-- ``ss.Connector`` has also been removed; use ``ss.Module`` instead. Instead, modules can be placed anywhere in the list of modules (e.g., in demographics, networks, diseases, interventions), depending on when you want them to execute.
+- ``ss.Connector`` functionality has been moved to ``ss.Module``. ``ss.Module`` objects can be placed anywhere in the list of modules (e.g., in demographics, networks, diseases, interventions), depending on when you want them to execute. However, ``ss.Connector`` objects are applied after ``Disease.step_state()`` and before
 - Many of the module methods have been renamed; in particular, all modules now have a ``step()`` method, which replaces ``update()`` (for demographics and networks), ``apply()`` (for interventions and analyzers), and ``make_new_cases()`` (for diseases).
-- All modules are treated the same in the integration loop, except for diseases, which have ``step_pre()`` and ``die()`` methods.
+- All modules are treated the same in the integration loop, except for diseases, which have ``step_state()`` and ``step_die()`` methods.
 
 Other changes
 ~~~~~~~~~~~~~
@@ -36,7 +36,7 @@ Other changes
 - Fixed a bug in how the ``InfectionLog`` is added to disease modules.
 - ``Infection.validate_beta()`` is now applied on every timestep, so changes to beta during the simulation are now honored.
 - ``sim.get_intervention()`` and ``sim.get_analyzer()`` have been removed; use built-in ``ndict`` operations (e.g., the label) to find the object you're after.
-- ``requires`` has been removed from modules, but ``ss.check_requires()`` is still available if needed.
+- ``requires`` has been removed from modules, but ``ss.check_requires()`` is still available if needed. Call it manually from ``init_pre()`` if desired, e.g. ``ss.check_requires(self.sim, self.requires)``.
 - For networks, ``contacts`` has been renamed ``edges`` except in cases where it refers to an *agent's* contacts. For example, ``network.contacts`` has been renamed ``network.edges``, but ``ss.find_contacts()`` remains the same.
 - ``Sim._orig_pars`` has been removed.
 - ``ss.unique()`` has been removed.

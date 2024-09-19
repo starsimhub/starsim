@@ -102,7 +102,7 @@ class Sim:
         # self.pars.validate_modules(self)
         
         # Move initialized modules to the sim
-        keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers']
+        keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
         for key in keys:
             setattr(self, key, self.pars.pop(key))
             
@@ -193,6 +193,7 @@ class Sim:
             self.demographics(),
             self.networks(),
             self.diseases(),
+            self.connectors(),
             self.interventions(),
             [intv.product for intv in self.interventions() if hasattr(intv, 'product') and intv.product is not None], # TODO: simplify
             self.analyzers(),
@@ -203,7 +204,11 @@ class Sim:
         return self.yearvec[self.ti]
 
     def step(self):
-        """ Step through time and update values """
+        """
+        Step through time and update values
+        
+        TODO: assemble every method called during integration in a list, and then call them sequentially        
+        """
 
         # Set the time and if we have reached the end of the simulation, then do nothing
         if self.complete:
@@ -221,7 +226,11 @@ class Sim:
         # to be applied to newly created agents
         for disease in self.diseases():
             if isinstance(disease, ss.Disease): # Could be a connector instead -- TODO, rethink this
-                disease.step_pre()
+                disease.step_state()
+
+        # Update connectors -- TBC where this appears in the ordering
+        for connector in self.connectors():
+            connector.step()
 
         # Update networks - this takes place here in case autonomous state changes at this timestep
         # affect eligibility for contacts
@@ -242,7 +251,7 @@ class Sim:
         uids = self.people.check_deaths()
         for disease in self.diseases():
             if isinstance(disease, ss.Disease):
-                disease.die(uids)
+                disease.step_die(uids)
 
         # Update results
         self.people.update_results()

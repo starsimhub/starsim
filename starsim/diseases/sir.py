@@ -39,14 +39,14 @@ class SIR(ss.Infection):
         self.define_events(
             ss.Event(self.susceptible, self.infected, func=self.infect,  reskey='infections'),
             ss.Event(self.infected, self.recovered,   func=self.recover, reskey='recoveries'),
-            ss.Event(self.infected, self.dead,        func=self.die,     reskey='deaths'),
+            ss.Event(self.infected, self.dead,        func=self.step_die,     reskey='deaths'),
         )
         
         # Option 2 for defining events -- using strings
         self.define_events(
             ss.Event('susceptible -> infected', self.infect,  reskey='infections'),
             ss.Event('infected -> recovered',   self.recover, reskey='recoveries'),
-            ss.Event('infected -> dead',        self.die,     reskey='deaths'),
+            ss.Event('infected -> dead',        self.step_die,     reskey='deaths'),
         )
         
         self.define_attrs(
@@ -78,7 +78,7 @@ class SIR(ss.Infection):
         )
         return
 
-    def step_pre(self):
+    def step_state(self):
         # Progress infectious -> recovered
         sim = self.sim
         recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
@@ -113,7 +113,7 @@ class SIR(ss.Infection):
         self.ti_recovered[rec_uids] = ti + dur_inf[~will_die] / dt
         return
 
-    def die(self, uids):
+    def step_die(self, uids):
         """ Reset infected/recovered flags for dead agents """
         self.susceptible[uids] = False
         self.infected[uids] = False
@@ -160,7 +160,7 @@ class SIS(ss.Infection):
         )
         return
 
-    def step_pre(self):
+    def step_state(self):
         """ Progress infectious -> recovered """
         recovered = (self.infected & (self.ti_recovered <= self.sim.ti)).uids
         self.infected[recovered] = False

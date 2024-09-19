@@ -42,7 +42,7 @@ class HIV(ss.Infection):
         out = np.array(out)
         return out
 
-    def step_pre(self):
+    def step_state(self):
         """ Update CD4 """
         people = self.sim.people
         self.cd4[people.alive & self.infected & self.on_art] += (self.pars.cd4_max - self.cd4[people.alive & self.infected & self.on_art])/self.pars.cd4_rate

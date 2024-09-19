@@ -1,12 +1,13 @@
 """
-General module class -- base class for diseases, interventions, etc.
+General module class -- base class for diseases, interventions, etc. Also
+defines Analyzers and Connectors.
 """
 
 import sciris as sc
 import starsim as ss
 from functools import partial
 
-__all__ = ['module_map', 'find_modules', 'Module']
+__all__ = ['module_map', 'find_modules', 'Module', 'Analyzer', 'Connector']
 
 
 def module_map(key=None):
@@ -17,6 +18,7 @@ def module_map(key=None):
         diseases      = ss.Disease,
         interventions = ss.Intervention,
         analyzers     = ss.Analyzer,
+        connectors    = ss.Connector,
     )
     return module_map if key is None else module_map[key]
 
@@ -239,3 +241,27 @@ class Module(sc.quickobj):
                 ax.set_title(k)
                 ax.set_xlabel('Year')
         return fig
+
+
+class Analyzer(Module):
+    """
+    Base class for Analyzers. Analyzers are used to provide more detailed information 
+    about a simulation than is available by default -- for example, pulling states 
+    out of sim.people on a particular timestep before they get updated on the next step.
+    
+    The key method of the analyzer is ``step()``, which is called with the sim
+    on each timestep.
+    
+    To retrieve a particular analyzer from a sim, use sim.get_analyzer().
+    """
+    pass
+
+
+class Connector(Module):
+    """
+    Base class for Connectors, which mediate interactions between disease (or other) modules
+    
+    Because connectors can do anything, they have no specified structure: it is
+    up to the user to define how they behave.    
+    """
+    pass

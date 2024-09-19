@@ -77,7 +77,7 @@ class Cholera(ss.Infection):
         ]
         return
 
-    def step_pre(self):
+    def step_state(self):
         """
         Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/cholera.py
         Original version by Dom Delport
@@ -173,7 +173,7 @@ class Cholera(ss.Infection):
             self.set_prognoses(new_cases, source_uids=None)
         return
 
-    def die(self, uids):
+    def step_die(self, uids):
         """ Reset infected/recovered flags for dead agents """
         for state in ['susceptible', 'exposed', 'infected', 'symptomatic', 'recovered']:
             self.statesdict[state][uids] = False

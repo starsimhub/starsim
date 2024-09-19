@@ -39,7 +39,7 @@ class Measles(SIR):
     def infectious(self):
         return self.infected | self.exposed
 
-    def step_pre(self):
+    def step_state(self):
         # Progress exposed -> infected
         ti = self.sim.ti
         infected = (self.exposed & (self.ti_infected <= ti)).uids
@@ -85,7 +85,7 @@ class Measles(SIR):
 
         return
 
-    def die(self, uids):
+    def step_die(self, uids):
         # Reset infected/recovered flags for dead agents
         for state in ['susceptible', 'exposed', 'infected', 'recovered']:
             self.statesdict[state][uids] = False

@@ -58,14 +58,14 @@ class Disease(ss.Module):
             self.results += ss.Result(self.name, f'n_{state.name}', self.sim.npts, dtype=int, scale=True, label=state.label)
         return
 
-    def step_pre(self):
+    def step_state(self):
         """
         Carry out updates at the start of the timestep (prior to transmission);
         these are typically state changes
         """
         pass
 
-    def die(self, uids):
+    def step_die(self, uids):
         """
         Carry out state changes upon death
 
@@ -106,7 +106,7 @@ class Disease(ss.Module):
         the log as part of this operation if logging is enabled (in the
         `Disease` parameters)
 
-        The `source_uids` are relevant for infectious diseases, but would be left
+        The `sources` are relevant for infectious diseases, but would be left
         as `None` for NCDs.
 
         Args:
@@ -162,8 +162,8 @@ class Infection(Disease):
             ss.FloatArr('ti_infected', label='Time of infection' ),
         )
 
-        # Define random number generators for step()
-        self.rng = ss.multi_random('target', 'source')
+        # Define random number generator for determining transmission
+        self.trans_rng = ss.multi_random('source', 'target')
         return
     
     def init_pre(self, sim):
@@ -260,17 +260,18 @@ class Infection(Disease):
         """
         new_cases = []
         sources = []
+        networks = []
         betamap = self.validate_beta()
         
         rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
         rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
         
-        for nkey,net in self.sim.networks.items():
+        for i, (nkey,net) in enumerate(self.sim.networks.items()):
             nk = ss.standardize_netkey(nkey) # TEMP
             if len(net): # Skip networks with no edges
                 edges = net.edges
-                p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]]
-                p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]]
+                p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
+                p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1
                 for src, trg, beta in [p1p2b0, p2p1b1]:
                     if beta: # Skip networks with no transmission
     
@@ -278,29 +279,38 @@ class Infection(Disease):
                         beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
                         p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
         
-                        # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
-                        randvals = self.rng.rvs(src, trg)
+                        # Generate a new random number based on the two other random numbers
+                        randvals = self.trans_rng.rvs(src, trg)
                         transmitted = p_transmit > randvals
-                        new_cases.append(trg[transmitted])
-                        sources.append(src[transmitted])
+                        target_uids = trg[transmitted]
+                        source_uids = src[transmitted]
+                        new_cases.append(target_uids)
+                        sources.append(source_uids)
+                        networks.append(np.full(len(target_uids), dtype=ss_int_, fill_value=i))
                 
-        # Tidy up
-        new_cases = ss.uids.cat(new_cases)
-        sources = ss.uids.cat(sources)
-        networks = None # TEMP, NEED TO FIX
+        # Finalize
+        if len(new_cases) and len(sources):
+            new_cases = ss.uids.cat(new_cases)
+            new_cases, inds = new_cases.unique(return_index=True)
+            sources = ss.uids.cat(sources)[inds]
+            networks = np.concatenate(networks)[inds]
+        else:
+            new_cases = ss.uids()
+            sources = ss.uids()
+            networks = np.empty(0, dtype=ss_int_)
         return new_cases, sources, networks
 
-    def set_outcomes(self, target_uids, source_uids=None):
+    def set_outcomes(self, uids, sources=None):
         sim = self.sim
-        congenital = sim.people.age[target_uids] <= 0
+        congenital = sim.people.age[uids] <= 0
         if np.count_nonzero(congenital):
-            src_c = source_uids[congenital] if source_uids is not None else None
-            self.set_congenital(target_uids[congenital], src_c)
-        src_p = source_uids[~congenital] if source_uids is not None else None
-        self.set_prognoses(target_uids[~congenital], src_p)
+            src_c = sources[congenital] if sources is not None else None
+            self.set_congenital(uids[congenital], src_c)
+        src_p = sources[~congenital] if sources is not None else None
+        self.set_prognoses(uids[~congenital], src_p)
         return
 
-    def set_congenital(self, target_uids, source_uids=None):
+    def set_congenital(self, uids, sources=None):
         pass
     
     def update_results(self):
@@ -341,12 +351,12 @@ class InfectionLog(nx.MultiDiGraph):
 
     A table of outcomes can be returned using `InfectionLog.line_list()`
     """
-    def add_entries(self, sim, target_uids, source_uids=None): # TODO: reconcile with other methods
-        if source_uids is None:
-            for target in target_uids:
+    def add_entries(self, sim, uids, sources=None): # TODO: reconcile with other methods
+        if sources is None:
+            for target in uids:
                 self.log.append(np.nan, target, sim.year)
         else:
-            for target, source in zip(target_uids, source_uids):
+            for target, source in zip(uids, sources):
                 self.log.append(source, target, sim.year)
         return
 

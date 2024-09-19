@@ -1,26 +1,12 @@
 """
-Define interventions (and analyzers)
+Define interventions
 """
 
 import starsim as ss
 import sciris as sc
 import numpy as np
 
-__all__ = ['Analyzer', 'Intervention']
-
-
-class Analyzer(ss.Module):
-    """
-    Base class for analyzers. Analyzers are used to provide more detailed information 
-    about a simulation than is available by default -- for example, pulling states 
-    out of sim.people on a particular timestep before they get updated on the next step.
-    
-    The key method of the analyzer is ``step()``, which is called with the sim
-    on each timestep.
-    
-    To retrieve a particular analyzer from a sim, use sim.get_analyzer().
-    """
-    pass
+__all__ = ['Intervention']
 
 
 class Intervention(ss.Module):
@@ -52,12 +38,12 @@ class Intervention(ss.Module):
     def _parse_product_str(self, product):
         raise NotImplementedError
 
-    def check_eligibility(self, sim):
+    def check_eligibility(self):
         """
         Return an array of indices of agents eligible for screening at time t
         """
         if self.eligibility is not None:
-            is_eligible = self.eligibility(sim)
+            is_eligible = self.eligibility(self.sim)
             if is_eligible is not None and len(is_eligible): # Only worry if non-None/nonzero length
                 if isinstance(is_eligible, ss.BoolArr):
                     is_eligible = is_eligible.uids
@@ -65,7 +51,7 @@ class Intervention(ss.Module):
                     errormsg = f'Eligibility function must return BoolArr or UIDs, not {type(is_eligible)} {is_eligible}'
                     raise TypeError(errormsg)
         else:
-            is_eligible = sim.people.auids # Everyone
+            is_eligible = self.sim.people.auids # Everyone
         return is_eligible
 
 
@@ -191,20 +177,21 @@ class BaseTest(Intervention):
         self.outcomes = {k: np.array([], dtype=int) for k in self.product.hierarchy}
         return
 
-    def deliver(self, sim):
+    def deliver(self):
         """
         Deliver the diagnostics by finding who's eligible, finding who accepts, and applying the product.
         """
+        sim = self.sim
         ti = sc.findinds(self.timepoints, sim.ti)[0]
         prob = self.prob[ti]  # Get the proportion of people who will be tested this timestep
-        eligible_uids = self.check_eligibility(sim)  # Check eligibility
+        eligible_uids = self.check_eligibility()  # Check eligibility
         self.coverage_dist.set(p=prob)
         accept_uids = self.coverage_dist.filter(eligible_uids)
         if len(accept_uids):
-            self.outcomes = self.product.administer(sim, accept_uids)  # Actually administer the diagnostic
+            self.outcomes = self.product.administer(accept_uids)  # Actually administer the diagnostic
         return accept_uids
 
-    def check_eligibility(self, sim):
+    def check_eligibility(self):
         raise NotImplementedError
 
 
@@ -214,7 +201,7 @@ class BaseScreening(BaseTest):
     Args:
         kwargs (dict): passed to BaseTest
     """
-    def check_eligibility(self, sim):
+    def check_eligibility(self):
         """
         Check eligibility
         """
@@ -227,7 +214,7 @@ class BaseScreening(BaseTest):
         sim = self.sim
         accept_uids = ss.uids()
         if sim.ti in self.timepoints:
-            accept_uids = self.deliver(sim)
+            accept_uids = self.deliver()
             self.screened[accept_uids] = True
             self.screens[accept_uids] += 1
             self.ti_screened[accept_uids] = sim.ti
@@ -243,13 +230,13 @@ class BaseTriage(BaseTest):
     Args:
         kwargs (dict): passed to BaseTest
     """
-    def check_eligibility(self, sim):
-        return sc.promotetoarray(self.eligibility(sim))
+    def check_eligibility(self):
+        return sc.promotetoarray(self.eligibility(self.sim))
 
-    def step(self, sim):
+    def step(self):
         self.outcomes = {k: np.array([], dtype=int) for k in self.product.hierarchy}
         accept_inds = ss.uids()
-        if sim.t in self.timepoints: accept_inds = self.deliver(sim)
+        if self.sim.t in self.timepoints: accept_inds = self.deliver() # TODO: not robust for timestep
         return accept_inds
 
 
@@ -373,18 +360,18 @@ class BaseTreatment(Intervention):
         self.outcomes = {k: np.array([], dtype=int) for k in ['unsuccessful', 'successful']} # Store outcomes on each timestep
         return
 
-    def get_accept_inds(self, sim): # TODO: do not pass sim
+    def get_accept_inds(self):
         """
         Get indices of people who will acccept treatment; these people are then added to a queue or scheduled for receiving treatment
         """
         accept_uids = ss.uids()
-        eligible_uids = self.check_eligibility(sim)  # Apply eligiblity
+        eligible_uids = self.check_eligibility()  # Apply eligiblity
         if len(eligible_uids):
             self.coverage_dist.set(p=self.prob[0])
             accept_uids = self.coverage_dist.filter(eligible_uids)
         return accept_uids
 
-    def get_candidates(self, sim):
+    def get_candidates(self):
         """
         Get candidates for treatment on this timestep. Implemented by derived classes.
         """
@@ -394,13 +381,12 @@ class BaseTreatment(Intervention):
         """
         Perform treatment by getting candidates, checking their eligibility, and then treating them.
         """
-        sim = self.sim
         # Get indices of who will get treated
-        treat_candidates = self.get_candidates(sim)  # NB, this needs to be implemented by derived classes
-        still_eligible = self.check_eligibility(sim)
+        treat_candidates = self.get_candidates()  # NB, this needs to be implemented by derived classes
+        still_eligible = self.check_eligibility()
         treat_uids = treat_candidates.intersect(still_eligible)
         if len(treat_uids):
-            self.outcomes = self.product.administer(sim, treat_uids)
+            self.outcomes = self.product.administer(treat_uids)
         return treat_uids
 
 
@@ -417,15 +403,15 @@ class treat_num(BaseTreatment):
         self.max_capacity = max_capacity
         return
 
-    def add_to_queue(self, sim):
+    def add_to_queue(self):
         """
         Add people who are willing to accept treatment to the queue
         """
-        accept_inds = self.get_accept_inds(sim)
+        accept_inds = self.get_accept_inds()
         if len(accept_inds): self.queue += accept_inds.tolist()
         return
 
-    def get_candidates(self, sim):
+    def get_candidates(self):
         """
         Get the indices of people who are candidates for treatment
         """
@@ -442,8 +428,7 @@ class treat_num(BaseTreatment):
         Apply treatment. On each timestep, this method will add eligible people who are willing to accept treatment to a
         queue, and then will treat as many people in the queue as there is capacity for.
         """
-        sim = self.sim
-        self.add_to_queue(sim)
+        self.add_to_queue()
         treat_inds = BaseTreatment.step(self) # Apply method from BaseTreatment class
         self.queue = [e for e in self.queue if e not in treat_inds] # Recreate the queue, removing people who were treated
         return treat_inds
@@ -485,7 +470,7 @@ class BaseVaccination(Intervention):
 
             ti = sc.findinds(self.timepoints, sim.ti)[0]
             prob = self.prob[ti]  # Get the proportion of people who will be tested this timestep
-            is_eligible = self.check_eligibility(sim)  # Check eligibility
+            is_eligible = self.check_eligibility()  # Check eligibility
             self.coverage_dist.set(p=prob)
             accept_uids = self.coverage_dist.filter(is_eligible)
 

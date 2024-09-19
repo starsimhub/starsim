@@ -319,10 +319,13 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
 
 def combine_rands(a, b):
     """
-    Efficient algorithm for combining two arrays of random numbers into one
+    Efficient algorithm for combining two arrays of random integers into an array
+    of floats.
+    
+    See ss.multi_random() for the user-facing version.
     
     Args:
-        a (array): array of random integers between np.iinfo(np.int64).min and np.iinfo(np.int64).max
+        a (array): array of random integers between 0 and np.iinfo(np.uint64).max, as from ss.rand_raw()
         b (array): ditto, same size as a
         
     Returns:

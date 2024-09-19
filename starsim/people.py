@@ -20,9 +20,8 @@ class People(sc.prettyobj):
     will get passed instead since it will be needed before the People object is
     initialized.
 
-    Note that this class handles the mechanics of updating the actual people, while
-    ``ss.BasePeople`` takes care of housekeeping (saving, loading, exporting, etc.).
-    Please see the BasePeople class for additional methods.
+    Note that this class handles the mechanics of updating the actual people, 
+    as well as the additional housekeeping methods (saving, loading, exporting, etc.).
 
     Args:
         pars (dict): the sim parameters, e.g. sim.pars -- alternatively, if a number, interpreted as n_agents
@@ -369,6 +368,6 @@ class Person(sc.objdict):
     """ A simple class to hold all attributes of a person """
     def to_df(self):
         """ Convert to a dataframe """
-        df = sc.dataframe.from_dict(self, orient='index', columns='value')
+        df = sc.dataframe.from_dict(self, orient='index', columns=['value'])
         df.index.name = 'key'
         return df
