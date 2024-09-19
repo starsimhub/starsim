@@ -162,8 +162,8 @@ class Infection(Disease):
             ss.FloatArr('ti_infected', label='Time of infection' ),
         )
 
-        # Define random number generators for step()
-        self.rng = ss.multi_random('target', 'source')
+        # Define random number generator for determining transmission
+        self.trans_rng = ss.multi_random('source', 'target')
         return
     
     def init_pre(self, sim):
@@ -279,7 +279,7 @@ class Infection(Disease):
                         p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
         
                         # Generate a new random number based on the two other random numbers -- 3x faster than `rvs = np.remainder(rvs_s + rvs_t, 1)`
-                        randvals = self.rng.rvs(src, trg)
+                        randvals = self.trans_rng.rvs(src, trg)
                         transmitted = p_transmit > randvals
                         new_cases.append(trg[transmitted])
                         sources.append(src[transmitted])
