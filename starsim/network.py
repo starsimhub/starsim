@@ -852,7 +852,7 @@ class MSMNet(SexualNetwork):
 
     def step(self):
         self.end_pairs()
-        self.set_network_states(upper_age=self.sim.dt) # TODO: this looks weird
+        self.set_network_states()
         self.add_pairs()
         return
 
