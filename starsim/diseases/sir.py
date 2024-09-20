@@ -169,7 +169,7 @@ class SIS(ss.Infection):
     
     def update_immunity(self):
         has_imm = (self.immunity > 0).uids
-        self.immunity[has_imm] = (self.immunity[has_imm])*(1 - self.pars.waning*self.sim.dt)
+        self.immunity[has_imm] = (self.immunity[has_imm])*(1 - self.pars.waning)
         self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])
         return
 
@@ -185,7 +185,7 @@ class SIS(ss.Infection):
         dur_inf = self.pars.dur_inf.rvs(uids)
 
         # Determine when people recover
-        self.ti_recovered[uids] = self.sim.ti + dur_inf / self.sim.dt
+        self.ti_recovered[uids] = self.sim.ti + dur_inf
 
         return
     

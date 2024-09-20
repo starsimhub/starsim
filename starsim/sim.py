@@ -315,7 +315,7 @@ class Sim:
             elapsed = T.toc(output=True)
             if verbose: # Print progress
                 simlabel = f'"{self.label}": ' if self.label else ''
-                timepoint = self.yearvec[self.ti]
+                timepoint = self.timevec[self.ti]
                 timelabel = f'{timepoint:0.1f}' if isinstance(timepoint, float) else str(timepoint) # TODO: fix
                 string = f'  Running {simlabel}{timelabel} ({self.ti:2.0f}/{self.npts}) ({elapsed:0.2f} s) '
                 if verbose >= 2:
