@@ -102,7 +102,8 @@ def test_units(do_plot=False):
         sim.run()
         if do_plot:
             sim.plot()
-        
+    
+    # Uncomment this test once it might potentially pass lol
     rtol = 0.01
     vals = [sim.summary.sis_cum_infections for sim in [sims.y, sims.d]]
     # assert np.isclose(*vals, rtol=rtol), f'Values for cum_infections do not match ({vals})'

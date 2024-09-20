@@ -6,7 +6,7 @@ import numpy as np
 import sciris as sc
 
 # What classes are externally visible
-__all__ = ['time_units', 'time_ratio', 'TimeUnit', 'dur', 'rate', 'time_prob']
+__all__ = ['time_units', 'time_ratio', 'make_timevec', 'TimeUnit', 'dur', 'rate', 'time_prob']
 
     
 #%% Helper functions
@@ -50,6 +50,66 @@ def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0):
     factor = dt_ratio * unit_ratio
     return factor
 
+
+def int_to_date(x, unit='year'):
+    """ Convert an integer to a date """
+    if unit == 'year':
+        date = sc.date(f'{x}-01-01')
+    else:
+        raise NotImplementedError
+    return date
+        
+
+def date_add(start, dur, unit):
+    """ Add two dates (or integers) together """
+    if sc.isnumber(start):
+        end = start + dur
+    else:
+        if unit == 'year':
+            end = sc.datedelta(start, years=dur)
+        elif unit == 'day':
+            end = sc.datedelta(start, days=dur)
+        else:
+            raise NotImplementedError
+    return end
+        
+
+def date_diff(start, end, unit):
+    """ Find the difference between two dates (or integers) """
+    if sc.isnumber(start) and sc.isnumber(end):
+        dur = end - start
+    else:
+        if unit == 'year':
+            dur = sc.datetoyear(end) - sc.datetoyear(start) # TODO: allow non-integer amounts
+        elif unit == 'day':
+            dur = (end - start).days
+        else:
+            raise NotImplementedError
+    return dur
+
+
+def make_timevec(start, end, dt, unit):
+    """ Parse start, end, and dt into an appropriate time vector """
+    if sc.isnumber(start):
+        try:
+            stop = date_add(end, dt) # Potentially convert to a date
+            timevec = np.arange(start=start, stop=stop, step=dt) # The time points of the sim
+        except:
+            errormsg = f'Incompatible set of time inputs: start={start}, end={end}, dt={dt}. You can use dates or numbers but not both.'
+            raise ValueError(errormsg)
+    else:
+        if unit == 'year':
+            day_delta = int(np.round(time_ratio(unit1='year', dt1=dt, unit2='day', dt2=1.0)))
+            if day_delta == 0:
+                errormsg = f'Timestep {dt} is too small; must be at least 1 day'
+                raise ValueError(errormsg)
+        else:
+            if dt < 1:
+                errormsg = f'Cannot use a timestep of less than a day ({dt}) with date-based indexing'
+                raise ValueError(errormsg)
+            day_delta = int(np.round(dt))
+        timevec = sc.daterange(start, end, interval={'days':day_delta})
+    return timevec
 
 
 #%% Time classes

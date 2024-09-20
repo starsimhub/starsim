@@ -15,6 +15,7 @@ from .interventions import *
 from .demographics  import *
 from .disease       import *
 from .diseases      import *
+from .loop          import *
 from .sim           import *
 from .run           import *
 from .calibration   import *

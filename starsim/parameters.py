@@ -214,7 +214,7 @@ class SimPars(Pars):
         self.validate_agents()
         self.validate_total_pop()
         self.validate_time()
-        self.validate_dt()
+        # self.validate_dt()
         return
     
     def validate_verbose(self):
@@ -258,40 +258,6 @@ class SimPars(Pars):
             self.pop_scale = total_pop / self.n_agents
         return
     
-    def int_to_date(self, x):
-        """ Convert an integer to a date """
-        if self.unit == 'year':
-            date = sc.date(f'{x}-01-01')
-        else:
-            raise NotImplementedError
-        return date
-            
-    def date_add(self, start, dur):
-        """ Add two dates (or integers) together """
-        if sc.isnumber(start):
-            end = start + dur
-        else:
-            if self.unit == 'year':
-                end = sc.datedelta(start, years=dur) # TODO: allow non-integer amounts
-            elif self.unit == 'day':
-                end = sc.datedelta(start, days=dur)
-            else:
-                raise NotImplementedError
-        return end
-            
-    def date_diff(self, start, end):
-        """ Find the difference between two dates (or integers) """
-        if sc.isnumber(start) and sc.isnumber(end):
-            dur = end - start
-        else:
-            if self.unit == 'year':
-                dur = sc.datetoyear(end) - sc.datetoyear(start) # TODO: allow non-integer amounts
-            elif self.unit == 'day':
-                dur = (end - start).days
-            else:
-                raise NotImplementedError
-        return dur
-        
     def validate_time(self):
         """ Ensure at least one of dur and end is defined, but not both """
         if isinstance(self.start, str):
@@ -300,7 +266,7 @@ class SimPars(Pars):
             self.end = sc.date(self.end)
         if self.end is not None:
             if self.is_default('dur'):
-                self.dur = self.date_diff(self.start, self.end)
+                self.dur = ss.date_diff(self.start, self.end)
             else:
                 errormsg = f'You can supply either end ({self.end}) or dur ({self.dur}) but not both, since one is calculated from the other'
                 raise ValueError(errormsg)
@@ -309,30 +275,30 @@ class SimPars(Pars):
                 raise ValueError(errormsg)
         else:
             if self.dur is not None:
-                self.end = self.date_add(self.start, self.dur)
+                self.end = ss.date_add(self.start, self.dur)
             else:
                 errormsg = 'You must supply either "dur" or "end".'
                 raise ValueError(errormsg)
         return
 
-    def validate_dt(self): # TODO: may not be needed
-        """
-        Check that 1/dt is an integer value, otherwise results and time vectors will have mismatching shapes.
-        init_results explicitly makes this assumption by casting resfrequency = int(1/dt).
-        """
-        dt = self.dt
-        if dt < 1:
-            reciprocal = 1.0 / dt  # Compute the reciprocal of dt
-            if not reciprocal.is_integer():  # Check if reciprocal is not a whole (integer) number
-                reciprocal = int(reciprocal) # Round the reciprocal
-                rounded_dt = 1.0 / reciprocal
-                self.dt = rounded_dt
-                if self.verbose:
-                    warnmsg = f'Warning: Provided time step dt={dt} resulted in a non-integer number of steps per {self.unit}. Rounded to {rounded_dt}.'
-                    if self.unit == 'year':
-                        warnmsg += '\nConsider using unit="day" instead?'
-                    ss.warn(warnmsg)
-            return
+    # def validate_dt(self): # TODO: may not be needed
+    #     """
+    #     Check that 1/dt is an integer value, otherwise results and time vectors will have mismatching shapes.
+    #     init_results explicitly makes this assumption by casting resfrequency = int(1/dt).
+    #     """
+    #     dt = self.dt
+    #     if dt < 1:
+    #         reciprocal = 1.0 / dt  # Compute the reciprocal of dt
+    #         if not reciprocal.is_integer():  # Check if reciprocal is not a whole (integer) number
+    #             reciprocal = int(reciprocal) # Round the reciprocal
+    #             rounded_dt = 1.0 / reciprocal
+    #             self.dt = rounded_dt
+    #             if self.verbose:
+    #                 warnmsg = f'Warning: Provided time step dt={dt} resulted in a non-integer number of steps per {self.unit}. Rounded to {rounded_dt}.'
+    #                 if self.unit == 'year':
+    #                     warnmsg += '\nConsider using unit="day" instead?'
+    #                 ss.warn(warnmsg)
+    #         return
     
     def validate_modules(self):
         """ Validate modules passed in pars"""

@@ -34,10 +34,11 @@ class Sim:
         self.version = ss.__version__ # The Starsim version
         self.gitinfo = sc.gitinfo(path=__file__, verbose=False)
         self.dists = ss.Dists(obj=self) # Initialize the random number generator container
+        self.loop = ss.Loop(self) # Initialize the integration loop
+        self.results = ss.Results(module='sim')  # For storing results
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running
         self.results_ready = False  # Whether results are ready
-        self.results = ss.Results(module='sim')  # For storing results
         self.elapsed = None # The time required to run
         self.summary = None  # For storing a summary of the results
         self.filename = None # Store the filename, if saved
@@ -123,6 +124,9 @@ class Sim:
         
         # Initialize the results
         self.init_results()
+        
+        # Initialize the integration loop
+        self.loop.initialize()
 
         # It's initialized
         self.initialized = True
@@ -130,21 +134,7 @@ class Sim:
     
     def init_time_attrs(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
-        stop = self.pars.date_add(self.pars.end, self.pars.dt) # Potentially convert to a date
-        if sc.isnumber(self.pars.start):
-            self.timevec = np.arange(start=self.pars.start, stop=stop, step=self.pars.dt) # The time points of the sim
-        else:
-            if self.pars.unit == 'year':
-                day_delta = int(np.round(ss.time_ratio(unit1='year', dt1=self.pars.dt, unit2='day', dt2=1.0)))
-                if day_delta == 0:
-                    errormsg = f'Timestep {self.pars.dt} is too small; must be at least 1 day'
-                    raise ValueError(errormsg)
-            else:
-                if self.pars.dt < 1:
-                    errormsg = f'Cannot use a timestep of less than a day ({self.pars.dt}) with date-based indexing'
-                    raise ValueError(errormsg)
-                day_delta = int(np.round(self.pars.dt))
-            self.timevec = sc.daterange(self.pars.start, self.pars.end, interval={'days':day_delta})
+        self.timevec = ss.make_timevec()
         self.results.timevec = self.timevec # Store the yearvec in the results for plotting
         self.npts = len(self.timevec) # The number of points in the sim
         self.tivec = np.arange(self.npts) # The vector of time indices
@@ -312,6 +302,7 @@ class Sim:
             raise AlreadyRunError(errormsg)
 
         # Main simulation loop
+        # self.loop.run()
         while self.ti < until:
             elapsed = T.toc(output=True)
             if verbose: # Print progress
