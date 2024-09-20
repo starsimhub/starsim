@@ -147,7 +147,7 @@ class rate(TimeUnit):
     
 
 class time_prob(TimeUnit):
-    """ A probability over time (a.k.a. a "true" rate); must be >0 and <1 """
+    """ A probability over time (a.k.a. a "true" rate, cumulative hazard rate); must be >0 and <1 """
     @property
     def x(self):
         numer = (1 - np.exp(-self.value/self.factor))
