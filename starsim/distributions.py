@@ -27,11 +27,10 @@ def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs):
         module = obj
     dists = ss.find_objs(Dist, obj, **kwargs) # Important that this comes first, before the sim is linked to the dist!
     for key,val in dists.items():
-        if isinstance(val, ss.Dist): # TODO: should be able to skip this if statement since should always be true?
-            val.link_sim(sim, overwrite=overwrite)
-            val.link_module(module, overwrite=overwrite)
-            if init: # Usually this is false since usually these are initialized centrally by the sim
-                val.initialize()
+        val.link_sim(sim, overwrite=overwrite)
+        val.link_module(module, overwrite=overwrite)
+        if init: # Usually this is false since usually these are initialized centrally by the sim
+            val.initialize()
     return
 
 

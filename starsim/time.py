@@ -51,13 +51,13 @@ def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0):
     return factor
 
 
-def int_to_date(x, unit='year'):
-    """ Convert an integer to a date """
-    if unit == 'year':
-        date = sc.date(f'{x}-01-01')
-    else:
-        raise NotImplementedError
-    return date
+# def int_to_date(x, unit='year'): # TODO: use sc.datetoyear(..., reverse=True)
+#     """ Convert an integer to a date """
+#     if unit == 'year':
+#         date = sc.date(f'{x}-01-01')
+#     else:
+#         raise NotImplementedError
+#     return date
         
 
 def date_add(start, dur, unit):
