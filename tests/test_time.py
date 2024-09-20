@@ -29,6 +29,7 @@ def test_ratio():
 def test_classes():
     sc.heading('Test behavior of dur() and rate()')
     
+    # Test duration dt
     d1 = ss.dur(2)
     d2 = ss.dur(3)
     d3 = ss.dur(2, parent_dt=0.1)
@@ -37,12 +38,13 @@ def test_classes():
     d6 = ss.dur(3, self_dt=5)
     for d in [d1,d2,d3,d4,d5,d6]: d.initialize()
     
-    assert d1 + d2 == 5
-    assert d3 + d4 == 35
-    assert d3 * 2 == 40
-    assert d3 / 2 == 10
-    assert d5 + d6 == 35
+    assert d1 + d2 == 2+3
+    assert d3 + d4 == 2/0.1 + 3/0.2
+    assert d3 * 2 == 2/0.1*2
+    assert d3 / 2 == 2/0.1/2
+    assert d5 + d6 == 2*10 + 3*5
     
+    # Test rate dt
     r1 = ss.rate(2)
     r2 = ss.rate(3)
     r3 = ss.rate(2, parent_dt=0.1)
@@ -51,22 +53,36 @@ def test_classes():
     r6 = ss.rate(3, self_dt=5)
     for r in [r1,r2,r3,r4,r5,r6]: r.initialize()
     
-    assert r1 + r2 == 5
-    assert r3 + r4 == 0.8
-    assert r3 * 2 == 0.4
-    assert r3 / 2 == 0.1
-    assert r5 + r6 == 0.8
+    assert r1 + r2 == 2 + 3
+    assert r3 + r4 == 2*0.1 + 3*0.2
+    assert r3 * 2 == 2*0.1*2
+    assert r3 / 2 == 2*0.1/2
+    assert r5 + r6 == 2/10 + 3/5
     
-    d5 = ss.dur(2, unit='year').initialize(parent_unit='day')
-    d6 = ss.dur(3, unit='day').initialize(parent_unit='day')
-    assert d5 + d6 == 2*365+3
+    # Test duration units
+    d7 = ss.dur(2, unit='year').initialize(parent_unit='day')
+    d8 = ss.dur(3, unit='day').initialize(parent_unit='day')
+    assert d7 + d8 == 2*365+3
     
-    r5 = ss.rate(0.7, unit='week', self_dt=1).initialize(parent_unit='day')
-    r6 = ss.rate(0.7, self_dt=1).initialize(parent_dt=0.1)
-    assert np.isclose(r5.x, 0.1) # A limitation of this approach, not exact!
-    assert np.isclose(r6.x, 0.07)
+    # Test rate units
+    rval = 0.7
+    r7 = ss.rate(rval, unit='week', self_dt=1).initialize(parent_unit='day')
+    r8 = ss.rate(rval, self_dt=1).initialize(parent_dt=0.1)
+    assert np.isclose(r7.x, rval/7) # A limitation of this approach, not exact!
+    assert np.isclose(r8.x, rval/10)
     
-    return d3, d4, r3, r4
+    # Test time_prob
+    tpval = 0.1
+    tp0 = ss.time_prob(tpval).initialize(parent_dt=1.0)
+    tp1 = ss.time_prob(tpval).initialize(parent_dt=0.5)
+    tp2 = ss.time_prob(tpval).initialize(parent_dt=2)
+    assert tp0.x == tpval
+    assert np.isclose(tp1.x, tpval/2, rtol=0.1)
+    assert np.isclose(tp2.x, tpval*2, rtol=0.1)
+    assert tp1.x > tpval/2
+    assert tp2.x < tpval*2
+    
+    return d3, d8, r3, r8, tp1
     
 
 def test_units():

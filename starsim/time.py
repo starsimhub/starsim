@@ -2,11 +2,12 @@
 Functions and classes for handling time
 """
 
+import numpy as np
 import sciris as sc
 
 
 # What classes are externally visible
-__all__ = ['time_units', 'time_ratio', 'dur', 'rate']
+__all__ = ['time_units', 'time_ratio', 'dur', 'rate', 'time_prob']
 
     
     
@@ -79,13 +80,9 @@ class TimeUnit:
         
         if parent.unit is not None:
             self.parent_unit = parent.unit
-            if self.unit is None: 
-                self.unit = parent.unit
             
         if parent.dt is not None:
            self.parent_dt = parent.dt
-           if self.self_dt is None:
-                self.self_dt = parent.dt
         
         # Set defaults if not yet set -- TODO, is there a better way?
         self.self_dt = sc.ifelse(self.self_dt, 1.0)
@@ -104,8 +101,8 @@ class TimeUnit:
     
     def set_factor(self):
         """ Set factor used to multiply the value to get the output """
-        raise NotImplementedError
-    
+        self.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=self.parent_unit, dt2=self.parent_dt)
+        
     @property
     def x(self):
         """ The actual value used in calculations """
@@ -125,26 +122,25 @@ class TimeUnit:
 
 
 class dur(TimeUnit):
-    """ A number that acts like a duration """
-    
-    def set_factor(self):
-        self.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=self.parent_unit, dt2=self.parent_dt)
-        
+    """ Any number that acts like a duration """
     @property
     def x(self):
         return self.value*self.factor
 
 
 class rate(TimeUnit):
-    """ A number that acts like a rate """
-    
-    def set_factor(self):
-        self.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=self.parent_unit, dt2=self.parent_dt)
-        
+    """ Any number that acts like a rate """
     @property
     def x(self):
-        return self.value/self.factor # TODO: implement an optional 1 - np.exp(-value * dt) version, probably in a different class
+        return self.value/self.factor # TODO: implement an optional  version, probably in a different class
+    
 
-
+class time_prob(TimeUnit):
+    """ A probability over time (a.k.a. a "true" rate) """
+    @property
+    def x(self):
+        numer = (1 - np.exp(-self.value/self.factor))
+        denom = (1 - np.exp(-self.value))
+        return self.value*numer/denom
         
     
