@@ -117,6 +117,6 @@ if __name__ == '__main__':
     
     o1 = test_ratio()
     o2 = test_classes()
-    # o3 = test_units()
+    o3 = test_units()
     
     T.toc()

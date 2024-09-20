@@ -46,9 +46,9 @@ def find_modules(key=None):
 class Module(sc.quickobj):
 
     def __init__(self, name=None, label=None, unit=None, dt=None):
-        self.set_metadata(name, label) # Usually reset as part of self.update_pars()
-        self.set_time(unit, dt)
         self.pars = ss.Pars() # Usually populated via self.define_pars()
+        self.set_metadata(name, label) # Usually reset as part of self.update_pars()
+        self.set_time_pars(unit, dt)
         self.results = ss.Results(self.name)
         self.initialized = False
         self.finalized = False
@@ -155,7 +155,7 @@ class Module(sc.quickobj):
         timepars = ss.find_objs(ss.TimeUnit, self.pars) # Should it be self or self.pars?
         
         # Initialize them with the parent module
-        for timepar in timepars:
+        for timepar in timepars.values():
             if force or not timepar.initialized:
                 timepar.initialize(parent=self)
         return

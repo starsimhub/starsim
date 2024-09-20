@@ -300,9 +300,9 @@ class Network(ss.Module):
 
         return
 
-    def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
-        if uids is None: uids = Ellipsis
-        return self.edges.beta[uids] * disease_beta * dt
+    # def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
+    #     if uids is None: uids = Ellipsis
+    #     return self.edges.beta[uids] * disease_beta * dt
 
 
 class DynamicNetwork(Network):

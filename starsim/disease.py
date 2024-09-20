@@ -168,7 +168,7 @@ class Infection(Disease):
     
     def init_pre(self, sim):
         super().init_pre(sim)
-        self.validate_beta()
+        self.validate_beta(run_checks=True)
         return
 
     @property
@@ -189,6 +189,7 @@ class Infection(Disease):
         super().init_post()
         if self.pars.init_prev is None:
             return
+        
 
         initial_cases = self.pars.init_prev.filter()
         self.set_prognoses(initial_cases)  # TODO: sentinel value to indicate seeds?
@@ -207,17 +208,34 @@ class Infection(Disease):
         ]
         return
         
-    def validate_beta(self):
+    def validate_beta(self, run_checks=False):
         """ Validate beta and return as a map to match the networks """
         sim = self.sim
+        β = self.pars.beta
         
-        if 'beta' not in self.pars:
-            errormsg = f'Disease {self.name} is missing beta; pars are: {sc.strjoin(self.pars.keys())}'
-            raise sc.KeyNotFoundError(errormsg)
+        def scalar_beta(β):
+            return isinstance(β, ss.TimeUnit) or sc.isnumber(β)
+        
+        if run_checks:
+            scalar_warn = f'Beta is defined as a number ({β}); convert it to a rate to handle timestep conversions'
+
+            if 'beta' not in self.pars:
+                errormsg = f'Disease {self.name} is missing beta; pars are: {sc.strjoin(self.pars.keys())}'
+                raise sc.KeyNotFoundError(errormsg)
+                
+            if sc.isnumber(β):
+                ss.warn(scalar_warn)
+            elif isinstance(β, dict):
+                for netbeta in β.values():
+                    if sc.isnumber(netbeta):
+                        ss.warn(scalar_warn)
+                    elif isinstance(netbeta, (list, tuple)):
+                        for thisbeta in netbeta:
+                            if sc.isnumber(netbeta):
+                                ss.warn(scalar_warn)
 
         # If beta is a scalar, apply this bi-directionally to all networks
-        β = self.pars.beta
-        if sc.isnumber(β):
+        if scalar_beta(β):
             betamap = {ss.standardize_netkey(k):[β,β] for k in sim.networks.keys()}
 
         # If beta is a dict, check all entries are bi-directional
@@ -225,10 +243,14 @@ class Infection(Disease):
             betamap = dict()
             for k,thisbeta in β.items():
                 nkey = ss.standardize_netkey(k)
-                if sc.isnumber(thisbeta):
+                if scalar_beta(thisbeta):
                     betamap[nkey] = [thisbeta, thisbeta]
                 else:
                     betamap[nkey] = thisbeta
+        
+        else:
+            errormsg = f'Invalid type {type(β)} for beta'
+            raise TypeError(errormsg)
         
         # Check that it matches the network
         netkeys = [ss.standardize_netkey(k) for k in list(sim.networks.keys())]
@@ -276,7 +298,8 @@ class Infection(Disease):
                     if beta: # Skip networks with no transmission
     
                         # Calculate probability of a->b transmission.
-                        beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
+                        beta_per_dt = edges.beta * beta # TODO: think of shortcut to skip this multiplication if all edges are just 1.0
+                        # beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
                         p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
         
                         # Generate a new random number based on the two other random numbers
