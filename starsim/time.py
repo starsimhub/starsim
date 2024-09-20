@@ -5,11 +5,9 @@ Functions and classes for handling time
 import numpy as np
 import sciris as sc
 
-
 # What classes are externally visible
 __all__ = ['time_units', 'time_ratio', 'TimeUnit', 'dur', 'rate', 'time_prob']
 
-    
     
 #%% Helper functions
 
@@ -17,7 +15,8 @@ __all__ = ['time_units', 'time_ratio', 'TimeUnit', 'dur', 'rate', 'time_prob']
 time_units = sc.dictobj(
     day = 1,
     week = 7,
-    year = 365, # TODO: support months as well?
+    month = 30.4375, # 365.25/12 -- more accurate and nicer fraction
+    year = 365, # For simplicity with days
 )
 
 def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0):
@@ -68,7 +67,7 @@ class TimeUnit:
         self.initialized = False
         return
     
-    def initialize(self, parent=None, parent_unit=None, parent_dt=None): # TODO: should the parent actually be linked to? Seems excessive
+    def initialize(self, parent=None, parent_unit=None, parent_dt=None):
         """ Link to the sim and/or module units """
         if parent is None:
             parent = sc.dictobj(unit=parent_unit, dt=parent_dt)
@@ -84,11 +83,12 @@ class TimeUnit:
         if parent.dt is not None:
            self.parent_dt = parent.dt
         
-        # Set defaults if not yet set -- TODO, is there a better way?
+        # Set defaults if not yet set
         self.unit = sc.ifelse(self.unit, self.parent_unit)
         self.self_dt = sc.ifelse(self.self_dt, 1.0)
         self.parent_dt = sc.ifelse(self.parent_dt, 1.0)
         
+        # Calculate the actual conversion factor to be used in the calculations
         self.set_factor()
         self.initialized = True
         return self
@@ -106,7 +106,7 @@ class TimeUnit:
         
     @property
     def x(self):
-        """ The actual value used in calculations """
+        """ The actual value used in calculations -- the key step! """
         raise NotImplementedError
     
     # Act like a float
@@ -123,6 +123,7 @@ class TimeUnit:
     def __rpow__(self, other): return self.__pow__(other)
     def __rtruediv__(self, other): return self.__truediv__(other)
     
+    # Unfortunately, floats don't define the above methods, so we can't *just* use this
     def __getattr__(self, attr):
         """ Make it behave like a regular float mostly """
         if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
@@ -139,14 +140,14 @@ class dur(TimeUnit):
 
 
 class rate(TimeUnit):
-    """ Any number that acts like a rate """
+    """ Any number that acts like a rate; can be greater than 1 """
     @property
     def x(self):
-        return self.value/self.factor # TODO: implement an optional  version, probably in a different class
+        return self.value/self.factor
     
 
 class time_prob(TimeUnit):
-    """ A probability over time (a.k.a. a "true" rate) """
+    """ A probability over time (a.k.a. a "true" rate); must be >0 and <1 """
     @property
     def x(self):
         numer = (1 - np.exp(-self.value/self.factor))
