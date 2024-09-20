@@ -347,6 +347,7 @@ class Pregnancy(Demographics):
         invalid_age = (age < self.pars.min_age) | (age > self.pars.max_age)
         fertility_prob = fertility_rate * (self.pars.units * self.pars.rel_fertility * sim.pars.dt)
         fertility_prob[(~self.fecund).uids] = 0 # Currently infecund women cannot become pregnant
+        fertility_prob[self.infertile.uids] = 0 # Do not allow infertile 
         fertility_prob[uids[invalid_age]] = 0 # Women too young or old cannot become pregnant
         fertility_prob = np.clip(fertility_prob[uids], a_min=0, a_max=1)
         return fertility_prob
@@ -375,6 +376,7 @@ class Pregnancy(Demographics):
 
         low = sim.pars.n_agents + 1
         high = int(sim.pars.slot_scale*sim.pars.n_agents)
+        high = np.maximum(high, sim.pars.min_slots) # Make sure there are at least min_slots slots to avoid artifacts related to small populations
         self.choose_slots = ss.randint(low=low, high=high, sim=sim, module=self)
         return
 
@@ -399,9 +401,9 @@ class Pregnancy(Demographics):
                 self.sim.ti = dti
                 self.do_update()
             self.sim.ti = 0
-        self.do_update()
+        new_uids = self.do_update()
 
-        return
+        return new_uids
 
     def do_update(self):
         """ Perform all updates """
@@ -409,7 +411,7 @@ class Pregnancy(Demographics):
         conceive_uids = self.make_pregnancies()
         self.n_pregnancies = len(conceive_uids)
         new_uids = self.make_embryos(conceive_uids)
-        return
+        return new_uids
 
     def update_states(self):
         """ Update states """

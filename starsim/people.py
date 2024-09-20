@@ -325,11 +325,11 @@ class People(sc.prettyobj):
         """
         uids = self.dead.uids
         if len(uids):
-            
+
             # Remove the UIDs from the networks too
             for network in self.sim.networks.values():
                 network.remove_uids(uids) # TODO: only run once every nth timestep
-                
+
             # Calculate the indices to keep
             self.auids = self.auids[np.isin(self.auids, np.unique(uids), assume_unique=True, invert=True, kind='sort')]
 
