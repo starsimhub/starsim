@@ -16,7 +16,7 @@ This version contains several major breaking changes. These include: module-spec
 
 Time-aware parameters
 ~~~~~~~~~~~~~~~~~~~~~
-Coming soon!
+- Added ``ss.dur()``, ``ss.rate()``, and ``ss.time_prob`` classes, for automatic handling of time units in simulations.
 
 States and events
 ~~~~~~~~~~~~~~~~~

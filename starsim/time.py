@@ -7,7 +7,7 @@ import sciris as sc
 
 
 # What classes are externally visible
-__all__ = ['time_units', 'time_ratio', 'dur', 'rate', 'time_prob']
+__all__ = ['time_units', 'time_ratio', 'TimeUnit', 'dur', 'rate', 'time_prob']
 
     
     

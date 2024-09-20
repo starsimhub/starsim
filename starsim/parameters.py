@@ -168,7 +168,7 @@ class SimPars(Pars):
         self.pop_scale = None  # How much to scale the population
 
         # Simulation parameters
-        self.unit       = 'year' # The time unit to use; options are None, 'year' (default), and 'day'
+        self.unit       = 'year' # The time unit to use; options are 'year' (default), 'day', and 'none'
         self.start      = 2000   # Start of the simulation
         self.end        = None   # End of the simulation
         self.dur        = 50     # Duration of time to run, if end isn't specified
@@ -315,7 +315,7 @@ class SimPars(Pars):
                 raise ValueError(errormsg)
         return
 
-    def validate_dt(self):
+    def validate_dt(self): # TODO: may not be needed
         """
         Check that 1/dt is an integer value, otherwise results and time vectors will have mismatching shapes.
         init_results explicitly makes this assumption by casting resfrequency = int(1/dt).

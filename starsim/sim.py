@@ -121,6 +121,9 @@ class Sim:
         # Initialize the values in all of the states and networks
         self.init_vals()
         
+        # Initialize the durations and rates
+        self.init_time_pars()
+        
         # Initialize the results
         self.init_results()
 
@@ -130,15 +133,27 @@ class Sim:
     
     def init_time_attrs(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
-        self.dt = self.pars.dt # Shortcut to dt since used a lot
         stop = self.pars.date_add(self.pars.end, self.pars.dt) # Potentially convert to a date
-        self.yearvec = np.arange(start=self.pars.start, stop=stop, step=self.pars.dt) # The time points of the sim
-        self.results.yearvec = self.yearvec # Store the yearvec in the results for plotting
-        self.npts = len(self.yearvec) # The number of points in the sim
+        if sc.isnumber(self.pars.start):
+            self.timevec = np.arange(start=self.pars.start, stop=stop, step=self.pars.dt) # The time points of the sim
+        else:
+            if self.pars.unit == 'year':
+                day_delta = int(np.round(ss.time_ratio(unit1='year', dt1=self.pars.dt, unit2='day', dt2=1.0)))
+                if day_delta == 0:
+                    errormsg = f'Timestep {self.pars.dt} is too small; must be at least 1 day'
+                    raise ValueError(errormsg)
+            else:
+                if self.pars.dt < 1:
+                    errormsg = f'Cannot use a timestep of less than a day ({self.pars.dt}) with date-based indexing'
+                    raise ValueError(errormsg)
+                day_delta = int(np.round(self.pars.dt))
+            self.timevec = sc.daterange(self.pars.start, self.pars.end, interval={'days':day_delta})
+        self.results.timevec = self.timevec # Store the yearvec in the results for plotting
+        self.npts = len(self.timevec) # The number of points in the sim
         self.tivec = np.arange(self.npts) # The vector of time indices
         self.ti = 0  # The time index, e.g. 0, 1, 2
         return
-
+    
     def init_people(self, verbose=None, **kwargs):
         """
         Initialize people within the sim

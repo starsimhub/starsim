@@ -45,8 +45,9 @@ def find_modules(key=None):
 
 class Module(sc.quickobj):
 
-    def __init__(self, name=None, label=None):
+    def __init__(self, name=None, label=None, unit=None, dt=None):
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
+        self.set_time(unit, dt)
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.results = ss.Results(self.name)
         self.initialized = False
@@ -69,10 +70,16 @@ class Module(sc.quickobj):
         else:
             return out
     
-    def set_metadata(self, name, label):
+    def set_metadata(self, name=None, label=None):
         """ Set metadata for the module """
-        self.name = sc.ifelse(name, getattr(self, 'name', self.__class__.__name__.lower())) # Default name is the class name
+        self.name  = sc.ifelse(name,  getattr(self, 'name', self.__class__.__name__.lower())) # Default name is the class name
         self.label = sc.ifelse(label, getattr(self, 'label', self.name))
+        return
+    
+    def set_time_pars(self, unit=None, dt=None):
+        """ Set time units for the module """
+        self.unit  = sc.ifelse(unit,  getattr(self, 'unit', None))
+        self.dt    = sc.ifelse(unit,  getattr(self, 'dt', None))
         return
     
     def define_pars(self, inherit=True, **kwargs): # TODO: think if inherit should default to true or false
@@ -96,7 +103,9 @@ class Module(sc.quickobj):
                 
         # Update module attributes
         metadata = {key:pars.pop(key, None) for key in ['name', 'label']}
+        timepars = {key:pars.pop(key, None) for key in ['unit', 'dt']}
         self.set_metadata(**metadata)
+        self.set_time_pars(**timepars)
         
         # Should be no remaining pars
         if len(pars):
@@ -129,7 +138,26 @@ class Module(sc.quickobj):
         for state in self.states:
             if not state.initialized:
                 state.init_vals()
+        self.init_time_pars()
         self.initialized = True
+        return
+    
+    def init_time_pars(self, force=False):
+        """ Initialize all time parameters by ensuring all parameters are initialized; part of init_post() """
+        
+        # Find all modules and set the timestep
+        if force or self.unit is None:
+            self.unit = self.sim.pars.unit
+        if force or self.dt is None:
+            self.dt = self.sim.pars.dt
+        
+        # Find all time parameters in the module
+        timepars = ss.find_objs(ss.TimeUnit, self.pars) # Should it be self or self.pars?
+        
+        # Initialize them with the parent module
+        for timepar in timepars:
+            if force or not timepar.initialized:
+                timepar.initialize(parent=self)
         return
     
     def step(self):
