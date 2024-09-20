@@ -134,12 +134,13 @@ class Sim:
     
     def init_time_attrs(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
-        self.timevec = ss.make_timevec()
+        pars = self.pars
+        self.timevec = ss.make_timevec(pars.start, pars.end, pars.dt, pars.unit)
         self.results.timevec = self.timevec # Store the yearvec in the results for plotting
         self.npts = len(self.timevec) # The number of points in the sim
         self.tivec = np.arange(self.npts) # The vector of time indices
         self.ti = 0  # The time index, e.g. 0, 1, 2
-        self.dt_year = ss.time_ratio(self.pars.unit, self.pars.dt, 'year', 1.0) # Figure out what dt is in years; used for demographics # TODO: handle None
+        self.dt_year = ss.time_ratio(pars.unit, pars.dt, 'year', 1.0) # Figure out what dt is in years; used for demographics # TODO: handle None
         return
     
     def init_people(self, verbose=None, **kwargs):

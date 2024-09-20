@@ -266,7 +266,7 @@ class SimPars(Pars):
             self.end = sc.date(self.end)
         if self.end is not None:
             if self.is_default('dur'):
-                self.dur = ss.date_diff(self.start, self.end)
+                self.dur = ss.date_diff(self.start, self.end, self.unit)
             else:
                 errormsg = f'You can supply either end ({self.end}) or dur ({self.dur}) but not both, since one is calculated from the other'
                 raise ValueError(errormsg)

@@ -6,7 +6,7 @@ import numpy as np
 import sciris as sc
 
 # What classes are externally visible
-__all__ = ['time_units', 'time_ratio', 'make_timevec', 'TimeUnit', 'dur', 'rate', 'time_prob']
+__all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff', 'make_timevec', 'TimeUnit', 'dur', 'rate', 'time_prob']
 
     
 #%% Helper functions
@@ -92,11 +92,11 @@ def make_timevec(start, end, dt, unit):
     """ Parse start, end, and dt into an appropriate time vector """
     if sc.isnumber(start):
         try:
-            stop = date_add(end, dt) # Potentially convert to a date
+            stop = date_add(end, dt, unit) # Potentially convert to a date
             timevec = np.arange(start=start, stop=stop, step=dt) # The time points of the sim
-        except:
+        except Exception as E:
             errormsg = f'Incompatible set of time inputs: start={start}, end={end}, dt={dt}. You can use dates or numbers but not both.'
-            raise ValueError(errormsg)
+            raise ValueError(errormsg) from E
     else:
         if unit == 'year':
             day_delta = int(np.round(time_ratio(unit1='year', dt1=dt, unit2='day', dt2=1.0)))
@@ -210,8 +210,8 @@ class time_prob(TimeUnit):
     """ A probability over time (a.k.a. a "true" rate, cumulative hazard rate); must be >0 and <1 """
     @property
     def x(self):
-        numer = (1 - np.exp(-self.value/self.factor))
-        denom = (1 - np.exp(-self.value))
-        return self.value*numer/denom
+        rate = -np.log(1 - self.value)
+        out = 1 - np.exp(-rate/self.factor)
+        return out
         
     

@@ -76,7 +76,7 @@ def test_classes():
     tp0 = ss.time_prob(tpval).initialize(parent_dt=1.0)
     tp1 = ss.time_prob(tpval).initialize(parent_dt=0.5)
     tp2 = ss.time_prob(tpval).initialize(parent_dt=2)
-    assert tp0.x == tpval
+    assert np.isclose(tp0.x, tpval)
     assert np.isclose(tp1.x, tpval/2, rtol=0.1)
     assert np.isclose(tp2.x, tpval*2, rtol=0.1)
     assert tp1.x > tpval/2
@@ -137,9 +137,9 @@ if __name__ == '__main__':
     
     T = sc.timer()
     
-    # o1 = test_ratio()
-    # o2 = test_classes()
-    # o3 = test_units(do_plot)
+    o1 = test_ratio()
+    o2 = test_classes()
+    o3 = test_units(do_plot)
     o4 = test_multi_timestep(do_plot)
     
     T.toc()
