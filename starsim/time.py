@@ -85,6 +85,7 @@ class TimeUnit:
            self.parent_dt = parent.dt
         
         # Set defaults if not yet set -- TODO, is there a better way?
+        self.unit = sc.ifelse(self.unit, self.parent_unit)
         self.self_dt = sc.ifelse(self.self_dt, 1.0)
         self.parent_dt = sc.ifelse(self.parent_dt, 1.0)
         
