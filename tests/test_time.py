@@ -31,32 +31,40 @@ def test_classes():
     
     d1 = ss.dur(2)
     d2 = ss.dur(3)
-    d3 = ss.dur(2, dt=0.1)
-    d4 = ss.dur(3, dt=0.2)
-    for d in [d1,d2,d3,d4]: d.initialize()
+    d3 = ss.dur(2, parent_dt=0.1)
+    d4 = ss.dur(3, parent_dt=0.2)
+    d5 = ss.dur(2, self_dt=10)
+    d6 = ss.dur(3, self_dt=5)
+    for d in [d1,d2,d3,d4,d5,d6]: d.initialize()
     
     assert d1 + d2 == 5
     assert d3 + d4 == 35
     assert d3 * 2 == 40
     assert d3 / 2 == 10
+    assert d5 + d6 == 35
     
     r1 = ss.rate(2)
     r2 = ss.rate(3)
-    r3 = ss.rate(2, dt=0.1)
-    r4 = ss.rate(3, dt=0.2)
-    for r in [r1,r2,r3,r4]: r.initialize()
+    r3 = ss.rate(2, parent_dt=0.1)
+    r4 = ss.rate(3, parent_dt=0.2)
+    r5 = ss.rate(2, self_dt=10)
+    r6 = ss.rate(3, self_dt=5)
+    for r in [r1,r2,r3,r4,r5,r6]: r.initialize()
     
     assert r1 + r2 == 5
     assert r3 + r4 == 0.8
     assert r3 * 2 == 0.4
     assert r3 / 2 == 0.1
+    assert r5 + r6 == 0.8
     
-    d5 = ss.dur(2, unit='year', dt=1).initialize(base_unit='day')
-    d6 = ss.dur(3, unit='day', dt=1).initialize(base_unit='day')
+    d5 = ss.dur(2, unit='year').initialize(parent_unit='day')
+    d6 = ss.dur(3, unit='day').initialize(parent_unit='day')
     assert d5 + d6 == 2*365+3
     
-    r5 = ss.rate(0.7, unit='week', dt=1).initialize(base_unit='day')
+    r5 = ss.rate(0.7, unit='week', self_dt=1).initialize(parent_unit='day')
+    r6 = ss.rate(0.7, self_dt=1).initialize(parent_dt=0.1)
     assert np.isclose(r5.x, 0.1) # A limitation of this approach, not exact!
+    assert np.isclose(r6.x, 0.07)
     
     return d3, d4, r3, r4
     

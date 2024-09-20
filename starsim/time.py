@@ -26,7 +26,13 @@ def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0):
     
     unit1 and dt1 are the numerator, unit2 and dt2 are the denominator    
     """
-    dt_ratio = dt1/dt2
+    if dt1 == dt2:
+        dt_ratio = 1.0
+    else:
+        if dt1 is None or dt2 is None:
+            errormsg = f'Cannot convert between dt when one is None ({dt1}, {dt2})'
+            raise ValueError(errormsg)
+        dt_ratio = dt1/dt2
     
     if unit1 == unit2:
         unit_ratio = 1.0
@@ -47,44 +53,59 @@ def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0):
 
 class TimeUnit:
     """ Base class for durations and rates """
-    def __init__(self, value, unit=None, dt=None):
+    def __init__(self, value, unit=None, self_dt=None, parent_unit=None, parent_dt=None):
         self.value = value
         self.unit = unit
-        self.dt = dt
+        self.self_dt = self_dt
+        self.parent_unit = parent_unit
+        self.parent_dt = parent_dt
         self.factor = None
+        self.parent_name = None
         self.initialized = False
         return
     
-    def initialize(self, parent=None, base_unit=None, base_dt=None): # TODO: should the parent actually be linked to? Seems excessive
+    def initialize(self, parent=None, parent_unit=None, parent_dt=None): # TODO: should the parent actually be linked to? Seems excessive
         """ Link to the sim and/or module units """
         if parent is None:
-            if base_dt is None:
-                base_dt = 1.0
-            parent = sc.dictobj(unit=base_unit, dt=base_dt)
+            parent = sc.dictobj(unit=parent_unit, dt=parent_dt)
         else:
-            if base_dt is not None:
-                errormsg = f'Cannot override parent {parent} by setting base_dt'
+            if parent_dt is not None:
+                errormsg = f'Cannot override parent {parent} by setting parent_dt; set in parent object instead'
                 raise ValueError(errormsg)
-
-        if self.unit is None and parent.unit is not None:
-            self.unit = parent.unit
+            self.parent_name = parent.__class__.__name__ # TODO: or parent.name for Starsim objects?
+        
+        if parent.unit is not None:
+            self.parent_unit = parent.unit
+            if self.unit is None: 
+                self.unit = parent.unit
             
-        if self.dt is None and parent.dt is not None:
-            self.dt = parent.dt
-            
-        self.factor = time_ratio(unit1=self.unit, dt1=parent.dt, unit2=parent.unit, dt2=self.dt) # TODO: check
+        if parent.dt is not None:
+           self.parent_dt = parent.dt
+           if self.self_dt is None:
+                self.self_dt = parent.dt
+        
+        # Set defaults if not yet set -- TODO, is there a better way?
+        self.self_dt = sc.ifelse(self.self_dt, 1.0)
+        self.parent_dt = sc.ifelse(self.parent_dt, 1.0)
+        
+        self.set_factor()
         self.initialized = True
         return self
         
     def __repr__(self):
         name = self.__class__.__name__
-        return f'ss.{name}({self.value}, unit={self.unit}, dt={self.dt})'
+        return f'ss.{name}({self.value}, unit={self.unit}, dt={self.self_dt})'
     
     def disp(self):
         return sc.pr(self)
     
+    def set_factor(self):
+        """ Set factor used to multiply the value to get the output """
+        raise NotImplementedError
+    
     @property
     def x(self):
+        """ The actual value used in calculations """
         raise NotImplementedError
     
     # Act like a float
@@ -102,6 +123,10 @@ class TimeUnit:
 
 class dur(TimeUnit):
     """ A number that acts like a duration """
+    
+    def set_factor(self):
+        self.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=self.parent_unit, dt2=self.parent_dt)
+        
     @property
     def x(self):
         return self.value*self.factor
@@ -109,9 +134,13 @@ class dur(TimeUnit):
 
 class rate(TimeUnit):
     """ A number that acts like a rate """
+    
+    def set_factor(self):
+        self.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=self.parent_unit, dt2=self.parent_dt)
+        
     @property
     def x(self):
-        return self.value/self.factor
+        return self.value/self.factor # TODO: implement an optional 1 - np.exp(-value * dt) version, probably in a different class
 
 
         
