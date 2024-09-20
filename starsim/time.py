@@ -12,19 +12,22 @@ __all__ = ['time_units', 'time_ratio', 'dur', 'rate']
     
 #%% Helper functions
 
-
 # Define available time units
 time_units = sc.dictobj(
     day = 1,
     week = 7,
-    year = 365,
+    year = 365, # TODO: support months as well?
 )
 
 def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0):
     """
     Calculate the relationship between two sets of time factors
     
-    unit1 and dt1 are the numerator, unit2 and dt2 are the denominator    
+    Args:
+        unit1 and dt1 are the numerator, unit2 and dt2 are the denominator
+    
+    **Example**::
+        ss.time_ratio(unit1='week', dt1=2, unit2='day', dt2=1) # Returns 14.0
     """
     if dt1 == dt2:
         dt_ratio = 1.0
