@@ -513,5 +513,5 @@ class Pregnancy(Demographics):
     def finalize(self):
         super().finalize()
         n_alive = self.sim.results.n_alive
-        self.results['cbr'] = 1/self.pars.units * np.divide(self.results['births'] / self.sim.dt, n_alive, where=n_alive>0)
+        self.results['cbr'] = 1/self.pars.units * np.divide(self.results['births'] / self.sim.dt_year, n_alive, where=n_alive>0)
         return

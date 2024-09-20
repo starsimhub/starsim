@@ -123,9 +123,12 @@ class TimeUnit:
     def __rpow__(self, other): return self.__pow__(other)
     def __rtruediv__(self, other): return self.__truediv__(other)
     
-    # Handle other methods, i.e. act like a float
-    def __getattr__(self, name):
-        return self.x.__getattr__(name)
+    def __getattr__(self, attr):
+        """ Make it behave like a regular float mostly """
+        if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
+            return self.__getattribute__(attr)
+        else:
+            return getattr(self.x, attr)
         
 
 class dur(TimeUnit):

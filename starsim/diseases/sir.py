@@ -59,9 +59,9 @@ class SIR(ss.Infection):
         """ The current implementation """
         super().__init__()
         self.define_pars(
-            beta = 0.1,
+            beta = ss.rate(0.1),
             init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=6),
+            dur_inf = ss.lognorm_ex(mean=ss.dur(6)),
             p_death = ss.bernoulli(p=0.01),
         )
         self.update_pars(pars, **kwargs)
@@ -94,7 +94,6 @@ class SIR(ss.Infection):
     def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses """
         ti = self.sim.ti
-        dt = self.sim.dt
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = ti
@@ -109,8 +108,8 @@ class SIR(ss.Infection):
         will_die = p.p_death.rvs(uids)
         dead_uids = uids[will_die]
         rec_uids = uids[~will_die]
-        self.ti_dead[dead_uids] = ti + dur_inf[will_die] / dt # Consider rand round, but not CRN safe
-        self.ti_recovered[rec_uids] = ti + dur_inf[~will_die] / dt
+        self.ti_dead[dead_uids] = ti + dur_inf[will_die] # Consider rand round, but not CRN safe
+        self.ti_recovered[rec_uids] = ti + dur_inf[~will_die]
         return
 
     def step_die(self, uids):

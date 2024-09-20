@@ -321,17 +321,18 @@ class SimPars(Pars):
         init_results explicitly makes this assumption by casting resfrequency = int(1/dt).
         """
         dt = self.dt
-        reciprocal = 1.0 / dt  # Compute the reciprocal of dt
-        if not reciprocal.is_integer():  # Check if reciprocal is not a whole (integer) number
-            reciprocal = int(reciprocal) # Round the reciprocal
-            rounded_dt = 1.0 / reciprocal
-            self.dt = rounded_dt
-            if self.verbose:
-                warnmsg = f'Warning: Provided time step dt={dt} resulted in a non-integer number of steps per {self.unit}. Rounded to {rounded_dt}.'
-                if self.unit == 'year':
-                    warnmsg += '\nConsider using unit="day" instead?'
-                ss.warn(warnmsg)
-        return
+        if dt < 1:
+            reciprocal = 1.0 / dt  # Compute the reciprocal of dt
+            if not reciprocal.is_integer():  # Check if reciprocal is not a whole (integer) number
+                reciprocal = int(reciprocal) # Round the reciprocal
+                rounded_dt = 1.0 / reciprocal
+                self.dt = rounded_dt
+                if self.verbose:
+                    warnmsg = f'Warning: Provided time step dt={dt} resulted in a non-integer number of steps per {self.unit}. Rounded to {rounded_dt}.'
+                    if self.unit == 'year':
+                        warnmsg += '\nConsider using unit="day" instead?'
+                    ss.warn(warnmsg)
+            return
     
     def validate_modules(self):
         """ Validate modules passed in pars"""

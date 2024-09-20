@@ -149,6 +149,7 @@ class Sim:
         self.npts = len(self.timevec) # The number of points in the sim
         self.tivec = np.arange(self.npts) # The vector of time indices
         self.ti = 0  # The time index, e.g. 0, 1, 2
+        self.dt_year = ss.time_ratio(self.pars.unit, self.pars.dt, 'year', 1.0) # Figure out what dt is in years; used for demographics # TODO: handle None
         return
     
     def init_people(self, verbose=None, **kwargs):
@@ -635,7 +636,7 @@ class Sim:
         # Do the plotting
         with sc.options.with_style(style):
             
-            yearvec = flat.pop('yearvec')
+            timevec = flat.pop('timevec')
             if key is not None:
                 flat = {k:v for k,v in flat.items() if k.startswith(key)}
             
@@ -651,7 +652,7 @@ class Sim:
                 
             # Do the plotting
             for ax, (key, res) in zip(axs, flat.items()):
-                ax.plot(yearvec, res, **plot_kw, label=self.label)
+                ax.plot(timevec, res, **plot_kw, label=self.label)
                 title = getattr(res, 'label', key)
                 if res.module != 'sim':
                     try:

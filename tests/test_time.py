@@ -85,13 +85,13 @@ def test_classes():
     return d3, d8, r3, r8, tp1
     
 
-def test_units():
+def test_units(do_plot=False):
     sc.heading('Test behavior of year vs day units')
     
     pars = dict(
         diseases = 'sis',
         networks = 'random',
-        n_agents = small,
+        n_agents = medium,
     )
     
     sims = sc.objdict()
@@ -100,12 +100,33 @@ def test_units():
     
     for sim in sims.values():
         sim.run()
+        if do_plot:
+            sim.plot()
         
     rtol = 0.01
-    # assert np.isclose(sims.y.summary.cum_infections, sims.d.summary.cum_infections, rtol=rtol)
+    vals = [sim.summary.sis_cum_infections for sim in [sims.y, sims.d]]
+    # assert np.isclose(*vals, rtol=rtol), f'Values for cum_infections do not match ({vals})'
         
     return sims
 
+
+def test_multi_timestep(do_plot=False):
+    sc.heading('Test behavior of different modules having different timesteps')
+    
+    pars = dict(
+        diseases = ss.SIS(unit='day', dt=1.0),
+        demographics = ss.Pregnancy(unit='year', dt=0.25),
+        networks = ss.RandomNet(unit='week'),
+        n_agents = medium,
+    )
+    
+    sim = ss.Sim(pars, unit='day', dt=2, start='2000-01-01', end='2002-01-01')
+    sim.run()
+    
+    if do_plot:
+        sim.plot()
+        
+    return sim
 
 
 # %% Run as a script
@@ -115,8 +136,9 @@ if __name__ == '__main__':
     
     T = sc.timer()
     
-    o1 = test_ratio()
-    o2 = test_classes()
-    o3 = test_units()
+    # o1 = test_ratio()
+    # o2 = test_classes()
+    # o3 = test_units(do_plot)
+    o4 = test_multi_timestep(do_plot)
     
     T.toc()

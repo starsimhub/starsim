@@ -72,14 +72,14 @@ class Module(sc.quickobj):
     
     def set_metadata(self, name=None, label=None):
         """ Set metadata for the module """
-        self.name  = sc.ifelse(name,  getattr(self, 'name', self.pars.get('name', self.__class__.__name__.lower()))) # Default name is the class name
+        self.name  = sc.ifelse(name,  getattr(self, 'name',  self.pars.get('name', self.__class__.__name__.lower()))) # Default name is the class name
         self.label = sc.ifelse(label, getattr(self, 'label', self.pars.get('label', self.name)))
         return
     
     def set_time_pars(self, unit=None, dt=None):
         """ Set time units for the module """
         self.unit  = sc.ifelse(unit,  getattr(self, 'unit', self.pars.get('unit')))
-        self.dt    = sc.ifelse(unit,  getattr(self, 'dt', self.pars.get('unit')))
+        self.dt    = sc.ifelse(dt,    getattr(self, 'dt',   self.pars.get('dt')))
         return
     
     def define_pars(self, inherit=True, **kwargs): # TODO: think if inherit should default to true or false
@@ -126,6 +126,7 @@ class Module(sc.quickobj):
         sim.pars[self.name] = self.pars
         sim.results[self.name] = self.results
         sim.people.add_module(self) # Connect the states to the people
+        self.init_time_pars() # Initialize the modules' time parameters and link them to the sim
         self.init_results()
         return
     
@@ -138,7 +139,6 @@ class Module(sc.quickobj):
         for state in self.states:
             if not state.initialized:
                 state.init_vals()
-        self.init_time_pars()
         self.initialized = True
         return
     

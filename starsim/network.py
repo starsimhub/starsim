@@ -314,7 +314,7 @@ class DynamicNetwork(Network):
 
     def end_pairs(self):
         people = self.sim.people
-        self.edges.dur = self.edges.dur - self.dt
+        self.edges.dur = self.edges.dur - self.dt # TODO: think about whether this is right
 
         # Non-alive agents are removed
         active = (self.edges.dur > 0) & people.alive[self.edges.p1] & people.alive[self.edges.p2]
@@ -442,7 +442,7 @@ class RandomNet(DynamicNetwork):
         super().__init__(key_dict=key_dict)
         self.define_pars(
             n_contacts = ss.constant(10),
-            dur = 0,
+            dur = ss.dur(0),
         )
         self.update_pars(pars, **kwargs)
         self.dist = ss.Dist(distname='RandomNet') # Default RNG
