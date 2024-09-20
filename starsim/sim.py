@@ -121,9 +121,6 @@ class Sim:
         # Initialize the values in all of the states and networks
         self.init_vals()
         
-        # Initialize the durations and rates
-        self.init_time_pars()
-        
         # Initialize the results
         self.init_results()
 
@@ -187,9 +184,15 @@ class Sim:
         # Initialize values in people
         self.people.init_vals()
         
-        # Initialize values in other modules, including networks
+        # Initialize values in other modules, including networks and time parameters
         for mod in self.modules:
             mod.init_post()
+        return
+    
+    def reset_time_pars(self, force=True):
+        """ Reset the time parameters in the modules """
+        for mod in self.modules:
+            mod.init_time_pars(force=force)
         return
     
     def init_results(self):

@@ -145,10 +145,9 @@ class SIS(ss.Infection):
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
         self.define_pars(
-            unit = 'year',
             beta = ss.rate(0.05),
             init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.dur(ss.lognorm_ex(mean=10)),
+            dur_inf = ss.lognorm_ex(mean=ss.dur(10)), # TODO: handle gotcha of mean=ss.dur(10), std=3 -- should be able to automate it?
             waning = ss.rate(0.05),
             imm_boost = 1.0,
         )

@@ -72,14 +72,14 @@ class Module(sc.quickobj):
     
     def set_metadata(self, name=None, label=None):
         """ Set metadata for the module """
-        self.name  = sc.ifelse(name,  getattr(self, 'name', self.__class__.__name__.lower())) # Default name is the class name
-        self.label = sc.ifelse(label, getattr(self, 'label', self.name))
+        self.name  = sc.ifelse(name,  getattr(self, 'name', self.pars.get('name', self.__class__.__name__.lower()))) # Default name is the class name
+        self.label = sc.ifelse(label, getattr(self, 'label', self.pars.get('label', self.name)))
         return
     
     def set_time_pars(self, unit=None, dt=None):
         """ Set time units for the module """
-        self.unit  = sc.ifelse(unit,  getattr(self, 'unit', None))
-        self.dt    = sc.ifelse(unit,  getattr(self, 'dt', None))
+        self.unit  = sc.ifelse(unit,  getattr(self, 'unit', self.pars.get('unit')))
+        self.dt    = sc.ifelse(unit,  getattr(self, 'dt', self.pars.get('unit')))
         return
     
     def define_pars(self, inherit=True, **kwargs): # TODO: think if inherit should default to true or false

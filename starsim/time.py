@@ -112,14 +112,20 @@ class TimeUnit:
     def __add__(self, other): return self.x + other
     def __sub__(self, other): return self.x - other
     def __mul__(self, other): return self.x * other
+    def __pow__(self, other): return self.value ** other
     def __truediv__(self, other): return self.x / other
     
     # ...from either side
     def __radd__(self, other): return self.__add__(other)
     def __rsub__(self, other): return self.__sub__(other)
     def __rmul__(self, other): return self.__mul__(other)
+    def __rpow__(self, other): return self.__pow__(other)
     def __rtruediv__(self, other): return self.__truediv__(other)
-
+    
+    # Handle other methods, i.e. act like a float
+    def __getattr__(self, name):
+        return self.x.__getattr__(name)
+        
 
 class dur(TimeUnit):
     """ Any number that acts like a duration """
