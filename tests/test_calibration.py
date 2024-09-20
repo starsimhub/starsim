@@ -85,16 +85,8 @@ def test_calibration(do_plot=True):
 
     # Define the calibration parameters
     calib_pars = dict(
-        diseases = dict(
-            hiv = dict(
-                init_prev = [0.15, 0.01, 0.30],
-            ),
-        ),
-        networks = dict(
-            randomnet = dict(
-                n_contacts = [4, 2, 10],
-            ),
-        ),
+        init_prev = dict(low=0.01, high=0.30, guess=0.15, path=('diseases', 'hiv', 'init_prev')),
+        n_contacts = dict(low=2, high=10, guess=4, path=('networks', 'randomnet', 'n_contacts')),
     )
 
     # Make the sim and data
