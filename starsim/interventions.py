@@ -90,7 +90,7 @@ class RoutineDelivery(Intervention):
             self.end_year = self.years[-1]
 
         # More validation
-        if not(any(np.isclose(self.start_year, sim.yearvec)) and any(np.isclose(self.end_year, sim.yearvec))):
+        if not(any(np.isclose(self.start_year, sim.timevec)) and any(np.isclose(self.end_year, sim.timevec))):
             errormsg = 'Years must be within simulation start and end dates.'
             raise ValueError(errormsg)
 
@@ -98,11 +98,11 @@ class RoutineDelivery(Intervention):
         adj_factor = int(1 / sim.dt) - 1 if sim.dt < 1 else 1
 
         # Determine the timepoints at which the intervention will be applied
-        self.start_point = sc.findfirst(sim.yearvec, self.start_year)
-        self.end_point   = sc.findfirst(sim.yearvec, self.end_year) + adj_factor
+        self.start_point = sc.findfirst(sim.timevec, self.start_year)
+        self.end_point   = sc.findfirst(sim.timevec, self.end_year) + adj_factor
         self.years       = sc.inclusiverange(self.start_year, self.end_year)
         self.timepoints  = sc.inclusiverange(self.start_point, self.end_point)
-        self.yearvec     = np.arange(self.start_year, self.end_year + adj_factor, sim.dt)
+        self.timevec     = np.arange(self.start_year, self.end_year + adj_factor, sim.dt)
 
         # Get the probability input into a format compatible with timepoints
         if len(self.years) != len(self.prob):
@@ -112,7 +112,7 @@ class RoutineDelivery(Intervention):
                 errormsg = f'Length of years incompatible with length of probabilities: {len(self.years)} vs {len(self.prob)}'
                 raise ValueError(errormsg)
         else:
-            self.prob = sc.smoothinterp(self.yearvec, self.years, self.prob, smoothness=0)
+            self.prob = sc.smoothinterp(self.timevec, self.years, self.prob, smoothness=0)
 
         # Lastly, adjust the probability by the sim's timestep, if it's an annual probability
         if self.annual_prob: self.prob = 1 - (1 - self.prob) ** sim.dt
@@ -134,7 +134,7 @@ class CampaignDelivery(Intervention):
 
     def init_pre(self, sim):
         # Decide whether to apply the intervention at every timepoint throughout the year, or just once.
-        self.timepoints = sc.findnearest(sim.yearvec, self.years)
+        self.timepoints = sc.findnearest(sim.timevec, self.years)
 
         if len(self.prob) == 1:
             self.prob = np.array([self.prob[0]] * len(self.timepoints))

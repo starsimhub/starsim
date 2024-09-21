@@ -144,7 +144,7 @@ class Sim:
         """ Time indexing; derived values live in the sim rather than in the pars """
         pars = self.pars
         self.timevec = ss.make_timevec(pars.start, pars.stop, pars.dt, pars.unit)
-        self.results.timevec = self.timevec # Store the yearvec in the results for plotting # TODO: instead, store a timevec with each result
+        self.results.timevec = self.timevec # Store the timevec in the results for plotting # TODO: instead, store a timevec with each result
         self.npts = len(self.timevec) # The number of points in the sim
         self.timearray = np.arange(self.npts)*pars.dt # Absolute time array
         self.ti = 0  # The time index, e.g. 0, 1, 2
@@ -217,10 +217,6 @@ class Sim:
             self.analyzers(),
         )
     
-    @property
-    def year(self): # TODO: remove when we do the time refactor
-        return self.yearvec[self.ti]
-
     def start_step(self):
         """ Step through time and update values """
 
@@ -398,7 +394,7 @@ class Sim:
             errormsg = 'Please run the sim before exporting the results'
             raise RuntimeError(errormsg)
 
-        def flatten_results(d, prefix=''):
+        def flatten_results(d, prefix=''): # TODO: won't work with different timesteps
             flat = {}
             for key, val in d.items():
                 if isinstance(val, dict):
@@ -408,7 +404,7 @@ class Sim:
             return flat
 
         resdict = flatten_results(self.results)
-        resdict['t'] = self.yearvec
+        resdict['t'] = self.timevec
         df = sc.dataframe.from_dict(resdict).set_index('t')
         return df
 

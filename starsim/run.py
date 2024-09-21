@@ -172,7 +172,7 @@ class MultiSim(sc.prettyobj):
 
         # Calculate the statistics
         raw = {}
-        exclude = ['yearvec'] # Exclude things that we don't want to include
+        exclude = ['timevec'] # Exclude things that we don't want to include
 
         rflat = reduced_sim.results.flatten()
         rkeys = list(rflat.keys())
@@ -255,7 +255,7 @@ class MultiSim(sc.prettyobj):
         # Has been reduced, plot with uncertainty bounds
         else:
             flat = self.results
-            yearvec = flat.pop('yearvec')
+            timevec = flat.pop('timevec')
             n_cols = np.ceil(np.sqrt(len(flat))) # TODO: remove duplication with sim.plot()
             default_figsize = np.array([8, 6])
             figsize_factor = np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size based on the number of rows and columns
@@ -274,8 +274,8 @@ class MultiSim(sc.prettyobj):
                     
                 # Do the plotting
                 for ax, (key, res) in zip(axs.flatten(), flat.items()):
-                    ax.fill_between(yearvec, res.low, res.high, **fill_kw)
-                    ax.plot(yearvec, res, **plot_kw)
+                    ax.fill_between(timevec, res.low, res.high, **fill_kw)
+                    ax.plot(timevec, res, **plot_kw)
                     ax.set_title(getattr(res, 'label', key)) 
                     ax.set_xlabel('Year')
                 

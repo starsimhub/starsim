@@ -56,7 +56,7 @@ class Births(Demographics):
         if isinstance(self.pars.birth_rate, pd.DataFrame):
             br_year = self.pars.birth_rate[self.metadata.data_cols['year']]
             br_val = self.pars.birth_rate[self.metadata.data_cols['cbr']]
-            all_birth_rates = np.interp(sim.yearvec, br_year, br_val)
+            all_birth_rates = np.interp(self.timevec, br_year, br_val) # This assumes a year timestep -- probably ok?
             self.pars.birth_rate = all_birth_rates
         return
 
