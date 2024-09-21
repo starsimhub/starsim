@@ -22,7 +22,7 @@ def str2int(string, modulo=1_000_000):
 
 
 def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs):
-    """ Link distributions to the sim and the module; used in module.initialize() and people.initialize() """
+    """ Link distributions to the sim and the module; used in module.init() and people.init() """
     if module is None and isinstance(obj, ss.Module):
         module = obj
     dists = ss.find_objs(Dist, obj, **kwargs) # Important that this comes first, before the sim is linked to the dist!
@@ -30,7 +30,7 @@ def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs):
         val.link_sim(sim, overwrite=overwrite)
         val.link_module(module, overwrite=overwrite)
         if init: # Usually this is false since usually these are initialized centrally by the sim
-            val.initialize()
+            val.init()
     return
 
 
@@ -87,7 +87,7 @@ class Dists(sc.prettyobj):
         self.dists = ss.find_objs(Dist, obj, skip=skip)
         for trace,dist in self.dists.items():
             if not dist.initialized or force:
-                dist.initialize(trace=trace, seed=base_seed, sim=sim, force=force)
+                dist.init(trace=trace, seed=base_seed, sim=sim, force=force)
         
         # Confirm the seeds are unique
         self.check_seeds()
@@ -291,7 +291,7 @@ class Dist:
         
         **Example**::
             
-            dist = ss.random(seed=5).initialize()
+            dist = ss.random(seed=5).init()
             r1 = dist(5)
             r2 = dist(5)
             dist.reset(-1)
@@ -1024,7 +1024,7 @@ class multi_random(sc.prettyobj):
 class DistNotInitializedError(RuntimeError):
     """ Raised when Dist object is called when not initialized. """
     def __init__(self, dist):
-        msg = f'{dist} has not been initialized; please set strict=False when creating the distribution, or call dist.initialize()'
+        msg = f'{dist} has not been initialized; please set strict=False when creating the distribution, or call dist.init()'
         super().__init__(msg)
         return
 

@@ -28,7 +28,7 @@ class Sim:
         input_pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs) # TODO: check if copying here is OK
         self.pars.update(input_pars)  # Update the parameters
         
-        # Set attributes; see also sim.initialize() for more
+        # Set attributes; see also sim.init() for more
         self.label = label # Usually overwritten during initialization by the parameters
         self.created = sc.now()  # The datetime the sim was created
         self.version = ss.__version__ # The Starsim version
@@ -134,7 +134,7 @@ class Sim:
         self.init_results()
         
         # Initialize the integration loop
-        self.loop.initialize()
+        self.loop.init()
 
         # It's initialized
         self.initialized = True
@@ -230,7 +230,7 @@ class Sim:
 
         # Set the time and if we have reached the end of the simulation, then do nothing
         if self.complete:
-            errormsg = 'Simulation already complete (call sim.initialize() to re-run)'
+            errormsg = 'Simulation already complete (call sim.init() to re-run)'
             raise AlreadyRunError(errormsg)
 
         # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
@@ -306,7 +306,7 @@ class Sim:
         if self.ti >= until:  # NB. At the start, self.t is None so this check must occur after initialization
             errormsg = f'Simulation is currently at t={self.ti}, requested to run until ti={until} which has already been reached'
         if self.complete:
-            errormsg = 'Simulation is already complete (call sim.initialize() to re-run)'
+            errormsg = 'Simulation is already complete (call sim.init() to re-run)'
         if errormsg:
             raise AlreadyRunError(errormsg)
 

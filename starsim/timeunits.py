@@ -178,7 +178,7 @@ class TimeUnit:
     #     if self.factor is not None:
     #         return self.factor
     #     else:
-    #         errormsg = f'The factor for {self} has not been set. Have you called initialize()?'
+    #         errormsg = f'The factor for {self} has not been set. Have you called.init()?'
     #         raise RuntimeError(errormsg)
     
     # Act like a float

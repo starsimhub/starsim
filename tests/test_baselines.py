@@ -14,12 +14,12 @@ sc.options(interactive=False) # Assume not running interactively
 
 # Define the parameters
 pars = sc.objdict(
-    n_agents   = 10e3, # Number of agents
-    start      = 2000, # Starting year
-    n_years    = 20,   # Number of years to simulate
-    dt         = 0.2,  # Timestep
-    verbose    = 0,    # Don't print details of the run
-    rand_seed  = 2,    # Set a non-default seed
+    n_agents  = 10e3, # Number of agents
+    start     = 2000, # Starting year
+    dur       = 20,   # Number of years to simulate
+    dt        = 0.2,  # Timestep
+    verbose   = 0,    # Don't print details of the run
+    rand_seed = 2,    # Set a non-default seed
 )
 
 

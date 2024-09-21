@@ -132,7 +132,7 @@ class People(sc.prettyobj):
     def link_sim(self, sim):
         """ Initialization """
         if self.initialized:
-            errormsg = 'Cannot re-initialize a People object directly; use sim.initialize(reset=True)'
+            errormsg = 'Cannot re-initialize a People object directly; use sim.init(reset=True)'
             raise RuntimeError(errormsg)
         self.sim = sim # Store the sim
         ss.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module])
@@ -190,7 +190,7 @@ class People(sc.prettyobj):
 
         All states should be registered by this function for the purpose of connecting them to the
         People's UIDs and to have them be automatically resized when the number of agents changes.
-        This operation is normally triggered as part of initializing the state (via `State.initialize()`)
+        This operation is normally triggered as part of initializing the state (via `State.init()`)
         """
         if id(state) not in self._states:
             self._states[id(state)] = state

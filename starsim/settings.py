@@ -174,7 +174,7 @@ class Options(sc.objdict):
 
             # Convert warnings to errors
             with ss.options.context(warnings='error'):
-                ss.Sim(location='not a location').initialize()
+                ss.Sim(location='not a location').init()
 
             # Use with_style(), not context(), for plotting options
             with ss.options.with_style(dpi=50):

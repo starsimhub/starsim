@@ -286,7 +286,7 @@ class Pregnancy(Demographics):
             sc.objdict(data_cols=dict(year='Time', age='AgeGrp', value='ASFR')),
             metadata,
         )
-        self.choose_slots = None # Distribution for choosing slots; set in self.initialize()
+        self.choose_slots = None # Distribution for choosing slots; set in self.init()
 
         # For results tracking
         self.n_pregnancies = 0
