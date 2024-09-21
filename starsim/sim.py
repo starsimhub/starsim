@@ -57,7 +57,10 @@ class Sim:
         """ Show a quick version of the sim """
         # Try a more custom repr first
         try:
+            labelstr = f'{self.label}; ' if self.label else ''
             n = int(self.pars.n_agents)
+            timestr = f'{self.pars.start}—{self.pars.end}'
+            
             moddict = {}
             for modkey in ss.module_map().keys():
                 if hasattr(self, modkey):
@@ -66,8 +69,12 @@ class Sim:
                     thismodtype = self.pars[modkey]
                 else:
                     thismodtype = {}
-                if sc.isiterable(thismodtype) and len(thismodtype):
+                    
+                if isinstance(thismodtype, dict) and len(thismodtype):
                     moddict[modkey] = sc.strjoin(thismodtype.keys())
+                elif isinstance(thismodtype, str):
+                    moddict[modkey] = thismodtype
+                
             if len(moddict):
                 modulestr = ''
                 for k,mstr in moddict.items():
@@ -76,7 +83,8 @@ class Sim:
                 modulestr = ''
             if not self.initialized:
                 modulestr += '; not initialized'
-            string = f'Sim(n={n:n}{modulestr})'
+                
+            string = f'Sim({labelstr}n={n:n}; {timestr}{modulestr})'
         
         # Or just use default
         except Exception as E:
