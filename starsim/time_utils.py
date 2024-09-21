@@ -116,10 +116,9 @@ class TimeUnit:
         self.x = np.nan
         self.parent_name = None
         self.initialized = False
-        self.RMULC = 0
         return
     
-    def initialize(self, parent=None, parent_unit=None, parent_dt=None):
+    def init(self, parent=None, parent_unit=None, parent_dt=None):
         """ Link to the sim and/or module units """
         if parent is None:
             parent = sc.dictobj(unit=parent_unit, dt=parent_dt)
@@ -184,7 +183,7 @@ class TimeUnit:
     
     # Act like a float
     def __add__(self, other): return self.x + other
-    # def __sub__(self, other): return self.x - other
+    def __sub__(self, other): return self.x - other
     def __mul__(self, other): return self.x * other
     def __pow__(self, other): return self.x ** other
     def __truediv__(self, other): return self.x / other
@@ -195,15 +194,6 @@ class TimeUnit:
     def __rmul__(self, other): return other * self.x
     def __rpow__(self, other): return other ** self.x
     def __rtruediv__(self, other): return other / self.x
-    
-    def __sub__(self, other):
-        dem = 1000
-        self.RMULC += 1
-        if not self.RMULC % dem:
-            print('hi i am sub', self, other)
-            if np.random.rand() < 0.1:
-                raise Exception('you FUAIILED')
-        return other * self.x
     
     # Handle modify-in-place methods
     def __iadd__(self, other): self.value += other; return self
@@ -226,6 +216,7 @@ class TimeUnit:
             return ufunc(*args, **kwargs)
         else:
             return self.x.__array_ufunc__(ufunc, method, *args, **kwargs) # Probably not needed
+
 
 class dur(TimeUnit):
     """ Any number that acts like a duration """

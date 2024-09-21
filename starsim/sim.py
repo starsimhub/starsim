@@ -93,7 +93,7 @@ class Sim:
             
         return string
     
-    def initialize(self, **kwargs):
+    def init(self, **kwargs):
         """ Perform all initializations for the sim; most heavy lifting is done by the parameters """
         # Validation and initialization
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
@@ -125,7 +125,7 @@ class Sim:
                 intv.product.init_pre(self)
         
         # Initialize all distributions now that everything else is in place, then set states
-        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed, force=True)
+        self.dists.init(obj=self, base_seed=self.pars.rand_seed, force=True)
         
         # Initialize the values in all of the states and networks
         self.init_vals()
@@ -295,7 +295,7 @@ class Sim:
         # Initialization steps
         T = sc.timer()
         if not self.initialized:
-            self.initialize()
+            self.init()
         verbose = sc.ifelse(verbose, self.pars.verbose)
 
         # Check for AlreadyRun errors

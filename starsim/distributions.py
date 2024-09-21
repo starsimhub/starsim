@@ -62,7 +62,7 @@ class Dists(sc.prettyobj):
         self.initialized = False
         return
 
-    def initialize(self, obj=None, base_seed=None, sim=None, force=False):
+    def init(self, obj=None, base_seed=None, sim=None, force=False):
         """
         Set the base seed, find and initialize all distributions in an object
         
@@ -194,7 +194,7 @@ class Dist:
         self.ready = True
         self.initialized = False
         if not strict: # Otherwise, wait for a sim
-            self.initialize()
+            self.init()
         return
     
     def __repr__(self):
@@ -322,7 +322,7 @@ class Dist:
             self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
         return self.state
     
-    def initialize(self, trace=None, seed=None, module=None, sim=None, slots=None, force=False):
+    def init(self, trace=None, seed=None, module=None, sim=None, slots=None, force=False):
         """ Calculate the starting seed and create the RNG """
         
         if self.initialized is True and not force: # Don't warn if we have a partially initialized distribution
@@ -983,8 +983,8 @@ class multi_random(sc.prettyobj):
     def __len__(self):
         return len(self.dists)
         
-    def initialize(self, *args, **kwargs):
-        for dist in self.dists: dist.initialize(*args, **kwargs)
+    def init(self, *args, **kwargs):
+        for dist in self.dists: dist.init(*args, **kwargs)
         return
     
     def reset(self, *args, **kwargs):

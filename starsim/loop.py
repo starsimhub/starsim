@@ -19,7 +19,7 @@ class Loop:
         self.plan = sc.dataframe(columns=['time', 'module', 'funcname', 'call'])
         return
     
-    def initialize(self):
+    def init(self):
         """ Parse the sim modules into the integration plan """
     
     def run(self):
