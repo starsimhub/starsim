@@ -514,7 +514,7 @@ class RandomNet(DynamicNetwork):
         if isinstance(self.pars.dur, ss.Dist):
             dur = self.pars.dur.rvs(p1)
         else:
-            dur = np.full(len(p1), self.pars.dur)
+            dur = np.ones(len(p1))*self.pars.dur # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
         
         self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return

@@ -184,7 +184,7 @@ class TimeUnit:
     
     # Act like a float
     def __add__(self, other): return self.x + other
-    def __sub__(self, other): return self.x - other
+    # def __sub__(self, other): return self.x - other
     def __mul__(self, other): return self.x * other
     def __pow__(self, other): return self.x ** other
     def __truediv__(self, other): return self.x / other
@@ -192,15 +192,15 @@ class TimeUnit:
     # ...from either side
     def __radd__(self, other): return other + self.x
     def __rsub__(self, other): return other - self.x
-    # def __rmul__(self, other): return other * self.x
+    def __rmul__(self, other): return other * self.x
     def __rpow__(self, other): return other ** self.x
     def __rtruediv__(self, other): return other / self.x
     
-    def __rmul__(self, other):
+    def __sub__(self, other):
         dem = 1000
         self.RMULC += 1
         if not self.RMULC % dem:
-            print('hi i am rmul', self, other)
+            print('hi i am sub', self, other)
             if np.random.rand() < 0.1:
                 raise Exception('you FUAIILED')
         return other * self.x
