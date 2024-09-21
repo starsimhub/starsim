@@ -59,7 +59,7 @@ class Sim:
         try:
             labelstr = f'{self.label}; ' if self.label else ''
             n = int(self.pars.n_agents)
-            timestr = f'{self.pars.start}—{self.pars.end}'
+            timestr = f'{self.pars.start}—{self.pars.stop}'
             
             moddict = {}
             for modkey in ss.module_map().keys():
@@ -143,7 +143,7 @@ class Sim:
     def init_time_attrs(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
         pars = self.pars
-        self.timevec = ss.make_timevec(pars.start, pars.end, pars.dt, pars.unit)
+        self.timevec = ss.make_timevec(pars.start, pars.stop, pars.dt, pars.unit)
         self.results.timevec = self.timevec # Store the yearvec in the results for plotting # TODO: instead, store a timevec with each result
         self.npts = len(self.timevec) # The number of points in the sim
         self.timearray = np.arange(self.npts)*pars.dt # Absolute time array

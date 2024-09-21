@@ -5,6 +5,7 @@ Parent class for the integration loop.
 import numpy as np
 import sciris as sc
 import starsim as ss
+import matplotlib.pyplot as plt
 
 # What classes are externally visible
 __all__ = ['Loop']
@@ -125,23 +126,39 @@ class Loop:
                 row = func_row.copy()
                 row['time'] = time
                 row['key'] = (time, row['func_order'])
+                row['func_label'] = f"{row['module']}.{row['func_name']}"
                 raw.append(row)
         
         # Turn it into a dataframe and sort it
-        col_order = ['time', 'func_order', 'func', 'module', 'func_name'] # Func in the middle to hide it
+        col_order = ['time', 'func_order', 'func', 'key', 'func_label', 'module', 'func_name'] # Func in the middle to hide it
         self.plan = sc.dataframe(raw).sort_values('key').reset_index(drop=True)[col_order]
         return
     
     def run(self, until=np.nan): # TODO: process until into absolute units
         """ Actually run the integration loop """
-        for time,func in zip(self.plan.time, self.plan.func):
-            if time > until:
-                break
-            func() # Actually execute the step
+        for t,f in zip(self.plan.time, self.plan.func):
+            if t > until: break # Terminate if asked to
+            f() # Actually execute the step -- this is where all of Starsim happens!!
         return
     
-    def plot(self):
+    def plot(self, fig_kw=None, **kwargs):
         """ Plot a diagram of all the events """
-        raise NotImplementedError
+        # Assemble data
+        yticks = self.plan.func_order.unique()
+        ylabels = self.plan.func_label.unique()
+        x = self.plan.time
+        y = self.plan.func_order
+        
+        # Do the plotting
+        kw = sc.mergedicts(lw=2, markersize=4, alpha=0.8)
+        fig = plt.figure(**sc.mergedicts(fig_kw))
+        plt.plot(x, y, 'o-', **kw)
+        plt.yticks(yticks, ylabels)
+        plt.title(f'Integration plan ({len(self.plan)} events)')
+        plt.xlabel(f'Time since simulation start (in {self.sim.pars.unit}s)')
+        plt.grid(axis='y')
+        sc.figlayout()
+        sc.boxoff()
+        return fig
         
     

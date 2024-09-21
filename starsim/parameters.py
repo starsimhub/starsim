@@ -170,8 +170,8 @@ class SimPars(Pars):
         # Simulation parameters
         self.unit       = 'year' # The time unit to use; options are 'year' (default), 'day', and 'none'
         self.start      = 2000   # Start of the simulation
-        self.end        = None   # End of the simulation
-        self.dur        = 50     # Duration of time to run, if end isn't specified
+        self.stop       = None   # End of the simulation
+        self.dur        = 50     # Duration of time to run, if stop isn't specified
         self.dt         = 1.0    # Timestep (in units of self.unit)
         self.rand_seed  = 1      # Random seed; if None, don't reset
         self.slot_scale = 5      # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
@@ -259,25 +259,25 @@ class SimPars(Pars):
         return
     
     def validate_time(self):
-        """ Ensure at least one of dur and end is defined, but not both """
+        """ Ensure at least one of dur and stop is defined, but not both """
         if isinstance(self.start, str):
             self.start = sc.date(self.start)
-        if isinstance(self.end, str):
-            self.end = sc.date(self.end)
-        if self.end is not None:
+        if isinstance(self.stop, str):
+            self.stop = sc.date(self.stop)
+        if self.stop is not None:
             if self.is_default('dur'):
-                self.dur = ss.date_diff(self.start, self.end, self.unit)
+                self.dur = ss.date_diff(self.start, self.stop, self.unit)
             else:
-                errormsg = f'You can supply either end ({self.end}) or dur ({self.dur}) but not both, since one is calculated from the other'
+                errormsg = f'You can supply either stop ({self.stop}) or dur ({self.dur}) but not both, since one is calculated from the other'
                 raise ValueError(errormsg)
             if self.dur <= 0:
-                errormsg = f"Duration must be >0, but you supplied start={str(self.start)} and end={str(self.end)}, which gives dur={self.dur}"
+                errormsg = f"Duration must be >0, but you supplied start={str(self.start)} and stop={str(self.stop)}, which gives dur={self.dur}"
                 raise ValueError(errormsg)
         else:
             if self.dur is not None:
-                self.end = ss.date_add(self.start, self.dur, self.unit)
+                self.stop = ss.date_add(self.start, self.dur, self.unit)
             else:
-                errormsg = 'You must supply either "dur" or "end".'
+                errormsg = 'You must supply either "dur" or "stop".'
                 raise ValueError(errormsg)
         return
     

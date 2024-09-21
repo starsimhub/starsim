@@ -7,7 +7,7 @@ import sciris as sc
 
 # What classes are externally visible
 __all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff', 'make_timevec', 'make_timearray',
-           'TimeUnit', 'dur', 'rate', 'time_prob']
+           'TimeUnit', 'dur', 'days', 'years', 'rate', 'time_prob']
 
     
 #%% Helper functions
@@ -20,15 +20,19 @@ time_units = sc.dictobj(
     year = 365, # For simplicity with days
 )
 
-def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0):
+def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0, as_int=False):
     """
     Calculate the relationship between two sets of time factors
     
     Args:
-        unit1 and dt1 are the numerator, unit2 and dt2 are the denominator
+        unit1 (str): units for the numerator
+        dt1 (float): timestep for the numerator
+        unit2 (str): units for the denominator
+        dt2 (float): timestep for the denominator
+        as_int (bool): round and convert to an integer
     
     **Example**::
-        ss.time_ratio(unit1='week', dt1=2, unit2='day', dt2=1) # Returns 14.0
+        ss.time_ratio(unit1='week', dt1=2, unit2='day', dt2=1, as_int=True) # Returns 14
     """
     if dt1 == dt2:
         dt_ratio = 1.0
@@ -49,50 +53,51 @@ def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0):
         unit_ratio = u1/u2
         
     factor = dt_ratio * unit_ratio
+    if as_int:
+        factor = int(round(factor))
     return factor
 
 
 def date_add(start, dur, unit):
     """ Add two dates (or integers) together """
     if sc.isnumber(start):
-        end = start + dur
+        stop = start + dur
     else:
         if unit in time_units:
             ndays = int(round(time_units[unit]*dur))
-            end = sc.datedelta(start, days=ndays)
+            stop = sc.datedelta(start, days=ndays)
         else:
             errormsg = f'Unknown unit {unit}, choices are: {sc.strjoin(time_units.keys())}'
             raise ValueError(errormsg)
-    return end
+    return stop
         
 
-def date_diff(start, end, unit):
+def date_diff(start, stop, unit):
     """ Find the difference between two dates (or integers) """
-    if sc.isnumber(start) and sc.isnumber(end):
-        dur = end - start
+    if sc.isnumber(start) and sc.isnumber(stop):
+        dur = stop - start
     else:
         if unit == 'year':
-            dur = sc.datetoyear(end) - sc.datetoyear(start) # TODO: allow non-integer amounts
+            dur = sc.datetoyear(stop) - sc.datetoyear(start) # TODO: allow non-integer amounts
         elif unit == 'day':
-            dur = (end - start).days
+            dur = (stop - start).days
         else:
             raise NotImplementedError
     return dur
 
 
-def make_timevec(start, end, dt, unit):
-    """ Parse start, end, and dt into an appropriate time vector """
+def make_timevec(start, stop, dt, unit):
+    """ Parse start, stop, and dt into an appropriate time vector """
     if sc.isnumber(start):
         try:
-            stop = date_add(end, dt, unit) # Potentially convert to a date
-            timevec = np.arange(start=start, stop=stop, step=dt) # The time points of the sim
+            timevec = sc.inclusiverange(start=start, stop=stop, step=dt) # The time points of the sim
         except Exception as E:
-            errormsg = f'Incompatible set of time inputs: start={start}, end={end}, dt={dt}. You can use dates or numbers but not both.'
+            errormsg = f'Incompatible set of time inputs: start={start}, stop={stop}, dt={dt}. You can use dates or numbers but not both.'
             raise ValueError(errormsg) from E
     else:
-        day_delta = int(np.round(time_ratio(unit1=unit, dt1=dt, unit2='day', dt2=1.0)))
+        day_delta = time_ratio(unit1=unit, dt1=dt, unit2='day', dt2=1.0, as_int=True)
         if day_delta > 0:
-            timevec = sc.daterange(start, end, interval={'days':day_delta})
+            timevec = sc.daterange(start, stop, interval={'days':day_delta})
         else:
             errormsg = f'Timestep {dt} is too small; must be at least 1 day'
             raise ValueError(errormsg)
@@ -244,12 +249,26 @@ class dur(TimeUnit):
         return
 
 
+class days(dur):
+    """ Shortcut to ss.dur(value, units='day') """
+    def __init__(self, value, parent_unit=None, parent_dt=None):
+        super().__init__(self, value=value, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
+        return
+
+
+class years(dur):
+    """ Shortcut to ss.dur(value, units='year') """
+    def __init__(self, value, parent_unit=None, parent_dt=None):
+        super().__init__(self, value=value, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
+        return
+
+
 class rate(TimeUnit):
     """ Any number that acts like a rate; can be greater than 1 """
     def set_x(self):
         self.x = self.value/self.factor
         return
-    
+
 
 class time_prob(TimeUnit):
     """ A probability over time (a.k.a. a "true" rate, cumulative hazard rate); must be >0 and <1 """
