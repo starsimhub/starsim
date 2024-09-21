@@ -162,12 +162,17 @@ class Module(sc.quickobj):
         
         # Create the module-specific time vector
         self.timevec = ss.make_timevec(pars.start, pars.stop, self.dt, self.unit)
-        self.ti = 0    
+        self.ti = 0 # Track the current timestep, which may or may not match the sim's
         return
     
     def step(self):
         """ Define how the module updates over time """
         pass
+    
+    def finish_step(self):
+        """ Define what should happen at the end of the step; at minimum, increment ti """
+        self.ti += 1
+        return
     
     def update_results(self):
         """ Perform any results updates on each timestep """

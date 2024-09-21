@@ -276,6 +276,8 @@ class Sim:
         # If simulation reached the end, finalize the results
         if self.complete:
             self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
+            for mod in self.modules:
+                mod.ti -= 1
             self.finalize()
             sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 1, self.verbose)
         return self # Allows e.g. ss.Sim().run().plot()

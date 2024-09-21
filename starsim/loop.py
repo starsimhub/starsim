@@ -37,10 +37,10 @@ class Loop:
         func_name = func.__name__
         
         # Get the name if it's defined, the class otherwise; these must match timearrays
-        module_name = parent.name if isinstance(parent, ss.Module) else parent.__class__.__name__.lower()
+        module = parent.name if isinstance(parent, ss.Module) else parent.__class__.__name__.lower()
         
         # Create the row and append it to the function list
-        row = dict(func_order=len(self.funcs), parent=parent, module_name=module_name, func_name=func_name, func=func)
+        row = dict(func_order=len(self.funcs), module=module, func_name=func_name, func=func)
         self.funcs.append(row)
         return self
 
@@ -92,9 +92,12 @@ class Loop:
         for ana in sim.analyzers():
             self += ana.step
             
-        # Clean up dead agents and perform other housekeeping tasks
+        # Clean up dead agents, increment the time index, and perform other housekeeping tasks
+        for mod in sim.modules:
+            self += mod.finish_step
         self += sim.people.finish_step
         self += sim.finish_step
+        
         return self.funcs
     
     def collect_timearrays(self):
@@ -126,16 +129,15 @@ class Loop:
                 raw.append(row)
         
         # Turn it into a dataframe and sort it
-        col_order = ['time', 'func_order', 'parent', 'func', 'key', 'func_label', 'module_name', 'func_name'] # Func in the middle to hide it
+        col_order = ['time', 'func_order', 'func', 'key', 'func_label', 'module', 'func_name'] # Func in the middle to hide it
         self.plan = sc.dataframe(raw).sort_values('key').reset_index(drop=True)[col_order]
         return
     
     def run(self, until=np.nan): # TODO: process until into absolute units
         """ Actually run the integration loop """
-        for i,(time,parent,func) in self.plan.enumrows(cols=['time', 'parent', 'func'], type=tuple):
-            if time > until: break # Terminate if asked to
-            func() # Actually execute the step -- this is where all of Starsim happens!!
-            parent.ti += 1 # Increment the timestep of this module
+        for t,f in zip(self.plan.time, self.plan.func):
+            if t > until: break # Terminate if asked to
+            f() # Actually execute the step -- this is where all of Starsim happens!!
         return
     
     def to_df(self):
@@ -144,11 +146,22 @@ class Loop:
         df = self.plan[cols]
         return df
     
-    def plot(self, fig_kw=None, plot_kw=None, scatter_kw=None):
-        """ Plot a diagram of all the events """
+    def plot(self, simplify=False, fig_kw=None, plot_kw=None, scatter_kw=None):
+        """
+        Plot a diagram of all the events
+        
+        Args:
+            simplify (bool): if True, skip update_results and finish_step events, which are automatically applied
+            fig_kw (dict): passed to ``plt.figure()``
+            plot_kw (dict): passed to ``plt.plot()``
+            scatter_kw (dict): passed to ``plt.scatter()``
+        """
         
         # Assemble data
         df = self.plan
+        if simplify:
+            filter_out = ['update_results', 'finish_step']
+            df = df[~df.func_name.isin(filter_out)]
         yticks = df.func_order.unique()
         ylabels = df.func_label.unique()
         x = df.time
