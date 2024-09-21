@@ -7,7 +7,7 @@ import sciris as sc
 
 # What classes are externally visible
 __all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff', 'make_timevec', 'make_timearray',
-           'TimeUnit', 'dur', 'days', 'years', 'rate', 'time_prob']
+           'TimePar', 'dur', 'days', 'years', 'rate', 'time_prob']
 
     
 #%% Helper functions
@@ -124,12 +124,11 @@ def make_timearray(tv, unit, sim_unit):
 
 #%% Time classes
 
-class TimeUnit:
+class TimePar:
     """
-    Base class for durations and rates
+    Base class for time-aware parameters, durations and rates
     
     NB, because the factor needs to be recalculated, do not set values directly.
-    
     """
     def __init__(self, value, unit=None, parent_unit=None, parent_dt=None):
         self.value = value
@@ -190,20 +189,6 @@ class TimeUnit:
         """ Set factor used to multiply the value to get the output """
         self.factor = time_ratio(unit1=self.unit, dt1=1.0, unit2=self.parent_unit, dt2=self.parent_dt)
         return
-        
-    # @property
-    # def x(self):
-    #     """ The actual value used in calculations -- the key step! """
-    #     raise NotImplementedError
-        
-    # @property
-    # def f(self):
-    #     """ Return the factor, with a helpful error message if not set """
-    #     if self.factor is not None:
-    #         return self.factor
-    #     else:
-    #         errormsg = f'The factor for {self} has not been set. Have you called.init()?'
-    #         raise RuntimeError(errormsg)
     
     # Act like a float
     def __add__(self, other): return self.x + other
@@ -242,7 +227,7 @@ class TimeUnit:
             return self.x.__array_ufunc__(ufunc, method, *args, **kwargs) # Probably not needed
 
 
-class dur(TimeUnit):
+class dur(TimePar):
     """ Any number that acts like a duration """
     def set_x(self):
         self.x = self.value*self.factor
@@ -263,14 +248,14 @@ class years(dur):
         return
 
 
-class rate(TimeUnit):
+class rate(TimePar):
     """ Any number that acts like a rate; can be greater than 1 """
     def set_x(self):
         self.x = self.value/self.factor
         return
 
 
-class time_prob(TimeUnit):
+class time_prob(TimePar):
     """ A probability over time (a.k.a. a "true" rate, cumulative hazard rate); must be >0 and <1 """
     def set_x(self):
         rate = -np.log(1 - self.value)

@@ -120,7 +120,7 @@ def test_complex_api():
         n_agents = 1000,
         label = 'v1',
         verbose = 'brief',
-        end = 2020,
+        stop = 2020,
         networks = [
             ss.RandomNet(name='random1', n_contacts=6),
             dict(type='random', name='random2', n_contacts=4)

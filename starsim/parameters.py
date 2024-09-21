@@ -56,12 +56,15 @@ class Pars(sc.objdict):
                 old = self[key] # Get the existing object we're about to update
                 if isinstance(old, atomic_classes): # It's a number, string, etc: update directly
                     self[key] = new
+
                 elif isinstance(old, Pars): # It's a Pars object: update recursively
                     old.update(new, create=create)
                 elif isinstance(old, ss.ndict): # Update module containers
                     self._update_ndict(key, old, new)
                 elif isinstance(old, ss.Module):  # Update modules
                     self._update_module(key, old, new)
+                elif isinstance(old, ss.TimePar):
+                    self._update_timepar(key, old, new)
                 elif isinstance(old, ss.Dist): # Update a distribution
                     self._update_dist(key, old, new)
                 elif callable(old): # It's a function: update directly
@@ -71,7 +74,7 @@ class Pars(sc.objdict):
                     ss.warn(warnmsg)
                     self[key] = new
         return self
-    
+        
     def _update_ndict(self, key, old, new):
         """ Update an ndict object in the parameters, e.g. sim.pars.diseases """
         if not len(old): # It's empty, just overwrite
@@ -94,8 +97,35 @@ class Pars(sc.objdict):
             raise TypeError(errormsg)
         return
     
+    def _update_timepar(self, key, old, new):
+        """ Update a time parameter (duration or rate) """
+        
+        # It's a TimePar, e.g. dur_inf = ss.dur(6); use directly
+        if isinstance(new, ss.TimePar): 
+            new_cls = new.__class__
+            old_cls = old.__class__
+            if new_cls == old_cls:
+                self[key] = new
+            else:
+                errormsg = f'When updating a time parameter, the new class ({new_cls}) should match the original class ({old_cls})'
+                raise TypeError(errormsg)
+        
+        # It's a single number, e.g. dur_inf = 6; set parameters
+        elif isinstance(new, Number):
+            old.set(new)
+        
+        # It's a list of numbers, e.g. dur_inf = [6, 2]; set parameters
+        elif isinstance(new, list):
+            old.set(*new)
+        
+        # It's a dict, figure out what to do
+        elif isinstance(new, dict):
+            old.set(**new)
+        return
+    
     def _update_dist(self, key, old, new):
         """ Update a Dist object in the parameters, e.g. sim.pars.diseases.sir.dur_inf """
+        
         # It's a Dist, e.g. dur_inf = ss.normal(6,2); use directly
         if isinstance(new, ss.Dist): 
             if isinstance(old, ss.bernoulli) and not isinstance(new, ss.bernoulli):
@@ -108,7 +138,7 @@ class Pars(sc.objdict):
         elif isinstance(new, Number):
             old.set(new)
         
-        # It's a list number, e.g. dur_inf = [6, 2]; set parameters
+        # It's a list of numbers, e.g. dur_inf = [6, 2]; set parameters
         elif isinstance(new, list):
             old.set(*new)
         

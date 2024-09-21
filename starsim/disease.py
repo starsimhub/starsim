@@ -218,7 +218,7 @@ class Infection(Disease):
         β = self.pars.beta
         
         def scalar_beta(β):
-            return isinstance(β, ss.TimeUnit) or sc.isnumber(β)
+            return isinstance(β, ss.TimePar) or sc.isnumber(β)
         
         if run_checks:
             scalar_warn = f'Beta is defined as a number ({β}); convert it to a rate to handle timestep conversions'
