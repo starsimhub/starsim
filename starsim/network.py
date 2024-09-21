@@ -300,16 +300,17 @@ class Network(ss.Module):
 
         return
 
-    # def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
-    #     if uids is None: uids = Ellipsis
-    #     return self.edges.beta[uids] * disease_beta * dt
-
 
 class DynamicNetwork(Network):
     """ A network where partnerships update dynamically """
     def __init__(self, key_dict=None, **kwargs):
         key_dict = sc.mergedicts({'dur': ss_float_}, key_dict)
         super().__init__(key_dict=key_dict, **kwargs)
+        return
+    
+    def step(self):
+        self.end_pairs()
+        self.add_pairs()
         return
 
     def end_pairs(self):
@@ -492,11 +493,6 @@ class RandomNet(DynamicNetwork):
         self.dist.jump() # Reset the RNG manually # TODO, think if there's a better way
         return source, target
 
-    def step(self):
-        self.end_pairs()
-        self.add_pairs()
-        return
-
     def add_pairs(self):
         """ Generate edges """
         people = self.sim.people
@@ -548,11 +544,6 @@ class ErdosRenyiNet(DynamicNetwork):
         return
 
     def init_post(self):
-        self.add_pairs()
-        return
-
-    def update(self):
-        self.end_pairs()
         self.add_pairs()
         return
 
@@ -931,6 +922,9 @@ class MaternalNet(DynamicNetwork):
         """
         Set beta to 0 for women who complete duration of transmission
         Keep connections for now, might want to consider removing
+        
+        NB: add_pairs() and end_pairs() are NOT called here; this is done separately
+        in ss.Pregnancy.update_states().
         """
         inactive = self.edges.end <= self.sim.ti
         self.edges.beta[inactive] = 0

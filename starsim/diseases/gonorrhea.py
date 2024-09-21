@@ -15,7 +15,7 @@ class Gonorrhea(ss.Infection):
         super().__init__()
         self.define_pars(
             beta = 1.0, # Placeholder value
-            dur_inf_in_days = ss.lognorm_ex(mean=10, stdev=0.6),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
+            dur_inf_in_days = ss.lognorm_ex(mean=ss.days(10), stdev=ss.days(0.6)),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
             p_symp    = ss.bernoulli(p=0.5),  # Share of infections that are symptomatic. Placeholder value
             p_clear   = ss.bernoulli(p=0.2),  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
             init_prev = ss.bernoulli(p=0.1),
@@ -72,6 +72,6 @@ class Gonorrhea(ss.Infection):
 
         # Set natural clearance
         clear_uids = self.pars.p_clear.filter(uids)
-        dur = ti + self.pars.dur_inf_in_days.rvs(clear_uids)/365/self.sim.dt # Convert from days to years and then adjust for dt
+        dur = ti + self.pars.dur_inf_in_days.rvs(clear_uids) # Convert from days to years and then adjust for dt automatically # TODO: check!
         self.ti_clearance[clear_uids] = dur
         return

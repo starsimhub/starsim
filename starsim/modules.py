@@ -162,7 +162,7 @@ class Module(sc.quickobj):
         
         # Create the module-specific time vector
         self.timevec = ss.make_timevec(pars.start, pars.stop, self.dt, self.unit)
-        
+        self.ti = 0    
         return
     
     def step(self):

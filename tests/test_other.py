@@ -51,14 +51,15 @@ def test_microsim(do_plot=False):
         people=ss.People(small),
         networks=[ss.MFNet(), ss.MaternalNet()],
         demographics=ss.Pregnancy(),
-        diseases=hiv
+        diseases=hiv,
+        copy_inputs = False, # So we can reuse hiv
     )
     sim.init()
     sim.run()
 
     if do_plot:
         pl.figure()
-        pl.plot(sim.tivec, sim.results.hiv.n_infected)
+        pl.plot(hiv.timevec, hiv.results.n_infected)
         pl.title('HIV number of infections')
 
     return sim

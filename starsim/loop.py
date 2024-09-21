@@ -37,15 +37,10 @@ class Loop:
         func_name = func.__name__
         
         # Get the name if it's defined, the class otherwise; these must match timearrays
-        if isinstance(parent, ss.Sim):
-            module = 'sim'
-        elif isinstance(parent, ss.People):
-            module = 'people'
-        else:
-            module = parent.name
+        module_name = parent.name if isinstance(parent, ss.Module) else parent.__class__.__name__.lower()
         
         # Create the row and append it to the function list
-        row = dict(func_order=len(self.funcs), module=module, func_name=func_name, func=func)
+        row = dict(func_order=len(self.funcs), parent=parent, module_name=module_name, func_name=func_name, func=func)
         self.funcs.append(row)
         return self
 
@@ -131,15 +126,16 @@ class Loop:
                 raw.append(row)
         
         # Turn it into a dataframe and sort it
-        col_order = ['time', 'func_order', 'func', 'key', 'func_label', 'module', 'func_name'] # Func in the middle to hide it
+        col_order = ['time', 'func_order', 'parent', 'func', 'key', 'func_label', 'module_name', 'func_name'] # Func in the middle to hide it
         self.plan = sc.dataframe(raw).sort_values('key').reset_index(drop=True)[col_order]
         return
     
     def run(self, until=np.nan): # TODO: process until into absolute units
         """ Actually run the integration loop """
-        for t,f in zip(self.plan.time, self.plan.func):
-            if t > until: break # Terminate if asked to
-            f() # Actually execute the step -- this is where all of Starsim happens!!
+        for i,(time,parent,func) in self.plan.enumrows(cols=['time', 'parent', 'func'], type=tuple):
+            if time > until: break # Terminate if asked to
+            func() # Actually execute the step -- this is where all of Starsim happens!!
+            parent.ti += 1 # Increment the timestep of this module
         return
     
     def to_df(self):
