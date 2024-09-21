@@ -116,7 +116,7 @@ def test_complex_api():
             sim.people.age[:] = sim.people.age[:] + 1000
     
     # Specify parameters as a dictionary
-    p = dict(
+    pars1 = dict(
         n_agents = 1000,
         label = 'v1',
         verbose = 'brief',
@@ -137,7 +137,7 @@ def test_complex_api():
     )
     
     # Test with explicit initialization
-    pars = ss.SimPars(n_agents=1000, label='v1', verbose='brief', end=2020)
+    pars2 = ss.SimPars(n_agents=1000, label='v1', verbose='brief', stop=2020)
     
     net1 = ss.RandomNet(name='random1', n_contacts=6)
     net2 = ss.RandomNet(name='random2', n_contacts=4)
@@ -155,8 +155,8 @@ def test_complex_api():
     interventions = ss.ndict(int1)
 
     # Assemble
-    s1 = ss.Sim(p)
-    s2 = ss.Sim(pars=pars, networks=networks, diseases=diseases, demographics=demographics, interventions=interventions)
+    s1 = ss.Sim(pars1)
+    s2 = ss.Sim(pars=pars2, networks=networks, diseases=diseases, demographics=demographics, interventions=interventions)
     
     # Run
     s1.run()

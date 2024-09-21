@@ -66,15 +66,15 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, do_plot=False):
 
     sim.run()
 
-    end = start + n_years
+    stop = start + n_years
     nigeria_popsize = pd.read_csv(datadir/'nigeria_popsize.csv')
-    data = nigeria_popsize[(nigeria_popsize.year >= start) & (nigeria_popsize.year <= end)]
+    data = nigeria_popsize[(nigeria_popsize.year >= start) & (nigeria_popsize.year <= stop)]
 
     nigeria_cbr = pd.read_csv(datadir/'nigeria_births.csv')
-    cbr_data = nigeria_cbr[(nigeria_cbr.Year >= start) & (nigeria_cbr.Year <= end)]
+    cbr_data = nigeria_cbr[(nigeria_cbr.Year >= start) & (nigeria_cbr.Year <= stop)]
 
     nigeria_cmr = pd.read_csv(datadir/'nigeria_cmr.csv')
-    cmr_data = nigeria_cmr[(nigeria_cmr.Year >= start) & (nigeria_cmr.Year <= end)]
+    cmr_data = nigeria_cmr[(nigeria_cmr.Year >= start) & (nigeria_cmr.Year <= stop)]
 
     # Tests
     if which == 'pregnancy':

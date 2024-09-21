@@ -89,8 +89,8 @@ def test_units(do_plot=False):
     )
     
     sims = sc.objdict()
-    sims.y = ss.Sim(pars, unit='year', label='Year', start=2000, end=2002, dt=1/365)
-    sims.d = ss.Sim(pars, unit='day', label='Day', start='2000-01-01', end='2002-01-01', dt=1)
+    sims.y = ss.Sim(pars, unit='year', label='Year', start=2000, stop=2002, dt=1/365)
+    sims.d = ss.Sim(pars, unit='day', label='Day', start='2000-01-01', stop='2002-01-01', dt=1)
     
     for sim in sims.values():
         sim.run()
@@ -115,7 +115,7 @@ def test_multi_timestep(do_plot=False):
         n_agents = small,
     )
     
-    sim = ss.Sim(pars, unit='day', dt=2, start='2000-01-01', end='2002-01-01')
+    sim = ss.Sim(pars, unit='day', dt=2, start='2000-01-01', stop='2002-01-01')
     sim.run()
     
     if do_plot:

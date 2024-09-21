@@ -189,7 +189,7 @@ def test_worlds(do_plot=False):
     
     pars = dict(
         start = 2000,
-        end = 2100,
+        stop = 2100,
         n_agents = 200,
         verbose = 0.05,
         diseases = dict(
