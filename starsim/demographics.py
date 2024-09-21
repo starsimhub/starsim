@@ -117,7 +117,7 @@ class Births(Demographics):
         super().finalize()
         res = self.sim.results
         self.results.cumulative[:] = np.cumsum(self.results.new)
-        self.results.cbr[:] = 1/self.pars.units*np.divide(self.results.new/self.sim.dt, res.n_alive, where=res.n_alive>0)
+        self.results.cbr[:] = 1/self.pars.units*np.divide(self.results.new/self.sim.dt_year, res.n_alive, where=res.n_alive>0)
         return
 
 
@@ -245,7 +245,7 @@ class Deaths(Demographics):
         super().finalize()
         n_alive = self.sim.results.n_alive
         self.results.cumulative[:] = np.cumsum(self.results.new)
-        self.results.cmr[:] = 1/self.pars.units*np.divide(self.results.new / self.sim.dt, n_alive, where=n_alive>0)
+        self.results.cmr[:] = 1/self.pars.units*np.divide(self.results.new / self.sim.dt_year, n_alive, where=n_alive>0)
         return
 
 
@@ -487,7 +487,7 @@ class Pregnancy(Demographics):
 
         # Change states for the newly pregnant woman
         ti = self.sim.ti
-        dt = self.sim.dt
+        dt = self.dt # TODO: CHECK
         self.fecund[uids] = False
         self.pregnant[uids] = True
         self.ti_pregnant[uids] = ti
