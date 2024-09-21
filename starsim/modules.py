@@ -144,12 +144,13 @@ class Module(sc.quickobj):
     
     def init_time_pars(self, force=False):
         """ Initialize all time parameters by ensuring all parameters are initialized; part of init_post() """
+        pars = self.sim.pars
         
         # Find all modules and set the timestep
         if force or self.unit is None:
-            self.unit = self.sim.pars.unit
+            self.unit = pars.unit
         if force or self.dt is None:
-            self.dt = self.sim.pars.dt
+            self.dt = pars.dt
         
         # Find all time parameters in the module
         timepars = ss.find_objs(ss.TimeUnit, self.pars) # Should it be self or self.pars?
@@ -158,6 +159,10 @@ class Module(sc.quickobj):
         for timepar in timepars.values():
             if force or not timepar.initialized:
                 timepar.initialize(parent=self)
+        
+        # Create the module-specific time vector
+        self.timevec = ss.make_timevec(pars.start, pars.end, self.dt, self.unit)
+        
         return
     
     def step(self):

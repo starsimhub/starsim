@@ -51,26 +51,17 @@ def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0):
     return factor
 
 
-# def int_to_date(x, unit='year'): # TODO: use sc.datetoyear(..., reverse=True)
-#     """ Convert an integer to a date """
-#     if unit == 'year':
-#         date = sc.date(f'{x}-01-01')
-#     else:
-#         raise NotImplementedError
-#     return date
-        
-
 def date_add(start, dur, unit):
     """ Add two dates (or integers) together """
     if sc.isnumber(start):
         end = start + dur
     else:
-        if unit == 'year':
-            end = sc.datedelta(start, years=dur)
-        elif unit == 'day':
-            end = sc.datedelta(start, days=dur)
+        if unit in time_units:
+            ndays = int(round(time_units[unit]*dur))
+            end = sc.datedelta(start, days=ndays)
         else:
-            raise NotImplementedError
+            errormsg = f'Unknown unit {unit}, choices are: {sc.strjoin(time_units.keys())}'
+            raise ValueError(errormsg)
     return end
         
 
@@ -98,17 +89,12 @@ def make_timevec(start, end, dt, unit):
             errormsg = f'Incompatible set of time inputs: start={start}, end={end}, dt={dt}. You can use dates or numbers but not both.'
             raise ValueError(errormsg) from E
     else:
-        if unit == 'year':
-            day_delta = int(np.round(time_ratio(unit1='year', dt1=dt, unit2='day', dt2=1.0)))
-            if day_delta == 0:
-                errormsg = f'Timestep {dt} is too small; must be at least 1 day'
-                raise ValueError(errormsg)
+        day_delta = int(np.round(time_ratio(unit1=unit, dt1=dt, unit2='day', dt2=1.0)))
+        if day_delta > 0:
+            timevec = sc.daterange(start, end, interval={'days':day_delta})
         else:
-            if dt < 1:
-                errormsg = f'Cannot use a timestep of less than a day ({dt}) with date-based indexing'
-                raise ValueError(errormsg)
-            day_delta = int(np.round(dt))
-        timevec = sc.daterange(start, end, interval={'days':day_delta})
+            errormsg = f'Timestep {dt} is too small; must be at least 1 day'
+            raise ValueError(errormsg)
     return timevec
 
 
