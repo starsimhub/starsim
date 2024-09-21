@@ -76,6 +76,10 @@ class Disease(ss.Module):
         allows an intervention to avert a death scheduled on the same timestep, without having
         to undo any state changes that have already been applied (because they only run via this
         function if the death actually occurs).
+        
+        Unlike other methods during the integration loop, this method is not called directly
+        by the sim; instead, it is called by people.step_die(), which reconciles the UIDs of
+        the agents who will die.
 
         Depending on the module and the results it produces, it may or may not be necessary
         to implement this.
