@@ -116,10 +116,9 @@ def make_timevec(start, end, dt, unit):
 
 class TimeUnit:
     """ Base class for durations and rates """
-    def __init__(self, value, unit=None, self_dt=None, parent_unit=None, parent_dt=None):
+    def __init__(self, value, unit=None, parent_unit=None, parent_dt=None):
         self.value = value
         self.unit = unit
-        self.self_dt = self_dt
         self.parent_unit = parent_unit
         self.parent_dt = parent_dt
         self.factor = None
@@ -145,7 +144,6 @@ class TimeUnit:
         
         # Set defaults if not yet set
         self.unit = sc.ifelse(self.unit, self.parent_unit)
-        self.self_dt = sc.ifelse(self.self_dt, 1.0)
         self.parent_dt = sc.ifelse(self.parent_dt, 1.0)
         
         # Calculate the actual conversion factor to be used in the calculations
@@ -156,7 +154,7 @@ class TimeUnit:
     def __repr__(self):
         name = self.__class__.__name__
         initstr = '' if self.initialized else ', initialized=False'
-        return f'ss.{name}({self.value}, unit={self.unit}, dt={self.self_dt}{initstr})'
+        return f'ss.{name}({self.value}, unit={self.unit}, {initstr})'
     
     def disp(self):
         return sc.pr(self)
@@ -169,7 +167,7 @@ class TimeUnit:
     
     def set_factor(self):
         """ Set factor used to multiply the value to get the output """
-        self.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=self.parent_unit, dt2=self.parent_dt)
+        self.factor = time_ratio(unit1=self.unit, dt1=1.0, unit2=self.parent_unit, dt2=self.parent_dt)
         return
         
     @property

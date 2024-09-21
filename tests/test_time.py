@@ -34,42 +34,36 @@ def test_classes():
     d2 = ss.dur(3)
     d3 = ss.dur(2, parent_dt=0.1)
     d4 = ss.dur(3, parent_dt=0.2)
-    d5 = ss.dur(2, self_dt=10)
-    d6 = ss.dur(3, self_dt=5)
-    for d in [d1,d2,d3,d4,d5,d6]: d.initialize()
+    for d in [d1,d2,d3,d4]: d.initialize()
     
     assert d1 + d2 == 2+3
     assert d3 + d4 == 2/0.1 + 3/0.2
     assert d3 * 2 == 2/0.1*2
     assert d3 / 2 == 2/0.1/2
-    assert d5 + d6 == 2*10 + 3*5
     
     # Test rate dt
     r1 = ss.rate(2)
     r2 = ss.rate(3)
     r3 = ss.rate(2, parent_dt=0.1)
     r4 = ss.rate(3, parent_dt=0.2)
-    r5 = ss.rate(2, self_dt=10)
-    r6 = ss.rate(3, self_dt=5)
-    for r in [r1,r2,r3,r4,r5,r6]: r.initialize()
+    for r in [r1,r2,r3,r4]: r.initialize()
     
     assert r1 + r2 == 2 + 3
     assert r3 + r4 == 2*0.1 + 3*0.2
     assert r3 * 2 == 2*0.1*2
     assert r3 / 2 == 2*0.1/2
-    assert r5 + r6 == 2/10 + 3/5
     
     # Test duration units
-    d7 = ss.dur(2, unit='year').initialize(parent_unit='day')
-    d8 = ss.dur(3, unit='day').initialize(parent_unit='day')
-    assert d7 + d8 == 2*365+3
+    d5 = ss.dur(2, unit='year').initialize(parent_unit='day')
+    d6 = ss.dur(3, unit='day').initialize(parent_unit='day')
+    assert d5 + d6 == 2*365+3
     
     # Test rate units
     rval = 0.7
-    r7 = ss.rate(rval, unit='week', self_dt=1).initialize(parent_unit='day')
-    r8 = ss.rate(rval, self_dt=1).initialize(parent_dt=0.1)
-    assert np.isclose(r7.x, rval/7) # A limitation of this approach, not exact!
-    assert np.isclose(r8.x, rval/10)
+    r5 = ss.rate(rval, unit='week').initialize(parent_unit='day')
+    r6 = ss.rate(rval).initialize(parent_dt=0.1)
+    assert np.isclose(r5.x, rval/7) # A limitation of this approach, not exact!
+    assert np.isclose(r6.x, rval/10)
     
     # Test time_prob
     tpval = 0.1
@@ -82,16 +76,16 @@ def test_classes():
     assert tp1.x > tpval/2
     assert tp2.x < tpval*2
     
-    return d3, d8, r3, r8, tp1
+    return d3, d4, r3, r4, tp1
     
 
 def test_units(do_plot=False):
     sc.heading('Test behavior of year vs day units')
     
     pars = dict(
-        diseases = 'sis',
+        diseases = dict(type='sis', init_prev=0.1),
         networks = 'random',
-        n_agents = medium,
+        n_agents = small,
     )
     
     sims = sc.objdict()
@@ -115,10 +109,10 @@ def test_multi_timestep(do_plot=False):
     sc.heading('Test behavior of different modules having different timesteps')
     
     pars = dict(
-        diseases = ss.SIS(unit='day', dt=1.0),
-        demographics = ss.Pregnancy(unit='year', dt=0.25),
+        diseases = ss.SIS(unit='day', dt=1.0, init_prev=0.1, beta=ss.rate(0.01)),
+        # demographics = ss.Births(unit='year', dt=0.25),
         networks = ss.RandomNet(unit='week'),
-        n_agents = medium,
+        n_agents = small,
     )
     
     sim = ss.Sim(pars, unit='day', dt=2, start='2000-01-01', end='2002-01-01')
