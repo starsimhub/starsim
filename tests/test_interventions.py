@@ -33,7 +33,7 @@ def run_sir_vaccine(efficacy, leaky=True):
         n_years = 10,
         dt      = 0.01
     )
-    sim.initialize(verbose=False)
+    sim.init(verbose=False)
     
     # work out who to vaccinate
     in_trial = sim.people.sir.susceptible.uids

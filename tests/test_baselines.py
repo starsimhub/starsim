@@ -121,7 +121,7 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
         # Time initialization
         t0 = sc.tic()
         sim = make_sim()
-        sim.initialize()
+        sim.init()
         t_init = sc.toc(t0, output=True)
 
         # Time running

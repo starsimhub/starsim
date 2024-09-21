@@ -12,7 +12,7 @@ with sc.timer():
     hiv.pars['beta'] = {'simple_sexual': [0.0008, 0.0004], 'maternal': [0.2, 0]}
     
     sim = ss.Sim(start=1950, end=2050, people=ppl, networks=networks, demographics=ss.Pregnancy(), diseases=hiv)
-    sim.initialize()
+    sim.init()
     sim.run()
 
 if do_plot:

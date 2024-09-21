@@ -28,7 +28,7 @@ def test_manual():
 
     # Create a maternal network
     sim = ss.Sim(n_agents=n_agents)
-    sim.initialize()
+    sim.init()
     nw2 = ss.MaternalNet()
     nw2.init_pre(sim)
     nw2.add_pairs(mother_inds=[1, 2, 3], unborn_inds=[100, 101, 102], dur=[1, 1, 1])
@@ -43,15 +43,15 @@ def test_random():
 
     # Manual creation
     nw1 = ss.RandomNet()
-    ss.Sim(n_agents=small, networks=nw1, copy_inputs=False).initialize() # This initializes the network
+    ss.Sim(n_agents=small, networks=nw1, copy_inputs=False).init() # This initializes the network
     
     # Automatic creation as part of sim
-    s2 = ss.Sim(n_agents=small, networks='random').initialize()
+    s2 = ss.Sim(n_agents=small, networks='random').init()
     nw2 = s2.networks[0]
     
     # Increase the number of contacts
     nwdict = dict(type='random', n_contacts=20)
-    s3 = ss.Sim(n_agents=small, networks=nwdict).initialize()
+    s3 = ss.Sim(n_agents=small, networks=nwdict).init()
     nw3 = s3.networks[0]
     
     # Checks
@@ -99,17 +99,17 @@ def test_erdosrenyi():
     # Manual creation
     p = 0.1
     nw1 = ss.ErdosRenyiNet(p=p)
-    ss.Sim(n_agents=small, networks=nw1, copy_inputs=False).initialize() # This initializes the network
+    ss.Sim(n_agents=small, networks=nw1, copy_inputs=False).init() # This initializes the network
     test_ER(small, p, nw1)
 
     # Automatic creation as part of sim
-    s2 = ss.Sim(n_agents=small, networks='erdosrenyi').initialize()
+    s2 = ss.Sim(n_agents=small, networks='erdosrenyi').init()
     nw2 = s2.networks[0]
     
     # Larger example with higher p
     p=0.6
     nwdict = dict(type='erdosrenyi', p=p)
-    s3 = ss.Sim(n_agents=medium, networks=nwdict).initialize()
+    s3 = ss.Sim(n_agents=medium, networks=nwdict).init()
     nw3 = s3.networks[0]
     test_ER(medium, p, nw3)
     
@@ -126,7 +126,7 @@ def test_disk():
 
     # Visualize the path of agents
     nw1 = ss.DiskNet()
-    s1 = ss.Sim(n_agents=5, n_years=50, networks=nw1, copy_inputs=False).initialize() # This initializes the network
+    s1 = ss.Sim(n_agents=5, n_years=50, networks=nw1, copy_inputs=False).init() # This initializes the network
 
     if sc.options.interactive:
         # Visualize motion:
@@ -147,7 +147,7 @@ def test_disk():
 
     # Simulate SIR on a DiskNet
     nw2 = ss.DiskNet(r=0.15, v=0.05)
-    s2 = ss.Sim(n_agents=small, networks=nw2, diseases='sir').initialize() # This initializes the network
+    s2 = ss.Sim(n_agents=small, networks=nw2, diseases='sir').init() # This initializes the network
     s2.run()
 
     if sc.options.interactive:
@@ -165,11 +165,11 @@ def test_static():
     n = 100
     nc = p*n
     nd1 = dict(type='static', p=p)
-    nw1 = ss.Sim(n_agents=n, networks=nd1).initialize().networks[0]
+    nw1 = ss.Sim(n_agents=n, networks=nd1).init().networks[0]
     
     # Create with n_contacts
     nd2 = dict(type='static', n_contacts=nc)
-    nw2 = ss.Sim(n_agents=n, networks=nd2).initialize().networks[0]
+    nw2 = ss.Sim(n_agents=n, networks=nd2).init().networks[0]
     
     # Check
     assert len(nw1) == len(nw2), 'Networks should be the same length'

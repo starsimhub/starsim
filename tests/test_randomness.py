@@ -18,10 +18,10 @@ def make_dist(name='test', **kwargs):
 
 def make_dists(**kwargs):
     """ Make a Dists object with two distributions in it """
-    sim = ss.Sim(n_agents=100).initialize() # Need an empty sim to initialize properly
+    sim = ss.Sim(n_agents=100).init() # Need an empty sim to initialize properly
     distlist = [make_dist(), make_dist()]
     dists = ss.Dists(distlist)
-    dists.initialize(sim=sim)
+    dists.init(sim=sim)
     return dists
 
 
@@ -250,7 +250,7 @@ def test_independence(do_plot=False, thresh=0.1):
             dict(type='mf', debut=ss.constant(0), participation=0.5), # To avoid age correlations
         ]
     )
-    sim.initialize()
+    sim.init()
     
     # Assemble measures
     st = sim.people.states

@@ -55,7 +55,7 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, do_plot=False):
     )
 
     if do_plot:
-        sim.initialize()
+        sim.init()
         # Plot histograms of the age distributions - simulated vs data
         bins = np.arange(0, 101, 1)
         init_scale = nga_pop_1995 / n_agents
@@ -156,7 +156,7 @@ def test_aging():
     n_agents = int(1e3)
     
     # With no demograhpics, people shouldn't age
-    s1 = ss.Sim(n_agents=n_agents).initialize()
+    s1 = ss.Sim(n_agents=n_agents).init()
     orig_ages = s1.people.age.raw.copy()
     orig_age = orig_ages.mean()
     s1.run()

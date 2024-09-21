@@ -101,7 +101,7 @@ def test_api():
     
     # Check that Bernoulli distributions can't be changed
     with pytest.raises(TypeError):
-        ss.Sim(diseases=dict(type='sir', init_prev=dict(type='normal', loc=10)), **kw).initialize()
+        ss.Sim(diseases=dict(type='sir', init_prev=dict(type='normal', loc=10)), **kw).init()
     
     return s1
 
