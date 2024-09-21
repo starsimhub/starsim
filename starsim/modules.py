@@ -253,6 +253,8 @@ class Module(sc.quickobj):
         mod = cls(name=name)
         mod.func = func
         mod.step = partial(step, mod)
+        mod.step.__name__ = name # Manually add these in as for a regular class method
+        mod.step.__self__ = mod 
         return mod
             
     def to_json(self):
