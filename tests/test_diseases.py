@@ -40,7 +40,7 @@ def test_sir():
     plt.figure()
     res = sim.results
     plt.stackplot(
-        sim.yearvec,
+        sim.timevec,
         res.sir.n_susceptible,
         res.sir.n_infected,
         res.sir.n_recovered,

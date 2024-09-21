@@ -181,8 +181,9 @@ class TimePar:
         if unit        is not None: self.unit        = unit
         if parent_unit is not None: self.parent_unit = parent_unit
         if parent_dt   is not None: self.parent_dt   = parent_dt
-        self.set_factor()
-        self.set_x()
+        if self.initialized: # Don't try to set these unless it's been initialized
+            self.set_factor()
+            self.set_x()
         return self
     
     def set_factor(self):
