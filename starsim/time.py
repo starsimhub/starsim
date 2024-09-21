@@ -155,19 +155,36 @@ class TimeUnit:
         
     def __repr__(self):
         name = self.__class__.__name__
-        return f'ss.{name}({self.value}, unit={self.unit}, dt={self.self_dt})'
+        initstr = '' if self.initialized else ', initialized=False'
+        return f'ss.{name}({self.value}, unit={self.unit}, dt={self.self_dt}{initstr})'
     
     def disp(self):
         return sc.pr(self)
     
+    def set(self, **kwargs):
+        """ Reset the parameter values (NB, attributes can also be set directly) """
+        for k,v in kwargs.items():
+            setattr(self, k, v)
+        return self
+    
     def set_factor(self):
         """ Set factor used to multiply the value to get the output """
         self.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=self.parent_unit, dt2=self.parent_dt)
+        return
         
     @property
     def x(self):
         """ The actual value used in calculations -- the key step! """
         raise NotImplementedError
+        
+    @property
+    def f(self):
+        """ Return the factor, with a helpful error message if not set """
+        if self.factor is not None:
+            return self.factor
+        else:
+            errormsg = f'The factor for {self} has not been set. Have you called initialize()?'
+            raise RuntimeError(errormsg)
     
     # Act like a float
     def __add__(self, other): return self.x + other
@@ -183,6 +200,12 @@ class TimeUnit:
     def __rpow__(self, other): return self.__pow__(other)
     def __rtruediv__(self, other): return self.__truediv__(other)
     
+    # Handle modify-in-place methods
+    def __iadd__(self, other): self.value += other; return self
+    def __isub__(self, other): self.value -= other; return self
+    def __imul__(self, other): self.value *= other; return self
+    def __itruediv__(self, other): self.value /= other; return self
+    
     # Unfortunately, floats don't define the above methods, so we can't *just* use this
     def __getattr__(self, attr):
         """ Make it behave like a regular float mostly """
@@ -196,14 +219,14 @@ class dur(TimeUnit):
     """ Any number that acts like a duration """
     @property
     def x(self):
-        return self.value*self.factor
+        return self.value*self.f
 
 
 class rate(TimeUnit):
     """ Any number that acts like a rate; can be greater than 1 """
     @property
     def x(self):
-        return self.value/self.factor
+        return self.value/self.f
     
 
 class time_prob(TimeUnit):
@@ -211,7 +234,7 @@ class time_prob(TimeUnit):
     @property
     def x(self):
         rate = -np.log(1 - self.value)
-        out = 1 - np.exp(-rate/self.factor)
+        out = 1 - np.exp(-rate/self.f)
         return out
         
     
