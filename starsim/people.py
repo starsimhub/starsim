@@ -135,6 +135,7 @@ class People(sc.prettyobj):
             errormsg = 'Cannot re-initialize a People object directly; use sim.init(reset=True)'
             raise RuntimeError(errormsg)
         self.sim = sim # Store the sim
+        self.timevec = sim.timevec # Also store the timevec in the People object (not used, but for completeness)
         ss.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module])
         return
     
@@ -308,10 +309,17 @@ class People(sc.prettyobj):
         self.ti_dead[uids] = self.sim.ti
         return
 
-    def check_deaths(self):
+    def step_die(self):
         """ Carry out any deaths that took place this timestep """
         death_uids = (self.ti_dead <= self.sim.ti).uids
         self.alive[death_uids] = False
+        
+        # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
+        # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
+        for disease in self.sim.diseases():
+            if isinstance(disease, ss.Disease):
+                disease.step_die(death_uids)
+                
         return death_uids
     
     def remove_dead(self):
@@ -349,7 +357,7 @@ class People(sc.prettyobj):
         return
     
     def finish_step(self):
-        self.update_results()
+        # self.update_results() # This is called separately
         self.remove_dead()
         self.update_post()
         return

@@ -146,7 +146,7 @@ class Sim:
         self.timevec = ss.make_timevec(pars.start, pars.end, pars.dt, pars.unit)
         self.results.timevec = self.timevec # Store the yearvec in the results for plotting # TODO: instead, store a timevec with each result
         self.npts = len(self.timevec) # The number of points in the sim
-        self.tivec = np.arange(self.npts) # The vector of time indices
+        self.timearray = np.arange(self.npts)*pars.dt # Absolute time array
         self.ti = 0  # The time index, e.g. 0, 1, 2
         self.dt_year = ss.time_ratio(pars.unit, pars.dt, 'year', 1.0) # Figure out what dt is in years; used for demographics # TODO: handle None
         return
@@ -221,69 +221,33 @@ class Sim:
     def year(self): # TODO: remove when we do the time refactor
         return self.yearvec[self.ti]
 
-    def step(self):
-        """
-        Step through time and update values
-        
-        TODO: assemble every method called during integration in a list, and then call them sequentially        
-        """
+    def start_step(self):
+        """ Step through time and update values """
 
         # Set the time and if we have reached the end of the simulation, then do nothing
         if self.complete:
             errormsg = 'Simulation already complete (call sim.init() to re-run)'
             raise AlreadyRunError(errormsg)
+            
+        # Print out progress if needed
+        self.elapsed = self.timer.toc(output=True)
+        if self.verbose: # Print progress
+            simlabel = f'"{self.label}": ' if self.label else ''
+            timepoint = self.timevec[self.ti]
+            timelabel = f'{timepoint:0.1f}' if isinstance(timepoint, float) else str(timepoint) # TODO: fix
+            string = f'  Running {simlabel}{timelabel} ({self.ti:2.0f}/{self.npts}) ({self.elapsed:0.2f} s) '
+            if self.verbose >= 2:
+                sc.heading(string)
+            elif self.verbose > 0:
+                if not (self.ti % int(1.0 / self.verbose)):
+                    sc.progressbar(self.ti + 1, self.npts, label=string, length=20, newline=True)
 
         # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
-        self.dists.jump(to=self.ti+1)  # +1 offset because ti=0 is used on initialization
+        self.dists.jump(to=self.ti+1)  # +1 offset because ti=0 is used on initialization # TODO: each module should do this
+        return
 
-        # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
-        for dem in self.demographics():
-            dem.step()
-            
-        # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
-        # to be applied to newly created agents
-        for disease in self.diseases():
-            if isinstance(disease, ss.Disease): # Could be a connector instead -- TODO, rethink this
-                disease.step_state()
-
-        # Update connectors -- TBC where this appears in the ordering
-        for connector in self.connectors():
-            connector.step()
-
-        # Update networks - this takes place here in case autonomous state changes at this timestep
-        # affect eligibility for contacts
-        for network in self.networks():
-            network.step()
-
-        # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
-        # interventions, by running them at this point
-        for intv in self.interventions():
-            intv.step()
-        
-        # Carry out autonomous state changes in the disease modules, including transmission (but excluding deaths)
-        for disease in self.diseases():
-            disease.step()
-
-        # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
-        # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
-        uids = self.people.check_deaths()
-        for disease in self.diseases():
-            if isinstance(disease, ss.Disease):
-                disease.step_die(uids)
-
-        # Update results
-        self.people.update_results()
-        for mod in self.modules:
-            mod.update_results()
-
-        # Apply analyzers
-        for ana in self.analyzers():
-            ana.step()
-            
-        # Clean up dead agents and perform other housekeeping tasks
-        self.people.finish_step()
-
-        # Tidy up
+    def finish_step(self):
+        """ Finish the simulation timestep """
         self.ti += 1
         if self.ti == self.npts:
             self.complete = True
@@ -293,10 +257,10 @@ class Sim:
         """ Run the model once """
 
         # Initialization steps
-        T = sc.timer()
+        self.timer = sc.timer()
         if not self.initialized:
             self.init()
-        verbose = sc.ifelse(verbose, self.pars.verbose)
+        self.verbose = sc.ifelse(verbose, self.pars.verbose)
 
         # Check for AlreadyRun errors
         errormsg = None
@@ -310,30 +274,14 @@ class Sim:
         if errormsg:
             raise AlreadyRunError(errormsg)
 
-        # Main simulation loop
-        # self.loop.run()
-        while self.ti < until:
-            elapsed = T.toc(output=True)
-            if verbose: # Print progress
-                simlabel = f'"{self.label}": ' if self.label else ''
-                timepoint = self.timevec[self.ti]
-                timelabel = f'{timepoint:0.1f}' if isinstance(timepoint, float) else str(timepoint) # TODO: fix
-                string = f'  Running {simlabel}{timelabel} ({self.ti:2.0f}/{self.npts}) ({elapsed:0.2f} s) '
-                if verbose >= 2:
-                    sc.heading(string)
-                elif verbose > 0:
-                    if not (self.ti % int(1.0 / verbose)):
-                        sc.progressbar(self.ti + 1, self.npts, label=string, length=20, newline=True)
-
-            # Actually run the model -- lots happens on the next line!
-            self.step()
+        # Main simulation loop -- just one line!!!
+        self.loop.run(until)
 
         # If simulation reached the end, finalize the results
         if self.complete:
             self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
-            self.elapsed = elapsed
             self.finalize()
-            sc.printv(f'Run finished after {elapsed:0.2f} s.\n', 1, verbose)
+            sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 1, self.verbose)
         return self # Allows e.g. ss.Sim().run().plot()
 
     def finalize(self):

@@ -6,7 +6,8 @@ import numpy as np
 import sciris as sc
 
 # What classes are externally visible
-__all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff', 'make_timevec', 'TimeUnit', 'dur', 'rate', 'time_prob']
+__all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff', 'make_timevec', 'make_timearray',
+           'TimeUnit', 'dur', 'rate', 'time_prob']
 
     
 #%% Helper functions
@@ -96,6 +97,24 @@ def make_timevec(start, end, dt, unit):
             errormsg = f'Timestep {dt} is too small; must be at least 1 day'
             raise ValueError(errormsg)
     return timevec
+
+
+def make_timearray(tv, unit, sim_unit):
+    """ Convert a module time vector into a numerical time array with the same units as the sim """
+    
+    # It's an array of days or years: easy
+    if sc.isarray(tv):
+        ratio = time_ratio(unit1=unit, unit2=sim_unit)
+        abstv = tv*ratio # Get the units right
+        abstv -= abstv[0] # Start at 0
+    
+    # It's a date: convert to fractional years and then subtract the 
+    else:
+        yearvec = [sc.datetoyear(d) for d in tv]
+        absyearvec = np.array(yearvec) - yearvec[0] # Subtract start date
+        abstv = absyearvec*time_ratio(unit1='year', unit2=sim_unit)
+        
+    return abstv
 
 
 #%% Time classes
