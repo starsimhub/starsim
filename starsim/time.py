@@ -101,13 +101,19 @@ def make_timevec(start, end, dt, unit):
 #%% Time classes
 
 class TimeUnit:
-    """ Base class for durations and rates """
+    """
+    Base class for durations and rates
+    
+    NB, because the factor needs to be recalculated, do not set values directly.
+    
+    """
     def __init__(self, value, unit=None, parent_unit=None, parent_dt=None):
         self.value = value
         self.unit = unit
         self.parent_unit = parent_unit
         self.parent_dt = parent_dt
         self.factor = None
+        self.x = np.nan
         self.parent_name = None
         self.initialized = False
         return
@@ -134,21 +140,26 @@ class TimeUnit:
         
         # Calculate the actual conversion factor to be used in the calculations
         self.set_factor()
+        self.set_x()
         self.initialized = True
         return self
         
     def __repr__(self):
         name = self.__class__.__name__
-        initstr = '' if self.initialized else ', initialized=False'
-        return f'ss.{name}({self.value}, unit={self.unit}, {initstr})'
+        xstr = 'x={self.x:n}' if self.initialized else 'initialized=False'
+        return f'ss.{name}({self.value}, unit={self.unit}, {xstr})'
     
     def disp(self):
         return sc.pr(self)
     
-    def set(self, **kwargs):
-        """ Reset the parameter values (NB, attributes can also be set directly) """
-        for k,v in kwargs.items():
-            setattr(self, k, v)
+    def set(self, value=None, unit=None, parent_unit=None, parent_dt=None):
+        """ Reset the parameter values """
+        if value       is not None: self.value       = value
+        if unit        is not None: self.unit        = unit
+        if parent_unit is not None: self.parent_unit = parent_unit
+        if parent_dt   is not None: self.parent_dt   = parent_dt
+        self.set_factor()
+        self.set_x()
         return self
     
     def set_factor(self):
@@ -156,33 +167,33 @@ class TimeUnit:
         self.factor = time_ratio(unit1=self.unit, dt1=1.0, unit2=self.parent_unit, dt2=self.parent_dt)
         return
         
-    @property
-    def x(self):
-        """ The actual value used in calculations -- the key step! """
-        raise NotImplementedError
+    # @property
+    # def x(self):
+    #     """ The actual value used in calculations -- the key step! """
+    #     raise NotImplementedError
         
-    @property
-    def f(self):
-        """ Return the factor, with a helpful error message if not set """
-        if self.factor is not None:
-            return self.factor
-        else:
-            errormsg = f'The factor for {self} has not been set. Have you called initialize()?'
-            raise RuntimeError(errormsg)
+    # @property
+    # def f(self):
+    #     """ Return the factor, with a helpful error message if not set """
+    #     if self.factor is not None:
+    #         return self.factor
+    #     else:
+    #         errormsg = f'The factor for {self} has not been set. Have you called initialize()?'
+    #         raise RuntimeError(errormsg)
     
     # Act like a float
     def __add__(self, other): return self.x + other
     def __sub__(self, other): return self.x - other
     def __mul__(self, other): return self.x * other
-    def __pow__(self, other): return self.value ** other
+    def __pow__(self, other): return self.x ** other
     def __truediv__(self, other): return self.x / other
     
     # ...from either side
-    def __radd__(self, other): return self.__add__(other)
-    def __rsub__(self, other): return self.__sub__(other)
-    def __rmul__(self, other): return self.__mul__(other)
-    def __rpow__(self, other): return self.__pow__(other)
-    def __rtruediv__(self, other): return self.__truediv__(other)
+    def __radd__(self, other): return other + self.x
+    def __rsub__(self, other): return other - self.x
+    def __rmul__(self, other): return other * self.x
+    def __rpow__(self, other): return other ** self.x
+    def __rtruediv__(self, other): return other / self.x
     
     # Handle modify-in-place methods
     def __iadd__(self, other): self.value += other; return self
@@ -197,28 +208,42 @@ class TimeUnit:
             return self.__getattribute__(attr)
         else:
             return getattr(self.x, attr)
-        
+    
+    # # Borrowed from Arr
+    # def __array_ufunc__(self, *args, **kwargs):
+    #     if args[1] != '__call__':
+    #         args = [(x if x is not self else self.x) for x in args]
+    #         kwargs = {k: v if v is not self else self.x for k, v in kwargs.items()}
+    #         return self.x.__array_ufunc__(*args, **kwargs)
+    #     else:
+    #         args = [(x if x is not self else self.x) for x in args] # Convert any operands that are Arr instances to their value arrays
+    #         if 'out' in kwargs and kwargs['out'][0] is self:
+    #             del kwargs['out']
+    #             self.set(value=args[0](*args[2:], **kwargs))
+    #             return self
+    #         else:
+    #             # Otherwise, just run the ufunc
+    #             return args[0](*args[2:], **kwargs)
 
 class dur(TimeUnit):
     """ Any number that acts like a duration """
-    @property
-    def x(self):
-        return self.value*self.f
+    def set_x(self):
+        self.x = self.value*self.factor
+        return
 
 
 class rate(TimeUnit):
     """ Any number that acts like a rate; can be greater than 1 """
-    @property
-    def x(self):
-        return self.value/self.f
+    def set_x(self):
+        self.x = self.value/self.factor
+        return
     
 
 class time_prob(TimeUnit):
     """ A probability over time (a.k.a. a "true" rate, cumulative hazard rate); must be >0 and <1 """
-    @property
-    def x(self):
+    def set_x(self):
         rate = -np.log(1 - self.value)
-        out = 1 - np.exp(-rate/self.f)
-        return out
+        self.x = 1 - np.exp(-rate/self.factor)
+        return
         
     
