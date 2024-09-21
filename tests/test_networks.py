@@ -126,7 +126,7 @@ def test_disk():
 
     # Visualize the path of agents
     nw1 = ss.DiskNet()
-    s1 = ss.Sim(n_agents=5, n_years=50, networks=nw1, copy_inputs=False).init() # This initializes the network
+    s1 = ss.Sim(n_agents=5, dur=50, networks=nw1, copy_inputs=False).init() # This initializes the network
 
     if sc.options.interactive:
         # Visualize motion:
@@ -139,7 +139,7 @@ def test_disk():
         cmap = mpl.colormaps['plasma']
         colors = cmap(np.linspace(0, 1, s1.pars.n_agents))
         ax.scatter(nw1.x, nw1.y, s=50, c=colors)
-        for i in range(s1.pars.n_years):
+        for i in range(s1.pars.dur):
             ax.plot([0,1,1,0,0], [0,0,1,1,0], 'k-', lw=1)
             ax.quiver(nw1.x, nw1.y, vdt * np.cos(nw1.theta), vdt * np.sin(nw1.theta), color=colors)
             ax.set_aspect('equal', adjustable='box') #ax.set_xlim([0,1]); ax.set_ylim([0,1])

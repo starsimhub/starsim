@@ -83,8 +83,8 @@ class RoutineDelivery(Intervention):
 
         # If start_year and end_year are not provided, figure them out from the provided years or the sim
         if self.years is None:
-            if self.start_year is None: self.start_year = sim.pars['start']
-            if self.end_year is None:   self.end_year = sim.pars['end']
+            if self.start_year is None: self.start_year = sim.pars.start
+            if self.end_year is None:   self.end_year = sim.pars.stop
         else:
             self.start_year = self.years[0]
             self.end_year = self.years[-1]

@@ -10,9 +10,9 @@ import starsim as ss
 repeats = 10
 n_agents = 100_000
 pars = sc.objdict(
-    n_years       = 100,        # Number of years to simulate
-    dt            = 0.5,        # Timestep
-    verbose       = 0,          # Don't print details of the run
+    dur     = 100, # Number of years to simulate
+    dt      = 0.5, # Timestep
+    verbose = 0,   # Don't print details of the run
 )
 
 def make_run_sim():

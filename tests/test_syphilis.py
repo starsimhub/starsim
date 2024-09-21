@@ -37,7 +37,7 @@ def make_syph_sim(dt=1, n_agents=500):
         dt=dt,
         total_pop=93963392,
         start=1990,
-        n_years=40,
+        dur=40,
         people=ppl,
         diseases=syph,
         networks=ss.ndict(mf, maternal),
