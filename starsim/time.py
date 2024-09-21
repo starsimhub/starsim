@@ -116,6 +116,7 @@ class TimeUnit:
         self.x = np.nan
         self.parent_name = None
         self.initialized = False
+        self.RMULC = 0
         return
     
     def initialize(self, parent=None, parent_unit=None, parent_dt=None):
@@ -146,7 +147,7 @@ class TimeUnit:
         
     def __repr__(self):
         name = self.__class__.__name__
-        xstr = 'x={self.x:n}' if self.initialized else 'initialized=False'
+        xstr = f'x={self.x:n}' if self.initialized else 'initialized=False'
         return f'ss.{name}({self.value}, unit={self.unit}, {xstr})'
     
     def disp(self):
@@ -191,9 +192,18 @@ class TimeUnit:
     # ...from either side
     def __radd__(self, other): return other + self.x
     def __rsub__(self, other): return other - self.x
-    def __rmul__(self, other): return other * self.x
+    # def __rmul__(self, other): return other * self.x
     def __rpow__(self, other): return other ** self.x
     def __rtruediv__(self, other): return other / self.x
+    
+    def __rmul__(self, other):
+        dem = 1000
+        self.RMULC += 1
+        if not self.RMULC % dem:
+            print('hi i am rmul', self, other)
+            if np.random.rand() < 0.1:
+                raise Exception('you FUAIILED')
+        return other * self.x
     
     # Handle modify-in-place methods
     def __iadd__(self, other): self.value += other; return self
@@ -208,22 +218,14 @@ class TimeUnit:
             return self.__getattribute__(attr)
         else:
             return getattr(self.x, attr)
-    
-    # # Borrowed from Arr
-    # def __array_ufunc__(self, *args, **kwargs):
-    #     if args[1] != '__call__':
-    #         args = [(x if x is not self else self.x) for x in args]
-    #         kwargs = {k: v if v is not self else self.x for k, v in kwargs.items()}
-    #         return self.x.__array_ufunc__(*args, **kwargs)
-    #     else:
-    #         args = [(x if x is not self else self.x) for x in args] # Convert any operands that are Arr instances to their value arrays
-    #         if 'out' in kwargs and kwargs['out'][0] is self:
-    #             del kwargs['out']
-    #             self.set(value=args[0](*args[2:], **kwargs))
-    #             return self
-    #         else:
-    #             # Otherwise, just run the ufunc
-    #             return args[0](*args[2:], **kwargs)
+        
+    # Similar to Arr -- required for doing efficient array operations
+    def __array_ufunc__(self, ufunc, method, *args, **kwargs):
+        args = [(arg.x if arg is self else arg) for arg in args] # Use self.x for the operation
+        if method == '__call__':
+            return ufunc(*args, **kwargs)
+        else:
+            return self.x.__array_ufunc__(ufunc, method, *args, **kwargs) # Probably not needed
 
 class dur(TimeUnit):
     """ Any number that acts like a duration """
