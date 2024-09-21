@@ -150,6 +150,7 @@ class Loop:
     
     def plot(self, fig_kw=None, plot_kw=None, scatter_kw=None):
         """ Plot a diagram of all the events """
+        
         # Assemble data
         df = self.plan
         yticks = df.func_order.unique()
