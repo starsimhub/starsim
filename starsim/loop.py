@@ -3,6 +3,7 @@ Parent class for the integration loop.
 """
 
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
@@ -16,7 +17,7 @@ __all__ = ['Loop']
 
 class Loop:
     """ Base class for integration loop """
-    def __init__(self, sim):
+    def __init__(self, sim): # TODO: consider eps=1e-6 and round times to this value
         self.sim = sim
         self.funcs = []
         self.timearrays = sc.objdict()
@@ -141,22 +142,35 @@ class Loop:
             f() # Actually execute the step -- this is where all of Starsim happens!!
         return
     
-    def plot(self, fig_kw=None, **kwargs):
+    def to_df(self):
+        """ Return a user-friendly version of the plan """
+        cols = ['time', 'func_order', 'module', 'func_name']
+        df = self.plan[cols]
+        return df
+    
+    def plot(self, fig_kw=None, plot_kw=None, scatter_kw=None):
         """ Plot a diagram of all the events """
         # Assemble data
-        yticks = self.plan.func_order.unique()
-        ylabels = self.plan.func_label.unique()
-        x = self.plan.time
-        y = self.plan.func_order
+        df = self.plan
+        yticks = df.func_order.unique()
+        ylabels = df.func_label.unique()
+        x = df.time
+        y = df.func_order
+        
+        # Convert module names to integers for plotting colors
+        mod_int, _ = pd.factorize(df.module) 
+        colors = sc.gridcolors(np.unique(mod_int), asarray=True)
         
         # Do the plotting
-        kw = sc.mergedicts(lw=2, markersize=4, alpha=0.8)
+        plot_kw = sc.mergedicts(dict(lw=2, alpha=0.2, c='k'), plot_kw)
+        scatter_kw = sc.mergedicts(dict(s=200, alpha=0.6), scatter_kw)
         fig = plt.figure(**sc.mergedicts(fig_kw))
-        plt.plot(x, y, 'o-', **kw)
+        plt.plot(x, y, **plot_kw)
+        plt.scatter(x, y, c=colors[mod_int], **scatter_kw)
         plt.yticks(yticks, ylabels)
-        plt.title(f'Integration plan ({len(self.plan)} events)')
+        plt.title(f'Integration plan ({len(df)} events)')
         plt.xlabel(f'Time since simulation start (in {self.sim.pars.unit}s)')
-        plt.grid(axis='y')
+        plt.grid(True)
         sc.figlayout()
         sc.boxoff()
         return fig
