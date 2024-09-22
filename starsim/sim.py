@@ -151,6 +151,15 @@ class Sim:
         self.dt_year = ss.time_ratio(pars.unit, pars.dt, 'year', 1.0) # Figure out what dt is in years; used for demographics # TODO: handle None
         return
     
+    @property
+    def now(self):
+        """ Return the current time, i.e. the time vector at the current timestep """
+        try:
+            return self.timevec[self.ti]
+        except Exception as E:
+            ss.warn(f'Encountered exception when trying to calculate current time in {self.name}: {E}')
+            return None
+    
     def init_people(self, verbose=None, **kwargs):
         """
         Initialize people within the sim

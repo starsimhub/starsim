@@ -128,7 +128,7 @@ def test_ncd():
 
     plt.figure()
     plt.stackplot(
-        sim.yearvec,
+        sim.timevec,
         ncd.results.n_not_at_risk,
         ncd.results.n_at_risk - ncd.results.n_affected,
         ncd.results.n_affected,

@@ -165,6 +165,15 @@ class Module(sc.quickobj):
         self.ti = 0 # Track the current timestep, which may or may not match the sim's
         return
     
+    @property
+    def now(self):
+        """ Return the current time, i.e. the time vector at the current timestep """
+        try:
+            return self.timevec[self.ti]
+        except Exception as E:
+            ss.warn(f'Encountered exception when trying to calculate current time in {self.name}: {E}')
+            return None
+    
     def step(self):
         """ Define how the module updates over time """
         pass

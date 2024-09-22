@@ -124,13 +124,7 @@ class Disease(ss.Module):
         return
 
     def log_infections(self, uids, sources=None):
-        sim = self.sim
-        if sources is None:
-            for target in uids:
-                self.log.append(np.nan, target, sim.year)
-        else:
-            for target, source in zip(uids, sources):
-                self.log.append(source, target, sim.year)
+        self.log.add_entries(uids, sources, self.now)
         return
 
     def update_results(self):
@@ -376,13 +370,13 @@ class InfectionLog(nx.MultiDiGraph):
 
     A table of outcomes can be returned using `InfectionLog.line_list()`
     """
-    def add_entries(self, sim, uids, sources=None): # TODO: reconcile with other methods
+    def add_entries(self, uids, sources=None, time=np.nan):
         if sources is None:
             for target in uids:
-                self.log.append(np.nan, target, sim.year)
+                self.append(np.nan, target, time)
         else:
             for target, source in zip(uids, sources):
-                self.log.append(source, target, sim.year)
+                self.append(source, target, time)
         return
 
     def add_data(self, uids, **kwargs):
