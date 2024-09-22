@@ -611,7 +611,7 @@ class DiskNet(Network):
     def step(self):
 
         # Motion step
-        vdt = self.pars.v * self.sim.dt
+        vdt = self.pars.v * self.dt
         self.x[:] = self.x + vdt * np.cos(self.theta)
         self.y[:] = self.y + vdt * np.sin(self.theta)
 

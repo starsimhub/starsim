@@ -302,7 +302,6 @@ class Infection(Disease):
     
                         # Calculate probability of a->b transmission.
                         beta_per_dt = edges.beta * beta # TODO: think of shortcut to skip this multiplication if all edges are just 1.0
-                        # beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
                         p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
         
                         # Generate a new random number based on the two other random numbers
