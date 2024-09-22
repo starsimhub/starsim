@@ -64,13 +64,13 @@ class MultiSim(sc.prettyobj):
 
         return
 
-    def run(self, reduce=False, **kwargs):
+    def run(self, n_runs=4, **kwargs):
         """
         Run the sims
 
         Args:
-            reduce  (bool): whether to reduce after running (see reduce())
-            kwargs  (dict): passed to multi_run(); use run_args to pass arguments to sim.run()
+            n_runs (int): whether to reduce after running (see reduce())
+            kwargs (dict): passed to multi_run(); use run_args to pass arguments to sim.run()
 
         Returns:
             None (modifies MultiSim object in place)
@@ -89,11 +89,7 @@ class MultiSim(sc.prettyobj):
 
         # Run
         kwargs = sc.mergedicts(self.run_args, kwargs)
-        self.sims = multi_run(sims, **kwargs)
-
-        # Reduce
-        if reduce:
-            self.reduce()
+        self.sims = multi_run(sims, n_runs=n_runs, **kwargs)
 
         return self
 
@@ -229,6 +225,39 @@ class MultiSim(sc.prettyobj):
         """
         return self.reduce(use_mean=False, quantiles=quantiles, **kwargs)
     
+    def summarize(self, method='mean', quantiles=None, how='default'):
+        """
+        Summarize the simulations statistically.
+        
+        Args:
+            method (str): one of 'mean' (default: [mean, 2*std]), 'median' ([median, min, max]), or 'all' (all results)
+            quantiles (dict): if method='median', use these quantiles
+            how (str): passed to sim.summarize()
+        """
+        
+        # Compute the summaries
+        summaries = []
+        for sim in self.sims:
+            summaries.append(sim.summarize(how=how))
+            
+        summary = sc.dcp(summaries[0]) # Use the first one as a template
+        for k in summary.keys():
+            arr = np.array([s[k] for s in summaries])
+            if method == 'all':
+                summary[k] = arr
+            elif method == 'mean':
+                summary[k] = sc.objdict({'mean':arr.mean(), 'std':arr.std(), 'sem':arr.std()/np.sqrt(len(arr))}) # TODO: replace with sc.sem()
+            elif method == 'median':
+                if quantiles is None:
+                    quantiles = sc.objdict({'median':0.5, 'min':0, 'max':1, 'q25':0.25, 'q75':0.75})
+                elif isinstance(quantiles, list):
+                    quantiles = {q:q for q in quantiles}
+                summary[k] = {q:v for q,v in zip(quantiles, np.quantile(arr, quantiles))}
+        
+        self.summary = summary # Could reconcile with reduce()'s summary
+                                  
+        return summary
+    
     def plot(self, key=None, fig=None, fig_kw=None, plot_kw=None, fill_kw=None):
         """ 
         Plot all results in the MultiSim object.
@@ -354,11 +383,12 @@ def single_run(sim, ind=0, reseed=True, keep_people=False, run_args=None, sim_ar
 def multi_run(sim, n_runs=4, reseed=None, iterpars=None, keep_people=None, run_args=None, sim_args=None,
               par_args=None, do_run=True, parallel=True, n_cpus=None, verbose=None, **kwargs):
     """
-    For running multiple runs in parallel. If the first argument is a list of sims,
-    exactly these will be run and most other arguments will be ignored.
+    For running multiple sims in parallel. If the first argument is a list of sims
+    rather than a single sim, exactly these will be run and most other arguments 
+    will be ignored.
 
     Args:
-        sim         (Sim)   : the sim instance to be run, or a list of sims.
+        sim         (Sim/list): the sim instance to be run, or a list of sims.
         n_runs      (int)   : the number of parallel runs
         reseed      (bool)  : whether or not to generate a fresh seed for each run (default: true for single, false for list of sims)
         iterpars    (dict)  : any other parameters to iterate over the runs; see sc.parallelize() for syntax
