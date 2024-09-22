@@ -185,11 +185,10 @@ class Syphilis(ss.Infection):
     def init_results(self):
         """ Initialize results """
         super().init_results()
-        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'new_nnds',       npts, dtype=int, scale=True, label='New neonatal deaths'),
-            ss.Result(self.name, 'new_stillborns', npts, dtype=int, scale=True, label='New stillborns'),
-            ss.Result(self.name, 'new_congenital', npts, dtype=int, scale=True, label='New congenital syphilis'),
+            ss.Result(self.name, 'new_nnds',       self.npts, dtype=int, scale=True, label='New neonatal deaths'),
+            ss.Result(self.name, 'new_stillborns', self.npts, dtype=int, scale=True, label='New stillborns'),
+            ss.Result(self.name, 'new_congenital', self.npts, dtype=int, scale=True, label='New congenital syphilis'),
         ]
         return
 
@@ -421,8 +420,8 @@ class syph_screening(ss.routine_screening):
     def init_pre(self, sim):
         super().init_pre(sim)
         self.results += [
-            ss.Result('syphilis', 'n_screened', sim.npts, dtype=int, scale=True, label='Number screened'),
-            ss.Result('syphilis', 'n_dx', sim.npts, dtype=int, scale=True, label='Number diagnosed'),
+            ss.Result('syphilis', 'n_screened', self.npts, dtype=int, scale=True, label='Number screened'),
+            ss.Result('syphilis', 'n_dx',       self.npts, dtype=int, scale=True, label='Number diagnosed'),
         ]
         return
 
@@ -444,7 +443,7 @@ class syph_treatment(ss.treat_num):
 
     def init_pre(self, sim):
         super().init_pre(sim)
-        self.results += ss.Result('syphilis', 'n_tx', sim.npts, dtype=int, scale=True, label='Number treated')
+        self.results += ss.Result('syphilis', 'n_tx', self.npts, dtype=int, scale=True, label='Number treated')
         return
 
     def step(self):

@@ -191,7 +191,7 @@ class SIS(ss.Infection):
     def init_results(self):
         """ Initialize results """
         super().init_results()
-        self.results += ss.Result(self.name, 'rel_sus', self.sim.npts, dtype=float, label='Relative susceptibility')
+        self.results += ss.Result(self.name, 'rel_sus', self.npts, dtype=float, label='Relative susceptibility')
         return
 
     def update_results(self):

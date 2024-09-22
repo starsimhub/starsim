@@ -64,16 +64,13 @@ class Cholera(ss.Infection):
         return self.infected & ~self.symptomatic
 
     def init_results(self):
-        """
-        Initialize results
-        """
+        """ Initialize results """
         super().init_results()
-        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'new_deaths', npts, dtype=int, label='Deaths'),
-            ss.Result(self.name, 'cum_deaths', npts, dtype=int, label='Cumulative deaths'),
-            ss.Result(self.name, 'env_prev', npts, dtype=float, label='Environmental prevalence'),
-            ss.Result(self.name, 'env_conc', npts, dtype=float, label='Environmental concentration'),
+            ss.Result(self.name, 'new_deaths', self.npts, dtype=int,   label='Deaths'),
+            ss.Result(self.name, 'cum_deaths', self.npts, dtype=int,   label='Cumulative deaths'),
+            ss.Result(self.name, 'env_prev',   self.npts, dtype=float, label='Environmental prevalence'),
+            ss.Result(self.name, 'env_conc',   self.npts, dtype=float, label='Environmental concentration'),
         ]
         return
 

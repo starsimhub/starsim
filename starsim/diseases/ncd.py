@@ -73,11 +73,10 @@ class NCD(ss.Disease):
         Initialize results
         """
         super().init_results()
-        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'n_not_at_risk', npts, dtype=int, label='Not at risk'),
-            ss.Result(self.name, 'prevalence', npts, dtype=float, label='Prevalence'),
-            ss.Result(self.name, 'new_deaths', npts, dtype=int, label='Deaths'),
+            ss.Result(self.name, 'n_not_at_risk', self.npts, dtype=int,   label='Not at risk'),
+            ss.Result(self.name, 'prevalence',    self.npts, dtype=float, label='Prevalence'),
+            ss.Result(self.name, 'new_deaths',    self.npts, dtype=int,   label='Deaths'),
         ]
         return
 

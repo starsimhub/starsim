@@ -55,7 +55,7 @@ class Disease(ss.Module):
         Result for 'n_susceptible'
         """
         for state in self._boolean_states:
-            self.results += ss.Result(self.name, f'n_{state.name}', self.sim.npts, dtype=int, scale=True, label=state.label)
+            self.results += ss.Result(self.name, f'n_{state.name}', self.npts, dtype=int, scale=True, label=state.label)
         return
 
     def step_state(self):
@@ -197,11 +197,10 @@ class Infection(Disease):
         Initialize results
         """
         super().init_results()
-        sim = self.sim
         self.results += [
-            ss.Result(self.name, 'prevalence',     sim.npts, dtype=float, scale=False, label='Prevalence'),
-            ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True, label='New infections'),
-            ss.Result(self.name, 'cum_infections', sim.npts, dtype=int, scale=True, label='Cumulative infections'),
+            ss.Result(self.name, 'prevalence',     self.npts, dtype=float, scale=False, label='Prevalence'),
+            ss.Result(self.name, 'new_infections', self.npts, dtype=int, scale=True, label='New infections'),
+            ss.Result(self.name, 'cum_infections', self.npts, dtype=int, scale=True, label='Cumulative infections'),
         ]
         return
         

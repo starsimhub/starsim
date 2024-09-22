@@ -100,7 +100,7 @@ class Sim:
             ti = min(self.ti, len(self.timevec)-1) # During integration, ti can go one past the end of the time vector
             return self.timevec[ti]
         except Exception as E:
-            ss.warn(f'Encountered exception when trying to calculate current time: {E}')
+            ss.warn(f'Encountered exception in sim when getting the current time: {E}')
             return None
         
     @property

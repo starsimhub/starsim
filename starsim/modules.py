@@ -165,6 +165,7 @@ class Module(sc.quickobj):
         
         # Create the module-specific time vector
         self.timevec = ss.make_timevec(pars.start, pars.stop, self.dt, self.unit)
+        self.npts = len(self.timevec)
         self.ti = 0 # Track the current timestep, which may or may not match the sim's
         return
     
@@ -174,7 +175,7 @@ class Module(sc.quickobj):
         try:
             return self.timevec[self.ti]
         except Exception as E:
-            ss.warn(f'Encountered exception when trying to calculate current time in {self.name}: {E}')
+            ss.warn(f'Encountered exception when getting the current time in {self.name}: {E}')
             return None
     
     def step(self):

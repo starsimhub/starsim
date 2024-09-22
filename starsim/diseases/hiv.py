@@ -61,7 +61,7 @@ class HIV(ss.Infection):
     def init_results(self):
         """ Initialize results """
         super().init_results()
-        self.results += ss.Result(self.name, 'new_deaths', self.sim.npts, dtype=int, label='Deaths')
+        self.results += ss.Result(self.name, 'new_deaths', self.npts, dtype=int, label='Deaths')
         return
 
     def update_results(self):
@@ -101,7 +101,7 @@ class ART(ss.Intervention):
 
     def init_pre(self, sim):
         super().init_pre(sim)
-        self.results += ss.Result(self.name, 'n_art', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'n_art', self.npts, dtype=int)
         self.initialized = True
         return
 
@@ -139,7 +139,7 @@ class CD4_analyzer(ss.Analyzer):
 
     def init_pre(self, sim):
         super().init_pre(sim)
-        self.cd4 = np.zeros((sim.npts, sim.people.n), dtype=int)
+        self.cd4 = np.zeros((self.npts, sim.people.n), dtype=int)
         return
 
     def step(self):

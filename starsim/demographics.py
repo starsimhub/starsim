@@ -68,11 +68,10 @@ class Births(Demographics):
         return birth_rate
 
     def init_results(self):
-        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'new', npts, dtype=int, scale=True, label='New births'),
-            ss.Result(self.name, 'cumulative', npts, dtype=int, scale=True, label='Cumulative births'),
-            ss.Result(self.name, 'cbr', npts, dtype=int, scale=False, label='Crude birth rate'),
+            ss.Result(self.name, 'new',        self.npts, dtype=int, scale=True,  label='New births'),
+            ss.Result(self.name, 'cumulative', self.npts, dtype=int, scale=True,  label='Cumulative births'),
+            ss.Result(self.name, 'cbr',        self.npts, dtype=int, scale=False, label='Crude birth rate'),
         ]
         return
 
@@ -222,11 +221,10 @@ class Deaths(Demographics):
         return death_prob
 
     def init_results(self):
-        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'new', npts, dtype=int, scale=True, label='Deaths'),
-            ss.Result(self.name, 'cumulative', npts, dtype=int, scale=True, label='Cumulative deaths'),
-            ss.Result(self.name, 'cmr', npts, dtype=int, scale=False, label='Crude mortality rate'),
+            ss.Result(self.name, 'new',        self.npts, dtype=int, scale=True, label='Deaths'),
+            ss.Result(self.name, 'cumulative', self.npts, dtype=int, scale=True, label='Cumulative deaths'),
+            ss.Result(self.name, 'cmr',        self.npts, dtype=int, scale=False, label='Crude mortality rate'),
         ]
         return
 
@@ -371,11 +369,10 @@ class Pregnancy(Demographics):
         Still unclear whether this logic should live in the pregnancy module, the
         individual disease modules, the connectors, or the sim.
         """
-        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'pregnancies', npts, dtype=int, scale=True, label='New pregnancies'),
-            ss.Result(self.name, 'births', npts, dtype=int, scale=True, label='New births'),
-            ss.Result(self.name, 'cbr', npts, dtype=int, scale=False, label='Crude birth rate'),
+            ss.Result(self.name, 'pregnancies', self.npts, dtype=int, scale=True,  label='New pregnancies'),
+            ss.Result(self.name, 'births',      self.npts, dtype=int, scale=True,  label='New births'),
+            ss.Result(self.name, 'cbr',         self.npts, dtype=int, scale=False, label='Crude birth rate'),
         ]
         return
 
