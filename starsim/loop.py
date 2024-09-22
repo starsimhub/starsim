@@ -19,9 +19,9 @@ class Loop:
     """ Base class for integration loop """
     def __init__(self, sim): # TODO: consider eps=1e-6 and round times to this value
         self.sim = sim
-        self.funcs = []
-        self.timearrays = sc.objdict()
-        self.plan = sc.dataframe(columns=['order', 'time', 'module', 'func_name', 'func'])
+        self.funcs = None
+        self.timearrays = None
+        self.plan = None
         self.index = 0 # The next function to execute
         return
     
@@ -103,6 +103,7 @@ class Loop:
     
     def collect_timearrays(self):
         """ Collect numerical time arrays for each module """
+        self.timearrays = sc.objdict()
         
         # Handle the sim and people first
         sim = self.sim
@@ -148,7 +149,6 @@ class Loop:
         
         # Check if the simulation is complete
         if self.index == len(self.plan):
-            print('DIFUDIFUD', self.index)
             self.sim.complete = True
         return
     
@@ -196,5 +196,20 @@ class Loop:
         sc.figlayout()
         sc.boxoff()
         return fig
+    
+    def __deepcopy__(self, memo):
+        """ A dataframe that has functions in it doesn't copy well; convert to a dict first """
+        cls = self.__class__
+        new = cls.__new__(cls)
+        memo[id(self)] = new
+        for k, v in self.__dict__.items():
+            if k == 'plan':
+                origdict = v.to_dict() # Convert to a dictionary
+                newdict = sc.dcp(origdict, memo=memo) # Copy the dict
+                newdf = sc.dataframe(newdict)
+                setattr(new, k, newdf)
+            else:
+                setattr(new, k, sc.dcp(v, memo=memo)) # Regular deepcopy
+        return new
         
     
