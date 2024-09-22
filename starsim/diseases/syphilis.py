@@ -197,7 +197,7 @@ class Syphilis(ss.Infection):
         """ Updates prior to interventions """
 
         # Primary
-        ti = self.sim.ti
+        ti = self.ti
         primary = self.exposed & (self.ti_primary <= ti)
         self.primary[primary] = True
         self.exposed[primary] = False
@@ -260,7 +260,7 @@ class Syphilis(ss.Infection):
 
     def update_results(self):
         super().update_results()
-        ti = self.sim.ti
+        ti = self.ti
         self.results.new_nnds[ti]       = np.count_nonzero(self.ti_nnd == ti)
         self.results.new_stillborns[ti] = np.count_nonzero(self.ti_stillborn == ti)
         self.results.new_congenital[ti] = np.count_nonzero(self.ti_congenital == ti)
@@ -271,7 +271,7 @@ class Syphilis(ss.Infection):
         Set initial prognoses for adults newly infected with syphilis
         """
         
-        ti = self.sim.ti
+        ti = self.ti
         dt = self.sim.dt
 
         self.susceptible[uids] = False

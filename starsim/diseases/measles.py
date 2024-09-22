@@ -41,7 +41,7 @@ class Measles(SIR):
 
     def step_state(self):
         # Progress exposed -> infected
-        ti = self.sim.ti
+        ti = self.ti
         infected = (self.exposed & (self.ti_infected <= ti)).uids
         self.exposed[infected] = False
         self.infected[infected] = True

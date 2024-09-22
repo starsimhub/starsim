@@ -41,25 +41,25 @@ class Gonorrhea(ss.Infection):
 
     def update_results(self):
         super().update_results()
-        ti = self.sim.ti
+        ti = self.ti
         self.results.n_symptomatic[ti] = self.symptomatic.count()
         self.results.new_clearances[ti] = np.count_nonzero(self.ti_clearance == ti)
         return
 
     def step_state(self):
         """ Natural clearance """
-        clearances = self.ti_clearance <= self.sim.ti
+        clearances = self.ti_clearance <= self.ti
         self.susceptible[clearances] = True
         self.infected[clearances] = False
         self.symptomatic[clearances] = False
-        self.ti_clearance[clearances] = self.sim.ti
+        self.ti_clearance[clearances] = self.ti
 
         return
 
     def set_prognoses(self, uids, source_uids=None):
         """ Natural history of gonorrhea for adult infection """
         super().set_prognoses(uids, source_uids)
-        ti = self.sim.ti
+        ti = self.ti
 
         # Set infection status
         self.susceptible[uids] = False

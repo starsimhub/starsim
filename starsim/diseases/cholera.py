@@ -83,7 +83,7 @@ class Cholera(ss.Infection):
         Original version by Dom Delport
         """
         # Progress exposed -> infected
-        ti = self.sim.ti
+        ti = self.ti
         infected = (self.exposed & (self.ti_infected <= ti)).uids
         self.infected[infected] = True
 
@@ -165,7 +165,7 @@ class Cholera(ss.Infection):
         # Make new cases via indirect transmission
         pars = self.pars
         res = self.results
-        p_transmit = res.env_conc[self.sim.ti] * pars.beta_env
+        p_transmit = res.env_conc[self.ti] * pars.beta_env
         pars.p_env_transmit.set(p=p_transmit)
         new_cases = pars.p_env_transmit.filter(self.sim.people.uid[self.susceptible]) # TODO: make syntax nicer
         if new_cases.any():
@@ -181,7 +181,7 @@ class Cholera(ss.Infection):
     def update_results(self):
         super().update_results()
         res = self.results
-        ti = self.sim.ti
+        ti = self.ti
         res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti+1])
         return

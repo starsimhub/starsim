@@ -60,7 +60,7 @@ class Ebola(SIR):
     def step_state(self):
 
         # Progress exposed -> infected
-        ti = self.sim.ti
+        ti = self.ti
         infected = (self.exposed & (self.ti_infected <= ti)).uids
         self.exposed[infected] = False
         self.infected[infected] = True
@@ -95,7 +95,7 @@ class Ebola(SIR):
         # Do not call set_prognoses on the parent
         #super().set_prognoses(sim, uids, source_uids)
 
-        ti = self.sim.ti
+        ti = self.ti
         dt = self.sim.dt
         self.susceptible[uids] = False
         self.exposed[uids] = True

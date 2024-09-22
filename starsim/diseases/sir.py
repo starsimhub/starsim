@@ -93,7 +93,7 @@ class SIR(ss.Infection):
 
     def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses """
-        ti = self.sim.ti
+        ti = self.ti
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = ti
@@ -160,7 +160,7 @@ class SIS(ss.Infection):
 
     def step_state(self):
         """ Progress infectious -> recovered """
-        recovered = (self.infected & (self.ti_recovered <= self.sim.ti)).uids
+        recovered = (self.infected & (self.ti_recovered <= self.ti)).uids
         self.infected[recovered] = False
         self.susceptible[recovered] = True
         self.update_immunity()
@@ -177,14 +177,14 @@ class SIS(ss.Infection):
         super().set_prognoses(uids, source_uids)
         self.susceptible[uids] = False
         self.infected[uids] = True
-        self.ti_infected[uids] = self.sim.ti
+        self.ti_infected[uids] = self.ti
         self.immunity[uids] += self.pars.imm_boost
 
         # Sample duration of infection
         dur_inf = self.pars.dur_inf.rvs(uids)
 
         # Determine when people recover
-        self.ti_recovered[uids] = self.sim.ti + dur_inf
+        self.ti_recovered[uids] = self.ti + dur_inf
 
         return
     
@@ -197,7 +197,7 @@ class SIS(ss.Infection):
     def update_results(self):
         """ Store the population immunity (susceptibility) """
         super().update_results()
-        self.results['rel_sus'][self.sim.ti] = self.rel_sus.mean()
+        self.results['rel_sus'][self.ti] = self.rel_sus.mean()
         return 
 
     def plot(self):
