@@ -24,14 +24,14 @@ pars = sc.objdict(
 )
 
 
-def make_sim(run=False):
+def make_sim(run=False, **kwargs):
     """
     Define a default simulation for testing the baseline. If run directly (not 
     via pytest), also plot the sim by default.
     """
     diseases = ['sir', 'sis']
     networks = ['random', 'mf', 'maternal']
-    sim = ss.Sim(pars=pars, networks=networks, diseases=diseases, demographics=True)
+    sim = ss.Sim(pars=pars | kwargs, networks=networks, diseases=diseases, demographics=True)
     
     # Optionally run and plot
     if run:
@@ -62,17 +62,19 @@ def save_baseline():
     return
 
 
-def multisim_baseline(save=False, n_runs=10):
+def multisim_baseline(save=False, n_runs=10, **kwargs):
     """
     Check or update the multisim baseline results; not part of the integration tests
     """
-    sc.heading('Running MultiSim baseline...')
+    word = 'Saving' if save else 'Checking'
+    sc.heading(f'{word} MultiSim baseline...')
 
     # Make and run sims
-    sim = make_sim()
+    kwargs.setdefault('verbose', ss.options.verbose/n_runs*2)
+    sim = make_sim(**kwargs)
     msim = ss.MultiSim(base_sim=sim)
     msim.run(n_runs)
-    summary = msim.summarize_sims()
+    summary = msim.summarize()
 
     # Export results
     if save:
@@ -80,7 +82,7 @@ def multisim_baseline(save=False, n_runs=10):
         print('Done.')
     else:
         baseline = sc.loadjson(multisim_filename)
-        ss.diff_multisims(baseline, summary, die=False)
+        ss.diff_sims(baseline, summary, die=False)
 
     return
 

@@ -908,10 +908,11 @@ def diff_sims(sim1, sim2, multi=False, skip_key_diffs=False, skip=None, full=Fal
             numeric = sc.isnumber(old) and sc.isnumber(new) # Should all be numeric, but just in case
             if numeric and old > 0:
                 this_diff = new - old
+                this_ratio = new / old
                 if multi:
                     abs_ratio = abs(this_diff)/sem
+                    this_zscore = abs_ratio
                 else:
-                    this_ratio = new / old
                     abs_ratio = max(this_ratio, 1.0/this_ratio)
                 
                 # Set the character to use
