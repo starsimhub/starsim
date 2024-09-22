@@ -169,8 +169,14 @@ class TimePar:
         
     def __repr__(self):
         name = self.__class__.__name__
-        xstr = f'x={self.x:n}' if self.initialized else 'initialized=False'
-        return f'ss.{name}({self.value}, unit={self.unit}, {xstr})'
+        if self.initialized:
+            if self.x == self.value:
+                xstr = ''
+            else:
+                xstr = f', x={self.x:n}'
+        else:
+            xstr = ', initialized=False'
+        return f'ss.{name}({self.value}, unit={self.unit}{xstr})'
     
     def disp(self):
         return sc.pr(self)
@@ -210,6 +216,9 @@ class TimePar:
     def __isub__(self, other): self.value -= other; return self
     def __imul__(self, other): self.value *= other; return self
     def __itruediv__(self, other): self.value /= other; return self
+    
+    # Other methods
+    def __neg__(self): return -self.x
     
     # Unfortunately, floats don't define the above methods, so we can't *just* use this
     def __getattr__(self, attr):

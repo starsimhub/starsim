@@ -305,7 +305,7 @@ class Pregnancy(Demographics):
         if sc.isnumber(frd):
             fertility_rate[uids] = self.fertility_rate_data
         else:
-            year_ind = sc.findnearest(frd.index, sim.year-self.pars.dur_pregnancy)
+            year_ind = sc.findnearest(frd.index, sim.now-self.pars.dur_pregnancy) # TODO: make time-unit-aware
             nearest_year = frd.index[year_ind]
 
             # Assign agents to age bins

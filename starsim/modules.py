@@ -50,6 +50,7 @@ class Module(sc.quickobj):
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
         self.set_time_pars(unit, dt)
         self.results = ss.Results(self.name)
+        self.pre_initialized = False
         self.initialized = False
         self.finalized = False
         return
@@ -113,7 +114,7 @@ class Module(sc.quickobj):
             raise ValueError(errormsg)
         return
     
-    def init_pre(self, sim):
+    def init_pre(self, sim, force=False):
         """
         Perform initialization steps
 
@@ -121,13 +122,15 @@ class Module(sc.quickobj):
         initialization, initialized=False until init_vals() is called (which is after
         distributions are initialized).
         """
-        self.sim = sim # Link back to the sim object
-        ss.link_dists(self, sim, skip=ss.Sim) # Link the distributions to sim and module
-        sim.pars[self.name] = self.pars
-        sim.results[self.name] = self.results
-        sim.people.add_module(self) # Connect the states to the people
-        self.init_time_pars() # Initialize the modules' time parameters and link them to the sim
-        self.init_results()
+        if force or not self.pre_initialized:
+            self.sim = sim # Link back to the sim object
+            ss.link_dists(self, sim, skip=ss.Sim) # Link the distributions to sim and module
+            sim.pars[self.name] = self.pars
+            sim.results[self.name] = self.results
+            sim.people.add_module(self) # Connect the states to the people
+            self.init_time_pars() # Initialize the modules' time parameters and link them to the sim
+            self.init_results()
+            self.pre_initialized = True
         return
     
     def init_results(self):

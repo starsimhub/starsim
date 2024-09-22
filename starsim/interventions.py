@@ -75,7 +75,6 @@ class RoutineDelivery(Intervention):
         return
 
     def init_pre(self, sim):
-        super().init_pre(sim)
 
         # Validate inputs
         if (self.years is not None) and (self.start_year is not None or self.end_year is not None):
@@ -96,7 +95,7 @@ class RoutineDelivery(Intervention):
             raise ValueError(errormsg)
 
         # Adjustment to get the right end point
-        dt = self.dt # TODO: check if this is right
+        dt = sim.pars.dt # TODO: need to eventually replace with own timestep, but not initialized yet since super().init_pre() hasn't been called
         adj_factor = int(1/dt) - 1 if dt < 1 else 1
 
         # Determine the timepoints at which the intervention will be applied
@@ -135,8 +134,6 @@ class CampaignDelivery(Intervention):
         return
 
     def init_pre(self, sim):
-        super().init_pre(sim)
-        
         # Decide whether to apply the intervention at every timepoint throughout the year, or just once.
         self.timepoints = sc.findnearest(sim.timevec, self.years)
 
@@ -177,7 +174,7 @@ class BaseTest(Intervention):
         return
 
     def init_pre(self, sim):
-        super().init_pre(sim)
+        Intervention.init_pre(self, sim)
         self.outcomes = {k: np.array([], dtype=int) for k in self.product.hierarchy}
         return
 
@@ -360,7 +357,7 @@ class BaseTreatment(Intervention):
         return
 
     def init_pre(self, sim):
-        super().init_pre(sim)
+        Intervention.init_pre(self, sim)
         self.outcomes = {k: np.array([], dtype=int) for k in ['unsuccessful', 'successful']} # Store outcomes on each timestep
         return
 

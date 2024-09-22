@@ -91,13 +91,14 @@ def test_syph(dt=1, n_agents=500, do_plot=False):
 
     # Check plots
     burnin = 0
-    pi = int(burnin/sim.dt)
+    pi = int(burnin/dt)
     
     if do_plot:
+        tvec = sim.timevec[pi:]
         fig, ax = plt.subplots(2, 2)
         ax = ax.ravel()
         ax[0].stackplot(
-            sim.yearvec[pi:],
+            tvec,
             # sim.results.syphilis.n_susceptible[pi:],
             sim.results.syphilis.n_congenital[pi:],
             sim.results.syphilis.n_exposed[pi:],
@@ -108,13 +109,13 @@ def test_syph(dt=1, n_agents=500, do_plot=False):
         )
         ax[0].legend(['Congenital', 'Exposed', 'Primary', 'Secondary', 'Latent', 'Tertiary'], loc='lower right')
     
-        ax[1].plot(sim.yearvec[pi:], sim.results.syphilis.prevalence[pi:])
+        ax[1].plot(tvec, sim.results.syphilis.prevalence[pi:])
         ax[1].set_title('Syphilis prevalence')
     
-        ax[2].plot(sim.yearvec[pi:], sim.results.n_alive[pi:])
+        ax[2].plot(tvec, sim.results.n_alive[pi:])
         ax[2].set_title('Population')
     
-        ax[3].plot(sim.yearvec[pi:], sim.results.syphilis.new_infections[pi:])
+        ax[3].plot(tvec, sim.results.syphilis.new_infections[pi:])
         ax[3].set_title('New infections')
     
         fig.tight_layout()
