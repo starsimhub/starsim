@@ -85,7 +85,7 @@ def test_ppl_construction():
     sim.init()
     sim.run()
     pl.figure()
-    pl.plot(sim.tivec, sim.results.gonorrhea.n_infected)
+    pl.plot(sim.timevec, sim.results.gonorrhea.n_infected)
     pl.title('Number of gonorrhea infections')
 
     return sim

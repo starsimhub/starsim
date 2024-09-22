@@ -22,6 +22,7 @@ class Loop:
         self.funcs = []
         self.timearrays = sc.objdict()
         self.plan = sc.dataframe(columns=['order', 'time', 'module', 'func_name', 'func'])
+        self.index = 0 # The next function to execute
         return
     
     def init(self):
@@ -133,16 +134,27 @@ class Loop:
         self.plan = sc.dataframe(raw).sort_values('key').reset_index(drop=True)[col_order]
         return
     
-    def run(self, until=np.nan): # TODO: process until into absolute units
+    def run(self, until=None):
         """ Actually run the integration loop """
-        for t,f in zip(self.plan.time, self.plan.func):
-            if t > until: break # Terminate if asked to
-            f() # Actually execute the step -- this is where all of Starsim happens!!
+        if until is None: until = np.nan
+        self.index = 0 # Reset the index
+        
+        # Loop over every function in the integration loop, e.g. disease.step()
+        for f in self.plan.func: 
+            f() # Execute the function -- this is where all of Starsim happens!!
+            self.index += 1 # Increment the count
+            if self.sim.now > until: # Terminate if asked to
+                break
+        
+        # Check if the simulation is complete
+        if self.index == len(self.plan):
+            print('DIFUDIFUD', self.index)
+            self.sim.complete = True
         return
     
     def to_df(self):
-        """ Return a user-friendly version of the plan """
-        cols = ['time', 'func_order', 'module', 'func_name']
+        """ Return a user-friendly version of the plan, omitting object columns """
+        cols = ['time', 'func_order', 'module', 'func_name', 'func_label']
         df = self.plan[cols]
         return df
     
@@ -158,7 +170,7 @@ class Loop:
         """
         
         # Assemble data
-        df = self.plan
+        df = self.to_df()
         if simplify:
             filter_out = ['update_results', 'finish_step']
             df = df[~df.func_name.isin(filter_out)]

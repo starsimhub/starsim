@@ -155,9 +155,10 @@ class Sim:
     def now(self):
         """ Return the current time, i.e. the time vector at the current timestep """
         try:
-            return self.timevec[self.ti]
+            ti = min(self.ti, len(self.timevec)-1) # During integration, ti can go one past the end of the time vector
+            return self.timevec[ti]
         except Exception as E:
-            ss.warn(f'Encountered exception when trying to calculate current time in {self.name}: {E}')
+            ss.warn(f'Encountered exception when trying to calculate current time: {E}')
             return None
     
     def init_people(self, verbose=None, **kwargs):
@@ -254,8 +255,6 @@ class Sim:
     def finish_step(self):
         """ Finish the simulation timestep """
         self.ti += 1
-        if self.ti == self.npts:
-            self.complete = True
         return
 
     def run(self, until=None, verbose=None):
@@ -269,11 +268,6 @@ class Sim:
 
         # Check for AlreadyRun errors
         errormsg = None
-        until = sc.ifelse(until, self.npts)
-        if until > self.npts:
-            errormsg = f'Requested to run until t={until} but the simulation end is ti={self.npts}'
-        if self.ti >= until:  # NB. At the start, self.t is None so this check must occur after initialization
-            errormsg = f'Simulation is currently at t={self.ti}, requested to run until ti={until} which has already been reached'
         if self.complete:
             errormsg = 'Simulation is already complete (call sim.init() to re-run)'
         if errormsg:
@@ -285,7 +279,7 @@ class Sim:
         # If simulation reached the end, finalize the results
         if self.complete:
             self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
-            for mod in self.modules:
+            for mod in self.modules: # May not be needed, but keeps it consistent with the sim
                 mod.ti -= 1
             self.finalize()
             sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 1, self.verbose)
