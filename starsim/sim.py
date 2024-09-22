@@ -710,7 +710,7 @@ def diff_sims(sim1, sim2, multi=False, skip_key_diffs=False, skip=None, full=Fal
         missing = list(sim1_keys - sim2_keys)
         extra = list(sim2_keys - sim1_keys)
         if missing:
-            keymatchmsg += f'  Missing sim1 keys: {missing}\ns'
+            keymatchmsg += f'  Missing sim1 keys: {missing}\n'
         if extra:
             keymatchmsg += f'  Extra sim2 keys: {extra}\n'
 
