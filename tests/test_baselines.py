@@ -8,6 +8,7 @@ import sciris as sc
 import starsim as ss
 
 baseline_filename  = sc.thisdir(__file__, 'baseline.json')
+multisim_filename  = sc.thisdir(__file__, 'baseline_multisim.json')
 benchmark_filename = sc.thisdir(__file__, 'benchmark.json')
 parameters_filename = sc.thisdir(ss.__file__, 'regression', f'pars_v{ss.__version__}.json')
 sc.options(interactive=False) # Assume not running interactively
@@ -58,6 +59,29 @@ def save_baseline():
     # sim.export_pars(filename=parameters_filename) # If not different from previous version, can safely delete
 
     print('Done.')
+    return
+
+
+def multisim_baseline(save=False, n_runs=10):
+    """
+    Check or update the multisim baseline results; not part of the integration tests
+    """
+    sc.heading('Running MultiSim baseline...')
+
+    # Make and run sims
+    sim = make_sim()
+    msim = ss.MultiSim(base_sim=sim)
+    msim.run(n_runs)
+    summary = msim.summarize_sims()
+
+    # Export results
+    if save:
+        sc.savejson(multisim_filename, summary)
+        print('Done.')
+    else:
+        baseline = sc.loadjson(multisim_filename)
+        ss.diff_multisims(baseline, summary, die=False)
+
     return
 
 
