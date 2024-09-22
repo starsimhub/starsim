@@ -208,7 +208,7 @@ class MultiSim(sc.prettyobj):
             return self.base_sim
         else:
             return
-
+        
     def mean(self, bounds=None, **kwargs):
         """
         Alias for reduce(use_mean=True). See reduce() for full description.
@@ -228,6 +228,32 @@ class MultiSim(sc.prettyobj):
             kwargs (dict): passed to reduce()
         """
         return self.reduce(use_mean=False, quantiles=quantiles, **kwargs)
+    
+    def summarize_sims(self, method='mean', how='default'):
+        """
+        Summarize the simulations statistically.
+        
+        Args:
+            method (str): one of 'mean' (default: [mean, 2*std]), 'median' ([median, min, max]), or 'all' (all results)
+            how (str): passed to sim.summarize()
+        """
+        
+        # Compute the summaries
+        summaries = []
+        for sim in self.sims:
+            summaries.append(sim.summarize(how=how))
+            
+        summary = sc.dcp(summaries[0]) # Use the first one as a template
+        for k in summary.keys():
+            arr = np.array([s[k] for s in summaries])
+            if method == 'all':
+                summary[k] = arr
+            elif method == 'mean':
+                summary[k] = dict(mean=arr.mean(), std=arr.std())
+            elif method == 'median':
+                summary[k] = dict(median=np.median(arr), min=arr.min(), max=arr.max())
+            
+        return summary
     
     def plot(self, key=None, fig=None, fig_kw=None, plot_kw=None, fill_kw=None):
         """ 
