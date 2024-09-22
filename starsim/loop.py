@@ -23,6 +23,7 @@ class Loop:
         self.timearrays = None
         self.plan = None
         self.index = 0 # The next function to execute
+        self.initialized = False
         return
     
     def init(self):
@@ -30,7 +31,14 @@ class Loop:
         self.collect_funcs()
         self.collect_timearrays()
         self.make_plan()
+        self.initialized = True
         return
+    
+    def __len__(self):
+        if self.initialized:
+            return len(self.plan)
+        else:
+            return 0 # Or None?
     
     def __iadd__(self, func):
         """ Allow functions to be added to the function list """
@@ -44,6 +52,18 @@ class Loop:
         row = dict(func_order=len(self.funcs), module=module, func_name=func_name, func=func)
         self.funcs.append(row)
         return self
+    
+    def __repr__(self):
+        if self.initialized:
+            arrs = list({len(arr) for arr in self.timearrays.values()})
+            if len(arrs) == 1: arrs = arrs[0] # If all are the same, just use that
+            string = f'Loop(n={len(self)}, funcs={len(self.funcs)}, npts={arrs}, index={self.index})'
+        else:
+            string = 'Loop(initialized=False)'
+        return string
+    
+    def disp(self):
+        return sc.pr(self)
 
     def collect_funcs(self):
         """ Collect all the callable functions (methods) that comprise the step """
@@ -135,21 +155,42 @@ class Loop:
         self.plan = sc.dataframe(raw).sort_values('key').reset_index(drop=True)[col_order]
         return
     
-    def run(self, until=None):
-        """ Actually run the integration loop """
+    def run_one_step(self):
+        """
+        Take a single step, i.e. call a single function; only used for debugging purposes.
+        
+        Compare sim.run_one_step(), which runs a full timestep (which involves multiple function calls).        
+        """
+        f = self.plan.func[self.index] # Get the next function
+        f() # Call it
+        self.index += 1 # Increment the time
+        return
+    
+    def run(self, until=None, verbose=None):
+        """ Actually run the integration loop; usually called by sim.run() """
         if until is None: until = np.nan
-        self.index = 0 # Reset the index
         
         # Loop over every function in the integration loop, e.g. disease.step()
-        for f in self.plan.func: 
+        for f in self.plan.func[self.index:]:
+            if verbose:
+                row = self.plan[self.index]
+                print(f'Running t={row.time:n}, {row.func_label}()')
+            
             f() # Execute the function -- this is where all of Starsim happens!!
+
+            # Tidy up
             self.index += 1 # Increment the count
             if self.sim.now > until: # Terminate if asked to
                 break
-        
-        # Check if the simulation is complete
-        if self.index == len(self.plan):
-            self.sim.complete = True
+        return
+    
+    def manual_reset(self): # TODO: do we need this? I feel if we don't have it, people will be tempted to manually set loop.index = 0.
+        """
+        Reset the loop to run again. Note, does not reset sim quantities so should 
+        only be used for debugging.
+        """
+        self.index = 0
+        self.sim.complete = False
         return
     
     def to_df(self):

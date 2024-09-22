@@ -244,7 +244,6 @@ class SimPars(Pars):
         self.validate_agents()
         self.validate_total_pop()
         self.validate_time()
-        # self.validate_dt()
         return
     
     def validate_verbose(self):

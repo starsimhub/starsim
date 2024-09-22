@@ -93,22 +93,37 @@ class Sim:
             
         return string
     
+    @property
+    def now(self):
+        """ Return the current time, i.e. the time vector at the current timestep """
+        try:
+            ti = min(self.ti, len(self.timevec)-1) # During integration, ti can go one past the end of the time vector
+            return self.timevec[ti]
+        except Exception as E:
+            ss.warn(f'Encountered exception when trying to calculate current time: {E}')
+            return None
+        
+    @property
+    def modules(self):
+        """ Return iterator over all Module instances (stored in standard places) in the Sim """
+        return itertools.chain(
+            self.demographics(),
+            self.networks(),
+            self.diseases(),
+            self.connectors(),
+            self.interventions(),
+            [intv.product for intv in self.interventions() if hasattr(intv, 'product') and intv.product is not None], # TODO: simplify
+            self.analyzers(),
+        )
+    
     def init(self, **kwargs):
         """ Perform all initializations for the sim; most heavy lifting is done by the parameters """
+        
         # Validation and initialization
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
-        
-        # Validate parameters
-        self.pars.validate()
-
-        # Initialize time
-        self.init_time_attrs()
-        
-        # Initialize the people
-        self.init_people(**kwargs)  # Create all the people
-        
-        # # Initialize the modules within the parameters
-        # self.pars.validate_modules(self)
+        self.pars.validate() # Validate parameters
+        self.init_time_attrs() # Initialize time
+        self.init_people(**kwargs) # Initialize the people
         
         # Move initialized modules to the sim
         keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
@@ -124,18 +139,14 @@ class Sim:
             if hasattr(intv, 'product'): # TODO: simplify
                 intv.product.init_pre(self)
         
-        # Initialize all distributions now that everything else is in place, then set states
-        self.dists.init(obj=self, base_seed=self.pars.rand_seed, force=True)
+        # Final initializations
+        self.dists.init(obj=self, base_seed=self.pars.rand_seed, force=True) # Initialize all distributions now that everything else is in place
+        self.init_vals() # Initialize the values in all of the states and networks
+        self.init_results() # Initialize the results
+        self.loop.init() # Initialize the integration loop
+        self.timer = sc.timer(start=False) # Store a timer for keeping track of how long the run takes
+        self.verbose = self.pars.verbose # Store a run-specific value of verbose
         
-        # Initialize the values in all of the states and networks
-        self.init_vals()
-        
-        # Initialize the results
-        self.init_results()
-        
-        # Initialize the integration loop
-        self.loop.init()
-
         # It's initialized
         self.initialized = True
         return self
@@ -150,16 +161,6 @@ class Sim:
         self.ti = 0  # The time index, e.g. 0, 1, 2
         self.dt_year = ss.time_ratio(pars.unit, pars.dt, 'year', 1.0) # Figure out what dt is in years; used for demographics # TODO: handle None
         return
-    
-    @property
-    def now(self):
-        """ Return the current time, i.e. the time vector at the current timestep """
-        try:
-            ti = min(self.ti, len(self.timevec)-1) # During integration, ti can go one past the end of the time vector
-            return self.timevec[ti]
-        except Exception as E:
-            ss.warn(f'Encountered exception when trying to calculate current time: {E}')
-            return None
     
     def init_people(self, verbose=None, **kwargs):
         """
@@ -200,7 +201,7 @@ class Sim:
         return
     
     def reset_time_pars(self, force=True):
-        """ Reset the time parameters in the modules """
+        """ Reset the time parameters in the modules; used for imposing the sim's timestep on the modules """
         for mod in self.modules:
             mod.init_time_pars(force=force)
         return
@@ -214,19 +215,6 @@ class Sim:
         ]
         return
 
-    @property
-    def modules(self):
-        """ Return iterator over all Module instances (stored in standard places) in the Sim """
-        return itertools.chain(
-            self.demographics(),
-            self.networks(),
-            self.diseases(),
-            self.connectors(),
-            self.interventions(),
-            [intv.product for intv in self.interventions() if hasattr(intv, 'product') and intv.product is not None], # TODO: simplify
-            self.analyzers(),
-        )
-    
     def start_step(self):
         """ Step through time and update values """
 
@@ -256,15 +244,27 @@ class Sim:
         """ Finish the simulation timestep """
         self.ti += 1
         return
+    
+    def run_one_step(self, verbose=None):
+        """
+        Run a single sim step; only used for debugging purposes.
+        
+        Note: sim.run_one_step() runs a single simulation timestep, which involves
+        multiple function calls. In contrast, loop.run_one_step() runs a single
+        function call
+        
+        Note: the verbose here is only for the Loop object, not the sim.        
+        """
+        self.loop.run(self.now, verbose)
+        return self
 
     def run(self, until=None, verbose=None):
         """ Run the model once """
 
         # Initialization steps
-        self.timer = sc.timer()
-        if not self.initialized:
-            self.init()
+        if not self.initialized: self.init()
         self.verbose = sc.ifelse(verbose, self.pars.verbose)
+        self.timer.start()
 
         # Check for AlreadyRun errors
         errormsg = None
@@ -275,6 +275,10 @@ class Sim:
 
         # Main simulation loop -- just one line!!!
         self.loop.run(until)
+        
+        # Check if the simulation is complete
+        if self.loop.index == len(self.loop.plan):
+            self.complete = True
 
         # If simulation reached the end, finalize the results
         if self.complete:
