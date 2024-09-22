@@ -75,6 +75,7 @@ class RoutineDelivery(Intervention):
         return
 
     def init_pre(self, sim):
+        super().init_pre(sim)
 
         # Validate inputs
         if (self.years is not None) and (self.start_year is not None or self.end_year is not None):
@@ -95,14 +96,15 @@ class RoutineDelivery(Intervention):
             raise ValueError(errormsg)
 
         # Adjustment to get the right end point
-        adj_factor = int(1 / sim.dt) - 1 if sim.dt < 1 else 1 # TODO: fix
+        dt = self.dt # TODO: check if this is right
+        adj_factor = int(1/dt) - 1 if dt < 1 else 1
 
         # Determine the timepoints at which the intervention will be applied
         self.start_point = sc.findfirst(sim.timevec, self.start_year)
         self.end_point   = sc.findfirst(sim.timevec, self.end_year) + adj_factor
         self.years       = sc.inclusiverange(self.start_year, self.end_year)
         self.timepoints  = sc.inclusiverange(self.start_point, self.end_point)
-        self.yearvec     = np.arange(self.start_year, self.end_year + adj_factor, sim.dt)
+        self.yearvec     = np.arange(self.start_year, self.end_year + adj_factor, dt)
 
         # Get the probability input into a format compatible with timepoints
         if len(self.years) != len(self.prob):
@@ -115,7 +117,7 @@ class RoutineDelivery(Intervention):
             self.prob = sc.smoothinterp(self.yearvec, self.years, self.prob, smoothness=0)
 
         # Lastly, adjust the probability by the sim's timestep, if it's an annual probability
-        if self.annual_prob: self.prob = 1 - (1 - self.prob) ** sim.dt
+        if self.annual_prob: self.prob = 1 - (1 - self.prob) ** dt
 
         return
 
@@ -133,6 +135,8 @@ class CampaignDelivery(Intervention):
         return
 
     def init_pre(self, sim):
+        super().init_pre(sim)
+        
         # Decide whether to apply the intervention at every timepoint throughout the year, or just once.
         self.timepoints = sc.findnearest(sim.timevec, self.years)
 
@@ -173,7 +177,7 @@ class BaseTest(Intervention):
         return
 
     def init_pre(self, sim):
-        Intervention.init_pre(self, sim)
+        super().init_pre(sim)
         self.outcomes = {k: np.array([], dtype=int) for k in self.product.hierarchy}
         return
 
@@ -356,7 +360,7 @@ class BaseTreatment(Intervention):
         return
 
     def init_pre(self, sim):
-        Intervention.init_pre(self, sim)
+        super().init_pre(sim)
         self.outcomes = {k: np.array([], dtype=int) for k in ['unsuccessful', 'successful']} # Store outcomes on each timestep
         return
 
