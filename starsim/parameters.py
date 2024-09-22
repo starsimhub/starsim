@@ -120,7 +120,10 @@ class Pars(sc.objdict):
         
         # It's a dict, figure out what to do
         elif isinstance(new, dict):
-            old.set(**new)
+            if isinstance(old, ss.beta):
+                self[key] = new # TODO: use an actual set here
+            else:
+                old.set(**new)
         return
     
     def _update_dist(self, key, old, new):

@@ -19,7 +19,7 @@ class Cholera(ss.Infection):
         super().__init__()
         self.define_pars(
             # Initial conditions and beta
-            beta = 1.0, # Placeholder value
+            beta = ss.beta(1.0), # Placeholder value
             init_prev = ss.bernoulli(0.005),
             
             # Natural history parameters, all specified in days
@@ -32,7 +32,7 @@ class Cholera(ss.Infection):
             asymp_trans   = 0.01, # Reduction in transmission probability for asymptomatic infection, asymptomatic carriers shed 100-1000 times less bacteria than symptomatic carriers (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3084143/ and https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/). Previous models assume a 10% relative transmissibility (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4238032/)
 
             # Environmental parameters
-            beta_env = 0.5 / 3, # Scaling factor for transmission from environment,
+            beta_env = ss.beta(0.5 / 3), # Scaling factor for transmission from environment,
             half_sat_rate = 1_000_000, # Infectious dose in water sufficient to produce infection in 50% of  exposed, from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
             shedding_rate = ss.rate(10, unit='day'), # Rate at which infectious people shed bacteria to the environment (per day), from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
             decay_rate = ss.rate(0.033, unit='day'), # Rate at which bacteria in the environment dies (per day), from Chao et al. and Mukandavire et al. citing https://pubmed.ncbi.nlm.nih.gov/8882180/

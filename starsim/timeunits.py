@@ -5,9 +5,9 @@ Functions and classes for handling time
 import numpy as np
 import sciris as sc
 
-# What classes are externally visible
+# Classes that are externally visible
 __all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff', 'make_timevec', 'make_timearray',
-           'TimePar', 'dur', 'days', 'years', 'rate', 'time_prob']
+           'TimePar', 'dur', 'days', 'years', 'rate', 'time_prob', 'beta']
 
     
 #%% Helper functions
@@ -272,4 +272,8 @@ class time_prob(TimePar):
         self.x = 1 - np.exp(-rate/self.factor)
         return
         
+    
+class beta(time_prob):
+    """ A container for beta (i.e. the disease transmission rate) """
+    pass
     
