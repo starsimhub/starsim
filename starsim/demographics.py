@@ -85,7 +85,7 @@ class Births(Demographics):
 
         if isinstance(p.birth_rate, (pd.Series, pd.DataFrame)):
             available_years = p.birth_rate.index
-            year_ind = sc.findnearest(available_years, sim.year)
+            year_ind = sc.findnearest(available_years, sim.now) # TODO: make robust to timestep
             nearest_year = available_years[year_ind]
             this_birth_rate = p.birth_rate.loc[nearest_year]
         else:
@@ -198,7 +198,7 @@ class Deaths(Demographics):
             assert len(uids) == len(ppl.auids)
 
             available_years = drd.index.get_level_values('year')
-            year_ind = sc.findnearest(available_years, sim.year)
+            year_ind = sc.findnearest(available_years, sim.now) # TODO: make work with different timesteps
             nearest_year = available_years[year_ind]
 
             death_rate = np.empty(uids.shape, dtype=ss_float_)

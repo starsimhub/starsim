@@ -95,28 +95,29 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
 
     # Plots
     if do_plot:
+        tvec = sim.timevec
         fig, ax = plt.subplots(2, 2)
         ax = ax.ravel()
         ax[0].scatter(data.year, data.n_alive, alpha=0.5)
-        ax[0].plot(sim.yearvec, sim.results.n_alive, color='k')
+        ax[0].plot(tvec, sim.results.n_alive, color='k')
         ax[0].set_title('Population')
 
-        ax[1].plot(sim.yearvec, 1000 * sim.results.deaths.cmr / dt, label='Simulated CMR')
+        ax[1].plot(tvec, 1000 * sim.results.deaths.cmr, label='Simulated CMR')
         ax[1].scatter(cmr_data.Year, cmr_data.CMR, label='Data CMR')
         ax[1].set_title('CMR')
         ax[1].legend()
 
         if which == 'births':
-            ax[2].plot(sim.yearvec, sim.results.births.cbr / dt, label='Simulated CBR')
+            ax[2].plot(tvec, sim.results.births.cbr, label='Simulated CBR')
         elif which == 'pregnancy':
-            ax[2].plot(sim.yearvec, sim.results.pregnancy.cbr / dt, label='Simulated CBR')
+            ax[2].plot(tvec, sim.results.pregnancy.cbr, label='Simulated CBR')
         ax[2].scatter(cbr_data.Year, cbr_data.CBR, label='Data CBR')
         ax[2].set_title('CBR')
         ax[2].legend()
 
         if which == 'pregnancy':
-            ax[3].plot(sim.yearvec, sim.results.pregnancy.pregnancies / dt, label='Pregnancies')
-            ax[3].plot(sim.yearvec, sim.results.pregnancy.births / dt, label='Births')
+            ax[3].plot(tvec, sim.results.pregnancy.pregnancies, label='Pregnancies')
+            ax[3].plot(tvec, sim.results.pregnancy.births, label='Births')
             ax[3].set_title('Pregnancies and births')
             ax[3].legend()
 

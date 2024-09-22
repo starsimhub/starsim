@@ -28,6 +28,7 @@ class hiv_syph(ss.Connector):
 
     def step(self):
         """ Specify HIV-syphilis interactions """
+        
         diseases = self.sim.diseases
         syph = diseases.syphilis
         hiv = diseases.hiv
@@ -59,7 +60,7 @@ class Penicillin(ss.Intervention):
 
     def step(self):
         sim = self.sim
-        if sim.year > self.year:
+        if sim.now > self.year:
             syphilis = sim.diseases.syphilis
 
             # Define who is eligible for treatment
@@ -119,7 +120,7 @@ def test_connectors(do_plot=False):
         pl.figure()
         
         pl.subplot(2,1,1)
-        x = sims.con.yearvec
+        x = sims.con.timevec
         for label,res in results.items():
             pl.plot(x, res.syphilis, label=label)
         pl.title('Syphilis infections')
