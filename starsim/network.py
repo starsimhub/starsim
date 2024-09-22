@@ -926,14 +926,14 @@ class MaternalNet(DynamicNetwork):
         NB: add_pairs() and end_pairs() are NOT called here; this is done separately
         in ss.Pregnancy.update_states().
         """
-        inactive = self.edges.end <= self.sim.ti
+        inactive = self.edges.end <= self.ti
         self.edges.beta[inactive] = 0
         return
 
     def end_pairs(self):
         people = self.sim.people
         edges = self.edges
-        active = (edges.end > self.sim.ti) & people.alive[edges.p1] & people.alive[edges.p2]
+        active = (edges.end > self.ti) & people.alive[edges.p1] & people.alive[edges.p2]
         for k in self.meta_keys():
             edges[k] = edges[k][active]
         return len(active)
@@ -944,10 +944,10 @@ class MaternalNet(DynamicNetwork):
             return 0
         else:
             if start is None:
-                start = np.full_like(dur, fill_value=self.sim.ti)
+                start = np.full_like(dur, fill_value=self.ti)
             n = len(mother_inds)
             beta = np.ones(n)
-            end = start + sc.promotetoarray(dur) / self.sim.dt
+            end = start + sc.promotetoarray(dur)
             self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur, start=start, end=end)
             return n
 

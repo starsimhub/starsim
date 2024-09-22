@@ -110,7 +110,7 @@ class Births(Demographics):
         return new_uids
 
     def update_results(self):
-        self.results['new'][self.sim.ti] = self.n_births
+        self.results['new'][self.ti] = self.n_births
         return
 
     def finalize(self):
@@ -238,7 +238,7 @@ class Deaths(Demographics):
         return self.n_deaths
     
     def update_results(self):
-        self.results['new'][self.sim.ti] = self.n_deaths
+        self.results['new'][self.ti] = self.n_deaths
         return
 
     def finalize(self):
@@ -254,8 +254,8 @@ class Pregnancy(Demographics):
     def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__()
         self.define_pars(
-            dur_pregnancy = 0.75, # Duration for pre-natal transmission
-            dur_postpartum = ss.lognorm_ex(0.5, 0.5), # Duration for post-natal transmission (e.g. via breastfeeding)
+            dur_pregnancy = ss.years(0.75), # Duration for pre-natal transmission
+            dur_postpartum = ss.lognorm_ex(mean=ss.years(0.5), stdev=ss.years(0.5)), # Duration for post-natal transmission (e.g. via breastfeeding)
             fertility_rate = 0, # Can be a number of Pandas DataFrame
             rel_fertility = 1,
             maternal_death_prob = ss.bernoulli(0),
@@ -390,7 +390,7 @@ class Pregnancy(Demographics):
     def update_states(self):
         """ Update states """
         # Check for new deliveries
-        ti = self.sim.ti
+        ti = self.ti
         deliveries = self.pregnant & (self.ti_delivery <= ti)
         self.n_births = np.count_nonzero(deliveries)
         self.pregnant[deliveries] = False
@@ -406,7 +406,7 @@ class Pregnancy(Demographics):
                 prenatalnet = [nw for nw in self.sim.networks.values() if nw.prenatal][0]
 
                 # Find the prenatal connections that are ending
-                prenatal_ending = prenatalnet.edges.end<=self.sim.ti
+                prenatal_ending = prenatalnet.edges.end <= ti
                 new_mother_uids = prenatalnet.edges.p1[prenatal_ending]
                 new_infant_uids = prenatalnet.edges.p2[prenatal_ending]
 
@@ -417,7 +417,7 @@ class Pregnancy(Demographics):
 
                 # Create durations and start dates, and add connections
                 durs = self.dur_postpartum[new_mother_uids]
-                start = np.full(self.n_births, fill_value=self.sim.ti)
+                start = np.full(self.n_births, fill_value=ti)
 
                 # # Remove pairs from prenatal network and add to postnatal
                 prenatalnet.end_pairs()
@@ -443,7 +443,7 @@ class Pregnancy(Demographics):
         # Validation
         if np.any(self.pregnant[conceive_uids]):
             which_uids = conceive_uids[self.pregnant[conceive_uids]]
-            errormsg = f'New conceptions registered in {len(which_uids)} pregnant agent(s) at timestep {self.sim.ti}.'
+            errormsg = f'New conceptions registered in {len(which_uids)} pregnant agent(s) at timestep {self.ti}.'
             raise ValueError(errormsg)
 
         # Set prognoses for the pregnancies
@@ -472,7 +472,7 @@ class Pregnancy(Demographics):
             for lkey, layer in self.sim.networks.items():
                 if layer.prenatal:
                     durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy)
-                    start = np.full(n_unborn, fill_value=self.sim.ti)
+                    start = np.full(n_unborn, fill_value=self.ti)
                     layer.add_pairs(conceive_uids, new_uids, dur=durs, start=start)
 
         return new_uids
@@ -486,18 +486,18 @@ class Pregnancy(Demographics):
         """
 
         # Change states for the newly pregnant woman
-        ti = self.sim.ti
+        ti = self.ti
         dt = self.dt # TODO: CHECK
         self.fecund[uids] = False
         self.pregnant[uids] = True
         self.ti_pregnant[uids] = ti
 
         # Outcomes for pregnancies
-        dur_preg = np.full(len(uids), self.pars.dur_pregnancy)  # Duration in years
+        dur_preg = np.ones(len(uids))*self.pars.dur_pregnancy  # Duration in years
         dur_postpartum = self.pars.dur_postpartum.rvs(uids)
         dead = self.pars.maternal_death_prob.rvs(uids)
-        self.ti_delivery[uids] = ti + dur_preg/dt # Currently assumes maternal deaths still result in a live baby
-        self.ti_postpartum[uids] = self.ti_delivery[uids] + dur_postpartum/dt
+        self.ti_delivery[uids] = ti + dur_preg # Currently assumes maternal deaths still result in a live baby
+        self.ti_postpartum[uids] = self.ti_delivery[uids] + dur_postpartum
         self.dur_postpartum[uids] = dur_postpartum
 
         if np.any(dead): # NB: 100x faster than np.sum(), 10x faster than np.count_nonzero()
@@ -505,7 +505,7 @@ class Pregnancy(Demographics):
         return
 
     def update_results(self):
-        ti = self.sim.ti
+        ti = self.ti
         self.results['pregnancies'][ti] = self.n_pregnancies
         self.results['births'][ti] = self.n_births
         return

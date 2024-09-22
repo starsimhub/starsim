@@ -95,14 +95,14 @@ class RoutineDelivery(Intervention):
             raise ValueError(errormsg)
 
         # Adjustment to get the right end point
-        adj_factor = int(1 / sim.dt) - 1 if sim.dt < 1 else 1
+        adj_factor = int(1 / sim.dt) - 1 if sim.dt < 1 else 1 # TODO: fix
 
         # Determine the timepoints at which the intervention will be applied
         self.start_point = sc.findfirst(sim.timevec, self.start_year)
         self.end_point   = sc.findfirst(sim.timevec, self.end_year) + adj_factor
         self.years       = sc.inclusiverange(self.start_year, self.end_year)
         self.timepoints  = sc.inclusiverange(self.start_point, self.end_point)
-        self.timevec     = np.arange(self.start_year, self.end_year + adj_factor, sim.dt)
+        self.yearvec     = np.arange(self.start_year, self.end_year + adj_factor, sim.dt)
 
         # Get the probability input into a format compatible with timepoints
         if len(self.years) != len(self.prob):
@@ -112,7 +112,7 @@ class RoutineDelivery(Intervention):
                 errormsg = f'Length of years incompatible with length of probabilities: {len(self.years)} vs {len(self.prob)}'
                 raise ValueError(errormsg)
         else:
-            self.prob = sc.smoothinterp(self.timevec, self.years, self.prob, smoothness=0)
+            self.prob = sc.smoothinterp(self.yearvec, self.years, self.prob, smoothness=0)
 
         # Lastly, adjust the probability by the sim's timestep, if it's an annual probability
         if self.annual_prob: self.prob = 1 - (1 - self.prob) ** sim.dt
@@ -213,7 +213,7 @@ class BaseScreening(BaseTest):
         """
         sim = self.sim
         accept_uids = ss.uids()
-        if sim.ti in self.timepoints:
+        if sim.ti in self.timepoints: # TODO: change to self.ti
             accept_uids = self.deliver()
             self.screened[accept_uids] = True
             self.screens[accept_uids] += 1

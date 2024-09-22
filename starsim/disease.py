@@ -141,9 +141,8 @@ class Disease(ss.Module):
         This allows result updates at this point to capture outcomes dependent on multiple
         modules, where relevant.
         """
-        sim = self.sim
         for state in self._boolean_states:
-            self.results[f'n_{state.name}'][sim.ti] = np.count_nonzero(state & sim.people.alive)
+            self.results[f'n_{state.name}'][self.ti] = np.count_nonzero(state & self.sim.people.alive)
         return
 
 
@@ -343,10 +342,10 @@ class Infection(Disease):
     def update_results(self):
         super().update_results()
         res = self.results
-        ti = self.sim.ti
+        ti = self.ti
         res.prevalence[ti] = res.n_infected[ti] / np.count_nonzero(self.sim.people.alive)
         res.new_infections[ti] = np.count_nonzero(self.ti_infected == ti)
-        res.cum_infections[ti] = np.sum(res['new_infections'][:ti+1])
+        res.cum_infections[ti] = np.sum(res['new_infections'][:ti+1]) # TODO: can compute at end
         return
 
 

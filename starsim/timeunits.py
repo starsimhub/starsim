@@ -238,14 +238,14 @@ class dur(TimePar):
 class days(dur):
     """ Shortcut to ss.dur(value, units='day') """
     def __init__(self, value, parent_unit=None, parent_dt=None):
-        super().__init__(self, value=value, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
+        super().__init__(value=value, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
         return
 
 
 class years(dur):
     """ Shortcut to ss.dur(value, units='year') """
     def __init__(self, value, parent_unit=None, parent_dt=None):
-        super().__init__(self, value=value, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
+        super().__init__(value=value, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
         return
 
 

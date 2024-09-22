@@ -459,11 +459,15 @@ class Dist:
         # Check each parameter
         for key,val in self._pars.items():
             
+            # If it's a time parameter, transform it to a float now
+            if isinstance(val, ss.TimePar):
+                self._pars[key] = val.x
+            
             # If the parameter is callable, then call it
-            if callable(val) and not isinstance(val, type): # Types can appear as callable
+            elif callable(val) and not isinstance(val, type): # Types can appear as callable
                 size_par = uids if uids is not None else size
                 out = val(self.module, self.sim, size_par) # TODO: swap order to sim, module, size?
-                val = np.asarray(out) # Necessary since UIDArrays don't allow slicing # TODO: check if this is correct
+                val = np.asarray(out) # Necessary since FloatArrs don't allow slicing # TODO: check if this is correct
                 self._pars[key] = val
             
             # If it's iterable and UIDs are provided, then we need to use array-parameter logic
