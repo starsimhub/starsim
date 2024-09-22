@@ -91,7 +91,7 @@ class ART(ss.Intervention):
         self.coverage = sc.toarray(coverage)
         super().__init__()
         self.define_pars(
-            art_delay = ss.constant(v=ss.years(1)) # Value in years
+            art_delay = ss.constant(v=ss.years(1.0)) # Value in years
         )
         self.update_pars(pars=pars, **kwargs)
 
@@ -112,7 +112,7 @@ class ART(ss.Intervention):
 
         hiv = sim.people.hiv
         infected = hiv.infected.uids
-        ti_delay = np.round(self.pars.art_delay.rvs(infected)/sim.dt).astype(int)
+        ti_delay = np.round(self.pars.art_delay.rvs(infected)).astype(int)
         recently_infected = infected[hiv.ti_infected[infected] == sim.ti-ti_delay]
 
         n_added = 0

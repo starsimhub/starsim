@@ -272,7 +272,6 @@ class Syphilis(ss.Infection):
         """
         
         ti = self.ti
-        dt = self.sim.dt
 
         self.susceptible[uids] = False
         self.ever_exposed[uids] = True
@@ -284,17 +283,16 @@ class Syphilis(ss.Infection):
         # Set future dates and probabilities
         # Exposed to primary
         dur_exposed = self.pars.dur_exposed.rvs(uids)
-        self.ti_primary[uids] = ti + rr(dur_exposed / dt)
+        self.ti_primary[uids] = ti + rr(dur_exposed)
 
         # Primary to secondary
         dur_primary = self.pars.dur_primary.rvs(uids)
-        self.ti_secondary[uids] = self.ti_primary[uids] + rr(dur_primary / dt)
+        self.ti_secondary[uids] = self.ti_primary[uids] + rr(dur_primary)
         return
 
     def set_secondary_prognoses(self, uids):
         """ Set prognoses for people who have just progressed to secondary infection """
 
-        dt = self.sim.dt
         dur_secondary = self.pars.dur_secondary.rvs(uids)
 
         # Secondary to latent_temp or latent_long
@@ -303,31 +301,30 @@ class Syphilis(ss.Infection):
         latent_long_uids = uids[~latent_temp]
 
         dur_secondary_temp = dur_secondary[latent_temp]
-        self.ti_latent_temp[latent_temp_uids] = self.ti_secondary[latent_temp_uids] + rr(dur_secondary_temp / dt)
+        self.ti_latent_temp[latent_temp_uids] = self.ti_secondary[latent_temp_uids] + rr(dur_secondary_temp)
 
         dur_secondary_long = dur_secondary[~latent_temp]
-        self.ti_latent_long[latent_long_uids] = self.ti_secondary[latent_long_uids] + rr(dur_secondary_long / dt)
+        self.ti_latent_long[latent_long_uids] = self.ti_secondary[latent_long_uids] + rr(dur_secondary_long)
 
         return
 
     def set_latent_temp_prognoses(self, uids):
         # Primary to secondary
         dur_latent_temp = self.pars.dur_latent_temp.rvs(uids)
-        self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_temp / self.sim.dt)
+        self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_temp)
         return
 
     def set_latent_long_prognoses(self, uids):
-        dt = self.sim.dt
         dur_latent = self.pars.dur_latent_long.rvs(uids)
 
         # Primary to secondary
         dur_latent_long = dur_latent
-        self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_long / dt)
+        self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_long)
 
         # Latent_long to tertiary
         tertiary = self.pars.p_tertiary.rvs(uids)
         tertiary_uids = uids[tertiary]
-        self.ti_tertiary[tertiary_uids] = self.ti_latent_long[tertiary_uids] + rr(dur_latent_long[tertiary] / dt)
+        self.ti_tertiary[tertiary_uids] = self.ti_latent_long[tertiary_uids] + rr(dur_latent_long[tertiary])
 
         return
 
@@ -349,12 +346,13 @@ class Syphilis(ss.Infection):
                 time_to_birth = -sim.people.age.raw # TODO: make nicer
 
                 # Schedule events
+                ratio = ss.time_ratio(unit1='year', dt1=1.0, unit2=self.unit, dt2=self.dt) # TODO: think about simplifying
                 for oi, outcome in enumerate(self.pars.birth_outcome_keys):
                     o_uids = state_uids[assigned_outcomes == oi]
                     if len(o_uids) > 0:
                         ti_outcome = f'ti_{outcome}'
                         vals = getattr(self, ti_outcome)
-                        vals[o_uids] = sim.ti + rr(time_to_birth[o_uids] / sim.dt)
+                        vals[o_uids] = sim.ti + rr(time_to_birth[o_uids] * ratio)
                         setattr(self, ti_outcome, vals)
 
         return
