@@ -109,7 +109,7 @@ def test_multi_timestep(do_plot=False):
     sc.heading('Test behavior of different modules having different timesteps')
     
     pars = dict(
-        diseases = ss.SIS(unit='day', dt=1.0, init_prev=0.1, beta=ss.rate(0.01)),
+        diseases = ss.SIS(unit='day', dt=1.0, init_prev=0.1, beta=ss.beta(0.01)),
         # demographics = ss.Births(unit='year', dt=0.25),
         networks = ss.RandomNet(unit='week'),
         n_agents = small,

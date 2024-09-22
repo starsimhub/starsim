@@ -168,8 +168,6 @@ class Loop:
     
     def run(self, until=None, verbose=None):
         """ Actually run the integration loop; usually called by sim.run() """
-        if until is None: until = np.nan
-        
         # Loop over every function in the integration loop, e.g. disease.step()
         for f in self.plan.func[self.index:]:
             if verbose:
@@ -180,7 +178,7 @@ class Loop:
 
             # Tidy up
             self.index += 1 # Increment the count
-            if self.sim.now > until: # Terminate if asked to
+            if until and self.sim.now > until: # Terminate if asked to
                 break
         return
     
