@@ -251,7 +251,7 @@ class Sim:
         
         Note: sim.run_one_step() runs a single simulation timestep, which involves
         multiple function calls. In contrast, loop.run_one_step() runs a single
-        function call
+        function call.
         
         Note: the verbose here is only for the Loop object, not the sim.        
         """

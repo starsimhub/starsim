@@ -62,7 +62,7 @@ def run_sir_vaccine(efficacy, leaky=True):
     # run the simulation until sufficient cases
     old_cases = []
     for idx in range(1000):
-        sim.step() # TODO: figure out how to fix
+        sim.run_one_step()
         susc = sim.people.sir.susceptible.uids
         cases = np.setdiff1d(in_trial, susc)
         if len(cases) > total_cases:
