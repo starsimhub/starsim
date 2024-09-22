@@ -157,10 +157,12 @@ def test_syph_intvs(dt=1, n_agents=500, do_plot=False):
         sim_base.run()
 
         burnin = 10
-        pi = int(burnin/sim_base.dt)
+        syph_b = sim_base.diseases.syphilis
+        syph_i = sim_intv.diseases.syphilis
+        pi = int(burnin/syph_b.dt)
         plt.figure()
-        plt.plot(sim_base.yearvec[pi:], sim_base.results.syphilis.prevalence[pi:], label='Baseline')
-        plt.plot(sim_intv.yearvec[pi:], sim_intv.results.syphilis.prevalence[pi:], label='S&T')
+        plt.plot(syph_b.timevec[pi:], syph_b.results.prevalence[pi:], label='Baseline')
+        plt.plot(syph_i.timevec[pi:], syph_i.results.prevalence[pi:], label='S&T')
         plt.axvline(x=2020, color='k', ls='--')
         plt.title('Syphilis prevalence')
         plt.legend()
