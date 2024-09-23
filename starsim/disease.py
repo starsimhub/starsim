@@ -160,7 +160,9 @@ class Infection(Disease):
         )
 
         # Define random number generator for determining transmission
-        self.trans_rng = ss.multi_random('source', 'target')
+        # self.trans_rng = ss.multi_random('source', 'target')
+        self.rng_target = ss.rand_raw(name='target')
+        self.rng_source = ss.rand_raw(name='source')
         return
     
     def init_pre(self, sim):
@@ -298,7 +300,15 @@ class Infection(Disease):
                         p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
         
                         # Generate a new random number based on the two other random numbers
-                        randvals = self.trans_rng.rvs(src, trg)
+                        # sc.heading('hi', self.ti)
+                        # self.rng_source.show_state()
+                        # self.rng_target.show_state()
+                        rvs_s = self.rng_source.rvs(src)
+                        rvs_t = self.rng_target.rvs(trg)
+                        
+                        randvals = ss.utils.combine_rands(rvs_s, rvs_t)
+
+                        # randvals = self.trans_rng.rvs(src, trg)
                         transmitted = p_transmit > randvals
                         target_uids = trg[transmitted]
                         source_uids = src[transmitted]

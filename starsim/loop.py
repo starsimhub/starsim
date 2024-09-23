@@ -145,14 +145,17 @@ class Loop:
         for func_row in self.funcs:
             for time in self.timearrays[func_row['module']]:
                 row = func_row.copy()
-                row['time'] = time
-                row['key'] = (time, row['func_order'])
-                row['func_label'] = f"{row['module']}.{row['func_name']}"
+                row['time'] = time # Add time column
                 raw.append(row)
         
-        # Turn it into a dataframe and sort it
-        col_order = ['time', 'func_order', 'func', 'key', 'func_label', 'module', 'func_name'] # Func in the middle to hide it
-        self.plan = sc.dataframe(raw).sort_values('key').reset_index(drop=True)[col_order]
+        # Turn it into a dataframe
+        self.plan = sc.dataframe(raw)
+        
+        # Sort it by step_order, a combination of time and function order
+        self.plan['step_order'] = self.plan.time + ss.options.time_eps*self.plan.func_order
+        self.plan['func_label'] = self.plan.module + '.' + self.plan.func_name
+        col_order = ['time', 'func_order', 'step_order', 'func', 'func_label', 'module', 'func_name'] # Func in the middle to hide it
+        self.plan = self.plan.sort_values('step_order').reset_index(drop=True)[col_order]
         return
     
     def run_one_step(self):

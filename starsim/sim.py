@@ -217,6 +217,7 @@ class Sim:
 
     def start_step(self):
         """ Step through time and update values """
+        # sc.heading('STARTING STEP ', self.ti)
 
         # Set the time and if we have reached the end of the simulation, then do nothing
         if self.complete:
@@ -735,6 +736,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
             if mm or full:
                 mismatches[key] = d
 
+    df = sc.dataframe() # Preallocate in case there were no mismatches
     if len(mismatches):
         valmatchmsg = '\nThe following values differ between the two simulations:\n' if not full else ''
         df = sc.dataframe.from_dict(mismatches).transpose()
@@ -803,7 +805,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
             df['zscore'] = zscore
             df['statsig'] = df.zscore > small_change
         valmatchmsg += str(df)
-
+        
     # Raise an error if mismatches were found
     mismatchmsg = keymatchmsg + valmatchmsg
     if mismatchmsg:  # pragma: no cover

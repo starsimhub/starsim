@@ -119,6 +119,10 @@ def make_timearray(tv, unit, sim_unit):
         yearvec = [sc.datetoyear(d) for d in tv]
         absyearvec = np.array(yearvec) - yearvec[0] # Subtract start date
         abstv = absyearvec*time_ratio(unit1='year', unit2=sim_unit)
+    
+    # Round to the value of epsilon; alternative to np.round(abstv/eps)*eps, which has floating point error
+    decimals = int(-np.log10(ss.options.time_eps))
+    abstv = np.round(abstv, decimals=decimals)
         
     return abstv
 
@@ -287,7 +291,7 @@ class time_prob(TimePar):
         return
         
     
-class beta(time_prob):
+class beta(rate):
     """ A container for beta (i.e. the disease transmission rate) """
     pass
     

@@ -19,7 +19,8 @@ def str2int(string, modulo=1_000_000):
     is 5x slower than int.from_bytes(string.encode(), byteorder='big'), but should
     only add a couple milliseconds to a typical sim.
     """
-    integer = sc.sha(string, asint=True) # Hash the string to an integer
+    integer = int.from_bytes(string.encode(), byteorder='big')
+    # integer = sc.sha(string, asint=True) # Hash the string to an integer
     out = integer % modulo # Don't need all of it, this is more user-friendly
     return out
 
@@ -313,6 +314,7 @@ class Dist:
 
     def jump(self, to=None, delta=1):
         """ Advance the RNG, e.g. to timestep "to", by jumping """
+        # print(f'hi i am {self}, and i am jumping to={to}, delta={delta}')
         
         # Do not jump if centralized
         if ss.options._centralized:
