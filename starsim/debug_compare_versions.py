@@ -3,20 +3,15 @@ import starsim as ss
 
 debug = 0
 
-def check_imm(sim):
-    imm = sim.diseases.sis.immunity
-    print(f'immunity at {sim.ti}:', sc.arraymean(imm))
-
 # Define the parameters
 pars = sc.objdict(
-    dur        = 50,
+    dur        = 20,
     n_agents   = 10e3,
     dt         = 0.1,
     rand_seed  = 1,
     verbose    = 0.02,
-    diseases   = 'sis',
+    diseases   = 'sir',
     networks   = 'random',
-    # analyzers = check_imm,
 )
 
 s1 = ss.Sim(pars)
