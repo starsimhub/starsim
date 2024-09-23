@@ -201,7 +201,7 @@ def test_callable(n=n):
     
     scale = 1
     d1 = ss.normal(name='callable', loc=custom_loc, scale=scale).init(sim=sim)
-    d2 = ss.lognorm_ex(name='callable', mean=custom_loc, stdev=scale).init(sim=sim)
+    d2 = ss.lognorm_ex(name='callable', mean=custom_loc, std=scale).init(sim=sim)
 
     uids = np.array([1, 3, 7, 9])
     draws1 = d1.rvs(uids)

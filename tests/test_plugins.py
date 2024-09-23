@@ -80,7 +80,7 @@ class Penicillin(ss.Intervention):
 def make_args():
     """ Make people, HIV, syphilis, and network """
     pars = dict(n_agents=2000, verbose=0)
-    mf = ss.MFNet(duration=ss.lognorm_ex(mean=ss.dur(5), stdev=ss.dur(0.5)))
+    mf = ss.MFNet(duration=ss.lognorm_ex(mean=ss.dur(5), std=ss.dur(0.5)))
     hiv = ss.HIV(beta={'mf': [ss.beta(0.0008), ss.beta(0.0004)]}, init_prev=0.2) # TODO: beta should wrap the other way
     syph = ss.Syphilis(beta={'mf': [ss.beta(0.1), ss.beta(0.05)]}, init_prev=0.05)
     args = dict(pars=pars, networks=mf, diseases=[hiv, syph])
