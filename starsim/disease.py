@@ -161,8 +161,6 @@ class Infection(Disease):
 
         # Define random number generator for determining transmission
         self.trans_rng = ss.multi_random('source', 'target')
-        self.COUNT = 0
-        self.COUNT2 = 0
         return
     
     def init_pre(self, sim):
@@ -300,54 +298,25 @@ class Infection(Disease):
                         p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
         
                         # Generate a new random number based on the two other random numbers
-                        # self.trans_rng.jump(self.ti*3569)#np.random.randint(29834))
                         randvals = self.trans_rng.rvs(src, trg)
-                        # randvals = np.random.rand(len(randvals))
                         transmitted = p_transmit > randvals
                         target_uids = trg[transmitted]
                         source_uids = src[transmitted]
                         new_cases.append(target_uids)
                         sources.append(source_uids)
                         networks.append(np.full(len(target_uids), dtype=ss_int_, fill_value=i))
-                        
-                        self.COUNT += 1
-                        def ff(arr):
-                            n = 20
-                            # ln = np.arange(n)
-                            # out = arr[ln]
-                            inds = sc.findinds(p_transmit)[:n]
-                            out = inds, arr[inds]
-                            return out
-                        
-                        inds = sc.findinds(p_transmit)
-                        p_tr = p_transmit[inds]
-                        rv = randvals[inds]
-                        cc = np.corrcoef(p_tr, rv)[0,1]
-                        # print('         hrm:', sc.strjoin(sc.sigfigs([len(inds), p_transmit.mean(), p_tr.mean(), randvals.mean(), rv.mean(), cc])))
-                        # print(f'         hrm: inds={len(inds):n}, p_transmit={p_transmit.mean():n}, p_tr={p_tr.mean():n}, randvals={randvals.mean():n}, rv={rv.mean():n}, cc={cc:n}')
-                        
-                        # print('         p_tr:', ff(p_transmit))
-                        # print('          src:', ff(src))
-                        # print('          trg:', ff(trg))
-                        # print('        rel_t:', ff(rel_trans[src]))
-                        # print('        rel_s:', ff(rel_sus[trg]))
-                        # print('         rand:', ff(randvals))
-                        # print('        trans:', ff(transmitted))
-                        # print('                        mid-infect()', self.COUNT, len(target_uids), p_transmit.sum())
                 
         # Finalize
         if len(new_cases) and len(sources):
             new_cases = ss.uids.cat(new_cases)
-            TOT_NEW = len(new_cases)
             new_cases, inds = new_cases.unique(return_index=True)
-            TOT_UNI = len(new_cases)
             sources = ss.uids.cat(sources)[inds]
             networks = np.concatenate(networks)[inds]
         else:
             new_cases = ss.uids()
             sources = ss.uids()
             networks = np.empty(0, dtype=ss_int_)
-        # sc.heading('end infect()', self.ti, TOT_NEW, TOT_UNI, len(new_cases))
+
         return new_cases, sources, networks
 
     def set_outcomes(self, uids, sources=None):

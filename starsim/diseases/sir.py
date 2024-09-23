@@ -146,7 +146,7 @@ class SIS(ss.Infection):
         self.define_pars(
             beta = ss.beta(0.05),
             init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=ss.dur(10)), # TODO: handle gotcha of mean=ss.dur(10), std=3 -- should be able to automate it?
+            dur_inf = ss.lognorm_ex(mean=ss.dur(10)),
             waning = ss.rate(0.05),
             imm_boost = 1.0,
         )
@@ -184,8 +184,6 @@ class SIS(ss.Infection):
         dur_inf = self.pars.dur_inf.rvs(uids)
 
         # Determine when people recover
-        # self.COUNT2 += 1
-        # print('HI: set_prognoses()', self.COUNT2, sc.arraymean(dur_inf))
         self.ti_recovered[uids] = self.ti + dur_inf
 
         return
