@@ -286,7 +286,7 @@ class Pregnancy(Demographics):
             ss.BoolArr('fecund', default=True, label='Female of childbearing age'),
             ss.BoolArr('pregnant', label='Pregnant'),  # Currently pregnant
             ss.BoolArr('postpartum', label="Post-partum"),  # Currently post-partum
-            ss.FloatArr('child_uids', label='UID of children, from embryo through postpartum'),
+            ss.FloatArr('child_uid', label='UID of children, from embryo through postpartum'),
             ss.FloatArr('dur_postpartum', label='Post-partum duration'),  # Duration of postpartum phase
             ss.FloatArr('ti_pregnant', label='Time of pregnancy'),  # Time pregnancy begins
             ss.FloatArr('ti_delivery', label='Time of delivery'),  # Time of delivery
@@ -450,10 +450,10 @@ class Pregnancy(Demographics):
                 layer.add_pairs(new_mother_uids, new_infant_uids, dur=durs, start=start)
 
         # Check for new women emerging from post-partum
-        postpartum = ~self.pregnant & (self.ti_postpartum <= ti)
+        postpartum = self.postpartum & (self.ti_postpartum <= ti)
         self.postpartum[postpartum] = False
         self.fecund[postpartum] = True
-        self.child_uids[postpartum] = np.nan
+        self.child_uid[postpartum] = np.nan
 
         # Maternal deaths
         maternal_deaths = (self.ti_dead <= ti).uids
@@ -495,7 +495,7 @@ class Pregnancy(Demographics):
             people.slot[new_uids] = new_slots  # Before sampling female_dist
             people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
             people.parent[new_uids] = conceive_uids
-            self.child_uids[conceive_uids] = new_uids
+            self.child_uid[conceive_uids] = new_uids
 
             # Add connections to any prenatal transmission layers
             for lkey, layer in self.sim.networks.items():
@@ -540,7 +540,7 @@ class Pregnancy(Demographics):
         # Any pregnant? Consider death of the neonate
         mother_uids = death_uids[self.pregnant[death_uids]]
         if len(mother_uids):
-            neonate_uids = ss.uids(self.child_uids[mother_uids])
+            neonate_uids = ss.uids(self.child_uid[mother_uids])
             neonataldeath_uids = self.pars.p_neonataldeath_on_maternaldeath.filter(neonate_uids)
             if len(neonataldeath_uids):
                 self.sim.people.request_death(neonataldeath_uids)
@@ -551,12 +551,12 @@ class Pregnancy(Demographics):
         if len(neonate_uids):
             mother_uids = self.sim.people.parent[neonate_uids]
             # Baby lost, mother no longer pregnant
-            self.pregnant[neonate_uids] = False
-            self.fecund[neonate_uids] = True # Or wait?
-            self.postpartum[neonate_uids] = False
-            self.child_uids[neonate_uids] = np.nan
-            self.ti_delivery[neonate_uids] = np.nan
-            self.ti_postpartum[neonate_uids] = np.nan
+            self.pregnant[mother_uids] = False
+            self.fecund[mother_uids] = True # Or wait?
+            self.postpartum[mother_uids] = False
+            self.child_uid[mother_uids] = np.nan
+            self.ti_delivery[mother_uids] = np.nan
+            self.ti_postpartum[mother_uids] = np.nan
             # Keep ti_dead
         return
 
