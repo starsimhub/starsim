@@ -287,7 +287,7 @@ class time_prob(TimePar):
         return
         
     
-class beta(time_prob):
+class beta(rate):#beta(time_prob):
     """ A container for beta (i.e. the disease transmission rate) """
     pass
     

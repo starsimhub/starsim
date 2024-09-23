@@ -184,6 +184,8 @@ class SIS(ss.Infection):
         dur_inf = self.pars.dur_inf.rvs(uids)
 
         # Determine when people recover
+        # self.COUNT2 += 1
+        # print('HI: set_prognoses()', self.COUNT2, sc.arraymean(dur_inf))
         self.ti_recovered[uids] = self.ti + dur_inf
 
         return

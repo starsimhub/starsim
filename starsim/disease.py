@@ -161,6 +161,8 @@ class Infection(Disease):
 
         # Define random number generator for determining transmission
         self.trans_rng = ss.multi_random('source', 'target')
+        self.COUNT = 0
+        self.COUNT2 = 0
         return
     
     def init_pre(self, sim):
@@ -305,17 +307,31 @@ class Infection(Disease):
                         new_cases.append(target_uids)
                         sources.append(source_uids)
                         networks.append(np.full(len(target_uids), dtype=ss_int_, fill_value=i))
+                        
+                        self.COUNT += 1
+                        ln = np.arange(20)
+                        print('         p_tr:', p_transmit[ln])
+                        print('          src:', src[ln])
+                        print('          trg:', trg[ln])
+                        print('        rel_t:', rel_trans[src][ln])
+                        print('        rel_s:', rel_sus[trg][ln])
+                        print('         rand:', randvals[ln])
+                        print('        trans:', transmitted[ln])
+                        print('                        mid-infect()', self.COUNT, len(target_uids), p_transmit.sum())
                 
         # Finalize
         if len(new_cases) and len(sources):
             new_cases = ss.uids.cat(new_cases)
+            TOT_NEW = len(new_cases)
             new_cases, inds = new_cases.unique(return_index=True)
+            TOT_UNI = len(new_cases)
             sources = ss.uids.cat(sources)[inds]
             networks = np.concatenate(networks)[inds]
         else:
             new_cases = ss.uids()
             sources = ss.uids()
             networks = np.empty(0, dtype=ss_int_)
+        print('end infect()', self.ti, TOT_NEW, TOT_UNI, len(new_cases))
         return new_cases, sources, networks
 
     def set_outcomes(self, uids, sources=None):
