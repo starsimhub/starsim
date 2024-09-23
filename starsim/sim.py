@@ -660,7 +660,7 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
     return sim
 
 
-def diff_sims(sim1, sim2, multi=False, skip_key_diffs=False, skip=None, full=False, output=False, die=False):
+def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=False, die=False):
     '''
     Compute the difference of the summaries of two simulations, and print any
     values which differ.

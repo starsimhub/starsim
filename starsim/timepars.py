@@ -272,7 +272,7 @@ class years(dur):
         return
 
 
-class rate(TimePar):
+class rate(TimePar): # TODO: should all rates just be time_prob?
     """ Any number that acts like a rate; can be greater than 1 """
     def set_x(self):
         self.x = self.value/self.factor
@@ -280,14 +280,14 @@ class rate(TimePar):
 
 
 class time_prob(TimePar):
-    """ A probability over time (a.k.a. a "true" rate, cumulative hazard rate); must be >0 and <1 """
+    """ A probability over time (a.k.a. a cumulative hazard rate); must be >0 and <1 """
     def set_x(self):
         rate = -np.log(1 - self.value)
         self.x = 1 - np.exp(-rate/self.factor)
         return
         
     
-class beta(rate):#beta(time_prob):
+class beta(time_prob):
     """ A container for beta (i.e. the disease transmission rate) """
     pass
     
