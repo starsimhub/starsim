@@ -761,6 +761,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
                     this_zscore = abs_ratio
                 else:
                     abs_ratio = max(this_ratio, 1.0/this_ratio)
+                    this_zscore = None
                 
                 # Set the character to use
                 approx_eq = abs_ratio < small_change
