@@ -322,7 +322,8 @@ class Dist:
         self.ind = jumps
         self.reset() # First reset back to the initial state (used in case of different numbers of calls)
         if jumps: # Seems to randomize state if jumps=0
-            njumps = (self.called+jumps)*self.seed # To avoid possible collisions # TODO: tidy up
+            # njumps = (self.called+jumps)*self.seed # To avoid possible collisions # TODO: tidy up
+            njumps = jumps
             self.bitgen.state = self.bitgen.jumped(jumps=njumps).state # Now take "jumps" number of jumps
         return self.state
     
