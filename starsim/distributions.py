@@ -179,7 +179,6 @@ class Dist:
         # Auto-generated 
         self.rvs_func = None # The default function to call in make_rvs() to generate the random numbers
         self.dynamic_pars = None # Whether or not the distribution has array or callable parameters
-        self.dimension_pars = None # Parameters that have a dimension (usually time) and need to be consistently scaled
         self._pars = None # Validated and transformed (if necessary) parameters
         self._n = None # Internal variable to keep track of "n" argument (usually size)
         self._size = None # Internal variable to keep track of actual number of random variates asked for
@@ -612,7 +611,6 @@ class uniform(Dist):
     """
     def __init__(self, low=0.0, high=1.0, **kwargs):
         super().__init__(distname='uniform', low=low, high=high, **kwargs)
-        self.dimension_pars = ['low', 'high']
         return
     
     def ppf(self, rands):
@@ -632,7 +630,6 @@ class normal(Dist):
     """
     def __init__(self, loc=0.0, scale=1.0, **kwargs):
         super().__init__(distname='normal', dist=sps.norm, loc=loc, scale=scale, **kwargs)
-        self.dimension_pars = ['loc', 'scale']
         return
 
 
@@ -654,8 +651,6 @@ class lognorm_im(Dist):
     """
     def __init__(self, mean=0.0, sigma=1.0, **kwargs):
         super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
-        self.dimension_pars = ['mean', 'sigma']
-        raise Exception('Need to figure out dimensions')
         return
     
     def sync_pars(self, call=True):
@@ -688,7 +683,6 @@ class lognorm_ex(Dist):
     """
     def __init__(self, mean=1.0, std=1.0, **kwargs):
         super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, std=std, **kwargs)
-        self.dimension_pars = ['mean', 'std']
         return
     
     def convert_ex_to_im(self):
@@ -731,7 +725,6 @@ class expon(Dist):
     """
     def __init__(self, scale=1.0, **kwargs):
         super().__init__(distname='exponential', dist=sps.expon, scale=scale, **kwargs)
-        self.dimension_pars = ['scale']
         return
 
 
@@ -744,8 +737,6 @@ class poisson(Dist):
     """
     def __init__(self, lam=1.0, **kwargs):
         super().__init__(distname='poisson', dist=sps.poisson, lam=lam, **kwargs)
-        self.dimension_pars = ['lam']
-        raise Exception('need to check')
         return
     
     def sync_pars(self):
