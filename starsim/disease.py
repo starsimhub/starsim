@@ -288,7 +288,7 @@ class Infection(Disease):
 
         if len(new_cases):
             self._set_cases(new_cases, sources)
-            
+
         return new_cases, sources, networks
 
     def _set_cases(self, target_uids, source_uids=None):
