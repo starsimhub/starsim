@@ -166,7 +166,7 @@ class Dist:
         self.dist = dist # The type of distribution
         self.distname = distname
         self.name = name
-        self.pars = sc.dictobj(kwargs) # The user-defined kwargs
+        self.pars = sc.objdict(kwargs) # The user-defined kwargs
         self.seed = seed # Usually determined once added to the container
         self.offset = offset
         self.module = module

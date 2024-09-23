@@ -4,6 +4,7 @@ Functions and classes for handling time
 
 import numpy as np
 import sciris as sc
+import starsim as ss
 
 # Classes that are externally visible
 __all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff', 'make_timevec', 'make_timearray',
@@ -130,6 +131,19 @@ class TimePar:
     
     NB, because the factor needs to be recalculated, do not set values directly.
     """
+    def __new__(cls, value=None, *args, **kwargs):
+        """ Allow TimePars to wrap distributions and return the distributions """
+        
+        # Special distribution handling
+        if isinstance(value, ss.Dist):
+            dist = value
+            dist.pars[0] = cls(dist.pars[0], *args, **kwargs) # Convert the first parameter to a TimePar (the same scale is applied to all parameters)
+            return dist
+        
+        # Otherwise, do the usual initialization
+        else:
+            return super().__new__(cls)
+    
     def __init__(self, value, unit=None, parent_unit=None, parent_dt=None):
         self.value = value
         self.unit = unit
