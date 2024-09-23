@@ -367,7 +367,7 @@ class Dist:
         return self
     
     def link_sim(self, sim=None, overwrite=False):
-        """ Shortcut for linking the sim, only overwriting an existing one if overwrite=True """
+        """ Shortcut for linking the sim, only overwriting an existing one if overwrite=True; not for the user """
         if (not self.sim or overwrite) and sim is not None:
             self.sim = sim
         return
@@ -379,7 +379,7 @@ class Dist:
         return
     
     def process_seed(self, trace=None, seed=None):
-        """ Obtain the seed offset by hashing the path to this distribution; called automatically """
+        """ Obtain the seed offset by hashing the path to this distribution; not for the user """
         unique_name = trace or self.trace or self.name
         if unique_name:
             if not self.name:
@@ -392,7 +392,7 @@ class Dist:
         return
     
     def process_dist(self):
-        """ Ensure the distribution works """
+        """ Ensure the distribution works; not for the user """
         
         # Handle a SciPy distribution, if provided
         if self.dist is not None:
@@ -417,7 +417,7 @@ class Dist:
         return
     
     def process_size(self, n=1):
-        """ Handle an input of either size or UIDs and calculate size, UIDs, and slots """
+        """ Handle an input of either size or UIDs and calculate size, UIDs, and slots; not for the user """
         if np.isscalar(n) or isinstance(n, tuple):  # If passing a non-scalar size, interpret as dimension rather than UIDs iff a tuple
             uids = None
             slots = None
@@ -441,7 +441,8 @@ class Dist:
         return size, slots
     
     def process_pars(self, call=True):
-        """ Ensure the supplied dist and parameters are valid, and initialize them; called automatically """
+        """ Ensure the supplied dist and parameters are valid, and initialize them; not for the user """
+        self._time_factor = None # Time rescalings need to be done after distributions are calculated; store the correction factor here 
         self._pars = sc.cp(self.pars) # The actual keywords; shallow copy, modified below for special cases
         if call:
             self.call_pars() # Convert from function to values if needed
@@ -449,7 +450,7 @@ class Dist:
         return spars
     
     def call_pars(self):
-        """ Check if any parameters need to be called to be turned into arrays """
+        """ Check if any parameters need to be called to be turned into arrays; not for the user """
         
         # Initialize
         size, uids = self._size, self._uids
@@ -461,7 +462,13 @@ class Dist:
             
             # If it's a time parameter, transform it to a float now
             if isinstance(val, ss.TimePar):
-                self._pars[key] = val.x
+                self._pars[key] = val.value # Use the raw value
+                factor = val.x/val.value # Calculate the ratio here; NB, this is usually val.factor, but not for ss.time_prob
+                if self._time_factor is None:
+                    self._time_factor = factor
+                elif factor != self._time_factor:
+                    errormsg = f'Cannot have time parameters in the same distribution with inconsistent unit/dt values: {self._pars}'
+                    raise ValueError(errormsg)                    
             
             # If the parameter is callable, then call it
             elif callable(val) and not isinstance(val, type): # Types can appear as callable
@@ -476,12 +483,12 @@ class Dist:
         return
     
     def sync_pars(self):
-        """ Perform any necessary synchronizations or transformations on distribution parameters """
+        """ Perform any necessary synchronizations or transformations on distribution parameters; not for the user """
         self.update_dist_pars()
         return self._pars
     
     def update_dist_pars(self, pars=None):
-        """ Update SciPy distribution parameters """
+        """ Update SciPy distribution parameters; not for the user """
         if self.dist is not None:
             pars = pars if pars is not None else self._pars
             self.dist.kwds = pars
@@ -492,7 +499,7 @@ class Dist:
         return self.rng.random(size)
     
     def make_rvs(self):
-        """ Return default random numbers for scalar parameters """
+        """ Return default random numbers for scalar parameters; not for the user """
         if self.rvs_func is not None:
             rvs_func = getattr(self.rng, self.rvs_func) # Can't store this because then it references the wrong RNG after copy
             rvs = rvs_func(**self._pars, size=self._size)
@@ -504,13 +511,13 @@ class Dist:
         return rvs
     
     def ppf(self, rands):
-        """ Return default random numbers for array parameters """
+        """ Return default random numbers for array parameters; not for the user """
         rvs = self.dist.ppf(rands)
         return rvs
     
     def rvs(self, n=1, reset=False):
         """
-        Get random variables
+        Get random variables -- use this!
         
         Args:
             n (int/tuple/arr): if an int or tuple, return this many random variables; if an array, treat as UIDs
@@ -546,6 +553,10 @@ class Dist:
             rvs = self.make_rvs() # Or, just get regular values
             if self._slots is not None:
                 rvs = rvs[self._slots]
+                
+        # Scale by time if needed
+        if self._time_factor is not None:
+            rvs *= self._time_factor
         
         # Tidy up
         self.called += 1
