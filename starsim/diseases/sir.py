@@ -37,16 +37,16 @@ class SIR(ss.Infection):
         
     #     # Option 1 for defining events -- using objects
     #     self.define_events(
-    #         ss.Event(self.susceptible, self.infected, func=self.infect,  reskey='infections'),
-    #         ss.Event(self.infected, self.recovered,   func=self.recover, reskey='recoveries'),
-    #         ss.Event(self.infected, self.dead,        func=self.step_die,     reskey='deaths'),
+    #         ss.Event(self.susceptible, self.infected, func=self.infect,   reskey='infections'),
+    #         ss.Event(self.infected, self.recovered,   func=self.recover,  reskey='recoveries'),
+    #         ss.Event(self.infected, self.dead,        func=self.step_die, reskey='deaths'),
     #     )
         
     #     # Option 2 for defining events -- using strings
     #     self.define_events(
-    #         ss.Event('susceptible -> infected', self.infect,  reskey='infections'),
-    #         ss.Event('infected -> recovered',   self.recover, reskey='recoveries'),
-    #         ss.Event('infected -> dead',        self.step_die,     reskey='deaths'),
+    #         ss.Event('susceptible -> infected', self.infect,   reskey='infections'),
+    #         ss.Event('infected -> recovered',   self.recover,  reskey='recoveries'),
+    #         ss.Event('infected -> dead',        self.step_die, reskey='deaths'),
     #     )
         
     #     self.define_attrs(
