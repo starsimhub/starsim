@@ -179,6 +179,7 @@ class Dist:
         # Auto-generated 
         self.rvs_func = None # The default function to call in make_rvs() to generate the random numbers
         self.dynamic_pars = None # Whether or not the distribution has array or callable parameters
+        self.dimension_pars = None # Parameters that have a dimension (usually time) and need to be consistently scaled
         self._pars = None # Validated and transformed (if necessary) parameters
         self._n = None # Internal variable to keep track of "n" argument (usually size)
         self._size = None # Internal variable to keep track of actual number of random variates asked for
@@ -611,6 +612,7 @@ class uniform(Dist):
     """
     def __init__(self, low=0.0, high=1.0, **kwargs):
         super().__init__(distname='uniform', low=low, high=high, **kwargs)
+        self.dimension_pars = ['low', 'high']
         return
     
     def ppf(self, rands):
@@ -630,13 +632,14 @@ class normal(Dist):
     """
     def __init__(self, loc=0.0, scale=1.0, **kwargs):
         super().__init__(distname='normal', dist=sps.norm, loc=loc, scale=scale, **kwargs)
+        self.dimension_pars = ['loc', 'scale']
         return
 
 
 class lognorm_im(Dist):
     """
     Lognormal distribution, parameterized in terms of the "implicit" (normal)
-    distribution, with mean=loc and stdev=scale (see lognorm_ex for comparison).
+    distribution, with mean=loc and std=scale (see lognorm_ex for comparison).
     
     Note: the "loc" parameter here does *not* correspond to the mean of the resulting
     random variates!
@@ -651,6 +654,8 @@ class lognorm_im(Dist):
     """
     def __init__(self, mean=0.0, sigma=1.0, **kwargs):
         super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
+        self.dimension_pars = ['mean', 'sigma']
+        raise Exception('Need to figure out dimensions')
         return
     
     def sync_pars(self, call=True):
@@ -669,20 +674,21 @@ class lognorm_im(Dist):
 class lognorm_ex(Dist):
     """
     Lognormal distribution, parameterized in terms of the "explicit" (lognormal)
-    distribution, with mean=mean and stdev=stdev for this distribution (see lognorm_im for comparison).
+    distribution, with mean=mean and std=std for this distribution (see lognorm_im for comparison).
     Note that a mean ≤ 0.0 is impossible, since this is the parameter of the distribution
     after the log transform.
     
     Args:
         mean (float): the mean of this distribution (not the underlying distribution) (default 1.0)
-        stdev (float): the standard deviation of this distribution (not the underlying distribution) (default 1.0)
+        std (float): the standard deviation of this distribution (not the underlying distribution) (default 1.0)
     
     **Example**::
         
-        ss.lognorm_ex(mean=2, stdev=1, strict=False).rvs(1000).mean() # Should be close to 2
+        ss.lognorm_ex(mean=2, std=1, strict=False).rvs(1000).mean() # Should be close to 2
     """
-    def __init__(self, mean=1.0, stdev=1.0, **kwargs):
-        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, stdev=stdev, **kwargs)
+    def __init__(self, mean=1.0, std=1.0, **kwargs):
+        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, std=std, **kwargs)
+        self.dimension_pars = ['mean', 'std']
         return
     
     def convert_ex_to_im(self):
@@ -696,13 +702,13 @@ class lognorm_ex(Dist):
         self.call_pars() # Since can't work with functions
         p = self._pars
         mean = p.pop('mean')
-        stdev = p.pop('stdev')
+        std = p.pop('std')
         if np.isscalar(mean) and mean <= 0:
             errormsg = f'Cannot create a lognorm_ex distribution with mean≤0 (mean={mean}); did you mean to use lognorm_im instead?'
             raise ValueError(errormsg)
-        std2 = stdev**2
+        std2 = std**2
         mean2 = mean**2
-        sigma_im = np.sqrt(np.log(std2/mean2 + 1)) # Computes stdev for the underlying normal distribution
+        sigma_im = np.sqrt(np.log(std2/mean2 + 1)) # Computes std for the underlying normal distribution
         mean_im  = np.log(mean2 / np.sqrt(std2 + mean2)) # Computes the mean of the underlying normal distribution
         p.mean = mean_im
         p.sigma = sigma_im
@@ -725,6 +731,7 @@ class expon(Dist):
     """
     def __init__(self, scale=1.0, **kwargs):
         super().__init__(distname='exponential', dist=sps.expon, scale=scale, **kwargs)
+        self.dimension_pars = ['scale']
         return
 
 
@@ -737,6 +744,8 @@ class poisson(Dist):
     """
     def __init__(self, lam=1.0, **kwargs):
         super().__init__(distname='poisson', dist=sps.poisson, lam=lam, **kwargs)
+        self.dimension_pars = ['lam']
+        raise Exception('need to check')
         return
     
     def sync_pars(self):
