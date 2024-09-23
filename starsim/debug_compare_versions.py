@@ -11,7 +11,7 @@ pars = sc.objdict(
     rand_seed  = 2,
     verbose    = 0.02,
     diseases   = ['sir', 'sis'],
-    networks   = ['random']#, 'mf', 'maternal'],
+    networks   = ['random', 'mf']#, 'maternal'],
 )
 
 # s1 = ss.Sim(dur=20, diseases=['sir'], networks=['random'], dt=0.2, rand_seed=2)
