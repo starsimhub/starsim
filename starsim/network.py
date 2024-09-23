@@ -791,9 +791,9 @@ class MSMNet(SexualNetwork):
     def __init__(self, pars=None, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
         self.define_pars(
-            duration = ss.lognorm_ex(mean=15, stdev=15),
+            duration = ss.lognorm_ex(mean=15, std=15),
             debut = ss.normal(loc=16, scale=2),
-            acts = ss.lognorm_ex(mean=80, stdev=20),
+            acts = ss.lognorm_ex(mean=80, std=20),
             participation = ss.bernoulli(p=0.1),
         )
         self.update_pars(pars, **kwargs)
