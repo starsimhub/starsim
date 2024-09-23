@@ -18,7 +18,9 @@ def str2int(string, modulo=1_000_000):
     Cannot use Python's built-in hash() since it's randomized for strings, but
     this is almost as fast (and 5x faster than hashlib).
     """
-    return int.from_bytes(string.encode(), byteorder='big') % modulo
+    integer = sc.sha(string, asint=True) # Hash the string to an integer
+    out = integer % modulo # Don't need all of it, this is more user-friendly
+    return out
 
 
 def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs):
@@ -319,7 +321,8 @@ class Dist:
         self.ind = jumps
         self.reset() # First reset back to the initial state (used in case of different numbers of calls)
         if jumps: # Seems to randomize state if jumps=0
-            self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
+            njumps = (self.called+jumps)*self.seed # To avoid possible collisions # TODO: tidy up
+            self.bitgen.state = self.bitgen.jumped(jumps=njumps).state # Now take "jumps" number of jumps
         return self.state
     
     def init(self, trace=None, seed=None, module=None, sim=None, slots=None, force=False):
@@ -792,6 +795,7 @@ class randint(Dist):
         rvs = rvs.astype(self.pars['dtype'])
         return rvs
 
+
 class rand_raw(Dist):
     """
     Directly sample raw integers (uint64) from the random number generator.
@@ -802,6 +806,11 @@ class rand_raw(Dist):
             return self.rng.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=self._size)
         else:
             return self.bitgen.random_raw(self._size)
+        
+    def jump(self, *args, **kwargs):
+        super().jump(*args, **kwargs)
+        # self.show_state()
+        return
 
 
 class weibull(Dist):
@@ -998,13 +1007,13 @@ class multi_random(sc.prettyobj):
     def __len__(self):
         return len(self.dists)
         
-    def init(self, *args, **kwargs):
-        for dist in self.dists: dist.init(*args, **kwargs)
-        return
+    # def init(self, *args, **kwargs):
+    #     for dist in self.dists: dist.init(*args, **kwargs)
+    #     return
     
-    def reset(self, *args, **kwargs):
-        for dist in self.dists: dist.reset(*args, **kwargs)
-        return
+    # def reset(self, *args, **kwargs):
+    #     for dist in self.dists: dist.reset(*args, **kwargs)
+    #     return
     
     def jump(self, *args, **kwargs):
         for dist in self.dists: dist.jump(*args, **kwargs)

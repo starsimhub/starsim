@@ -300,7 +300,9 @@ class Infection(Disease):
                         p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
         
                         # Generate a new random number based on the two other random numbers
+                        # self.trans_rng.jump(self.ti*3569)#np.random.randint(29834))
                         randvals = self.trans_rng.rvs(src, trg)
+                        # randvals = np.random.rand(len(randvals))
                         transmitted = p_transmit > randvals
                         target_uids = trg[transmitted]
                         source_uids = src[transmitted]
@@ -309,15 +311,29 @@ class Infection(Disease):
                         networks.append(np.full(len(target_uids), dtype=ss_int_, fill_value=i))
                         
                         self.COUNT += 1
-                        ln = np.arange(20)
-                        print('         p_tr:', p_transmit[ln])
-                        print('          src:', src[ln])
-                        print('          trg:', trg[ln])
-                        print('        rel_t:', rel_trans[src][ln])
-                        print('        rel_s:', rel_sus[trg][ln])
-                        print('         rand:', randvals[ln])
-                        print('        trans:', transmitted[ln])
-                        print('                        mid-infect()', self.COUNT, len(target_uids), p_transmit.sum())
+                        def ff(arr):
+                            n = 20
+                            # ln = np.arange(n)
+                            # out = arr[ln]
+                            inds = sc.findinds(p_transmit)[:n]
+                            out = inds, arr[inds]
+                            return out
+                        
+                        inds = sc.findinds(p_transmit)
+                        p_tr = p_transmit[inds]
+                        rv = randvals[inds]
+                        cc = np.corrcoef(p_tr, rv)[0,1]
+                        # print('         hrm:', sc.strjoin(sc.sigfigs([len(inds), p_transmit.mean(), p_tr.mean(), randvals.mean(), rv.mean(), cc])))
+                        # print(f'         hrm: inds={len(inds):n}, p_transmit={p_transmit.mean():n}, p_tr={p_tr.mean():n}, randvals={randvals.mean():n}, rv={rv.mean():n}, cc={cc:n}')
+                        
+                        # print('         p_tr:', ff(p_transmit))
+                        # print('          src:', ff(src))
+                        # print('          trg:', ff(trg))
+                        # print('        rel_t:', ff(rel_trans[src]))
+                        # print('        rel_s:', ff(rel_sus[trg]))
+                        # print('         rand:', ff(randvals))
+                        # print('        trans:', ff(transmitted))
+                        # print('                        mid-infect()', self.COUNT, len(target_uids), p_transmit.sum())
                 
         # Finalize
         if len(new_cases) and len(sources):
@@ -331,7 +347,7 @@ class Infection(Disease):
             new_cases = ss.uids()
             sources = ss.uids()
             networks = np.empty(0, dtype=ss_int_)
-        print('end infect()', self.ti, TOT_NEW, TOT_UNI, len(new_cases))
+        # sc.heading('end infect()', self.ti, TOT_NEW, TOT_UNI, len(new_cases))
         return new_cases, sources, networks
 
     def set_outcomes(self, uids, sources=None):

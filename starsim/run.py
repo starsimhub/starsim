@@ -246,7 +246,7 @@ class MultiSim(sc.prettyobj):
             if method == 'all':
                 summary[k] = arr
             elif method == 'mean':
-                summary[k] = sc.objdict({'mean':arr.mean(), 'std':arr.std(), 'sem':arr.std()/np.sqrt(len(arr))}) # TODO: replace with sc.sem()
+                summary[k] = sc.objdict({'mean':arr.mean(), 'std':arr.std(), 'sem':sc.sem(arr)})
             elif method == 'median':
                 if quantiles is None:
                     quantiles = sc.objdict({'median':0.5, 'min':0, 'max':1, 'q25':0.25, 'q75':0.75})
