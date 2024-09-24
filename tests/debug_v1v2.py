@@ -16,12 +16,12 @@ v2pars = sc.objdict(
     n_agents  = 10e3, # Number of agents
     start     = 2000, # Starting year
     dur       = 20,   # Number of years to simulate
-    dt        = 0.1,  # Timestep
+    dt        = 1.0,  # Timestep
     verbose   = 0.05,    # Don't print details of the run
     rand_seed = 2,    # Set a non-default seed
-    diseases = ['sir', 'sis'],
-    networks = ['random', 'maternal'],#, 'maternal'],
-    demographics = True,
+    diseases = ['sis'],
+    networks = ['mf'],
+    # demographics = True,
 )
 
 v1pars = v2pars.copy()
