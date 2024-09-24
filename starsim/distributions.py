@@ -110,7 +110,7 @@ class Dists(sc.prettyobj):
         return
 
     def jump(self, to=None, delta=1):
-        """ Advance all RNGs, e.g. to timestep "to", by jumping """
+        """ Advance all RNGs, e.g. to call "to", by jumping """
         out = sc.autolist()
 
         # Do not jump if centralized
@@ -119,6 +119,18 @@ class Dists(sc.prettyobj):
 
         for dist in self.dists.values():
             out += dist.jump(to=to, delta=delta)
+        return out
+    
+    def jump_dt(self): # TODO: simplify with jump
+        """ Advance all RNGs to the next timestep """
+        out = sc.autolist()
+        
+        # Do not jump if centralized
+        if ss.options._centralized:
+            return out
+        
+        for dist in self.dists.values():
+            out += dist.jump_dt()
         return out
 
     def reset(self):
@@ -327,6 +339,11 @@ class Dist:
             njumps = jumps
             self.bitgen.state = self.bitgen.jumped(jumps=njumps).state # Now take "jumps" number of jumps
         return self.state
+    
+    def jump_dt(self, jumpsize=1000):
+        """ Automatically jump on the next value of dt """
+        to = jumpsize*(self.sim.ti+1)
+        return self.jump(to=to)
     
     def init(self, trace=None, seed=None, module=None, sim=None, slots=None, force=False):
         """ Calculate the starting seed and create the RNG """

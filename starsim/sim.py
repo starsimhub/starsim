@@ -237,8 +237,7 @@ class Sim:
                     sc.progressbar(self.ti + 1, self.npts, label=string, length=20, newline=True)
 
         # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
-        max_calls = 1000 # Should never need more than this many calls per distribution per timestep!
-        self.dists.jump(to=max_calls*(self.ti+1))  # +1 offset because ti=0 is used on initialization; multiply to avoid repeated numbers # TODO: each module should do this, but should be ok as-is with auto-jump
+        self.dists.jump_dt() # TODO: each module should do this, but should be ok as-is with auto-jump
         return
 
     def finish_step(self):
