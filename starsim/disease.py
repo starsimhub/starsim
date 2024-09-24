@@ -160,9 +160,7 @@ class Infection(Disease):
         )
 
         # Define random number generator for determining transmission
-        # self.trans_rng = ss.multi_random('source', 'target')
-        self.rng_target = ss.rand_raw(name='target')
-        self.rng_source = ss.rand_raw(name='source')
+        self.trans_rng = ss.multi_random('source', 'target')
         return
     
     def init_pre(self, sim):
@@ -295,21 +293,12 @@ class Infection(Disease):
                 for src, trg, beta in [p1p2b0, p2p1b1]:
                     if beta: # Skip networks with no transmission
     
-                        # Calculate probability of a->b transmission.
-                        beta_per_dt = net.net_beta(disease_beta=beta)
-                        #beta_per_dt = edges.beta * beta # TODO: think of shortcut to skip this multiplication if all edges are just 1.0
+                        # Calculate probability of a->b transmission
+                        beta_per_dt = net.net_beta(disease_beta=beta) # TODO: potentially refactor
                         p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
         
                         # Generate a new random number based on the two other random numbers
-                        # sc.heading('hi', self.ti)
-                        # self.rng_source.show_state()
-                        # self.rng_target.show_state()
-                        rvs_s = self.rng_source.rvs(src)
-                        rvs_t = self.rng_target.rvs(trg)
-                        
-                        randvals = ss.utils.combine_rands(rvs_s, rvs_t)
-
-                        # randvals = self.trans_rng.rvs(src, trg)
+                        randvals = self.trans_rng.rvs(src, trg)
                         transmitted = p_transmit > randvals
                         target_uids = trg[transmitted]
                         source_uids = src[transmitted]
