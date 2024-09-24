@@ -114,11 +114,14 @@ class Network(ss.Module):
 
     def __repr__(self, **kwargs):
         """ Convert to a dataframe for printing """
-        namestr = self.name
-        labelstr = f'"{self.label}"' if self.label else '<no label>'
-        keys_str = ', '.join(self.edges.keys())
-        output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", p1, p2, beta)
-        output += self.to_df().__repr__()
+        try:
+            namestr = self.name
+            labelstr = f'"{self.label}"' if self.label else '<no label>'
+            keys_str = ', '.join(self.edges.keys())
+            output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", p1, p2, beta)
+            output += self.to_df().__repr__()
+        except:
+            output = sc.prepr(self, vals=False)
         return output
 
     def __contains__(self, item):
