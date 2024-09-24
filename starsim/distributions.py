@@ -25,16 +25,16 @@ def str2int(string, modulo=1_000_000):
     return out
 
 
-def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs):
+def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs): # TODO: actually link the distributions to the modules!
     """ Link distributions to the sim and the module; used in module.init() and people.init() """
     if module is None and isinstance(obj, ss.Module):
         module = obj
-    dists = ss.find_objs(Dist, obj, **kwargs) # Important that this comes first, before the sim is linked to the dist!
-    for key,val in dists.items():
-        val.link_sim(sim, overwrite=overwrite)
-        val.link_module(module, overwrite=overwrite)
+    dists = sc.search(obj, type=Dist, **kwargs)
+    for dist in dists.values():
+        dist.link_sim(sim, overwrite=overwrite)
+        dist.link_module(module, overwrite=overwrite)
         if init: # Usually this is false since usually these are initialized centrally by the sim
-            val.init()
+            dist.init()
     return
 
 
@@ -88,7 +88,7 @@ class Dists(sc.prettyobj):
         skip = id(sim.people._states) if sim is not None else None
         
         # Find and initialize the distributions
-        self.dists = ss.find_objs(Dist, obj, skip=skip)
+        self.dists = sc.search(obj, type=Dist, skip=skip, flatten=True)
         for trace,dist in self.dists.items():
             if not dist.initialized or force:
                 dist.init(trace=trace, seed=base_seed, sim=sim, force=force)

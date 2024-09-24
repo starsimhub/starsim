@@ -12,7 +12,7 @@ import starsim as ss
 # %% Helper functions
 
 # What functions are externally visible
-__all__ = ['ndict', 'warn', 'find_objs', 'find_contacts', 'set_seed', 'check_requires', 'standardize_netkey', 'standardize_data']
+__all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'standardize_netkey', 'standardize_data']
 
 
 class ndict(sc.objdict):
@@ -157,18 +157,6 @@ def warn(msg, category=None, verbose=None, die=None):
         raise ValueError(errormsg)
 
     return
-
-
-def find_objs(cls, obj, verbose=False, **kwargs):
-    """ Find all objects of a specified class in a parent object; mostly used internally """
-    out = sc.objdict()
-    tree = sc.iterobj(obj, depthfirst=False, flatten=True, **kwargs)
-    if verbose: print(f'Found {len(tree)} objects')
-    for trace,val in tree.items():
-        if isinstance(val, cls):
-            out[trace] = val
-            if verbose: print(f'  {trace} is a {cls.__name__} ({len(out)})')
-    return out
 
 
 def find_contacts(p1, p2, inds):  # pragma: no cover
