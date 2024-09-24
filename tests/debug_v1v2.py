@@ -15,11 +15,11 @@ ss2 = sc.importbypath(root / 'starsim/starsim') # Starsim v2.0
 v2pars = sc.objdict(
     n_agents  = 10e3, # Number of agents
     start     = 2000, # Starting year
-    dur       = 50,   # Number of years to simulate
+    dur       = 100,   # Number of years to simulate
     dt        = 1.0,  # Timestep
     verbose   = 0.05,    # Don't print details of the run
     rand_seed = 2,    # Set a non-default seed
-    diseases = [dict(type='sis', beta=1.0)],
+    diseases = [dict(type='sis', beta=0.5)],
     networks = ['mf'],
     # demographics = True,
 )

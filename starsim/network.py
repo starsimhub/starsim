@@ -776,6 +776,8 @@ class MFNet(SexualNetwork):
             act_vals = self.pars.acts.rvs(len(p1))
 
         self.append(p1=p1, p2=p2, beta=beta, dur=dur_vals, acts=act_vals)
+        
+        print('hi i am v2, adding', self.ti, len(p1))
 
         return len(p1)
 
