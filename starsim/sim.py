@@ -217,7 +217,6 @@ class Sim:
 
     def start_step(self):
         """ Step through time and update values """
-        # sc.heading('STARTING STEP ', self.ti)
 
         # Set the time and if we have reached the end of the simulation, then do nothing
         if self.complete:
@@ -238,7 +237,8 @@ class Sim:
                     sc.progressbar(self.ti + 1, self.npts, label=string, length=20, newline=True)
 
         # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
-        self.dists.jump(to=self.ti+1)  # +1 offset because ti=0 is used on initialization # TODO: each module should do this
+        max_calls = 1000 # Should never need more than this many calls per distribution per timestep!
+        self.dists.jump(to=max_calls*(self.ti+1))  # +1 offset because ti=0 is used on initialization; multiply to avoid repeated numbers # TODO: each module should do this, but should be ok as-is with auto-jump
         return
 
     def finish_step(self):
