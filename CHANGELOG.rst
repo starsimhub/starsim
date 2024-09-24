@@ -12,7 +12,7 @@ Version 2.0.0 (2024-09-30)
 
 Summary
 ~~~~~~~
-This version contains several major breaking changes. These include: module-specific timesteps and time-aware parameters (including a day/year ``unit`` flag for modules, and  ``ss.dur()`` and ``ss.rate()`` classes for parameters), new ``ss.State`` and ``ss.Event`` classes that simplify disease logic; as well as changes to module types and integration (e.g. renaming ``update()`` and ``apply()`` methods to ``step()``).
+This version contains several major breaking changes. These include: module-specific timesteps and time-aware parameters (including a day/year ``unit`` flag for modules, and  ``ss.dur()`` and ``ss.rate()`` classes for parameters), and changes to module types and integration (e.g. renaming ``update()`` and ``apply()`` methods to ``step()``).
 
 Time-aware parameters and modules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -20,10 +20,6 @@ Time-aware parameters and modules
 - Durations and rates, along with modules and the sim itself, now have a ``unit`` parameter which can be ``'day'``, ``'week'``, ``'month'``, or ``'year'`` (default). Modules now also have their own timestep ``dt``. Different units and timesteps can be mixed and matched.
 - There is a new ``Loop`` class which handles the integration loop. You can view the integration plan via ``sim.loop.to_df()`` or ``sim.loop.plot()``.
 - There are more advanced debugging tools. You can run a single sim timestep with ``sim.run_one_step()`` (which in turn calls multiple functions), and you can run a single function from the integration loop with ``sim.loop.run_one_step()``.
-
-States and events
-~~~~~~~~~~~~~~~~~
-Coming soon!
 
 Module changes
 ~~~~~~~~~~~~~~
@@ -41,6 +37,8 @@ Other changes
 - ``sim.get_intervention()`` and ``sim.get_analyzer()`` have been removed; use built-in ``ndict`` operations (e.g., the label) to find the object you're after.
 - ``requires`` has been removed from modules, but ``ss.check_requires()`` is still available if needed. Call it manually from ``init_pre()`` if desired, e.g. ``ss.check_requires(self.sim, self.requires)``.
 - For networks, ``contacts`` has been renamed ``edges`` except in cases where it refers to an *agent's* contacts. For example, ``network.contacts`` has been renamed ``network.edges``, but ``ss.find_contacts()`` remains the same.
+- Distributions have a new ``jump_dt`` method that jumps by much more than a single state update.
+- ``ss.diff_sims()`` can now handle ``MultiSim` objects.
 - ``Sim._orig_pars`` has been removed.
 - ``ss.unique()`` has been removed.
 
