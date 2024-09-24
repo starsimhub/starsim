@@ -15,22 +15,26 @@ def str2int(string, modulo=1_000_000):
     """
     Convert a string to an int
     
-    Cannot use Python's built-in hash() since it's randomized for strings, but
-    this is almost as fast (and 5x faster than hashlib).
+    Cannot use Python's built-in hash() since it's randomized for strings. Hashlib
+    is 5x slower than int.from_bytes(string.encode(), byteorder='big'), but should
+    only add a couple milliseconds to a typical sim.
     """
-    return int.from_bytes(string.encode(), byteorder='big') % modulo
+    integer = int.from_bytes(string.encode(), byteorder='big')
+    # integer = sc.sha(string, asint=True) # Hash the string to an integer
+    out = integer % modulo # Don't need all of it, this is more user-friendly
+    return out
 
 
-def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs):
+def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs): # TODO: actually link the distributions to the modules! Currently this only does the opposite, but should have mod.dists as well
     """ Link distributions to the sim and the module; used in module.init() and people.init() """
     if module is None and isinstance(obj, ss.Module):
         module = obj
-    dists = ss.find_objs(Dist, obj, **kwargs) # Important that this comes first, before the sim is linked to the dist!
-    for key,val in dists.items():
-        val.link_sim(sim, overwrite=overwrite)
-        val.link_module(module, overwrite=overwrite)
+    dists = sc.search(obj, type=Dist, **kwargs)
+    for dist in dists.values():
+        dist.link_sim(sim, overwrite=overwrite)
+        dist.link_module(module, overwrite=overwrite)
         if init: # Usually this is false since usually these are initialized centrally by the sim
-            val.init()
+            dist.init()
     return
 
 
@@ -84,7 +88,7 @@ class Dists(sc.prettyobj):
         skip = id(sim.people._states) if sim is not None else None
         
         # Find and initialize the distributions
-        self.dists = ss.find_objs(Dist, obj, skip=skip)
+        self.dists = sc.search(obj, type=Dist, skip=skip, flatten=True)
         for trace,dist in self.dists.items():
             if not dist.initialized or force:
                 dist.init(trace=trace, seed=base_seed, sim=sim, force=force)
@@ -106,7 +110,7 @@ class Dists(sc.prettyobj):
         return
 
     def jump(self, to=None, delta=1):
-        """ Advance all RNGs, e.g. to timestep "to", by jumping """
+        """ Advance all RNGs, e.g. to call "to", by jumping """
         out = sc.autolist()
 
         # Do not jump if centralized
@@ -115,6 +119,18 @@ class Dists(sc.prettyobj):
 
         for dist in self.dists.values():
             out += dist.jump(to=to, delta=delta)
+        return out
+    
+    def jump_dt(self): # TODO: simplify with jump
+        """ Advance all RNGs to the next timestep """
+        out = sc.autolist()
+        
+        # Do not jump if centralized
+        if ss.options._centralized:
+            return out
+        
+        for dist in self.dists.values():
+            out += dist.jump_dt()
         return out
 
     def reset(self):
@@ -166,7 +182,7 @@ class Dist:
         self.dist = dist # The type of distribution
         self.distname = distname
         self.name = name
-        self.pars = sc.dictobj(kwargs) # The user-defined kwargs
+        self.pars = sc.objdict(kwargs) # The user-defined kwargs
         self.seed = seed # Usually determined once added to the container
         self.offset = offset
         self.module = module
@@ -319,8 +335,15 @@ class Dist:
         self.ind = jumps
         self.reset() # First reset back to the initial state (used in case of different numbers of calls)
         if jumps: # Seems to randomize state if jumps=0
-            self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
+            # njumps = (self.called+jumps)*self.seed # To avoid possible collisions # TODO: tidy up
+            njumps = jumps
+            self.bitgen.state = self.bitgen.jumped(jumps=njumps).state # Now take "jumps" number of jumps
         return self.state
+    
+    def jump_dt(self, jumpsize=1000):
+        """ Automatically jump on the next value of dt """
+        to = jumpsize*(self.sim.ti+1)
+        return self.jump(to=to)
     
     def init(self, trace=None, seed=None, module=None, sim=None, slots=None, force=False):
         """ Calculate the starting seed and create the RNG """
@@ -367,7 +390,7 @@ class Dist:
         return self
     
     def link_sim(self, sim=None, overwrite=False):
-        """ Shortcut for linking the sim, only overwriting an existing one if overwrite=True """
+        """ Shortcut for linking the sim, only overwriting an existing one if overwrite=True; not for the user """
         if (not self.sim or overwrite) and sim is not None:
             self.sim = sim
         return
@@ -379,7 +402,7 @@ class Dist:
         return
     
     def process_seed(self, trace=None, seed=None):
-        """ Obtain the seed offset by hashing the path to this distribution; called automatically """
+        """ Obtain the seed offset by hashing the path to this distribution; not for the user """
         unique_name = trace or self.trace or self.name
         if unique_name:
             if not self.name:
@@ -392,7 +415,7 @@ class Dist:
         return
     
     def process_dist(self):
-        """ Ensure the distribution works """
+        """ Ensure the distribution works; not for the user """
         
         # Handle a SciPy distribution, if provided
         if self.dist is not None:
@@ -417,7 +440,7 @@ class Dist:
         return
     
     def process_size(self, n=1):
-        """ Handle an input of either size or UIDs and calculate size, UIDs, and slots """
+        """ Handle an input of either size or UIDs and calculate size, UIDs, and slots; not for the user """
         if np.isscalar(n) or isinstance(n, tuple):  # If passing a non-scalar size, interpret as dimension rather than UIDs iff a tuple
             uids = None
             slots = None
@@ -441,7 +464,8 @@ class Dist:
         return size, slots
     
     def process_pars(self, call=True):
-        """ Ensure the supplied dist and parameters are valid, and initialize them; called automatically """
+        """ Ensure the supplied dist and parameters are valid, and initialize them; not for the user """
+        self._time_factor = None # Time rescalings need to be done after distributions are calculated; store the correction factor here 
         self._pars = sc.cp(self.pars) # The actual keywords; shallow copy, modified below for special cases
         if call:
             self.call_pars() # Convert from function to values if needed
@@ -449,7 +473,7 @@ class Dist:
         return spars
     
     def call_pars(self):
-        """ Check if any parameters need to be called to be turned into arrays """
+        """ Check if any parameters need to be called to be turned into arrays; not for the user """
         
         # Initialize
         size, uids = self._size, self._uids
@@ -461,7 +485,13 @@ class Dist:
             
             # If it's a time parameter, transform it to a float now
             if isinstance(val, ss.TimePar):
-                self._pars[key] = val.x
+                self._pars[key] = val.value # Use the raw value
+                factor = val.x/val.value # Calculate the ratio here; NB, this is usually val.factor, but not for ss.time_prob
+                if self._time_factor is None:
+                    self._time_factor = factor
+                elif factor != self._time_factor:
+                    errormsg = f'Cannot have time parameters in the same distribution with inconsistent unit/dt values: {self._pars}'
+                    raise ValueError(errormsg)                    
             
             # If the parameter is callable, then call it
             elif callable(val) and not isinstance(val, type): # Types can appear as callable
@@ -476,12 +506,12 @@ class Dist:
         return
     
     def sync_pars(self):
-        """ Perform any necessary synchronizations or transformations on distribution parameters """
+        """ Perform any necessary synchronizations or transformations on distribution parameters; not for the user """
         self.update_dist_pars()
         return self._pars
     
     def update_dist_pars(self, pars=None):
-        """ Update SciPy distribution parameters """
+        """ Update SciPy distribution parameters; not for the user """
         if self.dist is not None:
             pars = pars if pars is not None else self._pars
             self.dist.kwds = pars
@@ -492,7 +522,7 @@ class Dist:
         return self.rng.random(size)
     
     def make_rvs(self):
-        """ Return default random numbers for scalar parameters """
+        """ Return default random numbers for scalar parameters; not for the user """
         if self.rvs_func is not None:
             rvs_func = getattr(self.rng, self.rvs_func) # Can't store this because then it references the wrong RNG after copy
             rvs = rvs_func(**self._pars, size=self._size)
@@ -504,13 +534,13 @@ class Dist:
         return rvs
     
     def ppf(self, rands):
-        """ Return default random numbers for array parameters """
+        """ Return default random numbers for array parameters; not for the user """
         rvs = self.dist.ppf(rands)
         return rvs
     
     def rvs(self, n=1, reset=False):
         """
-        Get random variables
+        Get random variables -- use this!
         
         Args:
             n (int/tuple/arr): if an int or tuple, return this many random variables; if an array, treat as UIDs
@@ -546,6 +576,10 @@ class Dist:
             rvs = self.make_rvs() # Or, just get regular values
             if self._slots is not None:
                 rvs = rvs[self._slots]
+                
+        # Scale by time if needed
+        if self._time_factor is not None:
+            rvs = rvs*self._time_factor # TODO: Can't use rvs *= in case it's not a float; this is not ideal though since if not a float (e.g. for Poisson) it's probably a bug
         
         # Tidy up
         self.called += 1
@@ -636,7 +670,7 @@ class normal(Dist):
 class lognorm_im(Dist):
     """
     Lognormal distribution, parameterized in terms of the "implicit" (normal)
-    distribution, with mean=loc and stdev=scale (see lognorm_ex for comparison).
+    distribution, with mean=loc and std=scale (see lognorm_ex for comparison).
     
     Note: the "loc" parameter here does *not* correspond to the mean of the resulting
     random variates!
@@ -669,20 +703,20 @@ class lognorm_im(Dist):
 class lognorm_ex(Dist):
     """
     Lognormal distribution, parameterized in terms of the "explicit" (lognormal)
-    distribution, with mean=mean and stdev=stdev for this distribution (see lognorm_im for comparison).
+    distribution, with mean=mean and std=std for this distribution (see lognorm_im for comparison).
     Note that a mean ≤ 0.0 is impossible, since this is the parameter of the distribution
     after the log transform.
     
     Args:
         mean (float): the mean of this distribution (not the underlying distribution) (default 1.0)
-        stdev (float): the standard deviation of this distribution (not the underlying distribution) (default 1.0)
+        std (float): the standard deviation of this distribution (not the underlying distribution) (default 1.0)
     
     **Example**::
         
-        ss.lognorm_ex(mean=2, stdev=1, strict=False).rvs(1000).mean() # Should be close to 2
+        ss.lognorm_ex(mean=2, std=1, strict=False).rvs(1000).mean() # Should be close to 2
     """
-    def __init__(self, mean=1.0, stdev=1.0, **kwargs):
-        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, stdev=stdev, **kwargs)
+    def __init__(self, mean=1.0, std=1.0, **kwargs):
+        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, std=std, **kwargs)
         return
     
     def convert_ex_to_im(self):
@@ -696,13 +730,13 @@ class lognorm_ex(Dist):
         self.call_pars() # Since can't work with functions
         p = self._pars
         mean = p.pop('mean')
-        stdev = p.pop('stdev')
+        std = p.pop('std')
         if np.isscalar(mean) and mean <= 0:
             errormsg = f'Cannot create a lognorm_ex distribution with mean≤0 (mean={mean}); did you mean to use lognorm_im instead?'
             raise ValueError(errormsg)
-        std2 = stdev**2
+        std2 = std**2
         mean2 = mean**2
-        sigma_im = np.sqrt(np.log(std2/mean2 + 1)) # Computes stdev for the underlying normal distribution
+        sigma_im = np.sqrt(np.log(std2/mean2 + 1)) # Computes std for the underlying normal distribution
         mean_im  = np.log(mean2 / np.sqrt(std2 + mean2)) # Computes the mean of the underlying normal distribution
         p.mean = mean_im
         p.sigma = sigma_im
@@ -728,7 +762,7 @@ class expon(Dist):
         return
 
 
-class poisson(Dist):
+class poisson(Dist): # TODO: does not currently scale correctly with dt
     """
     Poisson distribution
     
@@ -780,6 +814,7 @@ class randint(Dist):
         rvs = rands * (p.high + 1 - p.low) + p.low
         rvs = rvs.astype(self.pars['dtype'])
         return rvs
+
 
 class rand_raw(Dist):
     """
@@ -988,14 +1023,17 @@ class multi_random(sc.prettyobj):
         return len(self.dists)
         
     def init(self, *args, **kwargs):
+        """ Not usually needed since each dist will handle this automatically; for completeness only """
         for dist in self.dists: dist.init(*args, **kwargs)
         return
     
     def reset(self, *args, **kwargs):
+        """ Not usually needed since each dist will handle this automatically; for completeness only """
         for dist in self.dists: dist.reset(*args, **kwargs)
         return
     
     def jump(self, *args, **kwargs):
+        """ Not usually needed since each dist will handle this automatically; for completeness only """
         for dist in self.dists: dist.jump(*args, **kwargs)
         return
     

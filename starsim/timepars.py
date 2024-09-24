@@ -4,6 +4,7 @@ Functions and classes for handling time
 
 import numpy as np
 import sciris as sc
+import starsim as ss
 
 # Classes that are externally visible
 __all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff', 'make_timevec', 'make_timearray',
@@ -118,6 +119,10 @@ def make_timearray(tv, unit, sim_unit):
         yearvec = [sc.datetoyear(d) for d in tv]
         absyearvec = np.array(yearvec) - yearvec[0] # Subtract start date
         abstv = absyearvec*time_ratio(unit1='year', unit2=sim_unit)
+    
+    # Round to the value of epsilon; alternative to np.round(abstv/eps)*eps, which has floating point error
+    decimals = int(-np.log10(ss.options.time_eps))
+    abstv = np.round(abstv, decimals=decimals)
         
     return abstv
 
@@ -130,6 +135,19 @@ class TimePar:
     
     NB, because the factor needs to be recalculated, do not set values directly.
     """
+    def __new__(cls, value=None, *args, **kwargs):
+        """ Allow TimePars to wrap distributions and return the distributions """
+        
+        # Special distribution handling
+        if isinstance(value, ss.Dist):
+            dist = value
+            dist.pars[0] = cls(dist.pars[0], *args, **kwargs) # Convert the first parameter to a TimePar (the same scale is applied to all parameters)
+            return dist
+        
+        # Otherwise, do the usual initialization
+        else:
+            return super().__new__(cls)
+    
     def __init__(self, value, unit=None, parent_unit=None, parent_dt=None):
         self.value = value
         self.unit = unit
@@ -170,10 +188,10 @@ class TimePar:
     def __repr__(self):
         name = self.__class__.__name__
         if self.initialized:
-            if self.x == self.value:
+            if self.factor == 1.0:
                 xstr = ''
             else:
-                xstr = f', x={self.x:n}'
+                xstr = f', x={self.x}'
         else:
             xstr = ', initialized=False'
         return f'ss.{name}({self.value}, unit={self.unit}{xstr})'
@@ -258,7 +276,7 @@ class years(dur):
         return
 
 
-class rate(TimePar):
+class rate(TimePar): # TODO: should all rates just be time_prob?
     """ Any number that acts like a rate; can be greater than 1 """
     def set_x(self):
         self.x = self.value/self.factor
@@ -266,7 +284,7 @@ class rate(TimePar):
 
 
 class time_prob(TimePar):
-    """ A probability over time (a.k.a. a "true" rate, cumulative hazard rate); must be >0 and <1 """
+    """ A probability over time (a.k.a. a cumulative hazard rate); must be >0 and <1 """
     def set_x(self):
         rate = -np.log(1 - self.value)
         self.x = 1 - np.exp(-rate/self.factor)

@@ -1,7 +1,7 @@
 from .version import __version__, __versiondate__, __license__
 from .settings      import *
 from .utils         import *
-from .timeunits     import *
+from .timepars      import *
 from .parameters    import *
 from .distributions import *
 from .states        import *
@@ -30,7 +30,7 @@ if options.verbose:
     print(__license__)
 
 # Double-check key requirements -- should match setup.py
-reqs = ['sciris>=3.1.6', 'pandas>=2.0.0', 'scipy', 'numba', 'networkx']
+reqs = ['sciris>=3.2.0', 'pandas>=2.0.0', 'scipy', 'numba', 'networkx']
 msg = f'The following dependencies for Starsim {__version__} were not met: <MISSING>.'
 sc.require(reqs, message=msg)
 del sc, reqs, msg # Don't keep this in the module

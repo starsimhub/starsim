@@ -156,7 +156,7 @@ class Module(sc.quickobj):
             self.dt = pars.dt
         
         # Find all time parameters in the module
-        timepars = ss.find_objs(ss.TimePar, self.pars) # Should it be self or self.pars?
+        timepars = sc.search(self.pars, type=ss.TimePar) # Should it be self or self.pars?
         
         # Initialize them with the parent module
         for timepar in timepars.values():

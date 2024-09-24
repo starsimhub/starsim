@@ -80,7 +80,7 @@ def test_api():
     # Check different ways of setting a distribution
     kw = dict(n_agents=n_agents, networks='random')
     d1 = ss.lognorm_ex(10) # Create a distribution with an argument
-    d2 = ss.lognorm_ex(mean=10, stdev=2) # Create a distribution with kwargs
+    d2 = ss.lognorm_ex(mean=10, std=2) # Create a distribution with kwargs
     d3 = ss.normal(loc=10) # Create a different type of distribution
     
     # Check specifying dist with a scalar
@@ -90,7 +90,7 @@ def test_api():
     
     # Check specifying dist with a list and dict
     s6 = ss.Sim(diseases=dict(type='sir', dur_inf=[10,2]), **kw).run() # Supply values as a list
-    s7 = ss.Sim(diseases=dict(type='sir', dur_inf=dict(mean=10, stdev=2)), **kw).run() # Supply values as a dict
+    s7 = ss.Sim(diseases=dict(type='sir', dur_inf=dict(mean=10, std=2)), **kw).run() # Supply values as a dict
     s8 = ss.Sim(diseases=dict(type='sir', dur_inf=d2), **kw).run() # Supply as a distribution
     ss.check_sims_match(s6, s7, s8), 'Sims should match'
     

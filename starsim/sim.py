@@ -237,7 +237,7 @@ class Sim:
                     sc.progressbar(self.ti + 1, self.npts, label=string, length=20, newline=True)
 
         # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
-        self.dists.jump(to=self.ti+1)  # +1 offset because ti=0 is used on initialization # TODO: each module should do this
+        self.dists.jump_dt() # TODO: each module should do this, but should be ok as-is with auto-jump
         return
 
     def finish_step(self):
@@ -666,8 +666,8 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     values which differ.
 
     Args:
-        sim1 (sim/dict): either a simulation object or the sim.summary dictionary
-        sim2 (sim/dict): ditto
+        sim1 (Sim/MultiSim/dict): either a simulation/MultiSim object or the sim.summary dictionary
+        sim2 (im/dict): ditto
         skip_key_diffs (bool): whether to skip keys that don't match between sims
         skip (list): a list of values to skip
         full (bool): whether to print out all values (not just those that differ)
@@ -681,15 +681,25 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         s2 = ss.Sim(rand_seed=2).run()
         ss.diff_sims(s1, s2)
     '''
-
-    if isinstance(sim1, Sim):
+    
+    # Convert to dict
+    if isinstance(sim1, (Sim, ss.MultiSim)):
         sim1 = sim1.summarize()
-    if isinstance(sim2, Sim):
+    if isinstance(sim2, (Sim, ss.MultiSim)):
         sim2 = sim2.summarize()
     for sim in [sim1, sim2]:
         if not isinstance(sim, dict):  # pragma: no cover
             errormsg = f'Cannot compare object of type {type(sim)}, must be a sim or a sim.summary dict'
             raise TypeError(errormsg)
+    
+    
+    # Check if it's a multisim
+    sim1 = sc.objdict(sim1)
+    sim2 = sc.objdict(sim2)
+    multi = isinstance(sim1[0], dict) # If it's a dict, then it's a multisim
+    if multi:
+        for sim in [sim1, sim2]:
+            assert 'mean' in sim[0], f"Can only compare multisims with summarize(method='mean'), but you have keys {sim[0].keys()}"
 
     # Compare keys
     keymatchmsg = ''
@@ -700,7 +710,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         missing = list(sim1_keys - sim2_keys)
         extra = list(sim2_keys - sim1_keys)
         if missing:
-            keymatchmsg += f'  Missing sim1 keys: {missing}\ns'
+            keymatchmsg += f'  Missing sim1 keys: {missing}\n'
         if extra:
             keymatchmsg += f'  Extra sim2 keys: {extra}\n'
 
@@ -711,29 +721,49 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     skip = sc.tolist(skip)
     for key in sim2.keys():  # To ensure order
         if key in sim1_keys and key not in skip:  # If a key is missing, don't count it as a mismatch
-            sim1_val = sim1[key] if key in sim1 else 'not present'
-            sim2_val = sim2[key] if key in sim2 else 'not present'
-            mm = not np.isclose(sim1_val, sim2_val, equal_nan=True)
+            d = sc.objdict()
+            if multi:
+                d.sim1 = sim1[key]['mean']
+                d.sim2 = sim2[key]['mean']
+                d.sim1_sem = sim1[key]['sem']
+                d.sim2_sem = sim2[key]['sem']
+            else:
+                d.sim1 = sim1[key]
+                d.sim2 = sim2[key]
+            mm = not np.isclose(d.sim1, d.sim2, equal_nan=True)
             n_mismatch += mm
             if mm or full:
-                mismatches[key] = {'sim1': sim1_val, 'sim2': sim2_val}
+                mismatches[key] = d
 
+    df = sc.dataframe() # Preallocate in case there were no mismatches
     if len(mismatches):
         valmatchmsg = '\nThe following values differ between the two simulations:\n' if not full else ''
         df = sc.dataframe.from_dict(mismatches).transpose()
         diff = []
         ratio = []
         change = []
-        small_change = 1e-3  # Define a small change, e.g. a rounding error
-        for mdict in mismatches.values():
-            old = mdict['sim1']
-            new = mdict['sim2']
-            numeric = sc.isnumber(sim1_val) and sc.isnumber(sim2_val)
+        zscore = []
+        small_change = 1 + 1e-3  # Define a small change, e.g. a rounding error
+        for d in mismatches.values():
+            old = d.sim1
+            new = d.sim2
+            if multi:
+                old_sem = d.sim1_sem
+                new_sem = d.sim1_sem
+                sem = old_sem + new_sem
+                small_change = 1.96 # 95% CI, roughly speaking
+                
+            numeric = sc.isnumber(old) and sc.isnumber(new) # Should all be numeric, but just in case
             if numeric and old > 0:
                 this_diff = new - old
                 this_ratio = new / old
-                abs_ratio = max(this_ratio, 1.0 / this_ratio)
-
+                if multi:
+                    abs_ratio = abs(this_diff)/sem
+                    this_zscore = abs_ratio
+                else:
+                    abs_ratio = max(this_ratio, 1.0/this_ratio)
+                    this_zscore = None
+                
                 # Set the character to use
                 approx_eq = abs_ratio < small_change
                 if approx_eq:    change_char = '≈'
@@ -755,18 +785,26 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
                 this_diff =  np.nan
                 this_ratio  = np.nan
                 this_change = 'N/A'
+                this_zscore = np.nan
 
             diff.append(this_diff)
             ratio.append(this_ratio)
             change.append(this_change)
+            zscore.append(this_zscore)
 
         df['diff'] = diff
         df['ratio'] = ratio
-        for col in ['sim1', 'sim2', 'diff', 'ratio']:
+        numeric_cols = ['sim1', 'sim2', 'diff', 'ratio']
+        if multi:
+            numeric_cols += ['sim1_sem', 'sim2_sem']
+        for col in numeric_cols:
             df[col] = df[col].round(decimals=3)
         df['change'] = change
+        if multi:
+            df['zscore'] = zscore
+            df['statsig'] = df.zscore > small_change
         valmatchmsg += str(df)
-
+        
     # Raise an error if mismatches were found
     mismatchmsg = keymatchmsg + valmatchmsg
     if mismatchmsg:  # pragma: no cover

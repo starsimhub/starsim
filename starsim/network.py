@@ -114,11 +114,14 @@ class Network(ss.Module):
 
     def __repr__(self, **kwargs):
         """ Convert to a dataframe for printing """
-        namestr = self.name
-        labelstr = f'"{self.label}"' if self.label else '<no label>'
-        keys_str = ', '.join(self.edges.keys())
-        output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", p1, p2, beta)
-        output += self.to_df().__repr__()
+        try:
+            namestr = self.name
+            labelstr = f'"{self.label}"' if self.label else '<no label>'
+            keys_str = ', '.join(self.edges.keys())
+            output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", p1, p2, beta)
+            output += self.to_df().__repr__()
+        except:
+            output = sc.prepr(self, vals=False)
         return output
 
     def __contains__(self, item):
@@ -300,6 +303,10 @@ class Network(ss.Module):
 
         return
 
+    def net_beta(self, disease_beta=None, dt=None, uids=None):
+        if uids is None: uids = Ellipsis
+        return self.edges.beta[uids] * disease_beta # Beta should already include dt if desired
+
 
 class DynamicNetwork(Network):
     """ A network where partnerships update dynamically """
@@ -315,7 +322,7 @@ class DynamicNetwork(Network):
 
     def end_pairs(self):
         people = self.sim.people
-        self.edges.dur = self.edges.dur - self.dt # TODO: think about whether this is right
+        self.edges.dur = self.edges.dur - self.dt # TODO: think about whether this is right # Update: it is, if duration is *NOT* a ss.dur! Otherwise it should be -1, in timestep units
 
         # Non-alive agents are removed
         active = (self.edges.dur > 0) & people.alive[self.edges.p1] & people.alive[self.edges.p2]
@@ -349,9 +356,9 @@ class SexualNetwork(DynamicNetwork):
         available[self.edges.p2] = False
         return available.uids
 
-    def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
+    def net_beta(self, disease_beta=None, uids=None):
         if uids is None: uids = Ellipsis
-        return self.edges.beta[uids] * (1 - (1 - disease_beta) ** (self.edges.acts[uids] * dt))
+        return self.edges.beta[uids] * (1 - (1 - disease_beta) ** (self.edges.acts[uids] * self.dt))
 
 
 # %% Specific instances of networks
@@ -700,10 +707,10 @@ class MFNet(SexualNetwork):
     def __init__(self, pars=None, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
         self.define_pars(
-            duration = ss.lognorm_ex(mean=ss.dur(15)),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+            duration = ss.lognorm_ex(mean=15),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
-            acts = ss.poisson(lam=80),
+            acts = ss.poisson(lam=80), # TODO: make this work with ss.rate, which it currently does not due to network initialization limitations
             rel_part_rates = 1.0,
         )
         self.update_pars(pars=pars, **kwargs)
@@ -778,7 +785,7 @@ class MFNet(SexualNetwork):
 
     def step(self):
         self.end_pairs()
-        self.set_network_states()
+        self.set_network_states(upper_age=self.dt) # TODO: check
         self.add_pairs()
         return
 
@@ -791,9 +798,9 @@ class MSMNet(SexualNetwork):
     def __init__(self, pars=None, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
         self.define_pars(
-            duration = ss.lognorm_ex(mean=15, stdev=15),
+            duration = ss.lognorm_ex(mean=15, std=15),
             debut = ss.normal(loc=16, scale=2),
-            acts = ss.lognorm_ex(mean=80, stdev=20),
+            acts = ss.lognorm_ex(mean=80, std=20),
             participation = ss.bernoulli(p=0.1),
         )
         self.update_pars(pars, **kwargs)
