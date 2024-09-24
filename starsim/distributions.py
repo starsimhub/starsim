@@ -563,7 +563,7 @@ class Dist:
                 
         # Scale by time if needed
         if self._time_factor is not None:
-            rvs *= self._time_factor
+            rvs = rvs*self._time_factor
         
         # Tidy up
         self.called += 1
@@ -746,7 +746,7 @@ class expon(Dist):
         return
 
 
-class poisson(Dist):
+class poisson(Dist): # TODO: does not currently scale correctly with dt
     """
     Poisson distribution
     

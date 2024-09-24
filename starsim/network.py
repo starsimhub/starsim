@@ -706,7 +706,7 @@ class MFNet(SexualNetwork):
             duration = ss.lognorm_ex(mean=ss.dur(15)),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
-            acts = ss.poisson(lam=80),
+            acts = ss.poisson(lam=ss.rate(80)),
             rel_part_rates = 1.0,
         )
         self.update_pars(pars=pars, **kwargs)
@@ -781,7 +781,7 @@ class MFNet(SexualNetwork):
 
     def step(self):
         self.end_pairs()
-        self.set_network_states()
+        self.set_network_states(upper_age=self.dt) # TODO: check
         self.add_pairs()
         return
 
