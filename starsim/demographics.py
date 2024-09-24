@@ -79,7 +79,7 @@ class Births(Demographics):
         self.results += [
             ss.Result(self.name, 'new', npts, dtype=int, scale=True, label='New births'),
             ss.Result(self.name, 'cumulative', npts, dtype=int, scale=True, label='Cumulative births'),
-            ss.Result(self.name, 'cbr', npts, dtype=int, scale=False, label='Crude birth rate'),
+            ss.Result(self.name, 'cbr', npts, dtype=float, scale=False, label='Crude birth rate'),
         ]
         return
 
@@ -390,7 +390,7 @@ class Pregnancy(Demographics):
         self.results += [
             ss.Result(self.name, 'pregnancies', npts, dtype=int, scale=True, label='New pregnancies'),
             ss.Result(self.name, 'births', npts, dtype=int, scale=True, label='New births'),
-            ss.Result(self.name, 'cbr', npts, dtype=int, scale=False, label='Crude birth rate'),
+            ss.Result(self.name, 'cbr', npts, dtype=float, scale=False, label='Crude birth rate'),
         ]
         return
 
@@ -627,7 +627,10 @@ class PregnancyLite(Demographics):
 
         age = sim.people.age[uids]
         p_conception = np.zeros(len(uids), dtype=ss_float_)
-        yi = np.argmin(sim.year-self.pars.dur_pregnancy > self.frd.index)
+
+        # Careful with year due to negative ti during initialization
+        year = self.sim.yearvec[0] + self.sim.ti * self.sim.dt
+        yi = np.argmin(year+self.pars.dur_pregnancy > self.frd.index)
         if yi > 0:
             yi -= 1 # So sim.year-self.pars.dur_pregnancy is in the current data year
         ASFR = self.frd.iloc[yi]
@@ -662,7 +665,9 @@ class PregnancyLite(Demographics):
         self.results += [
             ss.Result(self.name, 'pregnancies', npts, dtype=int, scale=True, label='New pregnancies'),
             ss.Result(self.name, 'births', npts, dtype=int, scale=True, label='New births'),
-            ss.Result(self.name, 'cbr', npts, dtype=int, scale=False, label='Crude birth rate'),
+            ss.Result(self.name, 'cbr', npts, dtype=float, scale=False, label='Crude birth rate'),
+            ss.Result(self.name, 'n_pregnant', npts, dtype=int, scale=False, label='Num pregnant'),
+            ss.Result(self.name, 'n_postpartum', npts, dtype=int, scale=False, label='Num postpartum'),
         ]
         return
 
@@ -776,6 +781,8 @@ class PregnancyLite(Demographics):
         ti = self.sim.ti
         self.results['pregnancies'][ti] = self.n_pregnancies
         self.results['births'][ti] = self.n_births
+        self.results['n_pregnant'][ti] = self.pregnant.sum()
+        self.results['n_postpartum'][ti] = self.postpartum.sum()
         return
 
     def finalize(self):
