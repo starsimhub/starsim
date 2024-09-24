@@ -20,8 +20,9 @@ v2pars = sc.objdict(
     verbose   = 0.05,    # Don't print details of the run
     rand_seed = 2,    # Set a non-default seed
     diseases = ['sir', 'sis'],
-    networks = ['random', 'mf', 'maternal'],
-    demographics = True,
+    networks = 'random',
+    # networks = ['random', 'mf', 'maternal'],
+    # demographics = True,
 )
 
 v1pars = v2pars.copy()
