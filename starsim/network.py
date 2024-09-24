@@ -303,6 +303,10 @@ class Network(ss.Module):
 
         return
 
+    def net_beta(self, disease_beta=None, dt=None, uids=None):
+        if uids is None: uids = Ellipsis
+        return self.edges.beta[uids] * disease_beta # Beta should already include dt if desired
+
 
 class DynamicNetwork(Network):
     """ A network where partnerships update dynamically """
@@ -318,7 +322,7 @@ class DynamicNetwork(Network):
 
     def end_pairs(self):
         people = self.sim.people
-        self.edges.dur = self.edges.dur - self.dt # TODO: think about whether this is right
+        self.edges.dur = self.edges.dur - self.dt # TODO: think about whether this is right # Update: it is, if duration is *NOT* a ss.dur! Otherwise it should be -1, in timestep units
 
         # Non-alive agents are removed
         active = (self.edges.dur > 0) & people.alive[self.edges.p1] & people.alive[self.edges.p2]
@@ -352,9 +356,9 @@ class SexualNetwork(DynamicNetwork):
         available[self.edges.p2] = False
         return available.uids
 
-    def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
+    def net_beta(self, disease_beta=None, uids=None):
         if uids is None: uids = Ellipsis
-        return self.edges.beta[uids] * (1 - (1 - disease_beta) ** (self.edges.acts[uids] * dt))
+        return self.edges.beta[uids] * (1 - (1 - disease_beta) ** (self.edges.acts[uids] * self.dt))
 
 
 # %% Specific instances of networks
@@ -703,10 +707,10 @@ class MFNet(SexualNetwork):
     def __init__(self, pars=None, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
         self.define_pars(
-            duration = ss.lognorm_ex(mean=ss.dur(15)),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
+            duration = ss.lognorm_ex(mean=15),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
-            acts = ss.poisson(lam=ss.rate(80)),
+            acts = ss.poisson(lam=80), # TODO: make this work with ss.rate, which it currently does not due to network initialization limitations
             rel_part_rates = 1.0,
         )
         self.update_pars(pars=pars, **kwargs)
@@ -776,8 +780,6 @@ class MFNet(SexualNetwork):
             act_vals = self.pars.acts.rvs(len(p1))
 
         self.append(p1=p1, p2=p2, beta=beta, dur=dur_vals, acts=act_vals)
-        
-        print('hi i am v2, adding', self.ti, len(p1))
 
         return len(p1)
 

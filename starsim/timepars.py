@@ -188,10 +188,10 @@ class TimePar:
     def __repr__(self):
         name = self.__class__.__name__
         if self.initialized:
-            if self.x == self.value:
+            if self.factor == 1.0:
                 xstr = ''
             else:
-                xstr = f', x={self.x:n}'
+                xstr = f', x={self.x}'
         else:
             xstr = ', initialized=False'
         return f'ss.{name}({self.value}, unit={self.unit}{xstr})'

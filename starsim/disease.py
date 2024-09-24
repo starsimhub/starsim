@@ -296,7 +296,8 @@ class Infection(Disease):
                     if beta: # Skip networks with no transmission
     
                         # Calculate probability of a->b transmission.
-                        beta_per_dt = edges.beta * beta # TODO: think of shortcut to skip this multiplication if all edges are just 1.0
+                        beta_per_dt = net.net_beta(disease_beta=beta)
+                        #beta_per_dt = edges.beta * beta # TODO: think of shortcut to skip this multiplication if all edges are just 1.0
                         p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
         
                         # Generate a new random number based on the two other random numbers
