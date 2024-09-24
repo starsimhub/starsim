@@ -25,7 +25,7 @@ def str2int(string, modulo=1_000_000):
     return out
 
 
-def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs): # TODO: actually link the distributions to the modules!
+def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs): # TODO: actually link the distributions to the modules! Currently this only does the opposite, but should have mod.dists as well
     """ Link distributions to the sim and the module; used in module.init() and people.init() """
     if module is None and isinstance(obj, ss.Module):
         module = obj
@@ -314,7 +314,6 @@ class Dist:
 
     def jump(self, to=None, delta=1):
         """ Advance the RNG, e.g. to timestep "to", by jumping """
-        # print(f'hi i am {self}, and i am jumping to={to}, delta={delta}')
         
         # Do not jump if centralized
         if ss.options._centralized:
@@ -563,7 +562,7 @@ class Dist:
                 
         # Scale by time if needed
         if self._time_factor is not None:
-            rvs = rvs*self._time_factor
+            rvs = rvs*self._time_factor # TODO: Can't use rvs *= in case it's not a float; this is not ideal though since if not a float (e.g. for Poisson) it's probably a bug
         
         # Tidy up
         self.called += 1
