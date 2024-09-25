@@ -7,6 +7,12 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 1.0.2 (2024-09-25)
+---------------------------
+- Fixes a bug in which random numbers drawn from auto-jumped distributions would overlap with random numbers drawn from subsequent timesteps.
+- *GitHub info*: PR `639 <https://github.com/starsimhub/starsim/pull/639>`_
+
+
 Version 1.0.1 (2024-07-22)
 ---------------------------
 - Adds a new distribution, ``ss.rand_raw()``, that samples raw integers from the random number bit generator, for use with calculating transmission. This version is roughly 20-30% faster than the previous implementation.
