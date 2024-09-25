@@ -207,7 +207,7 @@ class Dist:
         self._slots = None # Internal variable to track currently-in-use slots
         
         # History and random state
-        self.dt_jump_size = 1000 # How much to advance the RNG for each timestep
+        self.dt_jump_size = 1000 # How much to advance the RNG for each timestep (must be larger than the number times dist is called per timestep)
         self.rng = None # The actual RNG generator for generating random numbers
         self.trace = None # The path of this object within the parent
         self.ind = 0 # The index of the RNG (usually updated on each timestep)
