@@ -152,7 +152,7 @@ class OneMore(ss.Intervention):
             # Reset the random states
             p = sir.pars
             for dist in [p.dur_inf, p.p_death]:
-                dist.jump_dt() # Already has correct dt value
+                dist.jump_dt(force=True) # Already has correct dt value, but we need to force going back in time
 
         return
 
