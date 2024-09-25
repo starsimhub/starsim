@@ -37,7 +37,7 @@ def make_syph_sim(dt=1, n_agents=500):
         dt=dt,
         total_pop=93963392,
         start=1990,
-        n_years=40,
+        dur=40,
         people=ppl,
         diseases=syph,
         networks=ss.ndict(mf, maternal),
@@ -91,13 +91,14 @@ def test_syph(dt=1, n_agents=500, do_plot=False):
 
     # Check plots
     burnin = 0
-    pi = int(burnin/sim.dt)
+    pi = int(burnin/dt)
     
     if do_plot:
+        tvec = sim.timevec[pi:]
         fig, ax = plt.subplots(2, 2)
         ax = ax.ravel()
         ax[0].stackplot(
-            sim.yearvec[pi:],
+            tvec,
             # sim.results.syphilis.n_susceptible[pi:],
             sim.results.syphilis.n_congenital[pi:],
             sim.results.syphilis.n_exposed[pi:],
@@ -108,13 +109,13 @@ def test_syph(dt=1, n_agents=500, do_plot=False):
         )
         ax[0].legend(['Congenital', 'Exposed', 'Primary', 'Secondary', 'Latent', 'Tertiary'], loc='lower right')
     
-        ax[1].plot(sim.yearvec[pi:], sim.results.syphilis.prevalence[pi:])
+        ax[1].plot(tvec, sim.results.syphilis.prevalence[pi:])
         ax[1].set_title('Syphilis prevalence')
     
-        ax[2].plot(sim.yearvec[pi:], sim.results.n_alive[pi:])
+        ax[2].plot(tvec, sim.results.n_alive[pi:])
         ax[2].set_title('Population')
     
-        ax[3].plot(sim.yearvec[pi:], sim.results.syphilis.new_infections[pi:])
+        ax[3].plot(tvec, sim.results.syphilis.new_infections[pi:])
         ax[3].set_title('New infections')
     
         fig.tight_layout()
@@ -156,10 +157,12 @@ def test_syph_intvs(dt=1, n_agents=500, do_plot=False):
         sim_base.run()
 
         burnin = 10
-        pi = int(burnin/sim_base.dt)
+        syph_b = sim_base.diseases.syphilis
+        syph_i = sim_intv.diseases.syphilis
+        pi = int(burnin/syph_b.dt)
         plt.figure()
-        plt.plot(sim_base.yearvec[pi:], sim_base.results.syphilis.prevalence[pi:], label='Baseline')
-        plt.plot(sim_intv.yearvec[pi:], sim_intv.results.syphilis.prevalence[pi:], label='S&T')
+        plt.plot(syph_b.timevec[pi:], syph_b.results.prevalence[pi:], label='Baseline')
+        plt.plot(syph_i.timevec[pi:], syph_i.results.prevalence[pi:], label='S&T')
         plt.axvline(x=2020, color='k', ls='--')
         plt.title('Syphilis prevalence')
         plt.legend()

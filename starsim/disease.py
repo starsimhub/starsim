@@ -55,7 +55,7 @@ class Disease(ss.Module):
         Result for 'n_susceptible'
         """
         for state in self._boolean_states:
-            self.results += ss.Result(self.name, f'n_{state.name}', self.sim.npts, dtype=int, scale=True, label=state.label)
+            self.results += ss.Result(self.name, f'n_{state.name}', self.npts, dtype=int, scale=True, label=state.label)
         return
 
     def step_state(self):
@@ -76,6 +76,10 @@ class Disease(ss.Module):
         allows an intervention to avert a death scheduled on the same timestep, without having
         to undo any state changes that have already been applied (because they only run via this
         function if the death actually occurs).
+        
+        Unlike other methods during the integration loop, this method is not called directly
+        by the sim; instead, it is called by people.step_die(), which reconciles the UIDs of
+        the agents who will die.
 
         Depending on the module and the results it produces, it may or may not be necessary
         to implement this.
@@ -120,13 +124,7 @@ class Disease(ss.Module):
         return
 
     def log_infections(self, uids, sources=None):
-        sim = self.sim
-        if sources is None:
-            for target in uids:
-                self.log.append(np.nan, target, sim.year)
-        else:
-            for target, source in zip(uids, sources):
-                self.log.append(source, target, sim.year)
+        self.log.add_entries(uids, sources, self.now)
         return
 
     def update_results(self):
@@ -137,9 +135,8 @@ class Disease(ss.Module):
         This allows result updates at this point to capture outcomes dependent on multiple
         modules, where relevant.
         """
-        sim = self.sim
         for state in self._boolean_states:
-            self.results[f'n_{state.name}'][sim.ti] = np.count_nonzero(state & sim.people.alive)
+            self.results[f'n_{state.name}'][self.ti] = np.count_nonzero(state & self.sim.people.alive)
         return
 
 
@@ -168,7 +165,7 @@ class Infection(Disease):
     
     def init_pre(self, sim):
         super().init_pre(sim)
-        self.validate_beta()
+        self.validate_beta(run_checks=True)
         return
 
     @property
@@ -189,6 +186,7 @@ class Infection(Disease):
         super().init_post()
         if self.pars.init_prev is None:
             return
+        
 
         initial_cases = self.pars.init_prev.filter()
         self.set_prognoses(initial_cases)  # TODO: sentinel value to indicate seeds?
@@ -199,25 +197,41 @@ class Infection(Disease):
         Initialize results
         """
         super().init_results()
-        sim = self.sim
         self.results += [
-            ss.Result(self.name, 'prevalence',     sim.npts, dtype=float, scale=False, label='Prevalence'),
-            ss.Result(self.name, 'new_infections', sim.npts, dtype=int, scale=True, label='New infections'),
-            ss.Result(self.name, 'cum_infections', sim.npts, dtype=int, scale=True, label='Cumulative infections'),
+            ss.Result(self.name, 'prevalence',     self.npts, dtype=float, scale=False, label='Prevalence'),
+            ss.Result(self.name, 'new_infections', self.npts, dtype=int, scale=True, label='New infections'),
+            ss.Result(self.name, 'cum_infections', self.npts, dtype=int, scale=True, label='Cumulative infections'),
         ]
         return
         
-    def validate_beta(self):
+    def validate_beta(self, run_checks=False):
         """ Validate beta and return as a map to match the networks """
         sim = self.sim
+        β = self.pars.beta
         
-        if 'beta' not in self.pars:
-            errormsg = f'Disease {self.name} is missing beta; pars are: {sc.strjoin(self.pars.keys())}'
-            raise sc.KeyNotFoundError(errormsg)
+        def scalar_beta(β):
+            return isinstance(β, ss.TimePar) or sc.isnumber(β)
+        
+        if run_checks:
+            scalar_warn = f'Beta is defined as a number ({β}); convert it to a rate to handle timestep conversions'
+
+            if 'beta' not in self.pars:
+                errormsg = f'Disease {self.name} is missing beta; pars are: {sc.strjoin(self.pars.keys())}'
+                raise sc.KeyNotFoundError(errormsg)
+                
+            if sc.isnumber(β):
+                ss.warn(scalar_warn)
+            elif isinstance(β, dict):
+                for netbeta in β.values():
+                    if sc.isnumber(netbeta):
+                        ss.warn(scalar_warn)
+                    elif isinstance(netbeta, (list, tuple)):
+                        for thisbeta in netbeta:
+                            if sc.isnumber(netbeta):
+                                ss.warn(scalar_warn)
 
         # If beta is a scalar, apply this bi-directionally to all networks
-        β = self.pars.beta
-        if sc.isnumber(β):
+        if scalar_beta(β):
             betamap = {ss.standardize_netkey(k):[β,β] for k in sim.networks.keys()}
 
         # If beta is a dict, check all entries are bi-directional
@@ -225,10 +239,14 @@ class Infection(Disease):
             betamap = dict()
             for k,thisbeta in β.items():
                 nkey = ss.standardize_netkey(k)
-                if sc.isnumber(thisbeta):
+                if scalar_beta(thisbeta):
                     betamap[nkey] = [thisbeta, thisbeta]
                 else:
                     betamap[nkey] = thisbeta
+        
+        else:
+            errormsg = f'Invalid type {type(β)} for beta'
+            raise TypeError(errormsg)
         
         # Check that it matches the network
         netkeys = [ss.standardize_netkey(k) for k in list(sim.networks.keys())]
@@ -275,8 +293,8 @@ class Infection(Disease):
                 for src, trg, beta in [p1p2b0, p2p1b1]:
                     if beta: # Skip networks with no transmission
     
-                        # Calculate probability of a->b transmission.
-                        beta_per_dt = net.beta_per_dt(disease_beta=beta, dt=self.sim.dt)
+                        # Calculate probability of a->b transmission
+                        beta_per_dt = net.net_beta(disease_beta=beta) # TODO: potentially refactor
                         p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
         
                         # Generate a new random number based on the two other random numbers
@@ -298,6 +316,7 @@ class Infection(Disease):
             new_cases = ss.uids()
             sources = ss.uids()
             networks = np.empty(0, dtype=ss_int_)
+
         return new_cases, sources, networks
 
     def set_outcomes(self, uids, sources=None):
@@ -316,10 +335,10 @@ class Infection(Disease):
     def update_results(self):
         super().update_results()
         res = self.results
-        ti = self.sim.ti
+        ti = self.ti
         res.prevalence[ti] = res.n_infected[ti] / np.count_nonzero(self.sim.people.alive)
         res.new_infections[ti] = np.count_nonzero(self.ti_infected == ti)
-        res.cum_infections[ti] = np.sum(res['new_infections'][:ti+1])
+        res.cum_infections[ti] = np.sum(res['new_infections'][:ti+1]) # TODO: can compute at end
         return
 
 
@@ -351,13 +370,13 @@ class InfectionLog(nx.MultiDiGraph):
 
     A table of outcomes can be returned using `InfectionLog.line_list()`
     """
-    def add_entries(self, sim, uids, sources=None): # TODO: reconcile with other methods
+    def add_entries(self, uids, sources=None, time=np.nan):
         if sources is None:
             for target in uids:
-                self.log.append(np.nan, target, sim.year)
+                self.append(np.nan, target, time)
         else:
             for target, source in zip(uids, sources):
-                self.log.append(source, target, sim.year)
+                self.append(source, target, time)
         return
 
     def add_data(self, uids, **kwargs):

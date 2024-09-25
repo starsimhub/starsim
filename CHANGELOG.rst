@@ -12,21 +12,20 @@ Version 2.0.0 (2024-09-30)
 
 Summary
 ~~~~~~~
-This version contains several major breaking changes. These include: module-specific timesteps and time-aware parameters (including a day/year ``unit`` flag for modules, and  ``ss.dur()`` and ``ss.rate()`` classes for parameters), new ``ss.State`` and ``ss.Event`` classes that simplify disease logic; as well as changes to module types and integration (renaming ``update()`` and ``apply()`` methods to ``step()``).
+This version contains several major breaking changes. These include: module-specific timesteps and time-aware parameters (including a day/year ``unit`` flag for modules, and  ``ss.dur()`` and ``ss.rate()`` classes for parameters), and changes to module types and integration (e.g. renaming ``update()`` and ``apply()`` methods to ``step()``).
 
-Time-aware parameters
-~~~~~~~~~~~~~~~~~~~~~
-Coming soon!
-
-States and events
-~~~~~~~~~~~~~~~~~
-Coming soon!
+Time-aware parameters and modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+- Added ``ss.dur()``, ``ss.rate()``, and ``ss.time_prob()`` classes, for automatic handling of time units in simulations. There are also convenience classes ``ss.days()``, ``ss.years()``, and ``ss.beta()`` for special cases of these.
+- Durations and rates, along with modules and the sim itself, now have a ``unit`` parameter which can be ``'day'``, ``'week'``, ``'month'``, or ``'year'`` (default). Modules now also have their own timestep ``dt``. Different units and timesteps can be mixed and matched.
+- There is a new ``Loop`` class which handles the integration loop. You can view the integration plan via ``sim.loop.to_df()`` or ``sim.loop.plot()``.
+- There are more advanced debugging tools. You can run a single sim timestep with ``sim.run_one_step()`` (which in turn calls multiple functions), and you can run a single function from the integration loop with ``sim.loop.run_one_step()``.
 
 Module changes
 ~~~~~~~~~~~~~~
 - Functionality has been moved from ``ss.Plugin`` to ``ss.Module``, and the former has been removed.
-- ``ss.Connector`` functionality has been moved to ``ss.Module``. ``ss.Module`` objects can be placed anywhere in the list of modules (e.g., in demographics, networks, diseases, interventions), depending on when you want them to execute. However, ``ss.Connector`` objects are applied after ``Disease.step_state()`` and before
-- Many of the module methods have been renamed; in particular, all modules now have a ``step()`` method, which replaces ``update()`` (for demographics and networks), ``apply()`` (for interventions and analyzers), and ``make_new_cases()`` (for diseases).
+- ``ss.Connector`` functionality has been moved to ``ss.Module``. ``ss.Module`` objects can be placed anywhere in the list of modules (e.g., in demographics, networks, diseases, interventions), depending on when you want them to execute. However, ``ss.Connector`` objects are applied after ``Disease.step_state()`` and before ``Network.step()``.
+- Many of the module methods have been renamed; in particular, all modules now have a ``step()`` method, which replaces ``update()`` (for demographics and networks), ``apply()`` (for interventions and analyzers), and ``make_new_cases()`` (for diseases). For both the sim and modules, ``initialize()`` has been renamed ``init()``.
 - All modules are treated the same in the integration loop, except for diseases, which have ``step_state()`` and ``step_die()`` methods.
 
 Other changes
@@ -38,21 +37,25 @@ Other changes
 - ``sim.get_intervention()`` and ``sim.get_analyzer()`` have been removed; use built-in ``ndict`` operations (e.g., the label) to find the object you're after.
 - ``requires`` has been removed from modules, but ``ss.check_requires()`` is still available if needed. Call it manually from ``init_pre()`` if desired, e.g. ``ss.check_requires(self.sim, self.requires)``.
 - For networks, ``contacts`` has been renamed ``edges`` except in cases where it refers to an *agent's* contacts. For example, ``network.contacts`` has been renamed ``network.edges``, but ``ss.find_contacts()`` remains the same.
+- Distributions have a new ``jump_dt`` method that jumps by much more than a single state update.
+- ``ss.diff_sims()`` can now handle ``MultiSim` objects.
 - ``Sim._orig_pars`` has been removed.
 - ``ss.unique()`` has been removed.
 
 Regression information
 ~~~~~~~~~~~~~~~~~~~~~~
 - Results from Starsim v2.0 will be stochastically (but not statistically) different from Starsim v1.0.
+- All duration and rate parameters should now be wrapped with ``ss.dur()`` and ``ss.rate()``. Events that represent probabilities over time (i.e. hazard rates) can also be wrapped with ``ss.time_prob()``, although this is similar to ``ss.rate()`` unless the value is relatively large.
 - ``ss.Plugin`` has been removed. Use ``ss.Module`` instead.
 - ``init_results()`` is now called by ``init_pre()``, and does not need to be called explicitly.
 - ``default_pars()`` has been renamed ``define_pars()``.
 - ``add_states()`` has been renamed ``define_states()``
+- ``initialize()`` has been renamed ``init()``.
 - ``Demographics.update()`` has been renamed ``Demographics.step()``.
 - ``Network.update()`` has been renamed ``Network.step()``.
-- ``Disease.update_pre()`` has been renamed ``Disease.step_pre()``.
+- ``Disease.update_pre()`` has been renamed ``Disease.step_state()``.
 - ``Disease.make_new_cases()`` has been renamed ``Disease.step()``.
-- ``Disease.update_death()`` has been renamed ``Disease.die()``.
+- ``Disease.update_death()`` has been renamed ``Disease.step_die()`` (which is now called by ``People.step_die()``).
 - ``Infection._set_cases()`` has been renamed ``Infection.set_outcomes()``.
 - ``Intervention.apply(sim)`` has been renamed ``Intervention.step()``; ditto for ``Analyzer``.
 - ``Module.step()`` no longer takes ``sim`` as an argument (e.g., replace ``intervention.apply(sim)`` with ``intervention.step()``).

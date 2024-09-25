@@ -30,10 +30,10 @@ def run_sir_vaccine(efficacy, leaky=True):
                 beta      = 6,       
           )
         ),
-        n_years = 10,
-        dt      = 0.01
+        dur = 10,
+        dt  = 0.01
     )
-    sim.initialize(verbose=False)
+    sim.init(verbose=False)
     
     # work out who to vaccinate
     in_trial = sim.people.sir.susceptible.uids
@@ -62,7 +62,7 @@ def run_sir_vaccine(efficacy, leaky=True):
     # run the simulation until sufficient cases
     old_cases = []
     for idx in range(1000):
-        sim.step()
+        sim.run_one_step()
         susc = sim.people.sir.susceptible.uids
         cases = np.setdiff1d(in_trial, susc)
         if len(cases) > total_cases:
@@ -97,7 +97,7 @@ def test_sir_vaccine_all_or_nothing():
 if __name__ == '__main__':
     T = sc.timer()
 
-    sir_vaccine_leaky   = test_sir_vaccine_leaky(leaky=True)
-    sir_vaccine_a_or_n  = test_sir_vaccine_all_or_nothing(leaky=False)
+    leaky  = test_sir_vaccine_leaky()
+    a_or_n = test_sir_vaccine_all_or_nothing()
 
     T.toc()

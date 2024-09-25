@@ -83,26 +83,27 @@ class RoutineDelivery(Intervention):
 
         # If start_year and end_year are not provided, figure them out from the provided years or the sim
         if self.years is None:
-            if self.start_year is None: self.start_year = sim.pars['start']
-            if self.end_year is None:   self.end_year = sim.pars['end']
+            if self.start_year is None: self.start_year = sim.pars.start
+            if self.end_year is None:   self.end_year = sim.pars.stop
         else:
             self.start_year = self.years[0]
             self.end_year = self.years[-1]
 
         # More validation
-        if not(any(np.isclose(self.start_year, sim.yearvec)) and any(np.isclose(self.end_year, sim.yearvec))):
+        if not(any(np.isclose(self.start_year, sim.timevec)) and any(np.isclose(self.end_year, sim.timevec))):
             errormsg = 'Years must be within simulation start and end dates.'
             raise ValueError(errormsg)
 
         # Adjustment to get the right end point
-        adj_factor = int(1 / sim.dt) - 1 if sim.dt < 1 else 1
+        dt = sim.pars.dt # TODO: need to eventually replace with own timestep, but not initialized yet since super().init_pre() hasn't been called
+        adj_factor = int(1/dt) - 1 if dt < 1 else 1
 
         # Determine the timepoints at which the intervention will be applied
-        self.start_point = sc.findfirst(sim.yearvec, self.start_year)
-        self.end_point   = sc.findfirst(sim.yearvec, self.end_year) + adj_factor
+        self.start_point = sc.findfirst(sim.timevec, self.start_year)
+        self.end_point   = sc.findfirst(sim.timevec, self.end_year) + adj_factor
         self.years       = sc.inclusiverange(self.start_year, self.end_year)
         self.timepoints  = sc.inclusiverange(self.start_point, self.end_point)
-        self.yearvec     = np.arange(self.start_year, self.end_year + adj_factor, sim.dt)
+        self.yearvec     = np.arange(self.start_year, self.end_year + adj_factor, dt)
 
         # Get the probability input into a format compatible with timepoints
         if len(self.years) != len(self.prob):
@@ -115,7 +116,7 @@ class RoutineDelivery(Intervention):
             self.prob = sc.smoothinterp(self.yearvec, self.years, self.prob, smoothness=0)
 
         # Lastly, adjust the probability by the sim's timestep, if it's an annual probability
-        if self.annual_prob: self.prob = 1 - (1 - self.prob) ** sim.dt
+        if self.annual_prob: self.prob = 1 - (1 - self.prob) ** dt
 
         return
 
@@ -134,7 +135,7 @@ class CampaignDelivery(Intervention):
 
     def init_pre(self, sim):
         # Decide whether to apply the intervention at every timepoint throughout the year, or just once.
-        self.timepoints = sc.findnearest(sim.yearvec, self.years)
+        self.timepoints = sc.findnearest(sim.timevec, self.years)
 
         if len(self.prob) == 1:
             self.prob = np.array([self.prob[0]] * len(self.timepoints))
@@ -213,7 +214,7 @@ class BaseScreening(BaseTest):
         """
         sim = self.sim
         accept_uids = ss.uids()
-        if sim.ti in self.timepoints:
+        if sim.ti in self.timepoints: # TODO: change to self.ti
             accept_uids = self.deliver()
             self.screened[accept_uids] = True
             self.screens[accept_uids] += 1

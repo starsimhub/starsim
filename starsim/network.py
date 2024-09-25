@@ -114,11 +114,14 @@ class Network(ss.Module):
 
     def __repr__(self, **kwargs):
         """ Convert to a dataframe for printing """
-        namestr = self.name
-        labelstr = f'"{self.label}"' if self.label else '<no label>'
-        keys_str = ', '.join(self.edges.keys())
-        output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", p1, p2, beta)
-        output += self.to_df().__repr__()
+        try:
+            namestr = self.name
+            labelstr = f'"{self.label}"' if self.label else '<no label>'
+            keys_str = ', '.join(self.edges.keys())
+            output = f'{namestr}({labelstr}, {keys_str})\n'  # e.g. Network("r", p1, p2, beta)
+            output += self.to_df().__repr__()
+        except:
+            output = sc.prepr(self, vals=False)
         return output
 
     def __contains__(self, item):
@@ -300,9 +303,9 @@ class Network(ss.Module):
 
         return
 
-    def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
+    def net_beta(self, disease_beta=None, dt=None, uids=None):
         if uids is None: uids = Ellipsis
-        return self.edges.beta[uids] * disease_beta * dt
+        return self.edges.beta[uids] * disease_beta # Beta should already include dt if desired
 
 
 class DynamicNetwork(Network):
@@ -311,10 +314,15 @@ class DynamicNetwork(Network):
         key_dict = sc.mergedicts({'dur': ss_float_}, key_dict)
         super().__init__(key_dict=key_dict, **kwargs)
         return
+    
+    def step(self):
+        self.end_pairs()
+        self.add_pairs()
+        return
 
     def end_pairs(self):
         people = self.sim.people
-        self.edges.dur = self.edges.dur - self.sim.dt
+        self.edges.dur = self.edges.dur - self.dt # TODO: think about whether this is right # Update: it is, if duration is *NOT* a ss.dur! Otherwise it should be -1, in timestep units
 
         # Non-alive agents are removed
         active = (self.edges.dur > 0) & people.alive[self.edges.p1] & people.alive[self.edges.p2]
@@ -348,9 +356,9 @@ class SexualNetwork(DynamicNetwork):
         available[self.edges.p2] = False
         return available.uids
 
-    def beta_per_dt(self, disease_beta=None, dt=None, uids=None):
+    def net_beta(self, disease_beta=None, uids=None):
         if uids is None: uids = Ellipsis
-        return self.edges.beta[uids] * (1 - (1 - disease_beta) ** (self.edges.acts[uids] * dt))
+        return self.edges.beta[uids] * (1 - (1 - disease_beta) ** (self.edges.acts[uids] * self.dt))
 
 
 # %% Specific instances of networks
@@ -442,7 +450,7 @@ class RandomNet(DynamicNetwork):
         super().__init__(key_dict=key_dict)
         self.define_pars(
             n_contacts = ss.constant(10),
-            dur = 0,
+            dur = ss.dur(0),
         )
         self.update_pars(pars, **kwargs)
         self.dist = ss.Dist(distname='RandomNet') # Default RNG
@@ -492,11 +500,6 @@ class RandomNet(DynamicNetwork):
         self.dist.jump() # Reset the RNG manually # TODO, think if there's a better way
         return source, target
 
-    def step(self):
-        self.end_pairs()
-        self.add_pairs()
-        return
-
     def add_pairs(self):
         """ Generate edges """
         people = self.sim.people
@@ -514,7 +517,7 @@ class RandomNet(DynamicNetwork):
         if isinstance(self.pars.dur, ss.Dist):
             dur = self.pars.dur.rvs(p1)
         else:
-            dur = np.full(len(p1), self.pars.dur)
+            dur = np.ones(len(p1))*self.pars.dur # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
         
         self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return
@@ -548,11 +551,6 @@ class ErdosRenyiNet(DynamicNetwork):
         return
 
     def init_post(self):
-        self.add_pairs()
-        return
-
-    def update(self):
-        self.end_pairs()
         self.add_pairs()
         return
 
@@ -620,7 +618,7 @@ class DiskNet(Network):
     def step(self):
 
         # Motion step
-        vdt = self.pars.v * self.sim.dt
+        vdt = self.pars.v * self.dt
         self.x[:] = self.x + vdt * np.cos(self.theta)
         self.y[:] = self.y + vdt * np.sin(self.theta)
 
@@ -712,7 +710,7 @@ class MFNet(SexualNetwork):
             duration = ss.lognorm_ex(mean=15),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
-            acts = ss.poisson(lam=80),
+            acts = ss.poisson(lam=80), # TODO: make this work with ss.rate, which it currently does not due to network initialization limitations
             rel_part_rates = 1.0,
         )
         self.update_pars(pars=pars, **kwargs)
@@ -787,7 +785,7 @@ class MFNet(SexualNetwork):
 
     def step(self):
         self.end_pairs()
-        self.set_network_states(upper_age=self.sim.dt) # TODO: looks wrong
+        self.set_network_states(upper_age=self.dt) # TODO: check
         self.add_pairs()
         return
 
@@ -800,9 +798,9 @@ class MSMNet(SexualNetwork):
     def __init__(self, pars=None, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
         self.define_pars(
-            duration = ss.lognorm_ex(mean=15, stdev=15),
+            duration = ss.lognorm_ex(mean=15, std=15),
             debut = ss.normal(loc=16, scale=2),
-            acts = ss.lognorm_ex(mean=80, stdev=20),
+            acts = ss.lognorm_ex(mean=80, std=20),
             participation = ss.bernoulli(p=0.1),
         )
         self.update_pars(pars, **kwargs)
@@ -931,15 +929,18 @@ class MaternalNet(DynamicNetwork):
         """
         Set beta to 0 for women who complete duration of transmission
         Keep connections for now, might want to consider removing
+        
+        NB: add_pairs() and end_pairs() are NOT called here; this is done separately
+        in ss.Pregnancy.update_states().
         """
-        inactive = self.edges.end <= self.sim.ti
+        inactive = self.edges.end <= self.ti
         self.edges.beta[inactive] = 0
         return
 
     def end_pairs(self):
         people = self.sim.people
         edges = self.edges
-        active = (edges.end > self.sim.ti) & people.alive[edges.p1] & people.alive[edges.p2]
+        active = (edges.end > self.ti) & people.alive[edges.p1] & people.alive[edges.p2]
         for k in self.meta_keys():
             edges[k] = edges[k][active]
         return len(active)
@@ -950,10 +951,10 @@ class MaternalNet(DynamicNetwork):
             return 0
         else:
             if start is None:
-                start = np.full_like(dur, fill_value=self.sim.ti)
+                start = np.full_like(dur, fill_value=self.ti)
             n = len(mother_inds)
             beta = np.ones(n)
-            end = start + sc.promotetoarray(dur) / self.sim.dt
+            end = start + sc.promotetoarray(dur)
             self.append(p1=mother_inds, p2=unborn_inds, beta=beta, dur=dur, start=start, end=end)
             return n
 

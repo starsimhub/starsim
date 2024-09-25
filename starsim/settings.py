@@ -68,11 +68,14 @@ class Options(sc.objdict):
 
         optdesc.warnings = 'How warnings are handled: options are "warn" (default), "print", and "error"'
         options.warnings = str(os.getenv('STARSIM_WARNINGS', 'warn'))
+        
+        optdesc.time_eps = 'Set size of smallest possible time unit (in units of sim time, e.g. "year" or "day")'
+        options.time_eps = float(os.getenv('STARSIM_TIME_EPS', 1e-6))
 
         optdesc.sep = 'Set thousands seperator for text output'
         options.sep = str(os.getenv('STARSIM_SEP', ','))
 
-        optdesc.precision = 'Set arithmetic precision -- 32-bit by default for efficiency'
+        optdesc.precision = 'Set arithmetic precision'
         options.precision = int(os.getenv('STARSIM_PRECISION', 64))
 
         optdesc._centralized = 'If True, revert to centralized random number generation (NOT ADVISED).'
@@ -174,7 +177,7 @@ class Options(sc.objdict):
 
             # Convert warnings to errors
             with ss.options.context(warnings='error'):
-                ss.Sim(location='not a location').initialize()
+                ss.Sim(location='not a location').init()
 
             # Use with_style(), not context(), for plotting options
             with ss.options.with_style(dpi=50):

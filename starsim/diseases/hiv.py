@@ -14,7 +14,8 @@ class HIV(ss.Infection):
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
         self.define_pars(
-            beta = 1.0, # Placeholder value
+            unit = 'year',
+            beta = ss.beta(1.0), # Placeholder value
             cd4_min = 100,
             cd4_max = 500,
             cd4_rate = 5,
@@ -22,7 +23,7 @@ class HIV(ss.Infection):
             art_efficacy = 0.96,
             init_prev = ss.bernoulli(p=0.05),
             death_dist = ss.bernoulli(p=self.death_prob_func), # Uses p_death by default, modulated by CD4
-            p_death = 0.05,
+            p_death = ss.rate(0.05), # NB: this is death per unit time, not death per infection
         )
         self.update_pars(pars=pars, **kwargs)
 
@@ -38,7 +39,7 @@ class HIV(ss.Infection):
     @staticmethod
     def death_prob_func(module, sim, uids):
         p = module.pars
-        out = sim.dt * p.p_death / (p.cd4_min - p.cd4_max)**2 *  (module.cd4[uids] - p.cd4_max)**2
+        out = p.p_death / (p.cd4_min - p.cd4_max)**2 *  (module.cd4[uids] - p.cd4_max)**2
         out = np.array(out)
         return out
 
@@ -54,18 +55,18 @@ class HIV(ss.Infection):
         hiv_deaths = self.pars.death_dist.filter(can_die)
         
         people.request_death(hiv_deaths)
-        self.ti_dead[hiv_deaths] = self.sim.ti
+        self.ti_dead[hiv_deaths] = self.ti
         return
 
     def init_results(self):
         """ Initialize results """
         super().init_results()
-        self.results += ss.Result(self.name, 'new_deaths', self.sim.npts, dtype=int, label='Deaths')
+        self.results += ss.Result(self.name, 'new_deaths', self.npts, dtype=int, label='Deaths')
         return
 
     def update_results(self):
         super().update_results()
-        ti = self.sim.ti
+        ti = self.ti
         self.results['new_deaths'][ti] = np.count_nonzero(self.ti_dead == ti)
         return 
 
@@ -73,7 +74,7 @@ class HIV(ss.Infection):
         super().set_prognoses(uids, source_uids)
         self.susceptible[uids] = False
         self.infected[uids] = True
-        self.ti_infected[uids] = self.sim.ti
+        self.ti_infected[uids] = self.ti
         return
 
     def set_congenital(self, uids, source_uids):
@@ -90,7 +91,7 @@ class ART(ss.Intervention):
         self.coverage = sc.toarray(coverage)
         super().__init__()
         self.define_pars(
-            art_delay = ss.constant(v=1) # Value in years
+            art_delay = ss.constant(v=ss.years(1.0)) # Value in years
         )
         self.update_pars(pars=pars, **kwargs)
 
@@ -100,7 +101,7 @@ class ART(ss.Intervention):
 
     def init_pre(self, sim):
         super().init_pre(sim)
-        self.results += ss.Result(self.name, 'n_art', sim.npts, dtype=int)
+        self.results += ss.Result(self.name, 'n_art', self.npts, dtype=int)
         self.initialized = True
         return
 
@@ -111,7 +112,7 @@ class ART(ss.Intervention):
 
         hiv = sim.people.hiv
         infected = hiv.infected.uids
-        ti_delay = np.round(self.pars.art_delay.rvs(infected)/sim.dt).astype(int)
+        ti_delay = np.round(self.pars.art_delay.rvs(infected)).astype(int)
         recently_infected = infected[hiv.ti_infected[infected] == sim.ti-ti_delay]
 
         n_added = 0
@@ -138,7 +139,7 @@ class CD4_analyzer(ss.Analyzer):
 
     def init_pre(self, sim):
         super().init_pre(sim)
-        self.cd4 = np.zeros((sim.npts, sim.people.n), dtype=int)
+        self.cd4 = np.zeros((self.npts, sim.people.n), dtype=int)
         return
 
     def step(self):

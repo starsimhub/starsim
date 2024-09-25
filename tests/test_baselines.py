@@ -8,29 +8,30 @@ import sciris as sc
 import starsim as ss
 
 baseline_filename  = sc.thisdir(__file__, 'baseline.json')
+multisim_filename  = sc.thisdir(__file__, 'baseline_multisim.json')
 benchmark_filename = sc.thisdir(__file__, 'benchmark.json')
 parameters_filename = sc.thisdir(ss.__file__, 'regression', f'pars_v{ss.__version__}.json')
 sc.options(interactive=False) # Assume not running interactively
 
 # Define the parameters
 pars = sc.objdict(
-    n_agents   = 10e3, # Number of agents
-    start      = 2000, # Starting year
-    n_years    = 20,   # Number of years to simulate
-    dt         = 0.2,  # Timestep
-    verbose    = 0,    # Don't print details of the run
-    rand_seed  = 2,    # Set a non-default seed
+    n_agents  = 10e3, # Number of agents
+    start     = 2000, # Starting year
+    dur       = 20,   # Number of years to simulate
+    dt        = 0.2,  # Timestep
+    verbose   = 0,    # Don't print details of the run
+    rand_seed = 2,    # Set a non-default seed
 )
 
 
-def make_sim(run=False):
+def make_sim(run=False, **kwargs):
     """
     Define a default simulation for testing the baseline. If run directly (not 
     via pytest), also plot the sim by default.
     """
     diseases = ['sir', 'sis']
     networks = ['random', 'mf', 'maternal']
-    sim = ss.Sim(pars=pars, networks=networks, diseases=diseases, demographics=True)
+    sim = ss.Sim(pars=pars | kwargs, networks=networks, diseases=diseases, demographics=True)
     
     # Optionally run and plot
     if run:
@@ -58,6 +59,31 @@ def save_baseline():
     # sim.export_pars(filename=parameters_filename) # If not different from previous version, can safely delete
 
     print('Done.')
+    return
+
+
+def multisim_baseline(save=False, n_runs=10, **kwargs):
+    """
+    Check or update the multisim baseline results; not part of the integration tests
+    """
+    word = 'Saving' if save else 'Checking'
+    sc.heading(f'{word} MultiSim baseline...')
+
+    # Make and run sims
+    kwargs.setdefault('verbose', ss.options.verbose/n_runs*2)
+    sim = make_sim(**kwargs)
+    msim = ss.MultiSim(base_sim=sim)
+    msim.run(n_runs)
+    summary = msim.summarize()
+
+    # Export results
+    if save:
+        sc.savejson(multisim_filename, summary)
+        print('Done.')
+    else:
+        baseline = sc.loadjson(multisim_filename)
+        ss.diff_sims(baseline, summary, die=False)
+
     return
 
 
@@ -121,7 +147,7 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
         # Time initialization
         t0 = sc.tic()
         sim = make_sim()
-        sim.initialize()
+        sim.init()
         t_init = sc.toc(t0, output=True)
 
         # Time running
@@ -147,7 +173,7 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
                 },
             'parameters': {
                 'n_agents': sim.pars.n_agents,
-                'n_years':  sim.pars.n_years,
+                'dur':      sim.pars.dur,
                 'dt':       sim.pars.dt,
                 },
             'cpu_performance': ratio,

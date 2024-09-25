@@ -51,14 +51,15 @@ def test_microsim(do_plot=False):
         people=ss.People(small),
         networks=[ss.MFNet(), ss.MaternalNet()],
         demographics=ss.Pregnancy(),
-        diseases=hiv
+        diseases=hiv,
+        copy_inputs = False, # So we can reuse hiv
     )
-    sim.initialize()
+    sim.init()
     sim.run()
 
     if do_plot:
         pl.figure()
-        pl.plot(sim.tivec, sim.results.hiv.n_infected)
+        pl.plot(hiv.timevec, hiv.results.n_infected)
         pl.title('HIV number of infections')
 
     return sim
@@ -81,10 +82,10 @@ def test_ppl_construction():
     gon = ss.Gonorrhea(pars=gon_pars)
 
     sim = ss.Sim(pars=sim_pars, diseases=[gon])
-    sim.initialize()
+    sim.init()
     sim.run()
     pl.figure()
-    pl.plot(sim.tivec, sim.results.gonorrhea.n_infected)
+    pl.plot(sim.timevec, sim.results.gonorrhea.n_infected)
     pl.title('Number of gonorrhea infections')
 
     return sim
@@ -118,7 +119,7 @@ def test_arrs():
 
 def test_deepcopy():
     s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=small)
-    s1.initialize()
+    s1.init()
     
     s2 = sc.dcp(s1)
 
@@ -135,7 +136,7 @@ def test_deepcopy():
 
 def test_deepcopy_until():
     s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=small)
-    s1.initialize()
+    s1.init()
 
     s1.run(until=5)
 

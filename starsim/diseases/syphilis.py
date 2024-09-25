@@ -17,15 +17,15 @@ class Syphilis(ss.Infection):
         super().__init__()
         self.define_pars(
             # Initial conditions
-            beta = 1.0, # Placeholder
+            beta = ss.beta(1.0), # Placeholder
             init_prev = ss.bernoulli(p=0.03),
             
             # Adult syphilis natural history, all specified in years
-            dur_exposed = ss.lognorm_ex(mean=1 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_primary = ss.lognorm_ex(mean=1.5 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_exposed = ss.lognorm_ex(mean=1 / 12, std=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_primary = ss.lognorm_ex(mean=1.5 / 12, std=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_secondary = ss.normal(loc=3.6 / 12, scale=1.5 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_temp = ss.lognorm_ex(mean=1, stdev=6 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_long = ss.lognorm_ex(mean=20, stdev=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_temp = ss.lognorm_ex(mean=1, std=6 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_long = ss.lognorm_ex(mean=20, std=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_latent_temp = ss.bernoulli(p=0.25),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_tertiary = ss.bernoulli(p=0.35),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
 
@@ -96,11 +96,11 @@ class Syphilis(ss.Infection):
             init_prev = ss.bernoulli(p=0.03),
             
             # Adult syphilis natural history, all specified in years
-            dur_exposed = ss.lognorm_ex(mean=1 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_primary = ss.lognorm_ex(mean=1.5 / 12, stdev=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_exposed = ss.lognorm_ex(mean=1 / 12, std=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_primary = ss.lognorm_ex(mean=1.5 / 12, std=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_secondary = ss.normal(loc=3.6 / 12, scale=1.5 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_temp = ss.lognorm_ex(mean=1, stdev=6 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_long = ss.lognorm_ex(mean=20, stdev=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_temp = ss.lognorm_ex(mean=1, std=6 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_long = ss.lognorm_ex(mean=20, std=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_latent_temp = ss.bernoulli(p=0.25),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_tertiary = ss.bernoulli(p=0.35),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
     
@@ -185,11 +185,10 @@ class Syphilis(ss.Infection):
     def init_results(self):
         """ Initialize results """
         super().init_results()
-        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'new_nnds',       npts, dtype=int, scale=True, label='New neonatal deaths'),
-            ss.Result(self.name, 'new_stillborns', npts, dtype=int, scale=True, label='New stillborns'),
-            ss.Result(self.name, 'new_congenital', npts, dtype=int, scale=True, label='New congenital syphilis'),
+            ss.Result(self.name, 'new_nnds',       self.npts, dtype=int, scale=True, label='New neonatal deaths'),
+            ss.Result(self.name, 'new_stillborns', self.npts, dtype=int, scale=True, label='New stillborns'),
+            ss.Result(self.name, 'new_congenital', self.npts, dtype=int, scale=True, label='New congenital syphilis'),
         ]
         return
 
@@ -197,7 +196,7 @@ class Syphilis(ss.Infection):
         """ Updates prior to interventions """
 
         # Primary
-        ti = self.sim.ti
+        ti = self.ti
         primary = self.exposed & (self.ti_primary <= ti)
         self.primary[primary] = True
         self.exposed[primary] = False
@@ -210,10 +209,6 @@ class Syphilis(ss.Infection):
             self.primary[secondary_from_primary] = False
             self.set_secondary_prognoses(secondary_from_primary)
             self.rel_trans[secondary_from_primary] = self.pars.rel_trans['secondary']
-
-        # Hack to reset the MultiRNGs in set_secondary_prognoses so that they can be called again in this timestep. TODO: Refactor
-        self.pars.p_latent_temp.jump(ti+1)
-        self.pars.dur_secondary.jump(ti+1)
 
         # Secondary reactivation from latent
         secondary_from_latent = (self.latent_temp & (self.ti_secondary <= ti)).uids
@@ -260,7 +255,7 @@ class Syphilis(ss.Infection):
 
     def update_results(self):
         super().update_results()
-        ti = self.sim.ti
+        ti = self.ti
         self.results.new_nnds[ti]       = np.count_nonzero(self.ti_nnd == ti)
         self.results.new_stillborns[ti] = np.count_nonzero(self.ti_stillborn == ti)
         self.results.new_congenital[ti] = np.count_nonzero(self.ti_congenital == ti)
@@ -271,8 +266,7 @@ class Syphilis(ss.Infection):
         Set initial prognoses for adults newly infected with syphilis
         """
         
-        ti = self.sim.ti
-        dt = self.sim.dt
+        ti = self.ti
 
         self.susceptible[uids] = False
         self.ever_exposed[uids] = True
@@ -284,17 +278,16 @@ class Syphilis(ss.Infection):
         # Set future dates and probabilities
         # Exposed to primary
         dur_exposed = self.pars.dur_exposed.rvs(uids)
-        self.ti_primary[uids] = ti + rr(dur_exposed / dt)
+        self.ti_primary[uids] = ti + rr(dur_exposed)
 
         # Primary to secondary
         dur_primary = self.pars.dur_primary.rvs(uids)
-        self.ti_secondary[uids] = self.ti_primary[uids] + rr(dur_primary / dt)
+        self.ti_secondary[uids] = self.ti_primary[uids] + rr(dur_primary)
         return
 
     def set_secondary_prognoses(self, uids):
         """ Set prognoses for people who have just progressed to secondary infection """
 
-        dt = self.sim.dt
         dur_secondary = self.pars.dur_secondary.rvs(uids)
 
         # Secondary to latent_temp or latent_long
@@ -303,31 +296,30 @@ class Syphilis(ss.Infection):
         latent_long_uids = uids[~latent_temp]
 
         dur_secondary_temp = dur_secondary[latent_temp]
-        self.ti_latent_temp[latent_temp_uids] = self.ti_secondary[latent_temp_uids] + rr(dur_secondary_temp / dt)
+        self.ti_latent_temp[latent_temp_uids] = self.ti_secondary[latent_temp_uids] + rr(dur_secondary_temp)
 
         dur_secondary_long = dur_secondary[~latent_temp]
-        self.ti_latent_long[latent_long_uids] = self.ti_secondary[latent_long_uids] + rr(dur_secondary_long / dt)
+        self.ti_latent_long[latent_long_uids] = self.ti_secondary[latent_long_uids] + rr(dur_secondary_long)
 
         return
 
     def set_latent_temp_prognoses(self, uids):
         # Primary to secondary
         dur_latent_temp = self.pars.dur_latent_temp.rvs(uids)
-        self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_temp / self.sim.dt)
+        self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_temp)
         return
 
     def set_latent_long_prognoses(self, uids):
-        dt = self.sim.dt
         dur_latent = self.pars.dur_latent_long.rvs(uids)
 
         # Primary to secondary
         dur_latent_long = dur_latent
-        self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_long / dt)
+        self.ti_secondary[uids] = self.ti_latent_temp[uids] + rr(dur_latent_long)
 
         # Latent_long to tertiary
         tertiary = self.pars.p_tertiary.rvs(uids)
         tertiary_uids = uids[tertiary]
-        self.ti_tertiary[tertiary_uids] = self.ti_latent_long[tertiary_uids] + rr(dur_latent_long[tertiary] / dt)
+        self.ti_tertiary[tertiary_uids] = self.ti_latent_long[tertiary_uids] + rr(dur_latent_long[tertiary])
 
         return
 
@@ -349,12 +341,13 @@ class Syphilis(ss.Infection):
                 time_to_birth = -sim.people.age.raw # TODO: make nicer
 
                 # Schedule events
+                ratio = ss.time_ratio(unit1='year', dt1=1.0, unit2=self.unit, dt2=self.dt) # TODO: think about simplifying
                 for oi, outcome in enumerate(self.pars.birth_outcome_keys):
                     o_uids = state_uids[assigned_outcomes == oi]
                     if len(o_uids) > 0:
                         ti_outcome = f'ti_{outcome}'
                         vals = getattr(self, ti_outcome)
-                        vals[o_uids] = sim.ti + rr(time_to_birth[o_uids] / sim.dt)
+                        vals[o_uids] = sim.ti + rr(time_to_birth[o_uids] * ratio)
                         setattr(self, ti_outcome, vals)
 
         return
@@ -423,8 +416,8 @@ class syph_screening(ss.routine_screening):
     def init_pre(self, sim):
         super().init_pre(sim)
         self.results += [
-            ss.Result('syphilis', 'n_screened', sim.npts, dtype=int, scale=True, label='Number screened'),
-            ss.Result('syphilis', 'n_dx', sim.npts, dtype=int, scale=True, label='Number diagnosed'),
+            ss.Result('syphilis', 'n_screened', self.npts, dtype=int, scale=True, label='Number screened'),
+            ss.Result('syphilis', 'n_dx',       self.npts, dtype=int, scale=True, label='Number diagnosed'),
         ]
         return
 
@@ -446,7 +439,7 @@ class syph_treatment(ss.treat_num):
 
     def init_pre(self, sim):
         super().init_pre(sim)
-        self.results += ss.Result('syphilis', 'n_tx', sim.npts, dtype=int, scale=True, label='Number treated')
+        self.results += ss.Result('syphilis', 'n_tx', self.npts, dtype=int, scale=True, label='Number treated')
         return
 
     def step(self):

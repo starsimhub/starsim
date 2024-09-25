@@ -45,10 +45,12 @@ def find_modules(key=None):
 
 class Module(sc.quickobj):
 
-    def __init__(self, name=None, label=None):
-        self.set_metadata(name, label) # Usually reset as part of self.update_pars()
+    def __init__(self, name=None, label=None, unit=None, dt=None):
         self.pars = ss.Pars() # Usually populated via self.define_pars()
+        self.set_metadata(name, label) # Usually reset as part of self.update_pars()
+        self.set_time_pars(unit, dt)
         self.results = ss.Results(self.name)
+        self.pre_initialized = False
         self.initialized = False
         self.finalized = False
         return
@@ -69,10 +71,16 @@ class Module(sc.quickobj):
         else:
             return out
     
-    def set_metadata(self, name, label):
+    def set_metadata(self, name=None, label=None):
         """ Set metadata for the module """
-        self.name = sc.ifelse(name, getattr(self, 'name', self.__class__.__name__.lower())) # Default name is the class name
-        self.label = sc.ifelse(label, getattr(self, 'label', self.name))
+        self.name  = sc.ifelse(name,  getattr(self, 'name',  self.pars.get('name', self.__class__.__name__.lower()))) # Default name is the class name
+        self.label = sc.ifelse(label, getattr(self, 'label', self.pars.get('label', self.name)))
+        return
+    
+    def set_time_pars(self, unit=None, dt=None):
+        """ Set time units for the module """
+        self.unit  = sc.ifelse(unit,  getattr(self, 'unit', self.pars.get('unit')))
+        self.dt    = sc.ifelse(dt,    getattr(self, 'dt',   self.pars.get('dt')))
         return
     
     def define_pars(self, inherit=True, **kwargs): # TODO: think if inherit should default to true or false
@@ -96,7 +104,9 @@ class Module(sc.quickobj):
                 
         # Update module attributes
         metadata = {key:pars.pop(key, None) for key in ['name', 'label']}
+        timepars = {key:pars.pop(key, None) for key in ['unit', 'dt']}
         self.set_metadata(**metadata)
+        self.set_time_pars(**timepars)
         
         # Should be no remaining pars
         if len(pars):
@@ -104,7 +114,7 @@ class Module(sc.quickobj):
             raise ValueError(errormsg)
         return
     
-    def init_pre(self, sim):
+    def init_pre(self, sim, force=False):
         """
         Perform initialization steps
 
@@ -112,12 +122,15 @@ class Module(sc.quickobj):
         initialization, initialized=False until init_vals() is called (which is after
         distributions are initialized).
         """
-        self.sim = sim # Link back to the sim object
-        ss.link_dists(self, sim, skip=ss.Sim) # Link the distributions to sim and module
-        sim.pars[self.name] = self.pars
-        sim.results[self.name] = self.results
-        sim.people.add_module(self) # Connect the states to the people
-        self.init_results()
+        if force or not self.pre_initialized:
+            self.sim = sim # Link back to the sim object
+            ss.link_dists(self, sim, skip=ss.Sim) # Link the distributions to sim and module
+            sim.pars[self.name] = self.pars
+            sim.results[self.name] = self.results
+            sim.people.add_module(self) # Connect the states to the people
+            self.init_time_pars() # Initialize the modules' time parameters and link them to the sim
+            self.init_results()
+            self.pre_initialized = True
         return
     
     def init_results(self):
@@ -132,9 +145,47 @@ class Module(sc.quickobj):
         self.initialized = True
         return
     
+    def init_time_pars(self, force=False):
+        """ Initialize all time parameters by ensuring all parameters are initialized; part of init_post() """
+        pars = self.sim.pars
+        
+        # Find all modules and set the timestep
+        if force or self.unit is None:
+            self.unit = pars.unit
+        if force or self.dt is None:
+            self.dt = pars.dt
+        
+        # Find all time parameters in the module
+        timepars = sc.search(self.pars, type=ss.TimePar) # Should it be self or self.pars?
+        
+        # Initialize them with the parent module
+        for timepar in timepars.values():
+            if force or not timepar.initialized:
+                timepar.init(parent=self)
+        
+        # Create the module-specific time vector
+        self.timevec = ss.make_timevec(pars.start, pars.stop, self.dt, self.unit)
+        self.npts = len(self.timevec)
+        self.ti = 0 # Track the current timestep, which may or may not match the sim's
+        return
+    
+    @property
+    def now(self):
+        """ Return the current time, i.e. the time vector at the current timestep """
+        try:
+            return self.timevec[self.ti]
+        except Exception as E:
+            ss.warn(f'Encountered exception when getting the current time in {self.name}: {E}')
+            return None
+    
     def step(self):
         """ Define how the module updates over time """
         pass
+    
+    def finish_step(self):
+        """ Define what should happen at the end of the step; at minimum, increment ti """
+        self.ti += 1
+        return
     
     def update_results(self):
         """ Perform any results updates on each timestep """
@@ -220,6 +271,8 @@ class Module(sc.quickobj):
         mod = cls(name=name)
         mod.func = func
         mod.step = partial(step, mod)
+        mod.step.__name__ = name # Manually add these in as for a regular class method
+        mod.step.__self__ = mod 
         return mod
             
     def to_json(self):
@@ -232,12 +285,13 @@ class Module(sc.quickobj):
         return out
 
     def plot(self):
+        """ Plot all results in the module """
         with sc.options.with_style('fancy'):
             flat = sc.flattendict(self.results, sep=': ')
-            yearvec = self.sim.yearvec
+            timevec = self.timevec
             fig, axs = sc.getrowscols(len(flat), make=True)
             for ax, (k, v) in zip(axs.flatten(), flat.items()):
-                ax.plot(yearvec, v)
+                ax.plot(timevec, v)
                 ax.set_title(k)
                 ax.set_xlabel('Year')
         return fig

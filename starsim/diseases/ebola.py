@@ -19,17 +19,17 @@ class Ebola(SIR):
         self.define_pars(
             # Initial conditions and beta
             init_prev       = ss.bernoulli(p=0.005),
-            beta            = 1.0, # Placeholder value
+            beta            = ss.beta(1.0), # Placeholder value
             sev_factor      = 2.2,
             unburied_factor = 2.1,
             
             # Natural history parameters, all specified in days
-            dur_exp2symp    = ss.lognorm_ex(mean=12.7), # Add source
-            dur_symp2sev    = ss.lognorm_ex(mean=6), # Add source
-            dur_sev2dead    = ss.lognorm_ex(mean=1.5), # Add source
-            dur_dead2buried = ss.lognorm_ex(mean=2), # Add source
-            dur_symp2rec    = ss.lognorm_ex(mean=10), # Add source
-            dur_sev2rec     = ss.lognorm_ex(mean=10.4), # Add source
+            dur_exp2symp    = ss.lognorm_ex(mean=ss.days(12.7)), # Add source
+            dur_symp2sev    = ss.lognorm_ex(mean=ss.days(6)), # Add source
+            dur_sev2dead    = ss.lognorm_ex(mean=ss.days(1.5)), # Add source
+            dur_dead2buried = ss.lognorm_ex(mean=ss.days(2)), # Add source
+            dur_symp2rec    = ss.lognorm_ex(mean=ss.days(10)), # Add source
+            dur_sev2rec     = ss.lognorm_ex(mean=ss.days(10.4)), # Add source
             p_sev           = ss.bernoulli(p=0.7), # Add source
             p_death         = ss.bernoulli(p=0.55), # Add source
             p_safe_bury     = ss.bernoulli(p=0.25), # Probability of a safe burial - should be linked to diagnoses
@@ -60,7 +60,7 @@ class Ebola(SIR):
     def step_state(self):
 
         # Progress exposed -> infected
-        ti = self.sim.ti
+        ti = self.ti
         infected = (self.exposed & (self.ti_infected <= ti)).uids
         self.exposed[infected] = False
         self.infected[infected] = True
@@ -95,8 +95,7 @@ class Ebola(SIR):
         # Do not call set_prognoses on the parent
         #super().set_prognoses(sim, uids, source_uids)
 
-        ti = self.sim.ti
-        dt = self.sim.dt
+        ti = self.ti
         self.susceptible[uids] = False
         self.exposed[uids] = True
         self.ti_exposed[uids] = ti
@@ -104,25 +103,25 @@ class Ebola(SIR):
         p = self.pars
 
         # Determine when exposed become infected
-        self.ti_infected[uids] = ti + p.dur_exp2symp.rvs(uids) / dt
+        self.ti_infected[uids] = ti + p.dur_exp2symp.rvs(uids)
 
         # Determine who progresses to sever and when
         sev_uids = p.p_sev.filter(uids)
-        self.ti_severe[sev_uids] = self.ti_infected[sev_uids] + p.dur_symp2sev.rvs(sev_uids) / dt
+        self.ti_severe[sev_uids] = self.ti_infected[sev_uids] + p.dur_symp2sev.rvs(sev_uids)
 
         # Determine who dies and who recovers and when
         dead_uids = p.p_death.filter(sev_uids)
-        self.ti_dead[dead_uids] = self.ti_severe[dead_uids] + p.dur_sev2dead.rvs(dead_uids) / dt
+        self.ti_dead[dead_uids] = self.ti_severe[dead_uids] + p.dur_sev2dead.rvs(dead_uids)
         rec_sev_uids = np.setdiff1d(sev_uids, dead_uids)
-        self.ti_recovered[rec_sev_uids] = self.ti_severe[rec_sev_uids] + p.dur_sev2rec.rvs(rec_sev_uids) / dt
+        self.ti_recovered[rec_sev_uids] = self.ti_severe[rec_sev_uids] + p.dur_sev2rec.rvs(rec_sev_uids)
         rec_symp_uids = np.setdiff1d(uids, sev_uids)
-        self.ti_recovered[rec_symp_uids] = self.ti_infected[rec_symp_uids] + p.dur_symp2rec.rvs(rec_symp_uids) / dt
+        self.ti_recovered[rec_symp_uids] = self.ti_infected[rec_symp_uids] + p.dur_symp2rec.rvs(rec_symp_uids)
 
         # Determine time of burial - either immediate (safe burials) or after a delay (unsafe)
         safe_buried = p.p_safe_bury.filter(dead_uids)
         unsafe_buried = np.setdiff1d(dead_uids, safe_buried)
         self.ti_buried[safe_buried] = self.ti_dead[safe_buried]
-        self.ti_buried[unsafe_buried] = self.ti_dead[unsafe_buried] + p.dur_dead2buried.rvs(unsafe_buried) / dt
+        self.ti_buried[unsafe_buried] = self.ti_dead[unsafe_buried] + p.dur_dead2buried.rvs(unsafe_buried)
 
         # Change rel_trans values
         self.rel_trans[self.infectious] = 1

@@ -26,7 +26,7 @@ def test_sir():
     sir = ss.SIR(sir_pars)
 
     # Change pars after creating the SIR instance
-    sir.pars.beta = {'random': 0.1}
+    sir.pars.beta = {'random': ss.rate(0.1)}
 
     # You can also change the parameters of the default lognormal distribution directly
     sir.pars.dur_inf.set(loc=5)
@@ -40,7 +40,7 @@ def test_sir():
     plt.figure()
     res = sim.results
     plt.stackplot(
-        sim.yearvec,
+        sim.timevec,
         res.sir.n_susceptible,
         res.sir.n_infected,
         res.sir.n_recovered,
@@ -128,7 +128,7 @@ def test_ncd():
 
     plt.figure()
     plt.stackplot(
-        sim.yearvec,
+        sim.timevec,
         ncd.results.n_not_at_risk,
         ncd.results.n_at_risk - ncd.results.n_affected,
         ncd.results.n_affected,

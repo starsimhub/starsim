@@ -18,50 +18,50 @@ class SIR(ss.Infection):
     infected/infectious, and recovered. It also includes deaths, and basic
     results.
     """
-    def __future_init__(self, pars=None, **kwargs):
-        """ The plan for implementing events """
-        super().__init__()
-        self.define_pars(
-            beta = 0.1,
-            init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=6),
-            p_death = ss.bernoulli(p=0.01),
-        )
-        self.update_pars(pars, **kwargs)
+    # def __future_init__(self, pars=None, **kwargs):
+    #     """ The plan for implementing events """
+    #     super().__init__()
+    #     self.define_pars(
+    #         beta = ss.beta(0.1),
+    #         init_prev = ss.bernoulli(p=0.01),
+    #         dur_inf = ss.lognorm_ex(mean=6),
+    #         p_death = ss.bernoulli(p=0.01),
+    #     )
+    #     self.update_pars(pars, **kwargs)
         
-        self.define_states(
-            ss.State('susceptible', default=True),
-            ss.State('infected'),
-            ss.State('recovered'),
-        )
+    #     self.define_states(
+    #         ss.State('susceptible', default=True),
+    #         ss.State('infected'),
+    #         ss.State('recovered'),
+    #     )
         
-        # Option 1 for defining events -- using objects
-        self.define_events(
-            ss.Event(self.susceptible, self.infected, func=self.infect,  reskey='infections'),
-            ss.Event(self.infected, self.recovered,   func=self.recover, reskey='recoveries'),
-            ss.Event(self.infected, self.dead,        func=self.step_die,     reskey='deaths'),
-        )
+    #     # Option 1 for defining events -- using objects
+    #     self.define_events(
+    #         ss.Event(self.susceptible, self.infected, func=self.infect,   reskey='infections'),
+    #         ss.Event(self.infected, self.recovered,   func=self.recover,  reskey='recoveries'),
+    #         ss.Event(self.infected, self.dead,        func=self.step_die, reskey='deaths'),
+    #     )
         
-        # Option 2 for defining events -- using strings
-        self.define_events(
-            ss.Event('susceptible -> infected', self.infect,  reskey='infections'),
-            ss.Event('infected -> recovered',   self.recover, reskey='recoveries'),
-            ss.Event('infected -> dead',        self.step_die,     reskey='deaths'),
-        )
+    #     # Option 2 for defining events -- using strings
+    #     self.define_events(
+    #         ss.Event('susceptible -> infected', self.infect,   reskey='infections'),
+    #         ss.Event('infected -> recovered',   self.recover,  reskey='recoveries'),
+    #         ss.Event('infected -> dead',        self.step_die, reskey='deaths'),
+    #     )
         
-        self.define_attrs(
-            ss.FloatArr('rel_sus',   default=1.0),
-            ss.FloatArr('rel_trans', default=1.0),
-        )
-        return
+    #     self.define_attrs(
+    #         ss.FloatArr('rel_sus',   default=1.0),
+    #         ss.FloatArr('rel_trans', default=1.0),
+    #     )
+    #     return
     
     def __init__(self, pars=None, **kwargs):
         """ The current implementation """
         super().__init__()
         self.define_pars(
-            beta = 0.1,
+            beta = ss.beta(0.1),
             init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=6),
+            dur_inf = ss.lognorm_ex(mean=ss.dur(6)),
             p_death = ss.bernoulli(p=0.01),
         )
         self.update_pars(pars, **kwargs)
@@ -93,8 +93,7 @@ class SIR(ss.Infection):
 
     def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses """
-        ti = self.sim.ti
-        dt = self.sim.dt
+        ti = self.ti
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = ti
@@ -109,8 +108,8 @@ class SIR(ss.Infection):
         will_die = p.p_death.rvs(uids)
         dead_uids = uids[will_die]
         rec_uids = uids[~will_die]
-        self.ti_dead[dead_uids] = ti + dur_inf[will_die] / dt # Consider rand round, but not CRN safe
-        self.ti_recovered[rec_uids] = ti + dur_inf[~will_die] / dt
+        self.ti_dead[dead_uids] = ti + dur_inf[will_die] # Consider rand round, but not CRN safe
+        self.ti_recovered[rec_uids] = ti + dur_inf[~will_die]
         return
 
     def step_die(self, uids):
@@ -145,10 +144,10 @@ class SIS(ss.Infection):
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
         self.define_pars(
-            beta = 0.05,
+            beta = ss.beta(0.05),
             init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=10),
-            waning = 0.05,
+            dur_inf = ss.lognorm_ex(mean=ss.dur(10)),
+            waning = ss.rate(0.05),
             imm_boost = 1.0,
         )
         self.update_pars(pars=pars, *args, **kwargs)
@@ -161,7 +160,7 @@ class SIS(ss.Infection):
 
     def step_state(self):
         """ Progress infectious -> recovered """
-        recovered = (self.infected & (self.ti_recovered <= self.sim.ti)).uids
+        recovered = (self.infected & (self.ti_recovered <= self.ti)).uids
         self.infected[recovered] = False
         self.susceptible[recovered] = True
         self.update_immunity()
@@ -169,7 +168,7 @@ class SIS(ss.Infection):
     
     def update_immunity(self):
         has_imm = (self.immunity > 0).uids
-        self.immunity[has_imm] = (self.immunity[has_imm])*(1 - self.pars.waning*self.sim.dt)
+        self.immunity[has_imm] = (self.immunity[has_imm])*(1 - self.pars.waning)
         self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])
         return
 
@@ -178,27 +177,27 @@ class SIS(ss.Infection):
         super().set_prognoses(uids, source_uids)
         self.susceptible[uids] = False
         self.infected[uids] = True
-        self.ti_infected[uids] = self.sim.ti
+        self.ti_infected[uids] = self.ti
         self.immunity[uids] += self.pars.imm_boost
 
         # Sample duration of infection
         dur_inf = self.pars.dur_inf.rvs(uids)
 
         # Determine when people recover
-        self.ti_recovered[uids] = self.sim.ti + dur_inf / self.sim.dt
+        self.ti_recovered[uids] = self.ti + dur_inf
 
         return
     
     def init_results(self):
         """ Initialize results """
         super().init_results()
-        self.results += ss.Result(self.name, 'rel_sus', self.sim.npts, dtype=float, label='Relative susceptibility')
+        self.results += ss.Result(self.name, 'rel_sus', self.npts, dtype=float, label='Relative susceptibility')
         return
 
     def update_results(self):
         """ Store the population immunity (susceptibility) """
         super().update_results()
-        self.results['rel_sus'][self.sim.ti] = self.rel_sus.mean()
+        self.results['rel_sus'][self.ti] = self.rel_sus.mean()
         return 
 
     def plot(self):

@@ -170,25 +170,23 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     def __xor__(self, other): raise BooleanOperationError(self)
     def __invert__(self):     raise BooleanOperationError(self)
 
-    def __array_ufunc__(self, *args, **kwargs):
-        if args[1] != '__call__':
+    def __array_ufunc__(self, ufunc, method, *args, out=None, **kwargs):
+        args = [(arg.values if arg is self else arg) for arg in args]
+        if method != '__call__':
             # This is a catch-all for ufuncs that are not being applied with '__call__' (e.g., operations returning a scalar like 'np.sum()' use reduce instead)
-            args = [(x if x is not self else self.values) for x in args]
-            kwargs = {k: v if v is not self else self.values for k, v in kwargs.items()}
-            return self.values.__array_ufunc__(*args, **kwargs)
+            kwargs = {k:v.values if v is self else v for k,v in kwargs.items()}
+            return self.values.__array_ufunc__(ufunc, method, *args, out=out, **kwargs)
         else:
-            args = [(x if x is not self else self.values) for x in args] # Convert any operands that are Arr instances to their value arrays
-            if 'out' in kwargs and kwargs['out'][0] is self:
+            if out is self:
                 # In-place operations like += applied to the entire Arr instance
                 # use this branch. Therefore, we perform our computation on a new
                 # array with the same size as self.values, and then write it back
                 # to the appropriate entries in `self.raw` via `self[:]`
-                del kwargs['out']
-                self[:] = args[0](*args[2:], **kwargs)
+                self[:] = ufunc(*args, **kwargs)
                 return self
             else:
                 # Otherwise, just run the ufunc
-                return args[0](*args[2:], **kwargs)
+                return ufunc(*args, **kwargs)
 
     @property
     def auids(self):
