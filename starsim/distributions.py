@@ -357,11 +357,11 @@ class Dist:
         Automatically jump on the next value of dt
         
         Args:
-            ti (int): if specified, jump to this timestep (default: current sim timestep)
+            ti (int): if specified, jump to this timestep (default: current sim timestep plus one)
         """
         if ti is None:
-            ti = self.sim.ti
-        to = self.dt_jump_size*(self.sim.ti+1)
+            ti = self.sim.ti + 1
+        to = self.dt_jump_size*ti
         return self.jump(to=to, force=force)
     
     def init(self, trace=None, seed=None, module=None, sim=None, slots=None, force=False):
