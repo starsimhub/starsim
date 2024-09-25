@@ -204,7 +204,7 @@ class Sim:
             raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
 
         # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
-        self.dists.jump()  # to=self.ti+1 resulted in repeated draws for dists that auto jumped
+        self.dists.jump(to=1000*(self.ti+1)) # *1000 to fix repeated draws for dists that auto jumped
 
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
         for dem_mod in self.demographics():
