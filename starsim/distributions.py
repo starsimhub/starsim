@@ -109,7 +109,7 @@ class Dists(sc.prettyobj):
                 checked[seed] = dist
         return
 
-    def jump(self, to=None, delta=1):
+    def jump(self, to=None, delta=1, force=False):
         """ Advance all RNGs, e.g. to call "to", by jumping """
         out = sc.autolist()
 
@@ -118,11 +118,16 @@ class Dists(sc.prettyobj):
             return out
 
         for dist in self.dists.values():
-            out += dist.jump(to=to, delta=delta)
+            out += dist.jump(to=to, delta=delta, force=force)
         return out
     
-    def jump_dt(self): # TODO: simplify with jump
-        """ Advance all RNGs to the next timestep """
+    def jump_dt(self, ti=None, force=False): # Could this be simplified with jump(), or nice to have the parallel with Dist?
+        """
+        Advance all RNGs to the next timestep
+        
+        Args:
+            ti (int): if specified, jump to this timestep (default: current sim timestep)
+        """
         out = sc.autolist()
         
         # Do not jump if centralized
@@ -130,7 +135,7 @@ class Dists(sc.prettyobj):
             return out
         
         for dist in self.dists.values():
-            out += dist.jump_dt()
+            out += dist.jump_dt(ti=ti, force=force)
         return out
 
     def reset(self):
@@ -202,6 +207,7 @@ class Dist:
         self._slots = None # Internal variable to track currently-in-use slots
         
         # History and random state
+        self.dt_jump_size = 1000 # How much to advance the RNG for each timestep
         self.rng = None # The actual RNG generator for generating random numbers
         self.trace = None # The path of this object within the parent
         self.ind = 0 # The index of the RNG (usually updated on each timestep)
@@ -324,26 +330,39 @@ class Dist:
         self.ready = True
         return self.state
 
-    def jump(self, to=None, delta=1):
+    def jump(self, to=None, delta=1, force=False):
         """ Advance the RNG, e.g. to timestep "to", by jumping """
         
-        # Do not jump if centralized
+        # Do not jump if centralized # TODO: remove
         if ss.options._centralized:
             return self.state
-
+        
+        # Validation
         jumps = to if (to is not None) else self.ind + delta
+        if self.ind >= jumps and not force:
+            errormsg = f'You tried to jump the distribution "{self}" to state {jumps}, but the ' \
+                       f'RNG state is already at state {self.ind}, meaning you will draw the same ' \
+                        'random numbers twice. If you are sure you want to do this, set force=True.'
+            raise DistSeedRepeatError(msg=errormsg)
+        
+        # Do the jumping
         self.ind = jumps
         self.reset() # First reset back to the initial state (used in case of different numbers of calls)
         if jumps: # Seems to randomize state if jumps=0
-            # njumps = (self.called+jumps)*self.seed # To avoid possible collisions # TODO: tidy up
-            njumps = jumps
-            self.bitgen.state = self.bitgen.jumped(jumps=njumps).state # Now take "jumps" number of jumps
+            self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
         return self.state
     
-    def jump_dt(self, jumpsize=1000):
-        """ Automatically jump on the next value of dt """
-        to = jumpsize*(self.sim.ti+1)
-        return self.jump(to=to)
+    def jump_dt(self, ti=None, force=False):
+        """
+        Automatically jump on the next value of dt
+        
+        Args:
+            ti (int): if specified, jump to this timestep (default: current sim timestep)
+        """
+        if ti is None:
+            ti = self.sim.ti
+        to = self.dt_jump_size*(self.sim.ti+1)
+        return self.jump(to=to, force=force)
     
     def init(self, trace=None, seed=None, module=None, sim=None, slots=None, force=False):
         """ Calculate the starting seed and create the RNG """
@@ -1065,23 +1084,26 @@ class multi_random(sc.prettyobj):
 
 class DistNotInitializedError(RuntimeError):
     """ Raised when Dist object is called when not initialized. """
-    def __init__(self, dist):
-        msg = f'{dist} has not been initialized; please set strict=False when creating the distribution, or call dist.init()'
+    def __init__(self, dist=None, msg=None):
+        if msg is None:
+            msg = f'{dist} has not been initialized; please set strict=False when creating the distribution, or call dist.init()'
         super().__init__(msg)
         return
 
 
 class DistNotReadyError(RuntimeError):
     """ Raised when a Dist object is called without being ready. """
-    def __init__(self, dist):
-        msg = f'{dist} is not ready. This is likely caused by calling a distribution multiple times in a single step. Call dist.jump() to reset.'
+    def __init__(self, dist=None, msg=None):
+        if msg is None:
+            msg = f'{dist} is not ready. This is likely caused by calling a distribution multiple times in a single step. Call dist.jump() to reset.'
         super().__init__(msg)
         return
 
 
 class DistSeedRepeatError(RuntimeError):
     """ Raised when a Dist object shares a seed with another """
-    def __init__(self, dist1, dist2):
-        msg = f'A common seed was found between {dist1} and {dist2}. This is likely caused by incorrect initialization of the parent Dists object.'
+    def __init__(self, dist1=None, dist2=None, msg=None):
+        if msg is None:
+            msg = f'A common seed was found between {dist1} and {dist2}. This is likely caused by incorrect initialization of the parent Dists object.'
         super().__init__(msg)
         return

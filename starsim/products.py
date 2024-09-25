@@ -104,26 +104,20 @@ class Tx(Product):
         tx_successful = []  # Initialize list of successfully treated individuals
 
         for disease_name in self.diseases:
-
             disease = self.sim.diseases[disease_name]
 
             for state in self.health_states:
-
                 pre_tx_state = getattr(disease, state)
                 true_uids = pre_tx_state.uids # People in this state
                 these_uids = true_uids.intersect(uids)
 
                 if len(these_uids):
-
                     df_filter = (self.df.state == state) & (self.df.disease == disease_name)  # Filter by state
                     thisdf = self.df[df_filter]  # apply filter to get the results for this state & genotype
 
                     # Determine whether treatment is successful
                     self.efficacy_dist.set(p=thisdf.efficacy.values[0])
-
-                    # HACK to reset the efficacy_dist as it is called multiple times per timestep. TODO: Refactor
-                    self.efficacy_dist.jump(self.sim.ti+1)
-                    eff_treat_inds = self.efficacy_dist.filter(these_uids)
+                    eff_treat_inds = self.efficacy_dist.filter(these_uids) # TODO: think if there's a way of not calling this inside a loop like this
 
                     post_tx_state_name = thisdf.post_state.values[0]
                     post_tx_state = getattr(disease, post_tx_state_name)
