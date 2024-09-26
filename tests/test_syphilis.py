@@ -128,7 +128,7 @@ def test_syph_intvs(dt=1, n_agents=500, do_plot=False):
 
     # Interventions
     # screen_eligible = lambda sim: sim.demographics.pregnancy.pregnant
-    screen_eligible = lambda sim: sim.networks.mf.active(sim.people)
+    screen_eligible = lambda sim: sim.networks.mfnet.active(sim.people)
     syph_screening = ss.syph_screening(
         product='rpr',
         prob=0.99,

@@ -17,7 +17,7 @@ class Intervention(ss.Module):
     on each timestep.
     """
 
-    def __init__(self, eligibility=None, *args, **kwargs):
+    def __init__(self, *args, eligibility=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.eligibility = eligibility
         return
@@ -64,7 +64,7 @@ class RoutineDelivery(Intervention):
     Base class for any intervention that uses routine delivery; handles interpolation of input years.
     """
 
-    def __init__(self, years=None, start_year=None, end_year=None, prob=None, annual_prob=True, *args, **kwargs):
+    def __init__(self, *args, years=None, start_year=None, end_year=None, prob=None, annual_prob=True, **kwargs):
         super().__init__(*args, **kwargs)
         self.years = years
         self.start_year = start_year
@@ -75,6 +75,7 @@ class RoutineDelivery(Intervention):
         return
 
     def init_pre(self, sim):
+        super().init_pre(sim)
 
         # Validate inputs
         if (self.years is not None) and (self.start_year is not None or self.end_year is not None):
@@ -86,6 +87,7 @@ class RoutineDelivery(Intervention):
             if self.start_year is None: self.start_year = sim.pars.start
             if self.end_year is None:   self.end_year = sim.pars.stop
         else:
+            self.years = sc.promotetoarray(self.years)
             self.start_year = self.years[0]
             self.end_year = self.years[-1]
 
@@ -126,7 +128,7 @@ class CampaignDelivery(Intervention):
     Base class for any intervention that uses campaign delivery; handles interpolation of input years.
     """
 
-    def __init__(self, years, interpolate=None, prob=None, *args, **kwargs):
+    def __init__(self, *args, years=None, interpolate=None, prob=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.years = sc.promotetoarray(years)
         self.interpolate = True if interpolate is None else interpolate
@@ -134,6 +136,8 @@ class CampaignDelivery(Intervention):
         return
 
     def init_pre(self, sim):
+        super().init_pre(sim)
+        
         # Decide whether to apply the intervention at every timepoint throughout the year, or just once.
         self.timepoints = sc.findnearest(sim.timevec, self.years)
 
@@ -174,7 +178,7 @@ class BaseTest(Intervention):
         return
 
     def init_pre(self, sim):
-        Intervention.init_pre(self, sim)
+        super().init_pre(sim)
         self.outcomes = {k: np.array([], dtype=int) for k in self.product.hierarchy}
         return
 
@@ -251,17 +255,7 @@ class routine_screening(BaseScreening, RoutineDelivery):
         screen2 = ss.routine_screening(product=my_prod, prob=0.02, start_year=2020) # Screen 2% every year starting in 2020
         screen3 = ss.routine_screening(product=my_prod, prob=np.linspace(0.005,0.025,5), years=np.arange(2020,2025)) # Scale up screening over 5 years starting in 2020
     """
-
-    def __init__(self, product=None, prob=None, eligibility=None,
-                 years=None, start_year=None, end_year=None, **kwargs):
-        BaseScreening.__init__(self, product=product, eligibility=eligibility, **kwargs)
-        RoutineDelivery.__init__(self, prob=prob, start_year=start_year, end_year=end_year, years=years)
-        return
-
-    def init_pre(self, sim):
-        RoutineDelivery.init_pre(self, sim)  # Initialize this first, as it ensures that prob is interpolated properly
-        BaseScreening.init_pre(self, sim)  # Initialize this next
-        return
+    pass
 
 
 class campaign_screening(BaseScreening, CampaignDelivery):
@@ -274,17 +268,7 @@ class campaign_screening(BaseScreening, CampaignDelivery):
         screen1 = ss.campaign_screening(product=my_prod, prob=0.2, years=2030) # Screen 20% of the eligible population in 2020
         screen2 = ss.campaign_screening(product=my_prod, prob=0.02, years=[2025,2030]) # Screen 20% of the eligible population in 2025 and again in 2030
     """
-
-    def __init__(self, product=None, sex=None, eligibility=None,
-                 prob=None, years=None, interpolate=None, **kwargs):
-        BaseScreening.__init__(self, product=product, sex=sex, eligibility=eligibility, **kwargs)
-        CampaignDelivery.__init__(self, prob=prob, years=years, interpolate=interpolate)
-        return
-
-    def init_pre(self, sim):
-        CampaignDelivery.init_pre(self, sim)
-        BaseScreening.init_pre(self, sim)  # Initialize this next
-        return
+    pass
 
 
 class routine_triage(BaseTriage, RoutineDelivery):
@@ -297,18 +281,7 @@ class routine_triage(BaseTriage, RoutineDelivery):
         screened_pos = lambda sim: sim.interventions.screening.outcomes['positive']
         triage = ss.routine_triage(product=my_triage, eligibility=screen_pos, prob=0.9, start_year=2030)
     """
-
-    def __init__(self, product=None, prob=None, eligibility=None,
-                 years=None, start_year=None, end_year=None, annual_prob=None, **kwargs):
-        BaseTriage.__init__(self, product=product, eligibility=eligibility, **kwargs)
-        RoutineDelivery.__init__(self, prob=prob, start_year=start_year, end_year=end_year, years=years,
-                                 annual_prob=annual_prob)
-        return
-
-    def init_pre(self, sim):
-        RoutineDelivery.init_pre(self, sim)  # Initialize this first, as it ensures that prob is interpolated properly
-        BaseTriage.init_pre(self, sim)  # Initialize this next
-        return
+    pass
 
 
 class campaign_triage(BaseTriage, CampaignDelivery):
@@ -321,17 +294,7 @@ class campaign_triage(BaseTriage, CampaignDelivery):
         screened_pos = lambda sim: sim.interventions.screening.outcomes['positive']
         triage1 = ss.campaign_triage(product=my_triage, eligibility=screen_pos, prob=0.9, years=2030)
     """
-
-    def __init__(self, product=None, sex=None, eligibility=None,
-                 prob=None, years=None, interpolate=None, annual_prob=None, **kwargs):
-        BaseTriage.__init__(self, product=product, sex=sex, eligibility=eligibility, **kwargs)
-        CampaignDelivery.__init__(self, prob=prob, years=years, interpolate=interpolate, annual_prob=annual_prob)
-        return
-
-    def init_pre(self, sim):
-        CampaignDelivery.init_pre(self, sim)
-        BaseTriage.init_pre(self, sim)
-        return
+    pass
 
 
 #%% Treatment interventions
@@ -357,7 +320,7 @@ class BaseTreatment(Intervention):
         return
 
     def init_pre(self, sim):
-        Intervention.init_pre(self, sim)
+        super().init_pre(sim)
         self.outcomes = {k: np.array([], dtype=int) for k in ['unsuccessful', 'successful']} # Store outcomes on each timestep
         return
 
@@ -450,8 +413,8 @@ class BaseVaccination(Intervention):
          label          (str)           : the name of vaccination strategy
          kwargs         (dict)          : passed to Intervention()
     """
-    def __init__(self, product=None, prob=None, label=None, **kwargs):
-        Intervention.__init__(self, **kwargs)
+    def __init__(self, *args, product=None, prob=None, label=None, **kwargs):
+        super().__init__(*args, **kwargs)
         self.prob = sc.promotetoarray(prob)
         self.label = label
         self._parse_product(product)
@@ -491,18 +454,7 @@ class routine_vx(BaseVaccination, RoutineDelivery):
     Routine vaccination - an instance of base vaccination combined with routine delivery.
     See base classes for a description of input arguments.
     """
-
-    def __init__(self, product=None, prob=None, eligibility=None,
-                 start_year=None, end_year=None, years=None, **kwargs):
-
-        BaseVaccination.__init__(self, product=product, eligibility=eligibility, **kwargs)
-        RoutineDelivery.__init__(self, prob=prob, start_year=start_year, end_year=end_year, years=years)
-        return
-
-    def init_pre(self, sim):
-        RoutineDelivery.init_pre(self, sim)  # Initialize this first, as it ensures that prob is interpolated properly
-        BaseVaccination.init_pre(self, sim)  # Initialize this next
-        return
+    pass
 
 
 class campaign_vx(BaseVaccination, CampaignDelivery):
@@ -510,15 +462,4 @@ class campaign_vx(BaseVaccination, CampaignDelivery):
     Campaign vaccination - an instance of base vaccination combined with campaign delivery.
     See base classes for a description of input arguments.
     """
-
-    def __init__(self, product=None, prob=None, eligibility=None,
-                 years=None, interpolate=True, **kwargs):
-
-        BaseVaccination.__init__(self, product=product, eligibility=eligibility, **kwargs)
-        CampaignDelivery.__init__(self, prob=prob, years=years, interpolate=interpolate)
-        return
-
-    def init_pre(self, sim):
-        CampaignDelivery.init_pre(self, sim) # Initialize this first, as it ensures that prob is interpolated properly
-        BaseVaccination.init_pre(self, sim) # Initialize this next
-        return
+    pass
