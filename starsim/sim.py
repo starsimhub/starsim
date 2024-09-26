@@ -2,7 +2,6 @@
 Define core Sim classes
 """
 
-# Imports
 import itertools
 import numpy as np
 import sciris as sc
@@ -13,27 +12,37 @@ __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
 
 
 class Sim:
-
+    """
+    The Sim object
+    
+    All Starsim simulations run via the Sim class. It is responsible for initializing
+    and running all modules and generating results.
+    """
     def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, networks=None,
                  interventions=None, analyzers=None, connectors=None, copy_inputs=True, **kwargs):
-
         # Make default parameters (using values from parameters.py)
         self.pars = ss.make_pars() # Start with default pars
         args = dict(label=label, people=people, demographics=demographics, diseases=diseases, networks=networks, 
                     interventions=interventions, analyzers=analyzers, connectors=connectors)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
-        self.pars.update(sc.mergedicts(pars, args, kwargs, _copy=copy_inputs))  # Update the parameters
+        input_pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs) # TODO: check if copying here is OK
+        self.pars.update(input_pars)  # Update the parameters
         
-        # Set attributes
+        # Set attributes; see also sim.init() for more
         self.label = label # Usually overwritten during initialization by the parameters
         self.created = sc.now()  # The datetime the sim was created
-        self.initialized = False  # Whether initialization is complete
-        self.complete = False  # Whether a simulation has completed running # TODO: replace with finalized?
-        self.results_ready = False  # Whether results are ready
+        self.version = ss.__version__ # The Starsim version
+        self.gitinfo = sc.gitinfo(path=__file__, verbose=False)
         self.dists = ss.Dists(obj=self) # Initialize the random number generator container
+        self.loop = ss.Loop(self) # Initialize the integration loop
         self.results = ss.Results(module='sim')  # For storing results
+        self.initialized = False  # Whether initialization is complete
+        self.complete = False  # Whether a simulation has completed running
+        self.results_ready = False  # Whether results are ready
+        self.elapsed = None # The time required to run
         self.summary = None  # For storing a summary of the results
         self.filename = None # Store the filename, if saved
+
         return
     
     def __getitem__(self, key):
@@ -48,7 +57,10 @@ class Sim:
         """ Show a quick version of the sim """
         # Try a more custom repr first
         try:
+            labelstr = f'{self.label}; ' if self.label else ''
             n = int(self.pars.n_agents)
+            timestr = f'{self.pars.start}—{self.pars.stop}'
+            
             moddict = {}
             for modkey in ss.module_map().keys():
                 if hasattr(self, modkey):
@@ -57,8 +69,12 @@ class Sim:
                     thismodtype = self.pars[modkey]
                 else:
                     thismodtype = {}
-                if sc.isiterable(thismodtype) and len(thismodtype):
+                    
+                if isinstance(thismodtype, dict) and len(thismodtype):
                     moddict[modkey] = sc.strjoin(thismodtype.keys())
+                elif isinstance(thismodtype, str):
+                    moddict[modkey] = thismodtype
+                
             if len(moddict):
                 modulestr = ''
                 for k,mstr in moddict.items():
@@ -67,7 +83,8 @@ class Sim:
                 modulestr = ''
             if not self.initialized:
                 modulestr += '; not initialized'
-            string = f'Sim(n={n:n}{modulestr})'
+                
+            string = f'Sim({labelstr}n={n:n}; {timestr}{modulestr})'
         
         # Or just use default
         except Exception as E:
@@ -76,22 +93,37 @@ class Sim:
             
         return string
     
-    def initialize(self, **kwargs):
+    @property
+    def now(self):
+        """ Return the current time, i.e. the time vector at the current timestep """
+        try:
+            ti = min(self.ti, len(self.timevec)-1) # During integration, ti can go one past the end of the time vector
+            return self.timevec[ti]
+        except Exception as E:
+            ss.warn(f'Encountered exception in sim when getting the current time: {E}')
+            return None
+        
+    @property
+    def modules(self):
+        """ Return iterator over all Module instances (stored in standard places) in the Sim """
+        return itertools.chain(
+            self.demographics(),
+            self.networks(),
+            self.diseases(),
+            self.connectors(),
+            self.interventions(),
+            [intv.product for intv in self.interventions() if hasattr(intv, 'product') and intv.product is not None], # TODO: simplify
+            self.analyzers(),
+        )
+    
+    def init(self, **kwargs):
         """ Perform all initializations for the sim; most heavy lifting is done by the parameters """
+        
         # Validation and initialization
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
-        
-        # Validate parameters
-        self.pars.validate()
-
-        # Initialize time
-        self.init_time_attrs()
-        
-        # Initialize the people
-        self.init_people(**kwargs)  # Create all the people
-        
-        # # Initialize the modules within the parameters
-        # self.pars.validate_modules(self)
+        self.pars.validate() # Validate parameters
+        self.init_time_attrs() # Initialize time
+        self.init_people(**kwargs) # Initialize the people
         
         # Move initialized modules to the sim
         keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
@@ -101,35 +133,35 @@ class Sim:
         # Initialize all the modules with the sim
         for mod in self.modules:
             mod.init_pre(self)
-
-        # Initialize products # TODO: think about simplifying
-        for mod in self.interventions:
-            if hasattr(mod, 'product') and isinstance(mod.product, ss.Product):
-                mod.product.init_pre(self)
-
-        # Initialize all distributions now that everything else is in place, then set states
-        self.dists.initialize(obj=self, base_seed=self.pars.rand_seed, force=True)
-
-        # Initialize the values in all of the states and networks
-        self.init_vals()
-
-        # Initialize the results
-        self.init_results()
-
+                
+        # Initialize products # TODO: think about moving with other modules
+        for intv in self.interventions():
+            if hasattr(intv, 'product'): # TODO: simplify
+                intv.product.init_pre(self)
+        
+        # Final initializations
+        self.dists.init(obj=self, base_seed=self.pars.rand_seed, force=True) # Initialize all distributions now that everything else is in place
+        self.init_vals() # Initialize the values in all of the states and networks
+        self.init_results() # Initialize the results
+        self.loop.init() # Initialize the integration loop
+        self.timer = sc.timer(start=False) # Store a timer for keeping track of how long the run takes
+        self.verbose = self.pars.verbose # Store a run-specific value of verbose
+        
         # It's initialized
         self.initialized = True
         return self
     
     def init_time_attrs(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
-        self.dt = self.pars.dt # Shortcut to dt since used a lot
-        self.yearvec = np.arange(start=self.pars.start, stop=self.pars.end + self.pars.dt, step=self.pars.dt) # The time points of the sim
-        self.results.yearvec = self.yearvec # Store the yearvec in the results for plotting
-        self.npts = len(self.yearvec) # The number of points in the sim
-        self.tivec = np.arange(self.npts) # The vector of time indices
+        pars = self.pars
+        self.timevec = ss.make_timevec(pars.start, pars.stop, pars.dt, pars.unit)
+        self.results.timevec = self.timevec # Store the timevec in the results for plotting # TODO: instead, store a timevec with each result
+        self.npts = len(self.timevec) # The number of points in the sim
+        self.timearray = np.arange(self.npts)*pars.dt # Absolute time array
         self.ti = 0  # The time index, e.g. 0, 1, 2
+        self.dt_year = ss.time_ratio(pars.unit, pars.dt, 'year', 1.0) # Figure out what dt is in years; used for demographics # TODO: handle None
         return
-
+    
     def init_people(self, verbose=None, **kwargs):
         """
         Initialize people within the sim
@@ -163,9 +195,15 @@ class Sim:
         # Initialize values in people
         self.people.init_vals()
         
-        # Initialize values in other modules, including networks
+        # Initialize values in other modules, including networks and time parameters
         for mod in self.modules:
             mod.init_post()
+        return
+    
+    def reset_time_pars(self, force=True):
+        """ Reset the time parameters in the modules; used for imposing the sim's timestep on the modules """
+        for mod in self.modules:
+            mod.init_time_pars(force=force)
         return
     
     def init_results(self):
@@ -177,145 +215,82 @@ class Sim:
         ]
         return
 
-    @property
-    def modules(self):
-        """ Return iterator over all Module instances (stored in standard places) in the Sim """
-        products = [intv.product for intv in self.interventions.values() if
-                    hasattr(intv, 'product') and isinstance(intv.product, ss.Product)]
-        return itertools.chain(
-            self.demographics.values(),
-            self.networks.values(),
-            self.diseases.values(),
-            self.connectors.values(),
-            self.interventions.values(),
-            products,
-            self.analyzers.values(),
-        )
-    
-    @property
-    def year(self):
-        return self.yearvec[self.ti]
-
-    def step(self):
+    def start_step(self):
         """ Step through time and update values """
 
         # Set the time and if we have reached the end of the simulation, then do nothing
         if self.complete:
-            raise AlreadyRunError('Simulation already complete (call sim.initialize() to re-run)')
+            errormsg = 'Simulation already complete (call sim.init() to re-run)'
+            raise AlreadyRunError(errormsg)
+            
+        # Print out progress if needed
+        self.elapsed = self.timer.toc(output=True)
+        if self.verbose: # Print progress
+            simlabel = f'"{self.label}": ' if self.label else ''
+            timepoint = self.timevec[self.ti]
+            timelabel = f'{timepoint:0.1f}' if isinstance(timepoint, float) else str(timepoint) # TODO: fix
+            string = f'  Running {simlabel}{timelabel} ({self.ti:2.0f}/{self.npts}) ({self.elapsed:0.2f} s) '
+            if self.verbose >= 2:
+                sc.heading(string)
+            elif self.verbose > 0:
+                if not (self.ti % int(1.0 / self.verbose)):
+                    sc.progressbar(self.ti + 1, self.npts, label=string, length=20, newline=True)
 
         # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
-        self.dists.jump()  # was to=self.ti+1, but jumping to fixed ti causes issues with autojump if a distribution is called multiple times per step
-
-        # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
-        for dem_mod in self.demographics():
-            dem_mod.update()
-
-        # Carry out autonomous state changes in the disease modules. This allows autonomous state changes/initializations
-        # to be applied to newly created agents
-        for disease in self.diseases():
-            disease.update_pre()
-
-        # Update connectors -- TBC where this appears in the ordering
-        for connector in self.connectors():
-            connector.update()
-
-        # Update networks - this takes place here in case autonomous state changes at this timestep affect eligibility for contacts
-        for network in self.networks():
-            network.update()
-
-        # Apply interventions - new changes to contacts will be visible and so the final networks can be customized by
-        # interventions, by running them at this point
-        for intervention in self.interventions():
-            intervention(self)
-
-        # Carry out transmission/new cases
-        for disease in self.diseases():
-            disease.make_new_cases()
-
-        # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
-        # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
-        death_uids = self.people.resolve_deaths()
-        for mod in self.modules:
-            mod.update_death(death_uids)
-
-        # Update results
-        self.people.update_results()
-
-        for dem_mod in self.demographics():
-            dem_mod.update_results()
-
-        for disease in self.diseases():
-            disease.update_results()
-
-        for analyzer in self.analyzers():
-            analyzer(self)
-            
-        # Clean up dead agents
-        self.people.remove_dead()
-
-        # Tidy up
-        self.ti += 1
-        self.people.ti = self.ti
-        self.people.update_post()
-
-        if self.ti == self.npts:
-            self.complete = True
-
+        self.dists.jump_dt() # TODO: each module should do this, but should be ok as-is with auto-jump
         return
+
+    def finish_step(self):
+        """ Finish the simulation timestep """
+        self.ti += 1
+        return
+    
+    def run_one_step(self, verbose=None):
+        """
+        Run a single sim step; only used for debugging purposes.
+        
+        Note: sim.run_one_step() runs a single simulation timestep, which involves
+        multiple function calls. In contrast, loop.run_one_step() runs a single
+        function call.
+        
+        Note: the verbose here is only for the Loop object, not the sim.        
+        """
+        self.loop.run(self.now, verbose)
+        return self
 
     def run(self, until=None, verbose=None):
         """ Run the model once """
 
         # Initialization steps
-        T = sc.timer()
-        if not self.initialized:
-            self.initialize()
-            self._orig_pars = sc.dcp(self.pars)  # Create a copy of the parameters to restore after the run
-
-        if verbose is None:
-            verbose = self.pars.verbose
+        if not self.initialized: self.init()
+        self.verbose = sc.ifelse(verbose, self.pars.verbose)
+        self.timer.start()
 
         # Check for AlreadyRun errors
         errormsg = None
-        if until is None: until = self.npts
-        if until > self.npts:
-            errormsg = f'Requested to run until t={until} but the simulation end is ti={self.npts}'
-        if self.ti >= until:  # NB. At the start, self.t is None so this check must occur after initialization
-            errormsg = f'Simulation is currently at t={self.ti}, requested to run until ti={until} which has already been reached'
         if self.complete:
-            errormsg = 'Simulation is already complete (call sim.initialize() to re-run)'
+            errormsg = 'Simulation is already complete (call sim.init() to re-run)'
         if errormsg:
             raise AlreadyRunError(errormsg)
 
-        # Main simulation loop
-        while self.ti < until:
-
-            # Check if we were asked to stop
-            elapsed = T.toc(output=True)
-
-            # Print progress
-            if verbose:
-                simlabel = f'"{self.label}": ' if self.label else ''
-                string = f'  Running {simlabel}{self.yearvec[self.ti]:0.1f} ({self.ti:2.0f}/{self.npts}) ({elapsed:0.2f} s) '
-                if verbose >= 2:
-                    sc.heading(string)
-                elif verbose > 0:
-                    if not (self.ti % int(1.0 / verbose)):
-                        sc.progressbar(self.ti + 1, self.npts, label=string, length=20, newline=True)
-
-            # Actually run the model
-            self.step()
+        # Main simulation loop -- just one line!!!
+        self.loop.run(until)
+        
+        # Check if the simulation is complete
+        if self.loop.index == len(self.loop.plan):
+            self.complete = True
 
         # If simulation reached the end, finalize the results
         if self.complete:
-            self.finalize(verbose=verbose)
-            sc.printv(f'Run finished after {elapsed:0.2f} s.\n', 1, verbose)
+            self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
+            for mod in self.modules: # May not be needed, but keeps it consistent with the sim
+                mod.ti -= 1
+            self.finalize()
+            sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 1, self.verbose)
+        return self # Allows e.g. ss.Sim().run().plot()
 
-        return self
-
-    def finalize(self, verbose=None):
+    def finalize(self):
         """ Compute final results """
-
         if self.results_ready:
             # Because the results are rescaled in-place, finalizing the sim cannot be run more than once or
             # otherwise the scale factor will be applied multiple times
@@ -323,27 +298,26 @@ class Sim:
 
         # Scale the results
         for reskey, res in self.results.items():
-            if isinstance(res, ss.Result) and res.scale:
+            if isinstance(res, ss.Result) and res.scale: # NB: disease-specific results are scaled in module.finalize() below
                 self.results[reskey] = self.results[reskey] * self.pars.pop_scale
+        self.results_ready = True # Results are ready to use
 
+        # Finalize each module
         for module in self.modules:
             module.finalize()
 
-        self.summarize()
-        self.results_ready = True  # Set this first so self.summary() knows to print the results
-        self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
+        # Generate the summary and finish up
+        self.summarize() # Create summary
         return
 
     def summarize(self, how='default'):
         """
-        Provide a quick summary of the sim
+        Provide a quick summary of the sim; returns the last entry for count and 
+        cumulative results, and the mean otherwise.
         
         Args:
             how (str): how to summarize: can be 'mean', 'median', 'last', or a mapping of result keys to those
-        
-        Returns the last entry for count and cumulative results, and the mean otherwise
         """
-        
         def get_func(key, how, default='mean'):
             """
             Find the right function by matching the "how" key with the result key
@@ -404,9 +378,9 @@ class Sim:
         Returns:
             shrunken (Sim): a Sim object with the listed attributes removed
         """
-        # By default, skip people (~90% of memory), popdict, and _orig_pars (which is just a backup)
+        # By default, skip people
         if skip_attrs is None:
-            skip_attrs = ['people']
+            skip_attrs = ['people'] # TODO: think about skipping all states in all modules
 
         # Create the new object, and copy original dict, skipping the skipped attributes
         if in_place:
@@ -423,132 +397,13 @@ class Sim:
         else:
             return shrunken
 
-    def _get_ia(self, which, label=None, partial=False, as_list=False, as_inds=False, die=True, first=False):
-        """ Helper method for get_interventions() and get_analyzers(); see get_interventions() docstring """
-
-        # Handle inputs
-        if which not in ['interventions', 'analyzers']:  # pragma: no cover
-            errormsg = f'This method is only defined for interventions and analyzers, not "{which}"'
-            raise ValueError(errormsg)
-
-        ia_ndict = self.analyzers if which == 'analyzers' else self.interventions  # List of interventions or analyzers
-        n_ia = len(ia_ndict)  # Number of interventions/analyzers
-
-        position = 0 if first else -1  # Choose either the first or last element
-        if label is None:  # Get all interventions if no label is supplied, e.g. sim.get_interventions()
-            label = np.arange(n_ia)
-        if isinstance(label, np.ndarray):  # Allow arrays to be provided
-            label = label.tolist()
-        labels = sc.promotetolist(label)
-
-        # Calculate the matches
-        matches = []
-        match_inds = []
-
-        for label in labels:
-            if sc.isnumber(label):
-                matches.append(ia_ndict[label])
-                label = n_ia + label if label < 0 else label  # Convert to a positive number
-                match_inds.append(label)
-            elif sc.isstring(label) or isinstance(label, type):
-                for ind, ia_key, ia_obj in ia_ndict.enumitems():
-                    if sc.isstring(label) and ia_obj.label == label or (partial and (label in str(ia_obj.label))):
-                        matches.append(ia_obj)
-                        match_inds.append(ind)
-                    elif isinstance(label, type) and isinstance(ia_obj, label):
-                        matches.append(ia_obj)
-                        match_inds.append(ind)
-            else:  # pragma: no cover
-                errormsg = f'Could not interpret label type "{type(label)}": should be str, int, list, or {which} class'
-                raise TypeError(errormsg)
-
-        # Parse the output options
-        if as_inds:
-            output = match_inds
-        elif as_list:  # Used by get_interventions()
-            output = matches
-        else:
-            if len(matches) == 0:  # pragma: no cover
-                if die:
-                    errormsg = f'No {which} matching "{label}" were found'
-                    raise ValueError(errormsg)
-                else:
-                    output = None
-            else:
-                output = matches[
-                    position]  # Return either the first or last match (usually), used by get_intervention()
-
-        return output
-
-    def get_interventions(self, label=None, partial=False, as_inds=False):
-        """
-        Find the matching intervention(s) by label, index, or type. If None, return
-        all interventions. If the label provided is "summary", then print a summary
-        of the interventions (index, label, type).
-
-        Args:
-            label (str, int, Intervention, list): the label, index, or type of intervention to get; if a list, iterate over one of those types
-            partial (bool): if true, return partial matches (e.g. 'beta' will match all beta interventions)
-            as_inds (bool): if true, return matching indices instead of the actual interventions
-        """
-        return self._get_ia('interventions', label=label, partial=partial, as_inds=as_inds, as_list=True)
-
-    def get_intervention(self, label=None, partial=False, first=False, die=True):
-        """
-        Find the matching intervention(s) by label, index, or type.
-        If more than one intervention matches, return the last by default.
-        If no label is provided, return the last intervention in the list.
-
-        Args:
-            label (str, int, Intervention, list): the label, index, or type of intervention to get; if a list, iterate over one of those types
-            partial (bool): if true, return partial matches
-            first (bool): if true, return first matching intervention (otherwise, return last)
-            die (bool): whether to raise an exception if no intervention is found
-        """
-        return self._get_ia('interventions', label=label, partial=partial, first=first, die=die, as_inds=False,
-                            as_list=False)
-
-    def get_analyzers(self, label=None, partial=False, as_inds=False):
-        """
-        Find the matching analyzer(s) by label, index, or type. If None, return
-        all analyzers. If the label provided is "summary", then print a summary
-        of the analyzers (index, label, type).
-
-        Args:
-            label (str, int, Analyzer, list): the label, index, or type of analyzer to get; if a list, iterate over one of those types
-            partial (bool): if true, return partial matches (e.g. 'beta' will match all beta analyzers)
-            as_inds (bool): if true, return matching indices instead of the actual analyzers
-        """
-        return self._get_ia('analyzers', label=label, partial=partial, as_inds=as_inds, as_list=True)
-
-    def get_analyzer(self, label=None, partial=False, first=False, die=True):
-        """
-        Find the matching analyzer(s) by label, index, or type.
-        If more than one analyzer matches, return the last by default.
-        If no label is provided, return the last analyzer in the list.
-
-        Args:
-            label (str, int, Analyzer, list): the label, index, or type of analyzer to get; if a list, iterate over one of those types
-            partial (bool): if true, return partial matches
-            first (bool): if true, return first matching analyzer (otherwise, return last)
-            die (bool): whether to raise an exception if no analyzer is found
-        """
-        return self._get_ia('analyzers', label=label, partial=partial, first=first, die=die, as_inds=False,
-                            as_list=False)
-
     def export_df(self):
-        """
-        Export results as a Pandas dataframe
-
-        :return:
-
-        """
-
+        """ Export results as a Pandas dataframe """
         if not self.results_ready:  # pragma: no cover
             errormsg = 'Please run the sim before exporting the results'
             raise RuntimeError(errormsg)
 
-        def flatten_results(d, prefix=''):
+        def flatten_results(d, prefix=''): # TODO: won't work with different timesteps
             flat = {}
             for key, val in d.items():
                 if isinstance(val, dict):
@@ -558,8 +413,7 @@ class Sim:
             return flat
 
         resdict = flatten_results(self.results)
-        resdict['t'] = self.yearvec
-
+        resdict['t'] = self.timevec
         df = sc.dataframe.from_dict(resdict).set_index('t')
         return df
 
@@ -600,13 +454,11 @@ class Sim:
         else:
             obj = self
         sc.save(filename=filename, obj=obj)
-
         return filename
 
     @staticmethod
     def load(filename, *args, **kwargs):
-        """ Load from disk from a gzipped pickle.  """
-
+        """ Load from disk from a gzipped pickle """
         sim = sc.load(filename, *args, **kwargs)
         if not isinstance(sim, Sim):  # pragma: no cover
             errormsg = f'Cannot load object of {type(sim)} as a Sim object'
@@ -676,27 +528,27 @@ class Sim:
         keys = sc.promotetolist(keys)
 
         # Convert to JSON-compatible format
-        d = {}
+        d = sc.objdict()
         for key in keys:
             if key == 'results':
                 if self.results_ready:
-                    resdict = self.export_results(for_json=True)
-                    d['results'] = resdict
+                    resdict = self.export_results(for_json=True) # TODO: not implemented
+                    d.results = resdict
                 else:
-                    d['results'] = 'Results not available (Sim has not yet been run)'
+                    d.results = 'Results not available (Sim has not yet been run)'
             elif key in ['pars', 'parameters']:
                 pardict = self.export_pars()
-                d['parameters'] = pardict
+                d.parameters = pardict
             elif key == 'summary':
                 if self.results_ready:
-                    d['summary'] = dict(sc.dcp(self.summary))
+                    d.summary = dict(sc.dcp(self.summary))
                 else:
-                    d['summary'] = 'Summary not available (Sim has not yet been run)'
+                    d.summary = 'Summary not available (Sim has not yet been run)'
             elif key == 'short_summary':
                 if self.results_ready:
-                    d['short_summary'] = dict(sc.dcp(self.short_summary))
+                    d.short_summary = dict(sc.dcp(self.short_summary))
                 else:
-                    d['short_summary'] = 'Full summary not available (Sim has not yet been run)'
+                    d.short_summary = 'Full summary not available (Sim has not yet been run)'
             else:  # pragma: no cover
                 try:
                     d[key] = sc.sanitizejson(getattr(self, key))
@@ -737,7 +589,7 @@ class Sim:
         # Do the plotting
         with sc.options.with_style(style):
             
-            yearvec = flat.pop('yearvec')
+            timevec = flat.pop('timevec')
             if key is not None:
                 flat = {k:v for k,v in flat.items() if k.startswith(key)}
             
@@ -753,7 +605,7 @@ class Sim:
                 
             # Do the plotting
             for ax, (key, res) in zip(axs, flat.items()):
-                ax.plot(yearvec, res, **plot_kw, label=self.label)
+                ax.plot(timevec, res, **plot_kw, label=self.label)
                 title = getattr(res, 'label', key)
                 if res.module != 'sim':
                     try:
@@ -772,12 +624,7 @@ class Sim:
 
 
 class AlreadyRunError(RuntimeError):
-    """
-    This error is raised if a simulation is run in such a way that no timesteps
-    will be taken. This error is a distinct type so that it can be safely caught
-    and ignored if required, but it is anticipated that most of the time, calling
-    :py:func:`Sim.run` and not taking any timesteps, would be an inadvertent error.
-    """
+    """ Raised if trying to re-run an already-run sim without re-initializing """
     pass
 
 
@@ -819,8 +666,8 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     values which differ.
 
     Args:
-        sim1 (sim/dict): either a simulation object or the sim.summary dictionary
-        sim2 (sim/dict): ditto
+        sim1 (Sim/MultiSim/dict): either a simulation/MultiSim object or the sim.summary dictionary
+        sim2 (im/dict): ditto
         skip_key_diffs (bool): whether to skip keys that don't match between sims
         skip (list): a list of values to skip
         full (bool): whether to print out all values (not just those that differ)
@@ -834,15 +681,25 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         s2 = ss.Sim(rand_seed=2).run()
         ss.diff_sims(s1, s2)
     '''
-
-    if isinstance(sim1, Sim):
+    
+    # Convert to dict
+    if isinstance(sim1, (Sim, ss.MultiSim)):
         sim1 = sim1.summarize()
-    if isinstance(sim2, Sim):
+    if isinstance(sim2, (Sim, ss.MultiSim)):
         sim2 = sim2.summarize()
     for sim in [sim1, sim2]:
         if not isinstance(sim, dict):  # pragma: no cover
             errormsg = f'Cannot compare object of type {type(sim)}, must be a sim or a sim.summary dict'
             raise TypeError(errormsg)
+    
+    
+    # Check if it's a multisim
+    sim1 = sc.objdict(sim1)
+    sim2 = sc.objdict(sim2)
+    multi = isinstance(sim1[0], dict) # If it's a dict, then it's a multisim
+    if multi:
+        for sim in [sim1, sim2]:
+            assert 'mean' in sim[0], f"Can only compare multisims with summarize(method='mean'), but you have keys {sim[0].keys()}"
 
     # Compare keys
     keymatchmsg = ''
@@ -853,7 +710,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         missing = list(sim1_keys - sim2_keys)
         extra = list(sim2_keys - sim1_keys)
         if missing:
-            keymatchmsg += f'  Missing sim1 keys: {missing}\ns'
+            keymatchmsg += f'  Missing sim1 keys: {missing}\n'
         if extra:
             keymatchmsg += f'  Extra sim2 keys: {extra}\n'
 
@@ -864,70 +721,90 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
     skip = sc.tolist(skip)
     for key in sim2.keys():  # To ensure order
         if key in sim1_keys and key not in skip:  # If a key is missing, don't count it as a mismatch
-            sim1_val = sim1[key] if key in sim1 else 'not present'
-            sim2_val = sim2[key] if key in sim2 else 'not present'
-            mm = not np.isclose(sim1_val, sim2_val, equal_nan=True)
+            d = sc.objdict()
+            if multi:
+                d.sim1 = sim1[key]['mean']
+                d.sim2 = sim2[key]['mean']
+                d.sim1_sem = sim1[key]['sem']
+                d.sim2_sem = sim2[key]['sem']
+            else:
+                d.sim1 = sim1[key]
+                d.sim2 = sim2[key]
+            mm = not np.isclose(d.sim1, d.sim2, equal_nan=True)
             n_mismatch += mm
             if mm or full:
-                mismatches[key] = {'sim1': sim1_val, 'sim2': sim2_val}
+                mismatches[key] = d
 
+    df = sc.dataframe() # Preallocate in case there were no mismatches
     if len(mismatches):
         valmatchmsg = '\nThe following values differ between the two simulations:\n' if not full else ''
         df = sc.dataframe.from_dict(mismatches).transpose()
         diff = []
         ratio = []
         change = []
-        small_change = 1e-3  # Define a small change, e.g. a rounding error
-        for mdict in mismatches.values():
-            old = mdict['sim1']
-            new = mdict['sim2']
-            numeric = sc.isnumber(sim1_val) and sc.isnumber(sim2_val)
+        zscore = []
+        small_change = 1 + 1e-3  # Define a small change, e.g. a rounding error
+        for d in mismatches.values():
+            old = d.sim1
+            new = d.sim2
+            if multi:
+                old_sem = d.sim1_sem
+                new_sem = d.sim1_sem
+                sem = old_sem + new_sem
+                small_change = 1.96 # 95% CI, roughly speaking
+                
+            numeric = sc.isnumber(old) and sc.isnumber(new) # Should all be numeric, but just in case
             if numeric and old > 0:
                 this_diff = new - old
                 this_ratio = new / old
-                abs_ratio = max(this_ratio, 1.0 / this_ratio)
-
+                if multi:
+                    abs_ratio = abs(this_diff)/sem
+                    this_zscore = abs_ratio
+                else:
+                    abs_ratio = max(this_ratio, 1.0/this_ratio)
+                    this_zscore = None
+                
                 # Set the character to use
-                if abs_ratio < small_change:
-                    change_char = '≈'
-                elif new > old:
-                    change_char = '↑'
-                elif new < old:
-                    change_char = '↓'
-                elif new == old:
-                    change_char = '='
+                approx_eq = abs_ratio < small_change
+                if approx_eq:    change_char = '≈'
+                elif new > old:  change_char = '↑'
+                elif new < old:  change_char = '↓'
+                elif new == old: change_char = '='
                 else:
                     errormsg = f'Could not determine relationship between sim1={old} and sim2={new}'
                     raise ValueError(errormsg)
 
                 # Set how many repeats it should have
                 repeats = 1
-                if abs_ratio == 0:
-                    repeats = 0
-                if abs_ratio >= 1.1:
-                    repeats = 2
-                if abs_ratio >= 2:
-                    repeats = 3
-                if abs_ratio >= 10:
-                    repeats = 4
-
+                if abs_ratio == 0:   repeats = 0
+                if abs_ratio >= 1.1: repeats = 2
+                if abs_ratio >= 2:   repeats = 3
+                if abs_ratio >= 10:  repeats = 4
                 this_change = change_char * repeats
             else:  # pragma: no cover
-                this_diff = np.nan
-                this_ratio = np.nan
+                this_diff =  np.nan
+                this_ratio  = np.nan
                 this_change = 'N/A'
+                this_zscore = np.nan
 
             diff.append(this_diff)
             ratio.append(this_ratio)
             change.append(this_change)
+            zscore.append(this_zscore)
 
         df['diff'] = diff
         df['ratio'] = ratio
-        for col in ['sim1', 'sim2', 'diff', 'ratio']:
+        numeric_cols = ['sim1', 'sim2', 'diff', 'ratio']
+        if multi:
+            numeric_cols += ['sim1_sem', 'sim2_sem']
+        for col in numeric_cols:
             df[col] = df[col].round(decimals=3)
         df['change'] = change
+        if multi:
+            df['zscore'] = zscore
+            df['statsig'] = df.zscore > small_change
         valmatchmsg += str(df)
-
+        
     # Raise an error if mismatches were found
     mismatchmsg = keymatchmsg + valmatchmsg
     if mismatchmsg:  # pragma: no cover
@@ -945,11 +822,27 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
 
 
 def check_sims_match(*args, full=False):
-    """ Shortcut to using ss.diff_sims() to check if multiple sims match """
-    s1 = args[0]
+    """
+    Shortcut to using ss.diff_sims() to check if multiple sims match
+    
+    Args:
+        args (list): a list of 2 or more sims to compare
+        full (bool): if True, return whether each sim matches the first 
+    
+    **Example**::
+        
+        s1 = ss.Sim(diseases='sir', networks='random')
+        s2 = ss.Sim(pars=dict(diseases='sir', networks='random'))
+        s3 = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet())
+        assert ss.check_sims_match(s1, s2, s3)
+    """
+    if len(args) < 2:
+        errormsg = 'Must compare at least 2 sims'
+        raise ValueError(errormsg)
+    base = args[0]
     matches = []
-    for s2 in args[1:]:
-        diff = diff_sims(s1, s2, full=False, output=False, die=False)
+    for other in args[1:]:
+        diff = diff_sims(base, other, full=False, output=False, die=False)
         matches.append(not(diff)) # Return the opposite of the diff
     if full:
         return matches

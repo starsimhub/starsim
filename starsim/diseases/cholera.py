@@ -17,31 +17,31 @@ class Cholera(ss.Infection):
     def __init__(self, pars=None, *args, **kwargs):
         """ Initialize with parameters """
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             # Initial conditions and beta
-            beta = 1.0, # Placeholder value
+            beta = ss.beta(1.0), # Placeholder value
             init_prev = ss.bernoulli(0.005),
             
             # Natural history parameters, all specified in days
-            dur_exp2inf   = ss.lognorm_ex(mean=2.772, stdev=4.737), # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
-            dur_asymp2rec = ss.uniform(low=1, high=10), # From WHO cholera fact sheet, asymptomatic individuals shed bacteria for 1-10 days (https://www.who.int/news-room/fact-sheets/detail/cholera)
-            dur_symp2rec  = ss.lognorm_ex(mean=5, stdev=1.8), # According to Fung most modelling studies assume 5 days of symptoms (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3926264/), but found a range of 2.9-14 days. Distribution approximately fit to these values
-            dur_symp2dead = ss.lognorm_ex(mean=1, stdev=0.5), # There does not appear to be differences in timing/duration of mild vs severe disease, but death from severe disease happens rapidly https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5767916/
+            dur_exp2inf   = ss.days(ss.lognorm_ex(mean=2.772, std=4.737)), # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
+            dur_asymp2rec = ss.days(ss.uniform(low=1, high=10)), # From WHO cholera fact sheet, asymptomatic individuals shed bacteria for 1-10 days (https://www.who.int/news-room/fact-sheets/detail/cholera)
+            dur_symp2rec  = ss.days(ss.lognorm_ex(mean=5, std=1.8)), # According to Fung most modelling studies assume 5 days of symptoms (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3926264/), but found a range of 2.9-14 days. Distribution approximately fit to these values
+            dur_symp2dead = ss.days(ss.lognorm_ex(mean=1, std=0.5)), # There does not appear to be differences in timing/duration of mild vs severe disease, but death from severe disease happens rapidly https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5767916/
             p_death       = ss.bernoulli(p=0.005), # Probability of death is typically less than 1% when treated
             p_symp        = ss.bernoulli(p=0.5), # Proportion of infected which are symptomatic, mid range of ~25% and 57% estimates from Jaclson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3795095/) and Nelson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/), respectively
             asymp_trans   = 0.01, # Reduction in transmission probability for asymptomatic infection, asymptomatic carriers shed 100-1000 times less bacteria than symptomatic carriers (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3084143/ and https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/). Previous models assume a 10% relative transmissibility (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4238032/)
 
             # Environmental parameters
-            beta_env = 0.5 / 3, # Scaling factor for transmission from environment,
+            beta_env = ss.beta(0.5 / 3), # Scaling factor for transmission from environment,
             half_sat_rate = 1_000_000, # Infectious dose in water sufficient to produce infection in 50% of  exposed, from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
-            shedding_rate = 10, # Rate at which infectious people shed bacteria to the environment (per day), from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
-            decay_rate = 0.033, # Rate at which bacteria in the environment dies (per day), from Chao et al. and Mukandavire et al. citing https://pubmed.ncbi.nlm.nih.gov/8882180/
+            shedding_rate = ss.rate(10, unit='day'), # Rate at which infectious people shed bacteria to the environment (per day), from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
+            decay_rate = ss.rate(0.033, unit='day'), # Rate at which bacteria in the environment dies (per day), from Chao et al. and Mukandavire et al. citing https://pubmed.ncbi.nlm.nih.gov/8882180/
             p_env_transmit = ss.bernoulli(p=0), # Probability of environmental transmission - filled out later
         )
         self.update_pars(pars, **kwargs)
 
         # Boolean states
-        self.add_states(
+        self.define_states(
             # Susceptible & infected are added automatically, here we add the rest
             ss.BoolArr('exposed', label='Exposed'),
             ss.BoolArr('symptomatic', label='Symptomatic'),
@@ -64,26 +64,23 @@ class Cholera(ss.Infection):
         return self.infected & ~self.symptomatic
 
     def init_results(self):
-        """
-        Initialize results
-        """
+        """ Initialize results """
         super().init_results()
-        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'new_deaths', npts, dtype=int, label='Deaths'),
-            ss.Result(self.name, 'cum_deaths', npts, dtype=int, label='Cumulative deaths'),
-            ss.Result(self.name, 'env_prev', npts, dtype=float, label='Environmental prevalence'),
-            ss.Result(self.name, 'env_conc', npts, dtype=float, label='Environmental concentration'),
+            ss.Result(self.name, 'new_deaths', self.npts, dtype=int,   label='Deaths'),
+            ss.Result(self.name, 'cum_deaths', self.npts, dtype=int,   label='Cumulative deaths'),
+            ss.Result(self.name, 'env_prev',   self.npts, dtype=float, label='Environmental prevalence'),
+            ss.Result(self.name, 'env_conc',   self.npts, dtype=float, label='Environmental concentration'),
         ]
         return
 
-    def update_pre(self):
+    def step_state(self):
         """
         Adapted from https://github.com/optimamodel/gavi-outbreaks/blob/main/stisim/gavi/cholera.py
         Original version by Dom Delport
         """
         # Progress exposed -> infected
-        ti = self.sim.ti
+        ti = self.ti
         infected = (self.exposed & (self.ti_infected <= ti)).uids
         self.infected[infected] = True
 
@@ -114,7 +111,7 @@ class Cholera(ss.Infection):
         """
         p = self.pars
         r = self.results
-        ti = self.sim.ti
+        ti = self.ti
 
         n_symptomatic = self.symptomatic.sum()
         n_asymptomatic = self.asymptomatic.sum()
@@ -130,8 +127,7 @@ class Cholera(ss.Infection):
     def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses for those who get infected """
         super().set_prognoses(uids, source_uids)
-        ti = self.sim.ti
-        dt = self.sim.dt
+        ti = self.ti
 
         self.susceptible[uids] = False
         self.exposed[uids] = True
@@ -140,7 +136,7 @@ class Cholera(ss.Infection):
         p = self.pars
 
         # Determine when exposed become infected
-        self.ti_infected[uids] = ti + p.dur_exp2inf.rvs(uids) / dt
+        self.ti_infected[uids] = ti + p.dur_exp2inf.rvs(uids)
 
         # Determine who becomes symptomatic and when
         symp_uids = p.p_symp.filter(uids)
@@ -148,13 +144,13 @@ class Cholera(ss.Infection):
 
         # Determine who dies and when
         dead_uids = p.p_death.filter(symp_uids)
-        self.ti_dead[dead_uids] = self.ti_symptomatic[dead_uids] + p.dur_symp2dead.rvs(dead_uids) / dt
+        self.ti_dead[dead_uids] = self.ti_symptomatic[dead_uids] + p.dur_symp2dead.rvs(dead_uids)
         symp_rev_uids = np.setdiff1d(symp_uids, dead_uids)
         asymp_uids = np.setdiff1d(uids, symp_uids)
 
         # Determine when agents recover
-        self.ti_recovered[symp_rev_uids] = self.ti_exposed[symp_rev_uids] + p.dur_symp2rec.rvs(symp_rev_uids) / dt
-        self.ti_recovered[asymp_uids] = self.ti_exposed[asymp_uids] + p.dur_asymp2rec.rvs(asymp_uids) / dt
+        self.ti_recovered[symp_rev_uids] = self.ti_exposed[symp_rev_uids] + p.dur_symp2rec.rvs(symp_rev_uids)
+        self.ti_recovered[asymp_uids] = self.ti_exposed[asymp_uids] + p.dur_asymp2rec.rvs(asymp_uids)
 
         return
 
@@ -166,14 +162,14 @@ class Cholera(ss.Infection):
         # Make new cases via indirect transmission
         pars = self.pars
         res = self.results
-        p_transmit = res.env_conc[self.sim.ti] * pars.beta_env
+        p_transmit = res.env_conc[self.ti] * pars.beta_env
         pars.p_env_transmit.set(p=p_transmit)
         new_cases = pars.p_env_transmit.filter(self.sim.people.uid[self.susceptible]) # TODO: make syntax nicer
         if new_cases.any():
             self.set_prognoses(new_cases, source_uids=None)
         return
 
-    def update_death(self, uids):
+    def step_die(self, uids):
         """ Reset infected/recovered flags for dead agents """
         for state in ['susceptible', 'exposed', 'infected', 'symptomatic', 'recovered']:
             self.statesdict[state][uids] = False
@@ -182,7 +178,7 @@ class Cholera(ss.Infection):
     def update_results(self):
         super().update_results()
         res = self.results
-        ti = self.sim.ti
+        ti = self.ti
         res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti+1])
         return

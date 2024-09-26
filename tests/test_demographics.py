@@ -15,7 +15,7 @@ sc.options(interactive=False) # Assume not running interactively
 datadir = ss.root / 'tests/test_data'
 
 
-def test_nigeria(which='births', dt=1, start=1995, n_years=15, do_plot=False):
+def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
     """
     Make a Nigeria sim with demographic modules
     Switch between which='births' or 'pregnancy' to determine which demographic module to use
@@ -49,13 +49,13 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, do_plot=False):
         dt=dt,
         total_pop=nga_pop_1995,
         start=start,
-        n_years=n_years,
+        dur=dur,
         people=ppl,
         demographics=demographics,
     )
 
     if do_plot:
-        sim.initialize()
+        sim.init()
         # Plot histograms of the age distributions - simulated vs data
         bins = np.arange(0, 101, 1)
         init_scale = nga_pop_1995 / n_agents
@@ -66,15 +66,15 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, do_plot=False):
 
     sim.run()
 
-    end = start + n_years
+    stop = start + dur
     nigeria_popsize = pd.read_csv(datadir/'nigeria_popsize.csv')
-    data = nigeria_popsize[(nigeria_popsize.year >= start) & (nigeria_popsize.year <= end)]
+    data = nigeria_popsize[(nigeria_popsize.year >= start) & (nigeria_popsize.year <= stop)]
 
     nigeria_cbr = pd.read_csv(datadir/'nigeria_births.csv')
-    cbr_data = nigeria_cbr[(nigeria_cbr.Year >= start) & (nigeria_cbr.Year <= end)]
+    cbr_data = nigeria_cbr[(nigeria_cbr.Year >= start) & (nigeria_cbr.Year <= stop)]
 
     nigeria_cmr = pd.read_csv(datadir/'nigeria_cmr.csv')
-    cmr_data = nigeria_cmr[(nigeria_cmr.Year >= start) & (nigeria_cmr.Year <= end)]
+    cmr_data = nigeria_cmr[(nigeria_cmr.Year >= start) & (nigeria_cmr.Year <= stop)]
 
     # Tests
     if which == 'pregnancy':
@@ -88,34 +88,36 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, do_plot=False):
             assert np.array_equal(sim.results.pregnancy.pregnancies, sim.results.pregnancy.births)
             print('✓ (births == pregnancies)')
 
-    print("Check final pop size within 5% of data")
-    assert np.isclose(data.n_alive.values[-1], sim.results.n_alive[-1], rtol=0.05)
+    rtol = 0.05
+    print(f'Check final pop size within {rtol*100:n}% of data')
+    assert np.isclose(data.n_alive.values[-1], sim.results.n_alive[-1], rtol=rtol), f'Final population size not within {rtol*100:n}% of data'
     print(f'✓ (simulated/data={sim.results.n_alive[-1] / data.n_alive.values[-1]:.2f})')
 
     # Plots
     if do_plot:
+        tvec = sim.timevec
         fig, ax = plt.subplots(2, 2)
         ax = ax.ravel()
         ax[0].scatter(data.year, data.n_alive, alpha=0.5)
-        ax[0].plot(sim.yearvec, sim.results.n_alive, color='k')
+        ax[0].plot(tvec, sim.results.n_alive, color='k')
         ax[0].set_title('Population')
 
-        ax[1].plot(sim.yearvec, 1000 * sim.results.deaths.cmr / dt, label='Simulated CMR')
+        ax[1].plot(tvec, 1000 * sim.results.deaths.cmr, label='Simulated CMR')
         ax[1].scatter(cmr_data.Year, cmr_data.CMR, label='Data CMR')
         ax[1].set_title('CMR')
         ax[1].legend()
 
         if which == 'births':
-            ax[2].plot(sim.yearvec, sim.results.births.cbr / dt, label='Simulated CBR')
+            ax[2].plot(tvec, sim.results.births.cbr, label='Simulated CBR')
         elif which == 'pregnancy':
-            ax[2].plot(sim.yearvec, sim.results.pregnancy.cbr / dt, label='Simulated CBR')
+            ax[2].plot(tvec, sim.results.pregnancy.cbr, label='Simulated CBR')
         ax[2].scatter(cbr_data.Year, cbr_data.CBR, label='Data CBR')
         ax[2].set_title('CBR')
         ax[2].legend()
 
         if which == 'pregnancy':
-            ax[3].plot(sim.yearvec, sim.results.pregnancy.pregnancies / dt, label='Pregnancies')
-            ax[3].plot(sim.yearvec, sim.results.pregnancy.births / dt, label='Births')
+            ax[3].plot(tvec, sim.results.pregnancy.pregnancies, label='Pregnancies')
+            ax[3].plot(tvec, sim.results.pregnancy.births, label='Births')
             ax[3].set_title('Pregnancies and births')
             ax[3].legend()
 
@@ -127,7 +129,7 @@ def test_nigeria(which='births', dt=1, start=1995, n_years=15, do_plot=False):
 def test_constant_pop(do_plot=False):
     """ Test pars for constant pop size """
     sc.heading('Testing constant population size')
-    sim = ss.Sim(n_agents=10e3, birth_rate=10, death_rate=10/1010*1000, n_years=200, rand_seed=1).run()
+    sim = ss.Sim(n_agents=10e3, birth_rate=10, death_rate=10/1010*1000, dur=200, rand_seed=1).run()
     print("Check final pop size within 5% of starting pop")
     assert np.isclose(sim.results.n_alive[0], sim.results.n_alive[-1], rtol=0.05)
     print(f'✓ (final pop / starting pop={sim.results.n_alive[-1] / sim.results.n_alive[0]:.2f})')
@@ -155,7 +157,7 @@ def test_aging():
     n_agents = int(1e3)
     
     # With no demograhpics, people shouldn't age
-    s1 = ss.Sim(n_agents=n_agents).initialize()
+    s1 = ss.Sim(n_agents=n_agents).init()
     orig_ages = s1.people.age.raw.copy()
     orig_age = orig_ages.mean()
     s1.run()

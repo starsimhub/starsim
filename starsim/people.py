@@ -20,9 +20,8 @@ class People(sc.prettyobj):
     will get passed instead since it will be needed before the People object is
     initialized.
 
-    Note that this class handles the mechanics of updating the actual people, while
-    ``ss.BasePeople`` takes care of housekeeping (saving, loading, exporting, etc.).
-    Please see the BasePeople class for additional methods.
+    Note that this class handles the mechanics of updating the actual people, 
+    as well as the additional housekeeping methods (saving, loading, exporting, etc.).
 
     Args:
         pars (dict): the sim parameters, e.g. sim.pars -- alternatively, if a number, interpreted as n_agents
@@ -135,9 +134,10 @@ class People(sc.prettyobj):
     def link_sim(self, sim):
         """ Initialization """
         if self.initialized:
-            errormsg = 'Cannot re-initialize a People object directly; use sim.initialize(reset=True)'
+            errormsg = 'Cannot re-initialize a People object directly; use sim.init(reset=True)'
             raise RuntimeError(errormsg)
         self.sim = sim # Store the sim
+        self.timevec = sim.timevec # Also store the timevec in the People object (not used, but for completeness)
         ss.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module])
         return
     
@@ -193,7 +193,7 @@ class People(sc.prettyobj):
 
         All states should be registered by this function for the purpose of connecting them to the
         People's UIDs and to have them be automatically resized when the number of agents changes.
-        This operation is normally triggered as part of initializing the state (via `State.initialize()`)
+        This operation is normally triggered as part of initializing the state (via `State.init()`)
         """
         if id(state) not in self._states:
             self._states[id(state)] = state
@@ -282,7 +282,7 @@ class People(sc.prettyobj):
         """ Final updates at the very end of the timestep """
         sim = self.sim
         if sim.pars.use_aging:
-            self.age[self.alive.uids] += sim.dt
+            self.age[self.alive.uids] += sim.dt_year
         return
 
     def request_death(self, uids):
@@ -313,10 +313,11 @@ class People(sc.prettyobj):
         self.ti_dead[uids] = self.sim.ti
         return
 
-    def resolve_deaths(self):
+    def step_die(self):
         """ Carry out any deaths that took place this timestep """
         death_uids = (self.ti_dead <= self.sim.ti).uids
         self.alive[death_uids] = False
+
         return death_uids
 
     def remove_dead(self):
@@ -353,6 +354,12 @@ class People(sc.prettyobj):
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
         return
     
+    def finish_step(self):
+        # self.update_results() # This is called separately
+        self.remove_dead()
+        self.update_post()
+        return
+    
     def person(self, ind):
         """ Get all the properties for a single person """
         person = Person()
@@ -367,6 +374,6 @@ class Person(sc.objdict):
     """ A simple class to hold all attributes of a person """
     def to_df(self):
         """ Convert to a dataframe """
-        df = sc.dataframe.from_dict(self, orient='index', columns='value')
+        df = sc.dataframe.from_dict(self, orient='index', columns=['value'])
         df.index.name = 'key'
         return df

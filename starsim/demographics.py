@@ -21,16 +21,9 @@ class Demographics(ss.Module):
     """
     def init_pre(self, sim):
         super().init_pre(sim)
-        self.init_results()
         return
 
     def init_results(self):
-        pass
-
-    def update(self):
-        pass
-
-    def update_results(self):
         pass
 
 
@@ -38,7 +31,7 @@ class Births(Demographics):
     """ Create births based on rates, rather than based on pregnancy """
     def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             birth_rate = 30,
             rel_birth = 1,
             units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
@@ -63,7 +56,7 @@ class Births(Demographics):
         if isinstance(self.pars.birth_rate, pd.DataFrame):
             br_year = self.pars.birth_rate[self.metadata.data_cols['year']]
             br_val = self.pars.birth_rate[self.metadata.data_cols['cbr']]
-            all_birth_rates = np.interp(sim.yearvec, br_year, br_val)
+            all_birth_rates = np.interp(self.timevec, br_year, br_val) # This assumes a year timestep -- probably ok?
             self.pars.birth_rate = all_birth_rates
         return
 
@@ -75,18 +68,12 @@ class Births(Demographics):
         return birth_rate
 
     def init_results(self):
-        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'new', npts, dtype=int, scale=True, label='New births'),
-            ss.Result(self.name, 'cumulative', npts, dtype=int, scale=True, label='Cumulative births'),
-            ss.Result(self.name, 'cbr', npts, dtype=float, scale=False, label='Crude birth rate'),
+            ss.Result(self.name, 'new',        self.npts, dtype=int, scale=True,    label='New births'),
+            ss.Result(self.name, 'cumulative', self.npts, dtype=int, scale=True,    label='Cumulative births'),
+            ss.Result(self.name, 'cbr',        self.npts, dtype=float, scale=False, label='Crude birth rate'),
         ]
         return
-
-    def update(self):
-        new_uids = self.add_births()
-        self.n_births = len(new_uids)
-        return new_uids
 
     def get_births(self):
         """
@@ -97,7 +84,7 @@ class Births(Demographics):
 
         if isinstance(p.birth_rate, (pd.Series, pd.DataFrame)):
             available_years = p.birth_rate.index
-            year_ind = sc.findnearest(available_years, sim.year)
+            year_ind = sc.findnearest(available_years, sim.now) # TODO: make robust to timestep
             nearest_year = available_years[year_ind]
             this_birth_rate = p.birth_rate.loc[nearest_year]
         else:
@@ -108,6 +95,11 @@ class Births(Demographics):
         n_new = int(np.floor(sim.people.alive.count() * scaled_birth_prob))
         return n_new
 
+    def step(self):
+        new_uids = self.add_births()
+        self.n_births = len(new_uids)
+        return new_uids
+
     def add_births(self):
         """ Add n_new births to each state in the sim """
         people = self.sim.people
@@ -117,14 +109,14 @@ class Births(Demographics):
         return new_uids
 
     def update_results(self):
-        self.results['new'][self.sim.ti] = self.n_births
+        self.results['new'][self.ti] = self.n_births
         return
 
     def finalize(self):
         super().finalize()
         res = self.sim.results
-        self.results.cumulative = np.cumsum(self.results.new)
-        self.results.cbr = 1/self.pars.units*np.divide(self.results.new/self.sim.dt, res.n_alive, where=res.n_alive>0)
+        self.results.cumulative[:] = np.cumsum(self.results.new)
+        self.results.cbr[:] = 1/self.pars.units*np.divide(self.results.new/self.sim.dt_year, res.n_alive, where=res.n_alive>0)
         return
 
 
@@ -158,7 +150,7 @@ class Deaths(Demographics):
                 corresponding column name in data. Similar for "sex_keys". Finally,
         """
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             rel_death = 1,
             death_rate = 20,  # Default = a fixed rate of 2%/year, overwritten if data provided
             units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
@@ -205,7 +197,7 @@ class Deaths(Demographics):
             assert len(uids) == len(ppl.auids)
 
             available_years = drd.index.get_level_values('year')
-            year_ind = sc.findnearest(available_years, sim.year)
+            year_ind = sc.findnearest(available_years, sim.now) # TODO: make work with different timesteps
             nearest_year = available_years[year_ind]
 
             death_rate = np.empty(uids.shape, dtype=ss_float_)
@@ -229,33 +221,29 @@ class Deaths(Demographics):
         return death_prob
 
     def init_results(self):
-        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'new', npts, dtype=int, scale=True, label='Deaths'),
-            ss.Result(self.name, 'cumulative', npts, dtype=int, scale=True, label='Cumulative deaths'),
-            ss.Result(self.name, 'cmr', npts, dtype=int, scale=False, label='Crude mortality rate'),
+            ss.Result(self.name, 'new',        self.npts, dtype=int, scale=True,  label='Deaths'),
+            ss.Result(self.name, 'cumulative', self.npts, dtype=int, scale=True,  label='Cumulative deaths'),
+            ss.Result(self.name, 'cmr',        self.npts, dtype=int, scale=False, label='Crude mortality rate'),
         ]
         return
 
-    def update(self):
-        self.n_deaths = self.apply_deaths()
-        return
-
-    def apply_deaths(self):
+    def step(self):
         """ Select people to die """
         death_uids = self.pars.death_rate.filter()
         self.sim.people.request_death(death_uids)
-        return len(death_uids)
-
+        self.n_deaths = len(death_uids)
+        return self.n_deaths
+    
     def update_results(self):
-        self.results['new'][self.sim.ti] = self.n_deaths
+        self.results['new'][self.ti] = self.n_deaths
         return
 
     def finalize(self):
         super().finalize()
         n_alive = self.sim.results.n_alive
-        self.results.cumulative = np.cumsum(self.results.new)
-        self.results.cmr = 1/self.pars.units*np.divide(self.results.new / self.sim.dt, n_alive, where=n_alive>0)
+        self.results.cumulative[:] = np.cumsum(self.results.new)
+        self.results.cmr[:] = 1/self.pars.units*np.divide(self.results.new / self.sim.dt_year, n_alive, where=n_alive>0)
         return
 
 
@@ -263,9 +251,9 @@ class Pregnancy(Demographics):
     """ Create births via pregnancies """
     def __init__(self, pars=None, metadata=None, **kwargs):
         super().__init__()
-        self.default_pars(
-            dur_pregnancy = 0.75, # Duration for pre-natal transmission
-            dur_postpartum = ss.lognorm_ex(0.5, 0.5), # Duration for post-natal transmission (e.g. via breastfeeding)
+        self.define_pars(
+            dur_pregnancy = ss.years(0.75), # Duration for pre-natal transmission
+            dur_postpartum = ss.lognorm_ex(mean=ss.years(0.5), std=ss.years(0.5)), # Duration for post-natal transmission (e.g. via breastfeeding)
             fertility_rate = 0, # Can be a number of Pandas DataFrame
             rel_fertility = 1,
             maternal_death_prob = ss.bernoulli(0),
@@ -281,7 +269,7 @@ class Pregnancy(Demographics):
         self.pars.p_fertility = ss.bernoulli(p=0) # Placeholder, see make_fertility_prob_fn
         
         # Other, e.g. postpartum, on contraception...
-        self.add_states(
+        self.define_states(
             ss.BoolArr('infertile', label='Infertile'),  # Applies to girls and women outside the fertility window
             ss.BoolArr('fecund', default=True, label='Female of childbearing age'),
             ss.BoolArr('pregnant', label='Pregnant'),  # Currently pregnant
@@ -299,7 +287,7 @@ class Pregnancy(Demographics):
             sc.objdict(data_cols=dict(year='Time', age='AgeGrp', value='ASFR')),
             metadata,
         )
-        self.choose_slots = None # Distribution for choosing slots; set in self.initialize()
+        self.choose_slots = None # Distribution for choosing slots; set in self.init()
 
         # For results tracking
         self.n_pregnancies = 0
@@ -318,7 +306,7 @@ class Pregnancy(Demographics):
         if sc.isnumber(frd):
             fertility_rate[uids] = self.fertility_rate_data
         else:
-            year_ind = sc.findnearest(frd.index, sim.year-self.pars.dur_pregnancy)
+            year_ind = sc.findnearest(frd.index, sim.now-self.pars.dur_pregnancy) # TODO: make time-unit-aware
             nearest_year = frd.index[year_ind]
 
             # Assign agents to age bins
@@ -386,11 +374,10 @@ class Pregnancy(Demographics):
         Still unclear whether this logic should live in the pregnancy module, the
         individual disease modules, the connectors, or the sim.
         """
-        npts = self.sim.npts
         self.results += [
-            ss.Result(self.name, 'pregnancies', npts, dtype=int, scale=True, label='New pregnancies'),
-            ss.Result(self.name, 'births', npts, dtype=int, scale=True, label='New births'),
-            ss.Result(self.name, 'cbr', npts, dtype=float, scale=False, label='Crude birth rate'),
+            ss.Result(self.name, 'pregnancies', self.npts, dtype=int, scale=True,    label='New pregnancies'),
+            ss.Result(self.name, 'births',      self.npts, dtype=int, scale=True,    label='New births'),
+            ss.Result(self.name, 'cbr',         self.npts, dtype=float, scale=False, label='Crude birth rate'),
         ]
         return
 
@@ -416,7 +403,7 @@ class Pregnancy(Demographics):
     def update_states(self):
         """ Update states """
         # Check for new deliveries
-        ti = self.sim.ti
+        ti = self.ti
         deliveries = self.pregnant & (self.ti_delivery <= ti)
         self.n_births = np.count_nonzero(deliveries)
         self.pregnant[deliveries] = False
@@ -432,7 +419,7 @@ class Pregnancy(Demographics):
                 prenatalnet = [nw for nw in self.sim.networks.values() if nw.prenatal][0]
 
                 # Find the prenatal connections that are ending
-                prenatal_ending = prenatalnet.edges.end<=self.sim.ti
+                prenatal_ending = prenatalnet.edges.end <= ti
                 new_mother_uids = prenatalnet.edges.p1[prenatal_ending]
                 new_infant_uids = prenatalnet.edges.p2[prenatal_ending]
 
@@ -443,7 +430,7 @@ class Pregnancy(Demographics):
 
                 # Create durations and start dates, and add connections
                 durs = self.dur_postpartum[new_mother_uids]
-                start = np.full(self.n_births, fill_value=self.sim.ti)
+                start = np.full(self.n_births, fill_value=ti)
 
                 # # Remove pairs from prenatal network and add to postnatal
                 prenatalnet.end_pairs()
@@ -470,7 +457,7 @@ class Pregnancy(Demographics):
         # Validation
         if np.any(self.pregnant[conceive_uids]):
             which_uids = conceive_uids[self.pregnant[conceive_uids]]
-            errormsg = f'New conceptions registered in {len(which_uids)} pregnant agent(s) at timestep {self.sim.ti}.'
+            errormsg = f'New conceptions registered in {len(which_uids)} pregnant agent(s) at timestep {self.ti}.'
             raise ValueError(errormsg)
 
         # Set prognoses for the pregnancies
@@ -501,7 +488,7 @@ class Pregnancy(Demographics):
             for lkey, layer in self.sim.networks.items():
                 if layer.prenatal:
                     durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy)
-                    start = np.full(n_unborn, fill_value=self.sim.ti)
+                    start = np.full(n_unborn, fill_value=self.ti)
                     layer.add_pairs(conceive_uids, new_uids, dur=durs, start=start)
 
         if self.sim.ti < 0:
@@ -518,18 +505,18 @@ class Pregnancy(Demographics):
         """
 
         # Change states for the newly pregnant woman
-        ti = self.sim.ti
-        dt = self.sim.dt
+        ti = self.ti
+        dt = self.dt # TODO: CHECK
         self.fecund[uids] = False
         self.pregnant[uids] = True
         self.ti_pregnant[uids] = ti
 
         # Outcomes for pregnancies
-        dur_preg = np.full(len(uids), self.pars.dur_pregnancy)  # Duration in years
+        dur_preg = np.ones(len(uids))*self.pars.dur_pregnancy  # Duration in years
         dur_postpartum = self.pars.dur_postpartum.rvs(uids)
         dead = self.pars.maternal_death_prob.rvs(uids)
-        self.ti_delivery[uids] = ti + dur_preg/dt # Currently assumes maternal deaths still result in a live baby
-        self.ti_postpartum[uids] = self.ti_delivery[uids] + dur_postpartum/dt
+        self.ti_delivery[uids] = ti + dur_preg # Currently assumes maternal deaths still result in a live baby
+        self.ti_postpartum[uids] = self.ti_delivery[uids] + dur_postpartum
         self.dur_postpartum[uids] = dur_postpartum
 
         if np.any(dead): # NB: 100x faster than np.sum(), 10x faster than np.count_nonzero()
@@ -561,7 +548,7 @@ class Pregnancy(Demographics):
         return
 
     def update_results(self):
-        ti = self.sim.ti
+        ti = self.ti
         self.results['pregnancies'][ti] = self.n_pregnancies
         self.results['births'][ti] = self.n_births
         return
@@ -569,7 +556,7 @@ class Pregnancy(Demographics):
     def finalize(self):
         super().finalize()
         n_alive = self.sim.results.n_alive
-        self.results['cbr'] = 1/self.pars.units * np.divide(self.results['births'] / self.sim.dt, n_alive, where=n_alive>0)
+        self.results['cbr'] = 1/self.pars.units * np.divide(self.results['births'] / self.sim.dt_year, n_alive, where=n_alive>0)
         return
 
 

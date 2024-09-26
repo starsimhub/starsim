@@ -28,7 +28,7 @@ def make_sim():
         n_agents = n_agents,
         total_pop = 9980999,
         start = 1990,
-        n_years = 40,
+        dur = 40,
         diseases = [hiv],
         networks = [random, maternal],
         demographics = [pregnancy, death],

@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-
-'''
+"""
 Run this script to regenerate the baseline.
-'''
+"""
 
-import test_baselines as tb
+import test_baselines
 
-tb.save_baseline()
-tb.test_benchmark(do_save=True, repeats=5)
+test_baselines.save_baseline()
+test_baselines.test_benchmark(do_save=True, repeats=5)

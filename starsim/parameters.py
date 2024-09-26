@@ -56,12 +56,15 @@ class Pars(sc.objdict):
                 old = self[key] # Get the existing object we're about to update
                 if isinstance(old, atomic_classes): # It's a number, string, etc: update directly
                     self[key] = new
+
                 elif isinstance(old, Pars): # It's a Pars object: update recursively
                     old.update(new, create=create)
                 elif isinstance(old, ss.ndict): # Update module containers
                     self._update_ndict(key, old, new)
                 elif isinstance(old, ss.Module):  # Update modules
                     self._update_module(key, old, new)
+                elif isinstance(old, ss.TimePar):
+                    self._update_timepar(key, old, new)
                 elif isinstance(old, ss.Dist): # Update a distribution
                     self._update_dist(key, old, new)
                 elif callable(old): # It's a function: update directly
@@ -71,7 +74,7 @@ class Pars(sc.objdict):
                     ss.warn(warnmsg)
                     self[key] = new
         return self
-    
+        
     def _update_ndict(self, key, old, new):
         """ Update an ndict object in the parameters, e.g. sim.pars.diseases """
         if not len(old): # It's empty, just overwrite
@@ -94,8 +97,38 @@ class Pars(sc.objdict):
             raise TypeError(errormsg)
         return
     
+    def _update_timepar(self, key, old, new):
+        """ Update a time parameter (duration or rate) """
+        
+        # It's a TimePar, e.g. dur_inf = ss.dur(6); use directly
+        if isinstance(new, ss.TimePar): 
+            new_cls = new.__class__
+            old_cls = old.__class__
+            if new_cls == old_cls:
+                self[key] = new
+            else:
+                errormsg = f'When updating a time parameter, the new class ({new_cls}) should match the original class ({old_cls})'
+                raise TypeError(errormsg)
+        
+        # It's a single number, e.g. dur_inf = 6; set parameters
+        elif isinstance(new, Number):
+            old.set(new)
+        
+        # It's a list of numbers, e.g. dur_inf = [6, 2]; set parameters
+        elif isinstance(new, list):
+            old.set(*new)
+        
+        # It's a dict, figure out what to do
+        elif isinstance(new, dict):
+            if isinstance(old, ss.beta):
+                self[key] = new # TODO: use an actual set here
+            else:
+                old.set(**new)
+        return
+    
     def _update_dist(self, key, old, new):
         """ Update a Dist object in the parameters, e.g. sim.pars.diseases.sir.dur_inf """
+        
         # It's a Dist, e.g. dur_inf = ss.normal(6,2); use directly
         if isinstance(new, ss.Dist): 
             if isinstance(old, ss.bernoulli) and not isinstance(new, ss.bernoulli):
@@ -108,7 +141,7 @@ class Pars(sc.objdict):
         elif isinstance(new, Number):
             old.set(new)
         
-        # It's a list number, e.g. dur_inf = [6, 2]; set parameters
+        # It's a list of numbers, e.g. dur_inf = [6, 2]; set parameters
         elif isinstance(new, list):
             old.set(*new)
         
@@ -168,12 +201,12 @@ class SimPars(Pars):
         self.pop_scale = None  # How much to scale the population
 
         # Simulation parameters
-        self.unit       = 'year' # The time unit to use (NOT YET IMPLEMENTED)
+        self.unit       = 'year' # The time unit to use; options are 'year' (default), 'day', and 'none'
         self.start      = 2000   # Start of the simulation
-        self.end        = None   # End of the simulation
-        self.n_years    = 50     # Number of years to run, if end isn't specified. Note that this includes burn-in
-        self.dt         = 1.0    # Timestep
-        self.rand_seed  = 1      # Random seed, if None, don't reset
+        self.stop       = None   # End of the simulation
+        self.dur        = 50     # Duration of time to run, if stop isn't specified
+        self.dt         = 1.0    # Timestep (in units of self.unit)
+        self.rand_seed  = 1      # Random seed; if None, don't reset
         self.slot_scale = 5      # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
         self.min_slots  = 100  # Minimum number of slots, useful if the population size is very small
 
@@ -182,7 +215,7 @@ class SimPars(Pars):
         self.death_rate = None
         self.use_aging  = None # True if demographics, false otherwise
 
-        # Modules: demographics, diseases, connectors, networks, analyzers, and interventions
+        # Modules: demographics, diseases, networks, analyzers, and interventions
         self.people = None
         self.networks      = ss.ndict()
         self.demographics  = ss.ndict()
@@ -214,8 +247,7 @@ class SimPars(Pars):
         self.validate_verbose()
         self.validate_agents()
         self.validate_total_pop()
-        self.validate_start_end()
-        self.validate_dt()
+        self.validate_time()
         return
     
     def validate_verbose(self):
@@ -259,42 +291,27 @@ class SimPars(Pars):
             self.pop_scale = total_pop / self.n_agents
         return
     
-    def validate_start_end(self):
-        """ Ensure at least one of n_years and end is defined, but not both """
-        if self.end is not None:
-            if self.is_default('n_years'):
-                self.n_years = self.end - self.start
+    def validate_time(self):
+        """ Ensure at least one of dur and stop is defined, but not both """
+        if isinstance(self.start, str):
+            self.start = sc.date(self.start)
+        if isinstance(self.stop, str):
+            self.stop = sc.date(self.stop)
+        if self.stop is not None:
+            if self.is_default('dur'):
+                self.dur = ss.date_diff(self.start, self.stop, self.unit)
             else:
-                errormsg = f'You can supply either end ({self.end}) or n_years ({self.n_years}) but not both, since one is calculated from the other'
+                errormsg = f'You can supply either stop ({self.stop}) or dur ({self.dur}) but not both, since one is calculated from the other'
                 raise ValueError(errormsg)
-            if self.n_years <= 0:
-                errormsg = f"Number of years must be >0, but you supplied start={str(self.start)} and " \
-                           f"end={str(self.end)}, which gives n_years={self.n_years}"
+            if self.dur <= 0:
+                errormsg = f"Duration must be >0, but you supplied start={str(self.start)} and stop={str(self.stop)}, which gives dur={self.dur}"
                 raise ValueError(errormsg)
         else:
-            if self.n_years is not None:
-                self.end = self.start + self.n_years
+            if self.dur is not None:
+                self.stop = ss.date_add(self.start, self.dur, self.unit)
             else:
-                errormsg = 'You must supply one of n_years and end."'
+                errormsg = 'You must supply either "dur" or "stop".'
                 raise ValueError(errormsg)
-        return
-
-    def validate_dt(self):
-        """
-        Check that 1/dt is an integer value, otherwise results and time vectors will have mismatching shapes.
-        init_results explicitly makes this assumption by casting resfrequency = int(1/dt).
-        """
-        if self.unit == 'year': # TODO: implement properly
-            dt = self.dt
-            reciprocal = 1.0 / dt  # Compute the reciprocal of dt
-            if not reciprocal.is_integer():  # Check if reciprocal is not a whole (integer) number
-                # Round the reciprocal
-                reciprocal = int(reciprocal)
-                rounded_dt = 1.0 / reciprocal
-                self.dt = rounded_dt
-                if self.verbose:
-                    warnmsg = f'Warning: Provided time step dt={dt} resulted in a non-integer number of steps per year. Rounded to {rounded_dt}.'
-                    ss.warn(warnmsg)
         return
     
     def validate_modules(self):
@@ -423,8 +440,8 @@ class SimPars(Pars):
                             mod = expected_cls.from_func(mod)
                     
                     # Do final check
-                    if not isinstance(mod, expected_cls):
-                        errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls}, but was {type(mod)} instead'
+                    if not isinstance(mod, (expected_cls, ss.Module)): # TEMP: check if this check still works?
+                        errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls} or Plugin, but was {type(mod)} instead'
                         raise TypeError(errormsg)
                     modlist[i] = mod
         return

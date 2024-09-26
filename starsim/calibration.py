@@ -176,7 +176,7 @@ class Calibration(sc.prettyobj):
 
         # Initialize sim
         if not self.sim.initialized:
-            self.sim.initialize()
+            self.sim.init()
 
         # Figure out which sim results to get
         self.sim_result_list = self.target_data.columns.values.tolist()

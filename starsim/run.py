@@ -64,13 +64,13 @@ class MultiSim(sc.prettyobj):
 
         return
 
-    def run(self, reduce=False, **kwargs):
+    def run(self, n_runs=4, **kwargs):
         """
         Run the sims
 
         Args:
-            reduce  (bool): whether to reduce after running (see reduce())
-            kwargs  (dict): passed to multi_run(); use run_args to pass arguments to sim.run()
+            n_runs (int): whether to reduce after running (see reduce())
+            kwargs (dict): passed to multi_run(); use run_args to pass arguments to sim.run()
 
         Returns:
             None (modifies MultiSim object in place)
@@ -89,11 +89,7 @@ class MultiSim(sc.prettyobj):
 
         # Run
         kwargs = sc.mergedicts(self.run_args, kwargs)
-        self.sims = multi_run(sims, **kwargs)
-
-        # Reduce
-        if reduce:
-            self.reduce()
+        self.sims = multi_run(sims, n_runs=n_runs, **kwargs)
 
         return self
 
@@ -172,7 +168,7 @@ class MultiSim(sc.prettyobj):
 
         # Calculate the statistics
         raw = {}
-        exclude = ['yearvec'] # Exclude things that we don't want to include
+        exclude = ['timevec'] # Exclude things that we don't want to include
 
         rflat = reduced_sim.results.flatten()
         rkeys = list(rflat.keys())
@@ -229,6 +225,39 @@ class MultiSim(sc.prettyobj):
         """
         return self.reduce(use_mean=False, quantiles=quantiles, **kwargs)
     
+    def summarize(self, method='mean', quantiles=None, how='default'):
+        """
+        Summarize the simulations statistically.
+        
+        Args:
+            method (str): one of 'mean' (default: [mean, 2*std]), 'median' ([median, min, max]), or 'all' (all results)
+            quantiles (dict): if method='median', use these quantiles
+            how (str): passed to sim.summarize()
+        """
+        
+        # Compute the summaries
+        summaries = []
+        for sim in self.sims:
+            summaries.append(sim.summarize(how=how))
+            
+        summary = sc.dcp(summaries[0]) # Use the first one as a template
+        for k in summary.keys():
+            arr = np.array([s[k] for s in summaries])
+            if method == 'all':
+                summary[k] = arr
+            elif method == 'mean':
+                summary[k] = sc.objdict({'mean':arr.mean(), 'std':arr.std(), 'sem':sc.sem(arr)})
+            elif method == 'median':
+                if quantiles is None:
+                    quantiles = sc.objdict({'median':0.5, 'min':0, 'max':1, 'q25':0.25, 'q75':0.75})
+                elif isinstance(quantiles, list):
+                    quantiles = {q:q for q in quantiles}
+                summary[k] = {q:v for q,v in zip(quantiles, np.quantile(arr, quantiles))}
+        
+        self.summary = summary # Could reconcile with reduce()'s summary
+                                  
+        return summary
+    
     def plot(self, key=None, fig=None, fig_kw=None, plot_kw=None, fill_kw=None):
         """ 
         Plot all results in the MultiSim object.
@@ -255,7 +284,7 @@ class MultiSim(sc.prettyobj):
         # Has been reduced, plot with uncertainty bounds
         else:
             flat = self.results
-            yearvec = flat.pop('yearvec')
+            timevec = flat.pop('timevec')
             n_cols = np.ceil(np.sqrt(len(flat))) # TODO: remove duplication with sim.plot()
             default_figsize = np.array([8, 6])
             figsize_factor = np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size based on the number of rows and columns
@@ -267,12 +296,15 @@ class MultiSim(sc.prettyobj):
             with sc.options.with_style('simple'):
                 if key is not None:
                     flat = {k:v for k,v in flat.items() if k.startswith(key)}
-                fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
+                if fig is None:
+                    fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
+                else:
+                    axs = sc.toarray(fig.axes)
                     
                 # Do the plotting
                 for ax, (key, res) in zip(axs.flatten(), flat.items()):
-                    ax.fill_between(yearvec, res.low, res.high, **fill_kw)
-                    ax.plot(yearvec, res, **plot_kw)
+                    ax.fill_between(timevec, res.low, res.high, **fill_kw)
+                    ax.plot(timevec, res, **plot_kw)
                     ax.set_title(getattr(res, 'label', key)) 
                     ax.set_xlabel('Year')
                 
@@ -331,7 +363,9 @@ def single_run(sim, ind=0, reseed=True, keep_people=False, run_args=None, sim_ar
         if key in sim.pars.keys():
             if verbose >= 1:
                 print(f'Setting key {key} from {sim[key]} to {val}')
-                sim[key] = val
+            sim.pars[key] = val
+            if key == 'rand_seed':
+                ss.set_seed()
         else:
             raise sc.KeyNotFoundError(f'Could not set key {key}: not a valid parameter name')
 
@@ -349,11 +383,12 @@ def single_run(sim, ind=0, reseed=True, keep_people=False, run_args=None, sim_ar
 def multi_run(sim, n_runs=4, reseed=None, iterpars=None, keep_people=None, run_args=None, sim_args=None,
               par_args=None, do_run=True, parallel=True, n_cpus=None, verbose=None, **kwargs):
     """
-    For running multiple runs in parallel. If the first argument is a list of sims,
-    exactly these will be run and most other arguments will be ignored.
+    For running multiple sims in parallel. If the first argument is a list of sims
+    rather than a single sim, exactly these will be run and most other arguments 
+    will be ignored.
 
     Args:
-        sim         (Sim)   : the sim instance to be run, or a list of sims.
+        sim         (Sim/list): the sim instance to be run, or a list of sims.
         n_runs      (int)   : the number of parallel runs
         reseed      (bool)  : whether or not to generate a fresh seed for each run (default: true for single, false for list of sims)
         iterpars    (dict)  : any other parameters to iterate over the runs; see sc.parallelize() for syntax
