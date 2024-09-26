@@ -914,6 +914,7 @@ def diff_sims(sim1, sim2, multi=False, skip_key_diffs=False, skip=None, full=Fal
                     this_zscore = abs_ratio
                 else:
                     abs_ratio = max(this_ratio, 1.0/this_ratio)
+                    this_zscore = np.nan
                 
                 # Set the character to use
                 if abs_ratio < small_change:

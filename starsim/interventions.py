@@ -58,7 +58,7 @@ class Intervention(Plugin):
     on each timestep.
     """
 
-    def __init__(self, eligibility=None, *args, **kwargs):
+    def __init__(self, *args, eligibility=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.eligibility = eligibility
         return
@@ -105,7 +105,7 @@ class RoutineDelivery(Intervention):
     Base class for any intervention that uses routine delivery; handles interpolation of input years.
     """
 
-    def __init__(self, years=None, start_year=None, end_year=None, prob=None, annual_prob=True, *args, **kwargs):
+    def __init__(self, *args, years=None, start_year=None, end_year=None, prob=None, annual_prob=True, **kwargs):
         super().__init__(*args, **kwargs)
         self.years = years
         self.start_year = start_year
@@ -116,6 +116,7 @@ class RoutineDelivery(Intervention):
         return
 
     def init_pre(self, sim):
+        super().init_pre(sim)
 
         # Validate inputs
         if (self.years is not None) and (self.start_year is not None or self.end_year is not None):
@@ -127,6 +128,7 @@ class RoutineDelivery(Intervention):
             if self.start_year is None: self.start_year = sim.pars['start']
             if self.end_year is None:   self.end_year = sim.pars['end']
         else:
+            self.years = sc.promotetoarray(self.years)
             self.start_year = self.years[0]
             self.end_year = self.years[-1]
 
@@ -166,7 +168,7 @@ class CampaignDelivery(Intervention):
     Base class for any intervention that uses campaign delivery; handles interpolation of input years.
     """
 
-    def __init__(self, years, interpolate=None, prob=None, *args, **kwargs):
+    def __init__(self, *args, years=None, interpolate=None, prob=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.years = sc.promotetoarray(years)
         self.interpolate = True if interpolate is None else interpolate
@@ -174,6 +176,8 @@ class CampaignDelivery(Intervention):
         return
 
     def init_pre(self, sim):
+        super().init_pre(sim)
+        
         # Decide whether to apply the intervention at every timepoint throughout the year, or just once.
         self.timepoints = sc.findnearest(sim.yearvec, self.years)
 
@@ -214,7 +218,7 @@ class BaseTest(Intervention):
         return
 
     def init_pre(self, sim):
-        Intervention.init_pre(self, sim)
+        super().init_pre(sim)
         self.outcomes = {k: np.array([], dtype=int) for k in self.product.hierarchy}
         return
 
@@ -354,7 +358,7 @@ class BaseTreatment(Intervention):
         return
 
     def init_pre(self, sim):
-        Intervention.init_pre(self, sim)
+        super().init_pre(sim)
         self.outcomes = {k: np.array([], dtype=int) for k in ['unsuccessful', 'successful']} # Store outcomes on each timestep
         return
 
@@ -447,8 +451,8 @@ class BaseVaccination(Intervention):
          label          (str)           : the name of vaccination strategy
          kwargs         (dict)          : passed to Intervention()
     """
-    def __init__(self, product=None, prob=None, label=None, **kwargs):
-        super().__init__(self, **kwargs)
+    def __init__(self, *args, product=None, prob=None, label=None, **kwargs):
+        super().__init__(*args, **kwargs)
         self.prob = sc.promotetoarray(prob)
         self.label = label
         self._parse_product(product)
