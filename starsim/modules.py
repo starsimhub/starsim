@@ -73,6 +73,14 @@ class Module(sc.quickobj):
     
     def set_metadata(self, name=None, label=None):
         """ Set metadata for the module """
+        # Validation
+        for key,val in dict(name=name, label=label).items():
+            if val is not None:
+                if not isinstance(val, str):
+                    errormsg = f'Invalid value for {key}: must be str, not {type(val)}: {val}'
+                    raise TypeError(errormsg)
+            
+        # Set values
         self.name  = sc.ifelse(name,  getattr(self, 'name',  self.pars.get('name', self.__class__.__name__.lower()))) # Default name is the class name
         self.label = sc.ifelse(label, getattr(self, 'label', self.pars.get('label', self.name)))
         return
