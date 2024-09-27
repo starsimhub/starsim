@@ -38,7 +38,7 @@ Other changes
 - ``requires`` has been removed from modules, but ``ss.check_requires()`` is still available if needed. Call it manually from ``init_pre()`` if desired, e.g. ``ss.check_requires(self.sim, self.requires)``.
 - For networks, ``contacts`` has been renamed ``edges`` except in cases where it refers to an *agent's* contacts. For example, ``network.contacts`` has been renamed ``network.edges``, but ``ss.find_contacts()`` remains the same.
 - Distributions have a new ``jump_dt`` method that jumps by much more than a single state update.
-- ``ss.diff_sims()`` can now handle ``MultiSim` objects.
+- ``ss.diff_sims()`` can now handle ``MultiSim`` objects.
 - ``Sim._orig_pars`` has been removed.
 - ``ss.unique()`` has been removed.
 
