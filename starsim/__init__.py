@@ -4,7 +4,7 @@ from .utils         import *
 from .timepars      import *
 from .parameters    import *
 from .distributions import *
-from .states        import *
+from .arrays        import *
 from .people        import *
 from .modules       import *
 from .network       import *
