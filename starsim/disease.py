@@ -8,6 +8,7 @@ import starsim as ss
 import networkx as nx
 from operator import itemgetter
 import pandas as pd
+import numba as nb
 
 ss_int_ = ss.dtypes.int
 
@@ -268,14 +269,18 @@ class Infection(Disease):
             self.set_outcomes(new_cases, sources)
         
         return new_cases, sources, networks
+    
+    @staticmethod # In future, consider: @nb.njit(fastmath=True, parallel=True, cache=True)
+    def compute_transmission(src, trg, rel_trans, rel_sus, beta_per_dt, randvals):
+        """ Compute the probability of a->b transmission """
+        p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
+        transmitted = p_transmit > randvals
+        target_uids = trg[transmitted]
+        source_uids = src[transmitted]
+        return target_uids, source_uids
 
     def infect(self):
-        """
-        Add new cases of module, through transmission, incidence, etc.
-        
-        Common-random-number-safe transmission code works by mapping edges onto
-        slots.
-        """
+        """ Determine who gets infected on this timestep via transmission on the network """
         new_cases = []
         sources = []
         networks = []
@@ -285,23 +290,17 @@ class Infection(Disease):
         rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
         
         for i, (nkey,net) in enumerate(self.sim.networks.items()):
-            nk = ss.standardize_netkey(nkey) # TEMP
+            nk = ss.standardize_netkey(nkey)
             if len(net): # Skip networks with no edges
                 edges = net.edges
                 p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
                 p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1
                 for src, trg, beta in [p1p2b0, p2p1b1]:
                     if beta: # Skip networks with no transmission
-    
-                        # Calculate probability of a->b transmission
-                        beta_per_dt = net.net_beta(disease_beta=beta) # TODO: potentially refactor
-                        p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt
-        
-                        # Generate a new random number based on the two other random numbers
-                        randvals = self.trans_rng.rvs(src, trg)
-                        transmitted = p_transmit > randvals
-                        target_uids = trg[transmitted]
-                        source_uids = src[transmitted]
+                        beta_per_dt = net.net_beta(disease_beta=beta) # Compute beta for this network and timestep
+                        randvals = self.trans_rng.rvs(src, trg) # Generate a new random number based on the two other random numbers
+                        args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission
+                        target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
                         new_cases.append(target_uids)
                         sources.append(source_uids)
                         networks.append(np.full(len(target_uids), dtype=ss_int_, fill_value=i))

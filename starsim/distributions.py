@@ -2,8 +2,9 @@
 Define random-number-safe distributions.
 """
 
-import numpy as np
 import sciris as sc
+import numpy as np
+import numba as nb
 import scipy.stats as sps
 import starsim as ss
 import matplotlib.pyplot as pl
@@ -1056,6 +1057,19 @@ class multi_random(sc.prettyobj):
         for dist in self.dists: dist.jump(*args, **kwargs)
         return
     
+    @staticmethod
+    @nb.njit(fastmath=True, parallel=True, cache=True)
+    def combine_rvs(rvs_list):
+        """ Combine inputs into one number """
+        # Combine using bitwise-or
+        rand_ints = rvs_list[0]
+        for rand_ints2 in rvs_list[1:]:
+            rand_ints = np.bitwise_xor(rand_ints*rand_ints2, rand_ints-rand_ints2)
+            
+        # Normalize
+        rvs = rand_ints / np.iinfo(np.uint64).max
+        return rvs
+    
     def rvs(self, *args):
         """ Get random variates from each of the underlying distributions and combine them efficiently """
         # Validation
@@ -1066,15 +1080,12 @@ class multi_random(sc.prettyobj):
             raise ValueError(errormsg)
         
         # Generate the random numbers
-        rvs_list = [dist.rvs(arg) for dist,arg in zip(self.dists, args)]
-        
-        # Combine using bitwise-or
-        rand_ints = rvs_list[0]
-        for rand_ints2 in rvs_list[1:]:
-            rand_ints = np.bitwise_xor(rand_ints*rand_ints2, rand_ints-rand_ints2)
-            
-        # Normalize
-        rvs = rand_ints / np.iinfo(np.uint64).max
+        def make_dist(dist, arg):
+            return dist.rvs(arg)
+    
+        rvs_list = sc.parallelize(make_dist, iterkwargs=dict(dist=self.dists, arg=args))
+        # rvs_list = [dist.rvs(arg) for dist,arg in zip(self.dists, args)]
+        rvs = self.combine_rvs(rvs_list)
         return rvs
 
     

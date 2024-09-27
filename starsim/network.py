@@ -303,9 +303,10 @@ class Network(ss.Module):
 
         return
 
-    def net_beta(self, disease_beta=None, dt=None, uids=None):
-        if uids is None: uids = Ellipsis
-        return self.edges.beta[uids] * disease_beta # Beta should already include dt if desired
+    def net_beta(self, disease_beta=None, inds=None, disease=None):
+        """ Calculate the beta for the given disease and network """
+        if inds is None: inds = Ellipsis
+        return self.edges.beta[inds] * disease_beta # Beta should already include dt if desired
 
 
 class DynamicNetwork(Network):
@@ -356,9 +357,9 @@ class SexualNetwork(DynamicNetwork):
         available[self.edges.p2] = False
         return available.uids
 
-    def net_beta(self, disease_beta=None, uids=None):
-        if uids is None: uids = Ellipsis
-        return self.edges.beta[uids] * (1 - (1 - disease_beta) ** (self.edges.acts[uids] * self.dt))
+    def net_beta(self, disease_beta=None, inds=None, disease=None):
+        if inds is None: inds = Ellipsis
+        return self.edges.beta[inds] * (1 - (1 - disease_beta) ** (self.edges.acts[inds] * self.dt))
 
 
 # %% Specific instances of networks
