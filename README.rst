@@ -25,6 +25,8 @@ Starsim is most easily installed via PyPI: ``pip install starsim``.
 
 Starsim can also be installed locally. To do this, clone first this repository, then run ``pip install -e .`` (don't forget the dot at the end!).
 
+*Note:* Starsim leverages Intel's `short vector math library <https://numba.readthedocs.io/en/stable/user/performance-tips.html#intel-svml>`_. If you want to use this (for a ~10% speed improvement), install via `conda install intel-cmplr-lib-rt`.
+
 
 Usage and documentation
 -----------------------
