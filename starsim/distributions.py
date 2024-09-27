@@ -540,7 +540,7 @@ class Dist:
     
     def rand(self, size):
         """ Simple way to get simple random numbers """
-        return self.rng.random(size, dtype=ss.dtypes.float)
+        return self.rng.random(size, dtype=ss.dtypes.float) # Up to 2x faster with float32
     
     def make_rvs(self):
         """ Return default random numbers for scalar parameters; not for the user """
@@ -785,7 +785,7 @@ class expon(Dist):
     
     """
     def __init__(self, scale=1.0, **kwargs):
-        super().__init__(distname='exponential', dist=sps.expon, scale=scale, dtype=ss.dtypes.float, **kwargs)
+        super().__init__(distname='exponential', dist=sps.expon, scale=scale, **kwargs)
         return
 
 
@@ -797,7 +797,7 @@ class poisson(Dist): # TODO: does not currently scale correctly with dt
         lam (float): the scale of the distribution (default 1.0)
     """
     def __init__(self, lam=1.0, **kwargs):
-        super().__init__(distname='poisson', dist=sps.poisson, lam=lam, dtype=ss.dtypes.rand_int, **kwargs)
+        super().__init__(distname='poisson', dist=sps.poisson, lam=lam, **kwargs)
         return
     
     def sync_pars(self):
@@ -850,7 +850,7 @@ class rand_raw(Dist):
     """
     def make_rvs(self):
         if ss.options._centralized:
-            return self.rng.randint(low=0, high=np.iinfo(ss.dtypes.rand_uint).max, dtype=ss.dtypes.rand_uint, size=self._size)
+            return self.rng.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=self._size)
         else:
             return self.bitgen.random_raw(self._size) # TODO: figure out how to make accept dtype, or check speed
 
@@ -865,7 +865,7 @@ class weibull(Dist):
         scale (float): the scale parameter, sometimes called λ (default 1.0)
     """
     def __init__(self, c=1.0, loc=0.0, scale=1.0, **kwargs):
-        super().__init__(distname='weibull', dist=sps.weibull_min, c=c, loc=loc, scale=scale, dtype=ss.dtypes.float, **kwargs)
+        super().__init__(distname='weibull', dist=sps.weibull_min, c=c, loc=loc, scale=scale, **kwargs)
         return
     
     def make_rvs(self):
@@ -1074,7 +1074,7 @@ class multi_random(sc.prettyobj):
             rand_ints = np.bitwise_xor(rand_ints*rand_ints2, rand_ints-rand_ints2)
             
         # Normalize
-        rvs = rand_ints / np.iinfo(np.uint64).max
+        rvs = rand_ints / np.iinfo(np.uint64).max # rand_raw always produces uint64
         return rvs
     
     def rvs(self, *args):
