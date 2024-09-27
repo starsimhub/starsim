@@ -101,10 +101,8 @@ class Loop:
         for disease in sim.diseases():
             self += disease.step
 
-        # Update modules and people on death
-        for mod in sim.modules:
-            self += mod.step_die
-        self += sim.people.step_die # Sets .alive to False, effectively removing dead people from states
+        # Update people who died -- calls disease.step_die() internally
+        self += sim.people.step_die
 
         # Update results
         self += sim.people.update_results
