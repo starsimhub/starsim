@@ -15,7 +15,7 @@ __all__ = ['dtypes', 'options']
 dtypes = sc.objdict(
     bool = bool,
     int = np.int64,
-    float = np.float64,
+    float = np.float32,
     result_float = np.float64,
 )
 

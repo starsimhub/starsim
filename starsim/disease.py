@@ -299,7 +299,7 @@ class Infection(Disease):
                     if beta: # Skip networks with no transmission
                         beta_per_dt = net.net_beta(disease_beta=beta) # Compute beta for this network and timestep
                         randvals = self.trans_rng.rvs(src, trg) # Generate a new random number based on the two other random numbers
-                        args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission
+                        args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission 
                         target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
                         new_cases.append(target_uids)
                         sources.append(source_uids)
