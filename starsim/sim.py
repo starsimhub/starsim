@@ -17,15 +17,33 @@ class Sim:
     
     All Starsim simulations run via the Sim class. It is responsible for initializing
     and running all modules and generating results.
+    
+    Args:
+        pars (SimPars/dict): either an ss.SimPars object, or a nested dictionary; can include all other arguments
+        label (str): the human-readable name of the simulation
+        people (People): if provided, use this ss.People object
+        demographics (str/Demographics/list): a string naming the demographics module to use, the module itself, or a list
+        diseases (str/Disease/list): as above, for diseases
+        networks (str/Network/list): as above, for networks
+        interventions (str/Intervention/list): as above, for interventions
+        analyzers (str/Analyzer/list): as above, for analyzers
+        connectors (str/Connector/list): as above, for connectors
+        copy_inputs (bool): if True, copy modules as they're inserted into the sim (allowing reuse in other sims, but meaning they won't be updated)
+        kwargs (dict): merged with pars
+    
+    **Examples**::
+        
+        sim = ss.Sim(diseases='sir', networks='random') # Simplest Starsim sim; equivalent to ss.demo()
+        sim = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet()) # Equivalent using objects instead of strings
+        sim = ss.Sim(diseases=['sir', ss.SIS()], networks=['random', 'mf']) # Example using list inputs; can mix and match types
     """
     def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, networks=None,
                  interventions=None, analyzers=None, connectors=None, copy_inputs=True, **kwargs):
-        # Make default parameters (using values from parameters.py)
-        self.pars = ss.make_pars() # Start with default pars
+        self.pars = ss.make_pars() # Make default parameters (using values from parameters.py)
         args = dict(label=label, people=people, demographics=demographics, diseases=diseases, networks=networks, 
                     interventions=interventions, analyzers=analyzers, connectors=connectors)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
-        input_pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs) # TODO: check if copying here is OK
+        input_pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs)
         self.pars.update(input_pars)  # Update the parameters
         
         # Set attributes; see also sim.init() for more
@@ -42,7 +60,6 @@ class Sim:
         self.elapsed = None # The time required to run
         self.summary = None  # For storing a summary of the results
         self.filename = None # Store the filename, if saved
-
         return
     
     def __getitem__(self, key):

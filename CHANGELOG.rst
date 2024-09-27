@@ -36,6 +36,7 @@ Other changes
 - Fixed a bug in how results were defined for ``ss.Births`` and ``ss.Deaths``.
 - Fixed a bug in how the ``InfectionLog`` is added to disease modules.
 - ``MultiSim`` now has display methods ``brief()`` (minimal), ``show()`` (moderate), and ``disp`` (verbose).
+- ``ss.parallel()`` and ``ss.MultiSim.run()`` now modify simulations in place by default. Instead of ``sims = ss.parallel(sim1, sim2).sims; sims[0].plot()``, you can now simply do ``ss.parallel(sim1, sim2); sim1.plot()``. 
 - ``Sim.gitinfo`` has been replaced with ``Sim.metadata`` (which includes git info).
 - ``Infection.validate_beta()`` is now applied on every timestep, so changes to beta during the simulation are now honored.
 - ``sim.get_intervention()`` and ``sim.get_analyzer()`` have been removed; use built-in ``ndict`` operations (e.g., the label) to find the object you're after.

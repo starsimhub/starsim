@@ -281,8 +281,7 @@ class Samples:
         Args:
             folder: The folder name
             outputs: A list of tuples (df:pd.DataFrame, summary_row:dict) where the summary row as an entry 'seed' for the seed
-            identifiers: A list of columns to use as identifiers. These should appear in the summary dataframe and should have the same
-                         value for all samples.
+            identifiers: A list of columns to use as identifiers. These should appear in the summary dataframe and should have the same value for all samples.
         """
         zipdata = {} # Store all the data to be written as files inside the zipfile
         summary_rows = []
@@ -401,8 +400,8 @@ class Samples:
 
         Args:
             fcn: A function to apply. It should take in a dataframe
-            *args: Additional arguments for ``fcn``
-            **kwargs: Additional arguments for ``fcn``
+            args: Additional arguments for ``fcn``
+            kwargs: Additional arguments for ``fcn``
 
         Returns: A list with the output of ``fcn``
         """

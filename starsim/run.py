@@ -12,10 +12,19 @@ __all__ = ['MultiSim', 'single_run', 'multi_run', 'parallel']
 
 class MultiSim:
     """
-    Class for running multiple copies of a simulation.
+    Class for running multiple copies of a simulation. 
+    
+    Args:
+        sims (Sim/list): a single sim or a list of sims
+        base_sim (Sim): the sim used for shared properties; if not supplied, the first of the sims provided
+        label (str): the name of the multisim
+        n_runs (int): if a single sim is provided, the number of replicates (default 4)
+        initialize (bool): whether or not to initialize the sims (otherwise, initialize them during run)
+        inplace (bool): whether to modify the sims in-place (default True); else return new sims
+        kwargs (dict): stored in run_args and passed to run()
     """
 
-    def __init__(self, sims=None, base_sim=None, label=None, initialize=False, *args, **kwargs):
+    def __init__(self, sims=None, base_sim=None, label=None, n_runs=4, initialize=False, inplace=True, *args, **kwargs):
 
         # Handle inputs
         super().__init__(*args, **kwargs)
@@ -34,7 +43,7 @@ class MultiSim:
         self.sims = sims
         self.base_sim = base_sim
         self.label = base_sim.label if (label is None and base_sim is not None) else label
-        self.run_args = sc.mergedicts(kwargs)
+        self.run_args = sc.mergedicts(dict(n_runs=n_runs, inplace=inplace), kwargs)
         self.results = None
         self.which = None  # Whether the multisim is to be reduced, combined, etc.
         self.timer = sc.timer() # Create a timer
@@ -118,12 +127,13 @@ class MultiSim:
 
         return
 
-    def run(self, n_runs=4, **kwargs):
+    def run(self, **kwargs):
         """
-        Run the sims
+        Run the sims; see ``ss.multi_run()`` for additional arguments
 
         Args:
-            n_runs (int): whether to reduce after running (see reduce())
+            n_runs (int): how many replicates of each sim to run (if a list of sims is not provided)
+            inplace (bool): whether to modify the sims in place (otherwise return copies)
             kwargs (dict): passed to multi_run(); use run_args to pass arguments to sim.run()
 
         Returns:
@@ -144,7 +154,14 @@ class MultiSim:
         # Run
         self.timer.start()
         kwargs = sc.mergedicts(self.run_args, kwargs)
-        self.sims = multi_run(sims, n_runs=n_runs, **kwargs)
+        inplace = kwargs.pop('inplace', True)
+        run_sims = multi_run(sims, **kwargs) # Output sims are copies due to the pickling during parallelization
+        
+        # Handle output
+        if inplace and isinstance(self.sims, list) and len(run_sims) == len(self.sims): # Validation
+            for old,new in zip(self.sims, run_sims):
+                old.__dict__.update(new.__dict__) # Update the same object with the new results
+        self.sims = run_sims # Just overwrite references
         self.timer.stop()
 
         return self
@@ -331,7 +348,7 @@ class MultiSim:
         # Has not been reduced yet, plot individual sim
         if self.which is None:
             fig = None
-            alpha = 0.7 if len(self.sims) < 5 else 0.5
+            alpha = 0.7 if len(self) < 5 else 0.5
             plot_kw = sc.mergedicts({'alpha':alpha}, plot_kw)
             for sim in self.sims:
                 fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw)
@@ -407,7 +424,7 @@ def single_run(sim, ind=0, reseed=True, keep_people=False, run_args=None, sim_ar
 
     if reseed:
         sim.pars['rand_seed'] += ind  # Reset the seed, otherwise no point of parallel runs
-        ss.set_seed()
+        ss.set_seed() # Note: may not be needed
 
     if verbose >= 1:
         verb = 'Running' if do_run else 'Creating'
@@ -421,7 +438,7 @@ def single_run(sim, ind=0, reseed=True, keep_people=False, run_args=None, sim_ar
                 print(f'Setting key {key} from {sim[key]} to {val}')
             sim.pars[key] = val
             if key == 'rand_seed':
-                ss.set_seed()
+                ss.set_seed() # Note: may not be needed
         else:
             raise sc.KeyNotFoundError(f'Could not set key {key}: not a valid parameter name')
 
@@ -537,6 +554,7 @@ Alternatively, to run without multiprocessing, set parallel=False.
 
     return sims
                   
+
 def parallel(*args, **kwargs):
     """
     A shortcut to ``ss.MultiSim()``, allowing the quick running of multiple simulations
