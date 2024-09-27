@@ -179,7 +179,7 @@ class Dist:
         dist = ss.Dist(sps.norm, loc=3)
         dist.rvs(10) # Return 10 normally distributed random numbers
     """
-    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None, 
+    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None, dtype=ss.dtypes.float,
                  strict=True, auto=True, sim=None, module=None, debug=False, **kwargs):
         # If a string is provided as "dist" but there's no distname, swap the dist and the distname
         if isinstance(dist, str) and distname is None:
@@ -191,6 +191,7 @@ class Dist:
         self.pars = sc.objdict(kwargs) # The user-defined kwargs
         self.seed = seed # Usually determined once added to the container
         self.offset = offset
+        self.dtype = dtype
         self.module = module
         self.sim = sim
         self.slots = None # Created on initialization with a sim
@@ -539,13 +540,13 @@ class Dist:
     
     def rand(self, size):
         """ Simple way to get simple random numbers """
-        return self.rng.random(size)
+        return self.rng.random(size, dtype=ss.dtypes.float)
     
     def make_rvs(self):
         """ Return default random numbers for scalar parameters; not for the user """
         if self.rvs_func is not None:
             rvs_func = getattr(self.rng, self.rvs_func) # Can't store this because then it references the wrong RNG after copy
-            rvs = rvs_func(**self._pars, size=self._size)
+            rvs = rvs_func(**self._pars, size=self._size, dtype=self.dtype)
         elif self.dist is not None:
             rvs = self.dist.rvs(self._size)
         else:
@@ -577,7 +578,7 @@ class Dist:
         
         # Check if size is 0, then we can return
         if size == 0:
-            return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
+            return np.array([], dtype=ss.dtypes.int) # int dtype allows use as index, e.g. when filtering
         elif isinstance(size, ss.uids) and self.initialized == 'partial': # This point can be reached if and only if strict=False and UIDs are used as input
             errormsg = f'Distribution {self} is only partially initialized; cannot generate random numbers to match UIDs'
             raise ValueError(errormsg)
@@ -666,6 +667,12 @@ class uniform(Dist):
     def __init__(self, low=0.0, high=1.0, **kwargs):
         super().__init__(distname='uniform', low=low, high=high, **kwargs)
         return
+    
+    def make_rvs(self):
+        """ Specified here because uniform() doesn't take a dtype argument """
+        p = self._pars
+        rvs = self.rand(self._size) * (p.high - p.low) + p.low
+        return rvs
     
     def ppf(self, rands):
         p = self._pars
@@ -808,7 +815,7 @@ class randint(Dist):
         low (int): the lower bound of the distribution (default 0)
         high (int): the upper bound of the distribution (default of maximum integer size: 9,223,372,036,854,775,807)
     """
-    def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.int, **kwargs):
+    def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.rand_int, **kwargs):
         # Handle input arguments
         if len(args):
             if len(args) == 1:
@@ -821,7 +828,7 @@ class randint(Dist):
         if low is None:
             low = 0
         if high is None:
-            high = np.iinfo(ss.dtypes.int).max
+            high = np.iinfo(ss.dtypes.rand_int).max
             
         if ss.options._centralized: # randint because we're accessing via numpy.random
             super().__init__(distname='randint', low=low, high=high, dtype=dtype, **kwargs)
@@ -832,7 +839,7 @@ class randint(Dist):
     def ppf(self, rands):
         p = self._pars
         rvs = rands * (p.high + 1 - p.low) + p.low
-        rvs = rvs.astype(self.pars['dtype'])
+        rvs = rvs.astype(self.dtype)
         return rvs
 
 
@@ -843,9 +850,9 @@ class rand_raw(Dist):
     """
     def make_rvs(self):
         if ss.options._centralized:
-            return self.rng.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=self._size)
+            return self.rng.randint(low=0, high=np.iinfo(ss.dtypes.rand_uint).max, dtype=ss.dtypes.rand_uint, size=self._size)
         else:
-            return self.bitgen.random_raw(self._size)
+            return self.bitgen.random_raw(self._size, dtype=ss.dtypes.rand_uint)
 
 
 class weibull(Dist):
@@ -900,7 +907,7 @@ class bernoulli(Dist):
         return
     
     def make_rvs(self):
-        rvs = self.rng.random(self._size) < self._pars.p # 3x faster than using rng.binomial(1, p, size)
+        rvs = self.rand(self._size) < self._pars.p # 3x faster than using rng.binomial(1, p, size)
         return rvs
     
     def ppf(self, rands):
