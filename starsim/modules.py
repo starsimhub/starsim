@@ -261,6 +261,7 @@ class Module(sc.quickobj):
     def create(cls, name, *args, **kwargs):
         """
         Create a module instance by name
+        
         Args:
             name (str): A string with the name of the module class in lower case, e.g. 'sir'
         """

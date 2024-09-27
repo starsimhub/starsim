@@ -5,11 +5,11 @@ sphinx-autodoc-typehints
 pydata-sphinx-theme
 sphinx-design
 readthedocs-sphinx-search
+sphinxcontrib-napoleon
 ipykernel # For tutorials
 nbconvert==7.13.0 # For tutorials; >=7.14 does not work
 nbsphinx # For tutorials
 plantweb
 ipykernel
-nbsphinx
 optuna
 seaborn

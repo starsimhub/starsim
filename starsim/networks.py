@@ -30,10 +30,8 @@ class Network(ss.Module):
     the connection.
 
     Args:
-        p1 (array): an array of length N, the number of connections in the network, with the indices of people
-                   on one side of the connection.
-        p2 (array): an array of length N, the number of connections in the network, with the indices of people
-                    on the other side of the connection.
+        p1 (array): an array of length N, the number of connections in the network, with the indices of people on one side of the connection.
+        p2 (array): an array of length N, the number of connections in the network, with the indices of people on the other side of the connection.
         beta (array): an array representing relative transmissibility of each connection for this network - TODO, do we need this?
         label (str): the name of the network (optional)
         kwargs (dict): other keys copied directly into the network
@@ -187,6 +185,7 @@ class Network(ss.Module):
     def get_inds(self, inds, remove=False):
         """
         Get the specified indices from the edgelist and return them as a dict.
+        
         Args:
             inds (int, array, slice): the indices to find
             remove (bool): whether to remove the indices
