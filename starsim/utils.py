@@ -252,9 +252,7 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
         data (pandas.DataFrame, pandas.Series, dict, int, float): An associative array  or a number, with the input data to be standardized.
         metadata (dict): Dictionary specifiying index columns, the value column, and optionally mapping for sex labels
         min_year (float): Optionally specify a minimum year allowed in the data. Default is 1800.
-        out_of_range (float): Value to use for negative ages - typically 0 is a reasonable choice but other values (e.g., np.inf or np.nan)
-                              may be useful depending on the calculation. This will automatically be added to the dataframe with an age of
-                              ``-np.inf``
+        out_of_range (float): Value to use for negative ages - typically 0 is a reasonable choice but other values (e.g., np.inf or np.nan) may be useful depending on the calculation. This will automatically be added to the dataframe with an age of ``-np.inf``
 
     Returns:
     
