@@ -179,7 +179,7 @@ class Dist:
         dist = ss.Dist(sps.norm, loc=3)
         dist.rvs(10) # Return 10 normally distributed random numbers
     """
-    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None, dtype=ss.dtypes.float,
+    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None,
                  strict=True, auto=True, sim=None, module=None, debug=False, **kwargs):
         # If a string is provided as "dist" but there's no distname, swap the dist and the distname
         if isinstance(dist, str) and distname is None:
@@ -191,7 +191,6 @@ class Dist:
         self.pars = sc.objdict(kwargs) # The user-defined kwargs
         self.seed = seed # Usually determined once added to the container
         self.offset = offset
-        self.dtype = dtype
         self.module = module
         self.sim = sim
         self.slots = None # Created on initialization with a sim
@@ -649,7 +648,7 @@ __all__ += ['multi_random'] # Not a dist in the same sense as the others
 class random(Dist):
     """ Random distribution, with values on the interval (0, 1) """
     def __init__(self, **kwargs):
-        super().__init__(distname='random', **kwargs)
+        super().__init__(distname='random', dtype=ss.dtypes.float, **kwargs)
         return
     
     def ppf(self, rands):
@@ -690,7 +689,7 @@ class normal(Dist):
     
     """
     def __init__(self, loc=0.0, scale=1.0, **kwargs):
-        super().__init__(distname='normal', dist=sps.norm, loc=loc, scale=scale, **kwargs)
+        super().__init__(distname='normal', dist=sps.norm, loc=loc, scale=scale, dtype=ss.dtypes.float, **kwargs)
         return
 
 
@@ -711,7 +710,7 @@ class lognorm_im(Dist):
         ss.lognorm_im(mean=2, sigma=1, strict=False).rvs(1000).mean() # Should be roughly 10
     """
     def __init__(self, mean=0.0, sigma=1.0, **kwargs):
-        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
+        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, dtype=ss.dtypes.float, **kwargs)
         return
     
     def sync_pars(self, call=True):
@@ -743,7 +742,7 @@ class lognorm_ex(Dist):
         ss.lognorm_ex(mean=2, std=1, strict=False).rvs(1000).mean() # Should be close to 2
     """
     def __init__(self, mean=1.0, std=1.0, **kwargs):
-        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, std=std, **kwargs)
+        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, std=std, dtype=ss.dtypes.float, **kwargs)
         return
     
     def convert_ex_to_im(self):
@@ -785,7 +784,7 @@ class expon(Dist):
     
     """
     def __init__(self, scale=1.0, **kwargs):
-        super().__init__(distname='exponential', dist=sps.expon, scale=scale, **kwargs)
+        super().__init__(distname='exponential', dist=sps.expon, scale=scale, dtype=ss.dtypes.float, **kwargs)
         return
 
 
@@ -797,7 +796,7 @@ class poisson(Dist): # TODO: does not currently scale correctly with dt
         lam (float): the scale of the distribution (default 1.0)
     """
     def __init__(self, lam=1.0, **kwargs):
-        super().__init__(distname='poisson', dist=sps.poisson, lam=lam, **kwargs)
+        super().__init__(distname='poisson', dist=sps.poisson, lam=lam, dtype=ss.dtypes.rand_int, **kwargs)
         return
     
     def sync_pars(self):
@@ -865,7 +864,7 @@ class weibull(Dist):
         scale (float): the scale parameter, sometimes called λ (default 1.0)
     """
     def __init__(self, c=1.0, loc=0.0, scale=1.0, **kwargs):
-        super().__init__(distname='weibull', dist=sps.weibull_min, c=c, loc=loc, scale=scale, **kwargs)
+        super().__init__(distname='weibull', dist=sps.weibull_min, c=c, loc=loc, scale=scale, dtype=ss.dtypes.float, **kwargs)
         return
     
     def make_rvs(self):
