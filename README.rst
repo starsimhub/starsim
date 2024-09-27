@@ -97,17 +97,6 @@ The submodules of the Starsim folder are as follows:
 The ``diseases`` folder within the Starsim package contains definitions of different types of diseases, including STIs, Ebola, and cholera.
 
 
-Starsim applications
---------------------
-
-Starsim is being used as the simulation engine for a number of different disease-specific applications. These include:
-
-STIsim
-~~~~~~
-
-
-
-
 Contributing
 ------------
 
