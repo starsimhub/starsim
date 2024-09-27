@@ -286,8 +286,14 @@ class rate(TimePar): # TODO: should all rates just be time_prob?
 class time_prob(TimePar):
     """ A probability over time (a.k.a. a cumulative hazard rate); must be >0 and <1 """
     def set_x(self):
-        rate = -np.log(1 - self.value)
-        self.x = 1 - np.exp(-rate/self.factor)
+        if self.value == 1:
+            self.x = 1
+        elif 0 <= self.value <= 1:
+            rate = -np.log(1 - self.value)
+            self.x = 1 - np.exp(-rate/self.factor)
+        else:
+            errormsg = f'Invalid value {self.value} for {self}: must be 0-1'
+            raise ValueError(errormsg)
         return
         
     

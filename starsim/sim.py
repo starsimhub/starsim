@@ -144,7 +144,7 @@ class Sim:
         self.init_vals() # Initialize the values in all of the states and networks
         self.init_results() # Initialize the results
         self.loop.init() # Initialize the integration loop
-        self.timer = sc.timer(start=False) # Store a timer for keeping track of how long the run takes
+        self.timer = sc.timer() # Store a timer for keeping track of how long the run takes
         self.verbose = self.pars.verbose # Store a run-specific value of verbose
         
         # It's initialized
