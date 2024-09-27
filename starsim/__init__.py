@@ -7,7 +7,7 @@ from .distributions import *
 from .arrays        import *
 from .people        import *
 from .modules       import *
-from .network       import *
+from .networks      import *
 from .results       import *
 from .demographics  import *
 from .products      import *
