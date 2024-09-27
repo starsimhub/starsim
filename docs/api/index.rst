@@ -12,12 +12,14 @@ This page lists Starsim's full API, including all functions and classes.
    :recursive:
    :nosignatures:
 
+   starsim.arrays
    starsim.demographics
    starsim.disease
    starsim.distributions
    starsim.interventions
+   starsim.loop
    starsim.modules
-   starsim.network
+   starsim.networks
    starsim.parameters
    starsim.people
    starsim.products
@@ -26,5 +28,4 @@ This page lists Starsim's full API, including all functions and classes.
    starsim.samples
    starsim.settings
    starsim.sim
-   starsim.states
    starsim.utils
