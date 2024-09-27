@@ -32,7 +32,7 @@ class Sim:
         self.label = label # Usually overwritten during initialization by the parameters
         self.created = sc.now()  # The datetime the sim was created
         self.version = ss.__version__ # The Starsim version
-        self.gitinfo = sc.gitinfo(path=__file__, verbose=False)
+        self.metadata = sc.metadata(version=self.version, pipfreeze=False)
         self.dists = ss.Dists(obj=self) # Initialize the random number generator container
         self.loop = ss.Loop(self) # Initialize the integration loop
         self.results = ss.Results(module='sim')  # For storing results
