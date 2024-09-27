@@ -317,6 +317,12 @@ class People(sc.prettyobj):
         """ Carry out any deaths that took place this timestep """
         death_uids = (self.ti_dead <= self.sim.ti).uids
         self.alive[death_uids] = False
+        
+        # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
+        # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
+        for disease in self.sim.diseases():
+            if isinstance(disease, ss.Disease):
+                disease.step_die(death_uids)
 
         return death_uids
 
