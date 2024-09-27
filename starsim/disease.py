@@ -270,7 +270,7 @@ class Infection(Disease):
         
         return new_cases, sources, networks
     
-    @staticmethod # In future, consider: @nb.njit(fastmath=True, parallel=True, cache=True)
+    @staticmethod # In future, consider: @nb.njit(fastmath=True, parallel=True, cache=True), but no faster it seems
     def compute_transmission(src, trg, rel_trans, rel_sus, beta_per_dt, randvals):
         """ Compute the probability of a->b transmission """
         p_transmit = rel_trans[src] * rel_sus[trg] * beta_per_dt

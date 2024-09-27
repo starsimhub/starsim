@@ -1058,7 +1058,7 @@ class multi_random(sc.prettyobj):
         return
     
     @staticmethod
-    @nb.njit(fastmath=True, parallel=True, cache=True)
+    @nb.njit(fastmath=True, parallel=True, cache=True) # Numba is 3x faster
     def combine_rvs(rvs_list):
         """ Combine inputs into one number """
         # Combine using bitwise-or
@@ -1083,8 +1083,7 @@ class multi_random(sc.prettyobj):
         def make_dist(dist, arg):
             return dist.rvs(arg)
     
-        rvs_list = sc.parallelize(make_dist, iterkwargs=dict(dist=self.dists, arg=args))
-        # rvs_list = [dist.rvs(arg) for dist,arg in zip(self.dists, args)]
+        rvs_list = [dist.rvs(arg) for dist,arg in zip(self.dists, args)]
         rvs = self.combine_rvs(rvs_list)
         return rvs
 
