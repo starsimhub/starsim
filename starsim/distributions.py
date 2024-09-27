@@ -1043,7 +1043,7 @@ class multi_random(sc.prettyobj):
     """
     def __init__(self, names, *args, **kwargs):
         names = sc.mergelists(names, args)
-        self.dists = [ss.rand_raw(name=name, **kwargs) for name in names]
+        self.dists = [ss.random(name=name, **kwargs) for name in names]
         return
     
     def __len__(self):
@@ -1066,15 +1066,16 @@ class multi_random(sc.prettyobj):
     
     @staticmethod
     @nb.njit(fastmath=True, parallel=True, cache=True) # Numba is 3x faster
-    def combine_rvs(rvs_list):
+    def combine_rvs(rvs_list, int_type, int_max):
         """ Combine inputs into one number """
         # Combine using bitwise-or
-        rand_ints = rvs_list[0]
-        for rand_ints2 in rvs_list[1:]:
+        rand_ints = rvs_list[0].view(int_type)
+        for rand_floats in rvs_list[1:]:
+            rand_ints2 = rand_floats.view(int_type)
             rand_ints = np.bitwise_xor(rand_ints*rand_ints2, rand_ints-rand_ints2)
             
         # Normalize
-        rvs = rand_ints / np.iinfo(np.uint64).max # rand_raw always produces uint64
+        rvs = rand_ints / int_max
         return rvs
     
     def rvs(self, *args):
@@ -1086,12 +1087,10 @@ class multi_random(sc.prettyobj):
             errormsg = f'Number of UID lists supplied ({n_args}) does not match number of distributions ({n_dists})'
             raise ValueError(errormsg)
         
-        # Generate the random numbers
-        def make_dist(dist, arg):
-            return dist.rvs(arg)
-    
         rvs_list = [dist.rvs(arg) for dist,arg in zip(self.dists, args)]
-        rvs = self.combine_rvs(rvs_list)
+        int_type = ss.dtypes.rand_uint
+        int_max = np.iinfo(int_type).max
+        rvs = self.combine_rvs(rvs_list, int_type, int_max)
         return rvs
 
     
