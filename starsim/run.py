@@ -4,18 +4,27 @@ Utilities for running in parallel
 
 import numpy as np
 import sciris as sc
-import pylab as pl
+import matplotlib.pyplot as plt
 import starsim as ss
 
 __all__ = ['MultiSim', 'single_run', 'multi_run', 'parallel']
 
 
-class MultiSim(sc.prettyobj):
+class MultiSim:
     """
-    Class for running multiple copies of a simulation.
+    Class for running multiple copies of a simulation. 
+    
+    Args:
+        sims (Sim/list): a single sim or a list of sims
+        base_sim (Sim): the sim used for shared properties; if not supplied, the first of the sims provided
+        label (str): the name of the multisim
+        n_runs (int): if a single sim is provided, the number of replicates (default 4)
+        initialize (bool): whether or not to initialize the sims (otherwise, initialize them during run)
+        inplace (bool): whether to modify the sims in-place (default True); else return new sims
+        kwargs (dict): stored in run_args and passed to run()
     """
 
-    def __init__(self, sims=None, base_sim=None, label=None, initialize=False, *args, **kwargs):
+    def __init__(self, sims=None, base_sim=None, label=None, n_runs=4, initialize=False, inplace=True, *args, **kwargs):
 
         # Handle inputs
         super().__init__(*args, **kwargs)
@@ -34,9 +43,10 @@ class MultiSim(sc.prettyobj):
         self.sims = sims
         self.base_sim = base_sim
         self.label = base_sim.label if (label is None and base_sim is not None) else label
-        self.run_args = sc.mergedicts(kwargs)
+        self.run_args = sc.mergedicts(dict(n_runs=n_runs, inplace=inplace), kwargs)
         self.results = None
         self.which = None  # Whether the multisim is to be reduced, combined, etc.
+        self.timer = sc.timer() # Create a timer
 
         # Optionally initialize
         if initialize:
@@ -45,7 +55,60 @@ class MultiSim(sc.prettyobj):
         return
 
     def __len__(self):
-        return len(self.sims)
+        """ The length of a MultiSim is how many sims it contains """
+        try:
+            return len(self.sims)
+        except:
+            return 0
+    
+    def __repr__(self):
+        """ Return a brief description of a multisim; see multisim.disp() for the more detailed version. """
+        try:
+            labelstr = f'"{self.label}"; ' if self.label else ''
+            string   = f'MultiSim({labelstr}n_sims: {len(self)}; base: {self.base_sim})'
+        except Exception as E:
+            string = sc.objectid(self)
+            string += f'Warning, multisim appears to be malformed:\n{str(E)}'
+        return string
+    
+    def brief(self):
+        """ A single-line display of the MultiSim; same as print(multisim) """
+        print(self)
+        return
+    
+    def show(self, output=False):
+        """ Show more detail than print(multisim), but less than multisim.disp() """
+        '''
+        Print a moderate length summary of the MultiSim. See also multisim.disp()
+        (detailed output) and multisim.brief() (short output).
+    
+        Args:
+            output (bool): if true, return a string instead of printing output
+    
+        **Example**::
+    
+            msim = ss.MultiSim(ss.demo(run=False), label='Example multisim')
+            msim.run()
+            msim.show() # Prints moderate length output
+        '''
+        labelstr = f' "{self.label}"' if self.label else ''
+        simlenstr = f'{len(self)}'
+        string  = f'MultiSim{labelstr} summary:\n'
+        string += f'  Number of sims: {simlenstr}\n'
+        string += f'  Reduced/combined: {self.which}\n'
+        string += f'  Base: {self.base_sim}\n'
+        if self.sims:
+            string += '  Sims:\n'
+            for s,sim in enumerate(self.sims):
+                string += f'    {s}: {sim}\n'
+        if not output:
+            print(string)
+        else:
+            return string
+    
+    def disp(self):
+        """ Display the full object """
+        return sc.pr(self)
 
     def init_sims(self, **kwargs):
         """
@@ -64,12 +127,13 @@ class MultiSim(sc.prettyobj):
 
         return
 
-    def run(self, n_runs=4, **kwargs):
+    def run(self, **kwargs):
         """
-        Run the sims
+        Run the sims; see ``ss.multi_run()`` for additional arguments
 
         Args:
-            n_runs (int): whether to reduce after running (see reduce())
+            n_runs (int): how many replicates of each sim to run (if a list of sims is not provided)
+            inplace (bool): whether to modify the sims in place (otherwise return copies)
             kwargs (dict): passed to multi_run(); use run_args to pass arguments to sim.run()
 
         Returns:
@@ -88,8 +152,17 @@ class MultiSim(sc.prettyobj):
                     sim.label = f'Sim {s}'
 
         # Run
+        self.timer.start()
         kwargs = sc.mergedicts(self.run_args, kwargs)
-        self.sims = multi_run(sims, n_runs=n_runs, **kwargs)
+        inplace = kwargs.pop('inplace', True)
+        run_sims = multi_run(sims, **kwargs) # Output sims are copies due to the pickling during parallelization
+        
+        # Handle output
+        if inplace and isinstance(self.sims, list) and len(run_sims) == len(self.sims): # Validation
+            for old,new in zip(self.sims, run_sims):
+                old.__dict__.update(new.__dict__) # Update the same object with the new results
+        self.sims = run_sims # Just overwrite references
+        self.timer.stop()
 
         return self
 
@@ -275,11 +348,11 @@ class MultiSim(sc.prettyobj):
         # Has not been reduced yet, plot individual sim
         if self.which is None:
             fig = None
-            alpha = 0.7 if len(self.sims) < 5 else 0.5
+            alpha = 0.7 if len(self) < 5 else 0.5
             plot_kw = sc.mergedicts({'alpha':alpha}, plot_kw)
             for sim in self.sims:
                 fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw)
-            pl.legend()
+            plt.legend()
         
         # Has been reduced, plot with uncertainty bounds
         else:
@@ -351,7 +424,7 @@ def single_run(sim, ind=0, reseed=True, keep_people=False, run_args=None, sim_ar
 
     if reseed:
         sim.pars['rand_seed'] += ind  # Reset the seed, otherwise no point of parallel runs
-        ss.set_seed()
+        ss.set_seed() # Note: may not be needed
 
     if verbose >= 1:
         verb = 'Running' if do_run else 'Creating'
@@ -365,7 +438,7 @@ def single_run(sim, ind=0, reseed=True, keep_people=False, run_args=None, sim_ar
                 print(f'Setting key {key} from {sim[key]} to {val}')
             sim.pars[key] = val
             if key == 'rand_seed':
-                ss.set_seed()
+                ss.set_seed() # Note: may not be needed
         else:
             raise sc.KeyNotFoundError(f'Could not set key {key}: not a valid parameter name')
 
@@ -481,6 +554,7 @@ Alternatively, to run without multiprocessing, set parallel=False.
 
     return sims
                   
+
 def parallel(*args, **kwargs):
     """
     A shortcut to ``ss.MultiSim()``, allowing the quick running of multiple simulations

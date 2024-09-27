@@ -1,5 +1,5 @@
 import sciris as sc
-import matplotlib.pyplot as pl
+import matplotlib.pyplot as plt
 import starsim as ss
 
 do_plot = False
@@ -16,5 +16,5 @@ with sc.timer():
     sim.run()
 
 if do_plot:
-    pl.plot(sim.tivec, sim.results.hiv.n_infected)
-    pl.show()
+    plt.plot(sim.tivec, sim.results.hiv.n_infected)
+    plt.show()

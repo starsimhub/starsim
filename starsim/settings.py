@@ -12,12 +12,13 @@ import sciris as sc
 __all__ = ['dtypes', 'options']
 
 # Define Starsim-default data types
-dtypes = sc.objdict(
-    bool = bool,
-    int = np.int64,
-    float = np.float64,
-    result_float = np.float64,
-)
+class dtypes:
+    bool = bool
+    int = np.int64
+    rand_int = np.int32
+    rand_uint = np.uint32
+    float = np.float32
+    result_float = np.float64
 
 
 # Not public to avoid confusion with ss.options

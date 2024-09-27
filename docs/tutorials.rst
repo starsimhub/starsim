@@ -22,5 +22,5 @@ Developer tutorials
     tutorials/dev_tut_diseases.ipynb
     tutorials/dev_tut_pars.ipynb
     tutorials/dev_tut_analyzers.ipynb
-    tutorials/dev_tut_abm.ipynb
+    tutorials/dev_tut_nonstandard.ipynb
     

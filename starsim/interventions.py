@@ -203,6 +203,7 @@ class BaseTest(Intervention):
 class BaseScreening(BaseTest):
     """
     Base class for screening.
+
     Args:
         kwargs (dict): passed to BaseTest
     """
@@ -232,6 +233,7 @@ class BaseScreening(BaseTest):
 class BaseTriage(BaseTest):
     """
     Base class for triage.
+
     Args:
         kwargs (dict): passed to BaseTest
     """
@@ -251,6 +253,7 @@ class routine_screening(BaseScreening, RoutineDelivery):
     See base classes for a description of input arguments.
 
     **Examples**::
+    
         screen1 = ss.routine_screening(product=my_prod, prob=0.02) # Screen 2% of the eligible population every year
         screen2 = ss.routine_screening(product=my_prod, prob=0.02, start_year=2020) # Screen 2% every year starting in 2020
         screen3 = ss.routine_screening(product=my_prod, prob=np.linspace(0.005,0.025,5), years=np.arange(2020,2025)) # Scale up screening over 5 years starting in 2020

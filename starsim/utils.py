@@ -236,13 +236,12 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     specified metadata, or an ``ss.Dist`` if the data is already an ``ss.Dist`` object.
 
     The metadata is a dictionary that defines columns of the dataframe or keys
-    of the dictionary to use as indices in the output Series. It should contain
+    of the dictionary to use as indices in the output Series. It should contain:
 
     - ``metadata['data_cols']['value']`` specifying the name of the column/key to draw values from
     - ``metadata['data_cols']['year']`` optionally specifying the column containing year values; otherwise the default year will be used
     - ``metadata['data_cols']['age']`` optionally specifying the column containing age values; otherwise the default age will be used
-    - ``metadata['data_cols'][<arbitrary>]`` optionally specifying any other columns to use as indices. These will form part of the multiindex
-                                         for the standardized Series output.
+    - ``metadata['data_cols'][<arbitrary>]`` optionally specifying any other columns to use as indices. These will form part of the multi-index for the standardized Series output.
 
     If a ``sex`` column is part of the index, the metadata can also optionally specify a string mapping to convert
     the sex labels in the input data into the 'm'/'f' labels used by Starsim. In that case, the metadata can contain
@@ -253,11 +252,10 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
         data (pandas.DataFrame, pandas.Series, dict, int, float): An associative array  or a number, with the input data to be standardized.
         metadata (dict): Dictionary specifiying index columns, the value column, and optionally mapping for sex labels
         min_year (float): Optionally specify a minimum year allowed in the data. Default is 1800.
-        out_of_range (float): Value to use for negative ages - typically 0 is a reasonable choice but other values (e.g., np.inf or np.nan)
-                              may be useful depending on the calculation. This will automatically be added to the dataframe with an age of
-                              ``-np.inf``
+        out_of_range (float): Value to use for negative ages - typically 0 is a reasonable choice but other values (e.g., np.inf or np.nan) may be useful depending on the calculation. This will automatically be added to the dataframe with an age of ``-np.inf``
 
     Returns:
+    
         - A `pd.Series` for all supported formats of `data` *except* an ``ss.Dist``. This series will contain index columns for 'year'
           and 'age' (in that order) and then subsequent index columns for any other variables specified in the metadata, in the order
           they appeared in the metadata (except for year and age appearing first).

@@ -6,7 +6,7 @@ Test Starsim features not covered by other test files
 import sciris as sc
 import numpy as np
 import starsim as ss
-import matplotlib.pyplot as pl
+import matplotlib.pyplot as plt
 
 sc.options(interactive=False) # Assume not running interactively
 
@@ -58,9 +58,9 @@ def test_microsim(do_plot=False):
     sim.run()
 
     if do_plot:
-        pl.figure()
-        pl.plot(hiv.timevec, hiv.results.n_infected)
-        pl.title('HIV number of infections')
+        plt.figure()
+        plt.plot(hiv.timevec, hiv.results.n_infected)
+        plt.title('HIV number of infections')
 
     return sim
 
@@ -84,9 +84,9 @@ def test_ppl_construction():
     sim = ss.Sim(pars=sim_pars, diseases=[gon])
     sim.init()
     sim.run()
-    pl.figure()
-    pl.plot(sim.timevec, sim.results.gonorrhea.n_infected)
-    pl.title('Number of gonorrhea infections')
+    plt.figure()
+    plt.plot(sim.timevec, sim.results.gonorrhea.n_infected)
+    plt.title('Number of gonorrhea infections')
 
     return sim
 
@@ -170,5 +170,5 @@ if __name__ == '__main__':
     sims3 = test_deepcopy_until()
 
     sc.toc(T)
-    pl.show()
+    plt.show()
     print('Done.')
