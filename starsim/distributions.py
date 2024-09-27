@@ -1065,7 +1065,7 @@ class multi_random(sc.prettyobj):
         return
     
     @staticmethod
-    @nb.njit(fastmath=True, parallel=True, cache=True) # Numba is 3x faster
+    @nb.njit(fastmath=True, parallel=False, cache=True) # Numba is 3x faster, but disabling parallel for efficiency
     def combine_rvs(rvs_list, int_type, int_max):
         """ Combine inputs into one number """
         # Combine using bitwise-or
