@@ -16,22 +16,22 @@ def run_sir_vaccine(efficacy, leaky=True, do_plot=False):
 
     # create a basic SIR sim
     sim = ss.Sim(
-        n_agents = 1000,     
+        n_agents = 1000,
         pars = dict(
           networks = dict(     
-                type = 'random', 
-                n_contacts = 4    
+                type = 'random',
+                n_contacts = 4
           ),
-          diseases = dict(      
-                type      = 'sir',     
-                init_prev = 0.01,  
+          diseases = dict(
+                type      = 'sir',
+                init_prev = 0.01,
                 dur_inf   = 10,
                 p_death   = 0,
-                beta      = 0.06,       
+                beta      = 0.06,
           )
         ),
         dur = 10,
-        dt  = 0.1
+        dt  = 0.01
     )
     sim.init(verbose=False)
     
