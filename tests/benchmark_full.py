@@ -21,10 +21,10 @@ def make_run_sim():
     ppl = ss.People(n_agents=n_agents)
     
     # Make the components
-    sir = ss.SIR()
+    sir = ss.SIS()
     hiv = ss.HIV()
-    hiv.pars['beta'] = {'mf': [0.15, 0.10], 'maternal': [0.2, 0]}
-    networks = [ss.MFNet(), ss.MaternalNet()]
+    hiv.pars['beta'] = {'mf': [0.15, 0.10], 'maternal': [0.2, 0], 'random': [0,0]}
+    networks = [ss.RandomNet(), ss.MFNet(), ss.MaternalNet()]
     
     # Make the sim
     sim = ss.Sim(pars=pars, people=ppl, networks=networks, demographics=ss.Pregnancy(), diseases=[sir, hiv])

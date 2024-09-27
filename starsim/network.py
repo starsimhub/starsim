@@ -303,9 +303,10 @@ class Network(ss.Module):
 
         return
 
-    def net_beta(self, disease_beta=None, dt=None, uids=None):
-        if uids is None: uids = Ellipsis
-        return self.edges.beta[uids] * disease_beta # Beta should already include dt if desired
+    def net_beta(self, disease_beta=None, inds=None, disease=None):
+        """ Calculate the beta for the given disease and network """
+        if inds is None: inds = Ellipsis
+        return self.edges.beta[inds] * disease_beta # Beta should already include dt if desired
 
 
 class DynamicNetwork(Network):
@@ -356,9 +357,9 @@ class SexualNetwork(DynamicNetwork):
         available[self.edges.p2] = False
         return available.uids
 
-    def net_beta(self, disease_beta=None, uids=None):
-        if uids is None: uids = Ellipsis
-        return self.edges.beta[uids] * (1 - (1 - disease_beta) ** (self.edges.acts[uids] * self.dt))
+    def net_beta(self, disease_beta=None, inds=None, disease=None):
+        if inds is None: inds = Ellipsis
+        return self.edges.beta[inds] * (1 - (1 - disease_beta) ** (self.edges.acts[inds] * self.dt))
 
 
 # %% Specific instances of networks
@@ -461,7 +462,7 @@ class RandomNet(DynamicNetwork):
         return
 
     @staticmethod
-    @nb.njit(cache=True)
+    @nb.njit(fastmath=True, parallel=False, cache=True)
     def get_source(inds, n_contacts):
         """ Optimized helper function for getting contacts """
         total_number_of_half_edges = np.sum(n_contacts)
@@ -483,7 +484,7 @@ class RandomNet(DynamicNetwork):
         function should be HALF of the total contacts a person is expected to have, if both
         the source and target array outputs are used (e.g. for social contacts)
 
-        adjusted_number_of_contacts = np.round(number_of_contacts / 2).astype(cvd.default_int)
+        adjusted_number_of_contacts = np.round(number_of_contacts / 2).astype(ss.dtype.int)
 
         Whereas for asymmetric contacts (e.g. staff-public interactions) it might not be necessary
 
@@ -497,7 +498,7 @@ class RandomNet(DynamicNetwork):
         """
         source = self.get_source(inds, n_contacts)
         target = self.dist.rng.permutation(source)
-        self.dist.jump() # Reset the RNG manually # TODO, think if there's a better way
+        self.dist.jump() # Reset the RNG manually; does not auto-jump since using rng directly above # TODO, think if there's a better way
         return source, target
 
     def add_pairs(self):

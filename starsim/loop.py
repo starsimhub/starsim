@@ -2,6 +2,7 @@
 Parent class for the integration loop.
 """
 
+import time
 import numpy as np
 import pandas as pd
 import sciris as sc
@@ -23,6 +24,9 @@ class Loop:
         self.timearrays = None
         self.plan = None
         self.index = 0 # The next function to execute
+        self.cpu_time = [] # Store the CPU time of execution of each function
+        self.df = None # User-friendly verison of the plan
+        self.cpu_df = None # User-friendly time analysis
         self.initialized = False
         return
     
@@ -143,9 +147,9 @@ class Loop:
         # Assemble the list of dicts
         raw = []
         for func_row in self.funcs:
-            for time in self.timearrays[func_row['module']]:
+            for t in self.timearrays[func_row['module']]:
                 row = func_row.copy()
-                row['time'] = time # Add time column
+                row['time'] = t # Add time column
                 raw.append(row)
         
         # Turn it into a dataframe
@@ -156,6 +160,11 @@ class Loop:
         self.plan['func_label'] = self.plan.module + '.' + self.plan.func_name
         col_order = ['time', 'func_order', 'step_order', 'func', 'func_label', 'module', 'func_name'] # Func in the middle to hide it
         self.plan = self.plan.sort_values('step_order').reset_index(drop=True)[col_order]
+        return
+    
+    def store_time(self):
+        """ Store the current time in as high resolution as possible """
+        self.cpu_time.append(time.perf_counter())
         return
     
     def run_one_step(self):
@@ -172,15 +181,17 @@ class Loop:
     def run(self, until=None, verbose=None):
         """ Actually run the integration loop; usually called by sim.run() """
         # Loop over every function in the integration loop, e.g. disease.step()
-        for f in self.plan.func[self.index:]:
+        self.store_time()
+        for f,label in zip(self.plan.func[self.index:], self.plan.func_label[self.index:]):
             if verbose:
                 row = self.plan[self.index]
-                print(f'Running t={row.time:n}, {row.func_label}()')
+                print(f'Running t={row.time:n}, step={row.step_order}, {label}()')
             
             f() # Execute the function -- this is where all of Starsim happens!!
 
             # Tidy up
             self.index += 1 # Increment the count
+            self.store_time()
             if until and self.sim.now > until: # Terminate if asked to
                 break
         return
@@ -196,8 +207,25 @@ class Loop:
     
     def to_df(self):
         """ Return a user-friendly version of the plan, omitting object columns """
+        # Compute the main dataframe
         cols = ['time', 'func_order', 'module', 'func_name', 'func_label']
-        df = self.plan[cols]
+        df = self.plan[cols].copy() # Need to copy, otherwise it's messed up
+        times = np.diff(self.cpu_time)
+        if len(times) == len(df):
+            df['cpu_time'] = times
+        else:
+            warnmsg = f'Not adding timings since length mismatch ({len(df)} expected, {len(times)} actual'
+            ss.warn(warnmsg)
+        self.df = df
+        
+        # Compute the CPU dataframe
+        by_func = df.groupby('func_label')
+        method = dict(func_order='first', module='first', func_name='first', cpu_time='sum')
+        cdf = sc.dataframe(by_func.agg(method))
+        cdf['percent'] = cdf.cpu_time / cdf.cpu_time.sum()*100
+        cdf.insert(cdf.cols.index('cpu_time'), 'calls', by_func.size())
+        cdf.sort_values('cpu_time', inplace=True, ascending=False)
+        self.cpu_df = cdf
         return df
     
     def plot(self, simplify=False, fig_kw=None, plot_kw=None, scatter_kw=None):
@@ -234,6 +262,53 @@ class Loop:
         plt.yticks(yticks, ylabels)
         plt.title(f'Integration plan ({len(df)} events)')
         plt.xlabel(f'Time since simulation start (in {self.sim.pars.unit}s)')
+        plt.grid(True)
+        sc.figlayout()
+        sc.boxoff()
+        return fig
+    
+    def plot_cpu(self, bytime=True, fig_kw=None, bar_kw=None):
+        """
+        Plot the CPU time spent on each event; visualization of Loop.cpu_df.
+        
+        Args:
+            bytime (bool): if True, order events by total time rather than actual order
+            fig_kw (dict): passed to ``plt.figure()``
+            plot_kw (dict): passed to ``plt.bar()``
+        """
+        # Assemble data
+        if self.cpu_df is None:
+            self.to_df()
+        df = self.cpu_df
+        ylabels = df.index.values
+        if bytime:
+            y = np.arange(len(ylabels))
+        else:
+            y = df.func_order.values
+        y = y[::-1] # Reverse order so plots from top to bottom
+        
+        x = df.cpu_time.values
+        pcts = df.percent.values
+        
+        if x.max() < 1:
+            x *= 1e3
+            unit = 'ms'
+        else:
+            unit = 's'
+            
+        # Assemble labels
+        for i in range(len(df)):
+            timestr = sc.sigfig(x[i], 3) + f' {unit}'
+            pctstr = sc.sigfig(pcts[i], 3) + '%'
+            ylabels[i] += f'()\n{timestr}, {pctstr}'
+        
+        # Do the plotting
+        bar_kw = sc.mergedicts(bar_kw)
+        fig = plt.figure(**sc.mergedicts(fig_kw))
+        plt.barh(y, width=x, **bar_kw)
+        plt.yticks(y, ylabels)
+        plt.xlabel(f'CPU time ({unit})')
+        plt.ylabel('Function call')
         plt.grid(True)
         sc.figlayout()
         sc.boxoff()

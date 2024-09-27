@@ -2,8 +2,9 @@
 Define random-number-safe distributions.
 """
 
-import numpy as np
 import sciris as sc
+import numpy as np
+import numba as nb
 import scipy.stats as sps
 import starsim as ss
 import matplotlib.pyplot as pl
@@ -178,7 +179,7 @@ class Dist:
         dist = ss.Dist(sps.norm, loc=3)
         dist.rvs(10) # Return 10 normally distributed random numbers
     """
-    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None, 
+    def __init__(self, dist=None, distname=None, name=None, seed=None, offset=None,
                  strict=True, auto=True, sim=None, module=None, debug=False, **kwargs):
         # If a string is provided as "dist" but there's no distname, swap the dist and the distname
         if isinstance(dist, str) and distname is None:
@@ -447,6 +448,7 @@ class Dist:
             # Convert to a frozen distribution
             if isinstance(self.dist, sps._distn_infrastructure.rv_generic):
                 spars = self.process_pars(call=False)
+                spars.pop('dtype', None) # Not a valid arg for SciPy distributions
                 self.dist = self.dist(**spars) 
                 
             # Override the default random state with the correct one
@@ -538,13 +540,13 @@ class Dist:
     
     def rand(self, size):
         """ Simple way to get simple random numbers """
-        return self.rng.random(size)
+        return self.rng.random(size, dtype=ss.dtypes.float) # Up to 2x faster with float32
     
     def make_rvs(self):
         """ Return default random numbers for scalar parameters; not for the user """
         if self.rvs_func is not None:
             rvs_func = getattr(self.rng, self.rvs_func) # Can't store this because then it references the wrong RNG after copy
-            rvs = rvs_func(**self._pars, size=self._size)
+            rvs = rvs_func(size=self._size, **self._pars)
         elif self.dist is not None:
             rvs = self.dist.rvs(self._size)
         else:
@@ -576,7 +578,7 @@ class Dist:
         
         # Check if size is 0, then we can return
         if size == 0:
-            return np.array([], dtype=int) # int dtype allows use as index, e.g. when filtering
+            return np.array([], dtype=ss.dtypes.int) # int dtype allows use as index, e.g. when filtering
         elif isinstance(size, ss.uids) and self.initialized == 'partial': # This point can be reached if and only if strict=False and UIDs are used as input
             errormsg = f'Distribution {self} is only partially initialized; cannot generate random numbers to match UIDs'
             raise ValueError(errormsg)
@@ -647,7 +649,7 @@ __all__ += ['multi_random'] # Not a dist in the same sense as the others
 class random(Dist):
     """ Random distribution, with values on the interval (0, 1) """
     def __init__(self, **kwargs):
-        super().__init__(distname='random', **kwargs)
+        super().__init__(distname='random', dtype=ss.dtypes.float, **kwargs)
         return
     
     def ppf(self, rands):
@@ -666,6 +668,12 @@ class uniform(Dist):
         super().__init__(distname='uniform', low=low, high=high, **kwargs)
         return
     
+    def make_rvs(self):
+        """ Specified here because uniform() doesn't take a dtype argument """
+        p = self._pars
+        rvs = self.rand(self._size) * (p.high - p.low) + p.low
+        return rvs
+    
     def ppf(self, rands):
         p = self._pars
         rvs = rands * (p.high - p.low) + p.low
@@ -681,7 +689,7 @@ class normal(Dist):
         scale (float) the standard deviation of the distribution (default 1.0)
     
     """
-    def __init__(self, loc=0.0, scale=1.0, **kwargs):
+    def __init__(self, loc=0.0, scale=1.0, **kwargs): # Does not accept dtype
         super().__init__(distname='normal', dist=sps.norm, loc=loc, scale=scale, **kwargs)
         return
 
@@ -702,7 +710,7 @@ class lognorm_im(Dist):
         
         ss.lognorm_im(mean=2, sigma=1, strict=False).rvs(1000).mean() # Should be roughly 10
     """
-    def __init__(self, mean=0.0, sigma=1.0, **kwargs):
+    def __init__(self, mean=0.0, sigma=1.0, **kwargs): # Does not accept dtype
         super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
         return
     
@@ -734,7 +742,7 @@ class lognorm_ex(Dist):
         
         ss.lognorm_ex(mean=2, std=1, strict=False).rvs(1000).mean() # Should be close to 2
     """
-    def __init__(self, mean=1.0, std=1.0, **kwargs):
+    def __init__(self, mean=1.0, std=1.0, **kwargs): # Does not accept dtype
         super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, std=std, **kwargs)
         return
     
@@ -807,7 +815,7 @@ class randint(Dist):
         low (int): the lower bound of the distribution (default 0)
         high (int): the upper bound of the distribution (default of maximum integer size: 9,223,372,036,854,775,807)
     """
-    def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.int, **kwargs):
+    def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.rand_int, **kwargs):
         # Handle input arguments
         if len(args):
             if len(args) == 1:
@@ -820,7 +828,7 @@ class randint(Dist):
         if low is None:
             low = 0
         if high is None:
-            high = np.iinfo(ss.dtypes.int).max
+            high = np.iinfo(ss.dtypes.rand_int).max
             
         if ss.options._centralized: # randint because we're accessing via numpy.random
             super().__init__(distname='randint', low=low, high=high, dtype=dtype, **kwargs)
@@ -831,7 +839,7 @@ class randint(Dist):
     def ppf(self, rands):
         p = self._pars
         rvs = rands * (p.high + 1 - p.low) + p.low
-        rvs = rvs.astype(self.pars['dtype'])
+        rvs = rvs.astype(self.dtype)
         return rvs
 
 
@@ -844,7 +852,7 @@ class rand_raw(Dist):
         if ss.options._centralized:
             return self.rng.randint(low=0, high=np.iinfo(np.uint64).max, dtype=np.uint64, size=self._size)
         else:
-            return self.bitgen.random_raw(self._size)
+            return self.bitgen.random_raw(self._size) # TODO: figure out how to make accept dtype, or check speed
 
 
 class weibull(Dist):
@@ -899,7 +907,7 @@ class bernoulli(Dist):
         return
     
     def make_rvs(self):
-        rvs = self.rng.random(self._size) < self._pars.p # 3x faster than using rng.binomial(1, p, size)
+        rvs = self.rand(self._size) < self._pars.p # 3x faster than using rng.binomial(1, p, size)
         return rvs
     
     def ppf(self, rands):
@@ -1035,7 +1043,7 @@ class multi_random(sc.prettyobj):
     """
     def __init__(self, names, *args, **kwargs):
         names = sc.mergelists(names, args)
-        self.dists = [ss.rand_raw(name=name, **kwargs) for name in names]
+        self.dists = [ss.random(name=name, **kwargs) for name in names]
         return
     
     def __len__(self):
@@ -1056,6 +1064,20 @@ class multi_random(sc.prettyobj):
         for dist in self.dists: dist.jump(*args, **kwargs)
         return
     
+    @staticmethod
+    @nb.njit(fastmath=True, parallel=False, cache=True) # Numba is 3x faster, but disabling parallel for efficiency
+    def combine_rvs(rvs_list, int_type, int_max):
+        """ Combine inputs into one number """
+        # Combine using bitwise-or
+        rand_ints = rvs_list[0].view(int_type)
+        for rand_floats in rvs_list[1:]:
+            rand_ints2 = rand_floats.view(int_type)
+            rand_ints = np.bitwise_xor(rand_ints*rand_ints2, rand_ints-rand_ints2)
+            
+        # Normalize
+        rvs = rand_ints / int_max
+        return rvs
+    
     def rvs(self, *args):
         """ Get random variates from each of the underlying distributions and combine them efficiently """
         # Validation
@@ -1065,16 +1087,10 @@ class multi_random(sc.prettyobj):
             errormsg = f'Number of UID lists supplied ({n_args}) does not match number of distributions ({n_dists})'
             raise ValueError(errormsg)
         
-        # Generate the random numbers
         rvs_list = [dist.rvs(arg) for dist,arg in zip(self.dists, args)]
-        
-        # Combine using bitwise-or
-        rand_ints = rvs_list[0]
-        for rand_ints2 in rvs_list[1:]:
-            rand_ints = np.bitwise_xor(rand_ints*rand_ints2, rand_ints-rand_ints2)
-            
-        # Normalize
-        rvs = rand_ints / np.iinfo(np.uint64).max
+        int_type = ss.dtypes.rand_uint
+        int_max = np.iinfo(int_type).max
+        rvs = self.combine_rvs(rvs_list, int_type, int_max)
         return rvs
 
     
