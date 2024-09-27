@@ -187,11 +187,10 @@ class Infection(Disease):
         super().init_post()
         if self.pars.init_prev is None:
             return
-        
 
         initial_cases = self.pars.init_prev.filter()
         self.set_prognoses(initial_cases)  # TODO: sentinel value to indicate seeds?
-        return
+        return initial_cases
 
     def init_results(self):
         """
