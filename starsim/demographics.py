@@ -222,9 +222,9 @@ class Deaths(Demographics):
 
     def init_results(self):
         self.results += [
-            ss.Result(self.name, 'new',        self.npts, dtype=int, scale=True,  label='Deaths'),
-            ss.Result(self.name, 'cumulative', self.npts, dtype=int, scale=True,  label='Cumulative deaths'),
-            ss.Result(self.name, 'cmr',        self.npts, dtype=int, scale=False, label='Crude mortality rate'),
+            ss.Result(self.name, 'new',        self.npts, dtype=int,   scale=True,  label='Deaths'),
+            ss.Result(self.name, 'cumulative', self.npts, dtype=int,   scale=True,  label='Cumulative deaths'),
+            ss.Result(self.name, 'cmr',        self.npts, dtype=float, scale=False, label='Crude mortality rate'),
         ]
         return
 
