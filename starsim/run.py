@@ -158,11 +158,10 @@ class MultiSim:
         run_sims = multi_run(sims, **kwargs) # Output sims are copies due to the pickling during parallelization
         
         # Handle output
-        if False and inplace and isinstance(self.sims, list) and len(run_sims) == len(self.sims): # Validation
+        if inplace and isinstance(self.sims, list) and len(run_sims) == len(self.sims): # Validation
             for old,new in zip(self.sims, run_sims):
                 old.__dict__.update(new.__dict__) # Update the same object with the new results
-        else:
-            self.sims = sims # Just overwrite references
+        self.sims = run_sims # Just overwrite references
         self.timer.stop()
 
         return self
@@ -349,7 +348,7 @@ class MultiSim:
         # Has not been reduced yet, plot individual sim
         if self.which is None:
             fig = None
-            alpha = 0.7 if len(self.sims) < 5 else 0.5
+            alpha = 0.7 if len(self) < 5 else 0.5
             plot_kw = sc.mergedicts({'alpha':alpha}, plot_kw)
             for sim in self.sims:
                 fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw)
