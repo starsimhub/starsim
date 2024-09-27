@@ -448,6 +448,7 @@ class Dist:
             # Convert to a frozen distribution
             if isinstance(self.dist, sps._distn_infrastructure.rv_generic):
                 spars = self.process_pars(call=False)
+                spars.pop('dtype', None) # Not a valid arg for SciPy distributions
                 self.dist = self.dist(**spars) 
                 
             # Override the default random state with the correct one
@@ -545,7 +546,7 @@ class Dist:
         """ Return default random numbers for scalar parameters; not for the user """
         if self.rvs_func is not None:
             rvs_func = getattr(self.rng, self.rvs_func) # Can't store this because then it references the wrong RNG after copy
-            rvs = rvs_func(**self._pars, size=self._size, dtype=self.dtype)
+            rvs = rvs_func(size=self._size, **self._pars)
         elif self.dist is not None:
             rvs = self.dist.rvs(self._size)
         else:
@@ -688,8 +689,8 @@ class normal(Dist):
         scale (float) the standard deviation of the distribution (default 1.0)
     
     """
-    def __init__(self, loc=0.0, scale=1.0, **kwargs):
-        super().__init__(distname='normal', dist=sps.norm, loc=loc, scale=scale, dtype=ss.dtypes.float, **kwargs)
+    def __init__(self, loc=0.0, scale=1.0, **kwargs): # Does not accept dtype
+        super().__init__(distname='normal', dist=sps.norm, loc=loc, scale=scale, **kwargs)
         return
 
 
@@ -709,8 +710,8 @@ class lognorm_im(Dist):
         
         ss.lognorm_im(mean=2, sigma=1, strict=False).rvs(1000).mean() # Should be roughly 10
     """
-    def __init__(self, mean=0.0, sigma=1.0, **kwargs):
-        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, dtype=ss.dtypes.float, **kwargs)
+    def __init__(self, mean=0.0, sigma=1.0, **kwargs): # Does not accept dtype
+        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
         return
     
     def sync_pars(self, call=True):
@@ -741,8 +742,8 @@ class lognorm_ex(Dist):
         
         ss.lognorm_ex(mean=2, std=1, strict=False).rvs(1000).mean() # Should be close to 2
     """
-    def __init__(self, mean=1.0, std=1.0, **kwargs):
-        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, std=std, dtype=ss.dtypes.float, **kwargs)
+    def __init__(self, mean=1.0, std=1.0, **kwargs): # Does not accept dtype
+        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, std=std, **kwargs)
         return
     
     def convert_ex_to_im(self):
@@ -851,7 +852,7 @@ class rand_raw(Dist):
         if ss.options._centralized:
             return self.rng.randint(low=0, high=np.iinfo(ss.dtypes.rand_uint).max, dtype=ss.dtypes.rand_uint, size=self._size)
         else:
-            return self.bitgen.random_raw(self._size, dtype=ss.dtypes.rand_uint)
+            return self.bitgen.random_raw(self._size) # TODO: figure out how to make accept dtype, or check speed
 
 
 class weibull(Dist):
