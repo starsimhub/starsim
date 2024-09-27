@@ -270,7 +270,6 @@ class Pregnancy(Demographics):
         
         # Other, e.g. postpartum, on contraception...
         self.define_states(
-            ss.BoolArr('infertile', label='Infertile'),  # Applies to girls and women outside the fertility window
             ss.BoolArr('fecund', default=True, label='Female of childbearing age'),
             ss.BoolArr('pregnant', label='Pregnant'),  # Currently pregnant
             ss.BoolArr('postpartum', label="Post-partum"),  # Currently post-partum
@@ -314,19 +313,19 @@ class Pregnancy(Demographics):
             age_bin_all = np.digitize(age, age_bins) - 1
             new_rate = self.fertility_rate_data.loc[nearest_year].values.copy()  # Initialize array with new rates
 
-            if self.pregnant.any():
-                # Scale the new rate to convert the denominator from all women to non-pregnant women
+            if (~self.fecund).any():
+                # Scale the new rate to convert the denominator from all women to fecund women
                 v, c = np.unique(age_bin_all, return_counts=True)
                 age_counts = np.zeros(len(age_bins))
                 age_counts[v] = c
 
-                age_bin_pw = np.digitize(sim.people.age[self.pregnant], age_bins) - 1
-                v, c = np.unique(age_bin_pw, return_counts=True)
-                pregnant_age_counts = np.zeros(len(age_bins))
-                pregnant_age_counts[v] = c
+                age_bin_infecund = np.digitize(sim.people.age[~self.fecund], age_bins) - 1
+                v, c = np.unique(age_bin_infecund, return_counts=True)
+                infecund_age_counts = np.zeros(len(age_bins))
+                infecund_age_counts[v] = c
 
                 num_to_make = new_rate * age_counts  # Number that we need to make pregnant
-                new_denom = age_counts - pregnant_age_counts  # New denominator for rates
+                new_denom = age_counts - infecund_age_counts  # New denominator for rates
                 np.divide(num_to_make, new_denom, where=new_denom>0, out=new_rate)
 
             fertility_rate[uids] = new_rate[age_bin_all]
@@ -335,7 +334,6 @@ class Pregnancy(Demographics):
         invalid_age = (age < self.pars.min_age) | (age > self.pars.max_age)
         fertility_prob = fertility_rate * (self.pars.units * self.pars.rel_fertility * sim.pars.dt)
         fertility_prob[(~self.fecund).uids] = 0 # Currently infecund women cannot become pregnant
-        fertility_prob[self.infertile.uids] = 0 # Do not allow infertile 
         fertility_prob[uids[invalid_age]] = 0 # Women too young or old cannot become pregnant
         fertility_prob = np.clip(fertility_prob[uids], a_min=0, a_max=1)
         return fertility_prob
