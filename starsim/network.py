@@ -484,7 +484,7 @@ class RandomNet(DynamicNetwork):
         function should be HALF of the total contacts a person is expected to have, if both
         the source and target array outputs are used (e.g. for social contacts)
 
-        adjusted_number_of_contacts = np.round(number_of_contacts / 2).astype(cvd.default_int)
+        adjusted_number_of_contacts = np.round(number_of_contacts / 2).astype(ss.dtype.int)
 
         Whereas for asymmetric contacts (e.g. staff-public interactions) it might not be necessary
 
