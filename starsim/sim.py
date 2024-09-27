@@ -6,7 +6,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-import matplotlib.pyplot as pl
+import matplotlib.pyplot as plt
 
 __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
 
@@ -656,7 +656,7 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
             if plot:
                 sim.plot()
                 if show:
-                    pl.show()
+                    plt.show()
     return sim
 
 
