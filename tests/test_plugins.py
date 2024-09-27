@@ -4,7 +4,7 @@ Test connectors and custom interventions
 
 import sciris as sc
 import numpy as np
-import pylab as pl
+import matplotlib.pyplot as plt
 import starsim as ss
 
 sc.options(interactive=False) # Assume not running interactively
@@ -117,29 +117,29 @@ def test_connectors(do_plot=False):
 
     # Plot
     if do_plot:
-        pl.figure()
+        plt.figure()
         
-        pl.subplot(2,1,1)
+        plt.subplot(2,1,1)
         x = sims.con.timevec
         for label,res in results.items():
-            pl.plot(x, res.syphilis, label=label)
-        pl.title('Syphilis infections')
-        pl.xlabel('Year')
-        pl.ylabel('Count')
-        pl.axvline(2020)
-        pl.legend()
+            plt.plot(x, res.syphilis, label=label)
+        plt.title('Syphilis infections')
+        plt.xlabel('Year')
+        plt.ylabel('Count')
+        plt.axvline(2020)
+        plt.legend()
         
-        pl.subplot(2,1,2)
+        plt.subplot(2,1,2)
         for label,res in results.items():
-            pl.plot(x, res.hiv, label=label)
-        pl.title('HIV infections')
-        pl.xlabel('Year')
-        pl.ylabel('Count')
-        pl.axvline(2020)
-        pl.legend()
+            plt.plot(x, res.hiv, label=label)
+        plt.title('HIV infections')
+        plt.xlabel('Year')
+        plt.ylabel('Count')
+        plt.axvline(2020)
+        plt.legend()
         
         sc.figlayout()
-        pl.show()
+        plt.show()
     
     # Check results
     for disease in diseases:

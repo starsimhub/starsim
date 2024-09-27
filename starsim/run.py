@@ -4,13 +4,13 @@ Utilities for running in parallel
 
 import numpy as np
 import sciris as sc
-import pylab as pl
+import matplotlib.pyplot as plt
 import starsim as ss
 
 __all__ = ['MultiSim', 'single_run', 'multi_run', 'parallel']
 
 
-class MultiSim(sc.prettyobj):
+class MultiSim:
     """
     Class for running multiple copies of a simulation.
     """
@@ -37,6 +37,7 @@ class MultiSim(sc.prettyobj):
         self.run_args = sc.mergedicts(kwargs)
         self.results = None
         self.which = None  # Whether the multisim is to be reduced, combined, etc.
+        self.timer = sc.timer() # Create a timer
 
         # Optionally initialize
         if initialize:
@@ -45,7 +46,60 @@ class MultiSim(sc.prettyobj):
         return
 
     def __len__(self):
-        return len(self.sims)
+        """ The length of a MultiSim is how many sims it contains """
+        try:
+            return len(self.sims)
+        except:
+            return 0
+    
+    def __repr__(self):
+        """ Return a brief description of a multisim; see multisim.disp() for the more detailed version. """
+        try:
+            labelstr = f'"{self.label}"; ' if self.label else ''
+            string   = f'MultiSim({labelstr}n_sims: {len(self)}; base: {self.base_sim})'
+        except Exception as E:
+            string = sc.objectid(self)
+            string += f'Warning, multisim appears to be malformed:\n{str(E)}'
+        return string
+    
+    def brief(self):
+        """ A single-line display of the MultiSim; same as print(multisim) """
+        print(self)
+        return
+    
+    def show(self, output=False):
+        """ Show more detail than print(multisim), but less than multisim.disp() """
+        '''
+        Print a moderate length summary of the MultiSim. See also multisim.disp()
+        (detailed output) and multisim.brief() (short output).
+    
+        Args:
+            output (bool): if true, return a string instead of printing output
+    
+        **Example**::
+    
+            msim = ss.MultiSim(ss.demo(run=False), label='Example multisim')
+            msim.run()
+            msim.show() # Prints moderate length output
+        '''
+        labelstr = f' "{self.label}"' if self.label else ''
+        simlenstr = f'{len(self)}'
+        string  = f'MultiSim{labelstr} summary:\n'
+        string += f'  Number of sims: {simlenstr}\n'
+        string += f'  Reduced/combined: {self.which}\n'
+        string += f'  Base: {self.base_sim}\n'
+        if self.sims:
+            string += '  Sims:\n'
+            for s,sim in enumerate(self.sims):
+                string += f'    {s}: {sim}\n'
+        if not output:
+            print(string)
+        else:
+            return string
+    
+    def disp(self):
+        """ Display the full object """
+        return sc.pr(self)
 
     def init_sims(self, **kwargs):
         """
@@ -88,8 +142,10 @@ class MultiSim(sc.prettyobj):
                     sim.label = f'Sim {s}'
 
         # Run
+        self.timer.start()
         kwargs = sc.mergedicts(self.run_args, kwargs)
         self.sims = multi_run(sims, n_runs=n_runs, **kwargs)
+        self.timer.stop()
 
         return self
 
@@ -279,7 +335,7 @@ class MultiSim(sc.prettyobj):
             plot_kw = sc.mergedicts({'alpha':alpha}, plot_kw)
             for sim in self.sims:
                 fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw)
-            pl.legend()
+            plt.legend()
         
         # Has been reduced, plot with uncertainty bounds
         else:

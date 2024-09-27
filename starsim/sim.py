@@ -6,7 +6,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-import matplotlib.pyplot as pl
+import matplotlib.pyplot as plt
 
 __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
 
@@ -32,7 +32,7 @@ class Sim:
         self.label = label # Usually overwritten during initialization by the parameters
         self.created = sc.now()  # The datetime the sim was created
         self.version = ss.__version__ # The Starsim version
-        self.gitinfo = sc.gitinfo(path=__file__, verbose=False)
+        self.metadata = sc.metadata(version=self.version, pipfreeze=False)
         self.dists = ss.Dists(obj=self) # Initialize the random number generator container
         self.loop = ss.Loop(self) # Initialize the integration loop
         self.results = ss.Results(module='sim')  # For storing results
@@ -144,7 +144,7 @@ class Sim:
         self.init_vals() # Initialize the values in all of the states and networks
         self.init_results() # Initialize the results
         self.loop.init() # Initialize the integration loop
-        self.timer = sc.timer(start=False) # Store a timer for keeping track of how long the run takes
+        self.timer = sc.timer() # Store a timer for keeping track of how long the run takes
         self.verbose = self.pars.verbose # Store a run-specific value of verbose
         
         # It's initialized
@@ -656,7 +656,7 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
             if plot:
                 sim.plot()
                 if show:
-                    pl.show()
+                    plt.show()
     return sim
 
 

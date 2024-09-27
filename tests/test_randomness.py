@@ -5,9 +5,9 @@ Test the Dists object from distributions.py
 # %% Imports and settings
 import numpy as np
 import sciris as sc
-import starsim as ss
 import scipy.stats as sps
-import matplotlib.pyplot as pl
+import matplotlib.pyplot as plt
+import starsim as ss
 
 n = 5 # Default number of samples
 
@@ -162,20 +162,20 @@ def plot_infs(s1, s2):
     a1 = s1.interventions.countinf.arr
     a2 = s2.interventions.countinf.arr
     
-    fig = pl.figure()
-    pl.subplot(1,3,1)
-    pl.pcolormesh(a1.T)
-    pl.xlabel('Timestep')
-    pl.ylabel('Person')
-    pl.title('Baseline')
+    fig = plt.figure()
+    plt.subplot(1,3,1)
+    plt.pcolormesh(a1.T)
+    plt.xlabel('Timestep')
+    plt.ylabel('Person')
+    plt.title('Baseline')
     
-    pl.subplot(1,3,2)
-    pl.pcolormesh(a2.T)
-    pl.title('OneMore')
+    plt.subplot(1,3,2)
+    plt.pcolormesh(a2.T)
+    plt.title('OneMore')
     
-    pl.subplot(1,3,3)
-    pl.pcolormesh(a2.T - a1.T)
-    pl.title('Difference')
+    plt.subplot(1,3,3)
+    plt.pcolormesh(a2.T - a1.T)
+    plt.title('Difference')
     
     sc.figlayout()
     return fig
@@ -218,7 +218,7 @@ def test_worlds(do_plot=False):
     if do_plot:
         s1.plot()
         plot_infs(s1, s2)
-        pl.show()
+        plt.show()
     
     l1 = len(s1.people)
     l2 = len(s2.people)
@@ -276,16 +276,16 @@ def test_independence(do_plot=False, thresh=0.1):
                 
     # Optionally plot
     if do_plot:
-        pl.figure()
-        pl.imshow(stats)
+        plt.figure()
+        plt.imshow(stats)
         ticks = np.arange(n)
         labels = arrs.keys()
-        pl.xticks(ticks, labels)
-        pl.yticks(ticks, labels)
-        pl.xticks(rotation=15)
-        pl.colorbar()
+        plt.xticks(ticks, labels)
+        plt.yticks(ticks, labels)
+        plt.xticks(rotation=15)
+        plt.colorbar()
         sc.figlayout()
-        pl.show()
+        plt.show()
             
     # Test that everything is independent
     max_corr = abs(stats).max()
@@ -303,13 +303,13 @@ def test_combine_rands(do_plot=False):
     b = np.random.randint(np.iinfo(np.uint64).max, size=n, dtype=np.uint64)
     c = ss.utils.combine_rands(a, b)
     if do_plot:
-        pl.figure()
+        plt.figure()
         for i,k,v in sc.objdict(a=a,b=b,combined=c).enumitems():
-            pl.subplot(3,1,i+1)
-            pl.hist(v)
-            pl.title(k)
+            plt.subplot(3,1,i+1)
+            plt.hist(v)
+            plt.title(k)
         sc.figlayout()
-        pl.show()
+        plt.show()
     
     mean = c.mean()
     assert np.isclose(mean, target, atol=atol), f'Expected value to be 0.5±{atol}, not {mean}'

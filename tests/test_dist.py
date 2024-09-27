@@ -6,7 +6,7 @@ import numpy as np
 import sciris as sc
 import scipy.stats as sps
 import starsim as ss
-import matplotlib.pyplot as pl
+import matplotlib.pyplot as plt
 import pytest
 
 n = 1_000_000 # For testing statistical properties and performance of distributions
@@ -15,13 +15,13 @@ sc.options(interactive=False)
 
 
 def plot_rvs(rvs, times=None, nrows=None):
-    fig = pl.figure(figsize=(12,12))
+    fig = plt.figure(figsize=(12,12))
     nrows, ncols = sc.getrowscols(len(rvs), nrows=nrows)
     for i,name,r in rvs.enumitems():
-        pl.subplot(nrows, ncols, i+1)
-        pl.hist(r.astype(float))
+        plt.subplot(nrows, ncols, i+1)
+        plt.hist(r.astype(float))
         title = times[name] if times else name
-        pl.title(title)
+        plt.title(title)
         sc.commaticks()
     sc.figlayout()
     return fig

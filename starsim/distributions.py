@@ -7,7 +7,7 @@ import numpy as np
 import numba as nb
 import scipy.stats as sps
 import starsim as ss
-import matplotlib.pyplot as pl
+import matplotlib.pyplot as plt
 
 __all__ = ['link_dists', 'make_dist', 'dist_list', 'Dists', 'Dist']
 
@@ -626,13 +626,13 @@ class Dist:
 
     def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
         """ Plot the current state of the RNG as a histogram """
-        pl.figure(**sc.mergedicts(fig_kw))
+        plt.figure(**sc.mergedicts(fig_kw))
         rvs = self.rvs(n)
         self.reset(-1) # As if nothing ever happened
-        pl.hist(rvs, bins=bins, **sc.mergedicts(hist_kw))
-        pl.title(str(self))
-        pl.xlabel('Value')
-        pl.ylabel(f'Count ({n} total)')
+        plt.hist(rvs, bins=bins, **sc.mergedicts(hist_kw))
+        plt.title(str(self))
+        plt.xlabel('Value')
+        plt.ylabel(f'Count ({n} total)')
         return rvs
         
 

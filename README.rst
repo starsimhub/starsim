@@ -25,6 +25,8 @@ Starsim is most easily installed via PyPI: ``pip install starsim``.
 
 Starsim can also be installed locally. To do this, clone first this repository, then run ``pip install -e .`` (don't forget the dot at the end!).
 
+*Note:* Starsim leverages Intel's `short vector math library <https://numba.readthedocs.io/en/stable/user/performance-tips.html#intel-svml>`_. If you want to use this (for a ~10% speed improvement), install via `conda install intel-cmplr-lib-rt`.
+
 
 Usage and documentation
 -----------------------
@@ -63,22 +65,24 @@ Here is a slightly more realistic example of an SIR model with random connection
 More usage examples are available in the tutorials, as well as the ``tests`` folder.
 
 
-Model structure
----------------
+Starsim structure
+-----------------
 
 All core model code is located in the ``starsim`` subfolder; standard usage is ``import starsim as ss``.
 
-The model consists of core classes including Sim, Run, People, State, Network, Connectors, Analyzers, Interventions, Results, and more. These classes contain methods for running, building simple or dynamic networks, generating random numbers, calculating results, plotting, etc.
+The model consists of core classes including ``Sim``, ``People``, ``Disease``, ``Network``, ``Intervention``, and more. These classes contain methods for running, building simple or dynamic networks, generating random numbers, calculating results, plotting, etc.
 
-The structure of the starsim folder is as follows, roughly in the order in which the modules are imported, building from most fundamental to most complex:
+The submodules of the Starsim folder are as follows:
 
+• ``arrays.py``: Classes to handle store and update states for people in networks in the simulation including living, mother, child, susceptible, infected, inoculated, recovered, etc.
 • ``calibration.py``: Class to handle automated calibration of the model to data.
 •	``demographics.py``: Classes to transform initial condition input parameters for use in building and utilizing networks.
 •	``disease.py``: Classes to manage infection rate of spread, prevalence, waning effects, and other parameters for specific diseases.
-•	``distributions.py``: Classes that handle statistical distributions used throughout Starsim.
+•	``distributions.py``: Classes that handle statistical distributions used throughout Starsim to produce random numbers.
 •	``interventions.py``: The Intervention class, for adding interventions and dynamically modifying parameters, and classes for each of the specific interventions derived from it. The Analyzers class (for performing analyses on the sim while it's running), and other classes and functions for analyzing simulations.
+• ``loop.py``: The logic for the main simulation integration loop.
 •	``modules.py``: Class to handle "module" logic, such as updates (diseases, networks, etc).
-•	``network.py``: Classes for creating simple and dynamic networks of people based on input parameters.
+•	``networks.py``: Classes for creating simple and dynamic networks of people based on input parameters.
 •	``parameters.py``: Classes for creating the simulation parameters.
 •	``people.py``: The People class, for handling updates of state for each person.
 •	``products.py``: Classes to manage the deployment of vaccines and treatments.
@@ -87,7 +91,6 @@ The structure of the starsim folder is as follows, roughly in the order in which
 •	``samples.py``: Class to store data from a large number of simulations.
 •	``settings.py``: User-customizable options for Starsim (e.g. default font size).
 •	``sim.py``: The Sim class, which performs most of the heavy lifting: initializing the model, running, and plotting.
-•	``states.py``: Classes to handle store and update states for people in networks in the simulation including living, mother, child, susceptible, infected, inoculated, recovered, etc.
 •	``utils.py``: Helper functions.
 •	``version.py``: Version, date, and license information.
 
