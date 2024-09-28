@@ -11,7 +11,23 @@ __all__ = ['Result', 'Results']
 
 
 class Result(ss.BaseArr):
-    
+    """
+    Array-like container for holding sim results.
+
+    Args:
+        module (str): the name of the parent module, e.g. 'hiv'
+        name (str): the name of this result, e.g. 'new_infections'
+        shape (int/tuple): the shape of the result array (usually module.npts)
+        scale (bool): whether or not the result scales by population size (e.g. a count does, a prevalence does not)
+        label (str): a human-readable label for the result
+        values (array): prepopulate the Result with these values
+        low (array): values for the lower bound
+        high (array): values for the upper bound
+
+    In most cases, ``ss.Result`` behaves exactly like ``np.array()``, except with
+    the additional fields listed above. To see everything contained in a result,
+    you can use result.disp().
+    """
     def __init__(self, module=None, name=None, shape=None, dtype=None, scale=None, label=None, values=None, low=None, high=None):
         if values is not None:
             self.values = np.array(values, dtype=dtype)
@@ -43,7 +59,7 @@ class Result(ss.BaseArr):
     
 
 class Results(ss.ndict):
-    
+    """ Container for storing results """
     def __init__(self, module, strict=True, *args, **kwargs):
         super().__init__(type=Result, strict=strict)
         if hasattr(module, 'name'):
