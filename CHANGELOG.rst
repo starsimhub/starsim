@@ -76,7 +76,7 @@ Regression information
 - ``Infection._set_cases()`` has been renamed ``Infection.set_outcomes()``.
 - ``Intervention.apply(sim)`` has been renamed ``Intervention.step()``; ditto for ``Analyzer``.
 - ``Module.step()`` no longer takes ``sim`` as an argument (e.g., replace ``intervention.apply(sim)`` with ``intervention.step()``).
-- All modules now have ``init_results()`` and ``update_results()`` methods.
+- All modules now have methods for ``start_step()``, ``finish_step()``, ``init_results()``, and ``update_results()``.
 - ``Network.contacts`` has been renamed ``Network.edges``.
 - ``sim.get_intervention()`` and ``sim.get_analyzer()`` have been removed; simply call directly instead (e.g. replace ``sim.get_intervention('vaccine')`` with ``sim.interventions['vaccine']``).
 - ``requires`` is no longer an attribute of modules; call the ``ss.check_requires()`` function directly if needed.
