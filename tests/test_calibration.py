@@ -80,7 +80,7 @@ def make_data():
 
 #%% Define the tests
 
-def test_calibration(do_plot=True):
+def test_calibration(do_plot=False):
     sc.heading('Testing calibration')
 
     # Define the calibration parameters
@@ -108,8 +108,8 @@ def test_calibration(do_plot=True):
         sim = sim,
         data = data,
         weights = weights,
-        total_trials = 4,
-        n_workers = 2,
+        total_trials = 100,
+        n_workers = 20,
         die = True
     )
 
@@ -126,7 +126,11 @@ def test_calibration(do_plot=True):
         print('✓ Calibration improved fit')
     else:
         print('✗ Calibration did not improve fit, but this sometimes happens stochastically and is not necessarily an error')
-    
+
+    if do_plot:
+        calib.plot_sims()
+        calib.plot_trend()
+
     return sim, calib
 
 
@@ -134,7 +138,8 @@ def test_calibration(do_plot=True):
 if __name__ == '__main__':
 
     T = sc.timer()
+    do_plot = True
 
-    sim, calib = test_calibration()
+    sim, calib = test_calibration(do_plot=do_plot)
 
     T.toc()
