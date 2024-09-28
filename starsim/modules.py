@@ -41,7 +41,7 @@ def find_modules(key=None):
             except:
                 pass
     return modules if key is None else modules[key]
-    
+ 
 
 class Module(sc.quickobj):
 
@@ -54,11 +54,11 @@ class Module(sc.quickobj):
         self.initialized = False
         self.finalized = False
         return
-    
+ 
     def __bool__(self):
         """ Ensure that zero-length modules (e.g. networks) are still truthy """
         return True
-    
+ 
     def __call__(self, *args, **kwargs):
         """ Allow modules to be called like functions """
         return self.step(*args, **kwargs)
@@ -70,7 +70,7 @@ class Module(sc.quickobj):
             print(out)
         else:
             return out
-    
+ 
     def set_metadata(self, name=None, label=None):
         """ Set metadata for the module """
         # Validation
@@ -84,13 +84,13 @@ class Module(sc.quickobj):
         self.name  = sc.ifelse(name,  getattr(self, 'name',  self.pars.get('name', self.__class__.__name__.lower()))) # Default name is the class name
         self.label = sc.ifelse(label, getattr(self, 'label', self.pars.get('label', self.name)))
         return
-    
+ 
     def set_time_pars(self, unit=None, dt=None):
         """ Set time units for the module """
         self.unit  = sc.ifelse(unit,  getattr(self, 'unit', self.pars.get('unit')))
         self.dt    = sc.ifelse(dt,    getattr(self, 'dt',   self.pars.get('dt')))
         return
-    
+ 
     def define_pars(self, inherit=True, **kwargs): # TODO: think if inherit should default to true or false
         """ Create or merge Pars objects """
         if inherit: # Merge with existing
@@ -98,30 +98,30 @@ class Module(sc.quickobj):
         else: # Or overwrite
             self.pars = ss.Pars(**kwargs)
         return self.pars
-    
+ 
     def update_pars(self, pars, **kwargs):
         """ Pull out recognized parameters, returning the rest """
         pars = sc.mergedicts(pars, kwargs)
-        
+ 
         # Update matching module parameters
         matches = {}
         for key in list(pars.keys()): # Need to cast to list to avoid "dict changed during iteration"
             if key in self.pars:
                 matches[key] = pars.pop(key)
         self.pars.update(matches)
-                
+
         # Update module attributes
         metadata = {key:pars.pop(key, None) for key in ['name', 'label']}
         timepars = {key:pars.pop(key, None) for key in ['unit', 'dt']}
         self.set_metadata(**metadata)
         self.set_time_pars(**timepars)
-        
+ 
         # Should be no remaining pars
         if len(pars):
             errormsg = f'{len(pars)} unrecognized arguments for {self.name}: {sc.strjoin(pars.keys())}'
             raise ValueError(errormsg)
         return
-    
+ 
     def init_pre(self, sim, force=False):
         """
         Perform initialization steps
@@ -140,11 +140,11 @@ class Module(sc.quickobj):
             self.init_results()
             self.pre_initialized = True
         return
-    
+
     def init_results(self):
         """ Initialize any results required; part of init_pre() """
         pass
-    
+
     def init_post(self):
         """ Initialize the values of the states; the last step of initialization """
         for state in self.states:
@@ -152,31 +152,31 @@ class Module(sc.quickobj):
                 state.init_vals()
         self.initialized = True
         return
-    
+
     def init_time_pars(self, force=False):
         """ Initialize all time parameters by ensuring all parameters are initialized; part of init_post() """
         pars = self.sim.pars
-        
+
         # Find all modules and set the timestep
         if force or self.unit is None:
             self.unit = pars.unit
         if force or self.dt is None:
             self.dt = pars.dt
-        
+ 
         # Find all time parameters in the module
         timepars = sc.search(self.pars, type=ss.TimePar) # Should it be self or self.pars?
-        
+
         # Initialize them with the parent module
         for timepar in timepars.values():
             if force or not timepar.initialized:
                 timepar.init(parent=self)
-        
+
         # Create the module-specific time vector
         self.timevec = ss.make_timevec(pars.start, pars.stop, self.dt, self.unit)
         self.npts = len(self.timevec)
         self.ti = 0 # Track the current timestep, which may or may not match the sim's
         return
-    
+
     @property
     def now(self):
         """ Return the current time, i.e. the time vector at the current timestep """
@@ -185,16 +185,16 @@ class Module(sc.quickobj):
         except Exception as E:
             ss.warn(f'Encountered exception when getting the current time in {self.name}: {E}')
             return None
-    
+
     def step(self):
         """ Define how the module updates over time """
         pass
-    
+
     def finish_step(self):
         """ Define what should happen at the end of the step; at minimum, increment ti """
         self.ti += 1
         return
-    
+ 
     def update_results(self):
         """ Perform any results updates on each timestep """
         pass
@@ -212,11 +212,11 @@ class Module(sc.quickobj):
             if isinstance(res, ss.Result) and res.scale:
                 self.results[reskey] = self.results[reskey]*self.sim.pars.pop_scale
         return
-    
+ 
     def define_states(self, *args, check=True):
         """
         Add states to the module with the same attribute name as the state
-        
+ 
         Args:
             args (states): list of states to add
             check (bool): whether to check that the object being added is a state
@@ -228,10 +228,10 @@ class Module(sc.quickobj):
                 state = ss.State(**arg)
             else:
                 state = arg
-                
+
             if check:
                 assert isinstance(state, ss.Arr), f'Could not add {state}: not an Arr object'
-                
+ 
             setattr(self, state.name, state)
         return
 
@@ -270,7 +270,7 @@ class Module(sc.quickobj):
                 return subcls(*args, **kwargs)
         else:
             raise KeyError(f'Module "{name}" did not match any known Starsim modules')
-            
+ 
     @classmethod
     def from_func(cls, func):
         """ Create an module from a function """
@@ -281,9 +281,9 @@ class Module(sc.quickobj):
         mod.func = func
         mod.step = partial(step, mod)
         mod.step.__name__ = name # Manually add these in as for a regular class method
-        mod.step.__self__ = mod 
+        mod.step.__self__ = mod
         return mod
-            
+ 
     def to_json(self):
         """ Export to a JSON-compatible format """
         out = sc.objdict()
@@ -311,10 +311,10 @@ class Analyzer(Module):
     Base class for Analyzers. Analyzers are used to provide more detailed information 
     about a simulation than is available by default -- for example, pulling states 
     out of sim.people on a particular timestep before they get updated on the next step.
-    
+ 
     The key method of the analyzer is ``step()``, which is called with the sim
     on each timestep.
-    
+ 
     To retrieve a particular analyzer from a sim, use sim.get_analyzer().
     """
     pass
@@ -323,8 +323,8 @@ class Analyzer(Module):
 class Connector(Module):
     """
     Base class for Connectors, which mediate interactions between disease (or other) modules
-    
+ 
     Because connectors can do anything, they have no specified structure: it is
-    up to the user to define how they behave.    
+    up to the user to define how they behave.
     """
     pass

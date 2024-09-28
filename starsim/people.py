@@ -51,8 +51,10 @@ class People(sc.prettyobj):
         self.auids = uids.copy() # This tracks all active UIDs (in practice, agents who are alive)
         self.uid = ss.IndexArr('uid')  # This variable tracks all UIDs
         self.slot = ss.IndexArr('slot') # A slot is a special state managed internally
+        self.parent = ss.IndexArr('parent', label='UID of parent')  # UID of parent, if any, IndexArray?
         self.uid.grow(new_vals=uids)
         self.slot.grow(new_vals=uids)
+        self.parent.grow(new_uids=uids, new_vals=np.full(len(uids), self.parent.nan))
         for state in [self.uid, self.slot]:
             state.people = self # Manually link to people since we don't want to link to states
         
@@ -71,7 +73,7 @@ class People(sc.prettyobj):
             self.states.append(state, overwrite=False)
             setattr(self, state.name, state)
             state.link_people(self)
-            
+
         return
 
     @staticmethod
@@ -227,6 +229,8 @@ class People(sc.prettyobj):
         new_slots = new_slots if new_slots is not None else new_uids
         self.slot.grow(new_uids, new_vals=new_slots)
 
+        self.parent.grow(new_uids, new_vals=self.parent.nan) # Grow parent array
+
         # Grow the states
         for state in self._states.values():
             state.grow(new_uids)
@@ -319,20 +323,20 @@ class People(sc.prettyobj):
         for disease in self.sim.diseases():
             if isinstance(disease, ss.Disease):
                 disease.step_die(death_uids)
-                
+
         return death_uids
-    
+
     def remove_dead(self):
         """
         Remove dead agents
         """
         uids = self.dead.uids
         if len(uids):
-            
+
             # Remove the UIDs from the networks too
             for network in self.sim.networks.values():
                 network.remove_uids(uids) # TODO: only run once every nth timestep
-                
+
             # Calculate the indices to keep
             self.auids = self.auids[np.isin(self.auids, np.unique(uids), assume_unique=True, invert=True, kind='sort')]
 

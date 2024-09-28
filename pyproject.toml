@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "starsim"
+dynamic = ["version"]
+description = "A fast, flexible agent-based disease modeling framework"
+readme = "README.rst"
+requires-python = ">=3.8"
+license = {file = "LICENSE.txt"}
+keywords = ["agent-based model", "simulation", "disease", "epidemiology"]
+
+authors = [
+  { name = "Starsim Development Team", email = "info@starsim.org" },
+  { name = "Cliff Kerr" },
+  { name = "Robyn Stuart" },
+  { name = "Romesh Abeysuriya" },
+  { name = "Paula Sanz-Leon" },
+  { name = "Jamie Cohen" },
+  { name = "Daniel Klein" }
+]
+
+classifiers = [
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+  "Development Status :: 5 - Production/Stable",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12"
+]
+
+dependencies = [
+    "numpy",
+    "scipy",
+    "pandas>=2.0.0",
+    "sciris>=3.2.0",
+    "matplotlib",
+    "numba",
+    "networkx",
+    "optuna"
+]
+
+[project.optional-dependencies]
+fastmath = ["intel-cmplr-lib-rt"]
+test = ["pytest>=7.3", "pytest-cov", "pytest-env", "pytest-xdist"]
+
+[project.urls]
+"Website" = "https://starsim.org"
+"Source" = "https://github.com/starsimhub/starsim/"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["starsim*"]
+
+[tool.setuptools.package-data]
+mypkg = ["*.ipynb", "*.rst", "*.csv"]
+
+[tool.setuptools.dynamic]
+version = {attr = "starsim.version.__version__"}

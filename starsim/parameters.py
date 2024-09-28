@@ -208,6 +208,7 @@ class SimPars(Pars):
         self.dt         = 1.0    # Timestep (in units of self.unit)
         self.rand_seed  = 1      # Random seed; if None, don't reset
         self.slot_scale = 5      # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
+        self.min_slots  = 100  # Minimum number of slots, useful if the population size is very small
 
         # Demographic parameters
         self.birth_rate = None
