@@ -146,6 +146,18 @@ class Dists(sc.prettyobj):
             out += dist.reset()
         return out
 
+    def copy_to_module(self, module):
+        """ Copy the Sim's Dists object to the specified module """
+        matches = {key:dist for key,dist in self.dists.items() if id(dist.module) == id(module)} # Find which dists belong to this module
+        if len(matches):
+            new = Dists() # Create an empty Dists object
+            new.__dict__.update(self.__dict__) # Shallow-copy all values over
+            new.obj = module # Replace the module
+            new.dists = sc.objdict(matches) # Replace the dists with a shallow copy the matching dists
+            module.dists = new # Copy to the module
+        else:
+            new = None
+        return new
 
 class Dist:
     """

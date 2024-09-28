@@ -159,7 +159,7 @@ class Sim:
                 intv.product.init_pre(self)
         
         # Final initializations
-        self.dists.init(obj=self, base_seed=self.pars.rand_seed, force=True) # Initialize all distributions now that everything else is in place
+        self.init_dists() # Initialize distributions
         self.init_vals() # Initialize the values in all of the states and networks
         self.init_results() # Initialize the results
         self.init_data() # Initialize the data
@@ -208,7 +208,17 @@ class Sim:
         self.people = people
         self.people.link_sim(self)
         return self.people
-    
+
+    def init_dists(self):
+        """ Initialize the distributions """
+        # Initialize all distributions now that everything else is in place
+        self.dists.init(obj=self, base_seed=self.pars.rand_seed, force=True)
+
+        # Copy relevant dists to each module
+        for mod in self.modules:
+            self.dists.copy_to_module(mod)
+        return
+
     def init_vals(self):
         """ Initialize the states and other objects with values """
         

@@ -49,6 +49,7 @@ class Module(sc.quickobj):
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
         self.set_time_pars(unit, dt)
+        self.dists = None # Turned into a Dists object by sim.init_dists() if this module has dists
         self.results = ss.Results(self.name)
         self.pre_initialized = False
         self.initialized = False
