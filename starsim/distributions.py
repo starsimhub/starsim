@@ -635,7 +635,6 @@ class Dist:
             
         return rvs
 
-
     def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
         """ Plot the current state of the RNG as a histogram """
         plt.figure(**sc.mergedicts(fig_kw))
