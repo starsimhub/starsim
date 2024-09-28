@@ -123,7 +123,7 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         if values is not None:
             new.values = values # Replace data with new data
         else:
-            new.values = new.values.copy() # TODO: is this needed?
+            new.values = sc.cp(new.values) # TODO: is this needed?
         return new
 
 

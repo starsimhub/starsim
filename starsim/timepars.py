@@ -178,7 +178,7 @@ class TimePar(ss.BaseArr):
         
         # Set defaults if not yet set
         self.unit = sc.ifelse(self.unit, self.parent_unit)
-        self.parent_dt = sc.ifelse(self.parent_dt, 1.0)
+        self.parent_dt = sc.ifelse(self.parent_dt, self.self_dt, 1.0)
         
         # Calculate the actual conversion factor to be used in the calculations
         self.update()
@@ -202,14 +202,14 @@ class TimePar(ss.BaseArr):
     def isarray(self):
         return isinstance(self.values, np.ndarray)
 
-    def set(self, v=None, unit=None, parent_unit=None, parent_dt=None, self_dt=None):
+    def set(self, v=None, unit=None, parent_unit=None, parent_dt=None, self_dt=None, force=False):
         """ Reset the parameter values """
         if v           is not None: self.v           = v
         if unit        is not None: self.unit        = unit
         if parent_unit is not None: self.parent_unit = parent_unit
         if parent_dt   is not None: self.parent_dt   = parent_dt
         if self_dt     is not None: self.self_dt     = self_dt
-        if self.initialized: # Don't try to set these unless it's been initialized
+        if self.initialized or force: # Don't try to set these unless it's been initialized
             self.update()
         return self
 
@@ -221,51 +221,47 @@ class TimePar(ss.BaseArr):
     
     def update_factor(self):
         """ Set factor used to multiply the value to get the output """
-        self.factor = time_ratio(unit1=self.unit, dt1=1.0, unit2=self.parent_unit, dt2=self.parent_dt)
+        self.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=self.parent_unit, dt2=self.parent_dt)
         return
 
     def to(self, unit=None, dt=None):
-        """ Convert to a different unit and dt """
-        raise NotImplementedError
+        """ Create a new timepar based on the current one but with a different unit and/or dt """
+        new = self.asnew()
+        unit = sc.ifelse(unit, self.parent_unit, self.unit)
+        parent_dt = sc.ifelse(dt, self.parent_dt, self.self_dt)
+        new.set(parent_unit=unit, parent_dt=parent_dt, force=True)
+        new.v = new.values # Reset the base value to the converted value(s)
+        new.set(unit=unit, self_dt=parent_dt, parent_unit=self.parent_unit, parent_dt=self.parent_dt, force=True) # Reset the parent to match
+        return new
 
-    # # Act like a float
-    # def __add__(self, other): return self.x + other
-    # def __sub__(self, other): return self.x - other
-    # def __mul__(self, other): return self.x * other
-    # def __pow__(self, other): return self.x ** other
-    # def __truediv__(self, other): return self.x / other
+    def to_parent(self):
+        """ Create a new timepar with the same units as the parent """
+        unit = self.parent_unit
+        dt = self.parent_dt
+        return self.to(unit=unit, dt=dt)
+
+    # Act like a float -- TODO, add type checking
+    def __add__(self, other): return self.asnew().set(v=self.v + other)
+    def __sub__(self, other): return self.asnew().set(v=self.v - other)
+    def __mul__(self, other): return self.asnew().set(v=self.v * other)
+    def __pow__(self, other): return self.asnew().set(v=self.v ** other)
+    def __truediv__(self, other): return self.asnew().set(v=self.v / other)
     
-    # # ...from either side
-    # def __radd__(self, other): return other + self.x
-    # def __rsub__(self, other): return other - self.x
-    # def __rmul__(self, other): return other * self.x
-    # def __rpow__(self, other): return other ** self.x
-    # def __rtruediv__(self, other): return other / self.x
+    # ...from either side
+    def __radd__(self, other): return self.asnew().set(v=other + self.v)
+    def __rsub__(self, other): return self.asnew().set(v=other - self.v)
+    def __rmul__(self, other): return self.asnew().set(v=other * self.v)
+    def __rpow__(self, other): return self.asnew().set(v=other ** self.v)
+    def __rtruediv__(self, other): return self.asnew().set(v=other / self.v)
     
-    # # Handle modify-in-place methods
-    # def __iadd__(self, other): self.value += other; return self
-    # def __isub__(self, other): self.value -= other; return self
-    # def __imul__(self, other): self.value *= other; return self
-    # def __itruediv__(self, other): self.value /= other; return self
+    # Handle modify-in-place methods
+    def __iadd__(self, other): return self.set(v=self.v + other)
+    def __isub__(self, other): return self.set(v=self.v - other)
+    def __imul__(self, other): return self.set(v=self.v * other)
+    def __itruediv__(self, other): return self.set(v=self.v / other)
     
-    # # Other methods
-    # def __neg__(self): return -self.x
-    
-    # # Unfortunately, floats don't define the above methods, so we can't *just* use this
-    # def __getattr__(self, attr):
-    #     """ Make it behave like a regular float mostly """
-    #     if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
-    #         return self.__getattribute__(attr)
-    #     else:
-    #         return getattr(self.x, attr)
-        
-    # # Similar to Arr -- required for doing efficient array operations
-    # def __array_ufunc__(self, ufunc, method, *args, **kwargs):
-    #     args = [(arg.x if arg is self else arg) for arg in args] # Use self.x for the operation
-    #     if method == '__call__':
-    #         return ufunc(*args, **kwargs)
-    #     else:
-    #         return self.x.__array_ufunc__(ufunc, method, *args, **kwargs) # Probably not needed
+    # Other methods
+    def __neg__(self): return self.asnew().set(v=-self.v)
 
 
 class dur(TimePar):
