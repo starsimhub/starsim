@@ -87,6 +87,10 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         result = self.convert(result)
         return result
 
+    def __iter__(self):
+        """ For iterating correctly, e.g. for sum() """
+        return iter(self.values)
+
     def __getitem__(self, index):
         """ For indexing and slicing, e.g. arr[inds] """
         return self.values[index]
