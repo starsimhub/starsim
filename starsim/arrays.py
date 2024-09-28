@@ -19,45 +19,41 @@ import starsim as ss
 ss_float = ss.dtypes.float
 ss_int   = ss.dtypes.int
 ss_bool  = ss.dtypes.bool
+type_def = {
+    ss_float: ('float', float, np.float64, np.float32),
+    ss_int: ('int', int, np.int64, np.int32),
+    ss_bool: ('bool', bool, np.bool_),
+}
+type_map = {v:k for k,vlist in type_def.items() for v in vlist} # Invert into a full dictionary
 
 __all__ = ['check_dtype', 'BaseArr', 'Arr', 'FloatArr', 'BoolArr', 'State', 'IndexArr', 'uids']
 
 
 def check_dtype(dtype, default=None):
     """ Check that the supplied dtype is one of the supported options """
-    
-    # Handle dtype
+    # Handle input
     if dtype is None:
         if default is None:
             errormsg = 'Must supply either a dtype or a default value'
             raise ValueError(errormsg)
         else:
             dtype = type(default)
-    
-    if dtype in ['float', float, np.float64, np.float32]:
-        dtype = ss_float
-    elif dtype in ['int', int, np.int64, np.int32]:
-        dtype = ss_int
-    elif dtype in ['bool', bool, np.bool_]:
-        dtype = ss_bool
-    else:
+
+    # Do type conversion
+    new_dtype = type_map.get(dtype)
+    if new_dtype is None:
+        new_dtype = dtype
         warnmsg = f'Data type {type(default)} not a supported data type; set warn=False to suppress warning'
         ss.warn(warnmsg)
-    
-    return dtype
+
+    return new_dtype
 
 
-def get_values(obj):
+def get_arr_values(obj):
+    """ Helper function to efficiently extract values from a BaseArr, or return the original object """
     if isinstance(obj, BaseArr):
         return obj.values
     return obj
-
-
-# def array_to_basearr(obj):
-#     """ Check if an object is an array, and convert if so """
-#     if isinstance(obj, np.ndarray):
-#         return BaseArr(obj)
-#     return obj
 
 
 class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
@@ -82,10 +78,11 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
             return self.asnew(obj.values)
         return obj
 
-    # To handle numpy operations
+
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        """ To handle all numpy operations, e.g. arr1*arr2 """
         # Convert all inputs to their .values if they are BaseArr, otherwise leave unchanged
-        inputs = [get_values(x) for x in inputs]
+        inputs = [get_arr_values(x) for x in inputs]
         result = getattr(ufunc, method)(*inputs, **kwargs)
 
         # If result is a tuple (e.g., for divmod or ufuncs that return multiple values), convert all results to BaseArr
@@ -95,56 +92,31 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         result = self.convert(result)
         return result
 
-    # def __array_ufunc__(self, *args, **kwargs):
-    #     if args[1] != '__call__':
-    #         # This is a catch-all for ufuncs that are not being applied with '__call__' (e.g., operations returning a scalar like 'np.sum()' use reduce instead)
-    #         args = [(x if x is not self else self.values) for x in args]
-    #         kwargs = {k: v if v is not self else self.values for k, v in kwargs.items()}
-    #         result = self.values.__array_ufunc__(*args, **kwargs)
-    #         return self.convert(result)
-    #     else:
-    #         args = [(x if x is not self else self.values) for x in args] # Convert any operands that are Arr instances to their value arrays
-    #         if 'out' in kwargs and kwargs['out'][0] is self:
-    #             # In-place operations like += applied to the entire Arr instance
-    #             # use this branch. Therefore, we perform our computation on a new
-    #             # array with the same size as self.values, and then write it back
-    #             # to the appropriate entries in `self.raw` via `self[:]`
-    #             del kwargs['out']
-    #             self[:] = args[0](*args[2:], **kwargs)
-    #             return self
-    #         else:
-    #             # Otherwise, just run the ufunc
-    #             result = args[0](*args[2:], **kwargs)
-    #             return self.convert(result)
-
-    # # To support other numpy array functions
-    # def __array_function__(self, func, types, args, kwargs):
-    #     args = [get_values(arg) for arg in args]
-    #     result = func(*args, **kwargs)
-    #     return self.convert(result)
-
-    # For indexing and slicing
     def __getitem__(self, index):
+        """ For indexing and slicing, e.g. arr[inds] """
         return self.values[index]
 
     def __setitem__(self, index, value):
+        """ Assign values, e.g. arr1[inds] = arr2 """
         self.values[index] = value
 
-    # To ensure isinstance(a2, BaseArr) passes when creating new instances
     def __array__(self):
+        """ To ensure isinstance(arr, BaseArr) passes when creating new instances """
         return self.values
 
     def __repr__(self):
-        return f"BaseArr({self.values})"
+        return f"{self.__class__.__name__}({self.values})"
 
     def asnew(self, values=None, cls=None):
-        """ Duplicate and copy (rather than link) data, optionally resetting the array """
+        """ Duplicate and copy (rather than link) data """
         if cls is None: # Use the current class if none is provided
             cls = self.__class__
         new = object.__new__(cls) # Create a new Arr instance
         new.__dict__ = self.__dict__.copy() # Copy pointers
         if values is not None:
-            new.values = values # Replace data
+            new.values = values # Replace data with new data
+        else:
+            new.values = new.values.copy() # TODO: is this needed?
         return new
 
 
