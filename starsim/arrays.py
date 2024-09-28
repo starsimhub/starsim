@@ -53,13 +53,6 @@ def get_values(obj):
     return obj
 
 
-def array_to_basearr(obj):
-    """ Check if an object is an array, and convert if so """
-    if isinstance(obj, np.ndarray):
-        return BaseArr(obj)
-    return obj
-
-
 class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
     """
     An object that acts exactly like a NumPy array, except stores the values in self.values.
@@ -74,12 +67,22 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
     def __len__(self):
         return len(self.values)
 
+    def convert(self, obj):
+        """ Check if an object is an array, and convert if so """
+        cls = self.__class__
+        if isinstance(obj, np.ndarray):
+            return cls(obj)
+        elif type(obj) != cls and isinstance(obj, BaseArr): # TODO: is this needed?
+            return cls(obj.values)
+        return obj
+
     def __array_ufunc__(self, *args, **kwargs):
         if args[1] != '__call__':
             # This is a catch-all for ufuncs that are not being applied with '__call__' (e.g., operations returning a scalar like 'np.sum()' use reduce instead)
             args = [(x if x is not self else self.values) for x in args]
             kwargs = {k: v if v is not self else self.values for k, v in kwargs.items()}
-            return self.values.__array_ufunc__(*args, **kwargs)
+            result = self.values.__array_ufunc__(*args, **kwargs)
+            return self.convert(result)
         else:
             args = [(x if x is not self else self.values) for x in args] # Convert any operands that are Arr instances to their value arrays
             if 'out' in kwargs and kwargs['out'][0] is self:
@@ -92,13 +95,14 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
                 return self
             else:
                 # Otherwise, just run the ufunc
-                return args[0](*args[2:], **kwargs)
+                result = args[0](*args[2:], **kwargs)
+                return self.convert(result)
 
-    # # To support other numpy array functions
-    # def __array_function__(self, func, types, args, kwargs):
-    #     args = [get_values(arg) for arg in args]
-    #     result = array_to_basearr(func(*args, **kwargs))
-    #     return result
+    # To support other numpy array functions
+    def __array_function__(self, func, types, args, kwargs):
+        args = [get_values(arg) for arg in args]
+        result = func(*args, **kwargs)
+        return self.convert(result)
 
     # For indexing and slicing
     def __getitem__(self, index):
