@@ -53,6 +53,13 @@ def get_values(obj):
     return obj
 
 
+def array_to_basearr(obj):
+    """ Check if an object is an array, and convert if so """
+    if isinstance(obj, np.ndarray):
+        return BaseArr(obj)
+    return obj
+
+
 class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
     """
     An object that acts exactly like a NumPy array, except stores the values in self.values.
@@ -67,42 +74,55 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
     def __len__(self):
         return len(self.values)
 
-    def convert(self, obj):
-        """ Check if an object is an array, and convert if so """
-        cls = self.__class__
-        if isinstance(obj, np.ndarray):
-            return cls(obj)
-        elif type(obj) != cls and isinstance(obj, BaseArr): # TODO: is this needed?
-            return cls(obj.values)
-        return obj
+    # def convert(self, obj):
+    #     """ Check if an object is an array, and convert if so """
+    #     cls = self.__class__
+    #     if isinstance(obj, np.ndarray):
+    #         return cls(obj)
+    #     elif type(obj) != cls and isinstance(obj, BaseArr): # TODO: is this needed?
+    #         return cls(obj.values)
+    #     return obj
 
-    def __array_ufunc__(self, *args, **kwargs):
-        if args[1] != '__call__':
-            # This is a catch-all for ufuncs that are not being applied with '__call__' (e.g., operations returning a scalar like 'np.sum()' use reduce instead)
-            args = [(x if x is not self else self.values) for x in args]
-            kwargs = {k: v if v is not self else self.values for k, v in kwargs.items()}
-            result = self.values.__array_ufunc__(*args, **kwargs)
-            return self.convert(result)
-        else:
-            args = [(x if x is not self else self.values) for x in args] # Convert any operands that are Arr instances to their value arrays
-            if 'out' in kwargs and kwargs['out'][0] is self:
-                # In-place operations like += applied to the entire Arr instance
-                # use this branch. Therefore, we perform our computation on a new
-                # array with the same size as self.values, and then write it back
-                # to the appropriate entries in `self.raw` via `self[:]`
-                del kwargs['out']
-                self[:] = args[0](*args[2:], **kwargs)
-                return self
-            else:
-                # Otherwise, just run the ufunc
-                result = args[0](*args[2:], **kwargs)
-                return self.convert(result)
+    # To handle numpy operations
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        # Convert all inputs to their .values if they are BaseArr, otherwise leave unchanged
+        inputs = [get_values(x) for x in inputs]
+        result = getattr(ufunc, method)(*inputs, **kwargs)
 
-    # To support other numpy array functions
-    def __array_function__(self, func, types, args, kwargs):
-        args = [get_values(arg) for arg in args]
-        result = func(*args, **kwargs)
-        return self.convert(result)
+        # If result is a tuple (e.g., for divmod or ufuncs that return multiple values), convert all results to BaseArr
+        if isinstance(result, tuple):
+            return tuple(array_to_basearr(x) for x in result)
+
+        result = array_to_basearr(result)
+        return result
+
+    # def __array_ufunc__(self, *args, **kwargs):
+    #     if args[1] != '__call__':
+    #         # This is a catch-all for ufuncs that are not being applied with '__call__' (e.g., operations returning a scalar like 'np.sum()' use reduce instead)
+    #         args = [(x if x is not self else self.values) for x in args]
+    #         kwargs = {k: v if v is not self else self.values for k, v in kwargs.items()}
+    #         result = self.values.__array_ufunc__(*args, **kwargs)
+    #         return self.convert(result)
+    #     else:
+    #         args = [(x if x is not self else self.values) for x in args] # Convert any operands that are Arr instances to their value arrays
+    #         if 'out' in kwargs and kwargs['out'][0] is self:
+    #             # In-place operations like += applied to the entire Arr instance
+    #             # use this branch. Therefore, we perform our computation on a new
+    #             # array with the same size as self.values, and then write it back
+    #             # to the appropriate entries in `self.raw` via `self[:]`
+    #             del kwargs['out']
+    #             self[:] = args[0](*args[2:], **kwargs)
+    #             return self
+    #         else:
+    #             # Otherwise, just run the ufunc
+    #             result = args[0](*args[2:], **kwargs)
+    #             return self.convert(result)
+
+    # # To support other numpy array functions
+    # def __array_function__(self, func, types, args, kwargs):
+    #     args = [get_values(arg) for arg in args]
+    #     result = func(*args, **kwargs)
+    #     return self.convert(result)
 
     # For indexing and slicing
     def __getitem__(self, index):
