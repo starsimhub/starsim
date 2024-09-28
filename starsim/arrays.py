@@ -413,7 +413,17 @@ class BoolArr(Arr):
 
 
 class State(BoolArr):
-    """ A boolean array being used as a state """
+    """
+    A boolean array being used as a state.
+
+    Although functionally identical to BoolArr, a State is handled differently in
+    terms of automation: specifically, results are automatically generated from a 
+    State (but not a BoolArr).
+
+    States are typically used to keep track of externally-facing variables (e.g. 
+    disease.susceptible), while BoolArrs can be used to keep track of internal
+    ones (e.g. disease.has_immunity).
+    """
     pass
 
     

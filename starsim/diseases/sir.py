@@ -67,9 +67,9 @@ class SIR(ss.Infection):
         self.update_pars(pars, **kwargs)
         
         self.define_states(
-            ss.BoolArr('susceptible', default=True, label='Susceptible'),
-            ss.BoolArr('infected', label='Infectious'),
-            ss.BoolArr('recovered', label='Recovered'),
+            ss.State('susceptible', default=True, label='Susceptible'),
+            ss.State('infected', label='Infectious'),
+            ss.State('recovered', label='Recovered'),
             ss.FloatArr('ti_infected', label='Time of infection'),
             ss.FloatArr('ti_recovered', label='Time of recovery'),
             ss.FloatArr('ti_dead', label='Time of death'),

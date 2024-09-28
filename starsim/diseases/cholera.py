@@ -43,9 +43,9 @@ class Cholera(ss.Infection):
         # Boolean states
         self.define_states(
             # Susceptible & infected are added automatically, here we add the rest
-            ss.BoolArr('exposed', label='Exposed'),
-            ss.BoolArr('symptomatic', label='Symptomatic'),
-            ss.BoolArr('recovered', label='Recovered'),
+            ss.State('exposed', label='Exposed'),
+            ss.State('symptomatic', label='Symptomatic'),
+            ss.State('recovered', label='Recovered'),
     
             # Timepoint states
             ss.FloatArr('ti_exposed', label='Time of exposure'),

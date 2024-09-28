@@ -39,10 +39,10 @@ class Ebola(SIR):
         # Boolean states
         self.define_states(
             # SIR are added automatically, here we add E
-            ss.BoolArr('exposed', label='Exposed'),
-            ss.BoolArr('severe', label='Severe'),
-            ss.BoolArr('recovered', label='Recovered'),
-            ss.BoolArr('buried', label='Buried'),
+            ss.State('exposed', label='Exposed'),
+            ss.State('severe', label='Severe'),
+            ss.State('recovered', label='Recovered'),
+            ss.State('buried', label='Buried'),
     
             # Timepoint states
             ss.FloatArr('ti_exposed', label='Time of exposure'),

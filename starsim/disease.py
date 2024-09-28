@@ -27,15 +27,16 @@ class Disease(ss.Module):
         return
 
     @property
-    def _boolean_states(self):
+    def _disease_states(self):
         """
-        Iterator over states with boolean type
+        Iterator over disease states with boolean type
 
         For diseases, these states typically represent attributes like 'susceptible',
-        'infectious', 'diagnosed' etc. These variables are typically useful to
+        'infectious', 'diagnosed' etc. These variables are typically useful to store
+        results for.
         """
         for state in self.states:
-            if state.dtype == bool:
+            if isinstance(state, ss.State):
                 yield state
         return
 
@@ -50,11 +51,11 @@ class Disease(ss.Module):
         """
         Initialize results
 
-        By default, diseases all report on counts for any boolean states e.g., if
+        By default, diseases all report on counts for any explicitly defined "States", e.g. if
         a disease contains a boolean state 'susceptible' it will automatically contain a
-        Result for 'n_susceptible'
+        Result for 'n_susceptible'.
         """
-        for state in self._boolean_states:
+        for state in self._disease_states:
             self.results += ss.Result(self.name, f'n_{state.name}', self.npts, dtype=int, scale=True, label=state.label)
         return
 
@@ -135,8 +136,8 @@ class Disease(ss.Module):
         This allows result updates at this point to capture outcomes dependent on multiple
         modules, where relevant.
         """
-        for state in self._boolean_states:
-            self.results[f'n_{state.name}'][self.ti] = np.count_nonzero(state & self.sim.people.alive)
+        for state in self._disease_states:
+            self.results[f'n_{state.name}'][self.ti] = state.sum()
         return
 
 
@@ -152,8 +153,8 @@ class Infection(Disease):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.define_states(
-            ss.BoolArr('susceptible', default=True, label='Susceptible'),
-            ss.BoolArr('infected', label='Infectious'),
+            ss.State('susceptible', default=True, label='Susceptible'),
+            ss.State('infected', label='Infectious'),
             ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
             ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
             ss.FloatArr('ti_infected', label='Time of infection' ),

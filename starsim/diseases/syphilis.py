@@ -63,9 +63,9 @@ class Syphilis(ss.Infection):
             ss.State('latent_temp', label="Latent temporary"),  # Relapses to secondary (~1y)
             ss.State('latent_long', label="Latent long"),  # Can progress to tertiary or remain here
             ss.State('tertiary', label="Tertiary"),  # Includes complications (cardio/neuro/disfigurement)
-            ss.State('immune', label="Immune"),  # After effective treatment people may acquire temp immunity
-            ss.State('ever_exposed', label="Ever exposed", track_time=False),  # Anyone ever exposed - stays true after treatment
-            ss.State('congenital'),  # Congenital syphilis states
+            ss.BoolArr('immune', label="Immune"),  # After effective treatment people may acquire temp immunity
+            ss.BoolArr('ever_exposed', label="Ever exposed", track_time=False),  # Anyone ever exposed - stays true after treatment
+            ss.BoolArr('congenital'),  # Congenital syphilis states
         )
         
         self.define_events(
@@ -131,15 +131,15 @@ class Syphilis(ss.Infection):
     
         self.define_states(
             # Adult syphilis states
-            ss.BoolArr('exposed', label='Exposed'),  # AKA incubating. Free of symptoms, not transmissible
-            ss.BoolArr('primary', label='Primary'),  # Primary chancres
-            ss.BoolArr('secondary', label="Secondary"),  # Inclusive of those who may still have primary chancres
-            ss.BoolArr('latent_temp', label="Latent temporary"),  # Relapses to secondary (~1y)
-            ss.BoolArr('latent_long', label="Latent long"),  # Can progress to tertiary or remain here
-            ss.BoolArr('tertiary', label="Tertiary"),  # Includes complications (cardio/neuro/disfigurement)
-            ss.BoolArr('immune', label="Immune"),  # After effective treatment people may acquire temp immunity
-            ss.BoolArr('ever_exposed', label="Ever exposed"),  # Anyone ever exposed - stays true after treatment
-            ss.BoolArr('congenital', label="Congenital"),  # Congenital syphilis states
+            ss.State('exposed', label='Exposed'),  # AKA incubating. Free of symptoms, not transmissible
+            ss.State('primary', label='Primary'),  # Primary chancres
+            ss.State('secondary', label="Secondary"),  # Inclusive of those who may still have primary chancres
+            ss.State('latent_temp', label="Latent temporary"),  # Relapses to secondary (~1y)
+            ss.State('latent_long', label="Latent long"),  # Can progress to tertiary or remain here
+            ss.State('tertiary', label="Tertiary"),  # Includes complications (cardio/neuro/disfigurement)
+            ss.State('immune', label="Immune"),  # After effective treatment people may acquire temp immunity
+            ss.State('ever_exposed', label="Ever exposed"),  # Anyone ever exposed - stays true after treatment
+            ss.State('congenital', label="Congenital"),  # Congenital syphilis states
     
             # Timestep of state changes
             ss.FloatArr('ti_exposed', label='Time of exposure'),
