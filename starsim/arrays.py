@@ -71,6 +71,9 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
     def __getattr__(self, attr):
         return self.values.__getattribute__(attr)
 
+    def __len__(self):
+        return len(self.values)
+
     # To handle numpy operations
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         # Convert all inputs to their .values if they are BaseArr, otherwise leave unchanged
@@ -84,11 +87,11 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         result = array_to_basearr(result)
         return result
 
-    # To support other numpy array functions
-    def __array_function__(self, func, types, args, kwargs):
-        args = [get_values(arg) for arg in args]
-        result = array_to_basearr(func(*args, **kwargs))
-        return result
+    # # To support other numpy array functions
+    # def __array_function__(self, func, types, args, kwargs):
+    #     args = [get_values(arg) for arg in args]
+    #     result = array_to_basearr(func(*args, **kwargs))
+    #     return result
 
     # For indexing and slicing
     def __getitem__(self, index):
@@ -427,7 +430,7 @@ class IndexArr(Arr):
         return
     
     
-class uids(np.ndarray):
+class uids(BaseArr):
     """
     Class to specify that integers should be interpreted as UIDs.
     
@@ -436,6 +439,21 @@ class uids(np.ndarray):
     (class method), ``uids.remove()``, and ``uids.intersect()`` to simplify common
     UID operations.    
     """
+    # def __init__(self, arr=None):
+    #     if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
+    #         arr = arr.astype(ss_int)
+    #     elif isinstance(arr, BoolArr): # Shortcut for arr.uids
+    #         arr = arr.uids
+    #     elif isinstance(arr, set):
+    #         arr = np.fromiter(arr, dtype=ss_int)
+    #     elif arr is None: # Shortcut to return empty
+    #         arr = np.empty(0, dtype=ss_int)
+    #     elif isinstance(arr, int): # Convert e.g. ss.uids(0) to ss.uids([0])
+    #         arr = [arr]
+    #     arr = np.asarray(arr, dtype=ss_int)
+    #     super().__init__(arr)
+    #     return
+
     def __new__(cls, arr=None):
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
             return arr.astype(ss_int).view(cls)
