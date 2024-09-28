@@ -20,7 +20,7 @@ ss_float = ss.dtypes.float
 ss_int   = ss.dtypes.int
 ss_bool  = ss.dtypes.bool
 
-__all__ = ['check_dtype', 'Arr', 'FloatArr', 'BoolArr', 'State', 'IndexArr', 'uids']
+__all__ = ['check_dtype', 'BaseArr', 'Arr', 'FloatArr', 'BoolArr', 'State', 'IndexArr', 'uids']
 
 
 def check_dtype(dtype, default=None):
@@ -74,24 +74,31 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
     def __len__(self):
         return len(self.values)
 
-    # To handle numpy operations
-    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
-        # Convert all inputs to their .values if they are BaseArr, otherwise leave unchanged
-        inputs = [get_values(x) for x in inputs]
-        result = getattr(ufunc, method)(*inputs, **kwargs)
+    def __array_ufunc__(self, *args, **kwargs):
+        if args[1] != '__call__':
+            # This is a catch-all for ufuncs that are not being applied with '__call__' (e.g., operations returning a scalar like 'np.sum()' use reduce instead)
+            args = [(x if x is not self else self.values) for x in args]
+            kwargs = {k: v if v is not self else self.values for k, v in kwargs.items()}
+            return self.values.__array_ufunc__(*args, **kwargs)
+        else:
+            args = [(x if x is not self else self.values) for x in args] # Convert any operands that are Arr instances to their value arrays
+            if 'out' in kwargs and kwargs['out'][0] is self:
+                # In-place operations like += applied to the entire Arr instance
+                # use this branch. Therefore, we perform our computation on a new
+                # array with the same size as self.values, and then write it back
+                # to the appropriate entries in `self.raw` via `self[:]`
+                del kwargs['out']
+                self[:] = args[0](*args[2:], **kwargs)
+                return self
+            else:
+                # Otherwise, just run the ufunc
+                return args[0](*args[2:], **kwargs)
 
-        # If result is a tuple (e.g., for divmod or ufuncs that return multiple values), convert all results to BaseArr
-        if isinstance(result, tuple):
-            return tuple(array_to_basearr(x) for x in result)
-
-        result = array_to_basearr(result)
-        return result
-
-    # To support other numpy array functions
-    def __array_function__(self, func, types, args, kwargs):
-        args = [get_values(arg) for arg in args]
-        result = array_to_basearr(func(*args, **kwargs))
-        return result
+    # # To support other numpy array functions
+    # def __array_function__(self, func, types, args, kwargs):
+    #     args = [get_values(arg) for arg in args]
+    #     result = array_to_basearr(func(*args, **kwargs))
+    #     return result
 
     # For indexing and slicing
     def __getitem__(self, index):
