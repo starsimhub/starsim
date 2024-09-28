@@ -159,17 +159,7 @@ class Calibration(sc.prettyobj):
         self.after_sim  = None
 
         # Load data -- this is expecting a dataframe with a column for 'time' and other columns for to sim results
-        try:
-            data = sc.dataframe(data)
-        except Exception as E:
-            errormsg = f'Please pass data as a pandas dataframe or compatible input, not {type(data)}:\n{E}'
-            raise ValueError(errormsg)
-        self.data = data
-        try:
-            self.data.set_index('time', inplace=True)
-        except Exception as E:
-            errormsg = f'Calibration data must have a column called "time", with the same units as the sim (e.g. year), but instead has: {sc.strjoin(self.data.cols)}.\nError: {E}'
-            raise ValueError(errormsg)
+        self.data = ss.validate_sim_data(data, die=True)
 
         # Temporarily store a filename
         self.tmp_filename = 'tmp_calibration_%05i.obj'

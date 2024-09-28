@@ -12,7 +12,8 @@ import starsim as ss
 # %% Helper functions
 
 # What functions are externally visible
-__all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'standardize_netkey', 'standardize_data']
+__all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'standardize_netkey',
+           'standardize_data', 'validate_sim_data', ]
 
 
 class ndict(sc.objdict):
@@ -313,6 +314,47 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     output = output.sort_index()
 
     return output
+
+
+def validate_sim_data(data=None, die=None):
+    """
+    Validate data intended to be compared to the sim outputs, e.g. for calibration
+
+    Args:
+        data (df/dict): a dataframe (or dict) of data, with a column "time" plus data columns of the form "module.result", e.g. "hiv.new_infections"
+        die (bool): whether to raise an exception if the data cannot be converted (default: die if data is not None but cannot be converted)
+
+    """
+    success = False
+    if data is not None:
+        # Try loading the data
+        try:
+            data = sc.dataframe(data) # Convert it to a dataframe
+            timecols = ['time', 'day', 'date', 'year'] # If a time column is supplied, use it as the index
+            found = False
+            for timecol in timecols:
+                if timecol in data.cols:
+                    if found:
+                        errormsg = f'Multiple time columns found: please ensure only one of {timecols} is present; you supplied {data.cols}.'
+                        raise ValueError(errormsg)
+                    data.set_index(timecol, inplace=True)
+                    found = True
+            success = True
+
+        # Data loading failed
+        except Exception as E:
+            errormsg = f'Failed to add data "{data}": expecting a dataframe-compatible object. Error:\n{E}'
+            if die == False:
+                print(errormsg)
+            else:
+                raise ValueError(errormsg)
+
+    # Validation
+    if not success and die == True:
+        errormsg = 'Data "{data}" could not be converted and die == True'
+        raise ValueError(errormsg)
+
+    return data
 
 
 def combine_rands(a, b):

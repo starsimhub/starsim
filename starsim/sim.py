@@ -166,7 +166,7 @@ class Sim:
         self.loop.init() # Initialize the integration loop
         self.timer = sc.timer() # Store a timer for keeping track of how long the run takes
         self.verbose = self.pars.verbose # Store a run-specific value of verbose
-        
+
         # It's initialized
         self.initialized = True
         return self
@@ -236,16 +236,9 @@ class Sim:
         return
 
     def init_data(self, data=None):
-        """ Initialize the data, or add new data """
+        """ Initialize or add data to the sim """
         data = data if data is not None else self.data
-        if data is not None:
-            try:
-                data = sc.dataframe(data)
-                assert data.index.name == 'time' or 'time' in data.cols, 'Data must have a column called "time"'
-            except Exception as E:
-                errormsg = f'Failed to add data "{data}": expecting a dataframe with a column called "time". Error:\n{E}'
-                raise ValueError(errormsg)
-        self.data = data
+        self.data = ss.validate_sim_data(data)
         return
 
     def start_step(self):
@@ -617,7 +610,7 @@ class Sim:
         figsize = default_figsize*figsize_factor
         fig_kw = sc.mergedicts({'figsize':figsize}, fig_kw)
         plot_kw = sc.mergedicts({'lw':2}, plot_kw)
-        scatter_kw = sc.mergedicts({'alpha':0.5, 'color':'k'}, scatter_kw)
+        scatter_kw = sc.mergedicts({'alpha':0.3, 'color':'k'}, scatter_kw)
         modmap = {m.name:m for m in self.modules} # Find modules
         
         # Do the plotting
@@ -651,7 +644,7 @@ class Sim:
                             found = True
                             break
                     if found:
-                        ax.scatter(df.time, df[dfkey], **scatter_kw)
+                        ax.scatter(df.index.values, df[dfkey].values, **scatter_kw)
 
                 # Plot results
                 ax.plot(timevec, res, **plot_kw, label=self.label)
