@@ -370,10 +370,10 @@ class Dist:
         Automatically jump on the next value of dt
         
         Args:
-            ti (int): if specified, jump to this timestep (default: current sim timestep plus one)
+            ti (int): if specified, jump to this timestep (default: current module timestep plus one)
         """
         if ti is None:
-            ti = self.sim.ti + 1
+            ti = self.module.ti + 1
         to = self.dt_jump_size*ti
         return self.jump(to=to, force=force)
     
@@ -623,7 +623,7 @@ class Dist:
         elif self.strict:
             self.ready = False
         if self.debug:
-            simstr = f'on ti={self.sim.ti} ' if self.sim else ''
+            simstr = f'on ti={self.module.ti} ' if self.sim else ''
             sizestr = f'with size={self._size}, '
             slotstr = f'Σ(slots)={self._slots.sum()}, ' if self._slots else '<no slots>, '
             rvstr = f'Σ(rvs)={rvs.sum():0.2f}, |rvs|={rvs.mean():0.4f}'

@@ -75,7 +75,11 @@ class Loop:
         # Run the simulation step first (updates the distributions)
         self.funcs = [] # Reset, just in case
         sim = self.sim
+
+        # Collect the start_steps
         self += sim.start_step # Note special __iadd__() method above, which appends these to the funcs list
+        for mod in sim.modules:
+            self += mod.start_step
         
         # Update demographic modules (create new agents from births/immigration, schedule non-disease deaths and emigration)
         for dem in sim.demographics():

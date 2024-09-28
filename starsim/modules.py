@@ -187,8 +187,14 @@ class Module(sc.quickobj):
             ss.warn(f'Encountered exception when getting the current time in {self.name}: {E}')
             return None
 
+    def start_step(self):
+        """ Tasks to perform at the beginning of the step """
+        if self.dists is not None: # Will be None if no distributions are defined
+            self.dists.jump_dt() # Advance random number generators forward for calls on this step
+        return
+
     def step(self):
-        """ Define how the module updates over time """
+        """ Define how the module updates over time -- the key part of Starsim!! """
         pass
 
     def finish_step(self):
@@ -206,7 +212,7 @@ class Module(sc.quickobj):
         self.finalized = True
         return
 
-    def finalize_results(self): # TODO: this is confusing, needs to be not redefined by the user, or called after a custom finalize_results()
+    def finalize_results(self): # TODO: this is confusing, needs to be not redefined by the user, or called *after* a custom finalize_results()
         """ Finalize results """
         # Scale results
         for reskey, res in self.results.items():

@@ -252,7 +252,7 @@ class Sim:
         return
 
     def start_step(self):
-        """ Step through time and update values """
+        """ Start the step -- only print progress; all actual changes happen in the modules """
 
         # Set the time and if we have reached the end of the simulation, then do nothing
         if self.complete:
@@ -271,9 +271,6 @@ class Sim:
             elif self.verbose > 0:
                 if not (self.ti % int(1.0 / self.verbose)):
                     sc.progressbar(self.ti + 1, self.npts, label=string, length=20, newline=True)
-
-        # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
-        self.dists.jump_dt() # TODO: each module should do this, but should be ok as-is with auto-jump
         return
 
     def finish_step(self):
