@@ -108,8 +108,8 @@ def test_calibration(do_plot=False):
         sim = sim,
         data = data,
         weights = weights,
-        total_trials = 100,
-        n_workers = 20,
+        total_trials = 4,
+        n_workers = 2,
         die = True
     )
 

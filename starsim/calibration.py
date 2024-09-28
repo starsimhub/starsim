@@ -520,19 +520,21 @@ class Calibration(sc.prettyobj):
         fig = msim.plot(**kwargs)
         return fig
 
-    def plot_trend(self, best_thresh=2):
+    def plot_trend(self, best_thresh=None, fig_kw=None):
         """
         Plot the trend in best mismatch over time.
 
         Args:
-            best_thresh (int): Define the threshold for the "best" fits, relative to the lowest mismatch value
+            best_thresh (int): Define the threshold for the "best" fits, relative to the lowest mismatch value (if None, show all)
+            fig_kw (dict): passed to plt.figure()
         """
-        mismatch = sc.dcp(self.df['mismatch'].values)
+        df = self.df.sort_values('index') # Make a copy of the dataframe, sorted by trial number
+        mismatch = sc.dcp(df['mismatch'].values)
         best_mismatch = np.zeros(len(mismatch))
         for i in range(len(mismatch)):
             best_mismatch[i] = mismatch[:i+1].min()
         smoothed_mismatch = sc.smooth(mismatch)
-        fig = plt.figure(figsize=(16,12), dpi=120)
+        fig = plt.figure(**sc.mergedicts(fig_kw))
 
         ax1 = plt.subplot(2,1,1)
         plt.plot(mismatch, alpha=0.2, label='Original')
@@ -540,10 +542,10 @@ class Calibration(sc.prettyobj):
         plt.plot(best_mismatch, lw=3, label='Best')
 
         ax2 = plt.subplot(2,1,2)
-        max_mismatch = mismatch.min()*best_thresh
+        max_mismatch = mismatch.min()*best_thresh if best_thresh is not None else np.inf
         inds = sc.findinds(mismatch<=max_mismatch)
         plt.plot(best_mismatch, lw=3, label='Best')
-        plt.scatter(inds, mismatch[inds], c=mismatch[inds], label='Usable indices')
+        plt.scatter(inds, mismatch[inds], c=mismatch[inds], label='Trials')
         for ax in [ax1, ax2]:
             plt.sca(ax)
             plt.grid(True)
@@ -552,6 +554,7 @@ class Calibration(sc.prettyobj):
             sc.setxlim()
             plt.xlabel('Trial number')
             plt.ylabel('Mismatch')
+        sc.figlayout()
         return fig
 
 
