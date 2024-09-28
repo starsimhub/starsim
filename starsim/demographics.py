@@ -517,6 +517,7 @@ class Pregnancy(Demographics):
         return
 
     def finish_step(self):
+        super().finish_step()
         death_uids = ss.uids(self.sim.people.ti_dead <= self.sim.ti)
         if len(death_uids) == 0:
             return
