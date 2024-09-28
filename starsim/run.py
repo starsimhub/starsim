@@ -254,16 +254,17 @@ class MultiSim:
                 raw[rkey][:, s] = flat[rkey]
 
         for rkey in rkeys:
+            res = rflat[rkey]
             if use_mean:
                 r_mean = np.mean(raw[rkey], axis=1)
                 r_std = np.std(raw[rkey], axis=1)
-                rflat[rkey][:] = r_mean
-                rflat[rkey].low = r_mean - bounds * r_std
-                rflat[rkey].high = r_mean + bounds * r_std
+                res[:] = r_mean
+                res.low = r_mean - bounds * r_std
+                res.high = r_mean + bounds * r_std
             else:
-                rflat[rkey][:] = np.quantile(raw[rkey], q=0.5, axis=1)
-                rflat[rkey].low = np.quantile(raw[rkey], q=quantiles['low'], axis=1)
-                rflat[rkey].high = np.quantile(raw[rkey], q=quantiles['high'], axis=1)
+                res[:] = np.quantile(raw[rkey], q=0.5, axis=1)
+                res.low = np.quantile(raw[rkey], q=quantiles['low'], axis=1)
+                res.high = np.quantile(raw[rkey], q=quantiles['high'], axis=1)
 
         # Compute and store final results
         reduced_sim.summarize()

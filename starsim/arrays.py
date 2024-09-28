@@ -56,7 +56,11 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         return
 
     def __getattr__(self, attr):
-        return object.__getattribute__(self, 'values').__getattribute__(attr)
+        """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
+        if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
+            return self.__getattribute__(attr)
+        else:
+            return object.__getattribute__(self, 'values').__getattribute__(attr) # Be explicit to avoid possible recurison
 
     def __len__(self):
         return len(self.values)
@@ -68,7 +72,6 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         elif isinstance(obj, BaseArr):
             return self.asnew(obj.values)
         return obj
-
 
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ To handle all numpy operations, e.g. arr1*arr2 """
@@ -220,13 +223,6 @@ class Arr(BaseArr):
         self.raw[key] = value
         return
             
-    def __getattr__(self, attr):
-        """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
-        if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
-            return self.__getattribute__(attr)
-        else:
-            return getattr(self.values, attr)
-        
     def __gt__(self, other): return self.asnew(self.values > other,  cls=BoolArr)
     def __lt__(self, other): return self.asnew(self.values < other,  cls=BoolArr)
     def __ge__(self, other): return self.asnew(self.values >= other, cls=BoolArr)
