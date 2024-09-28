@@ -56,7 +56,7 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         return
 
     def __getattr__(self, attr):
-        return self.values.__getattribute__(attr)
+        return object.__getattribute__(self, 'values').__getattribute__(attr)
 
     def __len__(self):
         return len(self.values)
