@@ -110,12 +110,13 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         """ Full display of object """
         return sc.pr(self)
 
-    def asnew(self, values=None, cls=None):
+    def asnew(self, values=None, cls=None, **kwargs):
         """ Duplicate and copy (rather than link) data """
         if cls is None: # Use the current class if none is provided
             cls = self.__class__
         new = object.__new__(cls) # Create a new Arr instance
         new.__dict__ = self.__dict__.copy() # Copy pointers
+        new.__dict__.update(kwargs) # Update any keyword arguments provided # TODO: add validation?
         if values is not None:
             new.values = values # Replace data with new data
         else:

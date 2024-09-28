@@ -518,8 +518,8 @@ class Dist:
             
             # If it's a time parameter, transform it to a float now
             if isinstance(val, ss.TimePar):
-                self._pars[key] = val.value # Use the raw value
-                factor = val.x/val.value # Calculate the ratio here; NB, this is usually val.factor, but not for ss.time_prob
+                self._pars[key] = val.v # Use the raw value
+                factor = val.values/val.v # Calculate the ratio here; NB, this is usually val.factor, but not for ss.time_prob; note that this is actually an array
                 if self._time_factor is None:
                     self._time_factor = factor
                 elif factor != self._time_factor:
