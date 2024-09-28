@@ -47,7 +47,65 @@ def check_dtype(dtype, default=None):
     return dtype
 
 
-class Arr(np.lib.mixins.NDArrayOperatorsMixin):
+def get_values(obj):
+    if isinstance(obj, BaseArr):
+        return obj.values
+    return obj
+
+
+def array_to_basearr(obj):
+    """ Check if an object is an array, and convert if so """
+    if isinstance(obj, np.ndarray):
+        return BaseArr(obj)
+    return obj
+
+
+class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
+    """
+    An object that acts exactly like a NumPy array, except stores the values in self.values.
+    """
+    def __init__(self, values, *args, **kwargs):
+        self.values = np.array(values, *args, **kwargs)
+        return
+
+    def __getattr__(self, attr):
+        return self.values.__getattribute__(attr)
+
+    # To handle numpy operations
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        # Convert all inputs to their .values if they are BaseArr, otherwise leave unchanged
+        inputs = [get_values(x) for x in inputs]
+        result = getattr(ufunc, method)(*inputs, **kwargs)
+
+        # If result is a tuple (e.g., for divmod or ufuncs that return multiple values), convert all results to BaseArr
+        if isinstance(result, tuple):
+            return tuple(array_to_basearr(x) for x in result)
+
+        result = array_to_basearr(result)
+        return result
+
+    # To support other numpy array functions
+    def __array_function__(self, func, types, args, kwargs):
+        args = [get_values(arg) for arg in args]
+        result = array_to_basearr(func(*args, **kwargs))
+        return result
+
+    # For indexing and slicing
+    def __getitem__(self, index):
+        return self.values[index]
+
+    def __setitem__(self, index, value):
+        self.values[index] = value
+
+    # To ensure isinstance(a2, BaseArr) passes when creating new instances
+    def __array__(self):
+        return self.values
+
+    def __repr__(self):
+        return f"BaseArr({self.values})"
+
+
+class Arr(BaseArr):
     """
     Store a state of the agents (e.g. age, infection status, etc.) as an array.
     
@@ -169,24 +227,6 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     def __or__(self, other):  raise BooleanOperationError(self)
     def __xor__(self, other): raise BooleanOperationError(self)
     def __invert__(self):     raise BooleanOperationError(self)
-
-    def __array_ufunc__(self, ufunc, method, *args, out=None, **kwargs):
-        args = [(arg.values if arg is self else arg) for arg in args]
-        if method != '__call__':
-            # This is a catch-all for ufuncs that are not being applied with '__call__' (e.g., operations returning a scalar like 'np.sum()' use reduce instead)
-            kwargs = {k:v.values if v is self else v for k,v in kwargs.items()}
-            return self.values.__array_ufunc__(ufunc, method, *args, out=out, **kwargs)
-        else:
-            if out is self:
-                # In-place operations like += applied to the entire Arr instance
-                # use this branch. Therefore, we perform our computation on a new
-                # array with the same size as self.values, and then write it back
-                # to the appropriate entries in `self.raw` via `self[:]`
-                self[:] = ufunc(*args, **kwargs)
-                return self
-            else:
-                # Otherwise, just run the ufunc
-                return ufunc(*args, **kwargs)
 
     @property
     def auids(self):
