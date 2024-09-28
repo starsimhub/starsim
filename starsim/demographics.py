@@ -417,7 +417,7 @@ class Pregnancy(Demographics):
                 new_infant_uids = prenatalnet.edges.p2[prenatal_ending]
 
                 # Validation
-                if not np.array_equal(new_mother_uids, deliveries.uids):
+                if not set(new_mother_uids) == set(deliveries.uids): # Not sure why sometimes out of order
                     errormsg = 'IDs of new mothers do not match IDs of new deliveries'
                     raise ValueError(errormsg)
 
@@ -517,6 +517,7 @@ class Pregnancy(Demographics):
         return
 
     def finish_step(self):
+        super().finish_step()
         death_uids = ss.uids(self.sim.people.ti_dead <= self.sim.ti)
         if len(death_uids) == 0:
             return

@@ -159,7 +159,7 @@ class Sim:
                 intv.product.init_pre(self)
         
         # Final initializations
-        self.dists.init(obj=self, base_seed=self.pars.rand_seed, force=True) # Initialize all distributions now that everything else is in place
+        self.init_dists() # Initialize distributions
         self.init_vals() # Initialize the values in all of the states and networks
         self.init_results() # Initialize the results
         self.init_data() # Initialize the data
@@ -208,7 +208,17 @@ class Sim:
         self.people = people
         self.people.link_sim(self)
         return self.people
-    
+
+    def init_dists(self):
+        """ Initialize the distributions """
+        # Initialize all distributions now that everything else is in place
+        self.dists.init(obj=self, base_seed=self.pars.rand_seed, force=True)
+
+        # Copy relevant dists to each module
+        for mod in self.modules:
+            self.dists.copy_to_module(mod)
+        return
+
     def init_vals(self):
         """ Initialize the states and other objects with values """
         
@@ -242,7 +252,7 @@ class Sim:
         return
 
     def start_step(self):
-        """ Step through time and update values """
+        """ Start the step -- only print progress; all actual changes happen in the modules """
 
         # Set the time and if we have reached the end of the simulation, then do nothing
         if self.complete:
@@ -261,9 +271,6 @@ class Sim:
             elif self.verbose > 0:
                 if not (self.ti % int(1.0 / self.verbose)):
                     sc.progressbar(self.ti + 1, self.npts, label=string, length=20, newline=True)
-
-        # Advance random number generators forward to prepare for any random number calls that may be necessary on this step
-        self.dists.jump_dt() # TODO: each module should do this, but should be ok as-is with auto-jump
         return
 
     def finish_step(self):

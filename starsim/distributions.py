@@ -146,6 +146,18 @@ class Dists(sc.prettyobj):
             out += dist.reset()
         return out
 
+    def copy_to_module(self, module):
+        """ Copy the Sim's Dists object to the specified module """
+        matches = {key:dist for key,dist in self.dists.items() if id(dist.module) == id(module)} # Find which dists belong to this module
+        if len(matches):
+            new = Dists() # Create an empty Dists object
+            new.__dict__.update(self.__dict__) # Shallow-copy all values over
+            new.obj = module # Replace the module
+            new.dists = sc.objdict(matches) # Replace the dists with a shallow copy the matching dists
+            module.dists = new # Copy to the module
+        else:
+            new = None
+        return new
 
 class Dist:
     """
@@ -358,10 +370,10 @@ class Dist:
         Automatically jump on the next value of dt
         
         Args:
-            ti (int): if specified, jump to this timestep (default: current sim timestep plus one)
+            ti (int): if specified, jump to this timestep (default: current module timestep plus one)
         """
         if ti is None:
-            ti = self.sim.ti + 1
+            ti = self.module.ti + 1
         to = self.dt_jump_size*ti
         return self.jump(to=to, force=force)
     
@@ -611,18 +623,17 @@ class Dist:
         elif self.strict:
             self.ready = False
         if self.debug:
-            simstr = f'on ti={self.sim.ti} ' if self.sim else ''
+            tistr   = f'on ti={self.module.ti} ' if self.module else ''
             sizestr = f'with size={self._size}, '
             slotstr = f'Σ(slots)={self._slots.sum()}, ' if self._slots else '<no slots>, '
-            rvstr = f'Σ(rvs)={rvs.sum():0.2f}, |rvs|={rvs.mean():0.4f}'
+            rvstr   = f'Σ(rvs)={rvs.sum():0.2f}, |rvs|={rvs.mean():0.4f}'
             pre_state = str(self.history[-1]['state']['state'])[-5:]
             post_state = str(self.state_int)[-5:]
             statestr = f"state {pre_state}→{post_state}"
-            print(f'Debug: {self} called {simstr}{sizestr}{slotstr}{rvstr}, {statestr}')
+            print(f'Debug: {self} called {tistr}{sizestr}{slotstr}{rvstr}, {statestr}')
             assert pre_state != post_state # Always an error if the state doesn't change after drawing random numbers
             
         return rvs
-
 
     def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
         """ Plot the current state of the RNG as a histogram """
