@@ -228,6 +228,24 @@ class Network(ss.Module):
         self.validate_uids()
         return
 
+    def to_graph(self): # pragma: no cover
+        """
+        Convert to a networkx DiGraph
+
+        **Example**::
+
+            import networkx as nx
+            sim = ss.Sim(n_agents=100, networks='mf').init()
+            G = sim.networks.randomnet.to_graph()
+            nx.draw(G)
+        """
+        keys = [('p1', int), ('p2', int), ('beta', float)]
+        data = [np.array(self.edges[k], dtype=dtype).tolist() for k,dtype in keys]
+        G = nx.DiGraph()
+        G.add_weighted_edges_from(zip(*data), weight='beta')
+        nx.set_edge_attributes(G, self.label, name='layer')
+        return G
+
     def to_dict(self):
         """ Convert to dictionary """
         d = {k: self.edges[k] for k in self.meta_keys()}
