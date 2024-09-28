@@ -74,6 +74,7 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         """ To handle all numpy operations, e.g. arr1*arr2 """
         # Convert all inputs to their .values if they are BaseArr, otherwise leave unchanged
         inputs = [get_arr_values(x) for x in inputs]
+        kwargs = {k:get_arr_values(v) for k,v in kwargs.items()}
         result = getattr(ufunc, method)(*inputs, **kwargs)
 
         # If result is a tuple (e.g., for divmod or ufuncs that return multiple values), convert all results to BaseArr

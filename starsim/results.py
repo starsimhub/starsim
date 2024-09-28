@@ -14,7 +14,7 @@ class Result(ss.BaseArr):
     
     def __init__(self, module=None, name=None, shape=None, dtype=None, scale=None, label=None, values=None, low=None, high=None):
         if values is not None:
-            self.values = sc.toarray(values)
+            self.values = np.array(values, dtype=dtype)
         else:
             self.values = np.zeros(shape=shape, dtype=dtype)
         self.name = name
