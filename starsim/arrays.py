@@ -66,6 +66,7 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
     """
     def __init__(self, values, *args, **kwargs):
         self.values = np.array(values, *args, **kwargs)
+        self.COUNT = 0
         return
 
     def __getattr__(self, attr):
@@ -87,11 +88,15 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         result = array_to_basearr(result)
         return result
 
-    # # To support other numpy array functions
-    # def __array_function__(self, func, types, args, kwargs):
-    #     args = [get_values(arg) for arg in args]
-    #     result = array_to_basearr(func(*args, **kwargs))
-    #     return result
+    # To support other numpy array functions
+    def __array_function__(self, func, types, args, kwargs):
+        self.COUNT += 1
+        if self.COUNT > 10:
+            raise Exception
+        args = [get_values(arg) for arg in args]
+        kwargs = {k:get_values(v) for k,v in kwargs.items()}
+        result = array_to_basearr(func(*args, **kwargs))
+        return result
 
     # For indexing and slicing
     def __getitem__(self, index):
@@ -439,33 +444,33 @@ class uids(BaseArr):
     (class method), ``uids.remove()``, and ``uids.intersect()`` to simplify common
     UID operations.    
     """
-    # def __init__(self, arr=None):
-    #     if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
-    #         arr = arr.astype(ss_int)
-    #     elif isinstance(arr, BoolArr): # Shortcut for arr.uids
-    #         arr = arr.uids
-    #     elif isinstance(arr, set):
-    #         arr = np.fromiter(arr, dtype=ss_int)
-    #     elif arr is None: # Shortcut to return empty
-    #         arr = np.empty(0, dtype=ss_int)
-    #     elif isinstance(arr, int): # Convert e.g. ss.uids(0) to ss.uids([0])
-    #         arr = [arr]
-    #     arr = np.asarray(arr, dtype=ss_int)
-    #     super().__init__(arr)
-    #     return
-
-    def __new__(cls, arr=None):
+    def __init__(self, arr=None):
         if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
-            return arr.astype(ss_int).view(cls)
+            arr = arr.astype(ss_int)
         elif isinstance(arr, BoolArr): # Shortcut for arr.uids
-            return arr.uids
+            arr = arr.uids
         elif isinstance(arr, set):
-            return np.fromiter(arr, dtype=ss_int).view(cls)
+            arr = np.fromiter(arr, dtype=ss_int)
         elif arr is None: # Shortcut to return empty
-            return np.empty(0, dtype=ss_int).view(cls)
+            arr = np.empty(0, dtype=ss_int)
         elif isinstance(arr, int): # Convert e.g. ss.uids(0) to ss.uids([0])
             arr = [arr]
-        return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
+        arr = np.asarray(arr, dtype=ss_int)
+        super().__init__(arr)
+        return
+
+    # def __new__(cls, arr=None):
+    #     if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
+    #         return arr.astype(ss_int).view(cls)
+    #     elif isinstance(arr, BoolArr): # Shortcut for arr.uids
+    #         return arr.uids
+    #     elif isinstance(arr, set):
+    #         return np.fromiter(arr, dtype=ss_int).view(cls)
+    #     elif arr is None: # Shortcut to return empty
+    #         return np.empty(0, dtype=ss_int).view(cls)
+    #     elif isinstance(arr, int): # Convert e.g. ss.uids(0) to ss.uids([0])
+    #         arr = [arr]
+    #     return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
     
     def concat(self, other, **kw): # Class and instance methods can't share a name
         """ Equivalent to np.concatenate(), but return correct type """
