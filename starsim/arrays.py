@@ -53,11 +53,11 @@ def get_values(obj):
     return obj
 
 
-def array_to_basearr(obj):
-    """ Check if an object is an array, and convert if so """
-    if isinstance(obj, np.ndarray):
-        return BaseArr(obj)
-    return obj
+# def array_to_basearr(obj):
+#     """ Check if an object is an array, and convert if so """
+#     if isinstance(obj, np.ndarray):
+#         return BaseArr(obj)
+#     return obj
 
 
 class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
@@ -74,14 +74,13 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
     def __len__(self):
         return len(self.values)
 
-    # def convert(self, obj):
-    #     """ Check if an object is an array, and convert if so """
-    #     cls = self.__class__
-    #     if isinstance(obj, np.ndarray):
-    #         return cls(obj)
-    #     elif type(obj) != cls and isinstance(obj, BaseArr): # TODO: is this needed?
-    #         return cls(obj.values)
-    #     return obj
+    def convert(self, obj):
+        """ Check if an object is an array, and convert if so """
+        if isinstance(obj, np.ndarray):
+            return self.asnew(obj)
+        elif isinstance(obj, BaseArr):
+            return self.asnew(obj.values)
+        return obj
 
     # To handle numpy operations
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
@@ -91,9 +90,9 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
 
         # If result is a tuple (e.g., for divmod or ufuncs that return multiple values), convert all results to BaseArr
         if isinstance(result, tuple):
-            return tuple(array_to_basearr(x) for x in result)
+            return tuple(self.convert(x) for x in result)
 
-        result = array_to_basearr(result)
+        result = self.convert(result)
         return result
 
     # def __array_ufunc__(self, *args, **kwargs):
@@ -137,6 +136,16 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
 
     def __repr__(self):
         return f"BaseArr({self.values})"
+
+    def asnew(self, values=None, cls=None):
+        """ Duplicate and copy (rather than link) data, optionally resetting the array """
+        if cls is None: # Use the current class if none is provided
+            cls = self.__class__
+        new = object.__new__(cls) # Create a new Arr instance
+        new.__dict__ = self.__dict__.copy() # Copy pointers
+        if values is not None:
+            new.values = values # Replace data
+        return new
 
 
 class Arr(BaseArr):
