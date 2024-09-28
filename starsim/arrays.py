@@ -63,7 +63,10 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
             return object.__getattribute__(self, 'values').__getattribute__(attr) # Be explicit to avoid possible recurison
 
     def __len__(self):
-        return len(self.values)
+        return self.values.__len__()
+
+    def __bool__(self):
+        return self.values.__bool__()
 
     def convert(self, obj):
         """ Check if an object is an array, and convert if so """

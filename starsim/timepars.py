@@ -155,7 +155,7 @@ class TimePar(ss.BaseArr):
         self.parent_dt = parent_dt
         self.self_dt = self_dt
         self.factor = None
-        self.values = np.array([np.nan]) # Think about whether another value makes more sense pre-initialization
+        self.values = None
         self.parent_name = None
         self.initialized = False
         return
@@ -197,7 +197,11 @@ class TimePar(ss.BaseArr):
         else:
             xstr = ', initialized=False'
         return f'ss.{name}({self.v}, unit={self.unit}{xstr})'
-    
+
+    @property
+    def isarray(self):
+        return isinstance(self.values, np.ndarray)
+
     def set(self, v=None, unit=None, parent_unit=None, parent_dt=None, self_dt=None):
         """ Reset the parameter values """
         if v           is not None: self.v           = v
@@ -213,8 +217,6 @@ class TimePar(ss.BaseArr):
         """ Update the factor and values """
         self.update_factor()
         self.update_values()
-        if not isinstance(self.values, np.ndarray):
-            self.values = sc.toarray(self.values) # Ensure it's an array
         return self
     
     def update_factor(self):
