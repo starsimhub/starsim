@@ -62,11 +62,12 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         else:
             return object.__getattribute__(self, 'values').__getattribute__(attr) # Be explicit to avoid possible recurison
 
-    def __len__(self):
-        return self.values.__len__()
-
-    def __bool__(self):
-        return self.values.__bool__()
+    # Define more base methods
+    def __len__(self):   return self.values.__len__()
+    def __bool__(self):  return self.values.__bool__()
+    def __int__(self):   return self.values.__int__()
+    def __float__(self): return self.values.__float__()
+    def __contains__(self, key): return self.values.__contains__(key)
 
     def convert(self, obj):
         """ Check if an object is an array, and convert if so """
@@ -102,9 +103,9 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         """ Assign values, e.g. arr1[inds] = arr2 """
         self.values[index] = value
 
-    def __array__(self):
+    def __array__(self, *args, **kwargs):
         """ To ensure isinstance(arr, BaseArr) passes when creating new instances """
-        return self.values
+        return np.array(self.values, *args, **kwargs)
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.values})"

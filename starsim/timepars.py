@@ -200,7 +200,7 @@ class TimePar(ss.BaseArr):
 
     @property
     def isarray(self):
-        return isinstance(self.values, np.ndarray)
+        return isinstance(self.v, np.ndarray)
 
     def set(self, v=None, unit=None, parent_unit=None, parent_dt=None, self_dt=None, force=False):
         """ Reset the parameter values """
@@ -296,14 +296,22 @@ class time_prob(TimePar):
     """ A probability over time (a.k.a. a cumulative hazard rate); must be >0 and <1 """
     def update_values(self):
         v = self.v
-        if v == 1:
-            self.values = 1
-        elif 0 <= v <= 1:
-            rate = -np.log(1 - v)
-            self.values = 1 - np.exp(-rate/self.factor)
+        if self.isarray:
+            self.values = v.copy()
+            inds = np.logical_and(0.0 < v, v < 1.0)
+            rates = -np.log(1 - v)
+            self.values[inds] = 1 - np.exp(-rates/self.factor)
         else:
-            errormsg = f'Invalid value {self.value} for {self}: must be 0-1'
-            raise ValueError(errormsg)
+            if v == 0:
+                self.values = 0
+            elif v == 1:
+                self.values = 1
+            elif 0 <= v <= 1:
+                rate = -np.log(1 - v)
+                self.values = 1 - np.exp(-rate/self.factor)
+            else:
+                errormsg = f'Invalid value {self.value} for {self}: must be 0-1'
+                raise ValueError(errormsg)
         return
         
     
