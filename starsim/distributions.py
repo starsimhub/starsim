@@ -623,14 +623,14 @@ class Dist:
         elif self.strict:
             self.ready = False
         if self.debug:
-            simstr = f'on ti={self.module.ti} ' if self.sim else ''
+            tistr   = f'on ti={self.module.ti} ' if self.module else ''
             sizestr = f'with size={self._size}, '
             slotstr = f'Σ(slots)={self._slots.sum()}, ' if self._slots else '<no slots>, '
-            rvstr = f'Σ(rvs)={rvs.sum():0.2f}, |rvs|={rvs.mean():0.4f}'
+            rvstr   = f'Σ(rvs)={rvs.sum():0.2f}, |rvs|={rvs.mean():0.4f}'
             pre_state = str(self.history[-1]['state']['state'])[-5:]
             post_state = str(self.state_int)[-5:]
             statestr = f"state {pre_state}→{post_state}"
-            print(f'Debug: {self} called {simstr}{sizestr}{slotstr}{rvstr}, {statestr}')
+            print(f'Debug: {self} called {tistr}{sizestr}{slotstr}{rvstr}, {statestr}')
             assert pre_state != post_state # Always an error if the state doesn't change after drawing random numbers
             
         return rvs
