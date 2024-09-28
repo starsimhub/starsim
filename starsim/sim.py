@@ -29,6 +29,7 @@ class Sim:
         analyzers (str/Analyzer/list): as above, for analyzers
         connectors (str/Connector/list): as above, for connectors
         copy_inputs (bool): if True, copy modules as they're inserted into the sim (allowing reuse in other sims, but meaning they won't be updated)
+        data (df): a dataframe (or dict) of data, with a column "time" plus data of the form "module.result", e.g. "hiv.new_infections" (used for plotting only)
         kwargs (dict): merged with pars
     
     **Examples**::
@@ -38,7 +39,7 @@ class Sim:
         sim = ss.Sim(diseases=['sir', ss.SIS()], networks=['random', 'mf']) # Example using list inputs; can mix and match types
     """
     def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, networks=None,
-                 interventions=None, analyzers=None, connectors=None, copy_inputs=True, **kwargs):
+                 interventions=None, analyzers=None, connectors=None, copy_inputs=True, data=None, **kwargs):
         self.pars = ss.make_pars() # Make default parameters (using values from parameters.py)
         args = dict(label=label, people=people, demographics=demographics, diseases=diseases, networks=networks, 
                     interventions=interventions, analyzers=analyzers, connectors=connectors)
@@ -54,6 +55,7 @@ class Sim:
         self.dists = ss.Dists(obj=self) # Initialize the random number generator container
         self.loop = ss.Loop(self) # Initialize the integration loop
         self.results = ss.Results(module='sim')  # For storing results
+        self.data = data # For storing input data
         self.initialized = False  # Whether initialization is complete
         self.complete = False  # Whether a simulation has completed running
         self.results_ready = False  # Whether results are ready
@@ -160,6 +162,7 @@ class Sim:
         self.dists.init(obj=self, base_seed=self.pars.rand_seed, force=True) # Initialize all distributions now that everything else is in place
         self.init_vals() # Initialize the values in all of the states and networks
         self.init_results() # Initialize the results
+        self.init_data() # Initialize the data
         self.loop.init() # Initialize the integration loop
         self.timer = sc.timer() # Store a timer for keeping track of how long the run takes
         self.verbose = self.pars.verbose # Store a run-specific value of verbose
@@ -230,6 +233,19 @@ class Sim:
             ss.Result(None, 'new_deaths', self.npts, ss.dtypes.int, scale=True, label='Deaths'),
             ss.Result(None, 'cum_deaths', self.npts, ss.dtypes.int, scale=True, label='Cumulative deaths'),
         ]
+        return
+
+    def init_data(self, data=None):
+        """ Initialize the data, or add new data """
+        data = data if data is not None else self.data
+        if data is not None:
+            try:
+                data = sc.dataframe(data)
+                assert data.index.name == 'time' or 'time' in data.cols, 'Data must have a column called "time"'
+            except Exception as E:
+                errormsg = f'Failed to add data "{data}": expecting a dataframe with a column called "time". Error:\n{E}'
+                raise ValueError(errormsg)
+        self.data = data
         return
 
     def start_step(self):
@@ -580,7 +596,7 @@ class Sim:
 
         return output
     
-    def plot(self, key=None, fig=None, style='fancy', fig_kw=None, plot_kw=None):
+    def plot(self, key=None, fig=None, style='fancy', show_data=True, fig_kw=None, plot_kw=None, scatter_kw=None):
         """ 
         Plot all results in the Sim object
         
@@ -588,11 +604,11 @@ class Sim:
             key (str): the results key to plot (by default, all)
             fig (Figure): if provided, plot results into an existing figure
             style (str): the plotting style to use (default "fancy"; other options are "simple", None, or any Matplotlib style)
+            show_data (bool): plot the data, if available
             fig_kw (dict): passed to ``plt.subplots()``
             plot_kw (dict): passed to ``plt.plot()``
-        
+            scatter_kw (dict): passed to ``plt.scatter()``, for plotting the data
         """
-        
         # Configuration
         flat = self.results.flatten()
         n_cols = np.ceil(np.sqrt(len(flat))) # Number of columns of axes
@@ -601,6 +617,7 @@ class Sim:
         figsize = default_figsize*figsize_factor
         fig_kw = sc.mergedicts({'figsize':figsize}, fig_kw)
         plot_kw = sc.mergedicts({'lw':2}, plot_kw)
+        scatter_kw = sc.mergedicts({'alpha':0.5, 'color':'k'}, scatter_kw)
         modmap = {m.name:m for m in self.modules} # Find modules
         
         # Do the plotting
@@ -621,7 +638,22 @@ class Sim:
                 axs = [axs]
                 
             # Do the plotting
+            df = self.data if show_data else None # For plotting the data
             for ax, (key, res) in zip(axs, flat.items()):
+
+                # Plot data
+                if df is not None:
+                    mod = res.module
+                    name = res.name
+                    found = False
+                    for dfkey in [f'{mod}.{name}', f'{mod}_{name}']: # Allow dot or underscore
+                        if dfkey in df.cols:
+                            found = True
+                            break
+                    if found:
+                        ax.scatter(df.time, df[dfkey], **scatter_kw)
+
+                # Plot results
                 ax.plot(timevec, res, **plot_kw, label=self.label)
                 title = getattr(res, 'label', key)
                 if res.module != 'sim':

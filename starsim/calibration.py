@@ -158,14 +158,18 @@ class Calibration(sc.prettyobj):
         self.before_sim = None
         self.after_sim  = None
 
-        # Load data -- this is expecting a dataframe with a column for 'year' and other columns for to sim results
+        # Load data -- this is expecting a dataframe with a column for 'time' and other columns for to sim results
         try:
             data = sc.dataframe(data)
         except Exception as E:
             errormsg = f'Please pass data as a pandas dataframe or compatible input, not {type(data)}:\n{E}'
             raise ValueError(errormsg)
         self.data = data
-        self.data.set_index('year', inplace=True)
+        try:
+            self.data.set_index('time', inplace=True)
+        except Exception as E:
+            errormsg = f'Calibration data must have a column called "time", with the same units as the sim (e.g. year), but instead has: {sc.strjoin(self.data.cols)}.\nError: {E}'
+            raise ValueError(errormsg)
 
         # Temporarily store a filename
         self.tmp_filename = 'tmp_calibration_%05i.obj'
@@ -278,17 +282,17 @@ class Calibration(sc.prettyobj):
 
         # Export results
         df_res = sim.export_df()
-        df_res['year'] = np.floor(np.round(df_res.index, 1)).astype(int)
+        df_res['time'] = np.floor(np.round(df_res.index, 1)).astype(int)
         sim_results = sc.objdict()
 
         for skey in self.sim_result_list:
             if 'prevalence' in skey:
-                model_output = df_res.groupby(by='year')[skey].mean()
+                model_output = df_res.groupby(by='time')[skey].mean()
             else:
-                model_output = df_res.groupby(by='year')[skey].sum()
+                model_output = df_res.groupby(by='time')[skey].sum()
             sim_results[skey] = model_output.values
 
-        sim_results['year'] = model_output.index.values
+        sim_results['time'] = model_output.index.values
         # Store results in temporary files
         if save:
             filename = self.tmp_filename % trial.number
@@ -302,15 +306,15 @@ class Calibration(sc.prettyobj):
         """ Compute goodness-of-fit """
         fit = 0
         df_res = sim.export_df()
-        df_res['year'] = np.floor(np.round(df_res.index, 1)).astype(int)
+        df_res['time'] = np.floor(np.round(df_res.index, 1)).astype(int)
         for skey in self.sim_result_list:
             if 'prevalence' in skey:
-                model_output = df_res.groupby(by='year')[skey].mean()
+                model_output = df_res.groupby(by='time')[skey].mean()
             else:
-                model_output = df_res.groupby(by='year')[skey].sum()
+                model_output = df_res.groupby(by='time')[skey].sum()
 
             data = self.data[skey]
-            combined = pd.merge(data, model_output, how='left', on='year')
+            combined = pd.merge(data, model_output, how='left', on='time')
             combined['diffs'] = combined[skey+'_x'] - combined[skey+'_y']
             gofs = compute_gof(combined.dropna()[skey+'_x'], combined.dropna()[skey+'_y'])
 
@@ -449,6 +453,10 @@ class Calibration(sc.prettyobj):
         self.before_fit = self.compute_fit(self.before_sim)
         self.after_fit  = self.compute_fit(self.after_sim)
 
+        # Add the data to the sims
+        for sim in [self.before_sim, self.after_sim]:
+            sim.init_data(self.data)
+
         print(f'Fit with original pars: {self.before_fit:n}')
         print(f'Fit with best-fit pars: {self.after_fit:n}')
         if self.after_fit <= self.before_fit:
@@ -518,6 +526,9 @@ class Calibration(sc.prettyobj):
             self.comfirm_fit()
         msim = ss.MultiSim([self.before_sim, self.after_sim])
         fig = msim.plot(**kwargs)
+
+        # Add calibration data to the plot
+
         return fig
 
     def plot_trend(self, best_thresh=None, fig_kw=None):

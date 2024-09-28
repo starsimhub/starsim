@@ -40,7 +40,7 @@ def make_sim():
 def make_data():
     """ Define the calibration target data """
     target_data = [
-    ['year', 'n_alive', 'hiv.prevalence', 'hiv.n_infected', 'hiv.new_infections', 'hiv.new_deaths'],
+    ['time', 'n_alive', 'hiv.prevalence', 'hiv.n_infected', 'hiv.new_infections', 'hiv.new_deaths'],
     [  1990,  10432409,        0.0699742,          730000 ,               210000,           25000],
     [  1991,  10681008,        0.0851979,          910000 ,               220000,           33000],
     [  1992,  10900511,        0.1009127,          1100000,               220000,           43000],
@@ -108,7 +108,7 @@ def test_calibration(do_plot=False):
         sim = sim,
         data = data,
         weights = weights,
-        total_trials = 4,
+        total_trials = 8,
         n_workers = 2,
         die = True
     )
