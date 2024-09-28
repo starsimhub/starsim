@@ -41,12 +41,13 @@ dependencies = [
     "sciris>=3.2.0",
     "matplotlib",
     "numba",
-    "networkx"
+    "networkx",
+    "optuna"
 ]
 
 [project.optional-dependencies]
 fastmath = ["intel-cmplr-lib-rt"]
-test = ["pytest>=7.3", "pytest-cov", "pytest-env", "pytest-xdist", "optuna"]
+test = ["pytest>=7.3", "pytest-cov", "pytest-env", "pytest-xdist"]
 
 [project.urls]
 "Website" = "https://starsim.org"

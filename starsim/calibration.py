@@ -6,20 +6,11 @@ import os
 import numpy as np
 import pandas as pd
 import sciris as sc
+import optuna as op
 import starsim as ss
 
 
-__all__ = ['Calibration']
-
-
-def import_optuna():
-    """ A helper function to import Optuna, which is an optional dependency """
-    try:
-        import optuna as op # Import here since it's slow
-    except ModuleNotFoundError as E: # pragma: no cover
-        errormsg = f'Optuna import failed ({str(E)}), please install first (pip install optuna)'
-        raise ModuleNotFoundError(errormsg)
-    return op
+__all__ = ['Calibration', 'compute_gof']
 
 
 def compute_gof(actual, predicted, normalize=True, use_frac=False, use_squared=False, as_scalar='none', eps=1e-9, skestimator=None, estimator=None, **kwargs):
@@ -113,45 +104,42 @@ def compute_gof(actual, predicted, normalize=True, use_frac=False, use_squared=F
 class Calibration(sc.prettyobj):
     """
     A class to handle calibration of Starsim simulations. Uses the Optuna hyperparameter
-    optimization library (optuna.org), which must be installed separately (via
-    pip install optuna).
+    optimization library (optuna.org).
+
     Args:
         sim          (Sim)  : the simulation to calibrate
-        data         (df)   : pandas dataframe
+        data         (df)   : pandas dataframe (or dataframe-compatible dict) of the data to calibrate to
         calib_pars   (dict) : a dictionary of the parameters to calibrate of the format dict(key1=[best, low, high])
         fit_args     (dict) : a dictionary of options that are passed to sim.compute_fit() to calculate the goodness-of-fit
         n_trials     (int)  : the number of trials per worker
-        n_workers    (int)  : the number of parallel workers (default: maximum
-        total_trials (int)  : if n_trials is not supplied, calculate by dividing this number by n_workers)
+        n_workers    (int)  : the number of parallel workers (default: maximum number of available CPUs)
+        total_trials (int)  : if n_trials is not supplied, calculate by dividing this number by n_workers
         name         (str)  : the name of the database (default: 'hpvsim_calibration')
-        db_name      (str)  : the name of the database file (default: 'hpvsim_calibration.db')
+        db_name      (str)  : the name of the database file (default: 'starsim_calibration.db')
         keep_db      (bool) : whether to keep the database after calibration (default: false)
         storage      (str)  : the location of the database (default: sqlite)
         rand_seed    (int)  : if provided, use this random seed to initialize Optuna runs (for reproducibility)
         label        (str)  : a label for this calibration object
         die          (bool) : whether to stop if an exception is encountered (default: false)
         verbose      (bool) : whether to print details of the calibration
-        kwargs       (dict) : passed to Calibration()
 
     Returns:
         A Calibration object
     """
     def __init__(self, sim, data, calib_pars, randomize_seeds=True, weights=None, fit_args=None, n_trials=None, n_workers=None,
                 total_trials=None, name=None, db_name=None, estimator=None, keep_db=None, storage=None, rand_seed=None,
-                 sampler=None, label=None, die=False, verbose=True):
-
-        import multiprocessing as mp
+                sampler=None, label=None, die=False, verbose=True):
 
         # Handle run arguments
         if n_trials  is None: n_trials  = 20
-        if n_workers is None: n_workers = mp.cpu_count()
+        if n_workers is None: n_workers = sc.cpu_count()
         if name      is None: name      = 'starsim_calibration'
         if db_name   is None: db_name   = f'{name}.db'
         if keep_db   is None: keep_db   = False
         if storage   is None: storage   = f'sqlite:///{db_name}'
         if total_trials is not None: n_trials = int(np.ceil(total_trials/n_workers))
-        self.run_args   = sc.objdict(n_trials=int(n_trials), n_workers=int(n_workers), name=name, db_name=db_name,
-                                     keep_db=keep_db, storage=storage, rand_seed=rand_seed, sampler=sampler)
+        self.run_args = sc.objdict(n_trials=int(n_trials), n_workers=int(n_workers), name=name, db_name=db_name,
+                                   keep_db=keep_db, storage=storage, rand_seed=rand_seed, sampler=sampler)
 
         # Handle other inputs
         self.label           = label
@@ -165,8 +153,10 @@ class Calibration(sc.prettyobj):
         self.calibrated      = False
 
         # Load data -- this is expecting a dataframe with a column for 'year' and other columns for to sim results
-        if not isinstance(data, pd.DataFrame):
-            errormsg = 'Please pass data as a pandas dataframe'
+        try:
+            data = sc.dataframe(data)
+        except Exception as E:
+            errormsg = f'Please pass data as a pandas dataframe or compatible input, not {type(data)}:\n{E}'
             raise ValueError(errormsg)
         self.target_data = data
         self.target_data.set_index('year', inplace=True)
@@ -326,7 +316,6 @@ class Calibration(sc.prettyobj):
 
     def worker(self):
         """ Run a single worker """
-        op = import_optuna()
         if self.verbose:
             op.logging.set_verbosity(op.logging.DEBUG)
         else:
@@ -356,7 +345,6 @@ class Calibration(sc.prettyobj):
                     print(f'Removed existing calibration file {self.run_args.db_name}')
             else:
                 # Delete the study from the database e.g., mysql
-                op = import_optuna()
                 op.delete_study(study_name=self.run_args.name, storage=self.run_args.storage)
                 if self.verbose:
                     print(f'Deleted study {self.run_args.name} in {self.run_args.storage}')
@@ -367,7 +355,6 @@ class Calibration(sc.prettyobj):
 
     def make_study(self):
         """ Make a study, deleting one if it already exists """
-        op = import_optuna()
         if not self.run_args.keep_db:
             self.remove_db()
         if self.run_args.rand_seed is not None:
@@ -391,8 +378,6 @@ class Calibration(sc.prettyobj):
             verbose (bool): whether to print output from each trial
             kwargs (dict): if supplied, overwrite stored run_args (n_trials, n_workers, etc.)
         """
-        op = import_optuna()
-
         # Load and validate calibration parameters
         if calib_pars is not None:
             self.calib_pars = calib_pars
