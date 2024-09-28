@@ -110,11 +110,14 @@ class Calibration(sc.prettyobj):
         sim          (Sim)  : the simulation to calibrate
         data         (df)   : pandas dataframe (or dataframe-compatible dict) of the data to calibrate to
         calib_pars   (dict) : a dictionary of the parameters to calibrate of the format dict(key1=[best, low, high])
-        fit_args     (dict) : a dictionary of options that are passed to sim.compute_fit() to calculate the goodness-of-fit
         n_trials     (int)  : the number of trials per worker
         n_workers    (int)  : the number of parallel workers (default: maximum number of available CPUs)
         total_trials (int)  : if n_trials is not supplied, calculate by dividing this number by n_workers
-        name         (str)  : the name of the database (default: 'hpvsim_calibration')
+        reseed       (bool) : whether to generate new random seeds for each trial
+        weights      (dict) : the relative weights of each data source
+        fit_args     (dict) : a dictionary of options that are passed to sim.compute_fit() to calculate the goodness-of-fit
+        estimator    (func) : a custom estimator to use for computing the goodness-of-fit
+        name         (str)  : the name of the database (default: 'starsim_calibration')
         db_name      (str)  : the name of the database file (default: 'starsim_calibration.db')
         keep_db      (bool) : whether to keep the database after calibration (default: false)
         storage      (str)  : the location of the database (default: sqlite)
@@ -126,9 +129,9 @@ class Calibration(sc.prettyobj):
     Returns:
         A Calibration object
     """
-    def __init__(self, sim, data, calib_pars, randomize_seeds=True, weights=None, fit_args=None, n_trials=None, n_workers=None,
-                total_trials=None, name=None, db_name=None, estimator=None, keep_db=None, storage=None, rand_seed=None,
-                sampler=None, label=None, die=False, verbose=True):
+    def __init__(self, sim, data, calib_pars, n_trials=None, n_workers=None, total_trials=None, reseed=True,
+                 weights=None, fit_args=None, estimator=None, name=None, db_name=None, keep_db=None,
+                 storage=None, rand_seed=None, sampler=None, label=None, die=False, verbose=True):
 
         # Handle run arguments
         if n_trials  is None: n_trials  = 20
@@ -142,15 +145,15 @@ class Calibration(sc.prettyobj):
                                    keep_db=keep_db, storage=storage, rand_seed=rand_seed, sampler=sampler)
 
         # Handle other inputs
-        self.label           = label
-        self.sim             = sim
-        self.calib_pars      = calib_pars
-        self.randomize_seeds = randomize_seeds
-        self.weights         = weights
-        self.fit_args        = sc.mergedicts(fit_args)
-        self.die             = die
-        self.verbose         = verbose
-        self.calibrated      = False
+        self.label      = label
+        self.sim        = sim
+        self.calib_pars = calib_pars
+        self.reseed     = reseed
+        self.weights    = weights
+        self.fit_args   = sc.mergedicts(fit_args)
+        self.die        = die
+        self.verbose    = verbose
+        self.calibrated = False
 
         # Load data -- this is expecting a dataframe with a column for 'year' and other columns for to sim results
         try:
@@ -158,8 +161,8 @@ class Calibration(sc.prettyobj):
         except Exception as E:
             errormsg = f'Please pass data as a pandas dataframe or compatible input, not {type(data)}:\n{E}'
             raise ValueError(errormsg)
-        self.target_data = data
-        self.target_data.set_index('year', inplace=True)
+        self.data = data
+        self.data.set_index('year', inplace=True)
 
         # Temporarily store a filename
         self.tmp_filename = 'tmp_calibration_%05i.obj'
@@ -169,7 +172,7 @@ class Calibration(sc.prettyobj):
             self.sim.init()
 
         # Figure out which sim results to get
-        self.sim_result_list = self.target_data.columns.values.tolist()
+        self.sim_result_list = self.data.cols
 
         return
 
@@ -231,12 +234,12 @@ class Calibration(sc.prettyobj):
     def trial_to_sim_pars(self, pardict=None, trial=None):
         """
         Take in an optuna trial and sample from pars, after extracting them from the structure they're provided in
+
         Different use cases:
             - pardict is self.calib_pars, i.e. {'diseases':{'hiv':{'art_efficacy':[0.96, 0.9, 0.99]}}}, need to sample
             - pardict is self.initial_pars, i.e. {'diseases':{'hiv':{'art_efficacy':[0.96, 0.9, 0.99]}}}, pull 1st vals
             - pardict is self.best_pars, i.e. {'diseases':{'hiv':{'art_efficacy':0.96786}}}, pull single vals
         """
-
         pars = sc.dcp(pardict)
         for parname, spec in pars.items():
 
@@ -265,7 +268,7 @@ class Calibration(sc.prettyobj):
         else:
             calib_pars = None
 
-        if self.randomize_seeds:
+        if self.reseed:
             calib_pars['rand_seed'] = trial.suggest_int('rand_seed', 0, 1_000_000) # Choose a random rand_seed
 
         sim = self.run_sim(calib_pars)
@@ -303,7 +306,7 @@ class Calibration(sc.prettyobj):
             else:
                 model_output = df_res.groupby(by='year')[skey].sum()
 
-            data = self.target_data[skey]
+            data = self.data[skey]
             combined = pd.merge(data, model_output, how='left', on='year')
             combined['diffs'] = combined[skey+'_x'] - combined[skey+'_y']
             gofs = compute_gof(combined.dropna()[skey+'_x'], combined.dropna()[skey+'_y'])
@@ -333,24 +336,21 @@ class Calibration(sc.prettyobj):
         return output
 
     def remove_db(self):
-        """
-        Remove the database file if keep_db is false and the path exists.
-        """
+        """ Remove the database file if keep_db is false and the path exists """
         try:
             if 'sqlite' in self.run_args.storage:
                 # Delete the file from disk
                 if os.path.exists(self.run_args.db_name):
                     os.remove(self.run_args.db_name)
-                if self.verbose:
-                    print(f'Removed existing calibration file {self.run_args.db_name}')
+                if self.verbose: print(f'Removed existing calibration file {self.run_args.db_name}')
             else:
                 # Delete the study from the database e.g., mysql
                 op.delete_study(study_name=self.run_args.name, storage=self.run_args.storage)
-                if self.verbose:
-                    print(f'Deleted study {self.run_args.name} in {self.run_args.storage}')
+                if self.verbose: print(f'Deleted study {self.run_args.name} in {self.run_args.storage}')
         except Exception as E:
-            print('Could not delete study, skipping...')
-            print(str(E))
+            if self.verbose:
+                print('Could not delete study, skipping...')
+                print(str(E))
         return
 
     def make_study(self):
@@ -363,7 +363,7 @@ class Calibration(sc.prettyobj):
             raise NotImplementedError('Implemented but does not work')
         else:
             sampler = None
-        print(self.run_args.storage)
+        if self.verbose: print(self.run_args.storage)
         output = op.create_study(storage=self.run_args.storage, study_name=self.run_args.name, sampler=sampler)
         return output
 
@@ -393,7 +393,7 @@ class Calibration(sc.prettyobj):
 
         self.sim_results = []
         if load:
-            print('Loading saved results...')
+            if self.verbose: print('Loading saved results...')
             for trial in study.trials:
                 n = trial.number
                 try:
@@ -403,19 +403,19 @@ class Calibration(sc.prettyobj):
                     if tidyup:
                         try:
                             os.remove(filename)
-                            print(f'    Removed temporary file {filename}')
+                            if self.verbose: print(f'    Removed temporary file {filename}')
                         except Exception as E:
                             errormsg = f'Could not remove {filename}: {str(E)}'
-                            print(errormsg)
-                    print(f'  Loaded trial {n}')
+                            if self.verbose: print(errormsg)
+                    if self.verbose: print(f'  Loaded trial {n}')
                 except Exception as E:
                     errormsg = f'Warning, could not load trial {n}: {str(E)}'
-                    print(errormsg)
+                    if self.verbose: print(errormsg)
 
         # Compare the results
         self.parse_study(study)
 
-        print('Best pars:', self.best_pars)
+        if self.verbose: print('Best pars:', self.best_pars)
 
         # Tidy up
         self.calibrated = True
@@ -431,7 +431,7 @@ class Calibration(sc.prettyobj):
     def confirm_fit(self):
         """ Run before and after simulations to validate the fit """
 
-        print('\nConfirming fit...')
+        if self.verbose: print('\nConfirming fit...')
 
         before_pars = sc.dcp(self.calib_pars)
         for spec in before_pars.values():
@@ -460,7 +460,7 @@ class Calibration(sc.prettyobj):
         best = study.best_params
         self.best_pars = best
 
-        print('Making results structure...')
+        if self.verbose: print('Making results structure...')
         results = []
         n_trials = len(study.trials)
         failed_trials = []
@@ -472,7 +472,7 @@ class Calibration(sc.prettyobj):
                 failed_trials.append(data['index'])
             else:
                 results.append(data)
-        print(f'Processed {n_trials} trials; {len(failed_trials)} failed')
+        if self.verbose: print(f'Processed {n_trials} trials; {len(failed_trials)} failed')
 
         keys = ['index', 'mismatch'] + list(best.keys())
         data = sc.objdict().make(keys=keys, vals=[])
@@ -483,8 +483,8 @@ class Calibration(sc.prettyobj):
                     print(warnmsg)
                     r[key] = best[key]
                 data[key].append(r[key])
-        self.data = data
-        self.df = pd.DataFrame.from_dict(data)
+        self.study_data = data
+        self.df = sc.dataframe.from_dict(data)
         self.df = self.df.sort_values(by=['mismatch']) # Sort
         return
 
