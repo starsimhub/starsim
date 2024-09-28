@@ -1,18 +1,9 @@
 """
 Define array-handling classes, including agent states
-
-an event:
-- handles setting states true/false
-- gets uids automatically
-- generates ti_arrays
-- generates results
-
-get working without events/transitions
-define events as scheduling things, then transitions as making them happen
-consider function decorators
 """
 
 import numpy as np
+import sciris as sc
 import starsim as ss
 
 # Shorten these for performance
@@ -106,6 +97,10 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.values})"
+
+    def disp(self):
+        """ Full display of object """
+        return sc.pr(self)
 
     def asnew(self, values=None, cls=None):
         """ Duplicate and copy (rather than link) data """
