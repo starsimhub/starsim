@@ -19,12 +19,7 @@ class Demographics(ss.Module):
     place at the start of the timestep, before networks are updated and before
     any disease modules are executed.
     """
-    def init_pre(self, sim):
-        super().init_pre(sim)
-        return
-
-    def init_results(self):
-        pass
+    pass
 
 
 class Births(Demographics):

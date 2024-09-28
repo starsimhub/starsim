@@ -8,7 +8,6 @@ import starsim as ss
 import networkx as nx
 from operator import itemgetter
 import pandas as pd
-import numba as nb
 
 ss_int_ = ss.dtypes.int
 
@@ -389,11 +388,9 @@ class InfectionLog(nx.MultiDiGraph):
             uid: The UID of the target node (the agent that was infected)
             kwargs: Remaining arguments are stored as edge data
         """
-        for uid in sc.promotetoarray(uids):
-            source, target, key = max(self.in_edges(uid, keys=True),
-                                      key=itemgetter(2, 0))  # itemgetter twice as fast as lambda apparently
+        for uid in sc.toarray(uids):
+            source, target, key = max(self.in_edges(uid, keys=True), key=itemgetter(2, 0))  # itemgetter twice as fast as lambda apparently
             self[source][target][key].update(**kwargs)
-
         return
 
     def append(self, source, target, t, **kwargs):
