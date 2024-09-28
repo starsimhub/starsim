@@ -251,8 +251,8 @@ class Pregnancy(Demographics):
             dur_postpartum = ss.lognorm_ex(mean=ss.years(0.5), std=ss.years(0.5)), # Duration for post-natal transmission (e.g. via breastfeeding)
             fertility_rate = 0, # Can be a number of Pandas DataFrame
             rel_fertility = 1,
-            maternal_death_prob = ss.bernoulli(0),
-            p_neonataldeath_on_maternaldeath = ss.bernoulli(0),
+            p_maternal_death = ss.bernoulli(0),
+            p_neonatal_death = ss.bernoulli(0),
             sex_ratio = ss.bernoulli(0.5), # Ratio of babies born female
             min_age = 15, # Minimum age to become pregnant
             max_age = 50, # Maximum age to become pregnant
@@ -507,7 +507,7 @@ class Pregnancy(Demographics):
         # Outcomes for pregnancies
         dur_preg = np.ones(len(uids))*self.pars.dur_pregnancy  # Duration in years
         dur_postpartum = self.pars.dur_postpartum.rvs(uids)
-        dead = self.pars.maternal_death_prob.rvs(uids)
+        dead = self.pars.p_maternal_death.rvs(uids)
         self.ti_delivery[uids] = ti + dur_preg # Currently assumes maternal deaths still result in a live baby
         self.ti_postpartum[uids] = self.ti_delivery[uids] + dur_postpartum
         self.dur_postpartum[uids] = dur_postpartum
@@ -522,26 +522,24 @@ class Pregnancy(Demographics):
             return
 
         # Any pregnant? Consider death of the neonate
-        mother_uids = death_uids[self.pregnant[death_uids]]
-        if len(mother_uids):
-            neonate_uids = ss.uids(self.child_uid[mother_uids])
-            neonataldeath_uids = self.pars.p_neonataldeath_on_maternaldeath.filter(neonate_uids)
-            if len(neonataldeath_uids):
-                self.sim.people.request_death(neonataldeath_uids)
+        mother_death_uids = death_uids[self.pregnant[death_uids]]
+        if len(mother_death_uids):
+            neonate_uids = ss.uids(self.child_uid[mother_death_uids])
+            neonatal_death_uids = self.pars.p_neonatal_death.filter(neonate_uids)
+            if len(neonatal_death_uids):
+                self.sim.people.request_death(neonatal_death_uids)
 
         # Any prenatal? Handle changes to pregnancy
         is_prenatal = self.sim.people.age[death_uids] < 0
-        neonate_uids = death_uids[is_prenatal]
-        if len(neonate_uids):
-            mother_uids = self.sim.people.parent[neonate_uids]
-            # Baby lost, mother no longer pregnant
-            self.pregnant[mother_uids] = False
+        prenatal_death_uids = death_uids[is_prenatal]
+        if len(prenatal_death_uids):
+            mother_uids = self.sim.people.parent[prenatal_death_uids]
+            self.pregnant[mother_uids] = False # Baby lost, mother no longer pregnant
             self.fecund[mother_uids] = True # Or wait?
             self.postpartum[mother_uids] = False
             self.child_uid[mother_uids] = np.nan
             self.ti_delivery[mother_uids] = np.nan
             self.ti_postpartum[mother_uids] = np.nan
-            # Keep ti_dead
         return
 
     def update_results(self):
