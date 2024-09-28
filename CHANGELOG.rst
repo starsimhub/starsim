@@ -54,6 +54,7 @@ Other changes
 - ``sim.get_intervention()`` and ``sim.get_analyzer()`` have been removed; use built-in ``ndict`` operations (e.g., the label) to find the object you're after.
 - ``requires`` has been removed from modules, but ``ss.check_requires()`` is still available if needed. Call it manually from ``init_pre()`` if desired, e.g. a PMTCT intervention might call ``ss.check_requires(self.sim, ['hiv', 'maternalnet'])``.
 - For networks, ``contacts`` has been renamed ``edges`` except in cases where it refers to an *agent's* contacts. For example, ``network.contacts`` has been renamed ``network.edges``, but ``ss.find_contacts()`` remains the same.
+- Networks now have a ``to_graph()`` method that exports to NetworkX.
 - ``ss.diff_sims()`` can now handle ``MultiSim`` objects.
 - ``Sim._orig_pars`` has been removed.
 - ``ss.unique()`` has been removed.
