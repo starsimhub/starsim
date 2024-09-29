@@ -130,6 +130,33 @@ class Result(ss.BaseArr):
                 data[valcol] = val
         df = sc.dataframe(data)
         return df
+
+    def plot(self, fig=None, ax=None, fig_kw=None, plot_kw=None, fill_kw=None, **kwargs):
+        """ Plot a single result; kwargs are interpreted as plot_kw """
+        # Prepare inputs
+        fig_kw = sc.mergedicts(fig_kw)
+        plot_kw = sc.mergedicts(dict(lw=3, alpha=0.8), plot_kw, kwargs)
+        fill_kw = sc.mergedicts(dict(alpha=0.1), fill_kw)
+        if fig is None and ax is None:
+            fig = plt.figure(**fig_kw)
+        if ax is None:
+            ax = plt.subplot(111)
+        if self.timevec is None:
+            errormsg = f'Cannot figure out how to plot {self}: no time data associated with it'
+            raise ValueError(errormsg)
+
+        # Plot bounds
+        if self.low is not None and self.high is not None:
+            ax.fill_between(self.timevec, self.low, self.high, **fill_kw)
+
+        # Plot results
+        plt.plot(self.timevec, self.values, **plot_kw)
+        plt.title(self.full_label)
+        plt.xlabel('Time')
+        sc.commaticks()
+        if (self.values.min() >= 0) and (plt.ylim()[0]<0): # Don't allow axis to go negative if results don't
+            plt.ylim(bottom=0)
+        return fig
     
 
 class Results(ss.ndict):
@@ -188,11 +215,9 @@ class Results(ss.ndict):
 
     def plot(self, style='fancy', fig_kw=None, plot_kw=None):
         """ Plot all the results """
-
         # Prepare the inputs
         fig_kw = sc.mergedicts(fig_kw)
         plot_kw = sc.mergedicts(plot_kw)
-        timevec = self.get('timevec', None)
         results = list(self.all_results)
         nrows,ncols = sc.getrowscols(len(results))
 
@@ -200,13 +225,8 @@ class Results(ss.ndict):
         with sc.options.with_style(style):
             fig = plt.figure(**fig_kw)
             for i,res in enumerate(results):
-                plt.subplot(nrows, ncols, i+1)
-                timevec = sc.ifelse(res.timevec, timevec)
-                if timevec is None:
-                    errormsg = f'Cannot figure out how to plot {res}: no time data associated with it'
-                    raise ValueError(errormsg)
-                plt.plot(timevec, res.values, **plot_kw)
-                plt.title(res.key)
+                ax = plt.subplot(nrows, ncols, i+1)
+                res.plot(ax=ax, **plot_kw)
             sc.figlayout()
         return fig
 
