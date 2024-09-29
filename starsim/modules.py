@@ -144,7 +144,8 @@ class Module(sc.quickobj):
 
     def init_results(self):
         """ Initialize any results required; part of init_pre() """
-        pass
+        self.results.timevec = self.timevec # Store the timevec in the results for plotting
+        return
 
     def init_post(self):
         """ Initialize the values of the states; the last step of initialization """

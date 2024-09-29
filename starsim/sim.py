@@ -446,7 +446,7 @@ class Sim:
             return flat
 
         resdict = flatten_results(self.results)
-        resdict['t'] = self.timevec
+        resdict['timevec'] = self.timevec
         df = sc.dataframe.from_dict(resdict).set_index('t')
         return df
 

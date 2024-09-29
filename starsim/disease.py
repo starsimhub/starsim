@@ -55,6 +55,7 @@ class Disease(ss.Module):
         a disease contains a boolean state 'susceptible' it will automatically contain a
         Result for 'n_susceptible'.
         """
+        super().init_results()
         for state in self._disease_states:
             self.results += ss.Result(self.name, f'n_{state.name}', self.npts, dtype=int, scale=True, label=state.label)
         return
