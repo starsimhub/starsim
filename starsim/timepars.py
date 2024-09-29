@@ -8,7 +8,7 @@ import starsim as ss
 
 # Classes that are externally visible
 __all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff', 'make_timevec', 'make_abs_tvec',
-           'TimePar', 'dur', 'days', 'years', 'rate', 'time_prob', 'beta']
+           'TimePar', 'dur', 'days', 'years', 'rate', 'perday', 'peryear', 'time_prob', 'beta']
 
     
 #%% Helper functions
@@ -287,6 +287,20 @@ class rate(TimePar): # TODO: should all rates just be time_prob?
     """ Any number that acts like a rate; can be greater than 1 """
     def update_values(self):
         self.values = self.v/self.factor
+        return
+
+
+class perday(rate):
+    """ Shortcut to ss.rate(value, units='day') """
+    def __init__(self, v, parent_unit=None, parent_dt=None):
+        super().__init__(v=v, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
+        return
+
+
+class peryear(rate):
+    """ Shortcut to ss.rate(value, units='year') """
+    def __init__(self, v, parent_unit=None, parent_dt=None):
+        super().__init__(v=v, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
         return
 
 

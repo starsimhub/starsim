@@ -157,9 +157,10 @@ class Results(ss.ndict):
             warnmsg = f'You are adding a result of type {type(result)} to Results, which is inadvisable.'
             ss.warn(warnmsg)
 
-        if result.module and result.module != self._module:
-            warnmsg = f'You are adding a result from module {result.module} to module {self._module}; check that this is intentional.'
-            ss.warn(warnmsg)
+        if result.module != self._module:
+            if result.module:
+                warnmsg = f'You are adding a result from module {result.module} to module {self._module}; check that this is intentional.'
+                ss.warn(warnmsg)
             result.module = self._module
         
         super().append(result, key=key)
