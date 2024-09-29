@@ -194,6 +194,9 @@ class Infection(Disease):
         initial_cases = self.pars.init_prev.filter()
         if len(initial_cases):
             self.set_prognoses(initial_cases)  # TODO: sentinel value to indicate seeds?
+
+        # Exclude initial cases from results -- disabling for now since it disrupts counting of new infections, e.g. test_diseases.py
+        # self.ti_infected[self.ti_infected == self.ti] = -1
         return initial_cases
 
     def init_results(self):

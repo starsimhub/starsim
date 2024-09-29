@@ -105,14 +105,19 @@ class Births(Demographics):
         return new_uids
 
     def update_results(self):
-        self.results['new'][self.ti] = self.n_births
+        # New births -- already calculated
+        self.results.new[self.ti] = self.n_births
+
+        # Calculate crude birth rate (CBR)
+        inv_units = 1.0/self.pars.units
+        births_per_year = self.n_births/self.sim.dt_year
+        denom = self.sim.results.n_alive[self.sim.ti]
+        self.results.cbr[self.ti] = inv_units*births_per_year/denom
         return
 
     def finalize(self):
         super().finalize()
-        res = self.sim.results
         self.results.cumulative[:] = np.cumsum(self.results.new)
-        self.results.cbr[:] = 1/self.pars.units*np.divide(self.results.new/self.sim.dt_year, res.n_alive, where=res.n_alive>0)
         return
 
 
@@ -502,7 +507,6 @@ class Pregnancy(Demographics):
 
         # Change states for the newly pregnant woman
         ti = self.ti
-        dt = self.dt # TODO: CHECK
         self.fecund[uids] = False
         self.pregnant[uids] = True
         self.ti_pregnant[uids] = ti

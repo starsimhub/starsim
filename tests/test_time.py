@@ -81,10 +81,23 @@ def test_classes():
 
 def test_units(do_plot=False):
     sc.heading('Test behavior of year vs day units')
-    
+
+    sis = ss.SIS(
+        beta = ss.beta(0.05, 'day'),
+        init_prev = ss.bernoulli(p=0.1),
+        dur_inf = ss.lognorm_ex(mean=ss.dur(10, 'day')),
+        waning = ss.rate(0.05, 'day'),
+        imm_boost = 1.0,
+    )
+
+    rnet = ss.RandomNet(
+        n_contacts = 10,
+        dur = 0, # Note; network edge durations are required to have the same unit as the network
+    )
+
     pars = dict(
-        diseases = dict(type='sis', init_prev=0.1),
-        networks = 'random',
+        diseases = sis,
+        networks = rnet,
         n_agents = small,
     )
     
@@ -97,10 +110,10 @@ def test_units(do_plot=False):
         if do_plot:
             sim.plot()
     
-    # Uncomment this test once it might potentially pass lol
-    rtol = 0.01
+    # Check that results match to within stochastic uncertainty
+    rtol = 0.05
     vals = [sim.summary.sis_cum_infections for sim in [sims.y, sims.d]]
-    # assert np.isclose(*vals, rtol=rtol), f'Values for cum_infections do not match ({vals})'
+    assert np.isclose(*vals, rtol=rtol), f'Values for cum_infections do not match ({vals})'
         
     return sims
 
@@ -110,7 +123,7 @@ def test_multi_timestep(do_plot=False):
     
     pars = dict(
         diseases = ss.SIS(unit='day', dt=1.0, init_prev=0.1, beta=ss.beta(0.01)),
-        # demographics = ss.Births(unit='year', dt=0.25),
+        demographics = ss.Births(unit='year', dt=0.25),
         networks = ss.RandomNet(unit='week'),
         n_agents = small,
     )
