@@ -541,6 +541,66 @@ class RandomNet(DynamicNetwork):
         return
 
 
+class FastRandomNet(DynamicNetwork):
+    """ Random connectivity between agents """
+
+    def __init__(self, pars=None, key_dict=None, **kwargs):
+        """ Initialize """
+        super().__init__(key_dict=key_dict)
+        self.define_pars(
+            n_contacts = 10,
+            dur = 0, # Note; network edge durations are required to have the same unit as the network
+        )
+        self.update_pars(pars, **kwargs)
+        self.src_dist = ss.randint()
+        self.trg_dist = ss.randint()
+        return
+
+    def init_post(self):
+        self.add_pairs()
+        return
+
+    @staticmethod
+    @nb.njit(fastmath=True, parallel=False, cache=True)
+    def get_source(inds, n_contacts):
+        """ Optimized helper function for getting contacts """
+        total_number_of_half_edges = np.sum(n_contacts)
+        count = 0
+        source = np.zeros((total_number_of_half_edges,), dtype=ss_int_)
+        for i, person_id in enumerate(inds):
+            n = n_contacts[i]
+            source[count: count + n] = person_id
+            count += n
+        return source
+
+    def add_pairs(self):
+        """ Generate edges """
+        people = self.sim.people
+        born_uids = (people.alive & (people.age > 0)).uids
+        expected_contacts = self.pars.n_contacts*len(people)
+        actual_contacts = len(self)
+        needed_contacts = (expected_contacts - actual_contacts) // 2 # Divide by 2 since bidirectional
+
+        # Only proceed if we need more contacts
+        if needed_contacts:
+            self.src_dist.set(high=len(born_uids)) # Reset the distributions
+            # self.trg_dist.set(high=len(born_uids)) # Reset the distributions
+            src = self.src_dist.rvs(needed_contacts*2) # Note: not CRN-safe! Could also generate all inds at once and split them
+            # trg = self.trg_dist.rvs(needed_contacts)
+            p1 = born_uids[src[:needed_contacts]]
+            p2 = born_uids[src[needed_contacts:]]
+
+            beta = np.ones(len(p1), dtype=ss_float_)
+    
+            if isinstance(self.pars.dur, ss.Dist):
+                dur = self.pars.dur.rvs(p1)
+            else:
+                dur = np.ones(len(p1))*self.pars.dur # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
+            
+            self.append(p1=p1, p2=p2, beta=beta, dur=dur)
+        return
+
+
 class ErdosRenyiNet(DynamicNetwork):
     """
     In the Erdos-Renyi network, every possible edge has a probability, p, of
