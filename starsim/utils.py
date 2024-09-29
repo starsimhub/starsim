@@ -77,7 +77,7 @@ class ndict(sc.objdict):
         else:
             errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._nameattr}"'
             raise TypeError(errormsg)
-        return
+        return self
     
     def _check_key(self, key, overwrite=None):
         if overwrite is None: overwrite = self._overwrite
@@ -105,28 +105,35 @@ class ndict(sc.objdict):
             self.append(arg)
         for key, arg in kwargs.items():
             self.append(arg, key=key)
-        return
+        return self
+
+    def merge(self, other):
+        """ Merge another dictionary with this one """
+        for key, arg in other.items():
+            self.append(arg, key=key)
+        return self
 
     def copy(self):
+        """ Shallow copy """
         new = self.__class__.__new__(nameattr=self._nameattr, type=self._type, strict=self._strict)
         new.update(self)
         return new
 
-    def __add__(self, dict2):
+    def __add__(self, other):
         """ Allow c = a + b """
         new = self.copy()
-        if isinstance(dict2, list):
-            new.extend(dict2)
+        if isinstance(other, list):
+            new.extend(other)
         else:
-            new.append(dict2)
+            new.append(other)
         return new
 
-    def __iadd__(self, dict2):
+    def __iadd__(self, other):
         """ Allow a += b """
-        if isinstance(dict2, list):
-            self.extend(dict2)
+        if isinstance(other, list):
+            self.extend(other)
         else:
-            self.append(dict2)
+            self.append(other)
         return self
 
 
@@ -330,7 +337,7 @@ def validate_sim_data(data=None, die=None):
         # Try loading the data
         try:
             data = sc.dataframe(data) # Convert it to a dataframe
-            timecols = ['time', 'day', 'date', 'year'] # If a time column is supplied, use it as the index
+            timecols = ['t', 'timevec', 'tvec', 'time', 'day', 'date', 'year'] # If a time column is supplied, use it as the index
             found = False
             for timecol in timecols:
                 if timecol in data.cols:

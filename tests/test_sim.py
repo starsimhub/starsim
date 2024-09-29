@@ -185,8 +185,8 @@ def test_simple_vax(do_plot=do_plot):
     # Check plots
     if do_plot:
         plt.figure()
-        plt.plot(sim_base.yearvec, sim_base.results.sir.prevalence, label='Baseline')
-        plt.plot(sim_intv.yearvec, sim_intv.results.sir.prevalence, label='Vax')
+        plt.plot(sim_base.timevec, sim_base.results.sir.prevalence, label='Baseline')
+        plt.plot(sim_intv.timevec, sim_intv.results.sir.prevalence, label='Vax')
         plt.axvline(x=2015, color='k', ls='--')
         plt.title('Prevalence')
         plt.legend()

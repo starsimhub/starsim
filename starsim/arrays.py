@@ -1,53 +1,153 @@
 """
 Define array-handling classes, including agent states
-
-an event:
-- handles setting states true/false
-- gets uids automatically
-- generates ti_arrays
-- generates results
-
-get working without events/transitions
-define events as scheduling things, then transitions as making them happen
-consider function decorators
 """
 
 import numpy as np
+import sciris as sc
 import starsim as ss
 
 # Shorten these for performance
 ss_float = ss.dtypes.float
 ss_int   = ss.dtypes.int
 ss_bool  = ss.dtypes.bool
+type_def = {
+    ss_float: ('float', float, np.float64, np.float32),
+    ss_int: ('int', int, np.int64, np.int32),
+    ss_bool: ('bool', bool, np.bool_),
+}
+type_map = {v:k for k,vlist in type_def.items() for v in vlist} # Invert into a full dictionary
 
-__all__ = ['check_dtype', 'Arr', 'FloatArr', 'BoolArr', 'State', 'IndexArr', 'uids']
+__all__ = ['check_dtype', 'BaseArr', 'Arr', 'FloatArr', 'BoolArr', 'State', 'IndexArr', 'uids']
 
 
 def check_dtype(dtype, default=None):
     """ Check that the supplied dtype is one of the supported options """
-    
-    # Handle dtype
+    # Handle input
     if dtype is None:
         if default is None:
             errormsg = 'Must supply either a dtype or a default value'
             raise ValueError(errormsg)
         else:
             dtype = type(default)
-    
-    if dtype in ['float', float, np.float64, np.float32]:
-        dtype = ss_float
-    elif dtype in ['int', int, np.int64, np.int32]:
-        dtype = ss_int
-    elif dtype in ['bool', bool, np.bool_]:
-        dtype = ss_bool
-    else:
+
+    # Do type conversion
+    new_dtype = type_map.get(dtype)
+    if new_dtype is None:
+        new_dtype = dtype
         warnmsg = f'Data type {type(default)} not a supported data type; set warn=False to suppress warning'
         ss.warn(warnmsg)
-    
-    return dtype
+
+    return new_dtype
 
 
-class Arr(np.lib.mixins.NDArrayOperatorsMixin):
+
+
+
+class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
+    """
+    An object that acts exactly like a NumPy array, except stores the values in self.values.
+    """
+    def __init__(self, values, *args, **kwargs):
+        self.values = np.array(values, *args, **kwargs)
+        return
+
+    def __getattr__(self, attr):
+        """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
+        if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
+            return self.__getattribute__(attr)
+        else:
+            return object.__getattribute__(self, 'values').__getattribute__(attr) # Be explicit to avoid possible recurison
+
+    # Define more base methods
+    def __len__(self):   return self.values.__len__()
+    def __bool__(self):  return self.values.__bool__()
+    def __int__(self):   return self.values.__int__()
+    def __float__(self): return self.values.__float__()
+    def __contains__(self, key): return self.values.__contains__(key)
+
+    def convert(self, obj):
+        """ Check if an object is an array, and convert if so """
+        if isinstance(obj, np.ndarray):
+            return self.asnew(obj)
+        elif isinstance(obj, BaseArr):
+            return self.asnew(obj.values)
+        return obj
+
+    @staticmethod
+    def _arr(obj):
+        """ Helper function to efficiently extract values from a BaseArr, or return the original object """
+        if isinstance(obj, BaseArr):
+            return obj.values
+        return obj
+
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        """ To handle all numpy operations, e.g. arr1*arr2 """
+        # Convert all inputs to their .values if they are BaseArr, otherwise leave unchanged
+        inputs = [self._arr(x) for x in inputs]
+        kwargs = {k:self._arr(v) for k,v in kwargs.items()}
+        result = getattr(ufunc, method)(*inputs, **kwargs)
+
+        # If result is a tuple (e.g., for divmod or ufuncs that return multiple values), convert all results to BaseArr
+        if isinstance(result, tuple):
+            return tuple(self.convert(x) for x in result)
+
+        result = self.convert(result)
+        return result
+
+    def __iter__(self):
+        """ For iterating correctly, e.g. for sum() """
+        return iter(self.values)
+
+    def __getitem__(self, index):
+        """ For indexing and slicing, e.g. arr[inds] """
+        return self.values[index]
+
+    def __setitem__(self, index, value):
+        """ Assign values, e.g. arr1[inds] = arr2 """
+        self.values[index] = value
+
+    def __array__(self, *args, **kwargs):
+        """ To ensure isinstance(arr, BaseArr) passes when creating new instances """
+        return np.array(self.values, *args, **kwargs)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}({self.values})"
+
+    def disp(self):
+        """ Full display of object """
+        return sc.pr(self)
+
+    def asnew(self, values=None, cls=None, **kwargs):
+        """ Duplicate and copy (rather than link) data """
+        if cls is None: # Use the current class if none is provided
+            cls = self.__class__
+        new = object.__new__(cls) # Create a new Arr instance
+        new.__dict__ = self.__dict__.copy() # Copy pointers
+        new.__dict__.update(kwargs) # Update any keyword arguments provided # TODO: add validation?
+        if values is not None:
+            new.values = values # Replace data with new data
+        else:
+            new.values = sc.cp(new.values) # TODO: is this needed?
+        return new
+
+    def update(self, skip_none=True, overwrite=True, force=False, **kwargs):
+        """ Update the attributes, skipping None values and raising an error if extra keys are added """
+        if skip_none: # Remove None inputs
+            kwargs = {k:v for k,v in kwargs.items() if v is not None}
+        if not overwrite: # Don't overwrite non-None values
+            kwargs = {k:v for k,v in kwargs.items() if getattr(self, k, None) is None}
+        if not force: # Check if we'd be creating any new keys
+            kw_keys = set(kwargs.keys())
+            self_keys = set(self.__dict__.keys())
+            diff = kw_keys - self_keys
+            if diff:
+                errormsg = f'Invalid arguments to {self}: {diff}'
+                raise ValueError(errormsg)
+        self.__dict__.update(kwargs) # Actually perform the update
+        return self
+
+
+class Arr(BaseArr):
     """
     Store a state of the agents (e.g. age, infection status, etc.) as an array.
     
@@ -151,13 +251,6 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
         self.raw[key] = value
         return
             
-    def __getattr__(self, attr):
-        """ Make it behave like a regular array mostly -- enables things like sum(), mean(), etc. """
-        if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
-            return self.__getattribute__(attr)
-        else:
-            return getattr(self.values, attr)
-        
     def __gt__(self, other): return self.asnew(self.values > other,  cls=BoolArr)
     def __lt__(self, other): return self.asnew(self.values < other,  cls=BoolArr)
     def __ge__(self, other): return self.asnew(self.values >= other, cls=BoolArr)
@@ -169,24 +262,6 @@ class Arr(np.lib.mixins.NDArrayOperatorsMixin):
     def __or__(self, other):  raise BooleanOperationError(self)
     def __xor__(self, other): raise BooleanOperationError(self)
     def __invert__(self):     raise BooleanOperationError(self)
-
-    def __array_ufunc__(self, ufunc, method, *args, out=None, **kwargs):
-        args = [(arg.values if arg is self else arg) for arg in args]
-        if method != '__call__':
-            # This is a catch-all for ufuncs that are not being applied with '__call__' (e.g., operations returning a scalar like 'np.sum()' use reduce instead)
-            kwargs = {k:v.values if v is self else v for k,v in kwargs.items()}
-            return self.values.__array_ufunc__(ufunc, method, *args, out=out, **kwargs)
-        else:
-            if out is self:
-                # In-place operations like += applied to the entire Arr instance
-                # use this branch. Therefore, we perform our computation on a new
-                # array with the same size as self.values, and then write it back
-                # to the appropriate entries in `self.raw` via `self[:]`
-                self[:] = ufunc(*args, **kwargs)
-                return self
-            else:
-                # Otherwise, just run the ufunc
-                return ufunc(*args, **kwargs)
 
     @property
     def auids(self):
@@ -362,7 +437,17 @@ class BoolArr(Arr):
 
 
 class State(BoolArr):
-    """ A boolean array being used as a state """
+    """
+    A boolean array being used as a state.
+
+    Although functionally identical to BoolArr, a State is handled differently in
+    terms of automation: specifically, results are automatically generated from a 
+    State (but not a BoolArr).
+
+    States are typically used to keep track of externally-facing variables (e.g. 
+    disease.susceptible), while BoolArrs can be used to keep track of internal
+    ones (e.g. disease.has_immunity).
+    """
     pass
 
     

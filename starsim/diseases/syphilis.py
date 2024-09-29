@@ -63,9 +63,9 @@ class Syphilis(ss.Infection):
             ss.State('latent_temp', label="Latent temporary"),  # Relapses to secondary (~1y)
             ss.State('latent_long', label="Latent long"),  # Can progress to tertiary or remain here
             ss.State('tertiary', label="Tertiary"),  # Includes complications (cardio/neuro/disfigurement)
-            ss.State('immune', label="Immune"),  # After effective treatment people may acquire temp immunity
-            ss.State('ever_exposed', label="Ever exposed", track_time=False),  # Anyone ever exposed - stays true after treatment
-            ss.State('congenital'),  # Congenital syphilis states
+            ss.BoolArr('immune', label="Immune"),  # After effective treatment people may acquire temp immunity
+            ss.BoolArr('ever_exposed', label="Ever exposed", track_time=False),  # Anyone ever exposed - stays true after treatment
+            ss.BoolArr('congenital'),  # Congenital syphilis states
         )
         
         self.define_events(
@@ -131,15 +131,15 @@ class Syphilis(ss.Infection):
     
         self.define_states(
             # Adult syphilis states
-            ss.BoolArr('exposed', label='Exposed'),  # AKA incubating. Free of symptoms, not transmissible
-            ss.BoolArr('primary', label='Primary'),  # Primary chancres
-            ss.BoolArr('secondary', label="Secondary"),  # Inclusive of those who may still have primary chancres
-            ss.BoolArr('latent_temp', label="Latent temporary"),  # Relapses to secondary (~1y)
-            ss.BoolArr('latent_long', label="Latent long"),  # Can progress to tertiary or remain here
-            ss.BoolArr('tertiary', label="Tertiary"),  # Includes complications (cardio/neuro/disfigurement)
-            ss.BoolArr('immune', label="Immune"),  # After effective treatment people may acquire temp immunity
-            ss.BoolArr('ever_exposed', label="Ever exposed"),  # Anyone ever exposed - stays true after treatment
-            ss.BoolArr('congenital', label="Congenital"),  # Congenital syphilis states
+            ss.State('exposed', label='Exposed'),  # AKA incubating. Free of symptoms, not transmissible
+            ss.State('primary', label='Primary'),  # Primary chancres
+            ss.State('secondary', label="Secondary"),  # Inclusive of those who may still have primary chancres
+            ss.State('latent_temp', label="Latent temporary"),  # Relapses to secondary (~1y)
+            ss.State('latent_long', label="Latent long"),  # Can progress to tertiary or remain here
+            ss.State('tertiary', label="Tertiary"),  # Includes complications (cardio/neuro/disfigurement)
+            ss.State('immune', label="Immune"),  # After effective treatment people may acquire temp immunity
+            ss.State('ever_exposed', label="Ever exposed"),  # Anyone ever exposed - stays true after treatment
+            ss.State('congenital', label="Congenital"),  # Congenital syphilis states
     
             # Timestep of state changes
             ss.FloatArr('ti_exposed', label='Time of exposure'),
@@ -185,11 +185,11 @@ class Syphilis(ss.Infection):
     def init_results(self):
         """ Initialize results """
         super().init_results()
-        self.results += [
-            ss.Result(self.name, 'new_nnds',       self.npts, dtype=int, scale=True, label='New neonatal deaths'),
-            ss.Result(self.name, 'new_stillborns', self.npts, dtype=int, scale=True, label='New stillborns'),
-            ss.Result(self.name, 'new_congenital', self.npts, dtype=int, scale=True, label='New congenital syphilis'),
-        ]
+        self.define_results(
+            ss.Result('new_nnds',       dtype=int, label='New neonatal deaths'),
+            ss.Result('new_stillborns', dtype=int, label='New stillborns'),
+            ss.Result('new_congenital', dtype=int, label='New congenital syphilis'),
+        )
         return
 
     def step_state(self):
@@ -413,12 +413,12 @@ class syph_screening(ss.routine_screening):
             is_eligible = sim.people.auids  # Probably not required
         return is_eligible
 
-    def init_pre(self, sim):
-        super().init_pre(sim)
-        self.results += [
-            ss.Result('syphilis', 'n_screened', self.npts, dtype=int, scale=True, label='Number screened'),
-            ss.Result('syphilis', 'n_dx',       self.npts, dtype=int, scale=True, label='Number diagnosed'),
-        ]
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('n_screened', dtype=int, label='Number screened'),
+            ss.Result('n_dx',       dtype=int, label='Number diagnosed'),
+        )
         return
 
 
@@ -437,9 +437,11 @@ class syph_treatment(ss.treat_num):
         else:
             return products[product]
 
-    def init_pre(self, sim):
-        super().init_pre(sim)
-        self.results += ss.Result('syphilis', 'n_tx', self.npts, dtype=int, scale=True, label='Number treated')
+    def init_results(self):
+        super().init_results()
+        self.define_results(
+            ss.Result('n_tx', dtype=int, label='Number treated')
+        )
         return
 
     def step(self):

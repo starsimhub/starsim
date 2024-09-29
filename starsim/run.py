@@ -241,12 +241,9 @@ class MultiSim:
 
         # Calculate the statistics
         raw = {}
-        exclude = ['timevec'] # Exclude things that we don't want to include
 
         rflat = reduced_sim.results.flatten()
         rkeys = list(rflat.keys())
-        rkeys = [k for k in rkeys if k not in exclude]
-
         for rkey in rkeys:
             raw[rkey] = np.zeros((reduced_sim.npts, len(self.sims)))
             for s, sim in enumerate(self.sims):
@@ -254,22 +251,23 @@ class MultiSim:
                 raw[rkey][:, s] = flat[rkey]
 
         for rkey in rkeys:
+            res = rflat[rkey]
             if use_mean:
                 r_mean = np.mean(raw[rkey], axis=1)
                 r_std = np.std(raw[rkey], axis=1)
-                rflat[rkey][:] = r_mean
-                rflat[rkey].low = r_mean - bounds * r_std
-                rflat[rkey].high = r_mean + bounds * r_std
+                res[:] = r_mean
+                res.low = r_mean - bounds * r_std
+                res.high = r_mean + bounds * r_std
             else:
-                rflat[rkey][:] = np.quantile(raw[rkey], q=0.5, axis=1)
-                rflat[rkey].low = np.quantile(raw[rkey], q=quantiles['low'], axis=1)
-                rflat[rkey].high = np.quantile(raw[rkey], q=quantiles['high'], axis=1)
+                res[:] = np.quantile(raw[rkey], q=0.5, axis=1)
+                res.low = np.quantile(raw[rkey], q=quantiles['low'], axis=1)
+                res.high = np.quantile(raw[rkey], q=quantiles['high'], axis=1)
 
         # Compute and store final results
         reduced_sim.summarize()
         self.orig_base_sim = self.base_sim
         self.base_sim = reduced_sim
-        self.results = rflat
+        self.results = ss.Results('MultiSim').merge(rflat) # Create the dictionary and merge it
         self.summary = reduced_sim.summary
         self.which = 'reduced'
 
@@ -357,7 +355,6 @@ class MultiSim:
         # Has been reduced, plot with uncertainty bounds
         else:
             flat = self.results
-            timevec = flat.pop('timevec')
             n_cols = np.ceil(np.sqrt(len(flat))) # TODO: remove duplication with sim.plot()
             default_figsize = np.array([8, 6])
             figsize_factor = np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size based on the number of rows and columns
@@ -376,8 +373,8 @@ class MultiSim:
                     
                 # Do the plotting
                 for ax, (key, res) in zip(axs.flatten(), flat.items()):
-                    ax.fill_between(timevec, res.low, res.high, **fill_kw)
-                    ax.plot(timevec, res, **plot_kw)
+                    ax.fill_between(res.timevec, res.low, res.high, **fill_kw)
+                    ax.plot(res.timevec, res, **plot_kw)
                     ax.set_title(getattr(res, 'label', key)) 
                     ax.set_xlabel('Year')
                 

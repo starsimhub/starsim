@@ -26,7 +26,7 @@ class Gonorrhea(ss.Infection):
         # Additional states dependent on parameter values, e.g. self.p_symp?
         # These might be useful for connectors to target, e.g. if HIV reduces p_clear
         self.define_states(
-            ss.BoolArr('symptomatic', label='Symptomatic'),
+            ss.State('symptomatic', label='Symptomatic'),
             ss.FloatArr('ti_clearance', label='Time of clearance'),
             ss.FloatArr('p_symp', default=1, label='Probability of symptoms'),
         )
@@ -36,7 +36,9 @@ class Gonorrhea(ss.Infection):
     def init_results(self):
         """ Initialize results """
         super().init_results()
-        self.results += ss.Result(self.name, 'new_clearances', self.npts, dtype=int)
+        self.define_results(
+            ss.Result('new_clearances', dtype=int, label='New clearances')
+        )
         return
 
     def update_results(self):

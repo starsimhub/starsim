@@ -7,8 +7,8 @@ import sciris as sc
 import starsim as ss
 
 # Classes that are externally visible
-__all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff', 'make_timevec', 'make_timearray',
-           'TimePar', 'dur', 'days', 'years', 'rate', 'time_prob', 'beta']
+__all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff', 'make_timevec', 'make_abs_tvec',
+           'TimePar', 'dur', 'days', 'years', 'rate', 'perday', 'peryear', 'time_prob', 'beta']
 
     
 #%% Helper functions
@@ -105,7 +105,7 @@ def make_timevec(start, stop, dt, unit):
     return timevec
 
 
-def make_timearray(tv, unit, sim_unit):
+def make_abs_tvec(tv, unit, sim_unit):
     """ Convert a module time vector into a numerical time array with the same units as the sim """
     
     # It's an array of days or years: easy
@@ -129,18 +129,18 @@ def make_timearray(tv, unit, sim_unit):
 
 #%% Time classes
 
-class TimePar:
+class TimePar(ss.BaseArr):
     """
     Base class for time-aware parameters, durations and rates
     
     NB, because the factor needs to be recalculated, do not set values directly.
     """
-    def __new__(cls, value=None, *args, **kwargs):
+    def __new__(cls, v=None, *args, **kwargs):
         """ Allow TimePars to wrap distributions and return the distributions """
         
         # Special distribution handling
-        if isinstance(value, ss.Dist):
-            dist = value
+        if isinstance(v, ss.Dist):
+            dist = v
             dist.pars[0] = cls(dist.pars[0], *args, **kwargs) # Convert the first parameter to a TimePar (the same scale is applied to all parameters)
             return dist
         
@@ -148,13 +148,14 @@ class TimePar:
         else:
             return super().__new__(cls)
     
-    def __init__(self, value, unit=None, parent_unit=None, parent_dt=None):
-        self.value = value
+    def __init__(self, v, unit=None, parent_unit=None, parent_dt=None, self_dt=1.0):
+        self.v = v
         self.unit = unit
         self.parent_unit = parent_unit
         self.parent_dt = parent_dt
+        self.self_dt = self_dt
         self.factor = None
-        self.x = np.nan
+        self.values = None
         self.parent_name = None
         self.initialized = False
         return
@@ -177,11 +178,10 @@ class TimePar:
         
         # Set defaults if not yet set
         self.unit = sc.ifelse(self.unit, self.parent_unit)
-        self.parent_dt = sc.ifelse(self.parent_dt, 1.0)
+        self.parent_dt = sc.ifelse(self.parent_dt, self.self_dt, 1.0)
         
         # Calculate the actual conversion factor to be used in the calculations
-        self.set_factor()
-        self.set_x()
+        self.update_cached()
         self.initialized = True
         return self
         
@@ -191,109 +191,139 @@ class TimePar:
             if self.factor == 1.0:
                 xstr = ''
             else:
-                xstr = f', x={self.x}'
+                xstr = f', values={self.values}'
         else:
             xstr = ', initialized=False'
-        return f'ss.{name}({self.value}, unit={self.unit}{xstr})'
-    
-    def disp(self):
-        return sc.pr(self)
-    
-    def set(self, value=None, unit=None, parent_unit=None, parent_dt=None):
+        return f'ss.{name}({self.v}, unit={self.unit}{xstr})'
+
+    @property
+    def isarray(self):
+        return isinstance(self.v, np.ndarray)
+
+    def set(self, v=None, unit=None, parent_unit=None, parent_dt=None, self_dt=None, force=False):
         """ Reset the parameter values """
-        if value       is not None: self.value       = value
+        if v           is not None: self.v           = v
         if unit        is not None: self.unit        = unit
         if parent_unit is not None: self.parent_unit = parent_unit
         if parent_dt   is not None: self.parent_dt   = parent_dt
-        if self.initialized: # Don't try to set these unless it's been initialized
-            self.set_factor()
-            self.set_x()
+        if self_dt     is not None: self.self_dt     = self_dt
+        if self.initialized or force: # Don't try to set these unless it's been initialized
+            self.update_cached()
+        return self
+
+    def update_cached(self):
+        """ Update the cached factor and values """
+        self.update_factor()
+        self.update_values()
         return self
     
-    def set_factor(self):
+    def update_factor(self):
         """ Set factor used to multiply the value to get the output """
-        self.factor = time_ratio(unit1=self.unit, dt1=1.0, unit2=self.parent_unit, dt2=self.parent_dt)
+        self.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=self.parent_unit, dt2=self.parent_dt)
         return
-    
-    # Act like a float
-    def __add__(self, other): return self.x + other
-    def __sub__(self, other): return self.x - other
-    def __mul__(self, other): return self.x * other
-    def __pow__(self, other): return self.x ** other
-    def __truediv__(self, other): return self.x / other
+
+    def to(self, unit=None, dt=None):
+        """ Create a new timepar based on the current one but with a different unit and/or dt """
+        new = self.asnew()
+        unit = sc.ifelse(unit, self.parent_unit, self.unit)
+        parent_dt = sc.ifelse(dt, self.parent_dt, self.self_dt)
+        new.set(parent_unit=unit, parent_dt=parent_dt, force=True)
+        new.v = new.values # Reset the base value to the converted value(s)
+        new.set(unit=unit, self_dt=parent_dt, parent_unit=self.parent_unit, parent_dt=self.parent_dt, force=True) # Reset the parent to match
+        return new
+
+    def to_parent(self):
+        """ Create a new timepar with the same units as the parent """
+        unit = self.parent_unit
+        dt = self.parent_dt
+        return self.to(unit=unit, dt=dt)
+
+    # Act like a float -- TODO, add type checking
+    def __add__(self, other): return self.values + other
+    def __sub__(self, other): return self.values - other
+    def __mul__(self, other): return self.asnew().set(v=self.v * other)
+    def __pow__(self, other): return self.values ** other
+    def __truediv__(self, other): return self.asnew().set(v=self.v / other)
     
     # ...from either side
-    def __radd__(self, other): return other + self.x
-    def __rsub__(self, other): return other - self.x
-    def __rmul__(self, other): return other * self.x
-    def __rpow__(self, other): return other ** self.x
-    def __rtruediv__(self, other): return other / self.x
+    def __radd__(self, other): return other + self.values
+    def __rsub__(self, other): return other - self.values
+    def __rmul__(self, other): return self.asnew().set(v= other * self.v)
+    def __rpow__(self, other): return other ** self.values
+    def __rtruediv__(self, other): return other / self.values # TODO: should be a rate?
     
     # Handle modify-in-place methods
-    def __iadd__(self, other): self.value += other; return self
-    def __isub__(self, other): self.value -= other; return self
-    def __imul__(self, other): self.value *= other; return self
-    def __itruediv__(self, other): self.value /= other; return self
+    def __iadd__(self, other): return self.set(v=self.v + other)
+    def __isub__(self, other): return self.set(v=self.v - other)
+    def __imul__(self, other): return self.set(v=self.v * other)
+    def __itruediv__(self, other): return self.set(v=self.v / other)
     
     # Other methods
-    def __neg__(self): return -self.x
-    
-    # Unfortunately, floats don't define the above methods, so we can't *just* use this
-    def __getattr__(self, attr):
-        """ Make it behave like a regular float mostly """
-        if attr in ['__deepcopy__', '__getstate__', '__setstate__']:
-            return self.__getattribute__(attr)
-        else:
-            return getattr(self.x, attr)
-        
-    # Similar to Arr -- required for doing efficient array operations
-    def __array_ufunc__(self, ufunc, method, *args, **kwargs):
-        args = [(arg.x if arg is self else arg) for arg in args] # Use self.x for the operation
-        if method == '__call__':
-            return ufunc(*args, **kwargs)
-        else:
-            return self.x.__array_ufunc__(ufunc, method, *args, **kwargs) # Probably not needed
+    def __neg__(self): return self.asnew().set(v=-self.v)
 
 
 class dur(TimePar):
     """ Any number that acts like a duration """
-    def set_x(self):
-        self.x = self.value*self.factor
+    def update_values(self):
+        self.values = self.v*self.factor
         return
 
 
 class days(dur):
     """ Shortcut to ss.dur(value, units='day') """
-    def __init__(self, value, parent_unit=None, parent_dt=None):
-        super().__init__(value=value, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
+    def __init__(self, v, parent_unit=None, parent_dt=None):
+        super().__init__(v=v, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
         return
 
 
 class years(dur):
     """ Shortcut to ss.dur(value, units='year') """
-    def __init__(self, value, parent_unit=None, parent_dt=None):
-        super().__init__(value=value, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
+    def __init__(self, v, parent_unit=None, parent_dt=None):
+        super().__init__(v=v, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
         return
 
 
 class rate(TimePar): # TODO: should all rates just be time_prob?
     """ Any number that acts like a rate; can be greater than 1 """
-    def set_x(self):
-        self.x = self.value/self.factor
+    def update_values(self):
+        self.values = self.v/self.factor
+        return
+
+
+class perday(rate):
+    """ Shortcut to ss.rate(value, units='day') """
+    def __init__(self, v, parent_unit=None, parent_dt=None):
+        super().__init__(v=v, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
+        return
+
+
+class peryear(rate):
+    """ Shortcut to ss.rate(value, units='year') """
+    def __init__(self, v, parent_unit=None, parent_dt=None):
+        super().__init__(v=v, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
         return
 
 
 class time_prob(TimePar):
     """ A probability over time (a.k.a. a cumulative hazard rate); must be >0 and <1 """
-    def set_x(self):
-        if self.value == 1:
-            self.x = 1
-        elif 0 <= self.value <= 1:
-            rate = -np.log(1 - self.value)
-            self.x = 1 - np.exp(-rate/self.factor)
+    def update_values(self):
+        v = self.v
+        if self.isarray:
+            self.values = v.copy()
+            inds = np.logical_and(0.0 < v, v < 1.0)
+            rates = -np.log(1 - v)
+            self.values[inds] = 1 - np.exp(-rates/self.factor)
         else:
-            errormsg = f'Invalid value {self.value} for {self}: must be 0-1'
-            raise ValueError(errormsg)
+            if v == 0:
+                self.values = 0
+            elif v == 1:
+                self.values = 1
+            elif 0 <= v <= 1:
+                rate = -np.log(1 - v)
+                self.values = 1 - np.exp(-rate/self.factor)
+            else:
+                errormsg = f'Invalid value {self.value} for {self}: must be 0-1'
+                raise ValueError(errormsg)
         return
         
     

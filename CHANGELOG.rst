@@ -16,8 +16,10 @@ This version contains several major breaking changes. These include: module-spec
 
 Time-aware parameters and modules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-- Added ``ss.dur()``, ``ss.rate()``, and ``ss.time_prob()`` classes, for automatic handling of time units in simulations. There are also convenience classes ``ss.days()``, ``ss.years()``, and ``ss.beta()`` for special cases of these.
-- Durations and rates, along with modules and the sim itself, now have a ``unit`` parameter which can be ``'day'``, ``'week'``, ``'month'``, or ``'year'`` (default). Modules now also have their own timestep ``dt``. Different units and timesteps can be mixed and matched.
+- Added ``ss.dur()``, ``ss.rate()``, and ``ss.time_prob()`` classes, for automatic handling of time units in simulations. There are also convenience classes ``ss.days()``, ``ss.years()``, ``ss.perday()``, ``ss.peryear()``, and ``ss.beta()`` for special cases of these.
+- ``ss.dur()`` and ``ss.rate()``, along with modules and the sim itself, have a ``unit`` parameter which can be ``'day'``, ``'week'``, ``'month'``, or ``'year'`` (default). Modules now also have their own timestep ``dt``. Different units and timesteps can be mixed and matched. Time parameters have a ``to()`` method, e.g. ``ss.dur(1, 'year').to('day')`` will return ``ss.dur(365, unit='day')``.
+- The ``ss.Sim`` parameter ``n_years`` has been renamed ``dur``; ``sim.yearvec`` is now ``sim.timevec``, which can have units of days (usually starting at 0), dates (e.g. ``'2020-01-01'``), or years (e.g. ``2020``). ``sim.abs_tvec`` is the translation of ``sim.timevec`` as a numeric array starting at 0, using the sim's units (usually ``'day'`` or ``'year'``). For example, if ``sim.timevec`` is a list of daily dates from ``'2022-01-01'`` to ``'2022-12-31'``, ``sim.abs_tvec`` will be ``np.arange(365)``.
+- Each module also has its own ``mod.timevec``; this can be different from the sim if it defines its own time unit and/or timestep. ``mod.abs_tvec`` always starts at 0 and always uses the sim's unit.
 - There is a new ``Loop`` class which handles the integration loop. You can view the integration plan via ``sim.loop.to_df()`` or ``sim.loop.plot()``. You can see how long each part of the sim took with ``sim.loop.plot_cpu()``.
 - There are more advanced debugging tools. You can run a single sim timestep with ``sim.run_one_step()`` (which in turn calls multiple functions), and you can run a single function from the integration loop with ``sim.loop.run_one_step()``.
 
@@ -28,6 +30,17 @@ Module changes
 - Many of the module methods have been renamed; in particular, all modules now have a ``step()`` method, which replaces ``update()`` (for demographics and networks), ``apply()`` (for interventions and analyzers), and ``make_new_cases()`` (for diseases). For both the sim and modules, ``initialize()`` has been renamed ``init()``.
 - All modules are treated the same in the integration loop, except for diseases, which have ``step_state()`` and ``step_die()`` methods.
 - The Starsim module ``states.py`` has been moved to ``arrays.py``, and ``network.py`` has been moved to ``networks.py``.
+
+State and array changes
+~~~~~~~~~~~~~~~~~~~~~~~
+- ``ss.Arr``, ``ss.TimePar``, and ``ss.Result`` all inherit from the new class ``ss.BaseArr``, which provides functionality similar to a NumPy array, except all values are stored in ``arr.values`` (like a ``pd.Series``).
+- Whereas before, computations on an ``ss.Arr`` usually returned a NumPy array, calculations now usually return the same type. To access the NumPy array, use ``arr.values``. 
+- There is a new ``ss.State`` class, which is a subtype of ``ss.BoolArr``. Typically, ``ss.State`` is used for boolean disease states, such as ``infected``, ``susceptible``, etc., where you want to automatically generate results (e.g. ``n_infected``). You can continue using ``ss.BoolArr`` for other agent attributes that you don't necessarily want to automatically generate results for, e.g. ``ever_vaccinated``.
+
+Results changes
+~~~~~~~~~~~~~~~
+- Results are now defined differently. They should be defined in ``ss.Module.init_results()``, not ``ss.Module.init_pre()``. They now take the module name, number of points, and time vector from the parent module. As a result, they are usually initialized via ``ss.Module.define_results(res1, res2)`` (as opposed to ``mod.results += [res1, res2]`` previously). ``define_results()`` automatically adds these properties from the parent module; they can still be defined explicitly if needed however.
+- Because results now store their own time information, they can be plotted in a self-contained way. Both ``ss.Result`` and ``ss.Results`` objects now have ``plot()`` and ``to_df()`` methods.
 
 Demographics changes
 ~~~~~~~~~~~~~~~~~~~~
@@ -45,10 +58,11 @@ Computational changes
 
 Other changes
 ~~~~~~~~~~~~~
-- Fixed a bug in how the ``InfectionLog`` is added to disease modules.
-- ``MultiSim`` now has display methods ``brief()`` (minimal), ``show()`` (moderate), and ``disp`` (verbose).
 - Data can now be supplied to a simulation; it will be automatically plotted by ``sim.plot()``.
-- ``ss.Calibration`` has been significantly reworked, and now includes more flexible parameter setting, plus plotting (``calib.plot_sims()`` and ``calib.plot_trend()``).
+- ``ss.Calibration`` has been significantly reworked, and now includes more flexible parameter setting, plus plotting (``calib.plot_sims()`` and ``calib.plot_trend()``). It also has a ``debug`` argument (which runs in serial rather than paralell), which can be helpful for troubleshooting issues.
+- ``MultiSim`` now has display methods ``brief()`` (minimal), ``show()`` (moderate), and ``disp`` (verbose).
+- ``sim.export_df()`` has been renamed ``sim.to_df()``
+- Fixed a bug in how the ``InfectionLog`` is added to disease modules.
 - ``Sim.gitinfo`` has been replaced with ``Sim.metadata`` (which includes git info).
 - ``Infection.validate_beta()`` is now applied on every timestep, so changes to beta during the simulation are now honored.
 - ``sim.get_intervention()`` and ``sim.get_analyzer()`` have been removed; use built-in ``ndict`` operations (e.g., the label) to find the object you're after.

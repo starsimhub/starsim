@@ -63,11 +63,12 @@ class Births(Demographics):
         return birth_rate
 
     def init_results(self):
-        self.results += [
-            ss.Result(self.name, 'new',        self.npts, dtype=int, scale=True,    label='New births'),
-            ss.Result(self.name, 'cumulative', self.npts, dtype=int, scale=True,    label='Cumulative births'),
-            ss.Result(self.name, 'cbr',        self.npts, dtype=float, scale=False, label='Crude birth rate'),
-        ]
+        super().init_results()
+        self.define_results(
+            ss.Result('new',        dtype=int,   scale=True,  label='New births'),
+            ss.Result('cumulative', dtype=int,   scale=True,  label='Cumulative births'),
+            ss.Result('cbr',        dtype=float, scale=False, label='Crude birth rate'),
+        )
         return
 
     def get_births(self):
@@ -104,14 +105,19 @@ class Births(Demographics):
         return new_uids
 
     def update_results(self):
-        self.results['new'][self.ti] = self.n_births
+        # New births -- already calculated
+        self.results.new[self.ti] = self.n_births
+
+        # Calculate crude birth rate (CBR)
+        inv_units = 1.0/self.pars.units
+        births_per_year = self.n_births/self.sim.dt_year
+        denom = self.sim.results.n_alive[self.sim.ti]
+        self.results.cbr[self.ti] = inv_units*births_per_year/denom
         return
 
     def finalize(self):
         super().finalize()
-        res = self.sim.results
         self.results.cumulative[:] = np.cumsum(self.results.new)
-        self.results.cbr[:] = 1/self.pars.units*np.divide(self.results.new/self.sim.dt_year, res.n_alive, where=res.n_alive>0)
         return
 
 
@@ -216,11 +222,12 @@ class Deaths(Demographics):
         return death_prob
 
     def init_results(self):
-        self.results += [
-            ss.Result(self.name, 'new',        self.npts, dtype=int,   scale=True,  label='Deaths'),
-            ss.Result(self.name, 'cumulative', self.npts, dtype=int,   scale=True,  label='Cumulative deaths'),
-            ss.Result(self.name, 'cmr',        self.npts, dtype=float, scale=False, label='Crude mortality rate'),
-        ]
+        super().init_results()
+        self.define_results(
+            ss.Result('new',        dtype=int,   scale=True,  label='Deaths'),
+            ss.Result('cumulative', dtype=int,   scale=True,  label='Cumulative deaths'),
+            ss.Result('cmr',        dtype=float, scale=False, label='Crude mortality rate'),
+        )
         return
 
     def step(self):
@@ -265,9 +272,9 @@ class Pregnancy(Demographics):
         
         # Other, e.g. postpartum, on contraception...
         self.define_states(
-            ss.BoolArr('fecund', default=True, label='Female of childbearing age'),
-            ss.BoolArr('pregnant', label='Pregnant'),  # Currently pregnant
-            ss.BoolArr('postpartum', label="Post-partum"),  # Currently post-partum
+            ss.State('fecund', default=True, label='Female of childbearing age'),
+            ss.State('pregnant', label='Pregnant'),  # Currently pregnant
+            ss.State('postpartum', label="Post-partum"),  # Currently post-partum
             ss.FloatArr('child_uid', label='UID of children, from embryo through postpartum'),
             ss.FloatArr('dur_postpartum', label='Post-partum duration'),  # Duration of postpartum phase
             ss.FloatArr('ti_pregnant', label='Time of pregnancy'),  # Time pregnancy begins
@@ -367,11 +374,12 @@ class Pregnancy(Demographics):
         Still unclear whether this logic should live in the pregnancy module, the
         individual disease modules, the connectors, or the sim.
         """
-        self.results += [
-            ss.Result(self.name, 'pregnancies', self.npts, dtype=int, scale=True,    label='New pregnancies'),
-            ss.Result(self.name, 'births',      self.npts, dtype=int, scale=True,    label='New births'),
-            ss.Result(self.name, 'cbr',         self.npts, dtype=float, scale=False, label='Crude birth rate'),
-        ]
+        super().init_results()
+        self.define_results(
+            ss.Result('pregnancies', dtype=int,   scale=True,  label='New pregnancies'),
+            ss.Result('births',      dtype=int,   scale=True,  label='New births'),
+            ss.Result('cbr',         dtype=float, scale=False, label='Crude birth rate'),
+        )
         return
 
     def step(self):
@@ -471,7 +479,7 @@ class Pregnancy(Demographics):
 
             # Grow the arrays and set properties for the unborn agents
             new_uids = people.grow(len(new_slots), new_slots)
-            people.age[new_uids] = -self.pars.dur_pregnancy.x/self.pars.dur_pregnancy.factor
+            people.age[new_uids] = -self.pars.dur_pregnancy.to('year')
             people.slot[new_uids] = new_slots  # Before sampling female_dist
             people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
             people.parent[new_uids] = conceive_uids
@@ -499,7 +507,6 @@ class Pregnancy(Demographics):
 
         # Change states for the newly pregnant woman
         ti = self.ti
-        dt = self.dt # TODO: CHECK
         self.fecund[uids] = False
         self.pregnant[uids] = True
         self.ti_pregnant[uids] = ti

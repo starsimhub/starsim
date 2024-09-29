@@ -175,9 +175,9 @@ class Sim:
         """ Time indexing; derived values live in the sim rather than in the pars """
         pars = self.pars
         self.timevec = ss.make_timevec(pars.start, pars.stop, pars.dt, pars.unit)
-        self.results.timevec = self.timevec # Store the timevec in the results for plotting # TODO: instead, store a timevec with each result
+        self.results.timevec = self.timevec # Store the timevec in the results for plotting
         self.npts = len(self.timevec) # The number of points in the sim
-        self.timearray = np.arange(self.npts)*pars.dt # Absolute time array
+        self.abs_tvec = np.arange(self.npts)*pars.dt # Absolute time array
         self.ti = 0  # The time index, e.g. 0, 1, 2
         self.dt_year = ss.time_ratio(pars.unit, pars.dt, 'year', 1.0) # Figure out what dt is in years; used for demographics # TODO: handle None
         return
@@ -238,10 +238,11 @@ class Sim:
     
     def init_results(self):
         """ Create initial results that are present in all simulations """
-        self.results += [ # TODO: refactor with self.add_results()
-            ss.Result(None, 'n_alive',    self.npts, ss.dtypes.int, scale=True, label='Number alive'),
-            ss.Result(None, 'new_deaths', self.npts, ss.dtypes.int, scale=True, label='Deaths'),
-            ss.Result(None, 'cum_deaths', self.npts, ss.dtypes.int, scale=True, label='Cumulative deaths'),
+        kw = dict(shape=self.npts, timevec=self.timevec, dtype=int, scale=True)
+        self.results += [
+            ss.Result('n_alive',    label='Number alive', **kw),
+            ss.Result('new_deaths', label='Deaths', **kw),
+            ss.Result('cum_deaths', label='Cumulative deaths', **kw),
         ]
         return
 
@@ -430,24 +431,14 @@ class Sim:
         else:
             return shrunken
 
-    def export_df(self):
+    def to_df(self, sep='_'):
         """ Export results as a Pandas dataframe """
         if not self.results_ready:  # pragma: no cover
             errormsg = 'Please run the sim before exporting the results'
             raise RuntimeError(errormsg)
 
-        def flatten_results(d, prefix=''): # TODO: won't work with different timesteps
-            flat = {}
-            for key, val in d.items():
-                if isinstance(val, dict):
-                    flat.update(flatten_results(val, prefix=prefix+key+'.'))
-                else:
-                    flat[prefix+key] = val
-            return flat
-
-        resdict = flatten_results(self.results)
-        resdict['t'] = self.timevec
-        df = sc.dataframe.from_dict(resdict).set_index('t')
+        flat = self.results.flatten(sep=sep, only_results=False)
+        df = sc.dataframe.from_dict(flat)
         return df
 
     def save(self, filename=None, keep_people=None, skip_attrs=None, **kwargs):
@@ -508,7 +499,7 @@ class Sim:
         Args:
             filename (str): filename to save to; if None, do not save
             indent (int): indent (int): if writing to file, how many indents to use per nested level
-            args (list): passed to savejson()
+            args (list): passed to sc.jsonify()
             kwargs (dict): passed to savejson()
 
         Returns:
@@ -531,18 +522,15 @@ class Sim:
             sc.savejson(filename=filename, obj=pardict, indent=indent, *args, **kwargs)
         return pardict
 
-    def to_json(self, filename=None, keys=None, tostring=False, indent=2, verbose=False, *args, **kwargs):
+    def to_json(self, filename=None, keys=None, tostring=False, indent=2, verbose=False, **kwargs):
         '''
         Export results and parameters as JSON.
 
         Args:
             filename (str): if None, return string; else, write to file
-            keys (str or list): attributes to write to json (default: results, parameters, and summary)
-            tostring (bool): if not writing to file, whether to write to string (alternative is sanitized dictionary)
-            indent (int): if writing to file, how many indents to use per nested level
+            keys (str/list): attributes to write to json (choices: 'pars' and/or 'summary')
             verbose (bool): detail to print
-            args (list): passed to savejson()
-            kwargs (dict): passed to savejson()
+            kwargs (dict): passed to sc.jsonify()
 
         Returns:
             A unicode string containing a JSON representation of the results,
@@ -557,19 +545,13 @@ class Sim:
 
         # Handle keys
         if keys is None:
-            keys = ['results', 'pars', 'summary', 'short_summary']
+            keys = ['pars', 'summary']
         keys = sc.promotetolist(keys)
 
         # Convert to JSON-compatible format
         d = sc.objdict()
         for key in keys:
-            if key == 'results':
-                if self.results_ready:
-                    resdict = self.export_results(for_json=True) # TODO: not implemented
-                    d.results = resdict
-                else:
-                    d.results = 'Results not available (Sim has not yet been run)'
-            elif key in ['pars', 'parameters']:
+            if key in ['pars', 'parameters']:
                 pardict = self.export_pars()
                 d.parameters = pardict
             elif key == 'summary':
@@ -577,22 +559,14 @@ class Sim:
                     d.summary = dict(sc.dcp(self.summary))
                 else:
                     d.summary = 'Summary not available (Sim has not yet been run)'
-            elif key == 'short_summary':
-                if self.results_ready:
-                    d.short_summary = dict(sc.dcp(self.short_summary))
-                else:
-                    d.short_summary = 'Full summary not available (Sim has not yet been run)'
             else:  # pragma: no cover
-                try:
-                    d[key] = sc.sanitizejson(getattr(self, key))
-                except Exception as E:
-                    errormsg = f'Could not convert "{key}" to JSON: {str(E)}; continuing...'
-                    print(errormsg)
+                errormsg = f'Could not convert "{key}" to JSON; continuing...'
+                print(errormsg)
 
         if filename is None:
-            output = sc.jsonify(d, tostring=tostring, indent=indent, verbose=verbose, *args, **kwargs)
+            output = sc.jsonify(d, **kwargs)
         else:
-            output = sc.savejson(filename=filename, obj=d, indent=indent, *args, **kwargs)
+            output = sc.savejson(filename=filename, obj=d, **kwargs)
 
         return output
     
@@ -601,7 +575,7 @@ class Sim:
         Plot all results in the Sim object
         
         Args:
-            key (str): the results key to plot (by default, all)
+            key (str/list): the results key to plot (by default, all); if a list, plot exactly those keys
             fig (Figure): if provided, plot results into an existing figure
             style (str): the plotting style to use (default "fancy"; other options are "simple", None, or any Matplotlib style)
             show_data (bool): plot the data, if available
@@ -618,15 +592,16 @@ class Sim:
         fig_kw = sc.mergedicts({'figsize':figsize}, fig_kw)
         plot_kw = sc.mergedicts({'lw':2}, plot_kw)
         scatter_kw = sc.mergedicts({'alpha':0.3, 'color':'k'}, scatter_kw)
-        modmap = {m.name:m for m in self.modules} # Find modules
-        
+
         # Do the plotting
         with sc.options.with_style(style):
             
-            timevec = flat.pop('timevec')
             if key is not None:
-                flat = {k:v for k,v in flat.items() if k.startswith(key)}
-            
+                if isinstance(key, str):
+                    flat = {k:v for k,v in flat.items() if (key in k)}
+                else:
+                    flat = {k:flat[k] for k in key}
+
             # Get the figure
             if fig is None:
                 fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
@@ -654,18 +629,9 @@ class Sim:
                         ax.scatter(df.index.values, df[dfkey].values, **scatter_kw)
 
                 # Plot results
-                ax.plot(timevec, res, **plot_kw, label=self.label)
-                title = getattr(res, 'label', key)
-                if res.module != 'sim':
-                    try:
-                        mod = modmap[res.module]
-                        modtitle = mod.__class__.__name__
-                        assert res.module == modtitle.lower() # Only use the class name if the module name is the default
-                    except:
-                        modtitle = res.module
-                    title = f'{modtitle}: {title}'
-                ax.set_title(title) 
-                ax.set_xlabel('Year')
+                ax.plot(res.timevec, res.values, **plot_kw, label=self.label)
+                ax.set_title(res.full_label)
+                ax.set_xlabel('Time')
             
         sc.figlayout(fig=fig)
                 

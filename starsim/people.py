@@ -61,8 +61,8 @@ class People(sc.prettyobj):
         # Handle additional states
         extra_states = sc.promotetolist(extra_states)
         states = [
-            ss.BoolArr('alive', default=True),  # Time index for death
-            ss.BoolArr('female', default=ss.bernoulli(name='female', p=0.5)),
+            ss.State('alive', default=True),  # Time index for death
+            ss.State('female', default=ss.bernoulli(name='female', p=0.5)),
             ss.FloatArr('age', default=self.get_age_dist(age_data)), # NaN until conceived
             ss.FloatArr('ti_dead'),  # Time index for death
             ss.FloatArr('scale', default=1.0), # The scale factor for the agents (multiplied for making results)

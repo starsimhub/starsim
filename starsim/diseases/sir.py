@@ -17,44 +17,7 @@ class SIR(ss.Infection):
     This class implements a basic SIR model with states for susceptible,
     infected/infectious, and recovered. It also includes deaths, and basic
     results.
-    """
-    # def __future_init__(self, pars=None, **kwargs):
-    #     """ The plan for implementing events """
-    #     super().__init__()
-    #     self.define_pars(
-    #         beta = ss.beta(0.1),
-    #         init_prev = ss.bernoulli(p=0.01),
-    #         dur_inf = ss.lognorm_ex(mean=6),
-    #         p_death = ss.bernoulli(p=0.01),
-    #     )
-    #     self.update_pars(pars, **kwargs)
-        
-    #     self.define_states(
-    #         ss.State('susceptible', default=True),
-    #         ss.State('infected'),
-    #         ss.State('recovered'),
-    #     )
-        
-    #     # Option 1 for defining events -- using objects
-    #     self.define_events(
-    #         ss.Event(self.susceptible, self.infected, func=self.infect,   reskey='infections'),
-    #         ss.Event(self.infected, self.recovered,   func=self.recover,  reskey='recoveries'),
-    #         ss.Event(self.infected, self.dead,        func=self.step_die, reskey='deaths'),
-    #     )
-        
-    #     # Option 2 for defining events -- using strings
-    #     self.define_events(
-    #         ss.Event('susceptible -> infected', self.infect,   reskey='infections'),
-    #         ss.Event('infected -> recovered',   self.recover,  reskey='recoveries'),
-    #         ss.Event('infected -> dead',        self.step_die, reskey='deaths'),
-    #     )
-        
-    #     self.define_attrs(
-    #         ss.FloatArr('rel_sus',   default=1.0),
-    #         ss.FloatArr('rel_trans', default=1.0),
-    #     )
-    #     return
-    
+    """    
     def __init__(self, pars=None, **kwargs):
         """ The current implementation """
         super().__init__()
@@ -67,9 +30,9 @@ class SIR(ss.Infection):
         self.update_pars(pars, **kwargs)
         
         self.define_states(
-            ss.BoolArr('susceptible', default=True, label='Susceptible'),
-            ss.BoolArr('infected', label='Infectious'),
-            ss.BoolArr('recovered', label='Recovered'),
+            ss.State('susceptible', default=True, label='Susceptible'),
+            ss.State('infected', label='Infectious'),
+            ss.State('recovered', label='Recovered'),
             ss.FloatArr('ti_infected', label='Time of infection'),
             ss.FloatArr('ti_recovered', label='Time of recovery'),
             ss.FloatArr('ti_dead', label='Time of death'),
@@ -124,7 +87,7 @@ class SIR(ss.Infection):
         fig = plt.figure()
         kw = sc.mergedicts(dict(lw=2, alpha=0.8), kwargs)
         for rkey in ['n_susceptible', 'n_infected', 'n_recovered']:
-            plt.plot(self.timevec, self.sim.results.yearvec, self.results[rkey], label=self.results[rkey].label, **kw)
+            plt.plot(self.timevec, self.results[rkey], label=self.results[rkey].label, **kw)
         plt.legend(frameon=False)
         plt.xlabel('Time')
         plt.ylabel('Number of people')
@@ -192,7 +155,9 @@ class SIS(ss.Infection):
     def init_results(self):
         """ Initialize results """
         super().init_results()
-        self.results += ss.Result(self.name, 'rel_sus', self.npts, dtype=float, label='Relative susceptibility')
+        self.define_results(
+            ss.Result('rel_sus', dtype=float, label='Relative susceptibility')
+        )
         return
 
     def update_results(self):

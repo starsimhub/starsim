@@ -23,11 +23,11 @@ def module_map(key=None):
     return module_map if key is None else module_map[key]
 
 
-def find_modules(key=None):
-    """ Find all subclasses of Module, divided by type """
+def find_modules(key=None, flat=False):
+    """ Find all subclasses of Module present in Starsim, divided by type """
     modules = sc.objdict()
     modmap = module_map()
-    attrs = dir(ss)
+    attrs = dir(ss) # Find all attributes in Starsim (note: does not parse user code)
     for modkey, modtype in modmap.items(): # Loop over each module type
         modules[modkey] = sc.objdict()
         for attr in attrs: # Loop over each attribute (inefficient, but doesn't need to be optimized)
@@ -40,6 +40,8 @@ def find_modules(key=None):
                     modules[modkey][low_attr.removesuffix('net')] = item
             except:
                 pass
+    if flat:
+        modules = sc.objdict({k:v for vv in modules.values() for k,v in vv.items()}) # Unpack the nested dict into a flat one
     return modules if key is None else modules[key]
  
 
@@ -144,7 +146,8 @@ class Module(sc.quickobj):
 
     def init_results(self):
         """ Initialize any results required; part of init_pre() """
-        pass
+        self.results.timevec = self.timevec # Store the timevec in the results for plotting
+        return
 
     def init_post(self):
         """ Initialize the values of the states; the last step of initialization """
@@ -222,7 +225,7 @@ class Module(sc.quickobj):
  
     def define_states(self, *args, check=True):
         """
-        Add states to the module with the same attribute name as the state
+        Define states of the module with the same attribute name as the state
  
         Args:
             args (states): list of states to add
@@ -238,8 +241,26 @@ class Module(sc.quickobj):
 
             if check:
                 assert isinstance(state, ss.Arr), f'Could not add {state}: not an Arr object'
- 
+
+            # Add the state to the module
             setattr(self, state.name, state)
+        return
+
+    def define_results(self, *args, check=True):
+        """ Add results to the module """
+        for arg in args:
+            if isinstance(arg, (list, tuple)):
+                result = ss.Result(*arg)
+            elif isinstance(arg, dict):
+                result = ss.Result(**arg)
+            else:
+                result = arg
+
+            # Update with module information
+            result.update(module=self.name, shape=self.npts, timevec=self.timevec)
+
+            # Add the result to the dict of results; does automatic checking
+            self.results += result
         return
 
     @property

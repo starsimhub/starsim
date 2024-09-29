@@ -468,7 +468,7 @@ class RandomNet(DynamicNetwork):
         super().__init__(key_dict=key_dict)
         self.define_pars(
             n_contacts = ss.constant(10),
-            dur = ss.dur(0),
+            dur = 0, # Note; network edge durations are required to have the same unit as the network
         )
         self.update_pars(pars, **kwargs)
         self.dist = ss.Dist(distname='RandomNet') # Default RNG
@@ -525,7 +525,7 @@ class RandomNet(DynamicNetwork):
         if isinstance(self.pars.n_contacts, ss.Dist):
             number_of_contacts = self.pars.n_contacts.rvs(born.uids)  # or people.uid?
         else:
-            number_of_contacts = np.full(len(people), self.pars.n_contacts)
+            number_of_contacts = np.ones(len(people))*self.pars.n_contacts
 
         number_of_contacts = sc.randround(number_of_contacts / 2).astype(ss_int_)  # One-way contacts
 
@@ -596,7 +596,7 @@ class ErdosRenyiNet(DynamicNetwork):
         if isinstance(self.pars.dur, ss.Dist):
             dur = self.pars.dur.rvs(p1)
         else:
-            dur = np.full(len(p1), self.pars.dur)
+            dur = np.ones(len(p1))*self.pars.dur
         
         self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return
@@ -969,7 +969,7 @@ class MaternalNet(DynamicNetwork):
             return 0
         else:
             if start is None:
-                start = np.full_like(dur, fill_value=self.ti)
+                start = np.ones_like(dur)*self.ti
             n = len(mother_inds)
             beta = np.ones(n)
             end = start + sc.promotetoarray(dur)

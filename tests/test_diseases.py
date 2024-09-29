@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 test_run = True
 n_agents = [10_000, 2_000][test_run]
 do_plot = False
-sc.options(interactive=False) # Assume not running interactively
+sc.options(interactive=do_plot) # Assume not running interactively
 
 
 def test_sir():
@@ -181,6 +181,7 @@ def test_mtct():
     return sim
 
 if __name__ == '__main__':
+    do_plot = True
     sc.options(interactive=do_plot)
     sir   = test_sir()
     s1,s2 = test_sir_epi()

@@ -1,10 +1,10 @@
 from .version import __version__, __versiondate__, __license__
 from .settings      import *
 from .utils         import *
+from .arrays        import *
 from .timepars      import *
 from .parameters    import *
 from .distributions import *
-from .arrays        import *
 from .people        import *
 from .modules       import *
 from .networks      import *

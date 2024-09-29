@@ -27,15 +27,16 @@ class Disease(ss.Module):
         return
 
     @property
-    def _boolean_states(self):
+    def _disease_states(self):
         """
-        Iterator over states with boolean type
+        Iterator over disease states with boolean type
 
         For diseases, these states typically represent attributes like 'susceptible',
-        'infectious', 'diagnosed' etc. These variables are typically useful to
+        'infectious', 'diagnosed' etc. These variables are typically useful to store
+        results for.
         """
         for state in self.states:
-            if state.dtype == bool:
+            if isinstance(state, ss.State):
                 yield state
         return
 
@@ -50,12 +51,15 @@ class Disease(ss.Module):
         """
         Initialize results
 
-        By default, diseases all report on counts for any boolean states e.g., if
+        By default, diseases all report on counts for any explicitly defined "States", e.g. if
         a disease contains a boolean state 'susceptible' it will automatically contain a
-        Result for 'n_susceptible'
+        Result for 'n_susceptible'.
         """
-        for state in self._boolean_states:
-            self.results += ss.Result(self.name, f'n_{state.name}', self.npts, dtype=int, scale=True, label=state.label)
+        super().init_results()
+        results = sc.autolist()
+        for state in self._disease_states:
+            results += ss.Result(f'n_{state.name}', dtype=int, scale=True, label=state.label)
+        self.define_results(*results)
         return
 
     def step_state(self):
@@ -135,8 +139,8 @@ class Disease(ss.Module):
         This allows result updates at this point to capture outcomes dependent on multiple
         modules, where relevant.
         """
-        for state in self._boolean_states:
-            self.results[f'n_{state.name}'][self.ti] = np.count_nonzero(state & self.sim.people.alive)
+        for state in self._disease_states:
+            self.results[f'n_{state.name}'][self.ti] = state.sum()
         return
 
 
@@ -152,8 +156,8 @@ class Infection(Disease):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.define_states(
-            ss.BoolArr('susceptible', default=True, label='Susceptible'),
-            ss.BoolArr('infected', label='Infectious'),
+            ss.State('susceptible', default=True, label='Susceptible'),
+            ss.State('infected', label='Infectious'),
             ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
             ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
             ss.FloatArr('ti_infected', label='Time of infection' ),
@@ -190,6 +194,9 @@ class Infection(Disease):
         initial_cases = self.pars.init_prev.filter()
         if len(initial_cases):
             self.set_prognoses(initial_cases)  # TODO: sentinel value to indicate seeds?
+
+        # Exclude initial cases from results -- disabling for now since it disrupts counting of new infections, e.g. test_diseases.py
+        # self.ti_infected[self.ti_infected == self.ti] = -1
         return initial_cases
 
     def init_results(self):
@@ -197,11 +204,11 @@ class Infection(Disease):
         Initialize results
         """
         super().init_results()
-        self.results += [
-            ss.Result(self.name, 'prevalence',     self.npts, dtype=float, scale=False, label='Prevalence'),
-            ss.Result(self.name, 'new_infections', self.npts, dtype=int, scale=True, label='New infections'),
-            ss.Result(self.name, 'cum_infections', self.npts, dtype=int, scale=True, label='Cumulative infections'),
-        ]
+        self.define_results(
+            ss.Result('prevalence',     dtype=float, scale=False, label='Prevalence'),
+            ss.Result('new_infections', dtype=int,   scale=True,  label='New infections'),
+            ss.Result('cum_infections', dtype=int,   scale=True,  label='Cumulative infections'),
+        )
         return
         
     def validate_beta(self, run_checks=False):

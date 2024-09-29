@@ -16,7 +16,7 @@ def get_outputs(p_death):
         sir = ss.SIR(pars={'p_death':p_death})
         sim = ss.Sim(people=ppl, networks=network, diseases=sir, rand_seed=0, dur=5)
         sim.run(verbose=0)
-        df = sim.export_df()
+        df = sim.to_df()
         summary = {}
         summary['seed'] = sim.pars['rand_seed']
         summary['p_death'] = p_death
