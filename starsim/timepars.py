@@ -241,24 +241,24 @@ class TimePar(ss.BaseArr):
         return self.to(unit=unit, dt=dt)
 
     # Act like a float -- TODO, add type checking
-    def __add__(self, other): return self.asnew().set(v=self.v + other).values
-    def __sub__(self, other): return self.asnew().set(v=self.v - other).values
-    def __mul__(self, other): return self.asnew().set(v=self.v * other).values
-    def __pow__(self, other): return self.asnew().set(v=self.v ** other).values
-    def __truediv__(self, other): return self.asnew().set(v=self.v / other).values
+    def __add__(self, other): return self.asnew().set(v=self.v + self._arr(other))
+    def __sub__(self, other): return self.asnew().set(v=self.v - self._arr(other))
+    def __mul__(self, other): return self.asnew().set(v=self.v * self._arr(other))
+    def __pow__(self, other): return self.asnew().set(v=self.v ** self._arr(other))
+    def __truediv__(self, other): return self.asnew().set(v=self.v / self._arr(other))
     
     # ...from either side
-    def __radd__(self, other): return self.asnew().set(v=other + self.v).values
-    def __rsub__(self, other): return self.asnew().set(v=other - self.v).values
-    def __rmul__(self, other): return self.asnew().set(v=other * self.v).values
-    def __rpow__(self, other): return self.asnew().set(v=other ** self.v).values
-    def __rtruediv__(self, other): return self.asnew().set(v=other / self.v).values
+    def __radd__(self, other): return self.asnew().set(v=self._arr(other) + self.v)
+    def __rsub__(self, other): return self.asnew().set(v=self._arr(other) - self.v)
+    def __rmul__(self, other): return self.asnew().set(v=self._arr(other) * self.v)
+    def __rpow__(self, other): return self.asnew().set(v=self._arr(other) ** self.v)
+    def __rtruediv__(self, other): return self.asnew().set(v=self._arr(other) / self.v)
     
     # Handle modify-in-place methods
-    def __iadd__(self, other): return self.set(v=self.v + other)
-    def __isub__(self, other): return self.set(v=self.v - other)
-    def __imul__(self, other): return self.set(v=self.v * other)
-    def __itruediv__(self, other): return self.set(v=self.v / other)
+    def __iadd__(self, other): return self.set(v=self.v + self._arr(other))
+    def __isub__(self, other): return self.set(v=self.v - self._arr(other))
+    def __imul__(self, other): return self.set(v=self.v * self._arr(other))
+    def __itruediv__(self, other): return self.set(v=self.v / self._arr(other))
     
     # Other methods
     def __neg__(self): return self.asnew().set(v=-self.v)

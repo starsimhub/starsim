@@ -40,11 +40,7 @@ def check_dtype(dtype, default=None):
     return new_dtype
 
 
-def get_arr_values(obj):
-    """ Helper function to efficiently extract values from a BaseArr, or return the original object """
-    if isinstance(obj, BaseArr):
-        return obj.values
-    return obj
+
 
 
 class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
@@ -77,11 +73,18 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
             return self.asnew(obj.values)
         return obj
 
+    @staticmethod
+    def _arr(obj):
+        """ Helper function to efficiently extract values from a BaseArr, or return the original object """
+        if isinstance(obj, BaseArr):
+            return obj.values
+        return obj
+
     def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
         """ To handle all numpy operations, e.g. arr1*arr2 """
         # Convert all inputs to their .values if they are BaseArr, otherwise leave unchanged
-        inputs = [get_arr_values(x) for x in inputs]
-        kwargs = {k:get_arr_values(v) for k,v in kwargs.items()}
+        inputs = [self._arr(x) for x in inputs]
+        kwargs = {k:self._arr(v) for k,v in kwargs.items()}
         result = getattr(ufunc, method)(*inputs, **kwargs)
 
         # If result is a tuple (e.g., for divmod or ufuncs that return multiple values), convert all results to BaseArr
