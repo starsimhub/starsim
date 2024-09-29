@@ -262,6 +262,15 @@ class Calibration(sc.prettyobj):
 
         return pars
 
+    @staticmethod
+    def sim_to_df(sim): # TODO: remove this method
+        """ Convert a sim to the expected dataframe type """
+        df_res = sim.to_df(sep='.')
+        df_res['t'] = df_res['timevec']
+        df_res = df_res.set_index('t')
+        df_res['time'] = np.floor(np.round(df_res.index, 1)).astype(int)
+        return df_res
+
     def run_trial(self, trial, save=False):
         """ Define the objective for Optuna """
         if self.calib_pars is not None:
@@ -274,41 +283,46 @@ class Calibration(sc.prettyobj):
 
         sim = self.run_sim(calib_pars)
 
-        # Export results  # TODO: simplify and make more robust
-        df_res = sim.to_df(sep=self.sep)
-        df_res['time'] = np.floor(np.round(df_res['timevec'], 1)).astype(int)
+        # Export results # TODO: make more robust
+        df_res = self.sim_to_df(sim)
         sim_results = sc.objdict()
 
         for skey in self.sim_result_list:
-            if 'prevalence' in skey: # TODO: make more robust based on result.scale flag
+            if 'prevalence' in skey:
                 model_output = df_res.groupby(by='time')[skey].mean()
             else:
                 model_output = df_res.groupby(by='time')[skey].sum()
-            sim_results[skey] = model_output
+            sim_results[skey] = model_output.values
 
         sim_results['time'] = model_output.index.values
-
         # Store results in temporary files
         if save:
             filename = self.tmp_filename % trial.number
             sc.save(filename, sim_results)
 
         # Compute fit
-        fit = self.compute_fit(df_res)
+        fit = self.compute_fit(df_res=df_res)
         return fit
 
-    def compute_fit(self, sim_results):
+    def compute_fit(self, sim=None, df_res=None):
         """ Compute goodness-of-fit """
         fit = 0
+
+        # TODO: reduce duplication with above
+        if df_res is None:
+            df_res = self.sim_to_df(sim)
         for skey in self.sim_result_list:
-            model_output = sim_results[skey]
+            if 'prevalence' in skey:
+                model_output = df_res.groupby(by='time')[skey].mean()
+            else:
+                model_output = df_res.groupby(by='time')[skey].sum()
+
             data = self.data[skey]
             combined = pd.merge(data, model_output, how='left', on='time')
             combined['diffs'] = combined[skey+'_x'] - combined[skey+'_y']
-
-            # Compute goodness of fit
             gofs = compute_gof(combined.dropna()[skey+'_x'], combined.dropna()[skey+'_y'])
-            losses = gofs*self.weights.get(skey, 1.0) # Scale by weights
+
+            losses = gofs  #* self.weights[skey]
             mismatch = losses.sum()
             fit += mismatch
 
