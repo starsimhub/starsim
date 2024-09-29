@@ -73,11 +73,11 @@ class NCD(ss.Disease):
         Initialize results
         """
         super().init_results()
-        self.results += [
-            ss.Result(self.name, 'n_not_at_risk', self.npts, dtype=int,   label='Not at risk'),
-            ss.Result(self.name, 'prevalence',    self.npts, dtype=float, label='Prevalence'),
-            ss.Result(self.name, 'new_deaths',    self.npts, dtype=int,   label='Deaths'),
-        ]
+        self.define_results(
+            ss.Result('n_not_at_risk', dtype=int,   label='Not at risk'),
+            ss.Result('prevalence',    dtype=float, label='Prevalence'),
+            ss.Result('new_deaths',    dtype=int,   label='Deaths'),
+        )
         return
 
     def update_results(self):

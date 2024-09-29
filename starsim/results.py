@@ -30,13 +30,9 @@ class Result(ss.BaseArr):
     the additional fields listed above. To see everything contained in a result,
     you can use result.disp().
     """
-    def __init__(self, name=None, label=None, dtype=None, shape=None, scale=None,
+    def __init__(self, name=None, label=None, dtype=float, shape=None, scale=True,
                  module=None, values=None, timevec=None, low=None, high=None):
-        if values is None: # Typical use case, initialize first
-            shape = shape if shape is not None else 0
-            self.values = np.zeros(shape=shape, dtype=dtype)
-        else: # Or create if values already supplied
-            self.values = np.array(values, dtype=dtype)
+        # Copy inputs
         self.name = name
         self.label = label
         self.module = module
@@ -44,15 +40,63 @@ class Result(ss.BaseArr):
         self.timevec = timevec
         self.low = low
         self.high = high
+        self.dtype = dtype
+        self.shape = shape
+        self.values = values
+        self.init_values()
+        return
+
+    @property
+    def initialized(self):
+        return self.values is not None
+
+    def init_values(self, values=None, dtype=None, shape=None, force=False):
+        """ Handle values """
+        if not self.initialized or force:
+            values = sc.ifelse(values, self.values)
+            dtype = sc.ifelse(dtype, self.dtype)
+            shape = sc.ifelse(shape, self.shape)
+            if values is not None: # Create if values already supplied
+                self.values = np.array(values, dtype=dtype)
+                dtype = self.values.dtype
+                shape = self.values.shape
+            elif shape is not None: # Or if a shape is provided, initialize
+                self.values = np.zeros(shape=shape, dtype=dtype)
+            else:
+                self.values = None
+            self.dtype = dtype
+            self.shape = shape
+        return self.values
+
+    def update(self, *args, **kwargs):
+        """ Update parameters, and initialize values if needed """
+        super().update(*args, **kwargs)
+        self.init_values()
         return
 
     @property
     def key(self):
-        """ Return the <module>.<name> of the result """
+        """ Return the unique key of the result: <module>.<name>, e.g. "hiv.new_infections" """
         modulestr = f'{self.module}.' if (self.module is not None) else ''
         namestr = self.name if (self.name is not None) else 'unnamed'
         key = modulestr + namestr
         return key
+
+    @property
+    def full_label(self):
+        """ Return the full label of the result: <Module>: <label>, e.g. "HIV: New infections" """
+        reslabel = sc.ifelse(self.label, self.name)
+        if self.module == 'sim': # Don't add anything if it's the sim
+            full = f'Sim: {reslabel}'
+        else:
+            try:
+                mod = ss.find_modules(flat=True)[self.module]
+                modlabel = mod.__name__
+                assert self.module == modlabel.lower(), f'Mismatch: {self.module}, {modlabel}' # Only use the class name if the module name is the default
+            except: # Don't worry if we can't find it, just use the module name
+                modlabel = self.module
+            full = f'{modlabel}: {reslabel}'
+        return full
 
     def __repr__(self):
         cls_name = self.__class__.__name__
@@ -126,9 +170,11 @@ class Results(ss.ndict):
         """ Iterator over all results, skipping any nested values """
         return iter(res for res in self.values() if isinstance(res, Result))
 
-    def flatten(self, sep='_'):
-        """ Turn from a nested dictionary into a flat dictionary """
-        return sc.objdict(sc.flattendict(self, sep=sep))
+    def flatten(self, sep='_', only_results=True):
+        """ Turn from a nested dictionary into a flat dictionary, keeping only results by default """
+        out = sc.flattendict(self, sep=sep)
+        out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
+        return out
     
     def to_df(self):
         """ Merge all results dataframes into one """

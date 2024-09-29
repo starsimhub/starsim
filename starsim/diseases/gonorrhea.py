@@ -36,7 +36,9 @@ class Gonorrhea(ss.Infection):
     def init_results(self):
         """ Initialize results """
         super().init_results()
-        self.results += ss.Result(self.name, 'new_clearances', self.npts, dtype=int)
+        self.define_results(
+            ss.Result('new_clearances', dtype=int, label='New clearances')
+        )
         return
 
     def update_results(self):

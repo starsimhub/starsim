@@ -66,12 +66,12 @@ class Cholera(ss.Infection):
     def init_results(self):
         """ Initialize results """
         super().init_results()
-        self.results += [
-            ss.Result(self.name, 'new_deaths', self.npts, dtype=int,   label='Deaths'),
-            ss.Result(self.name, 'cum_deaths', self.npts, dtype=int,   label='Cumulative deaths'),
-            ss.Result(self.name, 'env_prev',   self.npts, dtype=float, label='Environmental prevalence'),
-            ss.Result(self.name, 'env_conc',   self.npts, dtype=float, label='Environmental concentration'),
-        ]
+        self.define_results(
+            ss.Result('new_deaths', dtype=int,   label='Deaths'),
+            ss.Result('cum_deaths', dtype=int,   label='Cumulative deaths'),
+            ss.Result('env_prev',   dtype=float, label='Environmental prevalence'),
+            ss.Result('env_conc',   dtype=float, label='Environmental concentration'),
+        )
         return
 
     def step_state(self):

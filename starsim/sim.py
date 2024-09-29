@@ -238,7 +238,7 @@ class Sim:
     
     def init_results(self):
         """ Create initial results that are present in all simulations """
-        kw = dict(shape=self.npts, dtype=int, scale=True)
+        kw = dict(shape=self.npts, timevec=self.timevec, dtype=int, scale=True)
         self.results += [
             ss.Result('n_alive',    label='Number alive', **kw),
             ss.Result('new_deaths', label='Deaths', **kw),
@@ -602,7 +602,7 @@ class Sim:
         Plot all results in the Sim object
         
         Args:
-            key (str): the results key to plot (by default, all)
+            key (str/list): the results key to plot (by default, all); if a list, plot exactly those keys
             fig (Figure): if provided, plot results into an existing figure
             style (str): the plotting style to use (default "fancy"; other options are "simple", None, or any Matplotlib style)
             show_data (bool): plot the data, if available
@@ -619,15 +619,16 @@ class Sim:
         fig_kw = sc.mergedicts({'figsize':figsize}, fig_kw)
         plot_kw = sc.mergedicts({'lw':2}, plot_kw)
         scatter_kw = sc.mergedicts({'alpha':0.3, 'color':'k'}, scatter_kw)
-        modmap = {m.name:m for m in self.modules} # Find modules
-        
+
         # Do the plotting
         with sc.options.with_style(style):
             
-            timevec = flat.pop('timevec')
             if key is not None:
-                flat = {k:v for k,v in flat.items() if k.startswith(key)}
-            
+                if isinstance(key, str):
+                    flat = {k:v for k,v in flat.items() if (key in k)}
+                else:
+                    flat = {k:flat[k] for k in key}
+
             # Get the figure
             if fig is None:
                 fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
@@ -655,18 +656,9 @@ class Sim:
                         ax.scatter(df.index.values, df[dfkey].values, **scatter_kw)
 
                 # Plot results
-                ax.plot(timevec, res, **plot_kw, label=self.label)
-                title = getattr(res, 'label', key)
-                if res.module != 'sim':
-                    try:
-                        mod = modmap[res.module]
-                        modtitle = mod.__class__.__name__
-                        assert res.module == modtitle.lower() # Only use the class name if the module name is the default
-                    except:
-                        modtitle = res.module
-                    title = f'{modtitle}: {title}'
-                ax.set_title(title) 
-                ax.set_xlabel('Year')
+                ax.plot(res.timevec, res.values, **plot_kw, label=self.label)
+                ax.set_title(res.full_label)
+                ax.set_xlabel('Time')
             
         sc.figlayout(fig=fig)
                 

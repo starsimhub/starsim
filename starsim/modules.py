@@ -23,11 +23,11 @@ def module_map(key=None):
     return module_map if key is None else module_map[key]
 
 
-def find_modules(key=None):
-    """ Find all subclasses of Module, divided by type """
+def find_modules(key=None, flat=False):
+    """ Find all subclasses of Module present in Starsim, divided by type """
     modules = sc.objdict()
     modmap = module_map()
-    attrs = dir(ss)
+    attrs = dir(ss) # Find all attributes in Starsim (note: does not parse user code)
     for modkey, modtype in modmap.items(): # Loop over each module type
         modules[modkey] = sc.objdict()
         for attr in attrs: # Loop over each attribute (inefficient, but doesn't need to be optimized)
@@ -40,6 +40,8 @@ def find_modules(key=None):
                     modules[modkey][low_attr.removesuffix('net')] = item
             except:
                 pass
+    if flat:
+        modules = sc.objdict({k:v for vv in modules.values() for k,v in vv.items()}) # Unpack the nested dict into a flat one
     return modules if key is None else modules[key]
  
 
