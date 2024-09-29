@@ -62,19 +62,19 @@ def test_classes():
     rval = 0.7
     r5 = ss.rate(rval, unit='week').init(parent_unit='day')
     r6 = ss.rate(rval).init(parent_dt=0.1)
-    assert np.isclose(r5.x, rval/7) # A limitation of this approach, not exact!
-    assert np.isclose(r6.x, rval/10)
+    assert np.isclose(r5.values, rval/7) # A limitation of this approach, not exact!
+    assert np.isclose(r6.values, rval/10)
     
     # Test time_prob
     tpval = 0.1
     tp0 = ss.time_prob(tpval).init(parent_dt=1.0)
     tp1 = ss.time_prob(tpval).init(parent_dt=0.5)
     tp2 = ss.time_prob(tpval).init(parent_dt=2)
-    assert np.isclose(tp0.x, tpval)
-    assert np.isclose(tp1.x, tpval/2, rtol=0.1)
-    assert np.isclose(tp2.x, tpval*2, rtol=0.1)
-    assert tp1.x > tpval/2
-    assert tp2.x < tpval*2
+    assert np.isclose(tp0.values, tpval)
+    assert np.isclose(tp1.values, tpval/2, rtol=0.1)
+    assert np.isclose(tp2.values, tpval*2, rtol=0.1)
+    assert tp1.values > tpval/2
+    assert tp2.values < tpval*2
     
     return d3, d4, r3, r4, tp1
     
@@ -83,7 +83,13 @@ def test_units(do_plot=False):
     sc.heading('Test behavior of year vs day units')
     
     pars = dict(
-        diseases = dict(type='sis', init_prev=0.1),
+        diseases = dict(
+            type='sis',
+            init_prev=0.1,
+            beta = ss.beta(0.05, 'year'),
+            dur_inf = ss.dur(10, 'year'),
+            waning = ss.rate(0.05, 'year'),
+        ),
         networks = 'random',
         n_agents = small,
     )
@@ -100,7 +106,7 @@ def test_units(do_plot=False):
     # Uncomment this test once it might potentially pass lol
     rtol = 0.01
     vals = [sim.summary.sis_cum_infections for sim in [sims.y, sims.d]]
-    # assert np.isclose(*vals, rtol=rtol), f'Values for cum_infections do not match ({vals})'
+    assert np.isclose(*vals, rtol=rtol), f'Values for cum_infections do not match ({vals})'
         
     return sims
 
