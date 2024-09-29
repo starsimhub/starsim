@@ -241,18 +241,18 @@ class TimePar(ss.BaseArr):
         return self.to(unit=unit, dt=dt)
 
     # Act like a float -- TODO, add type checking
-    def __add__(self, other): return self.asnew().set(v=self.v + other)
-    def __sub__(self, other): return self.asnew().set(v=self.v - other)
-    def __mul__(self, other): return self.asnew().set(v=self.v * other)
-    def __pow__(self, other): return self.asnew().set(v=self.v ** other)
-    def __truediv__(self, other): return self.asnew().set(v=self.v / other)
+    def __add__(self, other): return self.asnew().set(v=self.v + other).values
+    def __sub__(self, other): return self.asnew().set(v=self.v - other).values
+    def __mul__(self, other): return self.asnew().set(v=self.v * other).values
+    def __pow__(self, other): return self.asnew().set(v=self.v ** other).values
+    def __truediv__(self, other): return self.asnew().set(v=self.v / other).values
     
     # ...from either side
-    def __radd__(self, other): return self.asnew().set(v=other + self.v)
-    def __rsub__(self, other): return self.asnew().set(v=other - self.v)
-    def __rmul__(self, other): return self.asnew().set(v=other * self.v)
-    def __rpow__(self, other): return self.asnew().set(v=other ** self.v)
-    def __rtruediv__(self, other): return self.asnew().set(v=other / self.v)
+    def __radd__(self, other): return self.asnew().set(v=other + self.v).values
+    def __rsub__(self, other): return self.asnew().set(v=other - self.v).values
+    def __rmul__(self, other): return self.asnew().set(v=other * self.v).values
+    def __rpow__(self, other): return self.asnew().set(v=other ** self.v).values
+    def __rtruediv__(self, other): return self.asnew().set(v=other / self.v).values
     
     # Handle modify-in-place methods
     def __iadd__(self, other): return self.set(v=self.v + other)
