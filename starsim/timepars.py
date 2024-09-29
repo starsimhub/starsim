@@ -181,9 +181,7 @@ class TimePar(ss.BaseArr):
         self.parent_dt = sc.ifelse(self.parent_dt, self.self_dt, 1.0)
         
         # Calculate the actual conversion factor to be used in the calculations
-        self.update()
-        self.update_factor()
-        self.update_values()
+        self.update_cached()
         self.initialized = True
         return self
         
@@ -210,11 +208,11 @@ class TimePar(ss.BaseArr):
         if parent_dt   is not None: self.parent_dt   = parent_dt
         if self_dt     is not None: self.self_dt     = self_dt
         if self.initialized or force: # Don't try to set these unless it's been initialized
-            self.update()
+            self.update_cached()
         return self
 
-    def update(self):
-        """ Update the factor and values """
+    def update_cached(self):
+        """ Update the cached factor and values """
         self.update_factor()
         self.update_values()
         return self

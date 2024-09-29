@@ -223,7 +223,7 @@ class Module(sc.quickobj):
  
     def define_states(self, *args, check=True):
         """
-        Add states to the module with the same attribute name as the state
+        Define states of the module with the same attribute name as the state
  
         Args:
             args (states): list of states to add
@@ -239,8 +239,26 @@ class Module(sc.quickobj):
 
             if check:
                 assert isinstance(state, ss.Arr), f'Could not add {state}: not an Arr object'
- 
+
+            # Add the state to the module
             setattr(self, state.name, state)
+        return
+
+    def define_results(self, *args, check=True):
+        """ Add results to the module """
+        for arg in args:
+            if isinstance(arg, (list, tuple)):
+                result = ss.Result(*arg)
+            elif isinstance(arg, dict):
+                result = ss.Result(**arg)
+            else:
+                result = arg
+
+            # Update with module information
+            result.update(module=self.name, shape=self.npts, timevec=self.timevec)
+
+            # Add the result to the dict of results; does automatic checking
+            self.results += result
         return
 
     @property

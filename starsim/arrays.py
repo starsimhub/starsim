@@ -130,6 +130,22 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
             new.values = sc.cp(new.values) # TODO: is this needed?
         return new
 
+    def update(self, skip_none=True, overwrite=True, force=False, **kwargs):
+        """ Update the attributes, skipping None values and raising an error if extra keys are added """
+        if skip_none: # Remove None inputs
+            kwargs = {k:v for k,v in kwargs.items() if v is not None}
+        if not overwrite: # Don't overwrite non-None values
+            kwargs = {k:v for k,v in kwargs.items() if getattr(self, k, None) is None}
+        if not force: # Check if we'd be creating any new keys
+            kw_keys = set(kwargs.keys())
+            self_keys = set(self.__dict__.keys())
+            diff = kw_keys - self_keys
+            if diff:
+                errormsg = f'Invalid arguments to {self}: {diff}'
+                raise ValueError(errormsg)
+        self.__dict__.update(kwargs) # Actually perform the update
+        return self
+
 
 class Arr(BaseArr):
     """

@@ -108,25 +108,26 @@ class ndict(sc.objdict):
         return
 
     def copy(self):
+        """ Shallow copy """
         new = self.__class__.__new__(nameattr=self._nameattr, type=self._type, strict=self._strict)
         new.update(self)
         return new
 
-    def __add__(self, dict2):
+    def __add__(self, other):
         """ Allow c = a + b """
         new = self.copy()
-        if isinstance(dict2, list):
-            new.extend(dict2)
+        if isinstance(other, list):
+            new.extend(other)
         else:
-            new.append(dict2)
+            new.append(other)
         return new
 
-    def __iadd__(self, dict2):
+    def __iadd__(self, other):
         """ Allow a += b """
-        if isinstance(dict2, list):
-            self.extend(dict2)
+        if isinstance(other, list):
+            self.extend(other)
         else:
-            self.append(dict2)
+            self.append(other)
         return self
 
 
