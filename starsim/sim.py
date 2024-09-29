@@ -238,10 +238,11 @@ class Sim:
     
     def init_results(self):
         """ Create initial results that are present in all simulations """
-        self.results += [ # TODO: refactor with self.add_results()
-            ss.Result(None, 'n_alive',    self.npts, ss.dtypes.int, scale=True, label='Number alive'),
-            ss.Result(None, 'new_deaths', self.npts, ss.dtypes.int, scale=True, label='Deaths'),
-            ss.Result(None, 'cum_deaths', self.npts, ss.dtypes.int, scale=True, label='Cumulative deaths'),
+        kw = dict(shape=self.npts, dtype=int, scale=True)
+        self.results += [
+            ss.Result('n_alive',    label='Number alive', **kw),
+            ss.Result('new_deaths', label='Deaths', **kw),
+            ss.Result('cum_deaths', label='Cumulative deaths', **kw),
         ]
         return
 

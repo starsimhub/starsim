@@ -56,8 +56,10 @@ class Disease(ss.Module):
         Result for 'n_susceptible'.
         """
         super().init_results()
+        results = sc.autolist()
         for state in self._disease_states:
-            self.results += ss.Result(self.name, f'n_{state.name}', self.npts, dtype=int, scale=True, label=state.label)
+            results += ss.Result(f'n_{state.name}', dtype=int, scale=True, label=state.label)
+        self.define_results(*results)
         return
 
     def step_state(self):
@@ -199,11 +201,11 @@ class Infection(Disease):
         Initialize results
         """
         super().init_results()
-        self.results += [
-            ss.Result(self.name, 'prevalence',     self.npts, dtype=float, scale=False, label='Prevalence'),
-            ss.Result(self.name, 'new_infections', self.npts, dtype=int, scale=True, label='New infections'),
-            ss.Result(self.name, 'cum_infections', self.npts, dtype=int, scale=True, label='Cumulative infections'),
-        ]
+        self.define_results(
+            ss.Result('prevalence',     dtype=float, scale=False, label='Prevalence'),
+            ss.Result('new_infections', dtype=int,   scale=True,  label='New infections'),
+            ss.Result('cum_infections', dtype=int,   scale=True,  label='Cumulative infections'),
+        )
         return
         
     def validate_beta(self, run_checks=False):

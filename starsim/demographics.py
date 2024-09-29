@@ -64,11 +64,11 @@ class Births(Demographics):
 
     def init_results(self):
         super().init_results()
-        self.results += [
-            ss.Result(self.name, 'new',        self.npts, dtype=int, scale=True,    label='New births'),
-            ss.Result(self.name, 'cumulative', self.npts, dtype=int, scale=True,    label='Cumulative births'),
-            ss.Result(self.name, 'cbr',        self.npts, dtype=float, scale=False, label='Crude birth rate'),
-        ]
+        self.define_results(
+            ss.Result('new',        dtype=int,   scale=True,  label='New births'),
+            ss.Result('cumulative', dtype=int,   scale=True,  label='Cumulative births'),
+            ss.Result('cbr',        dtype=float, scale=False, label='Crude birth rate'),
+        )
         return
 
     def get_births(self):
@@ -218,11 +218,11 @@ class Deaths(Demographics):
 
     def init_results(self):
         super().init_results()
-        self.results += [
-            ss.Result(self.name, 'new',        self.npts, dtype=int,   scale=True,  label='Deaths'),
-            ss.Result(self.name, 'cumulative', self.npts, dtype=int,   scale=True,  label='Cumulative deaths'),
-            ss.Result(self.name, 'cmr',        self.npts, dtype=float, scale=False, label='Crude mortality rate'),
-        ]
+        self.define_results(
+            ss.Result('new',        dtype=int,   scale=True,  label='Deaths'),
+            ss.Result('cumulative', dtype=int,   scale=True,  label='Cumulative deaths'),
+            ss.Result('cmr',        dtype=float, scale=False, label='Crude mortality rate'),
+        )
         return
 
     def step(self):
@@ -370,11 +370,11 @@ class Pregnancy(Demographics):
         individual disease modules, the connectors, or the sim.
         """
         super().init_results()
-        self.results += [
-            ss.Result(self.name, 'pregnancies', self.npts, dtype=int, scale=True,    label='New pregnancies'),
-            ss.Result(self.name, 'births',      self.npts, dtype=int, scale=True,    label='New births'),
-            ss.Result(self.name, 'cbr',         self.npts, dtype=float, scale=False, label='Crude birth rate'),
-        ]
+        self.define_results(
+            ss.Result('pregnancies', dtype=int,   scale=True,  label='New pregnancies'),
+            ss.Result('births',      dtype=int,   scale=True,  label='New births'),
+            ss.Result('cbr',         dtype=float, scale=False, label='Crude birth rate'),
+        )
         return
 
     def step(self):
