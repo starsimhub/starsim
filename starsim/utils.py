@@ -77,7 +77,7 @@ class ndict(sc.objdict):
         else:
             errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._nameattr}"'
             raise TypeError(errormsg)
-        return
+        return self
     
     def _check_key(self, key, overwrite=None):
         if overwrite is None: overwrite = self._overwrite
@@ -105,7 +105,13 @@ class ndict(sc.objdict):
             self.append(arg)
         for key, arg in kwargs.items():
             self.append(arg, key=key)
-        return
+        return self
+
+    def merge(self, other):
+        """ Merge another dictionary with this one """
+        for key, arg in other.items():
+            self.append(arg, key=key)
+        return self
 
     def copy(self):
         """ Shallow copy """

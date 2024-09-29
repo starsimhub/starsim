@@ -431,24 +431,14 @@ class Sim:
         else:
             return shrunken
 
-    def export_df(self):
+    def to_df(self):
         """ Export results as a Pandas dataframe """
         if not self.results_ready:  # pragma: no cover
             errormsg = 'Please run the sim before exporting the results'
             raise RuntimeError(errormsg)
 
-        def flatten_results(d, prefix=''): # TODO: won't work with different timesteps
-            flat = {}
-            for key, val in d.items():
-                if isinstance(val, dict):
-                    flat.update(flatten_results(val, prefix=prefix+key+'.'))
-                else:
-                    flat[prefix+key] = val
-            return flat
-
-        resdict = flatten_results(self.results)
-        resdict['timevec'] = self.timevec
-        df = sc.dataframe.from_dict(resdict).set_index('t')
+        flat = self.results.flatten(only_results=False)
+        df = sc.dataframe.from_dict(flat)
         return df
 
     def save(self, filename=None, keep_people=None, skip_attrs=None, **kwargs):
@@ -509,7 +499,7 @@ class Sim:
         Args:
             filename (str): filename to save to; if None, do not save
             indent (int): indent (int): if writing to file, how many indents to use per nested level
-            args (list): passed to savejson()
+            args (list): passed to sc.jsonify()
             kwargs (dict): passed to savejson()
 
         Returns:
@@ -532,18 +522,15 @@ class Sim:
             sc.savejson(filename=filename, obj=pardict, indent=indent, *args, **kwargs)
         return pardict
 
-    def to_json(self, filename=None, keys=None, tostring=False, indent=2, verbose=False, *args, **kwargs):
+    def to_json(self, filename=None, keys=None, tostring=False, indent=2, verbose=False, **kwargs):
         '''
         Export results and parameters as JSON.
 
         Args:
             filename (str): if None, return string; else, write to file
-            keys (str or list): attributes to write to json (default: results, parameters, and summary)
-            tostring (bool): if not writing to file, whether to write to string (alternative is sanitized dictionary)
-            indent (int): if writing to file, how many indents to use per nested level
+            keys (str/list): attributes to write to json (choices: 'pars' and/or 'summary')
             verbose (bool): detail to print
-            args (list): passed to savejson()
-            kwargs (dict): passed to savejson()
+            kwargs (dict): passed to sc.jsonify()
 
         Returns:
             A unicode string containing a JSON representation of the results,
@@ -558,19 +545,13 @@ class Sim:
 
         # Handle keys
         if keys is None:
-            keys = ['results', 'pars', 'summary', 'short_summary']
+            keys = ['pars', 'summary']
         keys = sc.promotetolist(keys)
 
         # Convert to JSON-compatible format
         d = sc.objdict()
         for key in keys:
-            if key == 'results':
-                if self.results_ready:
-                    resdict = self.export_results(for_json=True) # TODO: not implemented
-                    d.results = resdict
-                else:
-                    d.results = 'Results not available (Sim has not yet been run)'
-            elif key in ['pars', 'parameters']:
+            if key in ['pars', 'parameters']:
                 pardict = self.export_pars()
                 d.parameters = pardict
             elif key == 'summary':
@@ -578,22 +559,14 @@ class Sim:
                     d.summary = dict(sc.dcp(self.summary))
                 else:
                     d.summary = 'Summary not available (Sim has not yet been run)'
-            elif key == 'short_summary':
-                if self.results_ready:
-                    d.short_summary = dict(sc.dcp(self.short_summary))
-                else:
-                    d.short_summary = 'Full summary not available (Sim has not yet been run)'
             else:  # pragma: no cover
-                try:
-                    d[key] = sc.sanitizejson(getattr(self, key))
-                except Exception as E:
-                    errormsg = f'Could not convert "{key}" to JSON: {str(E)}; continuing...'
-                    print(errormsg)
+                errormsg = f'Could not convert "{key}" to JSON; continuing...'
+                print(errormsg)
 
         if filename is None:
-            output = sc.jsonify(d, tostring=tostring, indent=indent, verbose=verbose, *args, **kwargs)
+            output = sc.jsonify(d, **kwargs)
         else:
-            output = sc.savejson(filename=filename, obj=d, indent=indent, *args, **kwargs)
+            output = sc.savejson(filename=filename, obj=d, **kwargs)
 
         return output
     

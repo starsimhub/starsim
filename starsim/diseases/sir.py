@@ -87,7 +87,7 @@ class SIR(ss.Infection):
         fig = plt.figure()
         kw = sc.mergedicts(dict(lw=2, alpha=0.8), kwargs)
         for rkey in ['n_susceptible', 'n_infected', 'n_recovered']:
-            plt.plot(self.timevec, self.sim.results.yearvec, self.results[rkey], label=self.results[rkey].label, **kw)
+            plt.plot(self.timevec, self.results[rkey], label=self.results[rkey].label, **kw)
         plt.legend(frameon=False)
         plt.xlabel('Time')
         plt.ylabel('Number of people')

@@ -94,7 +94,7 @@ class Result(ss.BaseArr):
                 modlabel = mod.__name__
                 assert self.module == modlabel.lower(), f'Mismatch: {self.module}, {modlabel}' # Only use the class name if the module name is the default
             except: # Don't worry if we can't find it, just use the module name
-                modlabel = self.module
+                modlabel = self.module.title()
             full = f'{modlabel}: {reslabel}'
         return full
 
@@ -134,11 +134,11 @@ class Result(ss.BaseArr):
 
 class Results(ss.ndict):
     """ Container for storing results """
-    def __init__(self, module, strict=True, *args, **kwargs):
-        super().__init__(type=Result, strict=strict)
+    def __init__(self, module, *args, strict=True, **kwargs):
         if hasattr(module, 'name'):
             module = module.name
         self.setattribute('_module', module)
+        super().__init__(type=Result, strict=strict, *args, **kwargs)
         return
 
     def __repr__(self, *args, **kwargs): # TODO: replace with dataframe summary
@@ -173,7 +173,8 @@ class Results(ss.ndict):
     def flatten(self, sep='_', only_results=True):
         """ Turn from a nested dictionary into a flat dictionary, keeping only results by default """
         out = sc.flattendict(self, sep=sep)
-        out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
+        if only_results:
+            out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
         return out
     
     def to_df(self):

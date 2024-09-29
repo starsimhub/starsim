@@ -271,7 +271,7 @@ class Calibration(sc.prettyobj):
         sim = self.run_sim(calib_pars)
 
         # Export results
-        df_res = sim.export_df()
+        df_res = sim.to_df()
         df_res['time'] = np.floor(np.round(df_res.index, 1)).astype(int)
         sim_results = sc.objdict()
 
@@ -295,7 +295,7 @@ class Calibration(sc.prettyobj):
     def compute_fit(self, sim):
         """ Compute goodness-of-fit """
         fit = 0
-        df_res = sim.export_df()
+        df_res = sim.to_df()
         df_res['time'] = np.floor(np.round(df_res.index, 1)).astype(int)
         for skey in self.sim_result_list:
             if 'prevalence' in skey:
