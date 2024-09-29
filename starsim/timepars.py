@@ -7,7 +7,7 @@ import sciris as sc
 import starsim as ss
 
 # Classes that are externally visible
-__all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff', 'make_timevec', 'make_timearray',
+__all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff', 'make_timevec', 'make_abs_tvec',
            'TimePar', 'dur', 'days', 'years', 'rate', 'time_prob', 'beta']
 
     
@@ -105,7 +105,7 @@ def make_timevec(start, stop, dt, unit):
     return timevec
 
 
-def make_timearray(tv, unit, sim_unit):
+def make_abs_tvec(tv, unit, sim_unit):
     """ Convert a module time vector into a numerical time array with the same units as the sim """
     
     # It's an array of days or years: easy

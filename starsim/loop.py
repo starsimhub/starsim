@@ -21,7 +21,7 @@ class Loop:
     def __init__(self, sim): # TODO: consider eps=1e-6 and round times to this value
         self.sim = sim
         self.funcs = None
-        self.timearrays = None
+        self.abs_tvecs = None
         self.plan = None
         self.index = 0 # The next function to execute
         self.cpu_time = [] # Store the CPU time of execution of each function
@@ -33,7 +33,7 @@ class Loop:
     def init(self):
         """ Parse the sim into the integration plan """
         self.collect_funcs()
-        self.collect_timearrays()
+        self.collect_abs_tvecs()
         self.make_plan()
         self.initialized = True
         return
@@ -49,7 +49,7 @@ class Loop:
         parent = func.__self__
         func_name = func.__name__
         
-        # Get the name if it's defined, the class otherwise; these must match timearrays
+        # Get the name if it's defined, the class otherwise; these must match abs_tvecs
         module = parent.name if isinstance(parent, ss.Module) else parent.__class__.__name__.lower()
         
         # Create the row and append it to the function list
@@ -59,7 +59,7 @@ class Loop:
     
     def __repr__(self):
         if self.initialized:
-            arrs = list({len(arr) for arr in self.timearrays.values()})
+            arrs = list({len(arr) for arr in self.abs_tvecs.values()})
             if len(arrs) == 1: arrs = arrs[0] # If all are the same, just use that
             string = f'Loop(n={len(self)}, funcs={len(self.funcs)}, npts={arrs}, index={self.index})'
         else:
@@ -129,21 +129,21 @@ class Loop:
         
         return self.funcs
     
-    def collect_timearrays(self):
+    def collect_abs_tvecs(self):
         """ Collect numerical time arrays for each module """
-        self.timearrays = sc.objdict()
+        self.abs_tvecs = sc.objdict()
         
         # Handle the sim and people first
         sim = self.sim
         for key in ['sim', 'people']:
-            self.timearrays[key] = sim.timearray
+            self.abs_tvecs[key] = sim.abs_tvec
         
         # Handle all other modules
         for mod in sim.modules:
-            timearray = ss.make_timearray(mod.timevec, mod.unit, sim.pars.unit)
-            self.timearrays[mod.name] = timearray
+            abs_tvec = ss.make_abs_tvec(mod.timevec, mod.unit, sim.pars.unit)
+            self.abs_tvecs[mod.name] = abs_tvec
             
-        return self.timearrays
+        return self.abs_tvecs
     
     def make_plan(self):
         """ Combine the module ordering and the time vectors into the integration plan """
@@ -151,7 +151,7 @@ class Loop:
         # Assemble the list of dicts
         raw = []
         for func_row in self.funcs:
-            for t in self.timearrays[func_row['module']]:
+            for t in self.abs_tvecs[func_row['module']]:
                 row = func_row.copy()
                 row['time'] = t # Add time column
                 raw.append(row)

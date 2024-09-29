@@ -111,7 +111,7 @@ def test_calibration(do_plot=False):
         total_trials = 8,
         n_workers = 2,
         die = True,
-        debug = True,
+        debug = False,
     )
 
     # Perform the calibration
