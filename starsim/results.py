@@ -111,7 +111,7 @@ class Result(ss.BaseArr):
         else:
             return super().__getitem__(key)
 
-    def to_df(self, rename=True):
+    def to_df(self, sep='_', rename=True):
         """
         Convert to a dataframe with timevec, value, low, and high columns
 
@@ -125,7 +125,7 @@ class Result(ss.BaseArr):
         data[valcol] = self.values
         for key in ['low', 'high']:
             val = self[key]
-            valcol = f'{self.name}_{key}' if rename else key
+            valcol = f'{self.name}{sep}{key}' if rename else key
             if val is not None:
                 data[valcol] = val
         df = sc.dataframe(data)
@@ -177,9 +177,9 @@ class Results(ss.ndict):
             out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
         return out
     
-    def to_df(self):
+    def to_df(self, sep='_'):
         """ Merge all results dataframes into one """
-        dfs = [res.to_df() for res in self.all_results]
+        dfs = [res.to_df(sep=sep) for res in self.all_results]
         df = dfs[0]
         for df2 in dfs[1:]:
             df.merge(df2)

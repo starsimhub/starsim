@@ -337,7 +337,7 @@ def validate_sim_data(data=None, die=None):
         # Try loading the data
         try:
             data = sc.dataframe(data) # Convert it to a dataframe
-            timecols = ['time', 'day', 'date', 'year'] # If a time column is supplied, use it as the index
+            timecols = ['t', 'timevec', 'tvec', 'time', 'day', 'date', 'year'] # If a time column is supplied, use it as the index
             found = False
             for timecol in timecols:
                 if timecol in data.cols:

@@ -431,13 +431,13 @@ class Sim:
         else:
             return shrunken
 
-    def to_df(self):
+    def to_df(self, sep='_'):
         """ Export results as a Pandas dataframe """
         if not self.results_ready:  # pragma: no cover
             errormsg = 'Please run the sim before exporting the results'
             raise RuntimeError(errormsg)
 
-        flat = self.results.flatten(only_results=False)
+        flat = self.results.flatten(sep=sep, only_results=False)
         df = sc.dataframe.from_dict(flat)
         return df
 

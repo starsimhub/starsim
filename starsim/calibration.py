@@ -118,6 +118,7 @@ class Calibration(sc.prettyobj):
         weights      (dict) : the relative weights of each data source
         fit_args     (dict) : a dictionary of options that are passed to sim.compute_fit() to calculate the goodness-of-fit
         estimator    (func) : a custom estimator to use for computing the goodness-of-fit
+        sep          (str)  : the separate between different types of results, e.g. 'hiv.deaths' vs 'hiv_deaths'
         name         (str)  : the name of the database (default: 'starsim_calibration')
         db_name      (str)  : the name of the database file (default: 'starsim_calibration.db')
         keep_db      (bool) : whether to keep the database after calibration (default: false)
@@ -125,14 +126,15 @@ class Calibration(sc.prettyobj):
         rand_seed    (int)  : if provided, use this random seed to initialize Optuna runs (for reproducibility)
         label        (str)  : a label for this calibration object
         die          (bool) : whether to stop if an exception is encountered (default: false)
+        debug        (bool) : if True, do not run in parallel
         verbose      (bool) : whether to print details of the calibration
 
     Returns:
         A Calibration object
     """
     def __init__(self, sim, data, calib_pars, n_trials=None, n_workers=None, total_trials=None, reseed=True,
-                 weights=None, fit_args=None, estimator=None, name=None, db_name=None, keep_db=None,
-                 storage=None, rand_seed=None, sampler=None, label=None, die=False, verbose=True):
+                 weights=None, fit_args=None, estimator=None, sep='.', name=None, db_name=None, keep_db=None,
+                 storage=None, rand_seed=None, sampler=None, label=None, die=False, debug=False, verbose=True):
 
         # Handle run arguments
         if n_trials  is None: n_trials  = 20
@@ -142,15 +144,17 @@ class Calibration(sc.prettyobj):
         if keep_db   is None: keep_db   = False
         if storage   is None: storage   = f'sqlite:///{db_name}'
         if total_trials is not None: n_trials = int(np.ceil(total_trials/n_workers))
-        self.run_args = sc.objdict(n_trials=int(n_trials), n_workers=int(n_workers), name=name, db_name=db_name,
-                                   keep_db=keep_db, storage=storage, rand_seed=rand_seed, sampler=sampler)
+        kw = dict(n_trials=int(n_trials), n_workers=int(n_workers), debug=debug, name=name, db_name=db_name,
+                  keep_db=keep_db, storage=storage, rand_seed=rand_seed, sampler=sampler)
+        self.run_args = sc.objdict(kw)
 
         # Handle other inputs
         self.label      = label
         self.sim        = sim
         self.calib_pars = calib_pars
         self.reseed     = reseed
-        self.weights    = weights
+        self.sep        = sep
+        self.weights    = sc.mergedicts(weights)
         self.fit_args   = sc.mergedicts(fit_args)
         self.die        = die
         self.verbose    = verbose
@@ -270,45 +274,41 @@ class Calibration(sc.prettyobj):
 
         sim = self.run_sim(calib_pars)
 
-        # Export results
-        df_res = sim.to_df()
-        df_res['time'] = np.floor(np.round(df_res.index, 1)).astype(int)
+        # Export results  # TODO: simplify and make more robust
+        df_res = sim.to_df(sep=self.sep)
+        df_res['time'] = np.floor(np.round(df_res['timevec'], 1)).astype(int)
         sim_results = sc.objdict()
 
         for skey in self.sim_result_list:
-            if 'prevalence' in skey:
+            if 'prevalence' in skey: # TODO: make more robust based on result.scale flag
                 model_output = df_res.groupby(by='time')[skey].mean()
             else:
                 model_output = df_res.groupby(by='time')[skey].sum()
-            sim_results[skey] = model_output.values
+            sim_results[skey] = model_output
 
         sim_results['time'] = model_output.index.values
+
         # Store results in temporary files
         if save:
             filename = self.tmp_filename % trial.number
             sc.save(filename, sim_results)
 
         # Compute fit
-        fit = self.compute_fit(sim)
+        fit = self.compute_fit(df_res)
         return fit
 
-    def compute_fit(self, sim):
+    def compute_fit(self, sim_results):
         """ Compute goodness-of-fit """
         fit = 0
-        df_res = sim.to_df()
-        df_res['time'] = np.floor(np.round(df_res.index, 1)).astype(int)
         for skey in self.sim_result_list:
-            if 'prevalence' in skey:
-                model_output = df_res.groupby(by='time')[skey].mean()
-            else:
-                model_output = df_res.groupby(by='time')[skey].sum()
-
+            model_output = sim_results[skey]
             data = self.data[skey]
             combined = pd.merge(data, model_output, how='left', on='time')
             combined['diffs'] = combined[skey+'_x'] - combined[skey+'_y']
-            gofs = compute_gof(combined.dropna()[skey+'_x'], combined.dropna()[skey+'_y'])
 
-            losses = gofs  #* self.weights[skey]
+            # Compute goodness of fit
+            gofs = compute_gof(combined.dropna()[skey+'_x'], combined.dropna()[skey+'_y'])
+            losses = gofs*self.weights.get(skey, 1.0) # Scale by weights
             mismatch = losses.sum()
             fit += mismatch
 
@@ -326,7 +326,7 @@ class Calibration(sc.prettyobj):
 
     def run_workers(self):
         """ Run multiple workers in parallel """
-        if self.run_args.n_workers > 1: # Normal use case: run in parallel
+        if self.run_args.n_workers > 1 and not self.run_args.debug: # Normal use case: run in parallel
             output = sc.parallelize(self.worker, iterarg=self.run_args.n_workers)
         else: # Special case: just run one
             output = [self.worker()]
@@ -367,6 +367,7 @@ class Calibration(sc.prettyobj):
     def calibrate(self, calib_pars=None, confirm_fit=False, load=False, tidyup=True, **kwargs):
         """
         Perform calibration.
+
         Args:
             calib_pars (dict): if supplied, overwrite stored calib_pars
             confirm_fit (bool): if True, run simulations with parameters from before and after calibration
