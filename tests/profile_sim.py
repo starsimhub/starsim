@@ -4,7 +4,7 @@ import starsim as ss
 kw = dict(n_agents=100e3, start=2000, dur=100, diseases='sis', networks='random')
 sim = ss.Sim(**kw)
 
-prof = ['profile', 'cprofile', 'time'][0]
+prof = ['profile', 'cprofile', 'time'][1]
 
 if prof == 'profile':
     prf = sc.profile(run=sim.run, follow=[sim.run, ss.disease.Infection.infect, ss.network.RandomNet.step])
