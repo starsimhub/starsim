@@ -423,14 +423,16 @@ disable=raw-checker-failed,
         use-symbolic-message-instead,
         C0321, # Starsim: multiple statements on a line
         C0325, # Starsim: allow parentheses in if
-        C0411, # Starsim: import order
-        C0413, # Starsim: import position
-        E1101, # Starsim: Don't check class membership (dynamic classes)
+        C0411, # Starsim: allow different import order
+        C0412, # Starsim: allow ungrouped imports
+        C0413, # Starsim: allow imports not at the top
+        E1101, # Starsim: don't check class membership (dynamic classes)
         R1705, # Starsim: allow else-return
         R1711, # Starsim: empty return
         R1720, # Starsim: allow else after raise
         R1735, # Starsim: dict literal
-        W0702, # Starsim: Allow bare except
+        W0702, # Starsim: allow bare except
+        W0718, # Starsim: allow general exception
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option
