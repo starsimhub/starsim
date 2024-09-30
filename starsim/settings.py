@@ -4,7 +4,6 @@ All options should be set using set() or directly, e.g.::
 
     ss.options(verbose=False)
 """
-
 import os
 import numpy as np
 import sciris as sc

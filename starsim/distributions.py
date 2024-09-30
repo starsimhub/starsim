@@ -1,7 +1,6 @@
 """
 Define random-number-safe distributions.
 """
-
 import sciris as sc
 import numpy as np
 import numba as nb

@@ -2,7 +2,6 @@
 General module class -- base class for diseases, interventions, etc. Also
 defines Analyzers and Connectors.
 """
-
 import sciris as sc
 import starsim as ss
 from functools import partial

@@ -1,8 +1,6 @@
 """
 Defines the People class and functions associated with making people
 """
-
-# %% Imports
 import numpy as np
 import pandas as pd
 import sciris as sc

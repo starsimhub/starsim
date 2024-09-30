@@ -1,7 +1,6 @@
 """
 Define the calibration class
 """
-
 import os
 import numpy as np
 import pandas as pd
@@ -57,9 +56,11 @@ def compute_gof(actual, predicted, normalize=True, use_frac=False, use_squared=F
             import sklearn.metrics as sm
             sklearn_gof = getattr(sm, skestimator) # Shortcut to e.g. sklearn.metrics.max_error
         except ImportError as E:
-            raise ImportError(f'You must have scikit-learn >=0.22.2 installed: {str(E)}')
+            errormsg = f'You must have scikit-learn >=0.22.2 installed: {str(E)}'
+            raise ImportError(errormsg) from E
         except AttributeError:
-            raise AttributeError(f'Estimator {skestimator} is not available; see https://scikit-learn.org/stable/modules/model_evaluation.html#scoring-parameter for options')
+            errormsg = f'Estimator {skestimator} is not available; see https://scikit-learn.org/stable/modules/model_evaluation.html#scoring-parameter for options'
+            raise AttributeError(errormsg) from E
         gof = sklearn_gof(actual, predicted, **kwargs)
         return gof
 

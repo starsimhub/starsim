@@ -6,7 +6,6 @@ Hierarchy
 - samples: collection of results with same parameters but different seeds
 - dataset: collection of samples (with different parameters)
 """
-
 import io
 import zipfile
 import sciris as sc

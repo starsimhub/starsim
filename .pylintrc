@@ -141,7 +141,7 @@ class-attribute-naming-style=any
 # Regular expression matching correct class attribute names. Overrides class-
 # attribute-naming-style. If left empty, class attribute names will be checked
 # with the set naming style.
-#class-attribute-rgx=
+class-attribute-rgx=[a-z_][a-z0-9_]{0,15}$ # Starsim
 
 # Naming style matching correct class constant names.
 class-const-naming-style=UPPER_CASE
@@ -182,8 +182,7 @@ function-naming-style=snake_case
 good-names=i,
            j,
            k,
-           ex,
-           Run,
+           E,
            _
 
 # Good variable names regexes, separated by a comma. If names match any regex,
@@ -421,7 +420,10 @@ disable=raw-checker-failed,
         suppressed-message,
         useless-suppression,
         deprecated-pragma,
-        use-symbolic-message-instead
+        use-symbolic-message-instead,
+        C0413, # Starsim
+        E221, # Starsim
+        E261 # Starsim
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option

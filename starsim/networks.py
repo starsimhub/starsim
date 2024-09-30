@@ -1,7 +1,6 @@
 """
 Networks that connect people within a population
 """
-
 import networkx as nx
 import numpy as np
 import numba as nb

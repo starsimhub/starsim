@@ -1,12 +1,10 @@
 """
 Result structures.
 """
-
 import numpy as np
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
-
 
 __all__ = ['Result', 'Results']
 

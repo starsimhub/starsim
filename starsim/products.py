@@ -1,7 +1,6 @@
 """
 Define products
 """
-
 import starsim as ss
 import sciris as sc
 import numpy as np

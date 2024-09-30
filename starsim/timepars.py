@@ -1,7 +1,6 @@
 """
 Functions and classes for handling time
 """
-
 import numpy as np
 import sciris as sc
 import starsim as ss

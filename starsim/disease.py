@@ -1,7 +1,6 @@
 """
 Base classes for diseases
 """
-
 import numpy as np
 import sciris as sc
 import starsim as ss

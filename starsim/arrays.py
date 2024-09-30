@@ -1,7 +1,6 @@
 """
 Define array-handling classes, including agent states
 """
-
 import numpy as np
 import sciris as sc
 import starsim as ss

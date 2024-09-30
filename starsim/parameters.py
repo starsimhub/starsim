@@ -1,7 +1,6 @@
 """
 Set parameters
 """
-
 from numbers import Number
 import numpy as np
 import pandas as pd

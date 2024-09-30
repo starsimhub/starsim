@@ -1,7 +1,6 @@
 """
 Define core Sim classes
 """
-
 import itertools
 import numpy as np
 import sciris as sc

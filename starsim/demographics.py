@@ -1,7 +1,6 @@
 """
 Define pregnancy, deaths, migration, etc.
 """
-
 import numpy as np
 import starsim as ss
 import sciris as sc
