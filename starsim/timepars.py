@@ -186,6 +186,7 @@ class TimePar(ss.BaseArr):
 
     def __repr__(self):
         name = self.__class__.__name__
+
         if self.initialized:
             if self.factor == 1.0:
                 xstr = ''
@@ -193,7 +194,13 @@ class TimePar(ss.BaseArr):
                 xstr = f', values={self.values}'
         else:
             xstr = ', initialized=False'
-        return f'ss.{name}({self.v}, unit={self.unit}{xstr})'
+
+        if (self.parent_unit is not None) and (self.unit != self.parent_unit):
+            parentstr = f', parent={self.parent_unit}'
+        else:
+            parentstr = ''
+
+        return f'ss.{name}({self.v}, unit={self.unit}{parentstr}{xstr})'
 
     @property
     def isarray(self):
@@ -228,7 +235,7 @@ class TimePar(ss.BaseArr):
         parent_dt = sc.ifelse(dt, self.parent_dt, self.self_dt)
         new.set(parent_unit=unit, parent_dt=parent_dt, force=True)
         new.v = new.values # Reset the base value to the converted value(s)
-        new.set(unit=unit, self_dt=parent_dt, parent_unit=self.parent_unit, parent_dt=self.parent_dt, force=True) # Reset the parent to match
+        new.set(unit=unit, self_dt=parent_dt, parent_unit=None, parent_dt=None, force=True) # Reset the parent to match
         return new
 
     def to_parent(self):
