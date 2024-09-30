@@ -14,10 +14,10 @@ __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
 class Sim:
     """
     The Sim object
-    
+
     All Starsim simulations run via the Sim class. It is responsible for initializing
     and running all modules and generating results.
-    
+
     Args:
         pars (SimPars/dict): either an ss.SimPars object, or a nested dictionary; can include all other arguments
         label (str): the human-readable name of the simulation
@@ -31,9 +31,9 @@ class Sim:
         copy_inputs (bool): if True, copy modules as they're inserted into the sim (allowing reuse in other sims, but meaning they won't be updated)
         data (df): a dataframe (or dict) of data, with a column "time" plus data of the form "module.result", e.g. "hiv.new_infections" (used for plotting only)
         kwargs (dict): merged with pars
-    
+
     **Examples**::
-        
+
         sim = ss.Sim(diseases='sir', networks='random') # Simplest Starsim sim; equivalent to ss.demo()
         sim = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet()) # Equivalent using objects instead of strings
         sim = ss.Sim(diseases=['sir', ss.SIS()], networks=['random', 'mf']) # Example using list inputs; can mix and match types
@@ -41,12 +41,12 @@ class Sim:
     def __init__(self, pars=None, label=None, people=None, demographics=None, diseases=None, networks=None,
                  interventions=None, analyzers=None, connectors=None, copy_inputs=True, data=None, **kwargs):
         self.pars = ss.make_pars() # Make default parameters (using values from parameters.py)
-        args = dict(label=label, people=people, demographics=demographics, diseases=diseases, networks=networks, 
+        args = dict(label=label, people=people, demographics=demographics, diseases=diseases, networks=networks,
                     interventions=interventions, analyzers=analyzers, connectors=connectors)
         args = {key:val for key,val in args.items() if val is not None} # Remove None inputs
         input_pars = sc.mergedicts(pars, args, kwargs, _copy=copy_inputs)
         self.pars.update(input_pars)  # Update the parameters
-        
+
         # Set attributes; see also sim.init() for more
         self.label = label # Usually overwritten during initialization by the parameters
         self.created = sc.now()  # The datetime the sim was created
@@ -63,15 +63,15 @@ class Sim:
         self.summary = None  # For storing a summary of the results
         self.filename = None # Store the filename, if saved
         return
-    
+
     def __getitem__(self, key):
         """ Allow dict-like access, e.g. sim['diseases'] """
         return getattr(self, key)
-    
+
     def __setitem__(self, key, value):
         """ Allow dict-like access, e.g. sim['created'] = sc.now() """
         return setattr(self, key, value)
-    
+
     def __repr__(self):
         """ Show a quick version of the sim """
         # Try a more custom repr first
@@ -79,7 +79,7 @@ class Sim:
             labelstr = f'{self.label}; ' if self.label else ''
             n = int(self.pars.n_agents)
             timestr = f'{self.pars.start}—{self.pars.stop}'
-            
+
             moddict = {}
             for modkey in ss.module_map().keys():
                 if hasattr(self, modkey):
@@ -88,12 +88,12 @@ class Sim:
                     thismodtype = self.pars[modkey]
                 else:
                     thismodtype = {}
-                    
+
                 if isinstance(thismodtype, dict) and len(thismodtype):
                     moddict[modkey] = sc.strjoin(thismodtype.keys())
                 elif isinstance(thismodtype, str):
                     moddict[modkey] = thismodtype
-                
+
             if len(moddict):
                 modulestr = ''
                 for k,mstr in moddict.items():
@@ -102,16 +102,16 @@ class Sim:
                 modulestr = ''
             if not self.initialized:
                 modulestr += '; not initialized'
-                
+
             string = f'Sim({labelstr}n={n:n}; {timestr}{modulestr})'
-        
+
         # Or just use default
         except Exception as E:
             ss.warn(f'Error displaying custom sim repr, falling back to default: {E}')
             string = sc.prepr(self, vals=False)
-            
+
         return string
-    
+
     @property
     def now(self):
         """ Return the current time, i.e. the time vector at the current timestep """
@@ -121,7 +121,7 @@ class Sim:
         except Exception as E:
             ss.warn(f'Encountered exception in sim when getting the current time: {E}')
             return None
-        
+
     @property
     def modules(self):
         """ Return iterator over all Module instances (stored in standard places) in the Sim """
@@ -134,30 +134,30 @@ class Sim:
             [intv.product for intv in self.interventions() if hasattr(intv, 'product') and intv.product is not None], # TODO: simplify
             self.analyzers(),
         )
-    
+
     def init(self, **kwargs):
         """ Perform all initializations for the sim; most heavy lifting is done by the parameters """
-        
+
         # Validation and initialization
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.validate() # Validate parameters
         self.init_time_attrs() # Initialize time
         self.init_people(**kwargs) # Initialize the people
-        
+
         # Move initialized modules to the sim
         keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
         for key in keys:
             setattr(self, key, self.pars.pop(key))
-            
+
         # Initialize all the modules with the sim
         for mod in self.modules:
             mod.init_pre(self)
-                
+
         # Initialize products # TODO: think about moving with other modules
         for intv in self.interventions():
             if hasattr(intv, 'product'): # TODO: simplify
                 intv.product.init_pre(self)
-        
+
         # Final initializations
         self.init_dists() # Initialize distributions
         self.init_vals() # Initialize the values in all of the states and networks
@@ -170,7 +170,7 @@ class Sim:
         # It's initialized
         self.initialized = True
         return self
-    
+
     def init_time_attrs(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
         pars = self.pars
@@ -181,13 +181,13 @@ class Sim:
         self.ti = 0  # The time index, e.g. 0, 1, 2
         self.dt_year = ss.time_ratio(pars.unit, pars.dt, 'year', 1.0) # Figure out what dt is in years; used for demographics # TODO: handle None
         return
-    
+
     def init_people(self, verbose=None, **kwargs):
         """
         Initialize people within the sim
         Sometimes the people are provided, in which case this just adds a few sim properties to them.
         Other time people are not provided and this method makes them.
-        
+
         Args:
             verbose (int):  detail to print
             kwargs  (dict): passed to ss.make_people()
@@ -221,21 +221,21 @@ class Sim:
 
     def init_vals(self):
         """ Initialize the states and other objects with values """
-        
+
         # Initialize values in people
         self.people.init_vals()
-        
+
         # Initialize values in other modules, including networks and time parameters
         for mod in self.modules:
             mod.init_post()
         return
-    
+
     def reset_time_pars(self, force=True):
         """ Reset the time parameters in the modules; used for imposing the sim's timestep on the modules """
         for mod in self.modules:
             mod.init_time_pars(force=force)
         return
-    
+
     def init_results(self):
         """ Create initial results that are present in all simulations """
         kw = dict(shape=self.npts, timevec=self.timevec, dtype=int, scale=True)
@@ -259,7 +259,7 @@ class Sim:
         if self.complete:
             errormsg = 'Simulation already complete (call sim.init() to re-run)'
             raise AlreadyRunError(errormsg)
-            
+
         # Print out progress if needed
         self.elapsed = self.timer.toc(output=True)
         if self.verbose: # Print progress
@@ -278,16 +278,16 @@ class Sim:
         """ Finish the simulation timestep """
         self.ti += 1
         return
-    
+
     def run_one_step(self, verbose=None):
         """
         Run a single sim step; only used for debugging purposes.
-        
+
         Note: sim.run_one_step() runs a single simulation timestep, which involves
         multiple function calls. In contrast, loop.run_one_step() runs a single
         function call.
-        
-        Note: the verbose here is only for the Loop object, not the sim.        
+
+        Note: the verbose here is only for the Loop object, not the sim.
         """
         self.loop.run(self.now, verbose)
         return self
@@ -309,7 +309,7 @@ class Sim:
 
         # Main simulation loop -- just one line!!!
         self.loop.run(until)
-        
+
         # Check if the simulation is complete
         if self.loop.index == len(self.loop.plan):
             self.complete = True
@@ -346,16 +346,16 @@ class Sim:
 
     def summarize(self, how='default'):
         """
-        Provide a quick summary of the sim; returns the last entry for count and 
+        Provide a quick summary of the sim; returns the last entry for count and
         cumulative results, and the mean otherwise.
-        
+
         Args:
             how (str): how to summarize: can be 'mean', 'median', 'last', or a mapping of result keys to those
         """
         def get_func(key, how, default='mean'):
             """
             Find the right function by matching the "how" key with the result key
-            
+
             For example, hkey="cum_ " will match result key "cum_infections"
             """
             func = None
@@ -366,7 +366,7 @@ class Sim:
             if func is None:
                 func = default
             return func
-            
+
         def get_result(res, func):
             """ Convert a string to the actual function to use, e.g. "median" maps to np.median() """
             if   func == 'mean':   return res.mean()
@@ -374,13 +374,13 @@ class Sim:
             elif func == 'last':   return res[-1]
             elif callable(func):   return func(res)
             else: raise Exception(f'"{func}" is not a valid function')
-        
+
         # Convert "how" from a string to a dict
         if how == 'default':
             how = {'n_':'mean', 'new_':'mean', 'cum_':'last', '':'mean'}
         elif isinstance(how, str):
             how = {'':how} # Match everything
-        
+
         summary = sc.objdict()
         flat = sc.flattendict(self.results, sep='_')
         for key, res in flat.items():
@@ -392,12 +392,12 @@ class Sim:
             summary[key] = entry
         self.summary = summary
         return summary
-    
+
     def disp(self):
         """ Print a full version of the sim """
         sc.pr(self)
         return
-    
+
     def shrink(self, skip_attrs=None, in_place=True):
         """
         "Shrinks" the simulation by removing the people and other memory-intensive
@@ -569,11 +569,11 @@ class Sim:
             output = sc.savejson(filename=filename, obj=d, **kwargs)
 
         return output
-    
+
     def plot(self, key=None, fig=None, style='fancy', show_data=True, fig_kw=None, plot_kw=None, scatter_kw=None):
-        """ 
+        """
         Plot all results in the Sim object
-        
+
         Args:
             key (str/list): the results key to plot (by default, all); if a list, plot exactly those keys
             fig (Figure): if provided, plot results into an existing figure
@@ -595,7 +595,7 @@ class Sim:
 
         # Do the plotting
         with sc.options.with_style(style):
-            
+
             if key is not None:
                 if isinstance(key, str):
                     flat = {k:v for k,v in flat.items() if (key in k)}
@@ -611,7 +611,7 @@ class Sim:
                 axs = fig.axes
             if not sc.isiterable(axs):
                 axs = [axs]
-                
+
             # Do the plotting
             df = self.data if show_data else None # For plotting the data
             for ax, (key, res) in zip(axs, flat.items()):
@@ -632,9 +632,9 @@ class Sim:
                 ax.plot(res.timevec, res.values, **plot_kw, label=self.label)
                 ax.set_title(res.full_label)
                 ax.set_xlabel('Time')
-            
+
         sc.figlayout(fig=fig)
-                
+
         return fig
 
 
@@ -646,17 +646,17 @@ class AlreadyRunError(RuntimeError):
 def demo(run=True, plot=True, summary=True, show=True, **kwargs):
     """
     Create a simple demo simulation for Starsim
-    
+
     Defaults to using the SIR model with a random network, but these can be configured.
-    
+
     Args:
         run (bool): whether to run the sim
         plot (bool): whether to plot the results
         summary (bool): whether to print a summary of the results
         kwargs (dict): passed to ``ss.Sim()``
-    
+
     **Examples**::
-        
+
         ss.demo() # Run, plot, and show results
         ss.demo(diseases='hiv', networks='mf') # Run with different defaults
     """
@@ -696,7 +696,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         s2 = ss.Sim(rand_seed=2).run()
         ss.diff_sims(s1, s2)
     '''
-    
+
     # Convert to dict
     if isinstance(sim1, (Sim, ss.MultiSim)):
         sim1 = sim1.summarize()
@@ -706,8 +706,8 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         if not isinstance(sim, dict):  # pragma: no cover
             errormsg = f'Cannot compare object of type {type(sim)}, must be a sim or a sim.summary dict'
             raise TypeError(errormsg)
-    
-    
+
+
     # Check if it's a multisim
     sim1 = sc.objdict(sim1)
     sim2 = sc.objdict(sim2)
@@ -767,7 +767,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
                 new_sem = d.sim1_sem
                 sem = old_sem + new_sem
                 small_change = 1.96 # 95% CI, roughly speaking
-                
+
             numeric = sc.isnumber(old) and sc.isnumber(new) # Should all be numeric, but just in case
             if numeric and old > 0:
                 this_diff = new - old
@@ -778,7 +778,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
                 else:
                     abs_ratio = max(this_ratio, 1.0/this_ratio)
                     this_zscore = np.nan
-                
+
                 # Set the character to use
                 approx_eq = abs_ratio < small_change
                 if approx_eq:    change_char = '≈'
@@ -819,7 +819,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
             df['zscore'] = zscore
             df['statsig'] = df.zscore > small_change
         valmatchmsg += str(df)
-        
+
     # Raise an error if mismatches were found
     mismatchmsg = keymatchmsg + valmatchmsg
     if mismatchmsg:  # pragma: no cover
@@ -839,13 +839,13 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
 def check_sims_match(*args, full=False):
     """
     Shortcut to using ss.diff_sims() to check if multiple sims match
-    
+
     Args:
         args (list): a list of 2 or more sims to compare
-        full (bool): if True, return whether each sim matches the first 
-    
+        full (bool): if True, return whether each sim matches the first
+
     **Example**::
-        
+
         s1 = ss.Sim(diseases='sir', networks='random')
         s2 = ss.Sim(pars=dict(diseases='sir', networks='random'))
         s3 = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet())
@@ -863,4 +863,4 @@ def check_sims_match(*args, full=False):
         return matches
     else:
         return all(matches)
-        
+

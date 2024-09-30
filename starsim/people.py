@@ -20,7 +20,7 @@ class People(sc.prettyobj):
     will get passed instead since it will be needed before the People object is
     initialized.
 
-    Note that this class handles the mechanics of updating the actual people, 
+    Note that this class handles the mechanics of updating the actual people,
     as well as the additional housekeeping methods (saving, loading, exporting, etc.).
 
     Args:
@@ -34,7 +34,7 @@ class People(sc.prettyobj):
 
     def __init__(self, n_agents, age_data=None, extra_states=None):
         """ Initialize """
-        
+
         # We internally store states in a dict keyed by the memory ID of the state, so that we can have colliding names
         # e.g., across modules, but we will never change the size of a State multiple times in the same iteration over
         # _states. This is a hidden variable because it is internally used to synchronize the size of all States contained
@@ -44,7 +44,7 @@ class People(sc.prettyobj):
         self.version = ss.__version__  # Store version info
         self.initialized = False
 
-        # Handle the three fundamental arrays: UIDs for tracking agents, slots for 
+        # Handle the three fundamental arrays: UIDs for tracking agents, slots for
         # tracking random numbers, and AUIDs for tracking alive agents
         n = int(n_agents)
         uids = ss.uids(np.arange(n))
@@ -57,7 +57,7 @@ class People(sc.prettyobj):
         self.parent.grow(new_uids=uids, new_vals=np.full(len(uids), self.parent.nan))
         for state in [self.uid, self.slot]:
             state.people = self # Manually link to people since we don't want to link to states
-        
+
         # Handle additional states
         extra_states = sc.promotetolist(extra_states)
         states = [
@@ -91,20 +91,20 @@ class People(sc.prettyobj):
             2      195.792
             3      187.442
 
-        The ages will be interpreted as lower bin edges. An upper bin edge will 
-        automatically be added based on the final age plus the difference of the 
-        last two bins. To explicitly control the width of the upper age bin, add 
-        an extra entry to the ``age_data`` with a value of 0 and an age value 
+        The ages will be interpreted as lower bin edges. An upper bin edge will
+        automatically be added based on the final age plus the difference of the
+        last two bins. To explicitly control the width of the upper age bin, add
+        an extra entry to the ``age_data`` with a value of 0 and an age value
         corresponding to the desired upper age bound.
-        
+
         Args:
             age_data: An array/series/dataframe with an index corresponding to age values, and a value corresponding to histogram counts
                          or relative proportions. A distribution will be estimated based on the histogram. The histogram will be
                          assumed to correspond to probability densitiy if the sum of the histogram values is equal to 1, otherwise
                          it will be assumed to correspond to counts.
-        
+
         Note: age_data can also be provided as a string
-        
+
         Returns:
             An ``ss.Dist`` instance that returns an age for newly created agents
         """
@@ -114,7 +114,7 @@ class People(sc.prettyobj):
             # Try loading from file
             if isinstance(age_data, str) or isinstance(age_data, Path):
                 age_data = pd.read_csv(age_data)
-                
+
             # Process
             if isinstance(age_data, np.ndarray): # TODO: accept output of np.histogram()
                 age_bins = age_data[:,0]
@@ -125,10 +125,10 @@ class People(sc.prettyobj):
             elif isinstance(age_data, pd.DataFrame):
                 age_bins = age_data['age'].values
                 age_props = age_data['value'].values
-            
+
             # Convert to a histogram
             dist = ss.histogram(values=age_props, bins=age_bins, name='Age distribution')
-        
+
         return dist
 
     def link_sim(self, sim):
@@ -140,7 +140,7 @@ class People(sc.prettyobj):
         self.timevec = sim.timevec # Also store the timevec in the People object (not used, but for completeness)
         ss.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module])
         return
-    
+
     def add_module(self, module, force=False):
         """
         Add a Module to the People instance
@@ -148,7 +148,7 @@ class People(sc.prettyobj):
         This method is used to add a module to the People. It will register any module states with this
         people instance for dynamic resizing, and expose the states contained in the module to the user
         via `People.states.<module_name>.<state_name>`
-        
+
         The entries created below make it possible to do `sim.people.hiv.susceptible` or
         `sim.people.states['hiv.susceptible']` and have both of them work
         """
@@ -165,7 +165,7 @@ class People(sc.prettyobj):
                 self.states[combined_name] = state # Register the state on the user-facing side using the combined name. Within the original module, it can still be referenced by its original name
                 module_states[state.name] = state
         return
-    
+
     def init_vals(self):
         """ Populate states with initial values, the final step of initialization """
         for state in self.states():
@@ -173,19 +173,19 @@ class People(sc.prettyobj):
                 state.init_vals()
         self.initialized = True
         return
-    
+
     def __bool__(self):
         """ Ensure that zero-length people are still truthy """
         return True
-    
+
     def __len__(self):
         """ Length of people """
         return len(self.auids)
-    
+
     @property
     def n_uids(self):
         return self.uid.len_used
-    
+
     def _link_state(self, state, die=True):
         """
         Link a state with the People instance for dynamic resizing; usually called by
@@ -234,7 +234,7 @@ class People(sc.prettyobj):
         # Grow the states
         for state in self._states.values():
             state.grow(new_uids)
-            
+
         # Finally, update the alive indices
         self.auids = self.auids.concat(new_uids)
         return new_uids
@@ -268,7 +268,7 @@ class People(sc.prettyobj):
         """
         state['_states'] =  {id(v):v for v in state['_states'].values()}
         self.__dict__ = state
-        
+
         return
 
     def scale_flows(self, inds):
@@ -317,7 +317,7 @@ class People(sc.prettyobj):
         """ Carry out any deaths that took place this timestep """
         death_uids = (self.ti_dead <= self.sim.ti).uids
         self.alive[death_uids] = False
-        
+
         # Execute deaths that took place this timestep (i.e., changing the `alive` state of the agents). This is executed
         # before analyzers have run so that analyzers are able to inspect and record outcomes for agents that died this timestep
         for disease in self.sim.diseases():
@@ -341,7 +341,7 @@ class People(sc.prettyobj):
             self.auids = self.auids[np.isin(self.auids, np.unique(uids), assume_unique=True, invert=True, kind='sort')]
 
         return
-    
+
     @property
     def dead(self):
         """ Dead boolean """
@@ -359,13 +359,13 @@ class People(sc.prettyobj):
         res.new_deaths[ti] = np.count_nonzero(self.ti_dead == ti)
         res.cum_deaths[ti] = np.sum(res.new_deaths[:ti]) # TODO: inefficient to compute the cumulative sum on every timestep!
         return
-    
+
     def finish_step(self):
         # self.update_results() # This is called separately
         self.remove_dead()
         self.update_post()
         return
-    
+
     def person(self, ind):
         """ Get all the properties for a single person """
         person = Person()
@@ -374,7 +374,7 @@ class People(sc.prettyobj):
         for key in self.states.keys():
             person[key] = self.states[key][ind]
         return person
-            
+
 
 class Person(sc.objdict):
     """ A simple class to hold all attributes of a person """

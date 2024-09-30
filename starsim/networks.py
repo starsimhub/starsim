@@ -1,6 +1,6 @@
-'''
+"""
 Networks that connect people within a population
-'''
+"""
 
 import networkx as nx
 import numpy as np
@@ -86,11 +86,11 @@ class Network(ss.Module):
         self.participant = ss.BoolArr('participant')
         self.validate_uids()
         return
-    
+
     @property
     def p1(self):
         return self.edges['p1'] if 'p1' in self.edges else None
-    
+
     @property
     def p2(self):
         return self.edges['p2'] if 'p2' in self.edges else None
@@ -150,7 +150,7 @@ class Network(ss.Module):
         states that depend on other states.
         """
         pass
-    
+
     def validate_uids(self):
         """ Ensure that p1, p2 are both UID arrays """
         edges = self.edges
@@ -185,7 +185,7 @@ class Network(ss.Module):
     def get_inds(self, inds, remove=False):
         """
         Get the specified indices from the edgelist and return them as a dict.
-        
+
         Args:
             inds (int, array, slice): the indices to find
             remove (bool): whether to remove the indices
@@ -332,7 +332,7 @@ class DynamicNetwork(Network):
         key_dict = sc.mergedicts({'dur': ss_float_}, key_dict)
         super().__init__(key_dict=key_dict, **kwargs)
         return
-    
+
     def step(self):
         self.end_pairs()
         self.add_pairs()
@@ -422,7 +422,7 @@ class StaticNet(Network):
         if self.pars.p is None: # Convert from n_contacts to probability
             self.pars.p = n_contacts/self.n_agents
         return
-    
+
     def init_post(self):
         super().init_post()
         if 'seed' in self.pars and self.pars.seed is True:
@@ -536,7 +536,7 @@ class RandomNet(DynamicNetwork):
             dur = self.pars.dur.rvs(p1)
         else:
             dur = np.ones(len(p1))*self.pars.dur # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
-        
+
         self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return
 
@@ -597,7 +597,7 @@ class ErdosRenyiNet(DynamicNetwork):
             dur = self.pars.dur.rvs(p1)
         else:
             dur = np.ones(len(p1))*self.pars.dur
-        
+
         self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return
 
@@ -863,7 +863,7 @@ class MSMNet(SexualNetwork):
             act_vals = self.pars.acts.rvs(len(p1))
 
         self.append(p1=p1, p2=p2, beta=np.ones_like(p1), dur=dur, acts=act_vals)
-        
+
         return len(p1)
 
     def step(self):
@@ -947,7 +947,7 @@ class MaternalNet(DynamicNetwork):
         """
         Set beta to 0 for women who complete duration of transmission
         Keep connections for now, might want to consider removing
-        
+
         NB: add_pairs() and end_pairs() are NOT called here; this is done separately
         in ss.Pregnancy.update_states().
         """

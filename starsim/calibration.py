@@ -433,13 +433,13 @@ class Calibration(sc.prettyobj):
         self.calibrated = True
         if not self.run_args.keep_db:
             self.remove_db()
-        
+
         # Optionally compute the sims before and after the fit
         if confirm_fit:
             self.confirm_fit()
 
         return self
-    
+
     def confirm_fit(self):
         """ Run before and after simulations to validate the fit """
 

@@ -157,7 +157,7 @@ class Result(ss.BaseArr):
         if (self.values.min() >= 0) and (plt.ylim()[0]<0): # Don't allow axis to go negative if results don't
             plt.ylim(bottom=0)
         return fig
-    
+
 
 class Results(ss.ndict):
     """ Container for storing results """
@@ -170,7 +170,7 @@ class Results(ss.ndict):
 
     def __repr__(self, *args, **kwargs): # TODO: replace with dataframe summary
         return super().__repr__(*args, **kwargs)
-    
+
     def append(self, arg, key=None):
         """ This is activated by adding as well, e.g. results += result """
         if isinstance(arg, (list, tuple)):
@@ -189,7 +189,7 @@ class Results(ss.ndict):
                 warnmsg = f'You are adding a result from module {result.module} to module {self._module}; check that this is intentional.'
                 ss.warn(warnmsg)
             result.module = self._module
-        
+
         super().append(result, key=key)
         return
 
@@ -204,7 +204,7 @@ class Results(ss.ndict):
         if only_results:
             out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
         return out
-    
+
     def to_df(self, sep='_'):
         """ Merge all results dataframes into one """
         dfs = [res.to_df(sep=sep) for res in self.all_results]

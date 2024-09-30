@@ -17,7 +17,7 @@ atomic_classes = (str, Number, list, np.ndarray, pd.Series, pd.DataFrame, type(N
 class Pars(sc.objdict):
     """
     Dict-like container of parameters
-    
+
     Acts like an ``sc.objdict()``, except that adding new keys are disallowed by
     default, and auto-updates known types.
     """
@@ -30,11 +30,11 @@ class Pars(sc.objdict):
                 raise ValueError(errormsg)
         super().__init__(**kwargs)
         return
-    
+
     def update(self, pars=None, create=False, **kwargs):
         """
         Update internal dict with new pars.
-        
+
         Args:
             pars (dict): the parameters to update (if None, do nothing)
             create (bool): if create is False, then raise a KeyNotFoundError if the key does not already exist
@@ -47,7 +47,7 @@ class Pars(sc.objdict):
             return self
         if not create: # Check if there are any mismatches, which raises an exception if there are
             self.check_key_mismatch(pars)
-        
+
         # Perform the update
         for key,new in pars.items():
             if key not in self.keys(): # It's a new parameter and create=True: update directly
@@ -74,7 +74,7 @@ class Pars(sc.objdict):
                     ss.warn(warnmsg)
                     self[key] = new
         return self
-        
+
     def _update_ndict(self, key, old, new):
         """ Update an ndict object in the parameters, e.g. sim.pars.diseases """
         if not len(old): # It's empty, just overwrite
@@ -87,7 +87,7 @@ class Pars(sc.objdict):
                 errormsg = f'Cannot update an ndict with {type(new)}: must be a dict to set new parameters'
                 raise TypeError(errormsg)
         return
-    
+
     def _update_module(self, key, old, new):
         """ Update a Module object in the parameters, e.g. sim.pars.diseases.sir """
         if isinstance(new, dict):
@@ -96,12 +96,12 @@ class Pars(sc.objdict):
             errormsg = f'Cannot update a module with {type(new)}: must be a dict to set new parameters'
             raise TypeError(errormsg)
         return
-    
+
     def _update_timepar(self, key, old, new):
         """ Update a time parameter (duration or rate) """
-        
+
         # It's a TimePar, e.g. dur_inf = ss.dur(6); use directly
-        if isinstance(new, ss.TimePar): 
+        if isinstance(new, ss.TimePar):
             new_cls = new.__class__
             old_cls = old.__class__
             if new_cls == old_cls:
@@ -109,15 +109,15 @@ class Pars(sc.objdict):
             else:
                 errormsg = f'When updating a time parameter, the new class ({new_cls}) should match the original class ({old_cls})'
                 raise TypeError(errormsg)
-        
+
         # It's a single number, e.g. dur_inf = 6; set parameters
         elif isinstance(new, Number):
             old.set(new)
-        
+
         # It's a list of numbers, e.g. dur_inf = [6, 2]; set parameters
         elif isinstance(new, list):
             old.set(*new)
-        
+
         # It's a dict, figure out what to do
         elif isinstance(new, dict):
             if isinstance(old, ss.beta):
@@ -125,26 +125,26 @@ class Pars(sc.objdict):
             else:
                 old.set(**new)
         return
-    
+
     def _update_dist(self, key, old, new):
         """ Update a Dist object in the parameters, e.g. sim.pars.diseases.sir.dur_inf """
-        
+
         # It's a Dist, e.g. dur_inf = ss.normal(6,2); use directly
-        if isinstance(new, ss.Dist): 
+        if isinstance(new, ss.Dist):
             if isinstance(old, ss.bernoulli) and not isinstance(new, ss.bernoulli):
                 errormsg = f"Bernoulli distributions can't be changed to another type: {type(new)} is invalid"
                 raise TypeError(errormsg)
             else:
                 self[key] = new
-        
+
         # It's a single number, e.g. dur_inf = 6; set parameters
         elif isinstance(new, Number):
             old.set(new)
-        
+
         # It's a list of numbers, e.g. dur_inf = [6, 2]; set parameters
         elif isinstance(new, list):
             old.set(*new)
-        
+
         # It's a dict, figure out what to do
         elif isinstance(new, dict):
             newtype = new.get('type')
@@ -168,12 +168,12 @@ class Pars(sc.objdict):
             errormsg = f'Key(s) {mismatches} not found; available keys are {available_keys}'
             raise sc.KeyNotFoundError(errormsg)
         return
-    
+
     def dict_update(self, *args, **kwargs):
         """ Redefine default dict.update(), since overwritten in this class; should not usually be used """
         super().update(*args, **kwargs)
         return
-    
+
     def to_json(self, **kwargs):
         """ Convert to JSON representation """
         return sc.jsonify(self, **kwargs)
@@ -190,7 +190,7 @@ class SimPars(Pars):
         kwargs (dict): any additional kwargs are interpreted as parameter names
     """
     def __init__(self, **kwargs):
-        
+
         # General parameters
         self.label   = '' # The label of the simulation
         self.verbose = ss.options.verbose # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
@@ -227,7 +227,7 @@ class SimPars(Pars):
         # Update with any supplied parameter values and generate things that need to be generated
         self.update(kwargs)
         return
-    
+
     def is_default(self, key):
         """ Check if the provided value matches the default """
         default_pars = SimPars() # Create a default SimPars object
@@ -241,7 +241,7 @@ class SimPars(Pars):
         self.validate_sim_pars()
         self.validate_modules()
         return
-    
+
     def validate_sim_pars(self):
         """ Validate each of the parameter values """
         self.validate_verbose()
@@ -249,7 +249,7 @@ class SimPars(Pars):
         self.validate_total_pop()
         self.validate_time()
         return
-    
+
     def validate_verbose(self):
         """ Validate verbosity """
         if self.verbose == 'brief':
@@ -258,7 +258,7 @@ class SimPars(Pars):
             errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self.par.verbose)} "{self.par.verbose}"'
             raise ValueError(errormsg)
         return
-    
+
     def validate_agents(self):
         """ Check that n_agents is supplied and convert to an integer """
         if self.people is not None:
@@ -273,7 +273,7 @@ class SimPars(Pars):
             errormsg = 'Must supply n_agents, a people object, or a popdict'
             raise ValueError(errormsg)
         return
-    
+
     def validate_total_pop(self):
         """ Ensure one but not both of total_pop and pop_scale are defined """
         if self.total_pop is not None:  # In future, if no pop_scale has been provided, try to get it from the location
@@ -290,7 +290,7 @@ class SimPars(Pars):
         if self.pop_scale is None:
             self.pop_scale = total_pop / self.n_agents
         return
-    
+
     def validate_time(self):
         """ Ensure at least one of dur and stop is defined, but not both """
         if isinstance(self.start, str):
@@ -313,10 +313,10 @@ class SimPars(Pars):
                 errormsg = 'You must supply either "dur" or "stop".'
                 raise ValueError(errormsg)
         return
-    
+
     def validate_modules(self):
         """ Validate modules passed in pars"""
-        
+
         # Do special validation on demographics (must be before modules are created)
         self.validate_demographics()
 
@@ -336,7 +336,7 @@ class SimPars(Pars):
         # Do special validation on networks (must be after modules are created)
         self.validate_networks()
         return
-    
+
     def validate_demographics(self):
         """ Validate demographics-related input parameters"""
         # Allow shortcut for default demographics # TODO: think about whether we want to enable this, when we have birth_rate and death_rate
@@ -350,7 +350,7 @@ class SimPars(Pars):
         if self.death_rate is not None:
             background_deaths = ss.Deaths(death_rate=self.death_rate)
             self.demographics += background_deaths
-        
+
         # Decide whether to use aging based on if demographics modules are present
         if self.use_aging is None:
             self.use_aging = True if self.demographics else False
@@ -387,7 +387,7 @@ class SimPars(Pars):
         """
         modmap = ss.module_map() # List of modules and parent module classes, e.g. ss.Disease
         modules = ss.find_modules() # Each individual module class option, e.g. ss.SIR
-        
+
         for modkey,ssmoddict in modules.items():
             moddictkeys = ssmoddict.keys()
             moddictvals = ssmoddict.values()
@@ -395,25 +395,25 @@ class SimPars(Pars):
             modlist = self[modkey]
             if isinstance(modlist, list): # Skip over ones that are already ndict format, assume they're already initialized
                 for i,mod in enumerate(modlist):
-                    
+
                     # Convert first from a string to a dict
                     if isinstance(mod, str):
                         mod = dict(type=mod)
-                        
+
                     # Convert from class to class instance (used for interventions and analyzers only)
                     if isinstance(mod, type) and modkey in ['interventions', 'analyzers']:
                         mod = mod() # Call it to create a class instance
-                    
+
                     # Now convert from a dict to a module
                     if isinstance(mod, dict):
-                        
+
                         # Get the module type as a string
                         if 'type' in mod:
                             modtype = mod.pop('type')
                         else:
                             errormsg = f'When specifying a {modkey} module with a dict, one of the keys must be "type"; you supplied {mod}'
                             raise ValueError(errormsg)
-                        
+
                         # Get the module type as a class
                         if isinstance(modtype, str): # Usual case, a string, e.g. dict(type='sir', dur_inf=6)
                             modtype = modtype.lower() # Because our map is in lowercase
@@ -428,17 +428,17 @@ class SimPars(Pars):
                             else:
                                 errormsg = f'Invalid module class "{modtype}" for "{modkey}"; must be one of {moddictvals}'
                                 raise TypeError(errormsg)
-                        
+
                         # Create the module and store it in the list
                         mod = modcls(**mod)
-                    
+
                     # Special handling for interventions and analyzers: convert class and function to class instance
                     if modkey in ['interventions', 'analyzers']:
                         if isinstance(mod, type) and issubclass(mod, expected_cls):
                             mod = mod()  # Convert from a class to an instance of a class
                         elif not isinstance(mod, ss.Module) and callable(mod):
                             mod = expected_cls.from_func(mod)
-                    
+
                     # Do final check
                     if not isinstance(mod, (expected_cls, ss.Module)): # TEMP: check if this check still works?
                         errormsg = f'Was expecting {modkey} entry {i} to be class {expected_cls} or Plugin, but was {type(mod)} instead'

@@ -10,7 +10,7 @@ import starsim as ss
 __all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff', 'make_timevec', 'make_abs_tvec',
            'TimePar', 'dur', 'days', 'years', 'rate', 'perday', 'peryear', 'time_prob', 'beta']
 
-    
+
 #%% Helper functions
 
 # Define available time units
@@ -24,14 +24,14 @@ time_units = sc.dictobj(
 def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0, as_int=False):
     """
     Calculate the relationship between two sets of time factors
-    
+
     Args:
         unit1 (str): units for the numerator
         dt1 (float): timestep for the numerator
         unit2 (str): units for the denominator
         dt2 (float): timestep for the denominator
         as_int (bool): round and convert to an integer
-    
+
     **Example**::
         ss.time_ratio(unit1='week', dt1=2, unit2='day', dt2=1, as_int=True) # Returns 14
     """
@@ -42,7 +42,7 @@ def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0, as_int=False):
             errormsg = f'Cannot convert between dt when one is None ({dt1}, {dt2})'
             raise ValueError(errormsg)
         dt_ratio = dt1/dt2
-    
+
     if unit1 == unit2:
         unit_ratio = 1.0
     else:
@@ -52,7 +52,7 @@ def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0, as_int=False):
         u1 = time_units[unit1]
         u2 = time_units[unit2]
         unit_ratio = u1/u2
-        
+
     factor = dt_ratio * unit_ratio
     if as_int:
         factor = int(round(factor))
@@ -71,7 +71,7 @@ def date_add(start, dur, unit):
             errormsg = f'Unknown unit {unit}, choices are: {sc.strjoin(time_units.keys())}'
             raise ValueError(errormsg)
     return stop
-        
+
 
 def date_diff(start, stop, unit):
     """ Find the difference between two dates (or integers) """
@@ -107,23 +107,23 @@ def make_timevec(start, stop, dt, unit):
 
 def make_abs_tvec(tv, unit, sim_unit):
     """ Convert a module time vector into a numerical time array with the same units as the sim """
-    
+
     # It's an array of days or years: easy
     if sc.isarray(tv):
         ratio = time_ratio(unit1=unit, unit2=sim_unit)
         abstv = tv*ratio # Get the units right
         abstv -= abstv[0] # Start at 0
-    
-    # It's a date: convert to fractional years and then subtract the 
+
+    # It's a date: convert to fractional years and then subtract the
     else:
         yearvec = [sc.datetoyear(d) for d in tv]
         absyearvec = np.array(yearvec) - yearvec[0] # Subtract start date
         abstv = absyearvec*time_ratio(unit1='year', unit2=sim_unit)
-    
+
     # Round to the value of epsilon; alternative to np.round(abstv/eps)*eps, which has floating point error
     decimals = int(-np.log10(ss.options.time_eps))
     abstv = np.round(abstv, decimals=decimals)
-        
+
     return abstv
 
 
@@ -132,22 +132,22 @@ def make_abs_tvec(tv, unit, sim_unit):
 class TimePar(ss.BaseArr):
     """
     Base class for time-aware parameters, durations and rates
-    
+
     NB, because the factor needs to be recalculated, do not set values directly.
     """
     def __new__(cls, v=None, *args, **kwargs):
         """ Allow TimePars to wrap distributions and return the distributions """
-        
+
         # Special distribution handling
         if isinstance(v, ss.Dist):
             dist = v
             dist.pars[0] = cls(dist.pars[0], *args, **kwargs) # Convert the first parameter to a TimePar (the same scale is applied to all parameters)
             return dist
-        
+
         # Otherwise, do the usual initialization
         else:
             return super().__new__(cls)
-    
+
     def __init__(self, v, unit=None, parent_unit=None, parent_dt=None, self_dt=1.0):
         self.v = v
         self.unit = unit
@@ -159,7 +159,7 @@ class TimePar(ss.BaseArr):
         self.parent_name = None
         self.initialized = False
         return
-    
+
     def init(self, parent=None, parent_unit=None, parent_dt=None):
         """ Link to the sim and/or module units """
         if parent is None:
@@ -169,22 +169,22 @@ class TimePar(ss.BaseArr):
                 errormsg = f'Cannot override parent {parent} by setting parent_dt; set in parent object instead'
                 raise ValueError(errormsg)
             self.parent_name = parent.__class__.__name__ # TODO: or parent.name for Starsim objects?
-        
+
         if parent.unit is not None:
             self.parent_unit = parent.unit
-            
+
         if parent.dt is not None:
            self.parent_dt = parent.dt
-        
+
         # Set defaults if not yet set
         self.unit = sc.ifelse(self.unit, self.parent_unit)
         self.parent_dt = sc.ifelse(self.parent_dt, self.self_dt, 1.0)
-        
+
         # Calculate the actual conversion factor to be used in the calculations
         self.update_cached()
         self.initialized = True
         return self
-        
+
     def __repr__(self):
         name = self.__class__.__name__
         if self.initialized:
@@ -216,7 +216,7 @@ class TimePar(ss.BaseArr):
         self.update_factor()
         self.update_values()
         return self
-    
+
     def update_factor(self):
         """ Set factor used to multiply the value to get the output """
         self.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=self.parent_unit, dt2=self.parent_dt)
@@ -244,20 +244,20 @@ class TimePar(ss.BaseArr):
     def __mul__(self, other): return self.asnew().set(v=self.v * other)
     def __pow__(self, other): return self.values ** other
     def __truediv__(self, other): return self.asnew().set(v=self.v / other)
-    
+
     # ...from either side
     def __radd__(self, other): return other + self.values
     def __rsub__(self, other): return other - self.values
     def __rmul__(self, other): return self.asnew().set(v= other * self.v)
     def __rpow__(self, other): return other ** self.values
     def __rtruediv__(self, other): return other / self.values # TODO: should be a rate?
-    
+
     # Handle modify-in-place methods
     def __iadd__(self, other): return self.set(v=self.v + other)
     def __isub__(self, other): return self.set(v=self.v - other)
     def __imul__(self, other): return self.set(v=self.v * other)
     def __itruediv__(self, other): return self.set(v=self.v / other)
-    
+
     # Other methods
     def __neg__(self): return self.asnew().set(v=-self.v)
 
@@ -325,9 +325,8 @@ class time_prob(TimePar):
                 errormsg = f'Invalid value {self.value} for {self}: must be 0-1'
                 raise ValueError(errormsg)
         return
-        
-    
+
+
 class beta(time_prob):
     """ A container for beta (i.e. the disease transmission rate) """
     pass
-    

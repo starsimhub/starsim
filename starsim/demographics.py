@@ -173,7 +173,7 @@ class Deaths(Demographics):
         self.pars.death_rate = ss.bernoulli(p=self.make_death_prob_fn)
         self.n_deaths = 0 # For results tracking
         return
-    
+
     def standardize_death_data(self):
         """ Standardize/validate death rates - handled in an external file due to shared functionality """
         death_rate = ss.standardize_data(data=self.pars.death_rate, metadata=self.metadata)
@@ -236,7 +236,7 @@ class Deaths(Demographics):
         self.sim.people.request_death(death_uids)
         self.n_deaths = len(death_uids)
         return self.n_deaths
-    
+
     def update_results(self):
         self.results['new'][self.ti] = self.n_deaths
         return
@@ -269,7 +269,7 @@ class Pregnancy(Demographics):
         self.update_pars(pars, **kwargs)
 
         self.pars.p_fertility = ss.bernoulli(p=0) # Placeholder, see make_fertility_prob_fn
-        
+
         # Other, e.g. postpartum, on contraception...
         self.define_states(
             ss.State('fecund', default=True, label='Female of childbearing age'),
