@@ -55,8 +55,8 @@ def save_baseline():
     # Export results
     sim.to_json(filename=baseline_filename, keys='summary')
     
-    # CK: To restore once export_pars is fixed
-    # sim.export_pars(filename=parameters_filename) # If not different from previous version, can safely delete
+    # # Save parameters
+    # sim.to_json(filename=parameters_filename, keys='pars') # If not different from previous version, can safely delete
 
     print('Done.')
     return

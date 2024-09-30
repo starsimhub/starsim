@@ -237,6 +237,14 @@ class TimePar(ss.BaseArr):
         dt = self.parent_dt
         return self.to(unit=unit, dt=dt)
 
+    def to_json(self):
+        """ Export to JSON """
+        attrs = ['v', 'unit', 'parent_unit', 'parent_dt', 'parent_name', 'self_dt', 'factor']
+        out = {'classname': self.__class__.__name__}
+        out.update({attr:getattr(self, attr) for attr in attrs})
+        out['values'] = sc.jsonify(self.values)
+        return out
+
     # Act like a float -- TODO, add type checking
     def __add__(self, other): return self.values + other
     def __sub__(self, other): return self.values - other

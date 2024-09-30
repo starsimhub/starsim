@@ -233,21 +233,8 @@ class Dist:
 
     def __repr__(self):
         """ Custom display to show state of object """
-        tracestr = '<no trace>' if self.trace is None else f"{self.trace}"
-        classname = self.__class__.__name__
-        diststr = ''
-        if classname == 'Dist':
-            if self.dist is not None:
-                try:
-                    diststr = f'dist={self.dist.name}, '
-                except:
-                    try: # What is wrong with you, SciPy -- after initialization, it moves here
-                        diststr = f'dist={self.dist.dist.name}, '
-                    except:
-                        diststr = f'dist={type(self.dist)}'
-            elif self.distname is not None:
-                diststr = f'dist={self.distname}, '
-        string = f'ss.{classname}({tracestr}, {diststr}pars={dict(self.pars)})'
+        j = sc.dictobj(self.to_json())
+        string = f'ss.{j.classname}({j.tracestr}, {j.diststr}pars={j.pars})'
         return string
 
     def disp(self):
@@ -633,6 +620,32 @@ class Dist:
             assert pre_state != post_state # Always an error if the state doesn't change after drawing random numbers
 
         return rvs
+
+    def to_json(self):
+        """ Return a dictionary representation of the Dist """
+        tracestr = '<no trace>' if self.trace is None else f"{self.trace}"
+        classname = self.__class__.__name__
+        diststr = ''
+        if classname == 'Dist':
+            if self.dist is not None:
+                try:
+                    diststr = f'dist={self.dist.name}, '
+                except:
+                    try: # What is wrong with you, SciPy -- after initialization, it moves here
+                        diststr = f'dist={self.dist.dist.name}, '
+                    except:
+                        diststr = f'dist={type(self.dist)}'
+            elif self.distname is not None:
+                diststr = f'dist={self.distname}, '
+        out = dict(
+            type = 'Dist',
+            classname = classname,
+            tracestr = tracestr,
+            diststr = diststr,
+            pars = dict(self.pars),
+        )
+        return out
+
 
     def plot_hist(self, n=1000, bins=None, fig_kw=None, hist_kw=None):
         """ Plot the current state of the RNG as a histogram """

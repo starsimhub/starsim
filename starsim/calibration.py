@@ -13,7 +13,8 @@ import starsim as ss
 __all__ = ['Calibration', 'compute_gof']
 
 
-def compute_gof(actual, predicted, normalize=True, use_frac=False, use_squared=False, as_scalar='none', eps=1e-9, skestimator=None, estimator=None, **kwargs):
+def compute_gof(actual, predicted, normalize=True, use_frac=False, use_squared=False,
+                as_scalar='none', eps=1e-9, skestimator=None, estimator=None, **kwargs):
     """
     Calculate the goodness of fit. By default use normalized absolute error, but
     highly customizable. For example, mean squared error is equivalent to
@@ -58,7 +59,7 @@ def compute_gof(actual, predicted, normalize=True, use_frac=False, use_squared=F
         except ImportError as E:
             errormsg = f'You must have scikit-learn >=0.22.2 installed: {str(E)}'
             raise ImportError(errormsg) from E
-        except AttributeError:
+        except AttributeError as E:
             errormsg = f'Estimator {skestimator} is not available; see https://scikit-learn.org/stable/modules/model_evaluation.html#scoring-parameter for options'
             raise AttributeError(errormsg) from E
         gof = sklearn_gof(actual, predicted, **kwargs)
@@ -80,7 +81,7 @@ def compute_gof(actual, predicted, normalize=True, use_frac=False, use_squared=F
 
         if normalize and not use_frac:
             actual_max = abs(actual).max()
-            if actual_max>0:
+            if actual_max > 0:
                 gofs /= actual_max
 
         if use_frac:
@@ -103,7 +104,7 @@ def compute_gof(actual, predicted, normalize=True, use_frac=False, use_squared=F
         return gofs
 
 
-class Calibration(sc.prettyobj):
+class Calibration(sc.prettyobj): # pragma: no cover
     """
     A class to handle calibration of Starsim simulations. Uses the Optuna hyperparameter
     optimization library (optuna.org).
@@ -118,7 +119,6 @@ class Calibration(sc.prettyobj):
         reseed       (bool) : whether to generate new random seeds for each trial
         weights      (dict) : the relative weights of each data source
         fit_args     (dict) : a dictionary of options that are passed to sim.compute_fit() to calculate the goodness-of-fit
-        estimator    (func) : a custom estimator to use for computing the goodness-of-fit
         sep          (str)  : the separate between different types of results, e.g. 'hiv.deaths' vs 'hiv_deaths'
         name         (str)  : the name of the database (default: 'starsim_calibration')
         db_name      (str)  : the name of the database file (default: 'starsim_calibration.db')
@@ -134,8 +134,8 @@ class Calibration(sc.prettyobj):
         A Calibration object
     """
     def __init__(self, sim, data, calib_pars, n_trials=None, n_workers=None, total_trials=None, reseed=True,
-                 weights=None, fit_args=None, estimator=None, sep='.', name=None, db_name=None, keep_db=None,
-                 storage=None, rand_seed=None, sampler=None, label=None, die=False, debug=False, verbose=True):
+                 weights=None, fit_args=None, sep='.', name=None, db_name=None, keep_db=None, storage=None,
+                 rand_seed=None, sampler=None, label=None, die=False, debug=False, verbose=True):
 
         # Handle run arguments
         if n_trials  is None: n_trials  = 20
@@ -210,12 +210,12 @@ class Calibration(sc.prettyobj):
                 continue
 
             if 'path' not in spec:
-                raise Exception(f'Cannot map {parname} because "path" is missing from the parameter configuration.')
+                raise ValueError(f'Cannot map {parname} because "path" is missing from the parameter configuration.')
 
             p = spec['path']
 
             if len(p) != 3:
-                raise Exception(f'Cannot map {parname} because "path" must be a tuple of length 3.')
+                raise ValueError(f'Cannot map {parname} because "path" must be a tuple of length 3.')
 
             modtype = p[0]
             dkey = p[1]

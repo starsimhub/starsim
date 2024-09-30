@@ -488,41 +488,8 @@ class Sim:
             raise TypeError(errormsg)
         return sim
 
-    def export_pars(self, filename=None, indent=2, *args, **kwargs):
-        '''
-        Return parameters for JSON export -- see also to_json().
-
-        This method is required so that interventions can specify
-        their JSON-friendly representation.
-
-        Args:
-            filename (str): filename to save to; if None, do not save
-            indent (int): indent (int): if writing to file, how many indents to use per nested level
-            args (list): passed to sc.jsonify()
-            kwargs (dict): passed to savejson()
-
-        Returns:
-            pardict (dict): a dictionary containing all the parameter values
-        '''
-        pardict = {}
-        for key,item in self.pars.items():
-            if key in ss.module_map().keys():
-                if np.iterable(item):
-                    item = [mod.to_json() for mod in item]
-                else:
-                    try:
-                        item = item.to_json()
-                    except:
-                        pass
-            elif key == 'people':
-                continue
-            pardict[key] = item
-        if filename is not None:
-            sc.savejson(filename=filename, obj=pardict, indent=indent, *args, **kwargs)
-        return pardict
-
     def to_json(self, filename=None, keys=None, tostring=False, indent=2, verbose=False, **kwargs):
-        '''
+        """
         Export results and parameters as JSON.
 
         Args:
@@ -532,16 +499,15 @@ class Sim:
             kwargs (dict): passed to sc.jsonify()
 
         Returns:
-            A unicode string containing a JSON representation of the results,
-            or writes the JSON file to disk
+            A dictionary representation of the parameters and/or summary results
+            (or write that dictionary to a file)
 
         **Examples**::
 
             json = sim.to_json()
             sim.to_json('results.json')
             sim.to_json('summary.json', keys='summary')
-        '''
-
+        """
         # Handle keys
         if keys is None:
             keys = ['pars', 'summary']
@@ -551,8 +517,8 @@ class Sim:
         d = sc.objdict()
         for key in keys:
             if key in ['pars', 'parameters']:
-                pardict = self.export_pars()
-                d.parameters = pardict
+                pardict = self.pars.to_json()
+                d.pars = pardict
             elif key == 'summary':
                 if self.results_ready:
                     d.summary = dict(sc.dcp(self.summary))
@@ -562,12 +528,11 @@ class Sim:
                 errormsg = f'Could not convert "{key}" to JSON; continuing...'
                 print(errormsg)
 
-        if filename is None:
-            output = sc.jsonify(d, **kwargs)
-        else:
-            output = sc.savejson(filename=filename, obj=d, **kwargs)
-
-        return output
+        # Final conversion
+        if filename is not None:
+            sc.savejson(filename=filename, obj=d, **kwargs)
+        d = sc.jsonify(d)
+        return d
 
     def plot(self, key=None, fig=None, style='fancy', show_data=True, fig_kw=None, plot_kw=None, scatter_kw=None):
         """

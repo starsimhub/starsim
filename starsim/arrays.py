@@ -145,6 +145,14 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
         self.__dict__.update(kwargs) # Actually perform the update
         return self
 
+    def to_json(self):
+        """ Return a dictionary representation of the Arr """
+        out = dict(
+            classname = self.__class__.__name__,
+            values = sc.jsonify(self.values),
+        )
+        return out
+
 
 class Arr(BaseArr):
     """
@@ -371,6 +379,19 @@ class Arr(BaseArr):
     def false(self):
         """ Reverse of true(); return UIDs of falsy values """
         return self.auids[~self.values.astype(bool)]
+
+    def to_json(self):
+        """ Export to JSON """
+        out = dict(
+            classname = self.__class__.__name__,
+            name = self.name,
+            label = self.label,
+            default = self.default,
+            nan = self.nan,
+            dtype = self.dtype,
+            values = sc.jsonify(self.values),
+        )
+        return out
 
 
 class FloatArr(Arr):

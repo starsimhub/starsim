@@ -175,7 +175,7 @@ class Pars(sc.objdict):
 
     def to_json(self, **kwargs):
         """ Convert to JSON representation """
-        return sc.jsonify(self, **kwargs)
+        return sc.jsonify(dict(self), **kwargs)
 
 
 class SimPars(Pars):
