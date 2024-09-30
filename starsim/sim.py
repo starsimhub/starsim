@@ -383,12 +383,13 @@ class Sim:
         summary = sc.objdict()
         flat = sc.flattendict(self.results, sep='_')
         for key, res in flat.items():
-            try:
-                func = get_func(key, how)
-                entry = get_result(res, func)
-            except Exception as E:
-                entry = f'N/A {E}'
-            summary[key] = entry
+            if '_timevec' not in key: # Skip module-specific time vectors
+                try:
+                    func = get_func(key, how)
+                    entry = get_result(res, func)
+                except Exception as E:
+                    entry = f'N/A {E}'
+                summary[key] = entry
         self.summary = summary
         return summary
 
