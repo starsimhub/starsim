@@ -421,9 +421,9 @@ disable=raw-checker-failed,
         useless-suppression,
         deprecated-pragma,
         use-symbolic-message-instead,
-        C0413, # Starsim
-        E221, # Starsim
-        E261 # Starsim
+        C0321, # Starsim: multiple statements on a line
+        C0413, # Starsim: import position
+        R1711 # Starsim: empty return
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option

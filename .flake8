@@ -1,2 +1,7 @@
+# Custom settings for Starsim. Disables:
+# E221: allow multiple spaces before operator
+# E261: allow one space before comment
+# E272: allow multiple spaces before keyword
+
 [flake8]
-ignore = E221, E261
+ignore = E221, E261, E272
