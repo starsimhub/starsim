@@ -447,4 +447,5 @@ class SimPars(Pars):
 
 
 def make_pars(**kwargs):
+    """ Shortcut for making a new instance of SimPars """
     return SimPars(**kwargs)

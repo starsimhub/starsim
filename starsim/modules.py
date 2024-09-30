@@ -45,13 +45,35 @@ def find_modules(key=None, flat=False):
 
 
 class Module(sc.quickobj):
+    """
+    The main base class for all Starsim modules: diseases, networks, interventions, etc.
+
+    Args:
+        name (str): a short, key-like name for the module (e.g. "randomnet")
+        label (str): the full, human-readable name for the module (e.g. "Random network")
+        unit (str): the time unit (e.g. 'day', 'year'); inherits from sim if not supplied
+        dt (float): the timestep (e.g. 1.0, 0.1); inherits from sim if not supplied
+    """
 
     def __init__(self, name=None, label=None, unit=None, dt=None):
+        # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
         self.set_time_pars(unit, dt)
+
+        # Properties to be added by init_pre()
+        self.sim = None
         self.dists = None # Turned into a Dists object by sim.init_dists() if this module has dists
         self.results = ss.Results(self.name)
+
+        # Time properties, added by init_time_pars()
+        self.unit = None
+        self.dt = None
+        self.timevec = None
+        self.npts = None
+        self.ti = None
+
+        # Finish initialization
         self.pre_initialized = False
         self.initialized = False
         self.finalized = False

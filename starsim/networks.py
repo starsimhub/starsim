@@ -88,14 +88,17 @@ class Network(ss.Module):
 
     @property
     def p1(self):
+        """ The first half of a network edge (person 1) """
         return self.edges['p1'] if 'p1' in self.edges else None
 
     @property
     def p2(self):
+        """ The second half of a network edge (person 2) """
         return self.edges['p2'] if 'p2' in self.edges else None
 
     @property
     def beta(self):
+        """ Relative transmission on each network edge """
         return self.edges['beta'] if 'beta' in self.edges else None
 
     def init_post(self, add_pairs=True):
