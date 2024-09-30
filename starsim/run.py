@@ -22,11 +22,9 @@ class MultiSim:
         inplace (bool): whether to modify the sims in-place (default True); else return new sims
         kwargs (dict): stored in run_args and passed to run()
     """
-
-    def __init__(self, sims=None, base_sim=None, label=None, n_runs=4, initialize=False, inplace=True, *args, **kwargs):
-
+    def __init__(self, sims=None, base_sim=None, label=None, n_runs=4, initialize=False, inplace=True, **kwargs):
         # Handle inputs
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
         if base_sim is None:
             if isinstance(sims, ss.Sim):
                 base_sim = sims
@@ -44,6 +42,7 @@ class MultiSim:
         self.label = base_sim.label if (label is None and base_sim is not None) else label
         self.run_args = sc.mergedicts(dict(n_runs=n_runs, inplace=inplace), kwargs)
         self.results = None
+        self.summary = None
         self.which = None  # Whether the multisim is to be reduced, combined, etc.
         self.timer = sc.timer() # Create a timer
 
@@ -76,8 +75,7 @@ class MultiSim:
         return
 
     def show(self, output=False):
-        """ Show more detail than print(multisim), but less than multisim.disp() """
-        '''
+        """
         Print a moderate length summary of the MultiSim. See also multisim.disp()
         (detailed output) and multisim.brief() (short output).
 
@@ -89,7 +87,7 @@ class MultiSim:
             msim = ss.MultiSim(ss.demo(run=False), label='Example multisim')
             msim.run()
             msim.show() # Prints moderate length output
-        '''
+        """
         labelstr = f' "{self.label}"' if self.label else ''
         simlenstr = f'{len(self)}'
         string  = f'MultiSim{labelstr} summary:\n'
@@ -102,6 +100,7 @@ class MultiSim:
                 string += f'    {s}: {sim}\n'
         if not output:
             print(string)
+            return
         else:
             return string
 
@@ -230,7 +229,7 @@ class MultiSim:
                 except Exception as E:
                     errormsg = (f'Could not figure out how to convert {quantiles} into a quantiles object:'
                                 f' must be a dict with keys low, high or a 2-element array ({str(E)})')
-                    raise ValueError(errormsg)
+                    raise ValueError(errormsg) from E
 
         # Store information on the sims
         n_runs = len(self)

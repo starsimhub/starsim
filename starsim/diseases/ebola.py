@@ -22,7 +22,7 @@ class Ebola(SIR):
             beta            = ss.beta(1.0), # Placeholder value
             sev_factor      = 2.2,
             unburied_factor = 2.1,
-            
+
             # Natural history parameters, all specified in days
             dur_exp2symp    = ss.lognorm_ex(mean=ss.days(12.7)), # Add source
             dur_symp2sev    = ss.lognorm_ex(mean=ss.days(6)), # Add source
@@ -35,7 +35,7 @@ class Ebola(SIR):
             p_safe_bury     = ss.bernoulli(p=0.25), # Probability of a safe burial - should be linked to diagnoses
         )
         self.update_pars(pars=pars, **kwargs)
-        
+
         # Boolean states
         self.define_states(
             # SIR are added automatically, here we add E
@@ -43,7 +43,7 @@ class Ebola(SIR):
             ss.State('severe', label='Severe'),
             ss.State('recovered', label='Recovered'),
             ss.State('buried', label='Buried'),
-    
+
             # Timepoint states
             ss.FloatArr('ti_exposed', label='Time of exposure'),
             ss.FloatArr('ti_severe', label='Time of severe symptoms'),
@@ -87,7 +87,7 @@ class Ebola(SIR):
         # Progress dead -> buried
         buried = (self.ti_buried <= ti).uids
         self.buried[buried] = True
-        
+
         return
 
     def set_prognoses(self, uids, source_uids=None):

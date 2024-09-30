@@ -53,7 +53,7 @@ class HIV(ss.Infection):
 
         can_die = people.hiv.infected.uids
         hiv_deaths = self.pars.death_dist.filter(can_die)
-        
+
         people.request_death(hiv_deaths)
         self.ti_dead[hiv_deaths] = self.ti
         return
@@ -70,7 +70,7 @@ class HIV(ss.Infection):
         super().update_results()
         ti = self.ti
         self.results['new_deaths'][ti] = np.count_nonzero(self.ti_dead == ti)
-        return 
+        return
 
     def set_prognoses(self, uids, source_uids=None):
         super().set_prognoses(uids, source_uids)

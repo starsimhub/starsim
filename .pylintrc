@@ -121,7 +121,7 @@ attr-naming-style=snake_case
 # Regular expression matching correct attribute names. Overrides attr-naming-
 # style. If left empty, attribute names will be checked with the set naming
 # style.
-#attr-rgx=
+attr-rgx=[a-z_][a-z0-9_]{0,15}$ # Starsim
 
 # Bad variable names which should always be refused, separated by a comma.
 bad-names=foo,
@@ -156,7 +156,7 @@ class-naming-style=PascalCase
 
 # Regular expression matching correct class names. Overrides class-naming-
 # style. If left empty, class names will be checked with the set naming style.
-#class-rgx=
+class-rgx==[a-zA-Z_][a-zA-Z0-9_]{0,15}$ # Starsim
 
 # Naming style matching correct constant names.
 const-naming-style=UPPER_CASE
@@ -286,10 +286,10 @@ max-attributes=20 # Starsim
 max-bool-expr=5
 
 # Maximum number of branch for function / method body.
-max-branches=12
+max-branches=15 # Starsim
 
 # Maximum number of locals for function / method body.
-max-locals=15
+max-locals=20 # Starsim
 
 # Maximum number of parents for a class (see R0901).
 max-parents=7
@@ -298,10 +298,10 @@ max-parents=7
 max-public-methods=20
 
 # Maximum number of return / yield for function / method body.
-max-returns=6
+max-returns=5 # Starsim
 
 # Maximum number of statements in function / method body.
-max-statements=50
+max-statements=200 # Starsim
 
 # Minimum number of public methods for a class (see R0903).
 min-public-methods=2
@@ -340,7 +340,7 @@ single-line-class-stmt=no
 
 # Allow the body of an if to be on the same line as the test if there is no
 # else.
-single-line-if-stmt=no
+single-line-if-stmt=yes # Starsim
 
 
 [IMPORTS]
@@ -353,7 +353,7 @@ allow-any-import-level=
 allow-reexport-from-package=no
 
 # Allow wildcard imports from modules that define __all__.
-allow-wildcard-with-all=no
+allow-wildcard-with-all=yes # Starsim
 
 # Deprecated modules which should not be used, separated by a comma.
 deprecated-modules=
@@ -422,8 +422,14 @@ disable=raw-checker-failed,
         deprecated-pragma,
         use-symbolic-message-instead,
         C0321, # Starsim: multiple statements on a line
+        C0325, # Starsim: allow parentheses in if
+        C0411, # Starsim: import order
         C0413, # Starsim: import position
-        R1711 # Starsim: empty return
+        R1705, # Starsim: allow else-return
+        R1711, # Starsim: empty return
+        R1720, # Starsim: allow else after raise
+        R1735, # Starsim: dict literal
+        W0702, # Starsim: Allow bare except
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option

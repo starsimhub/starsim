@@ -21,7 +21,7 @@ class Gonorrhea(ss.Infection):
             init_prev = ss.bernoulli(p=0.1),
         )
         self.update_pars(pars=pars, **kwargs)
-        
+
         # States additional to the default disease states (see base class)
         # Additional states dependent on parameter values, e.g. self.p_symp?
         # These might be useful for connectors to target, e.g. if HIV reduces p_clear
@@ -30,7 +30,7 @@ class Gonorrhea(ss.Infection):
             ss.FloatArr('ti_clearance', label='Time of clearance'),
             ss.FloatArr('p_symp', default=1, label='Probability of symptoms'),
         )
-        
+
         return
 
     def init_results(self):

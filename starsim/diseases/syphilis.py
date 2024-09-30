@@ -19,7 +19,7 @@ class Syphilis(ss.Infection):
             # Initial conditions
             beta = ss.beta(1.0), # Placeholder
             init_prev = ss.bernoulli(p=0.03),
-            
+
             # Adult syphilis natural history, all specified in years
             dur_exposed = ss.lognorm_ex(mean=1 / 12, std=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_primary = ss.lognorm_ex(mean=1.5 / 12, std=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
@@ -67,7 +67,7 @@ class Syphilis(ss.Infection):
             ss.BoolArr('ever_exposed', label="Ever exposed", track_time=False),  # Anyone ever exposed - stays true after treatment
             ss.BoolArr('congenital'),  # Congenital syphilis states
         )
-        
+
         self.define_events(
             ss.Event(src='susceptible', dest=['exposed', 'infected', 'ever_exposed'], func=self.infect),
             ss.Event('exposed -> primary', func=self.to_primary),
@@ -77,7 +77,7 @@ class Syphilis(ss.Infection):
             ss.Event('secondary -> latent_long', func=self.to_latent_long),
             ss.Event('latent_long -> tertiary', func=self.to_tertiary),
         )
-    
+
         # Timestep of state changes -- not all will be needed in future
         self.define_attrs(
             ss.FloatArr('ti_miscarriage', label='Time of miscarriage'),
@@ -86,7 +86,7 @@ class Syphilis(ss.Infection):
             ss.FloatArr('ti_congenital', label='Time of congenital syphilis'),
         )
         return
-    
+
     def __init__(self, pars=None, **kwargs):
         # Parameters
         super().__init__()
@@ -94,7 +94,7 @@ class Syphilis(ss.Infection):
             # Initial conditions
             beta = 1.0, # Placeholder
             init_prev = ss.bernoulli(p=0.03),
-            
+
             # Adult syphilis natural history, all specified in years
             dur_exposed = ss.lognorm_ex(mean=1 / 12, std=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             dur_primary = ss.lognorm_ex(mean=1.5 / 12, std=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
@@ -103,7 +103,7 @@ class Syphilis(ss.Infection):
             dur_latent_long = ss.lognorm_ex(mean=20, std=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_latent_temp = ss.bernoulli(p=0.25),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_tertiary = ss.bernoulli(p=0.35),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
-    
+
             # Transmission by stage
             rel_trans = dict(
                 exposed=1,
@@ -113,7 +113,7 @@ class Syphilis(ss.Infection):
                 latent_long=0.075,
                 tertiary=0.05,
             ),
-    
+
             # Congenital syphilis outcomes
             # Birth outcomes coded as:
             #   0: Neonatal death
@@ -128,7 +128,7 @@ class Syphilis(ss.Infection):
             birth_outcome_keys = ['miscarriage', 'nnd', 'stillborn', 'congenital'],
         )
         self.update_pars(pars, **kwargs)
-    
+
         self.define_states(
             # Adult syphilis states
             ss.State('exposed', label='Exposed'),  # AKA incubating. Free of symptoms, not transmissible
@@ -140,7 +140,7 @@ class Syphilis(ss.Infection):
             ss.State('immune', label="Immune"),  # After effective treatment people may acquire temp immunity
             ss.State('ever_exposed', label="Ever exposed"),  # Anyone ever exposed - stays true after treatment
             ss.State('congenital', label="Congenital"),  # Congenital syphilis states
-    
+
             # Timestep of state changes
             ss.FloatArr('ti_exposed', label='Time of exposure'),
             ss.FloatArr('ti_primary', label='Time of primary'),
@@ -154,7 +154,7 @@ class Syphilis(ss.Infection):
             ss.FloatArr('ti_stillborn', label='Time of stillborn'),
             ss.FloatArr('ti_congenital', label='Time of congenital syphilis'),
         )
-    
+
         return
 
     @property
@@ -265,7 +265,7 @@ class Syphilis(ss.Infection):
         """
         Set initial prognoses for adults newly infected with syphilis
         """
-        
+
         ti = self.ti
 
         self.susceptible[uids] = False
