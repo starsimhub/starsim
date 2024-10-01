@@ -20,9 +20,11 @@ class MultiSim:
         n_runs (int): if a single sim is provided, the number of replicates (default 4)
         initialize (bool): whether or not to initialize the sims (otherwise, initialize them during run)
         inplace (bool): whether to modify the sims in-place (default True); else return new sims
+        debug (bool): if True, run in serial
         kwargs (dict): stored in run_args and passed to run()
     """
-    def __init__(self, sims=None, base_sim=None, label=None, n_runs=4, initialize=False, inplace=True, **kwargs):
+    def __init__(self, sims=None, base_sim=None, label=None, n_runs=4, initialize=False,
+                 inplace=True, debug=False, **kwargs):
         # Handle inputs
         super().__init__(**kwargs)
         if base_sim is None:
@@ -40,7 +42,7 @@ class MultiSim:
         self.sims = sims
         self.base_sim = base_sim
         self.label = base_sim.label if (label is None and base_sim is not None) else label
-        self.run_args = sc.mergedicts(dict(n_runs=n_runs, inplace=inplace), kwargs)
+        self.run_args = sc.mergedicts(dict(n_runs=n_runs, inplace=inplace, debug=debug), kwargs)
         self.results = None
         self.summary = None
         self.which = None  # Whether the multisim is to be reduced, combined, etc.
@@ -121,6 +123,8 @@ class MultiSim:
 
         # Initialize the sims but don't run them
         kwargs = sc.mergedicts(self.run_args, kwargs, {'do_run': False})  # Never run, that's the point!
+        kwargs.pop('inplace', None)
+        kwargs.pop('debug', None)
         self.sims = multi_run(sims, **kwargs)
 
         return
@@ -153,7 +157,11 @@ class MultiSim:
         self.timer.start()
         kwargs = sc.mergedicts(self.run_args, kwargs)
         inplace = kwargs.pop('inplace', True)
-        run_sims = multi_run(sims, **kwargs) # Output sims are copies due to the pickling during parallelization
+        debug = kwargs.pop('debug', False)
+        if debug:
+            run_sims = [single_run(sim, **kwargs) for sim in sims]
+        else: # The next line does all the work!
+            run_sims = multi_run(sims, **kwargs) # Output sims are copies due to the pickling during parallelization
 
         # Handle output
         if inplace and isinstance(self.sims, list) and len(run_sims) == len(self.sims): # Validation
@@ -564,10 +572,12 @@ def parallel(*args, **kwargs):
 
     **Examples**::
 
-        s1 = ss.Sim(beta=0.01, label='Low')
-        s2 = ss.Sim(beta=0.02, label='High')
+        s1 = ss.Sim(n_agents=1000, label='Small', diseases='sis', networks='random')
+        s2 = ss.Sim(n_agents=2000, label='Large', diseases='sis', networks='random')
         ss.parallel(s1, s2).plot()
         msim = ss.parallel([s1, s2], keep_people=True)
     """
     sims = sc.mergelists(*args)
-    return MultiSim(sims=sims).run(**kwargs)
+    msim = MultiSim(sims=sims, **kwargs)
+    msim.run()
+    return msim
