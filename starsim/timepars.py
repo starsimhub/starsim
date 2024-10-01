@@ -207,15 +207,13 @@ class TimePar(ss.BaseArr):
     def isarray(self):
         return isinstance(self.v, np.ndarray)
 
-    def set(self, force=False, **kwargs):
-        """ Set the specified parameter values (v, unit, parent_unit, parent_dt, self_dt) and update stored values """
-        keys = ['v', 'unit', 'parent_unit', 'parent_dt', 'self_dt']
-        for key,val in kwargs.items():
-            if key in keys:
-                setattr(self, key, val)
-            else:
-                errormsg = f'"{key}" is not a valid key: must be one of {sc.strjoin(keys)}'
-                raise ValueError(errormsg)
+    def set(self, v=None, unit=None, parent_unit=None, parent_dt=None, self_dt=None, force=False):
+        """ Set the specified parameter values (ignoring None values) and update stored values """
+        if v           is not None: self.v           = v
+        if unit        is not None: self.unit        = unit
+        if parent_unit is not None: self.parent_unit = parent_unit
+        if parent_dt   is not None: self.parent_dt   = parent_dt
+        if self_dt     is not None: self.self_dt     = self_dt
         if self.initialized or force: # Don't try to set these unless it's been initialized
             self.update_cached()
         return self
