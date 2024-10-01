@@ -167,7 +167,7 @@ class Dist:
 
     Although it's possible in theory to define a custom distribution (i.e., not
     one from NumPy or SciPy), in practice this is difficult. The distribution needs
-    to have both a way to return random variables (easy), as well as the probability
+    to have both a way to return random variates (easy), as well as the probability
     point function (inverse CDF). In addition, the distribution must be able to
     take a NumPy RNG as its bit generator. It's easier to just use a default Dist
     (e.g., ss.random()), and then take its output as input (i.e., quantiles) for
@@ -491,6 +491,24 @@ class Dist:
         spars = self.sync_pars() # Synchronize parameters between the NumPy and SciPy distributions
         return spars
 
+    def preprocess_timepar(self, key, val):
+        """ Method to handle how timepars are processed; not for the user. By default, scales the output of the distribution. """
+        if self._timepar is None: # Store this here for later use
+            self._timepar = sc.dcp(val) # Make a copy to avoid modifying the original
+        elif val.factor != self._timepar.factor:
+            errormsg = f'Cannot have time parameters in the same distribution with inconsistent unit/dt values: {self._pars}'
+            raise ValueError(errormsg)
+        self._pars[key] = val.v # Use the raw value, since it could be anything (including a function)
+        return val.v # Also use this for the rest of the loop
+
+    def convert_callable(self, key, val, size, uids):
+        """ Method to handle how callable parameters are processed; not for the user """
+        size_par = uids if uids is not None else size
+        out = val(self.module, self.sim, size_par)
+        val = np.asarray(out) # Necessary since FloatArrs don't allow slicing # TODO: check if this is correct
+        self._pars[key] = val
+        return val
+
     def call_pars(self):
         """ Check if any parameters need to be called to be turned into arrays; not for the user """
 
@@ -504,20 +522,11 @@ class Dist:
 
             # If it's a time parameter, transform it to a float now
             if isinstance(val, ss.TimePar):
-                if self._timepar is None: # Store this here for later use
-                    self._timepar = sc.dcp(val) # Make a copy to avoid modifying the original
-                elif val.factor != self._timepar.factor:
-                    errormsg = f'Cannot have time parameters in the same distribution with inconsistent unit/dt values: {self._pars}'
-                    raise ValueError(errormsg)
-                self._pars[key] = val.v # Use the raw value, since it could be anything (including a function)
-                val = val.v # Update it here too, for the rest of the loop
+                val = self.preprocess_timepar(key, val)
 
             # If the parameter is callable, then call it
             if callable(val) and not isinstance(val, type): # Types can appear as callable
-                size_par = uids if uids is not None else size
-                out = val(self.module, self.sim, size_par) # TODO: swap order to sim, module, size?
-                val = np.asarray(out) # Necessary since FloatArrs don't allow slicing # TODO: check if this is correct
-                self._pars[key] = val
+                val = self.convert_callable(key, val, size, uids)
 
             # If it's iterable and UIDs are provided, then we need to use array-parameter logic
             if self.dynamic_pars is None and np.iterable(val) and uids is not None:
@@ -557,12 +566,21 @@ class Dist:
         rvs = self.dist.ppf(rands)
         return rvs
 
+    def postprocess_timepar(self, rvs):
+        """ Scale random variates after generation; not for the user """
+        tp = self._timepar # Shorten
+        self._timepar = None # Remove the timepar which is no longer needed
+        tp.v = rvs # Replace the base value with the random variates
+        tp.update_values() # Recalculate the values with the time scaling
+        rvs = tp.values.astype(rvs.dtype) # Replace the random variates with the scaled version, and preserve type
+        return rvs
+
     def rvs(self, n=1, reset=False):
         """
-        Get random variables -- use this!
+        Get random variates -- use this!
 
         Args:
-            n (int/tuple/arr): if an int or tuple, return this many random variables; if an array, treat as UIDs
+            n (int/tuple/arr): if an int or tuple, return this many random variates; if an array, treat as UIDs
             reset (bool): whether to automatically reset the random number distribution state after being called
         """
         # Check for readiness
@@ -598,11 +616,7 @@ class Dist:
 
         # Scale by time if needed
         if self._timepar is not None:
-            tp = self._timepar
-            tp.v = rvs # Replace the base value with the random variables
-            tp.update_values() # Recalculate the values with the time scaling
-            rvs = tp.values # Replace the random variables with the scaled version
-            self._timepar = None # Remove the timepar which is no longer needed
+            rvs = self.postprocess_timepar(rvs)
 
         # Tidy up
         self.called += 1
@@ -691,7 +705,14 @@ class uniform(Dist):
         low (float): the lower bound of the distribution (default 0.0)
         high (float): the upper bound of the distribution (default 1.0)
     """
-    def __init__(self, low=0.0, high=1.0, **kwargs):
+    def __init__(self, low=None, high=None, **kwargs):
+        if high is None and low is not None: # One argument, swap
+            high = low
+            low = 0.0
+        if low is None:
+            low = 0.0
+        if high is None:
+            high = 1.0
         super().__init__(distname='uniform', low=low, high=high, **kwargs)
         return
 
@@ -843,7 +864,7 @@ class randint(Dist):
         high (int): the upper bound of the distribution (default of maximum integer size: 9,223,372,036,854,775,807)
     """
     def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.rand_int, **kwargs):
-        # Handle input arguments
+        # Handle input arguments # TODO: reconcile with how this is handled in uniform()
         if len(args):
             if len(args) == 1:
                 high = args[0]
@@ -903,7 +924,7 @@ class weibull(Dist):
 
 class gamma(Dist):
     """
-    Gamma distribution
+    Gamma distribution (specifically, scipy.stats.gamma)
 
     Args:
         a (float): the shape parameter, sometimes called k (default 1.0)

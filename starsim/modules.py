@@ -194,7 +194,7 @@ class Module(sc.quickobj):
         # Initialize them with the parent module
         for timepar in timepars.values():
             if force or not timepar.initialized:
-                timepar.init(parent=self)
+                timepar.init(parent=self, die=False) # In some cases, the values can't be initialized; that's OK here
 
         # Create the module-specific time vector
         self.timevec = ss.make_timevec(pars.start, pars.stop, self.dt, self.unit)

@@ -54,8 +54,8 @@ def test_custom_dists(n=n, do_plot=False):
     rvs   = sc.objdict()
     times = sc.objdict()
     for name in ss.dist_list:
-        func = getattr(ss, name)
-        dist = func(name='test', strict=False)
+        dist_class = getattr(ss, name)
+        dist = dist_class(name='test', strict=False)
         dist.init()
         dists[name] = dist
         sc.tic()
@@ -235,6 +235,7 @@ def test_callable(n=n):
     print(f'Output samples were:\n{sc.sigfiground(draws3)}\n{sc.sigfiground(draws4)}')
     assert draw_diff < 1, 'Day and year outputs should match to the nearest day'
     assert age_diff < 1, 'Distribution outputs should match ages to the nearest day'
+
     return d1
 
 
@@ -284,6 +285,75 @@ def test_repeat_slot():
     return draws
 
 
+def test_timepar_dists():
+    """ Test interaction of distributions and timepars """
+    sc.heading('Test interaction of distributions and timepars')
+
+    # Set parameters
+    n = int(10e3)
+    u1 = 'day'
+    u2 = 'year'
+    dt_dur = 0.1
+    dt_rate = 20.0
+    ratio_dur  = ss.time_ratio(u1, 1.0, u2, dt_dur)
+    ratio_rate = ss.time_ratio(u2, 1.0, u1, dt_rate)
+
+    # Create time parameters
+    v = sc.objdict()
+    v.base = 30.0
+    v.dur = ss.dur(v.base, unit=u1, parent_unit=u2, parent_dt=dt_dur).init()
+    v.rate = ss.rate(v.base, unit=u2, parent_unit=u1, parent_dt=dt_rate).init() # Swap units
+
+    # Check distributions that scale linearly with time, with the parameter we'll set
+    linear_dists = dict(
+        constant   = 'v',
+        uniform    = 'high',
+        normal     = 'loc',
+        lognorm_ex = 'mean',
+        expon      = 'scale',
+        weibull    = 'scale',
+        gamma      = 'scale',
+    )
+
+    for name,par in linear_dists.items():
+        dist_class = getattr(ss, name)
+
+        # Create the dists, the first parameter of which should have time units
+        dists = sc.objdict()
+        for key,val in v.items():
+            pardict = {par:val} # Convert to a tiny dictionary to insert the correct name
+            dists[key] = dist_class(**pardict, name=key, strict=False).init()
+
+        # Create th erandom variates
+        rvs = sc.objdict()
+        for k,dist in dists.items():
+            rvs[k] = dist.rvs(n)
+
+        # Check that the distributions match
+        rtol = 0.1 # Be somewhat generous with the uncertainty
+        expected = rvs.base.mean()
+        expected_dur = expected*ratio_dur
+        expected_rate = expected/ratio_rate
+        actual_dur = rvs.dur.mean()
+        actual_rate = rvs.rate.mean()
+        assert np.isclose(expected_dur, actual_dur, rtol=rtol), f'Duration not close for {name}: {expected_dur:n} ≠ {actual_dur:n}'
+        assert np.isclose(expected_rate, actual_rate, rtol=rtol), f'Rate not close for {name}: {expected_rate:n} ≠ {actual_rate:n}'
+        print(f'✓ {name} passed: {expected_dur:n} ≈ {actual_dur:n}')
+
+    # for name in linear_dists:
+    #     dist_class = getattr(ss, name)
+    #     for tp,val in zip([ss.dur, ss.rate], [base_dur, base_rate])
+    #         dist = dist_class(name='test', strict=False)
+    #         dist.init()
+    #     dists[name] = dist
+    #     sc.tic()
+    #     rvs[name] = dist.rvs(n)
+
+    # Check distributions that scale nonlinearly linearly with time
+
+    # Check that distributions that do not scale with time
+
+
 
 # %% Run as a script
 if __name__ == '__main__':
@@ -301,5 +371,6 @@ if __name__ == '__main__':
     o7 = test_callable()
     o8 = test_array()
     o9 = test_repeat_slot()
+    o10 = test_timepar_dists()
 
     T.toc()

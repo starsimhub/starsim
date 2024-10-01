@@ -159,7 +159,7 @@ class TimePar(ss.BaseArr):
         self.initialized = False
         return
 
-    def init(self, parent=None, parent_unit=None, parent_dt=None, update_values=True):
+    def init(self, parent=None, parent_unit=None, parent_dt=None, update_values=True, die=True):
         """ Link to the sim and/or module units """
         if parent is None:
             parent = sc.dictobj(unit=parent_unit, dt=parent_dt)
@@ -181,7 +181,7 @@ class TimePar(ss.BaseArr):
         self.parent_dt = sc.ifelse(self.parent_dt, self.self_dt, 1.0) # If dt isn't defined, assume 1 (self_dt is defined by default)
 
         # Calculate the actual conversion factor to be used in the calculations
-        self.update_cached(update_values)
+        self.update_cached(update_values=update_values, die=die)
         self.initialized = True
         return self
 
@@ -218,15 +218,24 @@ class TimePar(ss.BaseArr):
             self.update_cached()
         return self
 
-    def update_cached(self, update_values=True):
+    def update_cached(self, update_values=True, die=True):
         """ Update the cached factor and values """
         try:
             self.update_factor()
             if update_values:
                 self.update_values()
-        except TypeError as E:
-            errormsg = f'Update failed for {self}. Argument v={self.v} should be a number or array; if a function, use update_values=False. Error: {E}'
-            raise TypeError(errormsg) from E
+        except TypeError as E: # For a known error, skip silently if die=False
+            if die:
+                errormsg = f'Update failed for {self}. Argument v={self.v} should be a number or array; if a function, use update_values=False. Error: {E}'
+                raise TypeError(errormsg) from E
+        except Exception as E: # For other errors, raise a warning
+            if die:
+                raise E
+            else:
+                tb = sc.traceback(E)
+                warnmsg = f'Uncaught error encountered while updating {self}, but die=False. Traceback:\n{tb}'
+                ss.warn(warnmsg)
+
         return self
 
     def update_factor(self):
@@ -293,7 +302,7 @@ class dur(TimePar):
     """ Any number that acts like a duration """
     def update_values(self):
         self.values = self.v*self.factor
-        return
+        return self.values
 
 
 class days(dur):
@@ -314,7 +323,7 @@ class rate(TimePar): # TODO: should all rates just be time_prob?
     """ Any number that acts like a rate; can be greater than 1 """
     def update_values(self):
         self.values = self.v/self.factor
-        return
+        return self.values
 
 
 class perday(rate):
@@ -351,7 +360,7 @@ class time_prob(TimePar):
             else:
                 errormsg = f'Invalid value {self.value} for {self}: must be 0-1'
                 raise ValueError(errormsg)
-        return
+        return self.values
 
 
 class beta(time_prob):
