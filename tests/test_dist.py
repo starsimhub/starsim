@@ -48,7 +48,7 @@ def test_dist(m=m):
 def test_custom_dists(n=n, do_plot=False):
     """ Test all custom dists """
     sc.heading('Testing all custom distributions')
-    
+
     o     = sc.objdict()
     dists = sc.objdict()
     rvs   = sc.objdict()
@@ -62,15 +62,15 @@ def test_custom_dists(n=n, do_plot=False):
         rvs[name] = dist.rvs(n)
         times[name] = sc.toc(name, unit='ms', output='message')
         print(f'{name:10s}: mean = {rvs[name].mean():n}')
-    
+
     if do_plot:
         plot_rvs(rvs, times=times, nrows=5)
-    
+
     o.dists = dists
     o.rvs = rvs
     o.times = times
     return o
-        
+
 
 def test_dists(n=n, do_plot=False):
     """ Test the Dists container """
@@ -79,14 +79,14 @@ def test_dists(n=n, do_plot=False):
 
     # Create the objects twice
     for i in range(2):
-        
+
         # Create a complex object containing various distributions
         obj = sc.prettyobj()
         obj.a = sc.objdict()
         obj.a.mylist = [ss.random(), ss.Dist(distname='uniform', low=2, high=3)]
         obj.b = dict(d3=ss.weibull(c=2), d4=ss.constant(v=0.3))
         dists = ss.Dists(obj).init(sim=make_sim())
-        
+
         # Call each distribution twice
         for j in range(2):
             rvs = sc.objdict()
@@ -94,15 +94,15 @@ def test_dists(n=n, do_plot=False):
                 rvs[str(dist)] = dist(n)
                 dist.jump() # Reset
             testvals[i,j] = rvs[0][283] # Pick one of the random values and store it
-    
+
     # Check that results are as expected
     print(testvals)
     assert np.all(testvals[0,:] == testvals[1,:]), 'Newly initialized objects should match'
     assert np.all(testvals[:,0] != testvals[:,1]), 'After jumping, values should be different'
-            
+
     if do_plot:
         plot_rvs(rvs)
-    
+
     o = sc.objdict()
     o.dists = dists
     o.rvs = rvs
@@ -112,80 +112,80 @@ def test_dists(n=n, do_plot=False):
 def test_scipy(m=m):
     """ Test that SciPy distributions also work """
     sc.heading('Testing SciPy distributions')
-    
+
     # Make SciPy distributions in two different ways
     dist1 = ss.Dist(dist=sps.expon, name='scipy', scale=2, strict=False).init() # Version 1: callable
     dist2 = ss.Dist(dist=sps.expon(scale=2), name='scipy', strict=False).init() # Version 2: frozen
     rvs1 = dist1(m)
     rvs2 = dist2(m)
-    
+
     # Check that they match
     print(rvs1)
     assert np.array_equal(rvs1, rvs2), 'Arrays should match'
-    
+
     return dist1, dist2
 
 
 def test_exceptions(m=m):
     """ Check that exceptions are being appropriately raised """
     sc.heading('Testing exceptions and strict')
-    
+
     # Create a strict distribution
     dist = ss.random(strict=True, auto=False)
     with pytest.raises(ss.distributions.DistNotInitializedError):
         dist(m) # Check that we can't call an uninitialized
-    
+
     # Initialize and check we can't call repeatedly
     dist.init(trace='test', sim=make_sim())
     rvs = dist(m)
     with pytest.raises(ss.distributions.DistNotReadyError):
         dist(m) # Check that we can't call an already-used distribution
-    
+
     # Check that we can with a non-strict Dist
     dist2 = ss.random(strict=False)
     dist2.init(trace='test')
     rvs2 = sc.autolist()
     for i in range(2):
         rvs2 += dist2(m) # We should be able to call multiple times with no problem
-    
+
     print(rvs)
     print(rvs2)
     assert np.array_equal(rvs, rvs2[0]), 'Separate dists should match'
     assert not np.array_equal(rvs2[0], rvs2[1]), 'Multiple calls to the same dist should not match'
-    
+
     return dist, dist2
-    
+
 
 def test_reset(m=m):
     """ Check that reset works as expected """
     sc.heading('Testing reset')
-    
+
     # Create and draw two sets of random numbers
     dist = ss.random(seed=533, strict=False).init()
     r1 = dist.rvs(m)
     r2 = dist.rvs(m)
     assert all(r1 != r2)
-    
+
     # Reset to the most recent state
     dist.reset(-1)
     r3 = dist.rvs(m)
     assert all(r3 == r2)
-    
+
     # Reset to the initial state
     dist.reset(0)
     r4 = dist.rvs(m)
     assert all(r4 == r1)
-    
+
     for r in [r1, r2, r3, r4]:
         print(r)
-    
+
     return dist
 
 
 def test_callable(n=n):
     """ Test callable parameters """
     sc.heading('Testing a uniform distribution with callable parameters')
-    
+
     # Define a fake people object
     sim = sc.prettyobj()
     sim.n = 10
@@ -198,7 +198,7 @@ def test_callable(n=n):
     def custom_loc(module, sim, uids):
         out = sim.people.age[uids]
         return out
-    
+
     scale = 1
     d1 = ss.normal(name='callable', loc=custom_loc, scale=scale).init(sim=sim)
     d2 = ss.lognorm_ex(name='callable', mean=custom_loc, std=scale).init(sim=sim)
@@ -212,6 +212,29 @@ def test_callable(n=n):
     for draws in [draws1, draws2]:
         meandiff = np.abs(sim.people.age[uids] - draws).mean()
         assert meandiff < scale*3, 'Outputs should match ages'
+
+    # Test timepars and callable functions
+    def custom_day(module, sim, uids):
+        out = sim.people.age[uids].copy()
+        out *= 365 # Convert to days manually
+        return out
+
+    scale = 1e-3 # Set to a very small but nonzero scale
+    loc  = ss.dur(custom_loc, unit='year', parent_unit='day').init(update_values=False)
+    mean = ss.dur(custom_day, unit='day',  parent_unit='day').init(update_values=False)
+    d3 = ss.normal(name='callable', loc=loc, scale=scale).init(sim=sim)
+    d4 = ss.lognorm_ex(name='callable', mean=mean, std=scale).init(sim=sim)
+
+    uids = np.array([1, 3, 7, 9])
+    draws3 = d3.rvs(uids)
+    draws4 = d4.rvs(uids)
+    age_in_days = sim.people.age[uids]*365
+    draw_diff = np.abs(draws3 - draws4).mean()
+    age_diff = np.abs(age_in_days - draws3).mean()
+    print(f'Input ages were:\n{sim.people.age[uids]}')
+    print(f'Output samples were:\n{sc.sigfiground(draws3)}\n{sc.sigfiground(draws4)}')
+    assert draw_diff < 1, 'Day and year outputs should match to the nearest day'
+    assert age_diff < 1, 'Distribution outputs should match ages to the nearest day'
     return d1
 
 
@@ -247,7 +270,7 @@ def test_repeat_slot():
     # Draw values
     d = ss.uniform(low=low, high=high, strict=False).init(slots=slots)
     draws = d.rvs(uids)
-    
+
     # Print and test
     print(f'Uniform sample for slots {slots} returned {draws}')
     assert len(draws) == len(slots)
@@ -266,9 +289,9 @@ def test_repeat_slot():
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
-    
+
     T = sc.timer()
-    
+
     o1 = test_dist()
     o2 = test_custom_dists(do_plot=do_plot)
     o3 = test_dists(do_plot=do_plot)
@@ -278,5 +301,5 @@ if __name__ == '__main__':
     o7 = test_callable()
     o8 = test_array()
     o9 = test_repeat_slot()
-    
+
     T.toc()

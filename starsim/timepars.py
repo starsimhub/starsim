@@ -176,8 +176,9 @@ class TimePar(ss.BaseArr):
            self.parent_dt = parent.dt
 
         # Set defaults if not yet set
-        self.unit = sc.ifelse(self.unit, self.parent_unit)
-        self.parent_dt = sc.ifelse(self.parent_dt, self.self_dt, 1.0)
+        self.unit = sc.ifelse(self.unit, self.parent_unit) # If unit isn't defined but parent is, set to parent
+        self.parent_unit = sc.ifelse(self.parent_unit, self.unit) # If parent isn't defined but unit is, set to self
+        self.parent_dt = sc.ifelse(self.parent_dt, self.self_dt, 1.0) # If dt isn't defined, assume 1 (self_dt is defined by default)
 
         # Calculate the actual conversion factor to be used in the calculations
         self.update_cached(update_values)
@@ -206,22 +207,28 @@ class TimePar(ss.BaseArr):
     def isarray(self):
         return isinstance(self.v, np.ndarray)
 
-    def set(self, v=None, unit=None, parent_unit=None, parent_dt=None, self_dt=None, force=False):
-        """ Reset the parameter values """
-        if v           is not None: self.v           = v
-        if unit        is not None: self.unit        = unit
-        if parent_unit is not None: self.parent_unit = parent_unit
-        if parent_dt   is not None: self.parent_dt   = parent_dt
-        if self_dt     is not None: self.self_dt     = self_dt
+    def set(self, force=False, **kwargs):
+        """ Set the specified parameter values (v, unit, parent_unit, parent_dt, self_dt) and update stored values """
+        keys = ['v', 'unit', 'parent_unit', 'parent_dt', 'self_dt']
+        for key,val in kwargs.items():
+            if key in keys:
+                setattr(self, key, val)
+            else:
+                errormsg = f'"{key}" is not a valid key: must be one of {sc.strjoin(keys)}'
+                raise ValueError(errormsg)
         if self.initialized or force: # Don't try to set these unless it's been initialized
             self.update_cached()
         return self
 
     def update_cached(self, update_values=True):
         """ Update the cached factor and values """
-        self.update_factor()
-        if update_values:
-            self.update_values()
+        try:
+            self.update_factor()
+            if update_values:
+                self.update_values()
+        except TypeError as E:
+            errormsg = f'Update failed for {self}. Argument v={self.v} should be a number or array; if a function, use update_values=False. Error: {E}'
+            raise TypeError(errormsg) from E
         return self
 
     def update_factor(self):
