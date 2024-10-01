@@ -347,8 +347,9 @@ class time_prob(TimePar):
         if self.isarray:
             self.values = v.copy()
             inds = np.logical_and(0.0 < v, v < 1.0)
-            rates = -np.log(1 - v)
-            self.values[inds] = 1 - np.exp(-rates/self.factor)
+            if inds.sum():
+                rates = -np.log(1 - v[inds])
+                self.values[inds] = 1 - np.exp(-rates/self.factor)
         else:
             if v == 0:
                 self.values = 0

@@ -182,17 +182,22 @@ def test_reset(m=m):
     return dist
 
 
+def make_fake_sim(n=10):
+    """ Define a fake sim object for testing slots """
+    sim = sc.prettyobj()
+    sim.n = n
+    sim.people = sc.prettyobj()
+    sim.people.uid = np.arange(sim.n)
+    sim.people.slot = np.arange(sim.n)
+    sim.people.age = np.random.uniform(0, 100, size=sim.n)
+    return sim
+
+
 def test_callable(n=n):
     """ Test callable parameters """
     sc.heading('Testing a uniform distribution with callable parameters')
 
-    # Define a fake people object
-    sim = sc.prettyobj()
-    sim.n = 10
-    sim.people = sc.prettyobj()
-    sim.people.uid = np.arange(sim.n)
-    sim.people.slot = np.arange(sim.n)
-    sim.people.age = np.random.uniform(0, 90, size=sim.n)
+    sim = make_fake_sim()
 
     # Define a parameter as a function
     def custom_loc(module, sim, uids):
@@ -212,29 +217,6 @@ def test_callable(n=n):
     for draws in [draws1, draws2]:
         meandiff = np.abs(sim.people.age[uids] - draws).mean()
         assert meandiff < scale*3, 'Outputs should match ages'
-
-    # Test timepars and callable functions
-    def custom_day(module, sim, uids):
-        out = sim.people.age[uids].copy()
-        out *= 365 # Convert to days manually
-        return out
-
-    scale = 1e-3 # Set to a very small but nonzero scale
-    loc  = ss.dur(custom_loc, unit='year', parent_unit='day').init(update_values=False)
-    mean = ss.dur(custom_day, unit='day',  parent_unit='day').init(update_values=False)
-    d3 = ss.normal(name='callable', loc=loc, scale=scale).init(sim=sim)
-    d4 = ss.lognorm_ex(name='callable', mean=mean, std=scale).init(sim=sim)
-
-    uids = np.array([1, 3, 7, 9])
-    draws3 = d3.rvs(uids)
-    draws4 = d4.rvs(uids)
-    age_in_days = sim.people.age[uids]*365
-    draw_diff = np.abs(draws3 - draws4).mean()
-    age_diff = np.abs(age_in_days - draws3).mean()
-    print(f'Input ages were:\n{sim.people.age[uids]}')
-    print(f'Output samples were:\n{sc.sigfiground(draws3)}\n{sc.sigfiground(draws4)}')
-    assert draw_diff < 1, 'Day and year outputs should match to the nearest day'
-    assert age_diff < 1, 'Distribution outputs should match ages to the nearest day'
 
     return d1
 
@@ -305,6 +287,7 @@ def test_timepar_dists():
     v.rate = ss.rate(v.base, unit=u2, parent_unit=u1, parent_dt=dt_rate).init() # Swap units
 
     # Check distributions that scale linearly with time, with the parameter we'll set
+    print('Testing linear distributions ...')
     linear_dists = dict(
         constant   = 'v',
         uniform    = 'high',
@@ -338,20 +321,100 @@ def test_timepar_dists():
         actual_rate = rvs.rate.mean()
         assert np.isclose(expected_dur, actual_dur, rtol=rtol), f'Duration not close for {name}: {expected_dur:n} ≠ {actual_dur:n}'
         assert np.isclose(expected_rate, actual_rate, rtol=rtol), f'Rate not close for {name}: {expected_rate:n} ≠ {actual_rate:n}'
-        print(f'✓ {name} passed: {expected_dur:n} ≈ {actual_dur:n}')
+        sc.printgreen(f'✓ {name} passed: {expected_dur:n} ≈ {actual_dur:n}')
 
-    # for name in linear_dists:
-    #     dist_class = getattr(ss, name)
-    #     for tp,val in zip([ss.dur, ss.rate], [base_dur, base_rate])
-    #         dist = dist_class(name='test', strict=False)
-    #         dist.init()
-    #     dists[name] = dist
-    #     sc.tic()
-    #     rvs[name] = dist.rvs(n)
+    # Check that unitless distributions fail
+    print('Testing unitless distributions ...')
+    par = ss.dur(10)
+    unitless_dists = ['lognorm_im', 'randint', 'choice']
+    for name in unitless_dists:
+        dist_class = getattr(ss, name)
+        with pytest.raises(NotImplementedError):
+            dist = dist_class(par, name='notimplemented', strict=False).init()
+            dist.rvs(n)
+        sc.printgreen(f'✓ {name} passed: raised appropriate error')
 
-    # Check distributions that scale nonlinearly linearly with time
+    # Check special distributions
+    print('Testing Poisson distribution ...')
+    lam1 = ss.rate(365, 'year', parent_unit='year').init()
+    lam2 = ss.rate(1,   'day',  parent_unit='year').init()
+    poi1 = ss.poisson(lam=lam1, strict=False).init()
+    poi2 = ss.poisson(lam=lam2, strict=False).init()
+    mean1 = poi1.rvs(n).mean()
+    mean2 = poi2.rvs(n).mean()
+    assert np.isclose(mean1, mean2, rtol=rtol), f'Poisson values do not match for {lam1} and {lam2}: {mean1:n} ≠ {mean2:n}'
+    sc.printgreen(f'✓ poisson passed: {mean1:n} ≈ {mean2:n}')
 
-    # Check that distributions that do not scale with time
+    print('Testing Bernoulli distribution ...')
+    p1 = 0.1
+    p2 = ss.time_prob(0.01, parent_dt=10).init()
+    ber1 = ss.bernoulli(p=p1, strict=False).init()
+    ber2 = ss.bernoulli(p=p2, strict=False).init()
+    mean1 = ber1.rvs(n).mean()
+    mean2 = ber2.rvs(n).mean()
+    assert np.isclose(mean1, mean2, rtol=rtol), f'Bernoulli values do not match for {lam1} and {lam2}: {mean1:n} ≠ {mean2:n}'
+    sc.printgreen(f'✓ bernoulli passed: {mean1:n} ≈ {mean2:n}')
+
+    return ber2
+
+
+def test_timepar_callable():
+    sc.heading('Test that timepars work with (some) callable functions')
+
+    print('Testing callable parameters with regular-scaling distributions')
+    sim = make_fake_sim(n=10)
+    uids = np.array([1, 3, 7, 9])
+
+    def age_year(module, sim, uids):
+        out = sim.people.age[uids].copy()
+        out *= 365 # Convert to days manually
+        return out
+
+    def age_day(module, sim, uids):
+        out = sim.people.age[uids].copy()
+        out *= 365 # Convert to days manually
+        return out
+
+    scale = 1e-3 # Set to a very small but nonzero scale
+    loc  = ss.dur(age_year, unit='year', parent_unit='day').init(update_values=False)
+    mean = ss.dur(age_day,  unit='day',  parent_unit='day').init(update_values=False)
+    d3 = ss.normal(name='callable', loc=loc, scale=scale).init(sim=sim)
+    d4 = ss.lognorm_ex(name='callable', mean=mean, std=scale).init(sim=sim)
+    draws3 = d3.rvs(uids)
+    draws4 = d4.rvs(uids)
+    age_in_days = sim.people.age[uids]*365
+    draw_diff = np.abs(draws3 - draws4).mean()
+    age_diff = np.abs(age_in_days - draws3).mean()
+    print(f'Input ages were:\n{sim.people.age[uids]}')
+    print(f'Output samples were:\n{sc.sigfiground(draws3)}\n{sc.sigfiground(draws4)}')
+    assert draw_diff < 1, 'Day and year outputs should match to the nearest day'
+    assert age_diff < 1, 'Distribution outputs should match ages to the nearest day'
+
+    print('Testing callable parameters with Bernoulli distributions')
+    n = 1000
+    sim = make_fake_sim(n=n)
+    uids = np.random.choice(n, size=n//2, replace=False)
+
+    def age_prob(module, sim, uids):
+        age = sim.people.age[uids]
+        mean = age.mean()
+        out = np.zeros_like(age)
+        out[age<=mean] = 0.01
+        out[age>mean]  = 0.10
+        return out
+
+    parent_dt = 10
+    p1 = ss.time_prob(age_prob)
+    p2 = ss.time_prob(age_prob, parent_dt=parent_dt).init()
+    ber1 = ss.bernoulli(p=p1, strict=False).init()
+    ber2 = ss.bernoulli(p=p2, strict=False).init()
+    brvs1 = ber1.rvs(uids)
+    brvs2 = ber2.rvs(uids)
+    raise Exception
+
+
+
+    return
 
 
 
@@ -362,15 +425,16 @@ if __name__ == '__main__':
 
     T = sc.timer()
 
-    o1 = test_dist()
-    o2 = test_custom_dists(do_plot=do_plot)
-    o3 = test_dists(do_plot=do_plot)
-    o4 = test_scipy()
-    o5 = test_exceptions()
-    o6 = test_reset()
-    o7 = test_callable()
-    o8 = test_array()
-    o9 = test_repeat_slot()
+    # o1 = test_dist()
+    # o2 = test_custom_dists(do_plot=do_plot)
+    # o3 = test_dists(do_plot=do_plot)
+    # o4 = test_scipy()
+    # o5 = test_exceptions()
+    # o6 = test_reset()
+    # o7 = test_callable()
+    # o8 = test_array()
+    # o9 = test_repeat_slot()
     o10 = test_timepar_dists()
+    o10 = test_timepar_callable()
 
     T.toc()

@@ -491,15 +491,15 @@ class Dist:
         spars = self.sync_pars() # Synchronize parameters between the NumPy and SciPy distributions
         return spars
 
-    def preprocess_timepar(self, key, val):
+    def preprocess_timepar(self, key, timepar):
         """ Method to handle how timepars are processed; not for the user. By default, scales the output of the distribution. """
         if self._timepar is None: # Store this here for later use
-            self._timepar = sc.dcp(val) # Make a copy to avoid modifying the original
-        elif val.factor != self._timepar.factor:
+            self._timepar = sc.dcp(timepar) # Make a copy to avoid modifying the original
+        elif timepar.factor != self._timepar.factor:
             errormsg = f'Cannot have time parameters in the same distribution with inconsistent unit/dt values: {self._pars}'
             raise ValueError(errormsg)
-        self._pars[key] = val.v # Use the raw value, since it could be anything (including a function)
-        return val.v # Also use this for the rest of the loop
+        self._pars[key] = timepar.v # Use the raw value, since it could be anything (including a function)
+        return timepar.v # Also use this for the rest of the loop
 
     def convert_callable(self, key, val, size, uids):
         """ Method to handle how callable parameters are processed; not for the user """
@@ -507,6 +507,14 @@ class Dist:
         out = val(self.module, self.sim, size_par)
         val = np.asarray(out) # Necessary since FloatArrs don't allow slicing # TODO: check if this is correct
         self._pars[key] = val
+        return val
+
+    def call_par(self, key, val, size, uids):
+        """ Check if this parameter needs to be called to be turned into an array; not for the user """
+        if isinstance(val, ss.TimePar): # If it's a time parameter, transform it to a float now
+            val = self.preprocess_timepar(key, val)
+        if callable(val) and not isinstance(val, type): # If the parameter is callable, then call it (types can appear as callable)
+            val = self.convert_callable(key, val, size, uids)
         return val
 
     def call_pars(self):
@@ -519,14 +527,7 @@ class Dist:
 
         # Check each parameter
         for key,val in self._pars.items():
-
-            # If it's a time parameter, transform it to a float now
-            if isinstance(val, ss.TimePar):
-                val = self.preprocess_timepar(key, val)
-
-            # If the parameter is callable, then call it
-            if callable(val) and not isinstance(val, type): # Types can appear as callable
-                val = self.convert_callable(key, val, size, uids)
+            val = self.call_par(key, val, size, uids)
 
             # If it's iterable and UIDs are provided, then we need to use array-parameter logic
             if self.dynamic_pars is None and np.iterable(val) and uids is not None:
@@ -568,11 +569,12 @@ class Dist:
 
     def postprocess_timepar(self, rvs):
         """ Scale random variates after generation; not for the user """
-        tp = self._timepar # Shorten
+        timepar = self._timepar # Shorten
         self._timepar = None # Remove the timepar which is no longer needed
-        tp.v = rvs # Replace the base value with the random variates
-        tp.update_values() # Recalculate the values with the time scaling
-        rvs = tp.values.astype(rvs.dtype) # Replace the random variates with the scaled version, and preserve type
+        timepar.v = rvs # Replace the base value with the random variates
+        timepar.update_values() # Recalculate the values with the time scaling
+        if isinstance(rvs, np.ndarray): # This can be false when converting values for a Bernoulli distribution (in which case rvs are actually dist parameters)
+            rvs = timepar.values.astype(rvs.dtype) # Replace the random variates with the scaled version, and preserve type
         return rvs
 
     def rvs(self, n=1, reset=False):
@@ -774,6 +776,11 @@ class lognorm_im(Dist):
         self.update_dist_pars(spars)
         return spars
 
+    def preprocess_timepar(self, key, val):
+        """ Not valid since incorrect time units """
+        errormsg = f'Cannot use timepars with a lognorm_im distribution ({self}) since its units are not time. Use lognorm_ex instead.'
+        raise NotImplementedError(errormsg)
+
 
 class lognorm_ex(Dist):
     """
@@ -854,6 +861,17 @@ class poisson(Dist): # TODO: does not currently scale correctly with dt
         self.update_dist_pars(spars)
         return spars
 
+    def preprocess_timepar(self, key, timepar):
+        """ Try to update the timepar before calculating array parameters, but raise an exception if this isn't possible """
+        try:
+            timepar.update_cached()
+        except Exception as E:
+            errormsg = f'Could not process timepar {timepar} for {self}. Note that Poisson distributions are not compatible with both callable parameters and timepars, since this would change the shape in an unknowable way.'
+            raise ValueError(errormsg) from E
+
+        self._pars[key] = timepar.values # Use the raw value, since it could be anything (including a function)
+        return timepar.values # Also use this for the rest of the loop
+
 
 class randint(Dist):
     """
@@ -862,9 +880,11 @@ class randint(Dist):
     Args:
         low (int): the lower bound of the distribution (default 0)
         high (int): the upper bound of the distribution (default of maximum integer size: 9,223,372,036,854,775,807)
+        allow_time (bool): allow time parameters to be specified as high/low values (disabled by default since introduces rounding error)
     """
-    def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.rand_int, **kwargs):
+    def __init__(self, *args, low=None, high=None, dtype=ss.dtypes.rand_int, allow_time=False, **kwargs):
         # Handle input arguments # TODO: reconcile with how this is handled in uniform()
+        self.allow_time = allow_time
         if len(args):
             if len(args) == 1:
                 high = args[0]
@@ -889,6 +909,14 @@ class randint(Dist):
         rvs = rands * (p.high + 1 - p.low) + p.low
         rvs = rvs.astype(self.dtype)
         return rvs
+
+    def preprocess_timepar(self, key, timepar):
+        """ Not valid due to a rounding error """
+        if self.allow_time:
+            return super().preprocess_timepar(key, timepar)
+        else:
+            errormsg = f'Cannot use timepars with a randint distribution ({self}) since the values may be rounded incorrectly. Use uniform() instead and convert to int yourself, or set allow_time=True if you really want to do this.'
+            raise NotImplementedError(errormsg)
 
 
 class rand_raw(Dist):
@@ -998,6 +1026,30 @@ class bernoulli(Dist):
         """ Alias to filter(uids, both=True) """
         return self.filter(uids=uids, both=True)
 
+    def call_par(self, key, val, size, uids):
+        """ Reverse the usual order of processing so callable is processed first, and then the timepar conversion """
+        is_timepar = isinstance(val, ss.TimePar)
+
+        if is_timepar: # If it's a time parameter, pull out the value
+            timepar = sc.dcp(val) # Rename to make more sense within the context of this method
+            val = timepar.v # Pull out the base value; we'll deal with the transformation later
+            self._timepar = timepar # This is used, then destroyed, by postprocess_timepar() below
+            if isinstance(timepar, ss.dur): # Validation
+                errormsg = f'Bernoulli distributions can only be used with ss.time_prob() or ss.rate(), not {timepar}'
+                raise TypeError(errormsg)
+
+        # As normal: if the parameter is callable, then call it (types can appear as callable)
+        if callable(val) and not isinstance(val, type):
+            val = self.convert_callable(key, val, size, uids)
+
+        # Process as a timepar
+        if is_timepar:
+            val = self.postprocess_timepar(val) # Note: this is processing the parameter rather than the rvs as usual
+
+        # Store in the parameters and return
+        self._pars[key] = val
+        return val
+
 
 class choice(Dist):
     """
@@ -1032,6 +1084,11 @@ class choice(Dist):
         inds = np.searchsorted(pcum, rands)
         rvs = pars.a[inds]
         return rvs
+
+    def preprocess_timepar(self, key, timepar):
+        """ Not valid since does not scale with time """
+        errormsg = f'Cannot use timepars with a choice distribution ({self}) since its units are not time. Convert output to time units instead.'
+        raise NotImplementedError(errormsg)
 
 
 class histogram(Dist):
