@@ -12,7 +12,7 @@ Version 2.0.0 (2024-10-01)
 
 Summary
 ~~~~~~~
-This version contains several major breaking changes. These include: module-specific timesteps and time-aware parameters (including a day/year ``unit`` flag for modules, and  ``ss.dur()`` and ``ss.rate()`` classes for parameters), and changes to module types and integration (e.g. renaming ``update()`` and ``apply()`` methods to ``step()``).
+Version 2.0 contains several major changes. These include: module-specific timesteps and time-aware parameters (including a day/year ``unit`` flag for modules, and  ``ss.dur()`` and ``ss.rate()`` classes for parameters), and changes to module types and integration (e.g. renaming ``update()`` and ``apply()`` methods to ``step()``;).
 
 Time-aware parameters and modules
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
