@@ -109,7 +109,7 @@ class Result(ss.BaseArr):
         else:
             return super().__getitem__(key)
 
-    def to_df(self, sep='_', rename=True):
+    def to_df(self, sep='_', rename=False):
         """
         Convert to a dataframe with timevec, value, low, and high columns
 
@@ -205,10 +205,10 @@ class Results(ss.ndict):
 
     def to_df(self, sep='_'):
         """ Merge all results dataframes into one """
-        dfs = [res.to_df(sep=sep) for res in self.all_results]
+        dfs = [res.to_df(sep=sep, rename=True) for res in self.all_results]
         df = dfs[0]
         for df2 in dfs[1:]:
-            df.merge(df2)
+            df = df.merge(df2)
         return df
 
     def plot(self, style='fancy', fig_kw=None, plot_kw=None):

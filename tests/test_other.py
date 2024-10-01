@@ -94,14 +94,14 @@ def test_ppl_construction():
 def test_arrs():
     sc.heading('Testing Arr objects')
     o = sc.objdict()
-    
+
     # Create a sim with only births
     pars = dict(n_agents=medium, diseases='sis', networks='random')
     p1 = sc.mergedicts(pars, birth_rate=10)
     p2 = sc.mergedicts(pars, death_rate=10)
     s1 = ss.Sim(pars=p1).run()
     s2 = ss.Sim(pars=p2).run()
-    
+
     # Tests
     assert len(s1.people.auids) > len(s2.people.auids), 'Should have more people with births'
     assert np.array_equal(s1.people.age, s1.people.age.raw[s1.people.auids]), 'Different ways of indexing age should match'
@@ -110,24 +110,25 @@ def test_arrs():
     assert not np.all(s2.people.alive.raw), 'Some agents should not be alive when indexed like this'
     assert np.array_equal(~s1.people.female, s1.people.male), 'Definition of men does not match'
     assert isinstance(s1.people.age < 5, ss.BoolArr), 'Performing logical operations should return a BoolArr'
-    
+
     o.s1 = s1
-    o.s2 = s2   
-    
+    o.s2 = s2
+
     return o
 
 
 def test_deepcopy():
+    sc.heading('Testing deepcopy')
     s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=small)
     s1.init()
-    
+
     s2 = sc.dcp(s1)
 
     s1.run()
     s2.run()
     s1.plot()
     s2.plot()
-    
+
     ss.diff_sims(s1, s2, full=True)
     assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
 
@@ -135,7 +136,8 @@ def test_deepcopy():
 
 
 def test_deepcopy_until():
-    s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=small)
+    sc.heading('Testing deepcopy with until')
+    s1 = ss.Sim(diseases='sir', networks='embedding', n_agents=small)
     s1.init()
 
     s1.run(until=5)
@@ -150,6 +152,25 @@ def test_deepcopy_until():
     assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
 
     return s1, s2
+
+
+def test_results():
+    sc.heading('Testing results export and plotting')
+    sim = ss.Sim(diseases='sis', networks='random', n_agents=medium)
+    sim.run()
+
+    # Export to dataframe
+    sis = sim.results.sis
+    res = sis.new_infections
+    df = res.to_df()
+    dfs = sis.to_df()
+    assert df.value.sum() == dfs.cum_infections.values[-1] == sim.summary.sis_cum_infections
+
+    # Plot
+    res.plot()
+    sim.results.sis.plot()
+
+    return sim
 
 
 
@@ -168,6 +189,7 @@ if __name__ == '__main__':
     sims = test_arrs()
     sims2 = test_deepcopy()
     sims3 = test_deepcopy_until()
+    sim4 = test_results()
 
     sc.toc(T)
     plt.show()
