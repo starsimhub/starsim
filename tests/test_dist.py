@@ -42,6 +42,10 @@ def test_dist(m=m):
     rvs = dist(m)
     print(rvs)
     assert 0 < rvs.min() < 1, 'Values should be between 0 and 1'
+
+    # Test other options
+    dist.show_state()
+    dist.plot_hist()
     return rvs
 
 

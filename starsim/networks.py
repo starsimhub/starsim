@@ -266,9 +266,9 @@ class Network(ss.Module):
             self.edges[key] = df[key].to_numpy()
         return self
 
-    def find_edges(self, inds, as_array=True):
+    def find_contacts(self, inds, as_array=True):
         """
-        Find all edges of the specified people
+        Find all contacts of the specified people
 
         For some purposes (e.g. contact tracing) it's necessary to find all the edges
         associated with a subset of the people in this network. Since edges are bidirectional
@@ -299,7 +299,7 @@ class Network(ss.Module):
             inds = np.array(inds, dtype=np.int64)
 
         # Find the edges
-        contact_inds = ss.find_edges(self.edges.p1, self.edges.p2, inds)
+        contact_inds = ss.find_contacts(self.edges.p1, self.edges.p2, inds)
         if as_array:
             contact_inds = np.fromiter(contact_inds, dtype=ss_int_)
             contact_inds.sort()
@@ -818,7 +818,7 @@ class MSMNet(SexualNetwork):
     def __init__(self, pars=None, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
         self.define_pars(
-            duration = ss.lognorm_ex(mean=15, std=15),
+            duration = ss.lognorm_ex(mean=2, std=1),
             debut = ss.normal(loc=16, scale=2),
             acts = ss.lognorm_ex(mean=80, std=20),
             participation = ss.bernoulli(p=0.1),
@@ -826,23 +826,20 @@ class MSMNet(SexualNetwork):
         self.update_pars(pars, **kwargs)
         return
 
-    def init_pre(self, sim):
-        # Add more here in line with MF network, e.g. age of debut
-        # Or if too much replication then perhaps both these networks
-        # should be subclasss of a specific network type (ask LY/DK)
-        super().init_pre(sim)
-        self.set_network_states(sim.people)
-        self.add_pairs(sim.people, ti=0)
+    def init_post(self):
+        self.set_network_states()
+        self.add_pairs()
         return
 
-    def set_network_states(self, people, upper_age=None):
+    def set_network_states(self, upper_age=None):
         """ Set network states including age of entry into network and participation rates """
+        people = self.sim.people
         if upper_age is None: uids = people.uid[people.male]
         else: uids = people.uid[people.male & (people.age < upper_age)]
 
         # Participation
         self.participant[people.female] = False
-        self.participant[uids] = self.participation.rvs(uids) # Should be CRN safe?
+        self.participant[uids] = self.pars.participation.rvs(uids) # Should be CRN safe?
 
         # Debut
         self.debut[uids] = self.pars.debut.rvs(len(uids)) # Just pass len(uids) as this network is not crn safe anyway
@@ -850,7 +847,7 @@ class MSMNet(SexualNetwork):
 
     def add_pairs(self):
         """ Pair all unpartnered MSM """
-        available_m = self.available(self.sim.people, 'm')
+        available_m = self.available(self.sim.people, 'male')
         n_pairs = int(len(available_m)/2)
         p1 = available_m[:n_pairs]
         p2 = available_m[n_pairs:n_pairs*2]
