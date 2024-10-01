@@ -1,15 +1,12 @@
 """
 Test demographic consistency
 """
-
-# %% Imports and settings
 import starsim as ss
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 import sciris as sc
 import pytest
-
 
 sc.options(interactive=False) # Assume not running interactively
 datadir = ss.root / 'tests/test_data'
@@ -146,7 +143,7 @@ def test_module_adding():
     births = ss.Births(pars={'birth_rate': 10})
     deaths = ss.Deaths(pars={'death_rate': 10})
     demographics = [births, deaths]
-    with pytest.raises(Exception): # CK: should be ValueError, but that fails for now, and this is OK
+    with pytest.raises(ValueError):
         ss.Sim(n_agents=1e3, demographics=demographics, birth_rate=10, death_rate=10).run()
     return demographics
 
@@ -155,7 +152,7 @@ def test_aging():
     """ Test that aging is configured properly """
     sc.heading('Testing aging')
     n_agents = int(1e3)
-    
+
     # With no demograhpics, people shouldn't age
     s1 = ss.Sim(n_agents=n_agents).init()
     orig_ages = s1.people.age.raw.copy()
@@ -163,19 +160,19 @@ def test_aging():
     s1.run()
     end_age = s1.people.age.mean()
     assert orig_age == end_age, f'By default there should be no aging, but {orig_age} != {end_age}'
-    
+
     # We should be able to manually turn on aging
     s2 = ss.Sim(n_agents=n_agents, use_aging=True).run()
     age2 = s2.people.age.mean()
     assert orig_age < age2, f'With aging, start age {orig_age} should be less than end age {age2}'
-    
+
     # Aging should turn on automatically if we add demographics
     s3 = ss.Sim(n_agents=n_agents, demographics=True).run()
     agent = s3.people.auids[0] # Find first alive agent
     orig_agent_age = orig_ages[agent]
     age3 = s3.people.age[ss.uids(agent)]
     assert orig_agent_age < age3, f'With demographics, original agent age {orig_agent_age} should be less than end age {age3}'
-    
+
     # ...but can be turned off manually
     s4 = ss.Sim(n_agents=n_agents, demographics=True, use_aging=False).run()
     agent = s4.people.auids[0] # Find first alive agent

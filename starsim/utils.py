@@ -1,7 +1,6 @@
 """
 Numerical utilities
 """
-
 import warnings
 import numpy as np
 import numba as nb
@@ -41,7 +40,7 @@ class ndict(sc.objdict):
         self.setattribute('_overwrite', overwrite)
         self.extend(*args, **kwargs)
         return
-    
+
     def __call__(self):
         """ Shortcut for returning values """
         return self.values()
@@ -78,7 +77,7 @@ class ndict(sc.objdict):
             errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._nameattr}"'
             raise TypeError(errormsg)
         return self
-    
+
     def _check_key(self, key, overwrite=None):
         if overwrite is None: overwrite = self._overwrite
         if key in self:
@@ -89,7 +88,7 @@ class ndict(sc.objdict):
             else:
                 ss.warn(f'Overwriting existing ndict entry "{key}"')
         return
-    
+
     def _check_type(self, arg):
         """ Check types """
         if self._type is not None:
@@ -263,7 +262,7 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
         out_of_range (float): Value to use for negative ages - typically 0 is a reasonable choice but other values (e.g., np.inf or np.nan) may be useful depending on the calculation. This will automatically be added to the dataframe with an age of ``-np.inf``
 
     Returns:
-    
+
         - A `pd.Series` for all supported formats of `data` *except* an ``ss.Dist``. This series will contain index columns for 'year'
           and 'age' (in that order) and then subsequent index columns for any other variables specified in the metadata, in the order
           they appeared in the metadata (except for year and age appearing first).
@@ -368,13 +367,13 @@ def combine_rands(a, b):
     """
     Efficient algorithm for combining two arrays of random integers into an array
     of floats.
-    
+
     See ss.multi_random() for the user-facing version.
-    
+
     Args:
         a (array): array of random integers between 0 and np.iinfo(np.uint64).max, as from ss.rand_raw()
         b (array): ditto, same size as a
-        
+
     Returns:
         A new array of random numbers the same size as a and b
     """

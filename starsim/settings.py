@@ -4,7 +4,6 @@ All options should be set using set() or directly, e.g.::
 
     ss.options(verbose=False)
 """
-
 import os
 import numpy as np
 import sciris as sc
@@ -52,7 +51,7 @@ class Options(sc.objdict):
         self.setattribute('optdesc', optdesc)  # Set the description as an attribute, not a dict entry
         self.setattribute('orig_options', sc.dcp(options))  # Copy the default options
         return
-    
+
     @staticmethod
     def get_orig_options():
         """
@@ -69,7 +68,7 @@ class Options(sc.objdict):
 
         optdesc.warnings = 'How warnings are handled: options are "warn" (default), "print", and "error"'
         options.warnings = str(os.getenv('STARSIM_WARNINGS', 'warn'))
-        
+
         optdesc.time_eps = 'Set size of smallest possible time unit (in units of sim time, e.g. "year" or "day")'
         options.time_eps = float(os.getenv('STARSIM_TIME_EPS', 1e-6))
 
@@ -147,7 +146,7 @@ class Options(sc.objdict):
         # Handle other keys
         elif key is not None:
             kwargs = sc.mergedicts(kwargs, {key: value})
-        
+
         # Reset options
         for key, value in kwargs.items():
             if key not in self:
@@ -159,7 +158,7 @@ class Options(sc.objdict):
                 if value in [None, 'default']:
                     value = self.orig_options[key]
                 self[key] = value
-                
+
                 # Handle special cases
                 if key == 'precision':
                     self.reset_precision()
@@ -203,7 +202,7 @@ class Options(sc.objdict):
             return self[key] != self.orig_options[key]
         else:
             return None
-    
+
     def set_precision(self):
         if self.precision == 32:
             dtypes.int = np.int32

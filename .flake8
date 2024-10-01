@@ -1,0 +1,11 @@
+# Custom settings for Starsim. Changes:
+# E221: allow multiple spaces before operator
+# E225: allow space around arithmetic operators
+# E226: allow space around arithmetic operators
+# E261: allow one space before comment
+# E272: allow multiple spaces before keyword
+# E501: allow long lines
+# E701: allow multiple statements on a line
+
+[flake8]
+ignore = E221, E225, E226, E261, E272, E501, E701

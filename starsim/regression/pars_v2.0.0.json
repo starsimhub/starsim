@@ -1,0 +1,200 @@
+{
+  "pars": {
+    "verbose": 0,
+    "n_agents": 10000,
+    "total_pop": 10000,
+    "pop_scale": 1.0,
+    "unit": "year",
+    "start": 2000,
+    "stop": 2020,
+    "dur": 20,
+    "dt": 0.2,
+    "rand_seed": 2,
+    "slot_scale": 5,
+    "min_slots": 100,
+    "birth_rate": null,
+    "death_rate": null,
+    "use_aging": true,
+    "births": {
+      "birth_rate": 30,
+      "rel_birth": 1,
+      "units": 0.001
+    },
+    "deaths": {
+      "rel_death": 1,
+      "death_rate": {
+        "type": "Dist",
+        "classname": "bernoulli",
+        "tracestr": "pars_deaths_death_rate",
+        "diststr": "",
+        "pars": {
+          "p": {
+            "python_class": "<class 'function'>"
+          }
+        }
+      },
+      "units": 0.001
+    },
+    "randomnet": {
+      "n_contacts": {
+        "type": "Dist",
+        "classname": "constant",
+        "tracestr": "pars_randomnet_n_contacts",
+        "diststr": "",
+        "pars": {
+          "v": 10
+        }
+      },
+      "dur": 0
+    },
+    "mfnet": {
+      "duration": {
+        "type": "Dist",
+        "classname": "lognorm_ex",
+        "tracestr": "pars_mfnet_duration",
+        "diststr": "",
+        "pars": {
+          "mean": 15,
+          "std": 1.0
+        }
+      },
+      "participation": {
+        "type": "Dist",
+        "classname": "bernoulli",
+        "tracestr": "pars_mfnet_participation",
+        "diststr": "",
+        "pars": {
+          "p": 0.9
+        }
+      },
+      "debut": {
+        "type": "Dist",
+        "classname": "normal",
+        "tracestr": "pars_mfnet_debut",
+        "diststr": "",
+        "pars": {
+          "loc": 16,
+          "scale": 1.0
+        }
+      },
+      "acts": {
+        "type": "Dist",
+        "classname": "poisson",
+        "tracestr": "pars_mfnet_acts",
+        "diststr": "",
+        "pars": {
+          "lam": 80
+        }
+      },
+      "rel_part_rates": 1.0
+    },
+    "maternalnet": {},
+    "sir": {
+      "log": false,
+      "beta": {
+        "classname": "beta",
+        "v": 0.1,
+        "unit": "year",
+        "parent_unit": "year",
+        "parent_dt": 0.2,
+        "parent_name": "Deaths",
+        "self_dt": 1.0,
+        "factor": 5.0,
+        "values": 0.0208516376390232
+      },
+      "init_prev": {
+        "type": "Dist",
+        "classname": "bernoulli",
+        "tracestr": "pars_sir_init_prev",
+        "diststr": "",
+        "pars": {
+          "p": 0.01
+        }
+      },
+      "dur_inf": {
+        "type": "Dist",
+        "classname": "lognorm_ex",
+        "tracestr": "pars_sir_dur_inf",
+        "diststr": "",
+        "pars": {
+          "mean": {
+            "classname": "dur",
+            "v": 6,
+            "unit": "year",
+            "parent_unit": "year",
+            "parent_dt": 0.2,
+            "parent_name": "Deaths",
+            "self_dt": 1.0,
+            "factor": 5.0,
+            "values": 30.0
+          },
+          "std": 1.0
+        }
+      },
+      "p_death": {
+        "type": "Dist",
+        "classname": "bernoulli",
+        "tracestr": "pars_sir_p_death",
+        "diststr": "",
+        "pars": {
+          "p": 0.01
+        }
+      }
+    },
+    "sis": {
+      "log": false,
+      "beta": {
+        "classname": "beta",
+        "v": 0.05,
+        "unit": "year",
+        "parent_unit": "year",
+        "parent_dt": 0.2,
+        "parent_name": "Deaths",
+        "self_dt": 1.0,
+        "factor": 5.0,
+        "values": 0.010206218313011495
+      },
+      "init_prev": {
+        "type": "Dist",
+        "classname": "bernoulli",
+        "tracestr": "pars_sis_init_prev",
+        "diststr": "",
+        "pars": {
+          "p": 0.01
+        }
+      },
+      "dur_inf": {
+        "type": "Dist",
+        "classname": "lognorm_ex",
+        "tracestr": "pars_sis_dur_inf",
+        "diststr": "",
+        "pars": {
+          "mean": {
+            "classname": "dur",
+            "v": 10,
+            "unit": "year",
+            "parent_unit": "year",
+            "parent_dt": 0.2,
+            "parent_name": "Deaths",
+            "self_dt": 1.0,
+            "factor": 5.0,
+            "values": 50.0
+          },
+          "std": 1.0
+        }
+      },
+      "waning": {
+        "classname": "rate",
+        "v": 0.05,
+        "unit": "year",
+        "parent_unit": "year",
+        "parent_dt": 0.2,
+        "parent_name": "Deaths",
+        "self_dt": 1.0,
+        "factor": 5.0,
+        "values": 0.01
+      },
+      "imm_boost": 1.0
+    }
+  }
+}

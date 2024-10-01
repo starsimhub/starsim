@@ -14,6 +14,8 @@ sc.options(interactive=do_plot) # Assume not running interactively
 
 
 def test_sir():
+    sc.heading('Testing SIR dynamics')
+
     ppl = ss.People(n_agents)
     network_pars = {
         'n_contacts': ss.poisson(4), # Contacts Poisson distributed with a mean of 4
@@ -54,7 +56,7 @@ def test_sir():
 
 def test_sir_epi():
     sc.heading('Test basic epi dynamics')
-    
+
     base_pars = dict(n_agents=n_agents, networks=dict(type='random'), diseases=dict(type='sir'))
 
     # Define the parameters to vary
@@ -103,6 +105,8 @@ def test_sir_epi():
 
 
 def test_sis(do_plot=do_plot):
+    sc.heading('Testing SIS dynamics')
+
     pars = dict(
         n_agents = n_agents,
         diseases = 'sis',
@@ -117,6 +121,8 @@ def test_sis(do_plot=do_plot):
 
 
 def test_ncd():
+    sc.heading('Testing NCDs')
+
     ppl = ss.People(n_agents)
     ncd = ss.NCD(pars={'log':True})
     sim = ss.Sim(people=ppl, diseases=ncd, copy_inputs=False) # Since using ncd directly below
@@ -143,6 +149,8 @@ def test_ncd():
 
 
 def test_gavi():
+    sc.heading('Testing GAVI diseases')
+
     sims = sc.autolist()
     for disease in ['cholera', 'measles', 'ebola']:
         pars = dict(
@@ -157,6 +165,8 @@ def test_gavi():
 
 
 def test_multidisease():
+    sc.heading('Testing simulating multiple diseases')
+
     ppl = ss.People(n_agents)
     sir1 = ss.SIR(name='sir1')
     sir2 = ss.SIR(name='sir2')
@@ -169,9 +179,9 @@ def test_multidisease():
     sim.run()
     return sim
 
-def test_mtct():
-    """ Test mother-to-child transmission routes """
 
+def test_mtct():
+    sc.heading('Test mother-to-child transmission routes')
     ppl = ss.People(n_agents)
     sis = ss.SIS(beta={'random':[0.005, 0.001], 'prenatal':[0.1, 0], 'postnatal':[0.1, 0]})
     networks = [ss.RandomNet(), ss.PrenatalNet(), ss.PostnatalNet()]
@@ -179,6 +189,7 @@ def test_mtct():
     sim = ss.Sim(dt=1/12, people=ppl, diseases=sis, networks=networks, demographics=demographics)
     sim.run()
     return sim
+
 
 if __name__ == '__main__':
     do_plot = True

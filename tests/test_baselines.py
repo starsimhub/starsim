@@ -26,13 +26,13 @@ pars = sc.objdict(
 
 def make_sim(run=False, **kwargs):
     """
-    Define a default simulation for testing the baseline. If run directly (not 
+    Define a default simulation for testing the baseline. If run directly (not
     via pytest), also plot the sim by default.
     """
     diseases = ['sir', 'sis']
     networks = ['random', 'mf', 'maternal']
     sim = ss.Sim(pars=pars | kwargs, networks=networks, diseases=diseases, demographics=True)
-    
+
     # Optionally run and plot
     if run:
         sim.run()
@@ -54,9 +54,9 @@ def save_baseline():
 
     # Export results
     sim.to_json(filename=baseline_filename, keys='summary')
-    
-    # CK: To restore once export_pars is fixed
-    # sim.export_pars(filename=parameters_filename) # If not different from previous version, can safely delete
+
+    # Save parameters
+    sim.to_json(filename=parameters_filename, keys='pars') # If not different from previous version, can safely delete
 
     print('Done.')
     return
@@ -89,7 +89,7 @@ def multisim_baseline(save=False, n_runs=10, **kwargs):
 
 def test_baseline():
     """ Compare the current default sim against the saved baseline """
-    
+
     # Load existing baseline
     baseline = sc.loadjson(baseline_filename)
     old = baseline['summary']
@@ -106,7 +106,7 @@ def test_baseline():
 
 def test_benchmark(do_save=False, repeats=1, verbose=True):
     """ Compare benchmark performance """
-    
+
     if verbose: print('Running benchmark...')
     try:
         previous = sc.loadjson(benchmark_filename)
@@ -141,9 +141,9 @@ def test_benchmark(do_save=False, repeats=1, verbose=True):
 
     # Do the actual benchmarking
     for r in range(repeats):
-        
+
         print(f'Repeat {r}')
-        
+
         # Time initialization
         t0 = sc.tic()
         sim = make_sim()

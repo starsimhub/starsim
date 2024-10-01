@@ -19,7 +19,7 @@ class Measles(SIR):
             # Initial conditions and beta
             beta = 1.0, # Placeholder value
             init_prev = ss.bernoulli(p=0.005),
-            
+
             # Natural history parameters, all specified in days
             dur_exp = ss.normal(loc=ss.days(8)),        # (days) - source: US CDC
             dur_inf = ss.normal(loc=ss.days(11)),       # (days) - source: US CDC

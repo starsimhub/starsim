@@ -7,7 +7,7 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
-Version 2.0.0 (2024-09-30)
+Version 2.0.0 (2024-10-01)
 --------------------------
 
 Summary
@@ -61,7 +61,8 @@ Other changes
 - Data can now be supplied to a simulation; it will be automatically plotted by ``sim.plot()``.
 - ``ss.Calibration`` has been significantly reworked, and now includes more flexible parameter setting, plus plotting (``calib.plot_sims()`` and ``calib.plot_trend()``). It also has a ``debug`` argument (which runs in serial rather than paralell), which can be helpful for troubleshooting issues.
 - ``MultiSim`` now has display methods ``brief()`` (minimal), ``show()`` (moderate), and ``disp`` (verbose).
-- ``sim.export_df()`` has been renamed ``sim.to_df()``
+- ``sim.export_df()`` has been renamed ``sim.to_df()``.
+- Most classes now have ``to_json()`` methods (which can also export to a dict).
 - Fixed a bug in how the ``InfectionLog`` is added to disease modules.
 - ``Sim.gitinfo`` has been replaced with ``Sim.metadata`` (which includes git info).
 - ``Infection.validate_beta()`` is now applied on every timestep, so changes to beta during the simulation are now honored.

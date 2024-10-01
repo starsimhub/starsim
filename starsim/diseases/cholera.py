@@ -21,7 +21,7 @@ class Cholera(ss.Infection):
             # Initial conditions and beta
             beta = ss.beta(1.0), # Placeholder value
             init_prev = ss.bernoulli(0.005),
-            
+
             # Natural history parameters, all specified in days
             dur_exp2inf   = ss.days(ss.lognorm_ex(mean=2.772, std=4.737)), # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
             dur_asymp2rec = ss.days(ss.uniform(low=1, high=10)), # From WHO cholera fact sheet, asymptomatic individuals shed bacteria for 1-10 days (https://www.who.int/news-room/fact-sheets/detail/cholera)
@@ -46,7 +46,7 @@ class Cholera(ss.Infection):
             ss.State('exposed', label='Exposed'),
             ss.State('symptomatic', label='Symptomatic'),
             ss.State('recovered', label='Recovered'),
-    
+
             # Timepoint states
             ss.FloatArr('ti_exposed', label='Time of exposure'),
             ss.FloatArr('ti_symptomatic', label='Time of symptoms'),
@@ -158,7 +158,7 @@ class Cholera(ss.Infection):
         """ Add indirect transmission """
         # Make new cases via direct transmission
         super().make_new_cases()
-        
+
         # Make new cases via indirect transmission
         pars = self.pars
         res = self.results

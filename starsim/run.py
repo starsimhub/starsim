@@ -1,7 +1,6 @@
 """
 Utilities for running in parallel
 """
-
 import numpy as np
 import sciris as sc
 import matplotlib.pyplot as plt
@@ -12,8 +11,8 @@ __all__ = ['MultiSim', 'single_run', 'multi_run', 'parallel']
 
 class MultiSim:
     """
-    Class for running multiple copies of a simulation. 
-    
+    Class for running multiple copies of a simulation.
+
     Args:
         sims (Sim/list): a single sim or a list of sims
         base_sim (Sim): the sim used for shared properties; if not supplied, the first of the sims provided
@@ -21,13 +20,13 @@ class MultiSim:
         n_runs (int): if a single sim is provided, the number of replicates (default 4)
         initialize (bool): whether or not to initialize the sims (otherwise, initialize them during run)
         inplace (bool): whether to modify the sims in-place (default True); else return new sims
+        debug (bool): if True, run in serial
         kwargs (dict): stored in run_args and passed to run()
     """
-
-    def __init__(self, sims=None, base_sim=None, label=None, n_runs=4, initialize=False, inplace=True, *args, **kwargs):
-
+    def __init__(self, sims=None, base_sim=None, label=None, n_runs=4, initialize=False,
+                 inplace=True, debug=False, **kwargs):
         # Handle inputs
-        super().__init__(*args, **kwargs)
+        super().__init__(**kwargs)
         if base_sim is None:
             if isinstance(sims, ss.Sim):
                 base_sim = sims
@@ -43,8 +42,9 @@ class MultiSim:
         self.sims = sims
         self.base_sim = base_sim
         self.label = base_sim.label if (label is None and base_sim is not None) else label
-        self.run_args = sc.mergedicts(dict(n_runs=n_runs, inplace=inplace), kwargs)
+        self.run_args = sc.mergedicts(dict(n_runs=n_runs, inplace=inplace, debug=debug), kwargs)
         self.results = None
+        self.summary = None
         self.which = None  # Whether the multisim is to be reduced, combined, etc.
         self.timer = sc.timer() # Create a timer
 
@@ -60,7 +60,7 @@ class MultiSim:
             return len(self.sims)
         except:
             return 0
-    
+
     def __repr__(self):
         """ Return a brief description of a multisim; see multisim.disp() for the more detailed version. """
         try:
@@ -70,27 +70,26 @@ class MultiSim:
             string = sc.objectid(self)
             string += f'Warning, multisim appears to be malformed:\n{str(E)}'
         return string
-    
+
     def brief(self):
         """ A single-line display of the MultiSim; same as print(multisim) """
         print(self)
         return
-    
+
     def show(self, output=False):
-        """ Show more detail than print(multisim), but less than multisim.disp() """
-        '''
+        """
         Print a moderate length summary of the MultiSim. See also multisim.disp()
         (detailed output) and multisim.brief() (short output).
-    
+
         Args:
             output (bool): if true, return a string instead of printing output
-    
+
         **Example**::
-    
+
             msim = ss.MultiSim(ss.demo(run=False), label='Example multisim')
             msim.run()
             msim.show() # Prints moderate length output
-        '''
+        """
         labelstr = f' "{self.label}"' if self.label else ''
         simlenstr = f'{len(self)}'
         string  = f'MultiSim{labelstr} summary:\n'
@@ -103,9 +102,10 @@ class MultiSim:
                 string += f'    {s}: {sim}\n'
         if not output:
             print(string)
+            return
         else:
             return string
-    
+
     def disp(self):
         """ Display the full object """
         return sc.pr(self)
@@ -123,6 +123,8 @@ class MultiSim:
 
         # Initialize the sims but don't run them
         kwargs = sc.mergedicts(self.run_args, kwargs, {'do_run': False})  # Never run, that's the point!
+        kwargs.pop('inplace', None)
+        kwargs.pop('debug', None)
         self.sims = multi_run(sims, **kwargs)
 
         return
@@ -155,8 +157,12 @@ class MultiSim:
         self.timer.start()
         kwargs = sc.mergedicts(self.run_args, kwargs)
         inplace = kwargs.pop('inplace', True)
-        run_sims = multi_run(sims, **kwargs) # Output sims are copies due to the pickling during parallelization
-        
+        debug = kwargs.pop('debug', False)
+        if debug:
+            run_sims = [single_run(sim, **kwargs) for sim in sims]
+        else: # The next line does all the work!
+            run_sims = multi_run(sims, **kwargs) # Output sims are copies due to the pickling during parallelization
+
         # Handle output
         if inplace and isinstance(self.sims, list) and len(run_sims) == len(self.sims): # Validation
             for old,new in zip(self.sims, run_sims):
@@ -231,7 +237,7 @@ class MultiSim:
                 except Exception as E:
                     errormsg = (f'Could not figure out how to convert {quantiles} into a quantiles object:'
                                 f' must be a dict with keys low, high or a 2-element array ({str(E)})')
-                    raise ValueError(errormsg)
+                    raise ValueError(errormsg) from E
 
         # Store information on the sims
         n_runs = len(self)
@@ -295,22 +301,22 @@ class MultiSim:
             kwargs (dict): passed to reduce()
         """
         return self.reduce(use_mean=False, quantiles=quantiles, **kwargs)
-    
+
     def summarize(self, method='mean', quantiles=None, how='default'):
         """
         Summarize the simulations statistically.
-        
+
         Args:
             method (str): one of 'mean' (default: [mean, 2*std]), 'median' ([median, min, max]), or 'all' (all results)
             quantiles (dict): if method='median', use these quantiles
             how (str): passed to sim.summarize()
         """
-        
+
         # Compute the summaries
         summaries = []
         for sim in self.sims:
             summaries.append(sim.summarize(how=how))
-            
+
         summary = sc.dcp(summaries[0]) # Use the first one as a template
         for k in summary.keys():
             arr = np.array([s[k] for s in summaries])
@@ -324,18 +330,18 @@ class MultiSim:
                 elif isinstance(quantiles, list):
                     quantiles = {q:q for q in quantiles}
                 summary[k] = {q:v for q,v in zip(quantiles, np.quantile(arr, quantiles))}
-        
+
         self.summary = summary # Could reconcile with reduce()'s summary
-                                  
+
         return summary
-    
+
     def plot(self, key=None, fig=None, fig_kw=None, plot_kw=None, fill_kw=None):
-        """ 
+        """
         Plot all results in the MultiSim object.
-        
+
         If the MultiSim object has been reduced (i.e. mean or median), then plot
         the best value and uncertainty bound. Otherwise, plot individual sims.
-        
+
         Args:
             key (str): the results key to plot (by default, all)
             fig (Figure): if provided, plot results into an existing figure
@@ -351,7 +357,7 @@ class MultiSim:
             for sim in self.sims:
                 fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw)
             plt.legend()
-        
+
         # Has been reduced, plot with uncertainty bounds
         else:
             flat = self.results
@@ -370,14 +376,14 @@ class MultiSim:
                     fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
                 else:
                     axs = sc.toarray(fig.axes)
-                    
+
                 # Do the plotting
                 for ax, (key, res) in zip(axs.flatten(), flat.items()):
                     ax.fill_between(res.timevec, res.low, res.high, **fill_kw)
                     ax.plot(res.timevec, res, **plot_kw)
-                    ax.set_title(getattr(res, 'label', key)) 
+                    ax.set_title(getattr(res, 'label', key))
                     ax.set_xlabel('Year')
-                
+
         return fig
 
 
@@ -454,7 +460,7 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, keep_people=None, run_a
               par_args=None, do_run=True, parallel=True, n_cpus=None, verbose=None, **kwargs):
     """
     For running multiple sims in parallel. If the first argument is a list of sims
-    rather than a single sim, exactly these will be run and most other arguments 
+    rather than a single sim, exactly these will be run and most other arguments
     will be ignored.
 
     Args:
@@ -550,7 +556,7 @@ Alternatively, to run without multiprocessing, set parallel=False.
             sims.append(sim)
 
     return sims
-                  
+
 
 def parallel(*args, **kwargs):
     """
@@ -566,10 +572,12 @@ def parallel(*args, **kwargs):
 
     **Examples**::
 
-        s1 = ss.Sim(beta=0.01, label='Low')
-        s2 = ss.Sim(beta=0.02, label='High')
+        s1 = ss.Sim(n_agents=1000, label='Small', diseases='sis', networks='random')
+        s2 = ss.Sim(n_agents=2000, label='Large', diseases='sis', networks='random')
         ss.parallel(s1, s2).plot()
         msim = ss.parallel([s1, s2], keep_people=True)
     """
     sims = sc.mergelists(*args)
-    return MultiSim(sims=sims).run(**kwargs)
+    msim = MultiSim(sims=sims, **kwargs)
+    msim.run()
+    return msim

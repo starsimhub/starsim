@@ -1,7 +1,6 @@
 """
 Base classes for diseases
 """
-
 import numpy as np
 import sciris as sc
 import starsim as ss
@@ -80,7 +79,7 @@ class Disease(ss.Module):
         allows an intervention to avert a death scheduled on the same timestep, without having
         to undo any state changes that have already been applied (because they only run via this
         function if the death actually occurs).
-        
+
         Unlike other methods during the integration loop, this method is not called directly
         by the sim; instead, it is called by people.step_die(), which reconciles the UIDs of
         the agents who will die.
@@ -166,7 +165,7 @@ class Infection(Disease):
         # Define random number generator for determining transmission
         self.trans_rng = ss.multi_random('source', 'target')
         return
-    
+
     def init_pre(self, sim):
         super().init_pre(sim)
         self.validate_beta(run_checks=True)
@@ -210,22 +209,22 @@ class Infection(Disease):
             ss.Result('cum_infections', dtype=int,   scale=True,  label='Cumulative infections'),
         )
         return
-        
+
     def validate_beta(self, run_checks=False):
         """ Validate beta and return as a map to match the networks """
         sim = self.sim
         β = self.pars.beta
-        
+
         def scalar_beta(β):
             return isinstance(β, ss.TimePar) or sc.isnumber(β)
-        
+
         if run_checks:
             scalar_warn = f'Beta is defined as a number ({β}); convert it to a rate to handle timestep conversions'
 
             if 'beta' not in self.pars:
                 errormsg = f'Disease {self.name} is missing beta; pars are: {sc.strjoin(self.pars.keys())}'
                 raise sc.KeyNotFoundError(errormsg)
-                
+
             if sc.isnumber(β):
                 ss.warn(scalar_warn)
             elif isinstance(β, dict):
@@ -250,11 +249,11 @@ class Infection(Disease):
                     betamap[nkey] = [thisbeta, thisbeta]
                 else:
                     betamap[nkey] = thisbeta
-        
+
         else:
             errormsg = f'Invalid type {type(β)} for beta'
             raise TypeError(errormsg)
-        
+
         # Check that it matches the network
         netkeys = [ss.standardize_netkey(k) for k in list(sim.networks.keys())]
         if set(betamap.keys()) != set(netkeys):
@@ -262,20 +261,20 @@ class Infection(Disease):
             raise ValueError(errormsg)
 
         return betamap
-    
+
     def step(self):
         """
         Perform key infection updates, including infection and setting prognoses
         """
         # Create new cases
         new_cases, sources, networks = self.infect() # TODO: store outputs in self or use objdict rather than 3 returns
-        
+
         # Set prognoses
         if len(new_cases):
             self.set_outcomes(new_cases, sources)
-        
+
         return new_cases, sources, networks
-    
+
     @staticmethod # In future, consider: @nb.njit(fastmath=True, parallel=True, cache=True), but no faster it seems
     def compute_transmission(src, trg, rel_trans, rel_sus, beta_per_dt, randvals):
         """ Compute the probability of a->b transmission """
@@ -291,10 +290,10 @@ class Infection(Disease):
         sources = []
         networks = []
         betamap = self.validate_beta()
-        
+
         rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
         rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
-        
+
         for i, (nkey,net) in enumerate(self.sim.networks.items()):
             nk = ss.standardize_netkey(nkey)
             if len(net): # Skip networks with no edges
@@ -305,12 +304,12 @@ class Infection(Disease):
                     if beta: # Skip networks with no transmission
                         beta_per_dt = net.net_beta(disease_beta=beta) # Compute beta for this network and timestep
                         randvals = self.trans_rng.rvs(src, trg) # Generate a new random number based on the two other random numbers
-                        args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission 
+                        args = (src, trg, rel_trans, rel_sus, beta_per_dt, randvals) # Set up the arguments to calculate transmission
                         target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
                         new_cases.append(target_uids)
                         sources.append(source_uids)
                         networks.append(np.full(len(target_uids), dtype=ss_int_, fill_value=i))
-                
+
         # Finalize
         if len(new_cases) and len(sources):
             new_cases = ss.uids.cat(new_cases)
@@ -336,7 +335,7 @@ class Infection(Disease):
 
     def set_congenital(self, uids, sources=None):
         pass
-    
+
     def update_results(self):
         super().update_results()
         res = self.results

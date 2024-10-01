@@ -6,7 +6,6 @@ Hierarchy
 - samples: collection of results with same parameters but different seeds
 - dataset: collection of samples (with different parameters)
 """
-
 import io
 import zipfile
 import sciris as sc
@@ -146,7 +145,7 @@ class Samples:
             self.preload()
 
         return
-        
+
     def copy(self):
         """
         Shallow copy - shared cache, copied summary
@@ -269,7 +268,7 @@ class Samples:
         Returns: Array of seed values
         """
         return self.index.get_level_values("seed").values
-    
+
     @staticmethod
     def _seedfile(seed):
         """ Helper function to generate a seed file name """
@@ -308,12 +307,12 @@ class Samples:
         # Finish working on and write the summary
         summary.set_index(identifiers, inplace=True)
         zipdata[summary_file] = summary.to_csv()
-        
+
         # Handle the zip file name
         if fname is None:
             fname = "-".join(str(row[x]) for x in identifiers[1:]) + ".zip"
         folder.mkdir(parents=True, exist_ok=True)
-        
+
         # Save the zip file
         sc.savezip(folder/fname, data=zipdata, tobytes=False)
 
@@ -348,7 +347,7 @@ class Samples:
         """
         for seed in self.seeds:
             yield seed, self.get(seed)
-            
+
     def __getitem__(self, item):
         """
         Overload getitem for convenience

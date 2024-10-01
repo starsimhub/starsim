@@ -17,7 +17,7 @@ class SIR(ss.Infection):
     This class implements a basic SIR model with states for susceptible,
     infected/infectious, and recovered. It also includes deaths, and basic
     results.
-    """    
+    """
     def __init__(self, pars=None, **kwargs):
         """ The current implementation """
         super().__init__()
@@ -28,7 +28,7 @@ class SIR(ss.Infection):
             p_death = ss.bernoulli(p=0.01),
         )
         self.update_pars(pars, **kwargs)
-        
+
         self.define_states(
             ss.State('susceptible', default=True, label='Susceptible'),
             ss.State('infected', label='Infectious'),
@@ -95,7 +95,7 @@ class SIR(ss.Infection):
         sc.boxoff()
         sc.commaticks()
         return fig
-    
+
 
 class SIS(ss.Infection):
     """
@@ -129,7 +129,7 @@ class SIS(ss.Infection):
         self.susceptible[recovered] = True
         self.update_immunity()
         return
-    
+
     def update_immunity(self):
         has_imm = (self.immunity > 0).uids
         self.immunity[has_imm] = (self.immunity[has_imm])*(1 - self.pars.waning)
@@ -151,7 +151,7 @@ class SIS(ss.Infection):
         self.ti_recovered[uids] = self.ti + dur_inf
 
         return
-    
+
     def init_results(self):
         """ Initialize results """
         super().init_results()
@@ -164,7 +164,7 @@ class SIS(ss.Infection):
         """ Store the population immunity (susceptibility) """
         super().update_results()
         self.results['rel_sus'][self.ti] = self.rel_sus.mean()
-        return 
+        return
 
     def plot(self, **kwargs):
         """ Default plot for SIS model """
@@ -188,13 +188,13 @@ __all__ += ['sir_vaccine']
 class sir_vaccine(ss.Vx):
     """
     Create a vaccine product that affects the probability of infection.
-    
-    The vaccine can be either "leaky", in which everyone who receives the vaccine 
-    receives the same amount of protection (specified by the efficacy parameter) 
+
+    The vaccine can be either "leaky", in which everyone who receives the vaccine
+    receives the same amount of protection (specified by the efficacy parameter)
     each time they are exposed to an infection. The alternative (leaky=False) is
     that the efficacy is the probability that the vaccine "takes", in which case
     that person is 100% protected (and the remaining people are 0% protected).
-    
+
     Args:
         efficacy (float): efficacy of the vaccine (0<=efficacy<=1)
         leaky (bool): see above
@@ -208,7 +208,7 @@ class sir_vaccine(ss.Vx):
         self.update_pars(pars, **kwargs)
         return
 
-    def administer(self, people, uids):        
+    def administer(self, people, uids):
         if self.pars.leaky:
             people.sir.rel_sus[uids] *= 1-self.pars.efficacy
         else:

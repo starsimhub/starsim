@@ -1,7 +1,6 @@
 """
 Define products
 """
-
 import starsim as ss
 import sciris as sc
 import numpy as np
@@ -25,7 +24,7 @@ class Product(ss.Module):
 
 class Dx(Product):
     """
-    Generic class for diagnostics 
+    Generic class for diagnostics
     """
 
     def __init__(self, df, hierarchy=None, *args, **kwargs):
@@ -51,7 +50,7 @@ class Dx(Product):
     def administer(self, uids, return_format='dict'):
         """
         Administer a testing product.
-        
+
         Returns:
 
              if return_format=='array': an array of length len(inds) with integer entries that map each person to one of the result_states
