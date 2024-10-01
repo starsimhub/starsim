@@ -7,9 +7,9 @@ sphinx-design
 readthedocs-sphinx-search
 sphinxcontrib-napoleon
 ipykernel # For tutorials
+ipywidgets # For the tutorials
 nbconvert # For tutorials
 nbsphinx # For tutorials
 plantweb
-ipykernel
 optuna
 seaborn
