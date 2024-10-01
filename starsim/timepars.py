@@ -159,7 +159,7 @@ class TimePar(ss.BaseArr):
         self.initialized = False
         return
 
-    def init(self, parent=None, parent_unit=None, parent_dt=None):
+    def init(self, parent=None, parent_unit=None, parent_dt=None, update_values=True):
         """ Link to the sim and/or module units """
         if parent is None:
             parent = sc.dictobj(unit=parent_unit, dt=parent_dt)
@@ -180,7 +180,7 @@ class TimePar(ss.BaseArr):
         self.parent_dt = sc.ifelse(self.parent_dt, self.self_dt, 1.0)
 
         # Calculate the actual conversion factor to be used in the calculations
-        self.update_cached()
+        self.update_cached(update_values)
         self.initialized = True
         return self
 
@@ -217,10 +217,11 @@ class TimePar(ss.BaseArr):
             self.update_cached()
         return self
 
-    def update_cached(self):
+    def update_cached(self, update_values=True):
         """ Update the cached factor and values """
         self.update_factor()
-        self.update_values()
+        if update_values:
+            self.update_values()
         return self
 
     def update_factor(self):

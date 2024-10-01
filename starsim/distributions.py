@@ -484,7 +484,7 @@ class Dist:
 
     def process_pars(self, call=True):
         """ Ensure the supplied dist and parameters are valid, and initialize them; not for the user """
-        self._time_factor = None # Time rescalings need to be done after distributions are calculated; store the correction factor here
+        self._timepar = None # Time rescalings need to be done after distributions are calculated; store the correction factor here
         self._pars = sc.cp(self.pars) # The actual keywords; shallow copy, modified below for special cases
         if call:
             self.call_pars() # Convert from function to values if needed
@@ -504,16 +504,16 @@ class Dist:
 
             # If it's a time parameter, transform it to a float now
             if isinstance(val, ss.TimePar):
-                self._pars[key] = val.v # Use the raw value
-                factor = val.values/val.v # Calculate the ratio here; NB, this is usually val.factor, but not for ss.time_prob; note that this is actually an array
-                if self._time_factor is None:
-                    self._time_factor = factor
-                elif factor != self._time_factor:
+                if self._timepar is None: # Store this here for later use
+                    self._timepar = sc.dcp(val) # Make a copy to avoid modifying the original
+                elif val.factor != self._timepar.factor:
                     errormsg = f'Cannot have time parameters in the same distribution with inconsistent unit/dt values: {self._pars}'
                     raise ValueError(errormsg)
+                self._pars[key] = val.v # Use the raw value, since it could be anything (including a function)
+                val = val.v # Update it here too, for the rest of the loop
 
             # If the parameter is callable, then call it
-            elif callable(val) and not isinstance(val, type): # Types can appear as callable
+            if callable(val) and not isinstance(val, type): # Types can appear as callable
                 size_par = uids if uids is not None else size
                 out = val(self.module, self.sim, size_par) # TODO: swap order to sim, module, size?
                 val = np.asarray(out) # Necessary since FloatArrs don't allow slicing # TODO: check if this is correct
@@ -597,8 +597,12 @@ class Dist:
                 rvs = rvs[self._slots]
 
         # Scale by time if needed
-        if self._time_factor is not None:
-            rvs = rvs*self._time_factor # TODO: Can't use rvs *= in case it's not a float; this is not ideal though since if not a float (e.g. for Poisson) it's probably a bug
+        if self._timepar is not None:
+            tp = self._timepar
+            tp.v = rvs # Replace the base value with the random variables
+            tp.update_values() # Recalculate the values with the time scaling
+            rvs = tp.values # Replace the random variables with the scaled version
+            self._timepar = None # Remove the timepar which is no longer needed
 
         # Tidy up
         self.called += 1
