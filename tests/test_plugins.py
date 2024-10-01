@@ -4,7 +4,7 @@ Test connectors and custom interventions
 
 import sciris as sc
 import numpy as np
-import pylab as pl
+import matplotlib.pyplot as plt
 import starsim as ss
 
 sc.options(interactive=False) # Assume not running interactively
@@ -13,8 +13,9 @@ sc.options(interactive=False) # Assume not running interactively
 class hiv_syph(ss.Connector):
     """ Simple connector whereby rel_sus to NG doubles if CD4 count is <200"""
     def __init__(self, pars=None, **kwargs):
-        super().__init__(label='HIV-Syphilis', requires=[ss.HIV, ss.Syphilis])
-        self.default_pars(
+        super().__init__()
+        self.define_pars(
+            label = 'HIV-Syphilis',
             rel_sus_syph_hiv    = 2,   # People with HIV are 2x more likely to acquire syphilis
             rel_sus_syph_aids   = 5,   # People with AIDS are 5x more likely to acquire syphilis
             rel_trans_syph_hiv  = 1.5, # People with HIV are 1.5x more likely to transmit syphilis
@@ -25,8 +26,9 @@ class hiv_syph(ss.Connector):
         self.update_pars(pars, **kwargs)
         return
 
-    def update(self):
+    def step(self):
         """ Specify HIV-syphilis interactions """
+        
         diseases = self.sim.diseases
         syph = diseases.syphilis
         hiv = diseases.hiv
@@ -56,8 +58,9 @@ class Penicillin(ss.Intervention):
         self.year = year
         return
 
-    def apply(self, sim):
-        if sim.year > self.year:
+    def step(self):
+        sim = self.sim
+        if sim.now > self.year:
             syphilis = sim.diseases.syphilis
 
             # Define who is eligible for treatment
@@ -77,8 +80,8 @@ class Penicillin(ss.Intervention):
 def make_args():
     """ Make people, HIV, syphilis, and network """
     pars = dict(n_agents=2000, verbose=0)
-    mf = ss.MFNet(duration=ss.lognorm_ex(mean=5, stdev=0.5))
-    hiv = ss.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2)
+    mf = ss.MFNet(duration=ss.lognorm_ex(mean=5, std=0.5)) # TODO: think about whether these should be ss.dur(); currently they are not since stored in natural units with -self.dt
+    hiv = ss.HIV(beta={'mf': [0.0008, 0.0004]}, init_prev=0.2) # TODO: beta should wrap the other way
     syph = ss.Syphilis(beta={'mf': [0.1, 0.05]}, init_prev=0.05)
     args = dict(pars=pars, networks=mf, diseases=[hiv, syph])
     return args
@@ -114,29 +117,29 @@ def test_connectors(do_plot=False):
 
     # Plot
     if do_plot:
-        pl.figure()
+        plt.figure()
         
-        pl.subplot(2,1,1)
-        x = sims.con.yearvec
+        plt.subplot(2,1,1)
+        x = sims.con.timevec
         for label,res in results.items():
-            pl.plot(x, res.syphilis, label=label)
-        pl.title('Syphilis infections')
-        pl.xlabel('Year')
-        pl.ylabel('Count')
-        pl.axvline(2020)
-        pl.legend()
+            plt.plot(x, res.syphilis, label=label)
+        plt.title('Syphilis infections')
+        plt.xlabel('Year')
+        plt.ylabel('Count')
+        plt.axvline(2020)
+        plt.legend()
         
-        pl.subplot(2,1,2)
+        plt.subplot(2,1,2)
         for label,res in results.items():
-            pl.plot(x, res.hiv, label=label)
-        pl.title('HIV infections')
-        pl.xlabel('Year')
-        pl.ylabel('Count')
-        pl.axvline(2020)
-        pl.legend()
+            plt.plot(x, res.hiv, label=label)
+        plt.title('HIV infections')
+        plt.xlabel('Year')
+        plt.ylabel('Count')
+        plt.axvline(2020)
+        plt.legend()
         
         sc.figlayout()
-        pl.show()
+        plt.show()
     
     # Check results
     for disease in diseases:

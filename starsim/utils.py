@@ -1,18 +1,18 @@
 """
 Numerical utilities
 """
-
 import warnings
 import numpy as np
-import sciris as sc
-import starsim as ss
 import numba as nb
 import pandas as pd
+import sciris as sc
+import starsim as ss
 
 # %% Helper functions
 
-# What functions are externally visible -- note, this gets populated in each section below
-__all__ = ['ndict', 'warn', 'unique', 'find_contacts', 'combine_rands']
+# What functions are externally visible
+__all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'standardize_netkey',
+           'standardize_data', 'validate_sim_data', ]
 
 
 class ndict(sc.objdict):
@@ -40,7 +40,7 @@ class ndict(sc.objdict):
         self.setattribute('_overwrite', overwrite)
         self.extend(*args, **kwargs)
         return
-    
+
     def __call__(self):
         """ Shortcut for returning values """
         return self.values()
@@ -76,8 +76,8 @@ class ndict(sc.objdict):
         else:
             errormsg = f'Could not interpret argument {arg}: does not have expected attribute "{self._nameattr}"'
             raise TypeError(errormsg)
-        return
-    
+        return self
+
     def _check_key(self, key, overwrite=None):
         if overwrite is None: overwrite = self._overwrite
         if key in self:
@@ -88,11 +88,11 @@ class ndict(sc.objdict):
             else:
                 ss.warn(f'Overwriting existing ndict entry "{key}"')
         return
-    
+
     def _check_type(self, arg):
         """ Check types """
         if self._type is not None:
-            if not isinstance(arg, self._type):
+            if not isinstance(arg, self._type) and not isinstance(arg, ss.Module): # Module is a valid argument anywhere
                 errormsg = f'The following item does not have the expected type {self._type}:\n{arg}'
                 raise TypeError(errormsg)
         return
@@ -104,28 +104,35 @@ class ndict(sc.objdict):
             self.append(arg)
         for key, arg in kwargs.items():
             self.append(arg, key=key)
-        return
+        return self
+
+    def merge(self, other):
+        """ Merge another dictionary with this one """
+        for key, arg in other.items():
+            self.append(arg, key=key)
+        return self
 
     def copy(self):
+        """ Shallow copy """
         new = self.__class__.__new__(nameattr=self._nameattr, type=self._type, strict=self._strict)
         new.update(self)
         return new
 
-    def __add__(self, dict2):
+    def __add__(self, other):
         """ Allow c = a + b """
         new = self.copy()
-        if isinstance(dict2, list):
-            new.extend(dict2)
+        if isinstance(other, list):
+            new.extend(other)
         else:
-            new.append(dict2)
+            new.append(other)
         return new
 
-    def __iadd__(self, dict2):
+    def __iadd__(self, other):
         """ Allow a += b """
-        if isinstance(dict2, list):
-            self.extend(dict2)
+        if isinstance(other, list):
+            self.extend(other)
         else:
-            self.append(dict2)
+            self.append(other)
         return self
 
 
@@ -159,18 +166,6 @@ def warn(msg, category=None, verbose=None, die=None):
     return
 
 
-def unique(arr):
-    """
-    Find the unique elements and counts in an array.
-    Equivalent to np.unique(return_counts=True) but ~5x faster, and
-    only works for arrays of positive integers.
-    """
-    counts = np.bincount(arr.ravel())
-    unique = np.flatnonzero(counts)
-    counts = counts[unique]
-    return unique, counts
-
-@nb.njit
 def find_contacts(p1, p2, inds):  # pragma: no cover
     """
     Variation on Network.find_contacts() that avoids sorting.
@@ -189,9 +184,19 @@ def find_contacts(p1, p2, inds):  # pragma: no cover
     return pairing_partners
 
 
-# %% Seed methods
+def check_requires(sim, requires, *args):
+    """ Check that the module's requirements (of other modules) are met """
+    errs = sc.autolist()
+    all_classes = [m.__class__ for m in sim.modules]
+    all_names = [m.name for m in sim.modules]
+    for req in sc.mergelists(requires, *args):
+        if req not in all_classes + all_names:
+            errs += req
+    if len(errs):
+        errormsg = f'The following module(s) are required, but the Sim does not contain them: {sc.strjoin(errs)}'
+        raise AttributeError(errormsg)
+    return
 
-__all__ += ['set_seed']
 
 def set_seed(seed=None):
     '''
@@ -224,8 +229,10 @@ def set_seed(seed=None):
 
 # %% Data cleaning and processing
 
-__all__ += ['standardize_data']
 
+def standardize_netkey(key):
+    """ Networks can be upper or lowercase, and have a suffix 'net' or not; this function standardizes them """
+    return key.lower().removesuffix('net')
 
 def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, default_age=0, default_year=2024):
     """
@@ -236,13 +243,12 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     specified metadata, or an ``ss.Dist`` if the data is already an ``ss.Dist`` object.
 
     The metadata is a dictionary that defines columns of the dataframe or keys
-    of the dictionary to use as indices in the output Series. It should contain
+    of the dictionary to use as indices in the output Series. It should contain:
 
     - ``metadata['data_cols']['value']`` specifying the name of the column/key to draw values from
     - ``metadata['data_cols']['year']`` optionally specifying the column containing year values; otherwise the default year will be used
     - ``metadata['data_cols']['age']`` optionally specifying the column containing age values; otherwise the default age will be used
-    - ``metadata['data_cols'][<arbitrary>]`` optionally specifying any other columns to use as indices. These will form part of the multiindex
-                                         for the standardized Series output.
+    - ``metadata['data_cols'][<arbitrary>]`` optionally specifying any other columns to use as indices. These will form part of the multi-index for the standardized Series output.
 
     If a ``sex`` column is part of the index, the metadata can also optionally specify a string mapping to convert
     the sex labels in the input data into the 'm'/'f' labels used by Starsim. In that case, the metadata can contain
@@ -253,11 +259,10 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
         data (pandas.DataFrame, pandas.Series, dict, int, float): An associative array  or a number, with the input data to be standardized.
         metadata (dict): Dictionary specifiying index columns, the value column, and optionally mapping for sex labels
         min_year (float): Optionally specify a minimum year allowed in the data. Default is 1800.
-        out_of_range (float): Value to use for negative ages - typically 0 is a reasonable choice but other values (e.g., np.inf or np.nan)
-                              may be useful depending on the calculation. This will automatically be added to the dataframe with an age of
-                              ``-np.inf``
+        out_of_range (float): Value to use for negative ages - typically 0 is a reasonable choice but other values (e.g., np.inf or np.nan) may be useful depending on the calculation. This will automatically be added to the dataframe with an age of ``-np.inf``
 
     Returns:
+
         - A `pd.Series` for all supported formats of `data` *except* an ``ss.Dist``. This series will contain index columns for 'year'
           and 'age' (in that order) and then subsequent index columns for any other variables specified in the metadata, in the order
           they appeared in the metadata (except for year and age appearing first).
@@ -317,14 +322,58 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     return output
 
 
+def validate_sim_data(data=None, die=None):
+    """
+    Validate data intended to be compared to the sim outputs, e.g. for calibration
+
+    Args:
+        data (df/dict): a dataframe (or dict) of data, with a column "time" plus data columns of the form "module.result", e.g. "hiv.new_infections"
+        die (bool): whether to raise an exception if the data cannot be converted (default: die if data is not None but cannot be converted)
+
+    """
+    success = False
+    if data is not None:
+        # Try loading the data
+        try:
+            data = sc.dataframe(data) # Convert it to a dataframe
+            timecols = ['t', 'timevec', 'tvec', 'time', 'day', 'date', 'year'] # If a time column is supplied, use it as the index
+            found = False
+            for timecol in timecols:
+                if timecol in data.cols:
+                    if found:
+                        errormsg = f'Multiple time columns found: please ensure only one of {timecols} is present; you supplied {data.cols}.'
+                        raise ValueError(errormsg)
+                    data.set_index(timecol, inplace=True)
+                    found = True
+            success = True
+
+        # Data loading failed
+        except Exception as E:
+            errormsg = f'Failed to add data "{data}": expecting a dataframe-compatible object. Error:\n{E}'
+            if die == False:
+                print(errormsg)
+            else:
+                raise ValueError(errormsg)
+
+    # Validation
+    if not success and die == True:
+        errormsg = 'Data "{data}" could not be converted and die == True'
+        raise ValueError(errormsg)
+
+    return data
+
+
 def combine_rands(a, b):
     """
-    Efficient algorithm for combining two arrays of random numbers into one
-    
+    Efficient algorithm for combining two arrays of random integers into an array
+    of floats.
+
+    See ss.multi_random() for the user-facing version.
+
     Args:
-        a (array): array of random integers between np.iinfo(np.int64).min and np.iinfo(np.int64).max
+        a (array): array of random integers between 0 and np.iinfo(np.uint64).max, as from ss.rand_raw()
         b (array): ditto, same size as a
-        
+
     Returns:
         A new array of random numbers the same size as a and b
     """

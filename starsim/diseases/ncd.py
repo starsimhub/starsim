@@ -19,16 +19,16 @@ class NCD(ss.Disease):
     """
     def __init__(self, pars=None, **kwargs):
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             initial_risk = ss.bernoulli(p=0.3), # Initial prevalence of risk factors
-            dur_risk = ss.expon(scale=10),
-            prognosis = ss.weibull(c=2, scale=5), # Time in years between first becoming affected and death
+            dur_risk = ss.expon(scale=ss.dur(10)),
+            prognosis = ss.weibull(c=ss.years(2), scale=5), # Time in years between first becoming affected and death
         )
         self.update_pars(pars=pars, **kwargs)
-        
-        self.add_states(
-            ss.BoolArr('at_risk', label='At risk'),
-            ss.BoolArr('affected', label='Affected'),
+
+        self.define_states(
+            ss.State('at_risk', label='At risk'),
+            ss.State('affected', label='Affected'),
             ss.FloatArr('ti_affected', label='Time of becoming affected'),
             ss.FloatArr('ti_dead', label='Time of death'),
         )
@@ -48,23 +48,23 @@ class NCD(ss.Disease):
         super().init_post()
         initial_risk = self.pars['initial_risk'].filter()
         self.at_risk[initial_risk] = True
-        self.ti_affected[initial_risk] = self.sim.ti + sc.randround(self.pars['dur_risk'].rvs(initial_risk) / self.sim.dt)
+        self.ti_affected[initial_risk] = self.ti + sc.randround(self.pars['dur_risk'].rvs(initial_risk))
         return initial_risk
 
-    def update_pre(self):
-        ti = self.sim.ti
+    def step_state(self):
+        ti = self.ti
         deaths = (self.ti_dead == ti).uids
         self.sim.people.request_death(deaths)
         self.log.add_data(deaths, died=True)
         self.results.new_deaths[ti] = len(deaths) # Log deaths attributable to this module
         return
 
-    def make_new_cases(self):
-        ti = self.sim.ti
+    def step(self):
+        ti = self.ti
         new_cases = (self.ti_affected == ti).uids
         self.affected[new_cases] = True
         prog_years = self.pars.prognosis.rvs(new_cases)
-        self.ti_dead[new_cases] = ti + sc.randround(prog_years / self.sim.dt)
+        self.ti_dead[new_cases] = ti + sc.randround(prog_years / self.dt)
         super().set_prognoses(new_cases)
         return new_cases
 
@@ -73,17 +73,16 @@ class NCD(ss.Disease):
         Initialize results
         """
         super().init_results()
-        npts = self.sim.npts
-        self.results += [
-            ss.Result(self.name, 'n_not_at_risk', npts, dtype=int, label='Not at risk'),
-            ss.Result(self.name, 'prevalence', npts, dtype=float, label='Prevalence'),
-            ss.Result(self.name, 'new_deaths', npts, dtype=int, label='Deaths'),
-        ]
+        self.define_results(
+            ss.Result('n_not_at_risk', dtype=int,   label='Not at risk'),
+            ss.Result('prevalence',    dtype=float, label='Prevalence'),
+            ss.Result('new_deaths',    dtype=int,   label='Deaths'),
+        )
         return
 
     def update_results(self):
         super().update_results()
-        ti = self.sim.ti
+        ti = self.ti
         self.results.n_not_at_risk[ti] = np.count_nonzero(self.not_at_risk)
         self.results.prevalence[ti]    = np.count_nonzero(self.affected)/len(self.sim.people)
         self.results.new_deaths[ti]    = np.count_nonzero(self.ti_dead == ti)

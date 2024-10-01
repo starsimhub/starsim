@@ -4,7 +4,6 @@ All options should be set using set() or directly, e.g.::
 
     ss.options(verbose=False)
 """
-
 import os
 import numpy as np
 import sciris as sc
@@ -12,12 +11,13 @@ import sciris as sc
 __all__ = ['dtypes', 'options']
 
 # Define Starsim-default data types
-dtypes = sc.objdict(
-    bool = bool,
-    int = np.int64,
-    float = np.float64,
-    result_float = np.float64,
-)
+class dtypes:
+    bool = bool
+    int = np.int64
+    rand_int = np.int32
+    rand_uint = np.uint32
+    float = np.float32
+    result_float = np.float64
 
 
 # Not public to avoid confusion with ss.options
@@ -51,7 +51,7 @@ class Options(sc.objdict):
         self.setattribute('optdesc', optdesc)  # Set the description as an attribute, not a dict entry
         self.setattribute('orig_options', sc.dcp(options))  # Copy the default options
         return
-    
+
     @staticmethod
     def get_orig_options():
         """
@@ -69,10 +69,13 @@ class Options(sc.objdict):
         optdesc.warnings = 'How warnings are handled: options are "warn" (default), "print", and "error"'
         options.warnings = str(os.getenv('STARSIM_WARNINGS', 'warn'))
 
+        optdesc.time_eps = 'Set size of smallest possible time unit (in units of sim time, e.g. "year" or "day")'
+        options.time_eps = float(os.getenv('STARSIM_TIME_EPS', 1e-6))
+
         optdesc.sep = 'Set thousands seperator for text output'
         options.sep = str(os.getenv('STARSIM_SEP', ','))
 
-        optdesc.precision = 'Set arithmetic precision -- 32-bit by default for efficiency'
+        optdesc.precision = 'Set arithmetic precision'
         options.precision = int(os.getenv('STARSIM_PRECISION', 64))
 
         optdesc._centralized = 'If True, revert to centralized random number generation (NOT ADVISED).'
@@ -143,7 +146,7 @@ class Options(sc.objdict):
         # Handle other keys
         elif key is not None:
             kwargs = sc.mergedicts(kwargs, {key: value})
-        
+
         # Reset options
         for key, value in kwargs.items():
             if key not in self:
@@ -155,7 +158,7 @@ class Options(sc.objdict):
                 if value in [None, 'default']:
                     value = self.orig_options[key]
                 self[key] = value
-                
+
                 # Handle special cases
                 if key == 'precision':
                     self.reset_precision()
@@ -174,7 +177,7 @@ class Options(sc.objdict):
 
             # Convert warnings to errors
             with ss.options.context(warnings='error'):
-                ss.Sim(location='not a location').initialize()
+                ss.Sim(location='not a location').init()
 
             # Use with_style(), not context(), for plotting options
             with ss.options.with_style(dpi=50):
@@ -199,7 +202,7 @@ class Options(sc.objdict):
             return self[key] != self.orig_options[key]
         else:
             return None
-    
+
     def set_precision(self):
         if self.precision == 32:
             dtypes.int = np.int32

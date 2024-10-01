@@ -1,0 +1,8 @@
+#!/usr/bin/env python3
+"""
+Quickly check the performance benchmark
+"""
+
+import test_baselines
+
+test_baselines.test_benchmark(do_save=False, repeats=5)

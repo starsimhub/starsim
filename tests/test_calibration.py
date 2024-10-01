@@ -28,7 +28,7 @@ def make_sim():
         n_agents = n_agents,
         total_pop = 9980999,
         start = 1990,
-        n_years = 40,
+        dur = 40,
         diseases = [hiv],
         networks = [random, maternal],
         demographics = [pregnancy, death],
@@ -40,7 +40,7 @@ def make_sim():
 def make_data():
     """ Define the calibration target data """
     target_data = [
-    ['year', 'n_alive', 'hiv.prevalence', 'hiv.n_infected', 'hiv.new_infections', 'hiv.new_deaths'],
+    ['time', 'n_alive', 'hiv.prevalence', 'hiv.n_infected', 'hiv.new_infections', 'hiv.new_deaths'],
     [  1990,  10432409,        0.0699742,          730000 ,               210000,           25000],
     [  1991,  10681008,        0.0851979,          910000 ,               220000,           33000],
     [  1992,  10900511,        0.1009127,          1100000,               220000,           43000],
@@ -80,21 +80,13 @@ def make_data():
 
 #%% Define the tests
 
-def test_calibration(do_plot=True):
+def test_calibration(do_plot=False):
     sc.heading('Testing calibration')
 
     # Define the calibration parameters
     calib_pars = dict(
-        diseases = dict(
-            hiv = dict(
-                init_prev = [0.15, 0.01, 0.30],
-            ),
-        ),
-        networks = dict(
-            randomnet = dict(
-                n_contacts = [4, 2, 10],
-            ),
-        ),
+        init_prev = dict(low=0.01, high=0.30, guess=0.15, path=('diseases', 'hiv', 'init_prev')),
+        n_contacts = dict(low=2, high=10, guess=4, path=('networks', 'randomnet', 'n_contacts')),
     )
 
     # Make the sim and data
@@ -116,9 +108,10 @@ def test_calibration(do_plot=True):
         sim = sim,
         data = data,
         weights = weights,
-        total_trials = 4,
+        total_trials = 8,
         n_workers = 2,
-        die = True
+        die = True,
+        debug = False,
     )
 
     # Perform the calibration
@@ -134,7 +127,11 @@ def test_calibration(do_plot=True):
         print('✓ Calibration improved fit')
     else:
         print('✗ Calibration did not improve fit, but this sometimes happens stochastically and is not necessarily an error')
-    
+
+    if do_plot:
+        calib.plot_sims()
+        calib.plot_trend()
+
     return sim, calib
 
 
@@ -142,7 +139,8 @@ def test_calibration(do_plot=True):
 if __name__ == '__main__':
 
     T = sc.timer()
+    do_plot = True
 
-    sim, calib = test_calibration()
+    sim, calib = test_calibration(do_plot=do_plot)
 
     T.toc()

@@ -8,7 +8,7 @@ import numpy as np
 import starsim as ss
 
 
-def run_sir_vaccine(efficacy, leaky=True):
+def run_sir_vaccine(efficacy, leaky=True, do_plot=False):
     # parameters
     v_frac      = 0.5    # fraction of population vaccinated
     total_cases = 500    # total cases at which point we check results
@@ -16,24 +16,24 @@ def run_sir_vaccine(efficacy, leaky=True):
 
     # create a basic SIR sim
     sim = ss.Sim(
-        n_agents = 1000,     
+        n_agents = 1000,
         pars = dict(
           networks = dict(     
-                type = 'random', 
-                n_contacts = 4    
+                type = 'random',
+                n_contacts = 4
           ),
-          diseases = dict(      
-                type      = 'sir',     
-                init_prev = 0.01,  
-                dur_inf   = 0.1,
+          diseases = dict(
+                type      = 'sir',
+                init_prev = 0.01,
+                dur_inf   = ss.dur(10),
                 p_death   = 0,
-                beta      = 6,       
+                beta      = ss.beta(0.06),
           )
         ),
-        n_years = 10,
-        dt      = 0.01
+        dur = 10,
+        dt  = 0.01
     )
-    sim.initialize(verbose=False)
+    sim.init(verbose=False)
     
     # work out who to vaccinate
     in_trial = sim.people.sir.susceptible.uids
@@ -62,7 +62,7 @@ def run_sir_vaccine(efficacy, leaky=True):
     # run the simulation until sufficient cases
     old_cases = []
     for idx in range(1000):
-        sim.step()
+        sim.run_one_step()
         susc = sim.people.sir.susceptible.uids
         cases = np.setdiff1d(in_trial, susc)
         if len(cases) > total_cases:
@@ -84,20 +84,24 @@ def run_sir_vaccine(efficacy, leaky=True):
         assert len(np.intersect1d(vac_cases, in_vac[rel_susc[in_vac] == 1.0])) == len(vac_cases), 'Not all vaccine cases amongst vaccine failures (all or nothing)'
         assert len(np.intersect1d(vac_cases, in_vac[rel_susc[in_vac] == 0.0])) == 0, 'Vaccine cases amongst fully vaccincated (all or nothing)'
 
+    if do_plot:
+        sim.plot()
+
     return sim
 
 
-def test_sir_vaccine_leaky():
-    return run_sir_vaccine(0.3, False)
+def test_sir_vaccine_leaky(do_plot=False):
+    return run_sir_vaccine(0.3, False, do_plot=do_plot)
 
-def test_sir_vaccine_all_or_nothing():
-    return run_sir_vaccine(0.3, True)
+def test_sir_vaccine_all_or_nothing(do_plot=False):
+    return run_sir_vaccine(0.3, True, do_plot=do_plot)
 
 
 if __name__ == '__main__':
     T = sc.timer()
+    do_plot = True
 
-    sir_vaccine_leaky   = test_sir_vaccine_leaky(leaky=True)
-    sir_vaccine_a_or_n  = test_sir_vaccine_all_or_nothing(leaky=False)
+    leaky  = test_sir_vaccine_leaky(do_plot=do_plot)
+    a_or_n = test_sir_vaccine_all_or_nothing(do_plot=do_plot)
 
     T.toc()

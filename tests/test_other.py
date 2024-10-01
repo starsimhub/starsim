@@ -1,12 +1,11 @@
 """
 Test Starsim features not covered by other test files
 """
-
-# %% Imports and settings
 import sciris as sc
 import numpy as np
 import starsim as ss
-import matplotlib.pyplot as pl
+import matplotlib.pyplot as plt
+import pytest
 
 sc.options(interactive=False) # Assume not running interactively
 
@@ -19,7 +18,7 @@ def test_people():
     sc.heading('Testing people object')
 
     # Base people contains only the states defined in base.base_states
-    ppl = ss.People(small)  # BasePeople
+    ppl = ss.People(small)
     del ppl
 
     # Possible to initialize people with extra states, e.g. a geolocation
@@ -51,15 +50,16 @@ def test_microsim(do_plot=False):
         people=ss.People(small),
         networks=[ss.MFNet(), ss.MaternalNet()],
         demographics=ss.Pregnancy(),
-        diseases=hiv
+        diseases=hiv,
+        copy_inputs = False, # So we can reuse hiv
     )
-    sim.initialize()
+    sim.init()
     sim.run()
 
     if do_plot:
-        pl.figure()
-        pl.plot(sim.tivec, sim.results.hiv.n_infected)
-        pl.title('HIV number of infections')
+        plt.figure()
+        plt.plot(hiv.timevec, hiv.results.n_infected)
+        plt.title('HIV number of infections')
 
     return sim
 
@@ -81,11 +81,11 @@ def test_ppl_construction():
     gon = ss.Gonorrhea(pars=gon_pars)
 
     sim = ss.Sim(pars=sim_pars, diseases=[gon])
-    sim.initialize()
+    sim.init()
     sim.run()
-    pl.figure()
-    pl.plot(sim.tivec, sim.results.gonorrhea.n_infected)
-    pl.title('Number of gonorrhea infections')
+    plt.figure()
+    plt.plot(sim.timevec, sim.results.gonorrhea.n_infected)
+    plt.title('Number of gonorrhea infections')
 
     return sim
 
@@ -93,14 +93,14 @@ def test_ppl_construction():
 def test_arrs():
     sc.heading('Testing Arr objects')
     o = sc.objdict()
-    
+
     # Create a sim with only births
     pars = dict(n_agents=medium, diseases='sis', networks='random')
     p1 = sc.mergedicts(pars, birth_rate=10)
     p2 = sc.mergedicts(pars, death_rate=10)
     s1 = ss.Sim(pars=p1).run()
     s2 = ss.Sim(pars=p2).run()
-    
+
     # Tests
     assert len(s1.people.auids) > len(s2.people.auids), 'Should have more people with births'
     assert np.array_equal(s1.people.age, s1.people.age.raw[s1.people.auids]), 'Different ways of indexing age should match'
@@ -109,24 +109,25 @@ def test_arrs():
     assert not np.all(s2.people.alive.raw), 'Some agents should not be alive when indexed like this'
     assert np.array_equal(~s1.people.female, s1.people.male), 'Definition of men does not match'
     assert isinstance(s1.people.age < 5, ss.BoolArr), 'Performing logical operations should return a BoolArr'
-    
+
     o.s1 = s1
-    o.s2 = s2   
-    
+    o.s2 = s2
+
     return o
 
 
 def test_deepcopy():
+    sc.heading('Testing deepcopy')
     s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=small)
-    s1.initialize()
-    
+    s1.init()
+
     s2 = sc.dcp(s1)
 
     s1.run()
     s2.run()
     s1.plot()
     s2.plot()
-    
+
     ss.diff_sims(s1, s2, full=True)
     assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True)
 
@@ -134,8 +135,9 @@ def test_deepcopy():
 
 
 def test_deepcopy_until():
-    s1 = ss.Sim(pars=dict(diseases='sir', networks='embedding'), n_agents=small)
-    s1.initialize()
+    sc.heading('Testing deepcopy with until')
+    s1 = ss.Sim(diseases='sir', networks='embedding', n_agents=small)
+    s1.init()
 
     s1.run(until=5)
 
@@ -150,6 +152,34 @@ def test_deepcopy_until():
 
     return s1, s2
 
+
+def test_results():
+    sc.heading('Testing results export and plotting')
+    sim = ss.Sim(diseases='sis', networks='random', n_agents=medium)
+    sim.run()
+
+    # Export to dataframe
+    sis = sim.results.sis
+    res = sis.new_infections
+    df = res.to_df()
+    dfs = sis.to_df()
+    assert df.value.sum() == dfs.cum_infections.values[-1] == sim.summary.sis_cum_infections
+
+    # Plot
+    res.plot()
+    sim.results.sis.plot()
+
+    return sim
+
+
+def test_check_reqiures():
+    sc.heading('Testing check_requires')
+    s1 = ss.Sim(diseases='sis', networks='random', n_agents=medium).init()
+    ss.check_requires(s1, 'sis')
+    ss.check_requires(s1, ss.SIS)
+    with pytest.raises(AttributeError):
+        ss.check_requires(s1, ss.SIR)
+    return s1
 
 
 # %% Run as a script
@@ -167,7 +197,9 @@ if __name__ == '__main__':
     sims = test_arrs()
     sims2 = test_deepcopy()
     sims3 = test_deepcopy_until()
+    sim4 = test_results()
+    sim5 = test_check_reqiures()
 
     sc.toc(T)
-    pl.show()
+    plt.show()
     print('Done.')

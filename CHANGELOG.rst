@@ -7,6 +7,100 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 2.0.0 (2024-10-01)
+--------------------------
+
+Summary
+~~~~~~~
+Version 2.0 contains several major changes. These include: module-specific timesteps and time-aware parameters (including a day/year ``unit`` flag for modules, and  ``ss.dur()`` and ``ss.rate()`` classes for parameters), and changes to module types and integration (e.g. renaming ``update()`` and ``apply()`` methods to ``step()``;).
+
+Time-aware parameters and modules
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+- Added ``ss.dur()``, ``ss.rate()``, and ``ss.time_prob()`` classes, for automatic handling of time units in simulations. There are also convenience classes ``ss.days()``, ``ss.years()``, ``ss.perday()``, ``ss.peryear()``, and ``ss.beta()`` for special cases of these.
+- ``ss.dur()`` and ``ss.rate()``, along with modules and the sim itself, have a ``unit`` parameter which can be ``'day'``, ``'week'``, ``'month'``, or ``'year'`` (default). Modules now also have their own timestep ``dt``. Different units and timesteps can be mixed and matched. Time parameters have a ``to()`` method, e.g. ``ss.dur(1, 'year').to('day')`` will return ``ss.dur(365, unit='day')``.
+- The ``ss.Sim`` parameter ``n_years`` has been renamed ``dur``; ``sim.yearvec`` is now ``sim.timevec``, which can have units of days (usually starting at 0), dates (e.g. ``'2020-01-01'``), or years (e.g. ``2020``). ``sim.abs_tvec`` is the translation of ``sim.timevec`` as a numeric array starting at 0, using the sim's units (usually ``'day'`` or ``'year'``). For example, if ``sim.timevec`` is a list of daily dates from ``'2022-01-01'`` to ``'2022-12-31'``, ``sim.abs_tvec`` will be ``np.arange(365)``.
+- Each module also has its own ``mod.timevec``; this can be different from the sim if it defines its own time unit and/or timestep. ``mod.abs_tvec`` always starts at 0 and always uses the sim's unit.
+- There is a new ``Loop`` class which handles the integration loop. You can view the integration plan via ``sim.loop.to_df()`` or ``sim.loop.plot()``. You can see how long each part of the sim took with ``sim.loop.plot_cpu()``.
+- There are more advanced debugging tools. You can run a single sim timestep with ``sim.run_one_step()`` (which in turn calls multiple functions), and you can run a single function from the integration loop with ``sim.loop.run_one_step()``.
+
+Module changes
+~~~~~~~~~~~~~~
+- Functionality has been moved from ``ss.Plugin`` to ``ss.Module``, and the former has been removed.
+- ``ss.Connector`` functionality has been moved to ``ss.Module``. ``ss.Module`` objects can be placed anywhere in the list of modules (e.g., in demographics, networks, diseases, interventions), depending on when you want them to execute. However, ``ss.Connector`` objects are applied after ``Disease.step_state()`` and before ``Network.step()``.
+- Many of the module methods have been renamed; in particular, all modules now have a ``step()`` method, which replaces ``update()`` (for demographics and networks), ``apply()`` (for interventions and analyzers), and ``make_new_cases()`` (for diseases). For both the sim and modules, ``initialize()`` has been renamed ``init()``.
+- All modules are treated the same in the integration loop, except for diseases, which have ``step_state()`` and ``step_die()`` methods.
+- The Starsim module ``states.py`` has been moved to ``arrays.py``, and ``network.py`` has been moved to ``networks.py``.
+
+State and array changes
+~~~~~~~~~~~~~~~~~~~~~~~
+- ``ss.Arr``, ``ss.TimePar``, and ``ss.Result`` all inherit from the new class ``ss.BaseArr``, which provides functionality similar to a NumPy array, except all values are stored in ``arr.values`` (like a ``pd.Series``).
+- Whereas before, computations on an ``ss.Arr`` usually returned a NumPy array, calculations now usually return the same type. To access the NumPy array, use ``arr.values``. 
+- There is a new ``ss.State`` class, which is a subtype of ``ss.BoolArr``. Typically, ``ss.State`` is used for boolean disease states, such as ``infected``, ``susceptible``, etc., where you want to automatically generate results (e.g. ``n_infected``). You can continue using ``ss.BoolArr`` for other agent attributes that you don't necessarily want to automatically generate results for, e.g. ``ever_vaccinated``.
+
+Results changes
+~~~~~~~~~~~~~~~
+- Results are now defined differently. They should be defined in ``ss.Module.init_results()``, not ``ss.Module.init_pre()``. They now take the module name, number of points, and time vector from the parent module. As a result, they are usually initialized via ``ss.Module.define_results(res1, res2)`` (as opposed to ``mod.results += [res1, res2]`` previously). ``define_results()`` automatically adds these properties from the parent module; they can still be defined explicitly if needed however.
+- Because results now store their own time information, they can be plotted in a self-contained way. Both ``ss.Result`` and ``ss.Results`` objects now have ``plot()`` and ``to_df()`` methods.
+
+Demographics changes
+~~~~~~~~~~~~~~~~~~~~
+- Fixed a bug in how results were defined for ``ss.Births`` and ``ss.Deaths``.
+- The ``ss.Pregnancy`` module has been significantly rewritten, including: (1) Agents now have a ``parent`` which indicates the UID of the parent; (2) Women now track ``child_uid``; (3) On neonatal death, the pregnancy state of the mother is corrected; (4) Pregnancy rates now adjusted for infecund rather than pregnant; (4) Pregnancy now has a burn-in, which defaults to ``True``; (5) Pregnancy has a ``p_neonatal_death`` parameter to capture fetal and neonatal death if the mother dies.
+- Slots now has a minimum, default of 100, to account for small initial population sizes that grow dramatically over time.
+
+Computational changes
+~~~~~~~~~~~~~~~~~~~~~
+- There have been several performance improvements. The default float type is now ``np.float32``. Transmission is now handled by a specialized ``Infection.compute_transmission()`` method. Several additional functions now use Numba, including ``fastmath=True``, which leverages Intel's short vector math library.
+- A new ``ss.multi_random()`` distribution class has been added, that allows random numbers to be generated by two (or more) agents. It largely replaces ``ss.combine_rands()`` and is 5-10x faster.
+- A new ``ss.gamma()`` distribution has also been added.
+- Distributions have a new ``jump_dt`` method that jumps by much more than a single state update.
+- ``ss.parallel()`` and ``ss.MultiSim.run()`` now modify simulations in place by default. Instead of ``sims = ss.parallel(sim1, sim2).sims; sims[0].plot()``, you can now simply do ``ss.parallel(sim1, sim2); sim1.plot()``.
+
+Other changes
+~~~~~~~~~~~~~
+- Data can now be supplied to a simulation; it will be automatically plotted by ``sim.plot()``.
+- ``ss.Calibration`` has been significantly reworked, and now includes more flexible parameter setting, plus plotting (``calib.plot_sims()`` and ``calib.plot_trend()``). It also has a ``debug`` argument (which runs in serial rather than paralell), which can be helpful for troubleshooting issues.
+- ``MultiSim`` now has display methods ``brief()`` (minimal), ``show()`` (moderate), and ``disp`` (verbose).
+- ``sim.export_df()`` has been renamed ``sim.to_df()``.
+- Most classes now have ``to_json()`` methods (which can also export to a dict).
+- Fixed a bug in how the ``InfectionLog`` is added to disease modules.
+- ``Sim.gitinfo`` has been replaced with ``Sim.metadata`` (which includes git info).
+- ``Infection.validate_beta()`` is now applied on every timestep, so changes to beta during the simulation are now honored.
+- ``sim.get_intervention()`` and ``sim.get_analyzer()`` have been removed; use built-in ``ndict`` operations (e.g., the label) to find the object you're after.
+- ``requires`` has been removed from modules, but ``ss.check_requires()`` is still available if needed. Call it manually from ``init_pre()`` if desired, e.g. a PMTCT intervention might call ``ss.check_requires(self.sim, ['hiv', 'maternalnet'])``.
+- For networks, ``contacts`` has been renamed ``edges`` except in cases where it refers to an *agent's* contacts. For example, ``network.contacts`` has been renamed ``network.edges``, but ``ss.find_contacts()`` remains the same.
+- Networks now have a ``to_graph()`` method that exports to NetworkX.
+- ``ss.diff_sims()`` can now handle ``MultiSim`` objects.
+- ``Sim._orig_pars`` has been removed.
+- ``ss.unique()`` has been removed.
+
+Regression information
+~~~~~~~~~~~~~~~~~~~~~~
+- Note: the list here covers major changes only; in general, Starsim v1.0 scripts will not be compatible with Starsim v2.0.
+- Results from Starsim v2.0 will be stochastically (but not statistically) different from Starsim v1.0.
+- All duration and rate parameters should now be wrapped with ``ss.dur()`` and ``ss.rate()``. Events that represent probabilities over time (i.e. hazard rates) can also be wrapped with ``ss.time_prob()``, although this is similar to ``ss.rate()`` unless the value is relatively large.
+- ``ss.Plugin`` has been removed. Use ``ss.Module`` instead.
+- ``init_results()`` is now called by ``init_pre()``, and does not need to be called explicitly.
+- ``default_pars()`` has been renamed ``define_pars()``.
+- ``add_states()`` has been renamed ``define_states()``
+- ``initialize()`` has been renamed ``init()``.
+- ``Demographics.update()`` has been renamed ``Demographics.step()``.
+- ``Network.update()`` has been renamed ``Network.step()``.
+- ``Disease.update_pre()`` has been renamed ``Disease.step_state()``.
+- ``Disease.make_new_cases()`` has been renamed ``Disease.step()``.
+- ``Disease.update_death()`` has been renamed ``Disease.step_die()`` (which is now called by ``People.step_die()``).
+- ``Infection._set_cases()`` has been renamed ``Infection.set_outcomes()``.
+- ``Intervention.apply(sim)`` has been renamed ``Intervention.step()``; ditto for ``Analyzer``.
+- ``Module.step()`` no longer takes ``sim`` as an argument (e.g., replace ``intervention.apply(sim)`` with ``intervention.step()``).
+- All modules now have methods for ``start_step()``, ``finish_step()``, ``init_results()``, and ``update_results()``.
+- ``Network.contacts`` has been renamed ``Network.edges``.
+- ``sim.get_intervention()`` and ``sim.get_analyzer()`` have been removed; simply call directly instead (e.g. replace ``sim.get_intervention('vaccine')`` with ``sim.interventions['vaccine']``).
+- ``requires`` is no longer an attribute of modules; call the ``ss.check_requires()`` function directly if needed.
+- ``People.resolve_deaths()`` has been renamed ``People.check_deaths()``
+- ``ss.unique()`` has been removed.
+- *GitHub info*: PR `626 <https://github.com/starsimhub/starsim/pull/626>`_
+
+
 Version 1.0.3 (2024-09-26)
 ---------------------------
 - Fixes a bug in which some intervention parameters (e.g. eligibility) do not get set properly.

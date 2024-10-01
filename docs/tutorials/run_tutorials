@@ -1,0 +1,62 @@
+#!/usr/bin/env python
+"""
+Run all the Jupyter notebook tutorials. Usage:
+  ./run_tutorials
+
+It will execute all notebooks in parallel, print out any errors
+encountered, and print a summary of results.
+
+NB: The execute() function was drafted in part via ChatGPT.
+"""
+
+import os
+import sciris as sc
+import nbformat
+import nbconvert.preprocessors as nbp
+
+folder = sc.path(__file__).resolve().parent # Ensure it's the real path if it's symlinked
+timeout = 600
+yay = '✓'
+boo = '😢'
+
+
+def execute(path):
+    """ Executes a single Jupyter notebook and returns success/failure """
+    try:
+        with open(path) as f:
+            print(f'Executing {path}...')
+            nb = nbformat.read(f, as_version=4)
+            ep = nbp.ExecutePreprocessor(timeout=timeout)
+            ep.preprocess(nb, {'metadata': {'path': os.path.dirname(path)}})
+        return f'{yay} {path} executed successfully.'
+    except nbp.CellExecutionError as e:
+        return f'{boo} Execution failed for {path}: {str(e)}'
+    except Exception as e:
+        return f'{boo} Error processing {path}: {str(e)}'
+
+
+def main():
+    """ Executes the notebooks in parallel and prints the results """
+    notebooks = sc.getfilepaths(folder=folder, pattern='*.ipynb')
+    results = sc.parallelize(execute, notebooks)
+    string = sc.newlinejoin(results)
+    
+    sc.heading('Results')
+    print(string)
+    
+    sc.heading('Summary')
+    n_yay = string.count(yay)
+    n_boo = string.count(boo)
+    summary = f'{n_yay} succeeded, {n_boo} failed'
+    if n_boo:
+        for i in range(len(notebooks)):
+            if boo in results[i]:
+                summary += f'\nFailed: {notebooks[i]}'
+    print(summary)
+    
+    return results
+
+
+if __name__ == '__main__':
+    results = main()
+

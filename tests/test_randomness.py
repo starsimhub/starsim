@@ -5,9 +5,9 @@ Test the Dists object from distributions.py
 # %% Imports and settings
 import numpy as np
 import sciris as sc
-import starsim as ss
 import scipy.stats as sps
-import matplotlib.pyplot as pl
+import matplotlib.pyplot as plt
+import starsim as ss
 
 n = 5 # Default number of samples
 
@@ -18,10 +18,10 @@ def make_dist(name='test', **kwargs):
 
 def make_dists(**kwargs):
     """ Make a Dists object with two distributions in it """
-    sim = ss.Sim(n_agents=100).initialize() # Need an empty sim to initialize properly
+    sim = ss.Sim(n_agents=100).init() # Need an empty sim to initialize properly
     distlist = [make_dist(), make_dist()]
     dists = ss.Dists(distlist)
-    dists.initialize(sim=sim)
+    dists.init(sim=sim)
     return dists
 
 
@@ -112,27 +112,35 @@ def test_order(n=n):
 class CountInf(ss.Intervention):
     """ Store every infection state in a timepoints x people array """
     def init_pre(self, sim):
+        super().init_pre(sim)
         n_agents = len(sim.people)
         self.arr = np.zeros((sim.npts, n_agents))
         self.n_agents = n_agents
         return
     
-    def apply(self, sim):
-        self.arr[sim.ti, :] = np.array(sim.diseases.sir.infected)[:self.n_agents]
+    def step(self):
+        self.arr[self.sim.ti, :] = np.array(self.sim.diseases.sir.infected)[:self.n_agents]
         return
 
 
 class OneMore(ss.Intervention):
     """ Add one additional agent and infection """
+    def __init__(self, ti_apply=10):
+        super().__init__()
+        self.ti_apply = ti_apply
+        return
+    
     def init_pre(self, sim):
+        super().init_pre(sim)
         one_birth = ss.Pregnancy(name='one_birth', rel_fertility=0) # Ensure no default births
         one_birth.init_pre(sim)
         self.one_birth = one_birth
         return
     
-    def apply(self, sim, ti=10):
+    def step(self):
         """ Create an extra agent """
-        if sim.ti == ti:
+        sim = self.sim
+        if sim.ti == self.ti_apply:
             new_uids = self.one_birth.make_embryos(ss.uids(0)) # Assign 0th agent to be the "mother"
             sim.people.age[new_uids] = -100 # Set to a very low number to never reach debut age
             
@@ -144,7 +152,7 @@ class OneMore(ss.Intervention):
             # Reset the random states
             p = sir.pars
             for dist in [p.dur_inf, p.p_death]:
-                dist.jump(delta=-1) # Reset RNG as if this never happened
+                dist.jump_dt(force=True) # Already has correct dt value, but we need to force going back in time
 
         return
 
@@ -154,20 +162,20 @@ def plot_infs(s1, s2):
     a1 = s1.interventions.countinf.arr
     a2 = s2.interventions.countinf.arr
     
-    fig = pl.figure()
-    pl.subplot(1,3,1)
-    pl.pcolormesh(a1.T)
-    pl.xlabel('Timestep')
-    pl.ylabel('Person')
-    pl.title('Baseline')
+    fig = plt.figure()
+    plt.subplot(1,3,1)
+    plt.pcolormesh(a1.T)
+    plt.xlabel('Timestep')
+    plt.ylabel('Person')
+    plt.title('Baseline')
     
-    pl.subplot(1,3,2)
-    pl.pcolormesh(a2.T)
-    pl.title('OneMore')
+    plt.subplot(1,3,2)
+    plt.pcolormesh(a2.T)
+    plt.title('OneMore')
     
-    pl.subplot(1,3,3)
-    pl.pcolormesh(a2.T - a1.T)
-    pl.title('Difference')
+    plt.subplot(1,3,3)
+    plt.pcolormesh(a2.T - a1.T)
+    plt.title('Difference')
     
     sc.figlayout()
     return fig
@@ -181,7 +189,7 @@ def test_worlds(do_plot=False):
     
     pars = dict(
         start = 2000,
-        end = 2100,
+        stop = 2100,
         n_agents = 200,
         verbose = 0.05,
         diseases = dict(
@@ -210,7 +218,7 @@ def test_worlds(do_plot=False):
     if do_plot:
         s1.plot()
         plot_infs(s1, s2)
-        pl.show()
+        plt.show()
     
     l1 = len(s1.people)
     l2 = len(s2.people)
@@ -242,7 +250,7 @@ def test_independence(do_plot=False, thresh=0.1):
             dict(type='mf', debut=ss.constant(0), participation=0.5), # To avoid age correlations
         ]
     )
-    sim.initialize()
+    sim.init()
     
     # Assemble measures
     st = sim.people.states
@@ -268,16 +276,16 @@ def test_independence(do_plot=False, thresh=0.1):
                 
     # Optionally plot
     if do_plot:
-        pl.figure()
-        pl.imshow(stats)
+        plt.figure()
+        plt.imshow(stats)
         ticks = np.arange(n)
         labels = arrs.keys()
-        pl.xticks(ticks, labels)
-        pl.yticks(ticks, labels)
-        pl.xticks(rotation=15)
-        pl.colorbar()
+        plt.xticks(ticks, labels)
+        plt.yticks(ticks, labels)
+        plt.xticks(rotation=15)
+        plt.colorbar()
         sc.figlayout()
-        pl.show()
+        plt.show()
             
     # Test that everything is independent
     max_corr = abs(stats).max()
@@ -293,15 +301,15 @@ def test_combine_rands(do_plot=False):
     np.random.seed(2)
     a = np.random.randint(np.iinfo(np.uint64).max, size=n, dtype=np.uint64)
     b = np.random.randint(np.iinfo(np.uint64).max, size=n, dtype=np.uint64)
-    c = ss.combine_rands(a, b)
+    c = ss.utils.combine_rands(a, b)
     if do_plot:
-        pl.figure()
+        plt.figure()
         for i,k,v in sc.objdict(a=a,b=b,combined=c).enumitems():
-            pl.subplot(3,1,i+1)
-            pl.hist(v)
-            pl.title(k)
+            plt.subplot(3,1,i+1)
+            plt.hist(v)
+            plt.title(k)
         sc.figlayout()
-        pl.show()
+        plt.show()
     
     mean = c.mean()
     assert np.isclose(mean, target, atol=atol), f'Expected value to be 0.5±{atol}, not {mean}'

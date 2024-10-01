@@ -8,7 +8,7 @@ You can supply command line arguments for "save" and "n_runs" as integers, e.g.
 """
 
 import sys
-import test_baselines as tb
+import test_baselines
 
 save = False
 n_runs = 10
@@ -19,4 +19,4 @@ if len(sys.argv) > 1:
 if len(sys.argv) > 2:
     n_runs = int(sys.argv[2])
 
-tb.multisim_baseline(save, n_runs)
+test_baselines.multisim_baseline(save, n_runs)

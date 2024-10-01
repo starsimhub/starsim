@@ -10,10 +10,12 @@ import matplotlib.pyplot as plt
 test_run = True
 n_agents = [10_000, 2_000][test_run]
 do_plot = False
-sc.options(interactive=False) # Assume not running interactively
+sc.options(interactive=do_plot) # Assume not running interactively
 
 
 def test_sir():
+    sc.heading('Testing SIR dynamics')
+
     ppl = ss.People(n_agents)
     network_pars = {
         'n_contacts': ss.poisson(4), # Contacts Poisson distributed with a mean of 4
@@ -26,7 +28,7 @@ def test_sir():
     sir = ss.SIR(sir_pars)
 
     # Change pars after creating the SIR instance
-    sir.pars.beta = {'random': 0.1}
+    sir.pars.beta = {'random': ss.rate(0.1)}
 
     # You can also change the parameters of the default lognormal distribution directly
     sir.pars.dur_inf.set(loc=5)
@@ -40,7 +42,7 @@ def test_sir():
     plt.figure()
     res = sim.results
     plt.stackplot(
-        sim.yearvec,
+        sim.timevec,
         res.sir.n_susceptible,
         res.sir.n_infected,
         res.sir.n_recovered,
@@ -54,7 +56,7 @@ def test_sir():
 
 def test_sir_epi():
     sc.heading('Test basic epi dynamics')
-    
+
     base_pars = dict(n_agents=n_agents, networks=dict(type='random'), diseases=dict(type='sir'))
 
     # Define the parameters to vary
@@ -103,6 +105,8 @@ def test_sir_epi():
 
 
 def test_sis(do_plot=do_plot):
+    sc.heading('Testing SIS dynamics')
+
     pars = dict(
         n_agents = n_agents,
         diseases = 'sis',
@@ -117,18 +121,20 @@ def test_sis(do_plot=do_plot):
 
 
 def test_ncd():
+    sc.heading('Testing NCDs')
+
     ppl = ss.People(n_agents)
     ncd = ss.NCD(pars={'log':True})
     sim = ss.Sim(people=ppl, diseases=ncd, copy_inputs=False) # Since using ncd directly below
     sim.run()
 
     assert len(ncd.log.out_edges) == ncd.log.number_of_edges()
-    df = ncd.log.line_list  # Check generation of line-list
+    df = ncd.log.line_list()  # Check generation of line-list
     assert df.source.isna().all()
 
     plt.figure()
     plt.stackplot(
-        sim.yearvec,
+        sim.timevec,
         ncd.results.n_not_at_risk,
         ncd.results.n_at_risk - ncd.results.n_affected,
         ncd.results.n_affected,
@@ -143,6 +149,8 @@ def test_ncd():
 
 
 def test_gavi():
+    sc.heading('Testing GAVI diseases')
+
     sims = sc.autolist()
     for disease in ['cholera', 'measles', 'ebola']:
         pars = dict(
@@ -157,6 +165,8 @@ def test_gavi():
 
 
 def test_multidisease():
+    sc.heading('Testing simulating multiple diseases')
+
     ppl = ss.People(n_agents)
     sir1 = ss.SIR(name='sir1')
     sir2 = ss.SIR(name='sir2')
@@ -169,9 +179,9 @@ def test_multidisease():
     sim.run()
     return sim
 
-def test_mtct():
-    """ Test mother-to-child transmission routes """
 
+def test_mtct():
+    sc.heading('Test mother-to-child transmission routes')
     ppl = ss.People(n_agents)
     sis = ss.SIS(beta={'random':[0.005, 0.001], 'prenatal':[0.1, 0], 'postnatal':[0.1, 0]})
     networks = [ss.RandomNet(), ss.PrenatalNet(), ss.PostnatalNet()]
@@ -180,7 +190,9 @@ def test_mtct():
     sim.run()
     return sim
 
+
 if __name__ == '__main__':
+    do_plot = True
     sc.options(interactive=do_plot)
     sir   = test_sir()
     s1,s2 = test_sir_epi()

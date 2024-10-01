@@ -4,7 +4,7 @@ Define SIR and SIS disease modules
 
 import numpy as np
 import sciris as sc
-import matplotlib.pyplot as pl
+import matplotlib.pyplot as plt
 import starsim as ss
 
 
@@ -19,23 +19,29 @@ class SIR(ss.Infection):
     results.
     """
     def __init__(self, pars=None, **kwargs):
+        """ The current implementation """
         super().__init__()
-        self.default_pars(
-            beta = 0.1,
+        self.define_pars(
+            beta = ss.beta(0.1),
             init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=6),
+            dur_inf = ss.lognorm_ex(mean=ss.dur(6)),
             p_death = ss.bernoulli(p=0.01),
         )
         self.update_pars(pars, **kwargs)
 
-        self.add_states(
-            ss.BoolArr('recovered', label='Recovered'),
+        self.define_states(
+            ss.State('susceptible', default=True, label='Susceptible'),
+            ss.State('infected', label='Infectious'),
+            ss.State('recovered', label='Recovered'),
+            ss.FloatArr('ti_infected', label='Time of infection'),
             ss.FloatArr('ti_recovered', label='Time of recovery'),
             ss.FloatArr('ti_dead', label='Time of death'),
+            ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
+            ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
         )
         return
 
-    def update_pre(self):
+    def step_state(self):
         # Progress infectious -> recovered
         sim = self.sim
         recovered = (self.infected & (self.ti_recovered <= sim.ti)).uids
@@ -50,9 +56,7 @@ class SIR(ss.Infection):
 
     def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses """
-        super().set_prognoses(uids, source_uids)
-        ti = self.sim.ti
-        dt = self.sim.dt
+        ti = self.ti
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = ti
@@ -67,30 +71,31 @@ class SIR(ss.Infection):
         will_die = p.p_death.rvs(uids)
         dead_uids = uids[will_die]
         rec_uids = uids[~will_die]
-        self.ti_dead[dead_uids] = ti + dur_inf[will_die] / dt # Consider rand round, but not CRN safe
-        self.ti_recovered[rec_uids] = ti + dur_inf[~will_die] / dt
+        self.ti_dead[dead_uids] = ti + dur_inf[will_die] # Consider rand round, but not CRN safe
+        self.ti_recovered[rec_uids] = ti + dur_inf[~will_die]
         return
 
-    def update_death(self, uids):
+    def step_die(self, uids):
         """ Reset infected/recovered flags for dead agents """
         self.susceptible[uids] = False
         self.infected[uids] = False
         self.recovered[uids] = False
         return
 
-    def plot(self, plot_kw=None):
+    def plot(self, **kwargs):
         """ Default plot for SIR model """
-        fig = pl.figure()
-        plot_kw = sc.mergedicts(dict(lw=2, alpha=0.8), plot_kw)
+        fig = plt.figure()
+        kw = sc.mergedicts(dict(lw=2, alpha=0.8), kwargs)
         for rkey in ['n_susceptible', 'n_infected', 'n_recovered']:
-            pl.plot(self.sim.results.yearvec, self.results[rkey], label=self.results[rkey].label, **plot_kw)
-        pl.legend(frameon=False)
-        pl.xlabel('Year')
-        pl.ylabel('Number of people')
+            plt.plot(self.timevec, self.results[rkey], label=self.results[rkey].label, **kw)
+        plt.legend(frameon=False)
+        plt.xlabel('Time')
+        plt.ylabel('Number of people')
+        plt.ylim(bottom=0)
         sc.boxoff()
         sc.commaticks()
         return fig
-    
+
 
 class SIS(ss.Infection):
     """
@@ -102,32 +107,32 @@ class SIS(ss.Infection):
     """
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
-        self.default_pars(
-            beta = 0.05,
+        self.define_pars(
+            beta = ss.beta(0.05),
             init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=10),
-            waning = 0.05,
+            dur_inf = ss.lognorm_ex(mean=ss.dur(10)),
+            waning = ss.rate(0.05),
             imm_boost = 1.0,
         )
         self.update_pars(pars=pars, *args, **kwargs)
 
-        self.add_states(
+        self.define_states(
             ss.FloatArr('ti_recovered'),
             ss.FloatArr('immunity', default=0.0),
         )
         return
 
-    def update_pre(self):
+    def step_state(self):
         """ Progress infectious -> recovered """
-        recovered = (self.infected & (self.ti_recovered <= self.sim.ti)).uids
+        recovered = (self.infected & (self.ti_recovered <= self.ti)).uids
         self.infected[recovered] = False
         self.susceptible[recovered] = True
         self.update_immunity()
         return
-    
+
     def update_immunity(self):
         has_imm = (self.immunity > 0).uids
-        self.immunity[has_imm] = (self.immunity[has_imm])*(1 - self.pars.waning*self.sim.dt)
+        self.immunity[has_imm] = (self.immunity[has_imm])*(1 - self.pars.waning)
         self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])
         return
 
@@ -136,35 +141,43 @@ class SIS(ss.Infection):
         super().set_prognoses(uids, source_uids)
         self.susceptible[uids] = False
         self.infected[uids] = True
-        self.ti_infected[uids] = self.sim.ti
+        self.ti_infected[uids] = self.ti
         self.immunity[uids] += self.pars.imm_boost
 
         # Sample duration of infection
         dur_inf = self.pars.dur_inf.rvs(uids)
 
         # Determine when people recover
-        self.ti_recovered[uids] = self.sim.ti + dur_inf / self.sim.dt
+        self.ti_recovered[uids] = self.ti + dur_inf
 
         return
-    
+
     def init_results(self):
         """ Initialize results """
         super().init_results()
-        self.results += ss.Result(self.name, 'rel_sus', self.sim.npts, dtype=float, label='Relative susceptibility')
+        self.define_results(
+            ss.Result('rel_sus', dtype=float, label='Relative susceptibility')
+        )
         return
 
     def update_results(self):
         """ Store the population immunity (susceptibility) """
         super().update_results()
-        self.results['rel_sus'][self.sim.ti] = self.rel_sus.mean()
-        return 
+        self.results['rel_sus'][self.ti] = self.rel_sus.mean()
+        return
 
-    def plot(self):
+    def plot(self, **kwargs):
         """ Default plot for SIS model """
-        fig = pl.figure()
+        fig = plt.figure()
+        kw = sc.mergedicts(dict(lw=2, alpha=0.8), kwargs)
         for rkey in ['n_susceptible', 'n_infected']:
-            pl.plot(self.results[rkey], label=self.results[rkey].label)
-        pl.legend()
+            plt.plot(self.timevec, self.results[rkey], label=self.results[rkey].label, **kw)
+        plt.legend(frameon=False)
+        plt.xlabel('Time')
+        plt.ylabel('Number of people')
+        plt.ylim(bottom=0)
+        sc.boxoff()
+        sc.commaticks()
         return fig
 
 
@@ -175,27 +188,27 @@ __all__ += ['sir_vaccine']
 class sir_vaccine(ss.Vx):
     """
     Create a vaccine product that affects the probability of infection.
-    
-    The vaccine can be either "leaky", in which everyone who receives the vaccine 
-    receives the same amount of protection (specified by the efficacy parameter) 
+
+    The vaccine can be either "leaky", in which everyone who receives the vaccine
+    receives the same amount of protection (specified by the efficacy parameter)
     each time they are exposed to an infection. The alternative (leaky=False) is
     that the efficacy is the probability that the vaccine "takes", in which case
     that person is 100% protected (and the remaining people are 0% protected).
-    
+
     Args:
         efficacy (float): efficacy of the vaccine (0<=efficacy<=1)
         leaky (bool): see above
     """
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
-        self.default_pars(
+        self.define_pars(
             efficacy = 0.9,
             leaky = True
         )
         self.update_pars(pars, **kwargs)
         return
 
-    def administer(self, people, uids):        
+    def administer(self, people, uids):
         if self.pars.leaky:
             people.sir.rel_sus[uids] *= 1-self.pars.efficacy
         else:
