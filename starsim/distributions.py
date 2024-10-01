@@ -573,8 +573,9 @@ class Dist:
         self._timepar = None # Remove the timepar which is no longer needed
         timepar.v = rvs # Replace the base value with the random variates
         timepar.update_values() # Recalculate the values with the time scaling
+        rvs = timepar.values # Replace the rvs with the scaled version
         if isinstance(rvs, np.ndarray): # This can be false when converting values for a Bernoulli distribution (in which case rvs are actually dist parameters)
-            rvs = timepar.values.astype(rvs.dtype) # Replace the random variates with the scaled version, and preserve type
+            rvs = rvs.astype(rvs.dtype) # Replace the random variates with the scaled version, and preserve type
         return rvs
 
     def rvs(self, n=1, reset=False):
