@@ -366,11 +366,12 @@ def test_timepar_callable():
     uids = np.array([1, 3, 7, 9])
 
     def age_year(module, sim, uids):
+        """ Extract age as a year """
         out = sim.people.age[uids].copy()
-        out *= 365 # Convert to days manually
         return out
 
     def age_day(module, sim, uids):
+        """ Extract age as a day """
         out = sim.people.age[uids].copy()
         out *= 365 # Convert to days manually
         return out
@@ -391,31 +392,42 @@ def test_timepar_callable():
     assert age_diff < 1, 'Distribution outputs should match ages to the nearest day'
 
     print('Testing callable parameters with Bernoulli distributions')
-    n = 1000
+    n = 100_000
     sim = make_fake_sim(n=n)
     uids = np.random.choice(n, size=n//2, replace=False)
+    age = sim.people.age[uids]
+    mean = age.mean()
+    young = sc.findinds(age<=mean)
+    old = sc.findinds(age>mean)
+    p_young = 0.001
+    p_old = 0.010
 
     def age_prob(module, sim, uids):
-        age = sim.people.age[uids]
-        mean = age.mean()
         out = np.zeros_like(age)
-        out[age<=mean] = 0.01
-        out[age>mean]  = 0.10
+        out[young] = p_young
+        out[old]   = p_old
         return out
 
     parent_dt = 10
-    p1 = ss.time_prob(age_prob)
-    p2 = ss.time_prob(age_prob, parent_dt=parent_dt).init()
-    ber1 = ss.bernoulli(p=p1, strict=False).init()
-    ber2 = ss.bernoulli(p=p2, strict=False).init()
+    p1 = age_prob
+    p2 = ss.time_prob(age_prob, parent_dt=parent_dt).init(update_values=False)
+    ber1 = ss.bernoulli(name='base', p=p1).init(sim=sim)
+    ber2 = ss.bernoulli(name='time', p=p2).init(sim=sim)
     brvs1 = ber1.rvs(uids)
     brvs2 = ber2.rvs(uids)
-    raise Exception
 
-
+    rtol = 0.5 # We're dealing with order-of-magnitude differences but small numbers, so be generous to avoid random failures
+    sum1 = brvs1.sum()*parent_dt
+    sum2 = brvs2.sum()
+    assert np.isclose(sum1, sum2, rtol=rtol), f'Callable Bernoulli sums did not match: {sum1}  ≠  {sum2}'
+    sc.printgreen(f'✓ Callable Bernoulli sums matched: {sum1:n} ≈ {sum2:n}')
+    for key,expected,inds in zip(['young', 'old'], [p_young, p_old], [young, old]):
+        m1 = brvs1[inds].mean()
+        m2 = brvs2[inds].mean()/parent_dt
+        assert np.allclose([expected, m1], [expected, m2], rtol=rtol), f'Callable Bernoulli proportions did not match: {expected:n}  ≠  {m1:n}  ≠  {m2:n}'
+        sc.printgreen(f'✓ Callable Bernoulli proportions matched: {expected:n}  ≈  {m1:n}  ≈  {m2:n}')
 
     return
-
 
 
 # %% Run as a script
@@ -425,15 +437,15 @@ if __name__ == '__main__':
 
     T = sc.timer()
 
-    # o1 = test_dist()
-    # o2 = test_custom_dists(do_plot=do_plot)
-    # o3 = test_dists(do_plot=do_plot)
-    # o4 = test_scipy()
-    # o5 = test_exceptions()
-    # o6 = test_reset()
-    # o7 = test_callable()
-    # o8 = test_array()
-    # o9 = test_repeat_slot()
+    o1 = test_dist()
+    o2 = test_custom_dists(do_plot=do_plot)
+    o3 = test_dists(do_plot=do_plot)
+    o4 = test_scipy()
+    o5 = test_exceptions()
+    o6 = test_reset()
+    o7 = test_callable()
+    o8 = test_array()
+    o9 = test_repeat_slot()
     o10 = test_timepar_dists()
     o10 = test_timepar_callable()
 

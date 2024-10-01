@@ -467,6 +467,9 @@ class Dist:
         else:
             uids = ss.uids(n)
             if len(uids):
+                if self.slots is None:
+                    errormsg = f'Could not find any slots in {self}. Did you remember to initialize the distribution with the sim?'
+                    raise ValueError(errormsg)
                 slots = self.slots[uids]
                 if len(slots): # Handle case where uids is boolean
                     size = slots.max() + 1
@@ -572,7 +575,7 @@ class Dist:
         timepar = self._timepar # Shorten
         self._timepar = None # Remove the timepar which is no longer needed
         timepar.v = rvs # Replace the base value with the random variates
-        timepar.update_values() # Recalculate the values with the time scaling
+        timepar.update_cached() # Recalculate the factor and values with the time scaling
         rvs = timepar.values # Replace the rvs with the scaled version
         if isinstance(rvs, np.ndarray): # This can be false when converting values for a Bernoulli distribution (in which case rvs are actually dist parameters)
             rvs = rvs.astype(rvs.dtype) # Replace the random variates with the scaled version, and preserve type
