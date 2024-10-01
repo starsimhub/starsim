@@ -1,12 +1,11 @@
 """
 Test Starsim features not covered by other test files
 """
-
-# %% Imports and settings
 import sciris as sc
 import numpy as np
 import starsim as ss
 import matplotlib.pyplot as plt
+import pytest
 
 sc.options(interactive=False) # Assume not running interactively
 
@@ -173,6 +172,15 @@ def test_results():
     return sim
 
 
+def test_check_reqiures():
+    sc.heading('Testing check_requires')
+    s1 = ss.Sim(diseases='sis', networks='random', n_agents=medium).init()
+    ss.check_requires(s1, 'sis')
+    ss.check_requires(s1, ss.SIS)
+    with pytest.raises(AttributeError):
+        ss.check_requires(s1, ss.SIR)
+    return s1
+
 
 # %% Run as a script
 if __name__ == '__main__':
@@ -190,6 +198,7 @@ if __name__ == '__main__':
     sims2 = test_deepcopy()
     sims3 = test_deepcopy_until()
     sim4 = test_results()
+    sim5 = test_check_reqiures()
 
     sc.toc(T)
     plt.show()
