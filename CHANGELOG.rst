@@ -7,7 +7,7 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
-Version 2.0.0 (2024-09-30)
+Version 2.0.0 (2024-10-01)
 --------------------------
 
 Summary
