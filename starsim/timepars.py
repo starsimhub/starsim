@@ -228,14 +228,21 @@ class TimePar(ss.BaseArr):
         self.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=self.parent_unit, dt2=self.parent_dt)
         return
 
+    def update_values(self):
+        """ Convert from self.v to self.values based on self.factor -- must be implemented by derived classes """
+        raise NotImplementedError
+
     def to(self, unit=None, dt=None):
         """ Create a new timepar based on the current one but with a different unit and/or dt """
         new = self.asnew()
         unit = sc.ifelse(unit, self.parent_unit, self.unit)
-        parent_dt = sc.ifelse(dt, self.parent_dt, self.self_dt)
-        new.set(parent_unit=unit, parent_dt=parent_dt, force=True)
-        new.v = new.values # Reset the base value to the converted value(s)
-        new.set(unit=unit, self_dt=parent_dt, parent_unit=None, parent_dt=None, force=True) # Reset the parent to match
+        parent_dt = sc.ifelse(dt, 1.0)
+        new.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=unit, dt2=parent_dt) # Calculaet the new factor
+        new.update_values() # Update values
+        new.v = new.values # Reset the base value
+        new.factor = 1.0 # Reset everything else to be 1
+        new.parent_unit = unit
+        new.parent_dt = parent_dt
         return new
 
     def to_parent(self):
