@@ -244,24 +244,25 @@ def test_save():
     sc.heading('Testing save and export...')
     f = sc.objdict() # Filenames
     f.sim  = 'temp.sim'
-    f.pars = 'pars.json'
     f.json = 'sim.json'
     sim = ss.Sim(n_agents=n_agents, diseases='sis', networks='random').run()
 
     # Run the methods
-    sim.save(f.sim)
-    sim.to_json(f.json)
+    sim.save(filename=f.sim)
+    sim.to_json(filename=f.json)
     json = sim.to_json()
 
     # Run methods
     s2 = sc.load(f.sim)
-    pars = sc.loadjson(f.pars)
     json2 = sc.loadjson(f.json)
 
     # Run tests
     assert sim.summary == s2.summary, 'Sims do not match'
-    assert sim.pars.n_agents == pars['n_agents'], 'Parameters do not match'
+    assert sim.pars.n_agents == json2['pars']['n_agents'], 'Parameters do not match'
     assert json == json2, 'Outputs do not match'
+
+    # Delete files
+    sc.rmpath(f.values())
 
     return sim
 
