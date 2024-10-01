@@ -16,30 +16,7 @@ type_def = {
 }
 type_map = {v:k for k,vlist in type_def.items() for v in vlist} # Invert into a full dictionary
 
-__all__ = ['check_dtype', 'BaseArr', 'Arr', 'FloatArr', 'BoolArr', 'State', 'IndexArr', 'uids']
-
-
-def check_dtype(dtype, default=None):
-    """ Check that the supplied dtype is one of the supported options """
-    # Handle input
-    if dtype is None:
-        if default is None:
-            errormsg = 'Must supply either a dtype or a default value'
-            raise ValueError(errormsg)
-        else:
-            dtype = type(default)
-
-    # Do type conversion
-    new_dtype = type_map.get(dtype)
-    if new_dtype is None:
-        new_dtype = dtype
-        warnmsg = f'Data type {type(default)} not a supported data type; set warn=False to suppress warning'
-        ss.warn(warnmsg)
-
-    return new_dtype
-
-
-
+__all__ = ['BaseArr', 'Arr', 'FloatArr', 'BoolArr', 'State', 'IndexArr', 'uids']
 
 
 class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
@@ -185,14 +162,10 @@ class Arr(BaseArr):
         - A ``ss.Dist`` instance
         nan (any): the value to use to represent NaN (not a number); also used as the default value if not supplied
         label (str): The human-readable name for the state
-        coerce (bool): Whether to ensure the the data is one of the supported data types
         skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
         people (ss.People): Optionally specify an initialized People object, used to construct temporary Arr instances
     """
-    def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, coerce=True, skip_init=False, people=None):
-        if coerce:
-            dtype = check_dtype(dtype, default)
-
+    def __init__(self, name=None, dtype=None, default=None, nan=None, label=None, skip_init=False, people=None):
         # Set attributes
         self.name = name
         self.label = label or name
@@ -403,7 +376,7 @@ class FloatArr(Arr):
     If you really want an integer array, you can use the default Arr class instead.
     """
     def __init__(self, name=None, nan=np.nan, **kwargs):
-        super().__init__(name=name, dtype=ss_float, nan=nan, coerce=False, **kwargs)
+        super().__init__(name=name, dtype=ss_float, nan=nan, **kwargs)
         return
 
     @property
@@ -427,7 +400,7 @@ class FloatArr(Arr):
 class BoolArr(Arr):
     """ Subclass of Arr with defaults for booleans """
     def __init__(self, name=None, nan=False, **kwargs): # No good NaN equivalent for bool arrays
-        super().__init__(name=name, dtype=ss_bool, nan=nan, coerce=False, **kwargs)
+        super().__init__(name=name, dtype=ss_bool, nan=nan, **kwargs)
         return
 
     def __and__(self, other): return self.asnew(self.values & other)
@@ -474,7 +447,7 @@ class State(BoolArr):
 class IndexArr(Arr):
     """ A special class of Arr used for UIDs and RNG IDs; not to be used as an integer array (for that, use FloatArr) """
     def __init__(self, name=None, label=None):
-        super().__init__(name=name, dtype=ss_int, default=None, nan=-1, label=label, coerce=False, skip_init=True)
+        super().__init__(name=name, dtype=ss_int, default=None, nan=-1, label=label, skip_init=True)
         self.raw = uids(self.raw)
         return
 
