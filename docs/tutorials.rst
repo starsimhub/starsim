@@ -12,6 +12,7 @@ User tutorials
     tutorials/tut_networks.ipynb
     tutorials/tut_diseases.ipynb
     tutorials/tut_interventions.ipynb
+    tutorials/tut_analyzers.ipynb
 
 Developer tutorials
 -------------------
@@ -21,6 +22,5 @@ Developer tutorials
 
     tutorials/dev_tut_diseases.ipynb
     tutorials/dev_tut_pars.ipynb
-    tutorials/dev_tut_analyzers.ipynb
     tutorials/dev_tut_nonstandard.ipynb
     
