@@ -516,7 +516,7 @@ class MixingPools(Intervention):
         for i, s in enumerate(self.pars.src):
             for j, d in enumerate(self.pars.dst):
                 beta = ss.beta(self.pars.beta_matrix[i,j])
-                mp = MixingPool(self, dict(diseases=self.pars.diseases, beta=beta, src=s, dst=d))
+                mp = MixingPool(pars=dict(diseases=self.pars.diseases, beta=beta, src=s, dst=d), pools=self)
                 mp.init_pre(sim) # Initialize the pool
                 mp.eff_contacts = self.eff_contacts
                 sim.interventions.append(mp)
@@ -531,7 +531,7 @@ class MixingPools(Intervention):
         return
 
 class MixingPool(Intervention):
-    def __init__(self, pools=None, pars=None, **kwargs):
+    def __init__(self, pars=None, pools=None, **kwargs):
         super().__init__(**kwargs)
 
         self.define_pars(

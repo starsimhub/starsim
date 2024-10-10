@@ -25,7 +25,6 @@ def test_single_defaults(do_plot=do_plot):
         sim.plot()
 
     assert(sim.results.sir['cum_infections'][-1] > sim.results.sir['cum_infections'][0]) # There were infections
-
     return sim
 
 
@@ -48,7 +47,6 @@ def test_single_age(do_plot=do_plot):
         sim.plot()
 
     assert(sim.results.sir['cum_infections'][-1] > sim.results.sir['cum_infections'][0]) # There were infections
-
     return sim
 
 
@@ -72,7 +70,6 @@ def test_single_sex(do_plot=do_plot):
 
     assert(sim.results.sir['cum_infections'][-1] > sim.results.sir['cum_infections'][0]) # There were infections
     assert(sim.people.male[sim.diseases.sir.ti_infected>0].all()) # All new infections should be in men
-
     return sim
 
 
@@ -129,18 +126,27 @@ def test_multi_ses(do_plot=do_plot):
     ppl = ss.People(n_agents=5_000, extra_states=ses)
 
     mps_pars = dict(
-        src = [lambda sim: ss.uids(sim.people.SES == s) for s in [SES.LOW, SES.MID, SES.HIGH]],
-        dst = [lambda sim: ss.uids(sim.people.SES == s) for s in [SES.LOW, SES.MID]],
+        src = [lambda sim, s=s: ss.uids(sim.people.SES == s) for s in [SES.LOW, SES.MID, SES.HIGH]],
+        dst = [lambda sim, s=s: ss.uids(sim.people.SES == s) for s in [SES.LOW, SES.MID]],
 
         # src on rows (1st dimension), dst on cols (2nd dimension)
         beta_matrix = np.array([
-            [0.04, 0.00], # LOW->LOW,  LOW->MID
-            [0.01, 0.04], # MID->LOW,  MID->MID
-            [0.00, 0.01], # HIGH->LOW, HIGH->MID
+            [0.050, 0.000], # LOW->LOW,  LOW->MID
+            [0.005, 0.050], # MID->LOW,  MID->MID
+            [0.000, 0.005], # HIGH->LOW, HIGH->MID
         ])
     )
     mps = ss.MixingPools(mps_pars)
-    mps.eff_contacts.default = ss.poisson(lam=3)
+    
+    # Lower SES have more effective contacts (in general, not necessarily with other lower SES)
+    def lam(self, sim, uids):
+        ses = sim.people.SES[uids]
+        l = np.zeros(len(uids))
+        l[ses==SES.LOW]  = 3
+        l[ses==SES.MID]  = 2
+        l[ses==SES.HIGH] = 1
+        return l
+    mps.eff_contacts.default = ss.poisson(lam=lam)
 
     def seeding(self, sim, uids):
         p = np.zeros(len(uids))
@@ -148,15 +154,32 @@ def test_multi_ses(do_plot=do_plot):
         p[high_ses] = 0.5 # 50% of SES HIGH
         return p
 
-    sir_pars = dict(
-        init_prev = ss.bernoulli(p=seeding)
-    )
+    class AzSES(ss.Analyzer):
+        def init_results(self):
+            self.new_cases = np.zeros((self.npts, 3))
 
-    sir = ss.SIR(sir_pars)
-    sim = ss.Sim(people=ppl, diseases=sir, interventions=mps, label='Multi') # One week time step
+        def step(self):
+            ti = self.ti
+            new_inf = self.sim.diseases.sir.ti_infected == ti
+            if not new_inf.any():
+                return
+
+            for ses in [SES.LOW, SES.MID, SES.HIGH]:
+                self.new_cases[ti, ses] = np.count_nonzero(new_inf & (self.sim.people.SES==ses))
+
+    az = AzSES()
+
+    sir = ss.SIR(init_prev = ss.bernoulli(p=seeding))
+    sim = ss.Sim(people=ppl, diseases=sir, interventions=mps, analyzers=az, label='Multi SES') # One week time step
     sim.run()
 
-    if do_plot: sim.plot()
+    if do_plot:
+        sim.plot()
+        fig, ax = plt.subplots()
+        new_cases = sim.analyzers[0].new_cases
+        for ses in [SES.LOW, SES.MID, SES.HIGH]:
+            ax.plot(sim.results.timevec, new_cases[:,ses], label=ses.name)
+        ax.legend()
 
     assert(sim.results.sir['cum_infections'][-1] > sim.results.sir['cum_infections'][0]) # There were infections
     return sim
@@ -167,12 +190,13 @@ if __name__ == '__main__':
     sc.options(interactive=do_plot)
     T = sc.timer()
 
-    sim0 = test_single_defaults(do_plot)
-    sim1 = test_single_age(do_plot)
-    sim2 = test_single_sex(do_plot)
+    if False:
+        sim0 = test_single_defaults(do_plot)
+        sim1 = test_single_age(do_plot)
+        sim2 = test_single_sex(do_plot)
 
-    sim3 = test_multi_defaults(do_plot)
-    sim4 = test_multi(do_plot)
+        sim3 = test_multi_defaults(do_plot)
+        sim4 = test_multi(do_plot)
     sim5 = test_multi_ses(do_plot)
 
     T.toc()
