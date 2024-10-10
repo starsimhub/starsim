@@ -55,7 +55,7 @@ class Module(sc.quickobj):
         dt (float): the timestep (e.g. 1.0, 0.1); inherits from sim if not supplied
     """
 
-    def __init__(self, name=None, label=None, unit=None, dt=None):
+    def __init__(self, name=None, label=None, unit=None, dt=None, **kwargs):
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()

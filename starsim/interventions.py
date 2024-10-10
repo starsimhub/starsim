@@ -465,3 +465,150 @@ class campaign_vx(BaseVaccination, CampaignDelivery):
     See base classes for a description of input arguments.
     """
     pass
+
+
+__all__ += ['AgeGroup', 'MixingPools', 'MixingPool']
+class AgeGroup():
+    # A simple age-based filter that returns uids of agents that match the criteria
+    def __init__(self, low, high, do_cache=True):
+        self.low = low
+        self.high = high
+
+        self.do_cache = do_cache
+        self.uids = None # Cached
+        self.ti_cache = -1
+        return
+
+    def __call__(self, sim):
+        if (not self.do_cache) or (self.ti_cache != sim.ti):
+            in_group = sim.people.age >= self.low
+            if self.high is not None:
+                in_group = in_group & (sim.people.age < self.high)
+            self.uids = ss.uids(in_group)
+            self.ti_cache = sim.ti
+        return self.uids
+
+    def __repr__(self):
+        return f'age {self.low}-{self.high}'
+
+class MixingPools(Intervention):
+    def __init__(self, pars=None, **kwargs):
+        super().__init__(**kwargs)
+
+        self.define_pars(
+            diseases = None,
+            beta_matrix = np.array([[0.4, 0.1], [0.15, 0.3]]),
+            src = [AgeGroup(0,15), AgeGroup(15,100)], # Alternatively, these could be a list of lists of uids
+            dst = [AgeGroup(0,15), AgeGroup(15,100)],
+        )
+        self.update_pars(pars, **kwargs)
+        self.validate_pars()
+
+        self.define_states(
+            ss.FloatArr('eff_contacts', default=ss.constant(v=1), label='Effective number of contacts')
+        )
+
+        return
+
+    def init_pre(self, sim):
+        super().init_pre(sim)
+
+        for i, s in enumerate(self.pars.src):
+            for j, d in enumerate(self.pars.dst):
+                beta = ss.beta(self.pars.beta_matrix[i,j])
+                mp = MixingPool(self, dict(diseases=self.pars.diseases, beta=beta, src=s, dst=d))
+                mp.init_pre(sim) # Initialize the pool
+                mp.eff_contacts = self.eff_contacts
+                sim.interventions.append(mp)
+        return
+
+    def validate_pars(self):
+        mm = self.pars.beta_matrix
+        if mm.shape[0] != len(self.pars.src):
+            raise Exception('The number of source groups must match the number of rows in the mixing matrix.')
+        if mm.shape[1] != len(self.pars.dst):
+            raise Exception('The number of destination groups must match the number of columns in the mixing matrix.')
+        return
+
+class MixingPool(Intervention):
+    def __init__(self, pools=None, pars=None, **kwargs):
+        super().__init__(**kwargs)
+
+        self.define_pars(
+            diseases = None,
+            src = AgeGroup(0,5),
+            dst = AgeGroup(0,5),
+            beta = ss.beta(0.2),
+        )
+        self.update_pars(pars, **kwargs)
+
+        self.name = f'pool from {self.pars.src} to {self.pars.dst}'
+
+        self.pools = pools
+        if pools == None:
+            self.define_states(
+                ss.FloatArr('eff_contacts', default=ss.constant(v=1), label='Effective number of contacts')
+            )
+
+        self.pars.diseases = sc.promotetolist(self.pars.diseases)
+
+        self.src_uids = None
+        self.dst_uids = None
+
+        self.p_acquire = ss.bernoulli(p=0) # Placeholder value
+
+        return
+
+    def init_post(self):
+        super().init_post()
+
+        if len(self.pars.diseases) == 0:
+            self.pars.diseases = self.sim.diseases.values()
+        else:
+            diseases = []
+            for d in self.pars.diseases:
+                if isinstance(ss.Disease):
+                    diseases.append(d)
+                else:
+                    if not isinstance(d, str):
+                        raise Exception(f'Diseases can be specified as ss.Disease objects or strings, not {type(d)}')
+                    if d not in self.sim.diseases:
+                        raise Exception(f'Could not find disease with name {d} in the list of diseases.')
+
+                    dis = self.sim.diseases[d]
+                    diseases.append(dis)
+        return
+
+    def get_uids(self, func_or_array):
+        if callable(func_or_array):
+            return func_or_array(self.sim)
+        elif isinstance(func_or_array, ss.BaseArr):
+            return func_or_array
+        raise Exception('src must be either a callable function, e.g. lambda sim: ss.uids(sim.people.age<5), or an instance of BaseArr, e.g. an array of uids.')
+
+    def start_step(self):
+        super().start_step()
+        self.src_uids = self.get_uids(self.pars.src)
+        self.dst_uids = self.get_uids(self.pars.dst)
+        return
+
+    def step(self):
+        super().step()
+
+        if self.pars.beta == 0:
+            return 0
+
+        n_new_cases = 0
+        for disease in self.pars.diseases:
+            eff_contacts = self.eff_contacts if self.pools is None else self.pools.eff_contacts
+            trans = np.mean(disease.infectious[self.src_uids] * eff_contacts[self.src_uids] * disease.rel_trans[self.src_uids])
+            acq = eff_contacts[self.dst_uids] * disease.susceptible[self.dst_uids] * disease.rel_sus[self.dst_uids]
+            p = self.pars.beta * trans * acq #1 - np.exp(-self.pars.beta * trans * acq)
+
+            self.p_acquire.set(p=p)
+            new_cases = self.p_acquire.filter(self.dst_uids)
+            n_new_cases += len(new_cases)
+
+            disease.set_prognoses(new_cases)
+
+        return n_new_cases
