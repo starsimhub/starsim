@@ -598,6 +598,8 @@ class Sim:
                 ax.set_title(res.full_label)
                 ax.set_xlabel('Time')
 
+        if self.label is not None:
+            fig.suptitle(self.label)
         sc.figlayout(fig=fig)
 
         return fig

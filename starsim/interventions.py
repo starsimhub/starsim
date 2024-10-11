@@ -497,16 +497,13 @@ class MixingPools(Intervention):
 
         self.define_pars(
             diseases = None,
-            beta_matrix = np.array([[0.4, 0.1], [0.15, 0.3]]),
+            beta = ss.beta(0.1),
+            contact_matrix = np.array([[2.4, 0.49], [0.91, 0.16]]),
             src = [AgeGroup(0,15), AgeGroup(15,100)], # Alternatively, these could be a list of lists of uids
             dst = [AgeGroup(0,15), AgeGroup(15,100)],
         )
         self.update_pars(pars, **kwargs)
         self.validate_pars()
-
-        self.define_states(
-            ss.FloatArr('eff_contacts', default=ss.constant(v=1), label='Effective number of contacts')
-        )
 
         return
 
@@ -515,23 +512,22 @@ class MixingPools(Intervention):
 
         for i, s in enumerate(self.pars.src):
             for j, d in enumerate(self.pars.dst):
-                beta = ss.beta(self.pars.beta_matrix[i,j])
-                mp = MixingPool(pars=dict(diseases=self.pars.diseases, beta=beta, src=s, dst=d), pools=self)
+                contacts = ss.poisson(lam=self.pars.contact_matrix[i,j])
+                mp = MixingPool(diseases=self.pars.diseases, beta=self.pars.beta, contacts=contacts, src=s, dst=d)
                 mp.init_pre(sim) # Initialize the pool
-                mp.eff_contacts = self.eff_contacts
                 sim.interventions.append(mp)
         return
 
     def validate_pars(self):
-        mm = self.pars.beta_matrix
-        if mm.shape[0] != len(self.pars.src):
+        cm = self.pars.contact_matrix
+        if cm.shape[0] != len(self.pars.src):
             raise Exception('The number of source groups must match the number of rows in the mixing matrix.')
-        if mm.shape[1] != len(self.pars.dst):
+        if cm.shape[1] != len(self.pars.dst):
             raise Exception('The number of destination groups must match the number of columns in the mixing matrix.')
         return
 
 class MixingPool(Intervention):
-    def __init__(self, pars=None, pools=None, **kwargs):
+    def __init__(self, pars=None, **kwargs):
         super().__init__(**kwargs)
 
         self.define_pars(
@@ -539,16 +535,15 @@ class MixingPool(Intervention):
             src = AgeGroup(0,5),
             dst = AgeGroup(0,5),
             beta = ss.beta(0.2),
+            contacts = ss.poisson(lam=1),
         )
         self.update_pars(pars, **kwargs)
 
         self.name = f'pool from {self.pars.src} to {self.pars.dst}'
 
-        self.pools = pools
-        if pools == None:
-            self.define_states(
-                ss.FloatArr('eff_contacts', default=ss.constant(v=1), label='Effective number of contacts')
-            )
+        self.define_states(
+            ss.FloatArr('eff_contacts', default=self.pars.contacts, label='Effective number of contacts')
+        )
 
         self.pars.diseases = sc.promotetolist(self.pars.diseases)
 
@@ -600,9 +595,8 @@ class MixingPool(Intervention):
 
         n_new_cases = 0
         for disease in self.pars.diseases:
-            eff_contacts = self.eff_contacts if self.pools is None else self.pools.eff_contacts
-            trans = np.mean(disease.infectious[self.src_uids] * eff_contacts[self.src_uids] * disease.rel_trans[self.src_uids])
-            acq = eff_contacts[self.dst_uids] * disease.susceptible[self.dst_uids] * disease.rel_sus[self.dst_uids]
+            trans = np.mean(disease.infectious[self.src_uids] * self.eff_contacts[self.src_uids] * disease.rel_trans[self.src_uids])
+            acq = self.eff_contacts[self.dst_uids] * disease.susceptible[self.dst_uids] * disease.rel_sus[self.dst_uids]
             p = self.pars.beta * trans * acq #1 - np.exp(-self.pars.beta * trans * acq)
 
             self.p_acquire.set(p=p)
