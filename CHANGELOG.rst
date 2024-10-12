@@ -10,6 +10,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 Version 2.0.1 (2024-10-11)
 ---------------------------
 - Adds a new approach to disease transmission called mixing pools. A mixing pool is a "mean field" coupling wherein susceptible agents are exposed to the average infectious agent. The user can create a single mixing pool using the ``MixingPool`` class, or create many pools using ``MixingPools``. Such mixing pools could be used to simulate contact matrices, for example as published by Prem et al.
+- *GitHub info*: PR `697 <https://github.com/starsimhub/starsim/pull/697>`_
 
 
 Version 2.0.0 (2024-10-01)
