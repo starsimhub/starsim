@@ -68,6 +68,8 @@ class Pars(sc.objdict):
                     self._update_dist(key, old, new)
                 elif callable(old): # It's a function: update directly
                     self[key] = new
+                elif isinstance(old, dict):
+                    self[key] = new # Take dictionaries directly, without warning the user
                 else: # Everything else; not used currently but could be
                     warnmsg = f'No known mechanism for handling {type(old)} → {type(new)}; using default'
                     ss.warn(warnmsg)

@@ -477,6 +477,8 @@ class AgeGroup():
         self.do_cache = do_cache
         self.uids = None # Cached
         self.ti_cache = -1
+
+        self.name = repr(self)
         return
 
     def __call__(self, sim):
@@ -499,8 +501,8 @@ class MixingPools(Intervention):
             diseases = None,
             beta = ss.beta(0.1),
             contact_matrix = np.array([[2.4, 0.49], [0.91, 0.16]]),
-            src = [AgeGroup(0,15), AgeGroup(15,100)], # Alternatively, these could be a list of lists of uids
-            dst = [AgeGroup(0,15), AgeGroup(15,100)],
+            src = {'0-15': AgeGroup(0,15), '15+': AgeGroup(15,None)}, # Alternatively, values could be a list of UIDs
+            dst = {'0-15': AgeGroup(0,15), '15+': AgeGroup(15,None)},
         )
         self.update_pars(pars, **kwargs)
         self.validate_pars()
@@ -510,16 +512,24 @@ class MixingPools(Intervention):
     def init_pre(self, sim):
         super().init_pre(sim)
 
-        for i, s in enumerate(self.pars.src):
-            for j, d in enumerate(self.pars.dst):
+        for i, (sk, s) in enumerate(self.pars.src.items()):
+            for j, (dk, d) in enumerate(self.pars.dst.items()):
                 contacts = ss.poisson(lam=self.pars.contact_matrix[i,j])
-                mp = MixingPool(diseases=self.pars.diseases, beta=self.pars.beta, contacts=contacts, src=s, dst=d)
+                name = f'pool:{sk}-->{dk}'
+                mp = MixingPool(diseases=self.pars.diseases, beta=self.pars.beta, contacts=contacts, src=s, dst=d, name=name)
                 mp.init_pre(sim) # Initialize the pool
                 sim.interventions.append(mp)
         return
 
     def validate_pars(self):
         cm = self.pars.contact_matrix
+
+        if not isinstance(self.pars.src, dict):
+            raise Exception(f'src must be a provided as a dictionary, not {type(self.pars.src)}')
+
+        if not isinstance(self.pars.dst, dict):
+            raise Exception(f'dst must be a provided as a dictionary, not {type(self.pars.src)}')
+
         if cm.shape[0] != len(self.pars.src):
             raise Exception('The number of source groups must match the number of rows in the mixing matrix.')
         if cm.shape[1] != len(self.pars.dst):
@@ -532,20 +542,19 @@ class MixingPool(Intervention):
 
         self.define_pars(
             diseases = None,
-            src = AgeGroup(0,5),
-            dst = AgeGroup(0,5),
+            src = None, # None indicates all alive agents. Try also AgeGroup(low=5, high=25) or ss.uids([2,3,4]) or lambda(sim): sim.people.age<25
+            dst = None, # Same as src
             beta = ss.beta(0.2),
             contacts = ss.poisson(lam=1),
         )
         self.update_pars(pars, **kwargs)
-
-        self.name = f'pool from {self.pars.src} to {self.pars.dst}'
 
         self.define_states(
             ss.FloatArr('eff_contacts', default=self.pars.contacts, label='Effective number of contacts')
         )
 
         self.pars.diseases = sc.promotetolist(self.pars.diseases)
+        self.diseases = None
 
         self.src_uids = None
         self.dst_uids = None
@@ -558,28 +567,31 @@ class MixingPool(Intervention):
         super().init_post()
 
         if len(self.pars.diseases) == 0:
-            self.pars.diseases = self.sim.diseases.values()
+            self.diseases = [d for d in self.sim.diseases.values() if isinstance(d, ss.Infection)] # Assume the user wants all communicable diseases
         else:
-            diseases = []
+            self.diseases = []
             for d in self.pars.diseases:
-                if isinstance(ss.Disease):
-                    diseases.append(d)
-                else:
-                    if not isinstance(d, str):
-                        raise Exception(f'Diseases can be specified as ss.Disease objects or strings, not {type(d)}')
-                    if d not in self.sim.diseases:
-                        raise Exception(f'Could not find disease with name {d} in the list of diseases.')
+                if not isinstance(d, str):
+                    raise Exception(f'Diseases can be specified as ss.Disease objects or strings, not {type(d)}')
+                if d not in self.sim.diseases:
+                    raise Exception(f'Could not find disease with name {d} in the list of diseases.')
+                dis = self.sim.diseases[d]
+                if not isinstance(dis, ss.Infection):
+                    raise Exception(f'Cannot create a mixing pool for disease {d}. Mixing pools only work for communicable diseases.')
+                self.diseases.append(dis)
 
-                    dis = self.sim.diseases[d]
-                    diseases.append(dis)
+            if len(self.diseases) == 0:
+                raise Exception('You must specify at least one transmissible disease to use mixing pools')
         return
 
     def get_uids(self, func_or_array):
-        if callable(func_or_array):
+        if func_or_array is None:
+            return self.sim.people.auids
+        elif callable(func_or_array):
             return func_or_array(self.sim)
-        elif isinstance(func_or_array, ss.BaseArr):
+        elif isinstance(func_or_array, ss.uids):
             return func_or_array
-        raise Exception('src must be either a callable function, e.g. lambda sim: ss.uids(sim.people.age<5), or an instance of BaseArr, e.g. an array of uids.')
+        raise Exception('src must be either a callable function, e.g. lambda sim: ss.uids(sim.people.age<5), or an array of uids.')
 
     def start_step(self):
         super().start_step()
@@ -594,8 +606,8 @@ class MixingPool(Intervention):
             return 0
 
         n_new_cases = 0
-        for disease in self.pars.diseases:
-            trans = np.mean(disease.infectious[self.src_uids] * self.eff_contacts[self.src_uids] * disease.rel_trans[self.src_uids])
+        for disease in self.diseases:
+            trans = np.mean(disease.infectious[self.src_uids] * disease.rel_trans[self.src_uids])
             acq = self.eff_contacts[self.dst_uids] * disease.susceptible[self.dst_uids] * disease.rel_sus[self.dst_uids]
             p = self.pars.beta * trans * acq #1 - np.exp(-self.pars.beta * trans * acq)
 

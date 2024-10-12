@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 __all__ = ['link_dists', 'make_dist', 'dist_list', 'Dists', 'Dist']
 
 
-def str2int(string, modulo=1_000_000):
+def str2int(string, modulo=None):
     """
     Convert a string to an int
 
@@ -21,7 +21,10 @@ def str2int(string, modulo=1_000_000):
     """
     integer = int.from_bytes(string.encode(), byteorder='big')
     # integer = sc.sha(string, asint=True) # Hash the string to an integer
-    out = integer % modulo # Don't need all of it, this is more user-friendly
+    if modulo is None:
+        return integer
+
+    out = integer % modulo # This is more user-friendly
     return out
 
 
@@ -85,7 +88,10 @@ class Dists(sc.prettyobj):
             raise ValueError(errormsg)
 
         # Do not look for distributions in the people states, since they shadow the "real" states
-        skip = id(sim.people._states) if sim is not None else None
+        skip = dict(
+            ids=id(sim.people._states) if sim is not None else None,
+            keys='module',
+        )
 
         # Find and initialize the distributions
         self.dists = sc.search(obj, type=Dist, skip=skip, flatten=True)

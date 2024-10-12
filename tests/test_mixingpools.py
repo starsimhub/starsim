@@ -3,6 +3,7 @@ Test Sim API
 """
 
 # %% Imports and settings
+import pytest
 import starsim as ss
 import sciris as sc
 import matplotlib.pyplot as plt
@@ -20,12 +21,74 @@ def test_single_defaults(do_plot=do_plot):
     sc.heading(f'Testing {test_name}...')
     mp = ss.MixingPool()
     sir = ss.SIR()
-    sim = ss.Sim(diseases=sir, interventions=mp, label=test_name) # One week time step
+    sim = ss.Sim(diseases=sir, interventions=mp, label=test_name)
     sim.run()
 
     if do_plot: sim.plot()
 
     assert(sim.results.sir['cum_infections'][-1] > sim.results.sir['cum_infections'][0]) # There were infections
+    return sim
+
+
+def test_single_uids(do_plot=do_plot):
+    """ Test a single MixingPool by UIDS, pre-initialization configuration """
+    test_name = sys._getframe().f_code.co_name
+    sc.heading(f'Testing {test_name}...')
+
+    n_agents = 10_000
+    k = n_agents // 2
+    mp = ss.MixingPool(
+        src = ss.uids(np.arange(k)),
+        dst = ss.uids(np.arange(k,n_agents))
+    )
+    sir = ss.SIR()
+    sim = ss.Sim(n_agents=n_agents, diseases=sir, interventions=mp, label=test_name)
+    sim.run()
+
+    if do_plot: sim.plot()
+
+    assert sim.results.sir['cum_infections'][-1] > sim.results.sir['cum_infections'][0], 'There were no new infections in the simulation'
+    return sim
+
+
+def test_single_ncd():
+    """ Test a single MixingPool with a ncd """
+    test_name = sys._getframe().f_code.co_name
+    sc.heading(f'Testing {test_name}...')
+    mp_pars = {
+        'src': ss.AgeGroup(0, 15),
+        'dst': ss.AgeGroup(15, None),
+        'beta': ss.beta(0.15),
+        'contacts': ss.poisson(lam=5),
+        'diseases': 'ncd'
+    }
+    mp = ss.MixingPool(mp_pars)
+
+    ncd = ss.NCD()
+    sim = ss.Sim(diseases=ncd, interventions=mp, label=test_name)
+    with pytest.raises(Exception):
+        sim.run()
+    return sim
+
+
+def test_single_missing_disease():
+    """ Test a single MixingPool with a missing disease """
+    test_name = sys._getframe().f_code.co_name
+    sc.heading(f'Testing {test_name}...')
+    mp_pars = {
+        'src': ss.AgeGroup(0, 15),
+        'dst': ss.AgeGroup(15, None),
+        'beta': ss.beta(0.15),
+        'contacts': ss.poisson(lam=5),
+        'diseases': 'hiv'
+    }
+    mp = ss.MixingPool(mp_pars)
+
+    sir = ss.SIR()
+    sim = ss.Sim(diseases=sir, interventions=mp, label=test_name)
+    with pytest.raises(Exception):
+        sim.run()
+
     return sim
 
 
@@ -43,7 +106,7 @@ def test_single_age(do_plot=do_plot):
     mp = ss.MixingPool(mp_pars)
 
     sir = ss.SIR()
-    sim = ss.Sim(diseases=sir, interventions=mp, label=test_name) # One week time step
+    sim = ss.Sim(diseases=sir, interventions=mp, label=test_name)
     sim.run()
 
     if do_plot: sim.plot()
@@ -58,14 +121,14 @@ def test_single_sex(do_plot=do_plot):
     test_name = sys._getframe().f_code.co_name
     sc.heading(f'Testing {test_name}...')
     mp_pars = {
-        'src': lambda sim: sim.people.female, # female to male transmission
+        'src': lambda sim: sim.people.female, # female to male (only) transmission
         'dst': lambda sim: sim.people.male,
         'beta': ss.beta(0.2),
         'contacts': ss.poisson(lam=4),
     }
     mp = ss.MixingPool(mp_pars)
 
-    sir = ss.SIR(init_prev=ss.bernoulli(0.8))
+    sir = ss.SIR(init_prev=ss.bernoulli(p=lambda self, sim, uids: 0.05*sim.people.female)) # Seed 5% of the female population
     sim = ss.Sim(diseases=sir, interventions=mp, label=test_name)
     sim.run()
 
@@ -82,7 +145,7 @@ def test_multi_defaults(do_plot=do_plot):
     sc.heading(f'Testing {test_name}...')
     mps = ss.MixingPools()
     sir = ss.SIR()
-    sim = ss.Sim(diseases=sir, interventions=mps, label=test_name) # One week time step
+    sim = ss.Sim(diseases=sir, interventions=mps, label=test_name)
     sim.run()
 
     if do_plot: sim.plot()
@@ -90,15 +153,16 @@ def test_multi_defaults(do_plot=do_plot):
     assert(sim.results.sir['cum_infections'][-1] > sim.results.sir['cum_infections'][0]) # There were infections
     return sim
 
+
 def test_multi(do_plot=do_plot):
     """ Test MixingPools """
     test_name = sys._getframe().f_code.co_name
     sc.heading(f'Testing {test_name}...')
 
-    groups = [
-        lambda sim: sim.people.female,
-        lambda sim: sim.people.male,
-    ]
+    groups = {
+        'Female': lambda sim: sim.people.female,
+        'Male': lambda sim: sim.people.male,
+    }
 
     mps_pars = dict(
         contact_matrix = np.array([[1.4, 0.5], [1.2, 0.7]]),
@@ -109,7 +173,7 @@ def test_multi(do_plot=do_plot):
     mps = ss.MixingPools(mps_pars)
 
     sir = ss.SIR()
-    sim = ss.Sim(diseases=sir, interventions=mps, label=test_name) # One week time step
+    sim = ss.Sim(diseases=sir, interventions=mps, label=test_name)
     sim.run()
 
     if do_plot: sim.plot()
@@ -117,70 +181,7 @@ def test_multi(do_plot=do_plot):
     assert(sim.results.sir['cum_infections'][-1] > sim.results.sir['cum_infections'][0]) # There were infections
     return sim
 
-def test_multi_ses(do_plot=do_plot):
-    """ Test MixingPools SES """
-    test_name = sys._getframe().f_code.co_name
-    sc.heading(f'Testing {test_name}...')
 
-    from enum import IntEnum
-    class SES(IntEnum):
-        LOW = 0
-        MID = 1
-        HIGH = 2
-
-    ses = ss.FloatArr('SES', default=ss.choice(a=[SES.LOW, SES.MID, SES.HIGH], p=[0.5, 0.3, 0.2]), label='SES')
-    ppl = ss.People(n_agents=11_000, extra_states=ses)
-
-    mps_pars = dict(
-        src = [lambda sim, s=s: ss.uids(sim.people.SES == s) for s in [SES.LOW, SES.MID, SES.HIGH]],
-        dst = [lambda sim, s=s: ss.uids(sim.people.SES == s) for s in [SES.LOW, SES.MID]],
-
-        # src on rows (1st dimension), dst on cols (2nd dimension)
-        contact_matrix = np.array([
-            [2.50, 0.00], # LOW->LOW,  LOW->MID
-            [0.5, 2.50], # MID->LOW,  MID->MID
-            [0.00, 0.5], # HIGH->LOW, HIGH->MID
-        ]),
-
-        beta = ss.beta(0.1),
-    )
-    mps = ss.MixingPools(mps_pars)
-    
-    def seeding(self, sim, uids):
-        p = np.zeros(len(uids))
-        high_ses = ss.uids(sim.people.SES == SES.HIGH)
-        p[high_ses] = 0.1 # 10% of SES HIGH
-        return p
-
-    class AzSES(ss.Analyzer):
-        def init_results(self):
-            self.new_cases = np.zeros((self.npts, 3))
-
-        def step(self):
-            ti = self.ti
-            new_inf = self.sim.diseases.sir.ti_infected == ti
-            if not new_inf.any():
-                return
-
-            for ses in [SES.LOW, SES.MID, SES.HIGH]:
-                self.new_cases[ti, ses] = np.count_nonzero(new_inf & (self.sim.people.SES==ses))
-
-    az = AzSES()
-
-    sir = ss.SIR(init_prev = ss.bernoulli(p=seeding))
-    sim = ss.Sim(people=ppl, diseases=sir, interventions=mps, analyzers=az, label=test_name) # One week time step
-    sim.run()
-
-    if do_plot:
-        sim.plot()
-        fig, ax = plt.subplots()
-        new_cases = sim.analyzers[0].new_cases
-        for ses in [SES.LOW, SES.MID, SES.HIGH]:
-            ax.plot(sim.results.timevec, new_cases[:,ses], label=ses.name)
-        ax.legend()
-
-    assert(sim.results.sir['cum_infections'][-1] > sim.results.sir['cum_infections'][0]) # There were infections
-    return sim
 
 
 if __name__ == '__main__':
@@ -189,12 +190,15 @@ if __name__ == '__main__':
     T = sc.timer()
 
     sim0 = test_single_defaults(do_plot)
-    sim1 = test_single_age(do_plot)
-    sim2 = test_single_sex(do_plot)
+    sim1 = test_single_uids(do_plot)
+    sim2 = test_single_ncd()
+    sim3 = test_single_missing_disease()
+    sim4 = test_single_age(do_plot)
+    sim5 = test_single_sex(do_plot)
 
-    sim3 = test_multi_defaults(do_plot)
-    sim4 = test_multi(do_plot)
-    sim5 = test_multi_ses(do_plot)
+    sim6 = test_multi_defaults(do_plot)
+    sim7 = test_multi(do_plot)
+    sim8 = test_multi_ses(do_plot)
 
     T.toc()
 

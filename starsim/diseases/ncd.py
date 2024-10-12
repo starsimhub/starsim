@@ -55,7 +55,8 @@ class NCD(ss.Disease):
         ti = self.ti
         deaths = (self.ti_dead == ti).uids
         self.sim.people.request_death(deaths)
-        self.log.add_data(deaths, died=True)
+        if self.pars.log:
+            self.log.add_data(deaths, died=True)
         self.results.new_deaths[ti] = len(deaths) # Log deaths attributable to this module
         return
 
