@@ -289,7 +289,7 @@ class Calibration(sc.prettyobj): # pragma: no cover
         sim_results = sc.objdict()
 
         for skey in self.sim_result_list:
-            if 'prevalence' in skey:
+            if 'prevalence' in skey or skey.startswith('n_'):
                 model_output = df_res.groupby(by='time')[skey].mean()
             else:
                 model_output = df_res.groupby(by='time')[skey].sum()
@@ -313,7 +313,7 @@ class Calibration(sc.prettyobj): # pragma: no cover
         if df_res is None:
             df_res = self.sim_to_df(sim)
         for skey in self.sim_result_list:
-            if 'prevalence' in skey:
+            if 'prevalence' in skey or skey.startswith('n_'):
                 model_output = df_res.groupby(by='time')[skey].mean()
             else:
                 model_output = df_res.groupby(by='time')[skey].sum()
