@@ -152,7 +152,7 @@ class Infection(Disease):
     operate on to capture co-infection
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, pars=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.define_states(
             ss.State('susceptible', default=True, label='Susceptible'),
@@ -161,6 +161,11 @@ class Infection(Disease):
             ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
             ss.FloatArr('ti_infected', label='Time of infection' ),
         )
+
+        self.define_pars(
+            init_prev = None, # Replace None with a ss.bernoulli to seed infections
+        )
+        self.update_pars(pars, **kwargs)
 
         # Define random number generator for determining transmission
         self.trans_rng = ss.multi_random('source', 'target')
