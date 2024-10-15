@@ -135,7 +135,7 @@ class Calibration(sc.prettyobj): # pragma: no cover
     """
     def __init__(self, sim, data, calib_pars, n_trials=None, n_workers=None, total_trials=None, reseed=True,
                  weights=None, fit_args=None, sep='.', name=None, db_name=None, keep_db=None, storage=None,
-                 rand_seed=None, sampler=None, label=None, die=False, debug=False, verbose=True):
+                 rand_seed=None, sampler=None, label=None, die=False, debug=False, verbose=True, save_results=False):
 
         # Handle run arguments
         if n_trials  is None: n_trials  = 20
@@ -159,6 +159,7 @@ class Calibration(sc.prettyobj): # pragma: no cover
         self.fit_args   = sc.mergedicts(fit_args)
         self.die        = die
         self.verbose    = verbose
+        self.save_results = save_results
         self.calibrated = False
         self.before_sim = None
         self.after_sim  = None
@@ -272,7 +273,7 @@ class Calibration(sc.prettyobj): # pragma: no cover
         df_res['time'] = np.floor(np.round(df_res.index, 1)).astype(int)
         return df_res
 
-    def run_trial(self, trial, save=False):
+    def run_trial(self, trial):
         """ Define the objective for Optuna """
         if self.calib_pars is not None:
             calib_pars = self.trial_to_sim_pars(self.calib_pars, trial)
@@ -297,7 +298,7 @@ class Calibration(sc.prettyobj): # pragma: no cover
 
         sim_results['time'] = model_output.index.values
         # Store results in temporary files
-        if save:
+        if self.save_results:
             filename = self.tmp_filename % trial.number
             sc.save(filename, sim_results)
 
@@ -529,7 +530,7 @@ class Calibration(sc.prettyobj): # pragma: no cover
             kwargs (dict): passed to MultiSim.plot()
         """
         if self.before_sim is None:
-            self.comfirm_fit()
+            self.confirm_fit()
         msim = ss.MultiSim([self.before_sim, self.after_sim])
         fig = msim.plot(**kwargs)
         return fig
