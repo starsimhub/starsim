@@ -154,12 +154,12 @@ class Sim:
 
         # Initialize products # TODO: think about moving with other modules
         for intv in self.interventions():
-            if hasattr(intv, 'product'): # TODO: simplify
+            if hasattr(intv, 'product') and intv.product is not None: # TODO: simplify
                 intv.product.init_pre(self)
 
         # Final initializations
         self.init_dists() # Initialize distributions
-        self.init_vals() # Initialize the values in all of the states and networks
+        self.init_vals() # Initialize the values in all the states and networks
         self.init_results() # Initialize the results
         self.init_data() # Initialize the data
         self.loop.init() # Initialize the integration loop
