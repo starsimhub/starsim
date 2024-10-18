@@ -78,14 +78,28 @@ def make_data():
     df = sc.dataframe(target_data[1:], columns=target_data[0])
     return df
 
-#%% Define the tests
+def build_sim(sim, calib_pars, **kwargs):
+    """ Modify the base simulation by applying calib_pars """
 
+    # Capture any parameters that need special handling here
+    if 'beta_randomnet' in calib_pars:
+        v = calib_pars.pop('beta_randomnet')['value']
+        sim.diseases.hiv.pars.beta['random'] = [ss.beta(v), ss.beta(v)]
+
+    # The remaining calib_pars should have a path and can be handled in the
+    # straighforward way by the built-in translate_pars
+    sim = ss.Calibration.translate_pars(sim, calib_pars)
+
+    return sim
+
+
+#%% Define the tests
 def test_calibration(do_plot=False):
     sc.heading('Testing calibration')
 
     # Define the calibration parameters
     calib_pars = dict(
-        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', path=('diseases', 'hiv', 'beta'), log=True), # Log scale
+        beta_randomnet = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True), # Log scale and no "path", will be handled by build_sim (ablve)
         init_prev = dict(low=0.01, high=0.30, guess=0.15, path=('diseases', 'hiv', 'init_prev')), # Default type is suggest_float, no need to re-specify
         n_contacts = dict(low=2, high=10, guess=4, suggest_type='suggest_int', path=('networks', 'randomnet', 'n_contacts')), # Suggest int just for demo
     )
@@ -109,7 +123,7 @@ def test_calibration(do_plot=False):
         sim = sim,
         data = data,
 
-        build_fn = None, # Use default builder, Calibration.translate_pars
+        build_fn = build_sim, # Use default builder, Calibration.translate_pars
         build_kwargs = None,
 
         eval_fn = None, # Use default evaluation, Calibration.compute_fit

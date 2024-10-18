@@ -214,17 +214,15 @@ class Calibration(sc.prettyobj):
         """ Take the nested dict of calibration pars and modify the sim """
 
         if 'rand_seed' in calib_pars:
-            sim.pars['rand_seed'] = calib_pars['rand_seed']
+            sim.pars['rand_seed'] = calib_pars.pop('rand_seed')
 
         for parname, spec in calib_pars.items():
-            if parname == 'rand_seed':
-                continue
-
             if 'path' not in spec:
                 raise ValueError(f'Cannot map {parname} because "path" is missing from the parameter configuration.')
 
             p = spec['path']
 
+            # TODO: Allow longer paths
             if len(p) != 3:
                 raise ValueError(f'Cannot map {parname} because "path" must be a tuple of length 3.')
 
@@ -261,8 +259,8 @@ class Calibration(sc.prettyobj):
             else:
                 sampler_fn = trial.suggest_float
 
-            path = spec.pop('path', None) # remove path
-            guess = spec.pop('guess', None) # remove guess
+            path = spec.pop('path', None) # remove path for the sampler
+            guess = spec.pop('guess', None) # remove guess for the sampler
             spec['value'] = sampler_fn(name=parname, **spec) # suggest values!
             spec['path'] = path
             spec['guess'] = guess
@@ -316,20 +314,21 @@ class Calibration(sc.prettyobj):
         fit = self.eval_fn(sim, self.data, **self.eval_kwargs)
         return fit
 
-    def compute_fit(self, sim, data, **kwargs):
+    @staticmethod
+    def compute_fit(sim, data, **kwargs):
         """ Compute goodness-of-fit """
         fit = 0
 
-        df_res = sim.to_df()
+        df_res = sim.to_df(sep='.')
 
-        for skey in self.sim_result_list:
+        for skey in data.cols:
             if 'prevalence' in skey:
                 model_output = df_res.groupby(by='time')[skey].mean()
             else:
                 model_output = df_res.groupby(by='time')[skey].sum()
 
-            data = self.data[skey]
-            combined = pd.merge(data, model_output, how='left', on='time')
+            obs = data[skey]
+            combined = pd.merge(obs, model_output, how='left', on='time')
             combined['diffs'] = combined[skey+'_x'] - combined[skey+'_y']
             gofs = compute_gof(combined.dropna()[skey+'_x'], combined.dropna()[skey+'_y'])
 
