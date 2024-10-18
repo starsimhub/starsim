@@ -207,7 +207,18 @@ class Module(sc.quickobj):
     def now(self):
         """ Return the current time, i.e. the time vector at the current timestep """
         try:
-            return self.timevec[self.ti]
+            if self.ti >= 0:
+                return self.timevec[self.ti]
+            else:
+                if sc.isnumber(self.sim.pars.start):
+                    return self.sim.pars.start + self.ti * self.dt * ss.time_ratio(unit1=self.unit, unit2='year')
+                else:
+                    assert isinstance(self.sim.pars.start, dt.date), 'Expected a datetime'
+                    if self.unit == 'day':
+                        return self.sim.pars.start + dt.timedelta(days=int(self.ti * self.dt))
+                    else:
+                        assert self.unit == 'year', 'Expected unit of "year"'
+                        return self.sim.pars.start + dt.timedelta(days=int(365.25 * self.ti * self.dt))
         except Exception as E:
             ss.warn(f'Encountered exception when getting the current time in {self.name}: {E}')
             return None
