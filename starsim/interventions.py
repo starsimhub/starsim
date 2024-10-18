@@ -605,6 +605,9 @@ class MixingPool(Intervention):
         if self.pars.beta == 0:
             return 0
 
+        if len(self.src_uids) == 0 or len(self.dst_uids) == 0:
+            return 0
+
         n_new_cases = 0
         for disease in self.diseases:
             trans = np.mean(disease.infectious[self.src_uids] * disease.rel_trans[self.src_uids])

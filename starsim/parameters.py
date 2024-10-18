@@ -108,8 +108,9 @@ class Pars(sc.objdict):
             if new_cls == old_cls:
                 self[key] = new
             else:
+                self[key] = new
                 errormsg = f'When updating a time parameter, the new class ({new_cls}) should match the original class ({old_cls})'
-                raise TypeError(errormsg)
+                ss.warn(errormsg)
 
         # It's a single number, e.g. dur_inf = 6; set parameters
         elif isinstance(new, Number):
