@@ -85,8 +85,9 @@ def test_calibration(do_plot=False):
 
     # Define the calibration parameters
     calib_pars = dict(
-        init_prev = dict(low=0.01, high=0.30, guess=0.15, path=('diseases', 'hiv', 'init_prev')),
-        n_contacts = dict(low=2, high=10, guess=4, path=('networks', 'randomnet', 'n_contacts')),
+        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', path=('diseases', 'hiv', 'beta'), log=True), # Log scale
+        init_prev = dict(low=0.01, high=0.30, guess=0.15, path=('diseases', 'hiv', 'init_prev')), # Default type is suggest_float, no need to re-specify
+        n_contacts = dict(low=2, high=10, guess=4, suggest_type='suggest_int', path=('networks', 'randomnet', 'n_contacts')), # Suggest int just for demo
     )
 
     # Make the sim and data
@@ -107,7 +108,13 @@ def test_calibration(do_plot=False):
         calib_pars = calib_pars,
         sim = sim,
         data = data,
-        weights = weights,
+
+        build_fn = None, # Use default builder, Calibration.translate_pars
+        build_kwargs = None,
+
+        eval_fn = None, # Use default evaluation, Calibration.compute_fit
+        eval_kwargs = dict(weights=weights), # Pass in weights
+
         total_trials = 8,
         n_workers = 2,
         die = True,

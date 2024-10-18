@@ -104,28 +104,33 @@ def compute_gof(actual, predicted, normalize=True, use_frac=False, use_squared=F
         return gofs
 
 
-class Calibration(sc.prettyobj): # pragma: no cover
+class Calibration(sc.prettyobj):
     """
     A class to handle calibration of Starsim simulations. Uses the Optuna hyperparameter
     optimization library (optuna.org).
 
     Args:
-        sim          (Sim)  : the simulation to calibrate
-        data         (df)   : pandas dataframe (or dataframe-compatible dict) of the data to calibrate to
-        calib_pars   (dict) : a dictionary of the parameters to calibrate of the format dict(key1=[best, low, high])
-        n_trials     (int)  : the number of trials per worker
-        n_workers    (int)  : the number of parallel workers (default: maximum number of available CPUs)
-        total_trials (int)  : if n_trials is not supplied, calculate by dividing this number by n_workers
+        sim          (Sim)  : the base simulation to calibrate
+        data         (df)   : pandas dataframe (or dataframe-compatible dict) containing calibration data
+        calib_pars   (dict) : a dictionary of the parameters to calibrate of the format dict(key1=dict(low=1, high=2, guess=1.5, **kwargs), key2=...), where kwargs can include "suggest_type" to choose the suggest method of the trial (e.g. suggest_float) and args passed to the trial suggest function like "log" and "step"
+        n_workers    (int)  : the number of parallel workers (if None, will use all available CPUs)
+        total_trials (int)  : the total number of trials to run, each worker will run approximately n_trials = total_trial / n_workers
+
         reseed       (bool) : whether to generate new random seeds for each trial
-        weights      (dict) : the relative weights of each data source
-        fit_args     (dict) : a dictionary of options that are passed to sim.compute_fit() to calculate the goodness-of-fit
-        sep          (str)  : the separate between different types of results, e.g. 'hiv.deaths' vs 'hiv_deaths'
-        name         (str)  : the name of the database (default: 'starsim_calibration')
+
+        build_fn  (callable): function that takes a sim object and calib_pars dictionary and returns a modified sim
+        build_kwargs  (dict): a dictionary of options that are passed to build_fn to aid in modifying the base simulation. The API is self.build_fn(sim, calib_pars=calib_pars, **self.build_kwargs), where sim is a copy of the base simulation to be modified with calib_pars
+
+        eval_fn   (callable): function that takes a sim object and data as arguments and returns a scalar. If None, uses built-in compute_gof function.
+        eval_kwargs  (dict) : a dictionary of options that are passed to eval_fn to calculate the goodness of fit, can include weights and "sep". The API is self.eval_fn(sim, self.data, **self.eval_kwargs), where sim is a completed sim
+
+        label        (str)  : a label for this calibration object
+        study_name   (str)  : name of the optuna study
         db_name      (str)  : the name of the database file (default: 'starsim_calibration.db')
         keep_db      (bool) : whether to keep the database after calibration (default: false)
         storage      (str)  : the location of the database (default: sqlite)
-        rand_seed    (int)  : if provided, use this random seed to initialize Optuna runs (for reproducibility)
-        label        (str)  : a label for this calibration object
+        sampler (BaseSampler): the sampler used by optuna, like optuna.samplers.TPESampler
+
         die          (bool) : whether to stop if an exception is encountered (default: false)
         debug        (bool) : if True, do not run in parallel
         verbose      (bool) : whether to print details of the calibration
@@ -133,20 +138,29 @@ class Calibration(sc.prettyobj): # pragma: no cover
     Returns:
         A Calibration object
     """
-    def __init__(self, sim, data, calib_pars, n_trials=None, n_workers=None, total_trials=None, reseed=True,
-                 weights=None, fit_args=None, sep='.', name=None, db_name=None, keep_db=None, storage=None,
-                 rand_seed=None, sampler=None, label=None, die=False, debug=False, verbose=True):
+    def __init__(self, sim, data, calib_pars, n_workers=None, total_trials=None,
+                 reseed=True,
+                 build_fn=None, build_kwargs=None, eval_fn=None, eval_kwargs=None,
+
+                 label=None, study_name=None, db_name=None, keep_db=None, storage=None,
+                 sampler=None, die=False, debug=False, verbose=True):
 
         # Handle run arguments
-        if n_trials  is None: n_trials  = 20
-        if n_workers is None: n_workers = sc.cpu_count()
-        if name      is None: name      = 'starsim_calibration'
-        if db_name   is None: db_name   = f'{name}.db'
-        if keep_db   is None: keep_db   = False
-        if storage   is None: storage   = f'sqlite:///{db_name}'
-        if total_trials is not None: n_trials = int(np.ceil(total_trials/n_workers))
-        kw = dict(n_trials=int(n_trials), n_workers=int(n_workers), debug=debug, name=name, db_name=db_name,
-                  keep_db=keep_db, storage=storage, rand_seed=rand_seed, sampler=sampler)
+        if total_trials is None: total_trials   = 100
+        if n_workers    is None: n_workers      = sc.cpu_count()
+        if study_name   is None: study_name     = 'starsim_calibration'
+        if db_name      is None: db_name        = f'{study_name}.db'
+        if keep_db      is None: keep_db        = False
+        if storage      is None: storage        = f'sqlite:///{db_name}'
+        
+        self.build_fn       = build_fn or self.translate_pars
+        self.build_kwargs   = build_kwargs or dict()
+        self.eval_fn        = eval_fn or self.compute_fit
+        self.eval_kwargs    = eval_kwargs or dict()
+
+        n_trials = int(np.ceil(total_trials/n_workers))
+        kw = dict(n_trials=n_trials, n_workers=int(n_workers), debug=debug, study_name=study_name,
+                  db_name=db_name, keep_db=keep_db, storage=storage, sampler=sampler)
         self.run_args = sc.objdict(kw)
 
         # Handle other inputs
@@ -154,9 +168,6 @@ class Calibration(sc.prettyobj): # pragma: no cover
         self.sim        = sim
         self.calib_pars = calib_pars
         self.reseed     = reseed
-        self.sep        = sep
-        self.weights    = sc.mergedicts(weights)
-        self.fit_args   = sc.mergedicts(fit_args)
         self.die        = die
         self.verbose    = verbose
         self.calibrated = False
@@ -183,7 +194,7 @@ class Calibration(sc.prettyobj): # pragma: no cover
         sim = sc.dcp(self.sim)
         if label: sim.label = label
 
-        sim = self.translate_pars(sim, calib_pars=calib_pars)
+        sim = self.build_fn(sim, calib_pars=calib_pars, **self.build_kwargs)
 
         # Run the sim
         try:
@@ -236,11 +247,6 @@ class Calibration(sc.prettyobj): # pragma: no cover
     def trial_to_sim_pars(self, pardict=None, trial=None):
         """
         Take in an optuna trial and sample from pars, after extracting them from the structure they're provided in
-
-        Different use cases:
-            - pardict is self.calib_pars, i.e. {'diseases':{'hiv':{'art_efficacy':[0.96, 0.9, 0.99]}}}, need to sample
-            - pardict is self.initial_pars, i.e. {'diseases':{'hiv':{'art_efficacy':[0.96, 0.9, 0.99]}}}, pull 1st vals
-            - pardict is self.best_pars, i.e. {'diseases':{'hiv':{'art_efficacy':0.96786}}}, pull single vals
         """
         pars = sc.dcp(pardict)
         for parname, spec in pars.items():
@@ -249,20 +255,21 @@ class Calibration(sc.prettyobj): # pragma: no cover
                 # Already have a value, likely running initial or final values as part of checking the fit
                 continue
 
-            if 'sampler' in spec:
-                sampler = spec.pop('sampler')
-                sampler_fn = getattr(trial, sampler)
+            if 'suggest_type' in spec:
+                suggest_type = spec.pop('suggest_type')
+                sampler_fn = getattr(trial, suggest_type)
             else:
                 sampler_fn = trial.suggest_float
 
             path = spec.pop('path', None) # remove path
             guess = spec.pop('guess', None) # remove guess
-            spec['value'] = sampler_fn(name=parname, **spec) # Sample!
+            spec['value'] = sampler_fn(name=parname, **spec) # suggest values!
             spec['path'] = path
             spec['guess'] = guess
 
         return pars
 
+    '''
     @staticmethod
     def sim_to_df(sim): # TODO: remove this method
         """ Convert a sim to the expected dataframe type """
@@ -271,6 +278,8 @@ class Calibration(sc.prettyobj): # pragma: no cover
         df_res = df_res.set_index('t')
         df_res['time'] = np.floor(np.round(df_res.index, 1)).astype(int)
         return df_res
+    '''
+
 
     def run_trial(self, trial, save=False):
         """ Define the objective for Optuna """
@@ -284,6 +293,7 @@ class Calibration(sc.prettyobj): # pragma: no cover
 
         sim = self.run_sim(calib_pars)
 
+        '''
         # Export results # TODO: make more robust
         df_res = self.sim_to_df(sim)
         sim_results = sc.objdict()
@@ -300,18 +310,18 @@ class Calibration(sc.prettyobj): # pragma: no cover
         if save:
             filename = self.tmp_filename % trial.number
             sc.save(filename, sim_results)
+        '''
 
         # Compute fit
-        fit = self.compute_fit(df_res=df_res)
+        fit = self.eval_fn(sim, self.data, **self.eval_kwargs)
         return fit
 
-    def compute_fit(self, sim=None, df_res=None):
+    def compute_fit(self, sim, data, **kwargs):
         """ Compute goodness-of-fit """
         fit = 0
 
-        # TODO: reduce duplication with above
-        if df_res is None:
-            df_res = self.sim_to_df(sim)
+        df_res = sim.to_df()
+
         for skey in self.sim_result_list:
             if 'prevalence' in skey:
                 model_output = df_res.groupby(by='time')[skey].mean()
@@ -335,7 +345,7 @@ class Calibration(sc.prettyobj): # pragma: no cover
             op.logging.set_verbosity(op.logging.DEBUG)
         else:
             op.logging.set_verbosity(op.logging.ERROR)
-        study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.name, sampler = self.run_args.sampler)
+        study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
         output = study.optimize(self.run_trial, n_trials=self.run_args.n_trials, callbacks=None)
         return output
 
@@ -357,8 +367,8 @@ class Calibration(sc.prettyobj): # pragma: no cover
                 if self.verbose: print(f'Removed existing calibration file {self.run_args.db_name}')
             else:
                 # Delete the study from the database e.g., mysql
-                op.delete_study(study_name=self.run_args.name, storage=self.run_args.storage)
-                if self.verbose: print(f'Deleted study {self.run_args.name} in {self.run_args.storage}')
+                op.delete_study(study_name=self.run_args.study_name, storage=self.run_args.storage)
+                if self.verbose: print(f'Deleted study {self.run_args.study_name} in {self.run_args.storage}')
         except Exception as E:
             if self.verbose:
                 print('Could not delete study, skipping...')
@@ -369,14 +379,8 @@ class Calibration(sc.prettyobj): # pragma: no cover
         """ Make a study, deleting one if it already exists """
         if not self.run_args.keep_db:
             self.remove_db()
-        if self.run_args.rand_seed is not None:
-            sampler = op.samplers.RandomSampler(self.run_args.rand_seed)
-            sampler.reseed_rng()
-            raise NotImplementedError('Implemented but does not work')
-        else:
-            sampler = None
         if self.verbose: print(self.run_args.storage)
-        output = op.create_study(storage=self.run_args.storage, study_name=self.run_args.name, sampler=sampler)
+        output = op.create_study(storage=self.run_args.storage, study_name=self.run_args.study_name)
         return output
 
     def calibrate(self, calib_pars=None, confirm_fit=False, load=False, tidyup=True, **kwargs):
@@ -400,7 +404,7 @@ class Calibration(sc.prettyobj): # pragma: no cover
         t0 = sc.tic()
         self.make_study()
         self.run_workers()
-        study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.name, sampler = self.run_args.sampler)
+        study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
         self.best_pars = sc.objdict(study.best_params)
         self.elapsed = sc.toc(t0, output=True)
 
@@ -456,8 +460,8 @@ class Calibration(sc.prettyobj): # pragma: no cover
 
         self.before_sim = self.run_sim(calib_pars=before_pars, label='Before calibration')
         self.after_sim  = self.run_sim(calib_pars=after_pars, label='After calibration')
-        self.before_fit = self.compute_fit(self.before_sim)
-        self.after_fit  = self.compute_fit(self.after_sim)
+        self.before_fit = self.eval_fn(self.before_sim, **self.eval_kwargs)
+        self.after_fit  = self.eval_fn(self.after_sim, **self.eval_kwargs)
 
         # Add the data to the sims
         for sim in [self.before_sim, self.after_sim]:
