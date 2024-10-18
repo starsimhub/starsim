@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 import starsim as ss
+import warnings
 
 __all__ = ['Pars', 'SimPars', 'make_pars']
 
@@ -108,8 +109,9 @@ class Pars(sc.objdict):
             if new_cls == old_cls:
                 self[key] = new
             else:
+                self[key] = new
                 errormsg = f'When updating a time parameter, the new class ({new_cls}) should match the original class ({old_cls})'
-                raise TypeError(errormsg)
+                warnings.warn(errormsg)
 
         # It's a single number, e.g. dur_inf = 6; set parameters
         elif isinstance(new, Number):

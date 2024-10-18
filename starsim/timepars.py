@@ -97,7 +97,7 @@ def make_timevec(start, stop, dt, unit):
     else:
         day_delta = time_ratio(unit1=unit, dt1=dt, unit2='day', dt2=1.0, as_int=True)
         if day_delta > 0:
-            timevec = sc.daterange(start, stop, interval={'days':day_delta})
+            timevec = np.array(sc.daterange(start, stop, interval={'days':day_delta}))
         else:
             errormsg = f'Timestep {dt} is too small; must be at least 1 day'
             raise ValueError(errormsg)
@@ -108,15 +108,16 @@ def make_abs_tvec(tv, unit, sim_unit):
     """ Convert a module time vector into a numerical time array with the same units as the sim """
 
     # It's an array of days or years: easy
-    if sc.isarray(tv):
+
+    if sc.isnumber(tv[0]):
         ratio = time_ratio(unit1=unit, unit2=sim_unit)
         abstv = tv*ratio # Get the units right
         abstv -= abstv[0] # Start at 0
 
     # It's a date: convert to fractional years and then subtract the
     else:
-        yearvec = [sc.datetoyear(d) for d in tv]
-        absyearvec = np.array(yearvec) - yearvec[0] # Subtract start date
+        yearvec = np.vectorize(sc.datetoyear)(tv)
+        absyearvec = yearvec - yearvec[0] # Subtract start date
         abstv = absyearvec*time_ratio(unit1='year', unit2=sim_unit)
 
     # Round to the value of epsilon; alternative to np.round(abstv/eps)*eps, which has floating point error

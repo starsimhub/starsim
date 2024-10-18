@@ -5,6 +5,7 @@ defines Analyzers and Connectors.
 import sciris as sc
 import starsim as ss
 from functools import partial
+import datetime as dt
 
 __all__ = ['module_map', 'find_modules', 'Module', 'Analyzer', 'Connector']
 
@@ -210,6 +211,14 @@ class Module(sc.quickobj):
         except Exception as E:
             ss.warn(f'Encountered exception when getting the current time in {self.name}: {E}')
             return None
+
+    @property
+    def now_year(self):
+        """ Like now, but convert datetime to floating point year """
+        now = self.now
+        if isinstance(now, dt.date):
+            return sc.datetoyear(now)
+        return now
 
     def start_step(self):
         """ Tasks to perform at the beginning of the step """

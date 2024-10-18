@@ -5,6 +5,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
+import datetime as dt
 import matplotlib.pyplot as plt
 
 __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
@@ -120,6 +121,14 @@ class Sim:
         except Exception as E:
             ss.warn(f'Encountered exception in sim when getting the current time: {E}')
             return None
+
+    @property
+    def now_year(self):
+        """ Like now, but convert datetime to floating point year """
+        now = self.now
+        if isinstance(now, dt.date):
+            return sc.datetoyear(now)
+        return now
 
     @property
     def modules(self):
