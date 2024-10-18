@@ -253,7 +253,7 @@ class TimePar(ss.BaseArr):
         new = self.asnew()
         unit = sc.ifelse(unit, self.parent_unit, self.unit)
         parent_dt = sc.ifelse(dt, 1.0)
-        new.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=unit, dt2=parent_dt) # Calculaet the new factor
+        new.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=unit, dt2=parent_dt) # Calculate the new factor
         new.update_values() # Update values
         new.v = new.values # Reset the base value
         new.factor = 1.0 # Reset everything else to be 1
