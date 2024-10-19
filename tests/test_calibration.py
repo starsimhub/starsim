@@ -15,19 +15,21 @@ n_agents = 2e3
 
 def make_sim():
     hiv = ss.HIV(
-        beta = {'random': [0.01]*2, 'maternal': [1, 0]},
-        init_prev = 0.15,
+        beta = {'random': [ss.beta(0.01)]*2, 'maternal': [ss.beta(0.4), 0]},
+        init_prev = ss.bernoulli(0.15),
+
+        dt = 0.25,
     )
     pregnancy = ss.Pregnancy(fertility_rate=20)
     death = ss.Deaths(death_rate=10)
-    random = ss.RandomNet(n_contacts=4)
+    random = ss.RandomNet(n_contacts=ss.poisson(4))
     maternal = ss.MaternalNet()
 
     sim = ss.Sim(
-        dt = 1,
+        dt = 0.5,
         n_agents = n_agents,
         total_pop = 9980999,
-        start = 1990,
+        start = sc.date('1990-01-01'),
         dur = 40,
         diseases = [hiv],
         networks = [random, maternal],

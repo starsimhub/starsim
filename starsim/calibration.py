@@ -8,6 +8,7 @@ import sciris as sc
 import optuna as op
 import matplotlib.pyplot as plt
 import starsim as ss
+import datetime as dt
 
 
 __all__ = ['Calibration', 'compute_gof']
@@ -319,18 +320,31 @@ class Calibration(sc.prettyobj):
         """ Compute goodness-of-fit """
         fit = 0
 
-        df_res = sim.to_df(sep='.')
+        #df_res = sim.to_df(sep='.')
 
         for skey in data.cols:
-            if 'prevalence' in skey:
-                model_output = df_res.groupby(by='time')[skey].mean()
+            if '.' in skey:
+                module, mkey = skey.split('.')
+                res = sim.results[module]
             else:
-                model_output = df_res.groupby(by='time')[skey].sum()
+                res = sim.results
+                mkey = skey
 
-            obs = data[skey]
-            combined = pd.merge(obs, model_output, how='left', on='time')
-            combined['diffs'] = combined[skey+'_x'] - combined[skey+'_y']
-            gofs = compute_gof(combined.dropna()[skey+'_x'], combined.dropna()[skey+'_y'])
+            time = np.array(res['timevec'])
+            if isinstance(sim.pars.start, dt.date):
+                time = np.array([sc.datetoyear(d) for d in time])
+
+            # Prevalent (interp) or incident (integrate interpolation over duration)
+            if mkey in ['n_alive', 'prevalence', 'n_infected']:
+                # Prevalent
+                sim_vals = np.interp(x=data.index, xp=time, fp=res[mkey])
+            elif mkey in ['new_infections', 'new_deaths']:
+                print(mkey)
+            else:
+                raise Exception(mkey)
+
+            obs_vals = data[skey]
+            gofs = compute_gof(obs_vals, sim_vals)
 
             losses = gofs  #* self.weights[skey]
             mismatch = losses.sum()
