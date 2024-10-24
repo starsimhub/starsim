@@ -110,6 +110,22 @@ def test_calibration(do_plot=False):
     sim = make_sim()
     data = make_data()
 
+    prevalence = ss.CalibComponent(
+        name = 'hiv.prevalence',
+        real_data = data['hiv.prevalence'],
+        sim_data_fn = lambda sim: sim.results.hiv.prevalence,
+        likelihood = 'hmm',
+        weight = 1,
+    )
+
+    new_infections = ss.CalibComponent(
+        name = 'hiv.new_infections',
+        real_data = data['hiv.new_infections'],
+        sim_data_fn = lambda sim: sim.results.hiv.new_infections,
+        likelihood = 'hmm',
+        weight = 1,
+    )
+
     # Define weights for the data
     weights = {
         'n_alive':            1.0,
@@ -128,8 +144,7 @@ def test_calibration(do_plot=False):
         build_fn = build_sim, # Use default builder, Calibration.translate_pars
         build_kwargs = None,
 
-        eval_fn = None, # Use default evaluation, Calibration.compute_fit
-        eval_kwargs = dict(weights=weights), # Pass in weights
+        components = [prevalence],
 
         total_trials = 8,
         n_workers = 2,
