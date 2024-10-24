@@ -5,6 +5,7 @@ import os
 import numpy as np
 import optuna as op
 import pandas as pd
+import datetime as dt
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
@@ -66,7 +67,7 @@ class Calibration(sc.prettyobj):
         self.build_fn       = build_fn or self.translate_pars
         self.build_kwargs   = build_kwargs or dict()
         self.eval_fn        = eval_fn or self._eval_fit
-        self.components     = components,
+        self.components     = components
 
         n_trials = int(np.ceil(total_trials/n_workers))
         kw = dict(n_trials=n_trials, n_workers=int(n_workers), debug=debug, study_name=study_name,
@@ -459,19 +460,40 @@ class CalibComponent(sc.prettyobj):
         pass
 
     @staticmethod
-    def interp(real_data, sim_data):
+    def linear_interp(real_data, sim_data):
+        """
+        Simply interpolate
+        Use for prevalent data like prevalence
+        """
         t = real_data.index
-        sim_t = sim_data.index
+        sim_t = np.array([sc.datetoyear(t) for t in sim_data.index if isinstance(t, dt.date)])
 
         sdi = np.interp(x=t, xp=sim_t, fp=sim_data)
         df = pd.Series(sdi, index=t)
+        return df
+
+    @staticmethod
+    def linear_accum(real_data, sim_data):
+        """
+        Interpolate in the accumulation, then difference.
+        Use for incident data like incidence or new_deaths
+        """
+        t = real_data.index
+        t_step = np.diff(t)
+        assert np.all(t_step == t_step[0])
+        ti = np.append(t, t[-1] + t_step) # Add one more because later we'll diff
+
+        sim_t = np.array([sc.datetoyear(t) for t in sim_data.index if isinstance(t, dt.date)])
+
+        sdi = np.interp(x=ti, xp=sim_t, fp=sim_data.cumsum())
+        df = pd.Series(sdi.diff(), index=t)
         return df
 
     def eval(self, sim):
         # Compute and return the negative log likelihood
 
         sim_data = self.sim_data_fn(sim)
-        sim_data = self.conform_data(sim_data)
+        sim_data = self.conform_fn(self.real_data, sim_data)
 
         nll = self.likelihood(self.real_data, sim_data)
 

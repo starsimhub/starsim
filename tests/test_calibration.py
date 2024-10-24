@@ -5,6 +5,7 @@ Test calibration
 #%% Imports and settings
 import sciris as sc
 import starsim as ss
+import pandas as pd
 
 do_plot = 1
 do_save = 0
@@ -77,7 +78,8 @@ def make_data():
     [  2021,  15085870,        0.0861733,          1300000,               19000 ,           None],
     [  2022,  15312158,        0.0848998,          1300000,               17000 ,           None],
     ]
-    df = sc.dataframe(target_data[1:], columns=target_data[0])
+    df = sc.dataframe(target_data[1:], columns=target_data[0]) \
+        .set_index('time')
     return df
 
 def build_sim(sim, calib_pars, **kwargs):
@@ -112,39 +114,41 @@ def test_calibration(do_plot=False):
 
     prevalence = ss.CalibComponent(
         name = 'hiv.prevalence',
+
+        # By default, automate these based on name
         real_data = data['hiv.prevalence'],
-        sim_data_fn = lambda sim: sim.results.hiv.prevalence,
+        sim_data_fn = lambda sim: pd.Series(sim.results.hiv.prevalence, index=sim.results.hiv.timevec),
+
+        # Don't like this syntax
+        conform_fn = ss.CalibComponent.linear_interp,
+
         likelihood = 'hmm',
         weight = 1,
     )
 
     new_infections = ss.CalibComponent(
         name = 'hiv.new_infections',
+
+        # By default, automate these based on name
         real_data = data['hiv.new_infections'],
-        sim_data_fn = lambda sim: sim.results.hiv.new_infections,
+        sim_data_fn = lambda sim: pd.Series(sim.results.hiv.new_infections, index=sim.results.hiv.timevec),
+
+        # Don't like this syntax
+        conform_fn = ss.CalibComponent.linear_accum,
+
         likelihood = 'hmm',
         weight = 1,
     )
-
-    # Define weights for the data
-    weights = {
-        'n_alive':            1.0,
-        'hiv.prevalence':     1.0,
-        'hiv.n_infected':     1.0,
-        'hiv.new_infections': 1.0,
-        'hiv.new_deaths':     1.0,
-    }
 
     # Make the calibration
     calib = ss.Calibration(
         calib_pars = calib_pars,
         sim = sim,
-        data = data,
 
         build_fn = build_sim, # Use default builder, Calibration.translate_pars
         build_kwargs = None,
 
-        components = [prevalence],
+        components = [prevalence, new_infections],
 
         total_trials = 8,
         n_workers = 2,
