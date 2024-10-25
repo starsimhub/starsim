@@ -11,7 +11,7 @@ import starsim as ss
 import matplotlib.pyplot as plt
 
 
-__all__ = ['Calibration', 'CalibComponent']
+__all__ = ['Calibration', 'CalibComponent', 'eConform', 'eLikelihood']
 
 
 class Calibration(sc.prettyobj):
@@ -430,9 +430,12 @@ class Calibration(sc.prettyobj):
 
 from enum import Enum
 
-class eMode(Enum):
+class eConform(Enum):
     PREVALENT = 0
     INCIDENT = 1
+
+class eLikelihood(Enum):
+    POISSON = 0
 
 class CalibComponent(sc.prettyobj):
     """
@@ -450,14 +453,39 @@ class CalibComponent(sc.prettyobj):
             If eMode.PREVALENT, simulation outputs will be interpolated to observed timepoints.
             If eMode.INCIDENT, ...
     """
-    def __init__(self, name, real_data, sim_data_fn, conform_fn, likelihood, weight=1):
+    def __init__(self, name, real_data, sim_data_fn, conform, likelihood, weight=1):
         self.name = name
         self.real_data = real_data
         self.sim_data_fn = sim_data_fn
-        self.conform_fn = conform_fn # e.g. prev_interp
-        self.likelihood = likelihood # Actually negative log-likelihood
         self.weight = weight
+
+        if isinstance(likelihood, eLikelihood):
+            if likelihood == eLikelihood.POISSON:
+                self.likelihood = self.poisson_nll # Actually negative log-likelihood
+        else:
+            if not callable(conform):
+                msg = f'The likelihood argument must be an eLikelihood or callable function, not {type(likelihood)}.'
+                raise Exception(msg)
+            self.likelihood = likelihood
+
+        if isinstance(conform, eConform):
+            if conform == eConform.INCIDENT:
+                self.conform = self.linear_accum
+            elif conform == eConform.PREVALENT:
+                self.conform = self.linear_interp
+        else:
+            if not callable(conform):
+                msg = f'The conform argument must be an eConform or callable function, not {type(conform)}.'
+                raise Exception(msg)
+            self.conform = conform
+
         pass
+
+    @staticmethod
+    def poisson_nll(real_data, sim_data):
+        print('poisson')
+
+        return 0
 
     @staticmethod
     def linear_interp(real_data, sim_data):
@@ -493,7 +521,7 @@ class CalibComponent(sc.prettyobj):
         # Compute and return the negative log likelihood
 
         sim_data = self.sim_data_fn(sim)
-        sim_data = self.conform_fn(self.real_data, sim_data)
+        sim_data = self.conform(self.real_data, sim_data)
 
         nll = self.likelihood(self.real_data, sim_data)
 

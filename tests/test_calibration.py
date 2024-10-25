@@ -119,10 +119,9 @@ def test_calibration(do_plot=False):
         real_data = data['hiv.prevalence'],
         sim_data_fn = lambda sim: pd.Series(sim.results.hiv.prevalence, index=sim.results.hiv.timevec),
 
-        # Don't like this syntax
-        conform_fn = ss.CalibComponent.linear_interp,
+        conform = ss.eConform.PREVALENT,
+        likelihood = ss.eLikelihood.POISSON,
 
-        likelihood = 'hmm',
         weight = 1,
     )
 
@@ -133,10 +132,9 @@ def test_calibration(do_plot=False):
         real_data = data['hiv.new_infections'],
         sim_data_fn = lambda sim: pd.Series(sim.results.hiv.new_infections, index=sim.results.hiv.timevec),
 
-        # Don't like this syntax
-        conform_fn = ss.CalibComponent.linear_accum,
+        conform = ss.eConform.INCIDENT,
+        likelihood = ss.eLikelihood.POISSON,
 
-        likelihood = 'hmm',
         weight = 1,
     )
 
