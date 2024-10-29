@@ -286,7 +286,7 @@ class Sim:
             timepoint = self.timevec[self.ti]
             timelabel = f'{timepoint:0.1f}' if isinstance(timepoint, float) else str(timepoint) # TODO: fix
             string = f'  Running {simlabel}{timelabel} ({self.ti:2.0f}/{self.npts}) ({self.elapsed:0.2f} s) '
-            if self.verbose >= 2:
+            if self.verbose >= 1:
                 sc.heading(string)
             elif self.verbose > 0:
                 if not (self.ti % int(1.0 / self.verbose)):
