@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 __all__ = ['link_dists', 'make_dist', 'dist_list', 'Dists', 'Dist']
 
 
-def str2int(string, modulo=None):
+def str2int(string, modulo=10_000_000):
     """
     Convert a string to an int
 
@@ -19,11 +19,7 @@ def str2int(string, modulo=None):
     is 5x slower than int.from_bytes(string.encode(), byteorder='big'), but should
     only add a couple milliseconds to a typical sim.
     """
-    integer = int.from_bytes(string.encode(), byteorder='big')
-    # integer = sc.sha(string, asint=True) # Hash the string to an integer
-    if modulo is None:
-        return integer
-
+    integer = sc.sha(string, asint=True) # Hash the string to an integer
     out = integer % modulo # This is more user-friendly
     return out
 

@@ -103,14 +103,7 @@ class Pars(sc.objdict):
 
         # It's a TimePar, e.g. dur_inf = ss.dur(6); use directly
         if isinstance(new, ss.TimePar):
-            new_cls = new.__class__
-            old_cls = old.__class__
-            if new_cls == old_cls:
-                self[key] = new
-            else:
-                self[key] = new
-                errormsg = f'When updating a time parameter, the new class ({new_cls}) should match the original class ({old_cls})'
-                ss.warn(errormsg)
+            self[key] = new
 
         # It's a single number, e.g. dur_inf = 6; set parameters
         elif isinstance(new, Number):
