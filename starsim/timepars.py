@@ -202,7 +202,32 @@ class TimePar(ss.BaseArr):
         else:
             parentstr = ''
 
-        return f'ss.{name}({self.v}, unit={self.unit}{parentstr}{xstr})'
+        default_dt = sc.ifelse(self.self_dt, 1.0) == 1.0
+        if not default_dt:
+            dtstr = f', self_dt={self.self_dt}'
+        else:
+            dtstr = ''
+
+        # Rather than ss.dur(3, unit='day'), dispaly as ss.days(3)
+        prefixstr = 'ss.'
+        key = (name, self.unit)
+        mapping = {
+            ('dur', 'day'): 'days',
+            ('dur', 'year'): 'years',
+            ('rate', 'day'): 'perday',
+            ('rate', 'year'): 'peryear',
+        }
+
+        if key in mapping and default_dt:
+            prefixstr += mapping[key]
+            unitstr = ''
+        else:
+            prefixstr += name
+            unitstr = f', unit={self.unit}'
+
+        suffixstr = unitstr + parentstr + dtstr + xstr
+
+        return f'{prefixstr}({self.v}{suffixstr})'
 
     @property
     def isarray(self):
