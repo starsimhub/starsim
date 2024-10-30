@@ -486,7 +486,7 @@ class Pregnancy(Demographics):
 
             # Grow the arrays and set properties for the unborn agents
             new_uids = people.grow(len(new_slots), new_slots)
-            people.age[new_uids] = -float(self.pars.dur_pregnancy.to('year'))
+            people.age[new_uids] = -self.pars.dur_pregnancy.to('year')
             people.slot[new_uids] = new_slots  # Before sampling female_dist
             people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
             people.parent[new_uids] = conceive_uids

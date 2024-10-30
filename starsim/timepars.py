@@ -212,9 +212,9 @@ class TimePar(ss.BaseArr):
         prefixstr = 'ss.'
         key = (name, self.unit)
         mapping = {
-            ('dur', 'day'): 'days',
-            ('dur', 'year'): 'years',
-            ('rate', 'day'): 'perday',
+            ('dur',  'day'):  'days',
+            ('dur',  'year'): 'years',
+            ('rate', 'day'):  'perday',
             ('rate', 'year'): 'peryear',
         }
 
