@@ -429,10 +429,6 @@ def single_run(sim, ind=0, reseed=True, keep_people=False, run_args=None, sim_ar
         sim.pars['rand_seed'] += ind  # Reset the seed, otherwise no point of parallel runs
         ss.set_seed() # Note: may not be needed
 
-    if verbose >= 1:
-        verb = 'Running' if do_run else 'Creating'
-        print(f'{verb} a simulation using seed={sim["rand_seed"]}')
-
     # Handle additional arguments
     for key, val in sim_args.items():
         print(f'Processing {key}:{val}')
