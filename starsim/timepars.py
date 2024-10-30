@@ -7,7 +7,7 @@ import starsim as ss
 
 # Classes that are externally visible
 __all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff', 'make_timevec', 'make_abs_tvec',
-           'TimePar', 'dur', 'days', 'years', 'rate', 'perday', 'peryear', 'time_prob', 'beta']
+           'TimePar', 'dur', 'days', 'years', 'rate', 'perday', 'peryear', 'time_prob', 'beta', 'rate_prob']
 
 
 #%% Helper functions
@@ -257,6 +257,8 @@ class TimePar(ss.BaseArr):
         new.update_values() # Update values
         new.v = new.values # Reset the base value
         new.factor = 1.0 # Reset everything else to be 1
+        new.unit = unit
+        new.self_dt = parent_dt
         new.parent_unit = unit
         new.parent_dt = parent_dt
         return new
@@ -306,43 +308,41 @@ class dur(TimePar):
         return self.values
 
 
-class days(dur):
+def days(v, parent_unit=None, parent_dt=None):
     """ Shortcut to ss.dur(value, units='day') """
-    def __init__(self, v, parent_unit=None, parent_dt=None):
-        super().__init__(v=v, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
-        return
+    return dur(v=v, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
 
 
-class years(dur):
+def years(v, parent_unit=None, parent_dt=None):
     """ Shortcut to ss.dur(value, units='year') """
-    def __init__(self, v, parent_unit=None, parent_dt=None):
-        super().__init__(v=v, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
-        return
+    return dur(v=v, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
 
 
-class rate(TimePar): # TODO: should all rates just be time_prob?
+class rate(TimePar):
     """ Any number that acts like a rate; can be greater than 1 """
     def update_values(self):
         self.values = self.v/self.factor
         return self.values
 
 
-class perday(rate):
+def perday(v, parent_unit=None, parent_dt=None):
     """ Shortcut to ss.rate(value, units='day') """
-    def __init__(self, v, parent_unit=None, parent_dt=None):
-        super().__init__(v=v, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
-        return
+    return rate(v=v, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
 
 
-class peryear(rate):
+def peryear(v, parent_unit=None, parent_dt=None):
     """ Shortcut to ss.rate(value, units='year') """
-    def __init__(self, v, parent_unit=None, parent_dt=None):
-        super().__init__(v=v, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
-        return
+    return rate(v=v, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
 
 
 class time_prob(TimePar):
-    """ A probability over time (a.k.a. a cumulative hazard rate); must be >0 and <1 """
+    """
+    A probability over time (a.k.a. a cumulative hazard rate); must be >0 and <1.
+
+    Note: ``ss.time_prob()`` converts one cumulative hazard rate to another with a
+    different time unit. ``ss.rate_prob()`` converts an exponential rate to a cumulative
+    hazard rate.
+    """
     def update_values(self):
         v = self.v
         if self.isarray:
@@ -359,6 +359,34 @@ class time_prob(TimePar):
             elif 0 <= v <= 1:
                 rate = -np.log(1 - v)
                 self.values = 1 - np.exp(-rate/self.factor)
+            else:
+                errormsg = f'Invalid value {self.value} for {self}: must be 0-1'
+                raise ValueError(errormsg)
+        return self.values
+
+
+class rate_prob(TimePar):
+    """
+    A probability specified as a rate; must be >0 and <1.
+
+    Note: ``ss.time_prob()`` converts one cumulative hazard rate to another with a
+    different time unit. ``ss.rate_prob()`` converts an exponential rate to a cumulative
+    hazard rate.
+    """
+    def update_values(self):
+        v = self.v
+        if self.isarray:
+            self.values = v.copy()
+            inds = np.logical_and(0.0 < v, v < 1.0)
+            if inds.sum():
+                self.values[inds] = 1 - np.exp(-v[inds]/self.factor)
+        else:
+            if v == 0:
+                self.values = 0
+            elif v == 1:
+                self.values = 1
+            elif 0 <= v <= 1:
+                self.values = 1 - np.exp(-v/self.factor)
             else:
                 errormsg = f'Invalid value {self.value} for {self}: must be 0-1'
                 raise ValueError(errormsg)
