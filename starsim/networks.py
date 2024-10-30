@@ -1109,6 +1109,12 @@ class MixingPool(Route):
 
         return
 
+    def __len__(self):
+        try:
+            return len(self.pars.dst)
+        except:
+            return 0
+
     def init_post(self):
         super().init_post()
 
@@ -1139,6 +1145,14 @@ class MixingPool(Route):
         elif isinstance(func_or_array, ss.uids):
             return func_or_array
         raise Exception('src must be either a callable function, e.g. lambda sim: ss.uids(sim.people.age<5), or an array of uids.')
+
+    def remove_uids(self, uids):
+        """ If UIDs are supplied explicitly, remove them if people die """
+        for key in ['src', 'dst']:
+            inds = self.pars[key]
+            if isinstance(inds, ss.uids):
+                self.pars[key] = inds.remove(uids)
+        return
 
     def start_step(self):
         super().start_step()

@@ -182,8 +182,6 @@ def test_multi(do_plot=do_plot):
     return sim
 
 
-
-
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
@@ -198,7 +196,6 @@ if __name__ == '__main__':
 
     sim6 = test_multi_defaults(do_plot)
     sim7 = test_multi(do_plot)
-    sim8 = test_multi_ses(do_plot)
 
     T.toc()
 
