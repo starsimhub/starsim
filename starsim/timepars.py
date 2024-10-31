@@ -362,7 +362,7 @@ def peryear(v, parent_unit=None, parent_dt=None):
 
 class time_prob(TimePar):
     """
-    A probability over time (a.k.a. a cumulative hazard rate); must be >0 and <1.
+    A probability over time (a.k.a. a cumulative hazard rate); must be >=0 and <=1.
 
     Note: ``ss.time_prob()`` converts one cumulative hazard rate to another with a
     different time unit. ``ss.rate_prob()`` converts an exponential rate to a cumulative
@@ -392,7 +392,7 @@ class time_prob(TimePar):
 
 class rate_prob(TimePar):
     """
-    A probability specified as a rate; must be >0 and <1.
+    An instantaneous rate converted to a probability; must be >=0.
 
     Note: ``ss.time_prob()`` converts one cumulative hazard rate to another with a
     different time unit. ``ss.rate_prob()`` converts an exponential rate to a cumulative
@@ -402,18 +402,16 @@ class rate_prob(TimePar):
         v = self.v
         if self.isarray:
             self.values = v.copy()
-            inds = np.logical_and(0.0 < v, v < 1.0)
+            inds = v > 0.0
             if inds.sum():
                 self.values[inds] = 1 - np.exp(-v[inds]/self.factor)
         else:
             if v == 0:
                 self.values = 0
-            elif v == 1:
-                self.values = 1
-            elif 0 <= v <= 1:
+            elif v > 0:
                 self.values = 1 - np.exp(-v/self.factor)
             else:
-                errormsg = f'Invalid value {self.value} for {self}: must be 0-1'
+                errormsg = f'Invalid value {self.value} for {self}: must be >=0'
                 raise ValueError(errormsg)
         return self.values
 
