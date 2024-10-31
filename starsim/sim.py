@@ -5,6 +5,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
+import datetime as dt
 import matplotlib.pyplot as plt
 
 __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
@@ -115,11 +116,30 @@ class Sim:
     def now(self):
         """ Return the current time, i.e. the time vector at the current timestep """
         try:
-            ti = min(self.ti, len(self.timevec)-1) # During integration, ti can go one past the end of the time vector
-            return self.timevec[ti]
+            if self.ti >= 0:
+                ti = min(self.ti, len(self.timevec)-1) # During integration, ti can go one past the end of the time vector
+                return self.timevec[ti]
+            else:
+                if sc.isnumber(self.pars.start):
+                    return self.pars.start + self.ti * self.dt * ss.time_ratio(unit1=self.unit, unit2='year')
+                else:
+                    assert isinstance(self.pars.start, dt.date), 'Expected a datetime'
+                    if self.unit == 'day':
+                        return self.pars.start + dt.timedelta(days=int(self.ti * self.dt))
+                    else:
+                        assert self.unit == 'year', 'Expected unit of "year"'
+                        return self.pars.start + dt.timedelta(days=int(365.25 * self.ti * self.dt))
         except Exception as E:
-            ss.warn(f'Encountered exception in sim when getting the current time: {E}')
-            return None
+            ss.warn(f'Encountered exception when getting the current time in {self.name}: {E}')
+            return None 
+
+    @property
+    def now_year(self):
+        """ Like now, but convert datetime to floating point year """
+        now = self.now
+        if isinstance(now, dt.date):
+            return sc.datetoyear(now)
+        return now
 
     @property
     def modules(self):
@@ -266,7 +286,7 @@ class Sim:
             timepoint = self.timevec[self.ti]
             timelabel = f'{timepoint:0.1f}' if isinstance(timepoint, float) else str(timepoint) # TODO: fix
             string = f'  Running {simlabel}{timelabel} ({self.ti:2.0f}/{self.npts}) ({self.elapsed:0.2f} s) '
-            if self.verbose >= 2:
+            if self.verbose >= 1:
                 sc.heading(string)
             elif self.verbose > 0:
                 if not (self.ti % int(1.0 / self.verbose)):
@@ -598,6 +618,8 @@ class Sim:
                 ax.set_title(res.full_label)
                 ax.set_xlabel('Time')
 
+        if self.label is not None:
+            fig.suptitle(self.label)
         sc.figlayout(fig=fig)
 
         return fig

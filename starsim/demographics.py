@@ -110,7 +110,7 @@ class Births(Demographics):
         # Calculate crude birth rate (CBR)
         inv_units = 1.0/self.pars.units
         births_per_year = self.n_births/self.sim.dt_year
-        denom = self.sim.results.n_alive[self.sim.ti]
+        denom = self.sim.results.n_alive[self.ti]
         self.results.cbr[self.ti] = inv_units*births_per_year/denom
         return
 
@@ -186,8 +186,11 @@ class Deaths(Demographics):
         """ Take in the module, sim, and uids, and return the probability of death for each UID on this timestep """
 
         drd = self.death_rate_data
+        time_factor = ss.time_ratio(unit1=self.unit, unit2='year')
         if sc.isnumber(drd):
             death_rate = drd
+            if isinstance(death_rate, ss.TimePar):
+                time_factor = 1 # Time conversion performed automatically by TimePar
         else:
 
             ppl = sim.people
@@ -197,7 +200,7 @@ class Deaths(Demographics):
             assert len(uids) == len(ppl.auids)
 
             available_years = drd.index.get_level_values('year')
-            year_ind = sc.findnearest(available_years, sim.now) # TODO: make work with different timesteps
+            year_ind = sc.findnearest(available_years, sim.now_year) # TODO: make work with different timesteps
             nearest_year = available_years[year_ind]
 
             death_rate = np.empty(uids.shape, dtype=ss_float_)
@@ -215,7 +218,7 @@ class Deaths(Demographics):
                 death_rate[:] = s.values[binned_ages]
 
         # Scale from rate to probability. Consider an exponential here.
-        death_prob = death_rate * (self.pars.units * self.pars.rel_death * sim.pars.dt)
+        death_prob = death_rate * (self.pars.units * self.pars.rel_death * sim.pars.dt) * time_factor
         death_prob = np.clip(death_prob, a_min=0, a_max=1)
 
         return death_prob
@@ -303,10 +306,13 @@ class Pregnancy(Demographics):
         frd = self.fertility_rate_data
         fertility_rate = np.zeros(len(sim.people.uid.raw), dtype=ss_float_)
 
+        time_factor = ss.time_ratio(unit1=self.unit, unit2='year')
         if sc.isnumber(frd):
             fertility_rate[uids] = self.fertility_rate_data
+            if isinstance(frd, ss.TimePar):
+                time_factor = 1 # Time conversion performed automatically by TimePar
         else:
-            year_ind = sc.findnearest(frd.index, sim.now-self.pars.dur_pregnancy) # TODO: make time-unit-aware
+            year_ind = sc.findnearest(frd.index, self.now_year-self.pars.dur_pregnancy.to('year')) # TODO: make time-unit-aware
             nearest_year = frd.index[year_ind]
 
             # Assign agents to age bins
@@ -333,7 +339,7 @@ class Pregnancy(Demographics):
 
         # Scale from rate to probability
         invalid_age = (age < self.pars.min_age) | (age > self.pars.max_age)
-        fertility_prob = fertility_rate * (self.pars.units * self.pars.rel_fertility * sim.pars.dt)
+        fertility_prob = fertility_rate * (self.pars.units * self.pars.rel_fertility * self.dt) * time_factor
         fertility_prob[(~self.fecund).uids] = 0 # Currently infecund women cannot become pregnant
         fertility_prob[uids[invalid_age]] = 0 # Women too young or old cannot become pregnant
         fertility_prob = np.clip(fertility_prob[uids], a_min=0, a_max=1)
@@ -382,12 +388,12 @@ class Pregnancy(Demographics):
         return
 
     def step(self):
-        if self.sim.ti == 0 and self.pars.burnin:
+        if self.ti == 0 and self.pars.burnin:
             dtis = np.arange(np.ceil(-1 * self.pars.dur_pregnancy), 0, 1).astype(int)
             for dti in dtis:
-                self.sim.ti = dti
+                self.ti = dti
                 self.do_step()
-            self.sim.ti = 0
+            self.ti = 0
         new_uids = self.do_step()
 
         return new_uids
@@ -396,7 +402,7 @@ class Pregnancy(Demographics):
         """ Perform all updates """
         self.update_states()
         conceive_uids = self.make_pregnancies()
-        self.n_pregnancies = len(conceive_uids)
+        self.n_pregnancies += len(conceive_uids) # += to handle burn-in
         new_uids = self.make_embryos(conceive_uids)
         return new_uids
 
@@ -454,6 +460,9 @@ class Pregnancy(Demographics):
         eligible_uids = self.sim.people.female.uids
         conceive_uids = self.pars.p_fertility.filter(eligible_uids)
 
+        if len(conceive_uids) == 0:
+            return ss.uids()
+
         # Validation
         if np.any(self.pregnant[conceive_uids]):
             which_uids = conceive_uids[self.pregnant[conceive_uids]]
@@ -461,8 +470,7 @@ class Pregnancy(Demographics):
             raise ValueError(errormsg)
 
         # Set prognoses for the pregnancies
-        if len(conceive_uids) > 0:
-            self.set_prognoses(conceive_uids)
+        self.set_prognoses(conceive_uids)
         return conceive_uids
 
     def make_embryos(self, conceive_uids):
@@ -491,8 +499,8 @@ class Pregnancy(Demographics):
                     start = np.full(n_unborn, fill_value=self.ti)
                     layer.add_pairs(conceive_uids, new_uids, dur=durs, start=start)
 
-        if self.sim.ti < 0:
-            people.age[new_uids] += -self.sim.ti * self.dt # Age to ti=0, TODO: Check!
+        if self.ti < 0:
+            people.age[new_uids] += -self.ti * self.sim.dt_year # Age to ti=0
 
         return new_uids
 
@@ -511,7 +519,7 @@ class Pregnancy(Demographics):
         self.ti_pregnant[uids] = ti
 
         # Outcomes for pregnancies
-        dur_preg = np.ones(len(uids))*self.pars.dur_pregnancy  # Duration in years
+        dur_preg = np.ones(len(uids))*self.pars.dur_pregnancy
         dur_postpartum = self.pars.dur_postpartum.rvs(uids)
         dead = self.pars.p_maternal_death.rvs(uids)
         self.ti_delivery[uids] = ti + dur_preg # Currently assumes maternal deaths still result in a live baby
@@ -524,7 +532,7 @@ class Pregnancy(Demographics):
 
     def finish_step(self):
         super().finish_step()
-        death_uids = ss.uids(self.sim.people.ti_dead <= self.sim.ti)
+        death_uids = ss.uids(self.sim.people.ti_dead <= self.ti)
         if len(death_uids) == 0:
             return
 
@@ -553,10 +561,15 @@ class Pregnancy(Demographics):
         ti = self.ti
         self.results['pregnancies'][ti] = self.n_pregnancies
         self.results['births'][ti] = self.n_births
+
+        # Reset for the next step
+        self.n_pregnancies = 0
+        self.n_births = 0
+
         return
 
     def finalize(self):
         super().finalize()
         n_alive = self.sim.results.n_alive
-        self.results['cbr'] = 1/self.pars.units * np.divide(self.results['births'] / self.sim.dt_year, n_alive, where=n_alive>0)
+        self.results['cbr'][:] = 1/self.pars.units * np.divide(self.results['births'] / self.sim.dt_year, n_alive, where=n_alive>0)
         return

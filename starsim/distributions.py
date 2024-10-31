@@ -11,18 +11,17 @@ import matplotlib.pyplot as plt
 __all__ = ['link_dists', 'make_dist', 'dist_list', 'Dists', 'Dist']
 
 
-def str2int(string, modulo=1_000_000):
+def str2int(string, modulo=1_000_000_000):
     """
-    Convert a string to an int
+    Convert a string to an int to use as a random seed; not for the user
 
     Cannot use Python's built-in hash() since it's randomized for strings. Hashlib
-    is 5x slower than int.from_bytes(string.encode(), byteorder='big'), but should
+    (sc.sha) is 5x slower than int.from_bytes(string.encode(), byteorder='big'), but should
     only add a couple milliseconds to a typical sim.
     """
-    integer = int.from_bytes(string.encode(), byteorder='big')
-    # integer = sc.sha(string, asint=True) # Hash the string to an integer
-    out = integer % modulo # Don't need all of it, this is more user-friendly
-    return out
+    integer = sc.sha(string, asint=True) # Hash the string to an integer
+    seed = integer % modulo # Ensure a user-friendly representation user-friendly
+    return seed
 
 
 def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs): # TODO: actually link the distributions to the modules! Currently this only does the opposite, but should have mod.dists as well
@@ -85,7 +84,10 @@ class Dists(sc.prettyobj):
             raise ValueError(errormsg)
 
         # Do not look for distributions in the people states, since they shadow the "real" states
-        skip = id(sim.people._states) if sim is not None else None
+        skip = dict(
+            ids=id(sim.people._states) if sim is not None else None,
+            keys='module',
+        )
 
         # Find and initialize the distributions
         self.dists = sc.search(obj, type=Dist, skip=skip, flatten=True)
@@ -1017,7 +1019,7 @@ class bernoulli(Dist):
         """ Return UIDs that correspond to True, or optionally return both True and False """
         if uids is None:
             uids = self.sim.people.auids # All active UIDs
-        elif isinstance(uids, ss.BoolArr):
+        elif isinstance(uids, (ss.BoolArr, ss.IndexArr)):
             uids = uids.uids
 
         bools = self.rvs(uids)

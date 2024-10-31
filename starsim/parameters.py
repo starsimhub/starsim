@@ -68,6 +68,8 @@ class Pars(sc.objdict):
                     self._update_dist(key, old, new)
                 elif callable(old): # It's a function: update directly
                     self[key] = new
+                elif isinstance(old, dict):
+                    self[key] = new # Take dictionaries directly, without warning the user
                 else: # Everything else; not used currently but could be
                     warnmsg = f'No known mechanism for handling {type(old)} → {type(new)}; using default'
                     ss.warn(warnmsg)
@@ -101,13 +103,7 @@ class Pars(sc.objdict):
 
         # It's a TimePar, e.g. dur_inf = ss.dur(6); use directly
         if isinstance(new, ss.TimePar):
-            new_cls = new.__class__
-            old_cls = old.__class__
-            if new_cls == old_cls:
-                self[key] = new
-            else:
-                errormsg = f'When updating a time parameter, the new class ({new_cls}) should match the original class ({old_cls})'
-                raise TypeError(errormsg)
+            self[key] = new
 
         # It's a single number, e.g. dur_inf = 6; set parameters
         elif isinstance(new, Number):
@@ -369,8 +365,12 @@ class SimPars(Pars):
     def validate_networks(self):
         """ Validate networks """
         # Don't allow more than one prenatal or postnatal network
-        prenatal_nets  = {k:nw for k,nw in self.networks.items() if nw.prenatal}
-        postnatal_nets = {k:nw for k,nw in self.networks.items() if nw.postnatal}
+        prenatal_nets = []
+        postnatal_nets = []
+        for k,nw in self.networks.items():
+            if isinstance(nw, ss.Network):
+                if nw.prenatal: prenatal_nets.append(k)
+                if nw.postnatal: postnatal_nets.append(k)
         if len(prenatal_nets) > 1:
             errormsg = f'Starsim currently only supports one prenatal network; prenatal networks are: {prenatal_nets.keys()}'
             raise ValueError(errormsg)
