@@ -32,7 +32,7 @@ class Calibration(sc.prettyobj):
 
         components (list of CalibComponent objects): CalibComponents independently assess pseudo-likelihood as part of evaluating the quality of input parameters
 
-        eval_fn  (callable): Function maping a sim to a float (e.g. negative log likelihood) to be maximized. If None, the default will use CalibComponents.
+        eval_fn  (callable): Function mapping a sim to a float (e.g. negative log likelihood) to be maximized. If None, the default will use CalibComponents.
 
         label        (str)  : a label for this calibration object
         study_name   (str)  : name of the optuna study
