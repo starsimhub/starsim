@@ -1026,18 +1026,38 @@ class AgeGroup(sc.prettyobj):
 
 class MixingPools(Route):
     """
-    A container for one or more MixingPool instances
+    A container for creating a rectangular array of MixingPool instances
 
     By default, separates the population into <15 and >15 age groups.
+
+    Args:
+        diseases (str): the diseases that transmit via these mixing pools
+        src (inds): source agents; can be AgeGroup(), ss.uids(), or lambda(sim); None indicates all alive agents
+        dst (inds): destination agents; as above
+        beta (float): overall transmission via these mixing pools
+        contacts (array): the relative connectivity between different mixing pools (can be float or Dist)
+
+    **Example**::
+
+        import starsim as ss
+        mps = ss.MixingPools(
+            diseases = 'sis',
+            beta = 0.1,
+            src = {'0-15': ss.AgeGroup(0, 15), '15+': ss.AgeGroup(15, None)},
+            dst = {'0-15': ss.AgeGroup(0, 15), '15+': ss.AgeGroup(15, None)},
+            contacts = [[2.4, 0.49], [0.91, 0.16]],
+        )
+        sim = ss.Sim(diseases='sis', networks=mps).run()
+        sim.plot()
     """
     def __init__(self, pars=None, **kwargs):
         super().__init__(**kwargs)
         self.define_pars(
             diseases = None,
+            src = None,
+            dst = None,
             beta = ss.beta(0.1),
-            contact_matrix = np.array([[2.4, 0.49], [0.91, 0.16]]), # TODO: document where these came from
-            src = {'0-15': AgeGroup(0,15), '15+': AgeGroup(15,None)}, # Alternatively, values could be a list of UIDs
-            dst = {'0-15': AgeGroup(0,15), '15+': AgeGroup(15,None)},
+            contacts = None,
         )
         self.update_pars(pars, **kwargs)
         self.validate_pars()
@@ -1045,31 +1065,40 @@ class MixingPools(Route):
 
     def init_pre(self, sim):
         super().init_pre(sim)
-        for i, (sk, s) in enumerate(self.pars.src.items()):
-            for j, (dk, d) in enumerate(self.pars.dst.items()):
-                contacts = ss.poisson(lam=self.pars.contact_matrix[i,j])
-                name = f'pool:{sk}-->{dk}'
-                mp = MixingPool(diseases=self.pars.diseases, beta=self.pars.beta, contacts=contacts, src=s, dst=d, name=name)
+        p = self.pars
+
+        for i,sk,src in p.src.enumitems():
+            for j,dk,dst in p.dst.enumitems():
+                contacts = p.contacts[i,j]
+                if sc.isnumber(contacts): # If it's a number, convert to a distribution
+                    contacts = ss.poisson(lam=contacts)
+                name = f'pool:{sk}->{dk}'
+                mp = MixingPool(name=name, diseases=p.diseases, beta=p.beta, contacts=contacts, src=src, dst=dst)
                 mp.init_pre(sim) # Initialize the pool
                 sim.networks.append(mp)
         return
 
     def validate_pars(self):
-        cm = self.pars.contact_matrix
+        """ Check that src and dst have correct types, and contacts is the correct shape """
+        p = self.pars
 
-        if not isinstance(self.pars.src, dict):
+        # Validate src and dst
+        if not isinstance(p.src, dict):
             errormsg = f'src must be a provided as a dictionary, not {type(self.pars.src)}'
             raise TypeError(errormsg)
-
-        if not isinstance(self.pars.dst, dict):
+        if not isinstance(p.dst, dict):
             raise TypeError(f'dst must be a provided as a dictionary, not {type(self.pars.src)}')
+        p.src = sc.objdict(p.src)
+        p.dst = sc.objdict(p.dst)
 
-        actual = cm.shape
-        expected = (len(self.pars.src), len(self.pars.dst))
-
+        # Validate the contacts
+        p.contacts = np.array(p.contacts)
+        actual = p.contacts.shape
+        expected = (len(p.src), len(p.dst))
         if actual != expected:
             errormsg = f'The number of source and destination groups must match the number of rows and columns in the mixing matrix, but {actual} != {expected}.'
             raise ValueError(errormsg)
+
         return
 
 
@@ -1083,6 +1112,29 @@ class MixingPool(Route):
         dst (inds): destination agents; as above
         beta (float): overall transmission
         contacts (Dist): the number of effective contacts of the destination agents
+
+    **Example**::
+
+        import starsim as ss
+
+        # Set the parameters
+        mp_pars = dict(
+            src = lambda sim: sim.people.male, # only males are infectious
+            dst = None, # all agents are susceptible
+            beta = ss.beta(0.2),
+            contacts = ss.poisson(lam=4),
+        )
+
+        # Seed 5% of the male population
+        def p_init(self, sim, uids):
+            return 0.05*sim.people.male
+
+        # Create and run the sim
+        sis = ss.SIS(init_prev=p_init)
+        mp = ss.MixingPool(mp_pars)
+        sim = ss.Sim(diseases=sis, networks=mp)
+        sim.run()
+        sim.plot()
     """
     def __init__(self, pars=None, **kwargs):
         super().__init__(**kwargs)
@@ -1154,14 +1206,10 @@ class MixingPool(Route):
                 self.pars[key] = inds.remove(uids)
         return
 
-    def start_step(self):
-        super().start_step()
-        self.src_uids = self.get_uids(self.pars.src)
-        self.dst_uids = self.get_uids(self.pars.dst)
-        return
-
     def step(self):
         super().step()
+        self.src_uids = self.get_uids(self.pars.src)
+        self.dst_uids = self.get_uids(self.pars.dst)
 
         if self.pars.beta == 0:
             return 0

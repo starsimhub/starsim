@@ -21,7 +21,7 @@ def test_single_defaults(do_plot=do_plot):
     sc.heading(f'Testing {test_name}...')
     mp = ss.MixingPool()
     sir = ss.SIR()
-    sim = ss.Sim(diseases=sir, interventions=mp, label=test_name)
+    sim = ss.Sim(diseases=sir, networks=mp, label=test_name)
     sim.run()
 
     if do_plot: sim.plot()
@@ -42,7 +42,7 @@ def test_single_uids(do_plot=do_plot):
         dst = ss.uids(np.arange(k,n_agents))
     )
     sir = ss.SIR()
-    sim = ss.Sim(n_agents=n_agents, diseases=sir, interventions=mp, label=test_name)
+    sim = ss.Sim(n_agents=n_agents, diseases=sir, networks=mp, label=test_name)
     sim.run()
 
     if do_plot: sim.plot()
@@ -65,7 +65,7 @@ def test_single_ncd():
     mp = ss.MixingPool(mp_pars)
 
     ncd = ss.NCD()
-    sim = ss.Sim(diseases=ncd, interventions=mp, label=test_name)
+    sim = ss.Sim(diseases=ncd, networks=mp, label=test_name)
     with pytest.raises(Exception):
         sim.run()
     return sim
@@ -85,7 +85,7 @@ def test_single_missing_disease():
     mp = ss.MixingPool(mp_pars)
 
     sir = ss.SIR()
-    sim = ss.Sim(diseases=sir, interventions=mp, label=test_name)
+    sim = ss.Sim(diseases=sir, networks=mp, label=test_name)
     with pytest.raises(Exception):
         sim.run()
 
@@ -106,7 +106,7 @@ def test_single_age(do_plot=do_plot):
     mp = ss.MixingPool(mp_pars)
 
     sir = ss.SIR()
-    sim = ss.Sim(diseases=sir, interventions=mp, label=test_name)
+    sim = ss.Sim(diseases=sir, networks=mp, label=test_name)
     sim.run()
 
     if do_plot: sim.plot()
@@ -129,7 +129,7 @@ def test_single_sex(do_plot=do_plot):
     mp = ss.MixingPool(mp_pars)
 
     sir = ss.SIR(init_prev=ss.bernoulli(p=lambda self, sim, uids: 0.05*sim.people.female)) # Seed 5% of the female population
-    sim = ss.Sim(diseases=sir, interventions=mp, label=test_name)
+    sim = ss.Sim(diseases=sir, networks=mp, label=test_name)
     sim.run()
 
     if do_plot: sim.plot()
@@ -145,7 +145,7 @@ def test_multi_defaults(do_plot=do_plot):
     sc.heading(f'Testing {test_name}...')
     mps = ss.MixingPools()
     sir = ss.SIR()
-    sim = ss.Sim(diseases=sir, interventions=mps, label=test_name)
+    sim = ss.Sim(diseases=sir, networks=mps, label=test_name)
     sim.run()
 
     if do_plot: sim.plot()
@@ -173,7 +173,7 @@ def test_multi(do_plot=do_plot):
     mps = ss.MixingPools(mps_pars)
 
     sir = ss.SIR()
-    sim = ss.Sim(diseases=sir, interventions=mps, label=test_name)
+    sim = ss.Sim(diseases=sir, networks=mps, label=test_name)
     sim.run()
 
     if do_plot: sim.plot()

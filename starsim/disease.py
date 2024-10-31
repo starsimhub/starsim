@@ -301,7 +301,7 @@ class Infection(Disease):
 
         for i, (nkey,net) in enumerate(self.sim.networks.items()):
             nk = ss.standardize_netkey(nkey)
-            if len(net): # Skip networks with no edges
+            if isinstance(net, ss.Network) and len(net): # Skip networks with no edges
                 edges = net.edges
                 p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
                 p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1

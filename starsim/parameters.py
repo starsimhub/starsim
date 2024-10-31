@@ -365,8 +365,12 @@ class SimPars(Pars):
     def validate_networks(self):
         """ Validate networks """
         # Don't allow more than one prenatal or postnatal network
-        prenatal_nets  = {k:nw for k,nw in self.networks.items() if nw.prenatal}
-        postnatal_nets = {k:nw for k,nw in self.networks.items() if nw.postnatal}
+        prenatal_nets = []
+        postnatal_nets = []
+        for k,nw in self.networks.items():
+            if isinstance(nw, ss.Network):
+                if nw.prenatal: prenatal_nets.append(k)
+                if nw.postnatal: postnatal_nets.apend(k)
         if len(prenatal_nets) > 1:
             errormsg = f'Starsim currently only supports one prenatal network; prenatal networks are: {prenatal_nets.keys()}'
             raise ValueError(errormsg)
