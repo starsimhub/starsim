@@ -13,15 +13,15 @@ __all__ = ['link_dists', 'make_dist', 'dist_list', 'Dists', 'Dist']
 
 def str2int(string, modulo=10_000_000):
     """
-    Convert a string to an int
+    Convert a string to an int to use as a random seed; not for the user
 
     Cannot use Python's built-in hash() since it's randomized for strings. Hashlib
-    is 5x slower than int.from_bytes(string.encode(), byteorder='big'), but should
+    (sc.sha) is 5x slower than int.from_bytes(string.encode(), byteorder='big'), but should
     only add a couple milliseconds to a typical sim.
     """
     integer = sc.sha(string, asint=True) # Hash the string to an integer
-    out = integer % modulo # This is more user-friendly
-    return out
+    seed = integer % modulo # Ensure a user-friendly representation user-friendly
+    return seed
 
 
 def link_dists(obj, sim, module=None, overwrite=False, init=False, **kwargs): # TODO: actually link the distributions to the modules! Currently this only does the opposite, but should have mod.dists as well

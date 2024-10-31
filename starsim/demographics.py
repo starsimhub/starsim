@@ -402,7 +402,7 @@ class Pregnancy(Demographics):
         """ Perform all updates """
         self.update_states()
         conceive_uids = self.make_pregnancies()
-        self.n_pregnancies = len(conceive_uids)
+        self.n_pregnancies += len(conceive_uids) # += to handle burn-in
         new_uids = self.make_embryos(conceive_uids)
         return new_uids
 
