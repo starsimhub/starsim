@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 __all__ = ['link_dists', 'make_dist', 'dist_list', 'Dists', 'Dist']
 
 
-def str2int(string, modulo=10_000_000):
+def str2int(string, modulo=1_000_000_000):
     """
     Convert a string to an int to use as a random seed; not for the user
 
