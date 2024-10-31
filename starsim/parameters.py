@@ -370,7 +370,7 @@ class SimPars(Pars):
         for k,nw in self.networks.items():
             if isinstance(nw, ss.Network):
                 if nw.prenatal: prenatal_nets.append(k)
-                if nw.postnatal: postnatal_nets.apend(k)
+                if nw.postnatal: postnatal_nets.append(k)
         if len(prenatal_nets) > 1:
             errormsg = f'Starsim currently only supports one prenatal network; prenatal networks are: {prenatal_nets.keys()}'
             raise ValueError(errormsg)
