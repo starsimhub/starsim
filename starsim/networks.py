@@ -1061,22 +1061,14 @@ class MixingPools(Route):
         )
         self.update_pars(pars, **kwargs)
         self.validate_pars()
+        self.pools = []
         return
 
-    def init_pre(self, sim):
-        super().init_pre(sim)
-        p = self.pars
-
-        for i,sk,src in p.src.enumitems():
-            for j,dk,dst in p.dst.enumitems():
-                contacts = p.contacts[i,j]
-                if sc.isnumber(contacts): # If it's a number, convert to a distribution
-                    contacts = ss.poisson(lam=contacts)
-                name = f'pool:{sk}->{dk}'
-                mp = MixingPool(name=name, diseases=p.diseases, beta=p.beta, contacts=contacts, src=src, dst=dst)
-                mp.init_pre(sim) # Initialize the pool
-                sim.networks.append(mp)
-        return
+    def __len__(self):
+        try:
+            return len(self.pools)
+        except:
+            return 0
 
     def validate_pars(self):
         """ Check that src and dst have correct types, and contacts is the correct shape """
@@ -1099,6 +1091,40 @@ class MixingPools(Route):
             errormsg = f'The number of source and destination groups must match the number of rows and columns in the mixing matrix, but {actual} != {expected}.'
             raise ValueError(errormsg)
 
+        return
+
+    def init_pre(self, sim):
+        super().init_pre(sim)
+        p = self.pars
+
+        self.pools = []
+        for i,sk,src in p.src.enumitems():
+            for j,dk,dst in p.dst.enumitems():
+                contacts = p.contacts[i,j]
+                if sc.isnumber(contacts): # If it's a number, convert to a distribution
+                    contacts = ss.poisson(lam=contacts)
+                name = f'pool:{sk}->{dk}'
+                mp = MixingPool(name=name, diseases=p.diseases, beta=p.beta, contacts=contacts, src=src, dst=dst)
+                mp.init_pre(sim) # Initialize the pool
+                self.pools.append(mp)
+        return
+
+    def init_post(self):
+        """ Initialize each mixing pool """
+        for mp in self.pools:
+            mp.init_post()
+        return
+
+    def step(self):
+        """ Step each mixing pool """
+        for mp in self.pools:
+            mp.step()
+        return
+
+    def remove_uids(self, uids):
+        """ Remove UIDs from each mixing pool """
+        for mp in self.pools:
+            mp.remove_uids(uids)
         return
 
 

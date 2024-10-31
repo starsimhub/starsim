@@ -143,7 +143,7 @@ def test_multi_defaults(do_plot=do_plot):
     """ Test MixingPools using defaults """
     test_name = sys._getframe().f_code.co_name
     sc.heading(f'Testing {test_name}...')
-    mps = ss.MixingPools()
+    mps = ss.MixingPools(src={'all':None}, dst={'all':None}, contacts=[[1]])
     sir = ss.SIR()
     sim = ss.Sim(diseases=sir, networks=mps, label=test_name)
     sim.run()
@@ -165,7 +165,7 @@ def test_multi(do_plot=do_plot):
     }
 
     mps_pars = dict(
-        contact_matrix = np.array([[1.4, 0.5], [1.2, 0.7]]),
+        contacts = np.array([[1.4, 0.5], [1.2, 0.7]]),
         beta = ss.beta(0.2),
         src = groups,
         dst = groups,
