@@ -376,6 +376,10 @@ class time_prob(TimePar):
             if inds.sum():
                 rates = -np.log(1 - v[inds])
                 self.values[inds] = 1 - np.exp(-rates/self.factor)
+            invalid = np.logical_or(v < 0.0, 1.0 < v)
+            if invalid.sum():
+                errormsg = f'Invalid value {self.v} for {self}: must be 0-1. If using in a calculation, use .values instead.'
+                raise ValueError(errormsg)
         else:
             if v == 0:
                 self.values = 0
@@ -385,7 +389,7 @@ class time_prob(TimePar):
                 rate = -np.log(1 - v)
                 self.values = 1 - np.exp(-rate/self.factor)
             else:
-                errormsg = f'Invalid value {self.value} for {self}: must be 0-1'
+                errormsg = f'Invalid value {self.v} for {self}: must be 0-1. If using in a calculation, use .values instead.'
                 raise ValueError(errormsg)
         return self.values
 
@@ -405,13 +409,17 @@ class rate_prob(TimePar):
             inds = v > 0.0
             if inds.sum():
                 self.values[inds] = 1 - np.exp(-v[inds]/self.factor)
+            invalid = v < 0.0
+            if invalid.sum():
+                errormsg = f'Invalid value {self.v} for {self}: must be >=0. If using in a calculation, use .values instead.'
+                raise ValueError(errormsg)
         else:
             if v == 0:
                 self.values = 0
             elif v > 0:
                 self.values = 1 - np.exp(-v/self.factor)
             else:
-                errormsg = f'Invalid value {self.value} for {self}: must be >=0'
+                errormsg = f'Invalid value {self.value} for {self}: must be >=0. If using in a calculation, use .values instead.'
                 raise ValueError(errormsg)
         return self.values
 
