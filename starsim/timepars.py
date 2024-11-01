@@ -20,6 +20,8 @@ time_units = sc.dictobj(
     year = 365, # For simplicity with days
 )
 
+
+
 def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0, as_int=False):
     """
     Calculate the relationship between two sets of time factors
@@ -158,6 +160,21 @@ class TimePar(ss.BaseArr):
         self.values = None
         self.parent_name = None
         self.initialized = False
+        self.validate_units()
+        return
+
+    def validate_units(self):
+        """ Check that the units entered are valid """
+        try:
+            self.unit = unit_mapping[self.unit]
+        except KeyError:
+            errormsg = f'Invalid unit "{self.unit}"; must be one of: {sc.strjoin(time_units.keys())}'
+            raise ValueError(errormsg)
+        try:
+            self.parent_unit = unit_mapping[self.parent_unit]
+        except KeyError:
+            errormsg = f'Invalid parent unit "{self.parent_unit}"; must be one of: {sc.strjoin(time_units.keys())}'
+            raise ValueError(errormsg)
         return
 
     def init(self, parent=None, parent_unit=None, parent_dt=None, update_values=True, die=True):
@@ -184,6 +201,7 @@ class TimePar(ss.BaseArr):
         # Calculate the actual conversion factor to be used in the calculations
         self.update_cached(update_values=update_values, die=die)
         self.initialized = True
+        self.validate_units()
         return self
 
     def __repr__(self):
@@ -242,6 +260,7 @@ class TimePar(ss.BaseArr):
         if self_dt     is not None: self.self_dt     = self_dt
         if self.initialized or force: # Don't try to set these unless it's been initialized
             self.update_cached()
+        self.validate_units()
         return self
 
     def update_cached(self, update_values=True, die=True):
@@ -427,3 +446,14 @@ class rate_prob(TimePar):
 class beta(time_prob):
     """ A container for beta (i.e. the disease transmission rate) """
     pass
+
+
+# Map different units onto the time units -- placed at the end to include the functions
+unit_mapping_reverse = {
+    None: [None, 'none'],
+    'day': ['d', 'day', 'days', 'perday', days, perday],
+    'year': ['y', 'yr', 'year', 'years', 'peryear', years, peryear],
+    'week': ['w', 'wk', 'week', 'weeks'],
+    'month': ['m', 'mo', 'month', 'months'],
+}
+unit_mapping = {v:k for k,vlist in unit_mapping_reverse.items() for v in vlist}
