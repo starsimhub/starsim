@@ -197,13 +197,11 @@ class SimPars(Pars):
 
         # Simulation parameters
         self.unit       = 'year' # The time unit to use; options are 'year' (default), 'day', and 'none'
-        self.start      = 2000   # Start of the simulation
+        self.start      = '2000-01-01' # Start of the simulation
         self.stop       = None   # End of the simulation
         self.dur        = 50     # Duration of time to run, if stop isn't specified
         self.dt         = 1.0    # Timestep (in units of self.unit)
         self.rand_seed  = 1      # Random seed; if None, don't reset
-        self.slot_scale = 5      # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
-        self.min_slots  = 100  # Minimum number of slots, useful if the population size is very small
 
         # Demographic parameters
         self.birth_rate = None

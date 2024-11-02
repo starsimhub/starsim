@@ -267,6 +267,8 @@ class Pregnancy(Demographics):
             max_age = 50, # Maximum age to become pregnant
             units = 1e-3, # Assumes fertility rates are per 1000. If using percentages, switch this to 1
             burnin = True, # Should we seed pregnancies that would have happened before the start of the simulation?
+            slot_scale = 5, # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
+            min_slots  = 100, # Minimum number of slots, useful if the population size is very small
         )
         self.update_pars(pars, **kwargs)
 
@@ -368,8 +370,8 @@ class Pregnancy(Demographics):
         self.pars.p_fertility.set(p=self.make_fertility_prob_fn)
 
         low = sim.pars.n_agents + 1
-        high = int(sim.pars.slot_scale*sim.pars.n_agents)
-        high = np.maximum(high, sim.pars.min_slots) # Make sure there are at least min_slots slots to avoid artifacts related to small populations
+        high = int(self.pars.slot_scale*sim.pars.n_agents)
+        high = np.maximum(high, self.pars.min_slots) # Make sure there are at least min_slots slots to avoid artifacts related to small populations
         self.choose_slots = ss.randint(low=low, high=high, sim=sim, module=self)
         return
 
