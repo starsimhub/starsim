@@ -30,7 +30,7 @@ class Sim:
         connectors (str/Connector/list): as above, for connectors
         copy_inputs (bool): if True, copy modules as they're inserted into the sim (allowing reuse in other sims, but meaning they won't be updated)
         data (df): a dataframe (or dict) of data, with a column "time" plus data of the form "module.result", e.g. "hiv.new_infections" (used for plotting only)
-        kwargs (dict): merged with pars
+        kwargs (dict): merged with pars; see ss.SimPars for all parameter values
 
     **Examples**::
 
@@ -131,7 +131,7 @@ class Sim:
                         return self.pars.start + dt.timedelta(days=int(365.25 * self.ti * self.dt))
         except Exception as E:
             ss.warn(f'Encountered exception when getting the current time in {self.name}: {E}')
-            return None 
+            return None
 
     @property
     def now_year(self):

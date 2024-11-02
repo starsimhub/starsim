@@ -182,7 +182,27 @@ class SimPars(Pars):
     directly.
 
     Args:
-        kwargs (dict): any additional kwargs are interpreted as parameter names
+        label (str): The name of the simulation
+        n_agents (int/float): The number of agents to run (default 10,000)
+        total_pop (int/float): If provided, scale the agents to this effective population size
+        pop_scale (float): If provided, use this agent-to-population scale factor (total_pop = n_agents*pop_scale)
+        unit (str): The time unit for the simulation (default 'year'; other choices are 'day', 'week', 'month')
+        start (float/str/date): The starting date for the simulation (default 2000); can be a year or date
+        stop (float/str/date): If provided, the ending date for the simulation (if not provided, calculate from "dur")
+        dur (int): How many timesteps to simulate, if "stop" is not provided (default 50)
+        dt (float): The timestep, in units of "unit" (default 1.0)
+        rand_seed (int): The overall random seed for the simulation (used to set module-specific random seeds)
+        birth_rate (float): If provided, include births with this rate (per 1000 people per year)
+        death_rate (float): If provided, include deaths with this rate (per 1000 people per year)
+        use_aging (bool): Specify whether agents age (by default, agents age if and only if births and/or deaths are included)
+        people (People): If provided, use a pre-existing People object rather than creating one (in which case n_agents will be ignored)
+        networks (str/list/Module): The network module(s); can be a string, single module (i.e. Network), or list
+        demographics (str/list/Module): As above
+        diseases (str/list/Module): As above
+        connectors (str/list/Module): As above
+        interventions (str/list/Module): As above
+        analyzers (str/list/Module): As above
+        verbose (float): How much detail to print (1 = every timestep, 0.1 = every 10 timesteps, etc.)
     """
     def __init__(self, **kwargs):
 
@@ -197,7 +217,7 @@ class SimPars(Pars):
 
         # Simulation parameters
         self.unit       = 'year' # The time unit to use; options are 'year' (default), 'day', and 'none'
-        self.start      = '2000-01-01' # Start of the simulation
+        self.start      = None   # Start of the simulation
         self.stop       = None   # End of the simulation
         self.dur        = 50     # Duration of time to run, if stop isn't specified
         self.dt         = 1.0    # Timestep (in units of self.unit)
@@ -286,6 +306,11 @@ class SimPars(Pars):
 
     def validate_time(self):
         """ Ensure at least one of dur and stop is defined, but not both """
+        if self.start is None:
+            if self.unit == 'year':
+                self.start = 2000
+            else:
+                self.start = '2000-01-01'
         if isinstance(self.start, str):
             self.start = sc.date(self.start)
         if isinstance(self.stop, str):
