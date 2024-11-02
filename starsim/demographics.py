@@ -28,7 +28,7 @@ class Births(Demographics):
         self.define_pars(
             birth_rate = 30,
             rel_birth = 1,
-            units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
+            rate_units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
         )
         self.update_pars(pars, **kwargs)
 
@@ -85,7 +85,7 @@ class Births(Demographics):
         else:
             this_birth_rate = p.birth_rate
 
-        scaled_birth_prob = this_birth_rate * p.units * p.rel_birth * sim.pars.dt
+        scaled_birth_prob = this_birth_rate * p.rate_units * p.rel_birth * sim.pars.dt
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
         n_new = int(np.floor(sim.people.alive.count() * scaled_birth_prob))
         return n_new
@@ -108,10 +108,10 @@ class Births(Demographics):
         self.results.new[self.ti] = self.n_births
 
         # Calculate crude birth rate (CBR)
-        inv_units = 1.0/self.pars.units
+        inv_rate_units = 1.0/self.pars.rate_units
         births_per_year = self.n_births/self.sim.dt_year
         denom = self.sim.results.n_alive[self.ti]
-        self.results.cbr[self.ti] = inv_units*births_per_year/denom
+        self.results.cbr[self.ti] = inv_rate_units*births_per_year/denom
         return
 
     def finalize(self):
@@ -143,7 +143,7 @@ class Deaths(Demographics):
             pars: dict with arguments including:
                 rel_death: constant used to scale all death rates
                 death_rate: float, dict, or pandas dataframe/series containing mortality data
-                units: units for death rates (see in-line comment on par dict below)
+                rate_units: units for death rates (see in-line comment on par dict below)
 
             metadata: data about the data contained within the data input.
                 "data_cols" is is a dictionary mapping standard keys, like "year" to the
@@ -153,7 +153,7 @@ class Deaths(Demographics):
         self.define_pars(
             rel_death = 1,
             death_rate = 20,  # Default = a fixed rate of 2%/year, overwritten if data provided
-            units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
+            rate_units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
         self.update_pars(pars, **kwargs)
 
@@ -218,7 +218,7 @@ class Deaths(Demographics):
                 death_rate[:] = s.values[binned_ages]
 
         # Scale from rate to probability. Consider an exponential here.
-        death_prob = death_rate * (self.pars.units * self.pars.rel_death * sim.pars.dt) * time_factor
+        death_prob = death_rate * (self.pars.rate_units * self.pars.rel_death * sim.pars.dt) * time_factor
         death_prob = np.clip(death_prob, a_min=0, a_max=1)
 
         return death_prob
@@ -247,7 +247,7 @@ class Deaths(Demographics):
         super().finalize()
         n_alive = self.sim.results.n_alive
         self.results.cumulative[:] = np.cumsum(self.results.new)
-        self.results.cmr[:] = 1/self.pars.units*np.divide(self.results.new / self.sim.dt_year, n_alive, where=n_alive>0)
+        self.results.cmr[:] = 1/self.pars.rate_units*np.divide(self.results.new / self.sim.dt_year, n_alive, where=n_alive>0)
         return
 
 
@@ -265,7 +265,7 @@ class Pregnancy(Demographics):
             sex_ratio = ss.bernoulli(0.5), # Ratio of babies born female
             min_age = 15, # Minimum age to become pregnant
             max_age = 50, # Maximum age to become pregnant
-            units = 1e-3, # Assumes fertility rates are per 1000. If using percentages, switch this to 1
+            rate_units = 1e-3, # Assumes fertility rates are per 1000. If using percentages, switch this to 1
             burnin = True, # Should we seed pregnancies that would have happened before the start of the simulation?
             slot_scale = 5, # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
             min_slots  = 100, # Minimum number of slots, useful if the population size is very small
@@ -341,7 +341,7 @@ class Pregnancy(Demographics):
 
         # Scale from rate to probability
         invalid_age = (age < self.pars.min_age) | (age > self.pars.max_age)
-        fertility_prob = fertility_rate * (self.pars.units * self.pars.rel_fertility * self.dt) * time_factor
+        fertility_prob = fertility_rate * (self.pars.rate_units * self.pars.rel_fertility * self.dt) * time_factor
         fertility_prob[(~self.fecund).uids] = 0 # Currently infecund women cannot become pregnant
         fertility_prob[uids[invalid_age]] = 0 # Women too young or old cannot become pregnant
         fertility_prob = np.clip(fertility_prob[uids], a_min=0, a_max=1)
@@ -573,5 +573,5 @@ class Pregnancy(Demographics):
     def finalize(self):
         super().finalize()
         n_alive = self.sim.results.n_alive
-        self.results['cbr'][:] = 1/self.pars.units * np.divide(self.results['births'] / self.sim.dt_year, n_alive, where=n_alive>0)
+        self.results['cbr'][:] = 1/self.pars.rate_units * np.divide(self.results['births'] / self.sim.dt_year, n_alive, where=n_alive>0)
         return
