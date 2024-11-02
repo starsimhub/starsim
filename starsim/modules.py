@@ -136,8 +136,8 @@ class Module(sc.quickobj):
         self.pars.update(matches)
 
         # Update module attributes
-        metadata = {key:pars.pop(key, None) for key in ['name', 'label']}
-        timepars = {key:pars.pop(key, None) for key in ['unit', 'dt']}
+        metadata = {key:pars.pop(key, self.pars.pop(key, None)) for key in ['name', 'label']}
+        timepars = {key:pars.pop(key, self.pars.pop(key, None)) for key in ['unit', 'dt']}
         self.set_metadata(**metadata)
         self.set_time_pars(**timepars)
 

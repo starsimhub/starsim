@@ -22,7 +22,7 @@ def make_syph_sim(dt=1, n_agents=500):
     # Make demographic modules
     fertility_rates = {'fertility_rate': pd.read_csv(datadir/'nigeria_asfr.csv')}
     pregnancy = ss.Pregnancy(pars=fertility_rates)
-    death_rates = {'death_rate': pd.read_csv(datadir/'nigeria_deaths.csv'), 'units': 1}
+    death_rates = {'death_rate': pd.read_csv(datadir/'nigeria_deaths.csv'), 'rate_units': 1}
     death = ss.Deaths(death_rates)
 
     # Make people and networks
@@ -92,7 +92,7 @@ def test_syph(dt=1, n_agents=500, do_plot=False):
     # Check plots
     burnin = 0
     pi = int(burnin/dt)
-    
+
     if do_plot:
         tvec = sim.timevec[pi:]
         fig, ax = plt.subplots(2, 2)
@@ -108,16 +108,16 @@ def test_syph(dt=1, n_agents=500, do_plot=False):
             sim.results.syphilis.n_tertiary[pi:],
         )
         ax[0].legend(['Congenital', 'Exposed', 'Primary', 'Secondary', 'Latent', 'Tertiary'], loc='lower right')
-    
+
         ax[1].plot(tvec, sim.results.syphilis.prevalence[pi:])
         ax[1].set_title('Syphilis prevalence')
-    
+
         ax[2].plot(tvec, sim.results.n_alive[pi:])
         ax[2].set_title('Population')
-    
+
         ax[3].plot(tvec, sim.results.syphilis.new_infections[pi:])
         ax[3].set_title('New infections')
-    
+
         fig.tight_layout()
         plt.show()
 
@@ -183,6 +183,6 @@ if __name__ == '__main__':
 
     sim = test_syph(dt=dt, n_agents=n_agents, do_plot=do_plot)
     sim_base, sim_intv = test_syph_intvs(dt=dt, n_agents=n_agents, do_plot=True)
-    
+
     T.toc()
 
