@@ -17,7 +17,7 @@ time_units = sc.dictobj(
     day = 1,
     week = 7,
     month = 30.4375, # 365.25/12 -- more accurate and nicer fraction
-    year = 365, # For simplicity with days
+    year = 365.25, # For simplicity with days
 )
 
 
