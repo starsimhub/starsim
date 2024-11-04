@@ -15,11 +15,18 @@ ss_int_ = ss.dtypes.int
 
 
 # Specify all externally visible functions this file defines; see also more definitions below
-__all__ = ['Network', 'DynamicNetwork', 'SexualNetwork']
+__all__ = ['Route', 'Network', 'DynamicNetwork', 'SexualNetwork']
 
 # %% General network classes
 
-class Network(ss.Module):
+class Route(ss.Module):
+    """
+    A transmission route -- e.g., a network, mixing pool, environmental transmission, etc.
+    """
+    pass
+
+
+class Network(Route):
     """
     A class holding a single network of contact edges (connections) between people
     as well as methods for updating these.
@@ -987,3 +994,265 @@ class PostnatalNet(MaternalNet):
     def __init__(self, key_dict=None, prenatal=False, postnatal=True, **kwargs):
         super().__init__(key_dict=key_dict, prenatal=prenatal, postnatal=postnatal, **kwargs)
         return
+
+
+__all__ += ['AgeGroup', 'MixingPools', 'MixingPool']
+
+class AgeGroup(sc.prettyobj):
+    """ A simple age-based filter that returns uids of agents that match the criteria """
+    def __init__(self, low, high, do_cache=True):
+        self.low = low
+        self.high = high
+
+        self.do_cache = do_cache
+        self.uids = None # Cached
+        self.ti_cache = -1
+
+        self.name = repr(self)
+        return
+
+    def __call__(self, sim):
+        if (not self.do_cache) or (self.ti_cache != sim.ti):
+            in_group = sim.people.age >= self.low
+            if self.high is not None:
+                in_group = in_group & (sim.people.age < self.high)
+            self.uids = ss.uids(in_group)
+            self.ti_cache = sim.ti
+        return self.uids
+
+    def __repr__(self):
+        return f'age({self.low}-{self.high})'
+
+
+class MixingPools(Route):
+    """
+    A container for creating a rectangular array of MixingPool instances
+
+    By default, separates the population into <15 and >15 age groups.
+
+    Args:
+        diseases (str): the diseases that transmit via these mixing pools
+        src (inds): source agents; can be AgeGroup(), ss.uids(), or lambda(sim); None indicates all alive agents
+        dst (inds): destination agents; as above
+        beta (float): overall transmission via these mixing pools
+        contacts (array): the relative connectivity between different mixing pools (can be float or Dist)
+
+    **Example**::
+
+        import starsim as ss
+        mps = ss.MixingPools(
+            diseases = 'sis',
+            beta = 0.1,
+            src = {'0-15': ss.AgeGroup(0, 15), '15+': ss.AgeGroup(15, None)},
+            dst = {'0-15': ss.AgeGroup(0, 15), '15+': ss.AgeGroup(15, None)},
+            contacts = [[2.4, 0.49], [0.91, 0.16]],
+        )
+        sim = ss.Sim(diseases='sis', networks=mps).run()
+        sim.plot()
+    """
+    def __init__(self, pars=None, **kwargs):
+        super().__init__(**kwargs)
+        self.define_pars(
+            diseases = None,
+            src = None,
+            dst = None,
+            beta = ss.beta(0.1),
+            contacts = None,
+        )
+        self.update_pars(pars, **kwargs)
+        self.validate_pars()
+        self.pools = []
+        return
+
+    def __len__(self):
+        try:
+            return len(self.pools)
+        except:
+            return 0
+
+    def validate_pars(self):
+        """ Check that src and dst have correct types, and contacts is the correct shape """
+        p = self.pars
+
+        # Validate src and dst
+        if not isinstance(p.src, dict):
+            errormsg = f'src must be a provided as a dictionary, not {type(self.pars.src)}'
+            raise TypeError(errormsg)
+        if not isinstance(p.dst, dict):
+            raise TypeError(f'dst must be a provided as a dictionary, not {type(self.pars.src)}')
+        p.src = sc.objdict(p.src)
+        p.dst = sc.objdict(p.dst)
+
+        # Validate the contacts
+        p.contacts = np.array(p.contacts)
+        actual = p.contacts.shape
+        expected = (len(p.src), len(p.dst))
+        if actual != expected:
+            errormsg = f'The number of source and destination groups must match the number of rows and columns in the mixing matrix, but {actual} != {expected}.'
+            raise ValueError(errormsg)
+
+        return
+
+    def init_pre(self, sim):
+        super().init_pre(sim)
+        p = self.pars
+
+        self.pools = []
+        for i,sk,src in p.src.enumitems():
+            for j,dk,dst in p.dst.enumitems():
+                contacts = p.contacts[i,j]
+                if sc.isnumber(contacts): # If it's a number, convert to a distribution
+                    contacts = ss.poisson(lam=contacts)
+                name = f'pool:{sk}->{dk}'
+                mp = MixingPool(name=name, diseases=p.diseases, beta=p.beta, contacts=contacts, src=src, dst=dst)
+                mp.init_pre(sim) # Initialize the pool
+                self.pools.append(mp)
+        return
+
+    def init_post(self):
+        """ Initialize each mixing pool """
+        for mp in self.pools:
+            mp.init_post()
+        return
+
+    def step(self):
+        """ Step each mixing pool """
+        for mp in self.pools:
+            mp.step()
+        return
+
+    def remove_uids(self, uids):
+        """ Remove UIDs from each mixing pool """
+        for mp in self.pools:
+            mp.remove_uids(uids)
+        return
+
+
+class MixingPool(Route):
+    """
+    Define a single mixing pool; can be used as a drop-in replacement for a network.
+
+    Args:
+        diseases (str): the diseases that transmit via this mixing pool
+        src (inds): source agents; can be AgeGroup(), ss.uids(), or lambda(sim); None indicates all alive agents
+        dst (inds): destination agents; as above
+        beta (float): overall transmission
+        contacts (Dist): the number of effective contacts of the destination agents
+
+    **Example**::
+
+        import starsim as ss
+
+        # Set the parameters
+        mp_pars = dict(
+            src = lambda sim: sim.people.male, # only males are infectious
+            dst = None, # all agents are susceptible
+            beta = ss.beta(0.2),
+            contacts = ss.poisson(lam=4),
+        )
+
+        # Seed 5% of the male population
+        def p_init(self, sim, uids):
+            return 0.05*sim.people.male
+
+        # Create and run the sim
+        sis = ss.SIS(init_prev=p_init)
+        mp = ss.MixingPool(mp_pars)
+        sim = ss.Sim(diseases=sis, networks=mp)
+        sim.run()
+        sim.plot()
+    """
+    def __init__(self, pars=None, **kwargs):
+        super().__init__(**kwargs)
+
+        self.define_pars(
+            diseases = None,
+            src = None,
+            dst = None, # Same as src
+            beta = ss.beta(0.2),
+            contacts = ss.poisson(lam=1),
+        )
+        self.update_pars(pars, **kwargs)
+
+        self.define_states(
+            ss.FloatArr('eff_contacts', default=self.pars.contacts, label='Effective number of contacts')
+        )
+
+        self.pars.diseases = sc.promotetolist(self.pars.diseases)
+        self.diseases = None
+        self.src_uids = None
+        self.dst_uids = None
+
+        self.p_acquire = ss.bernoulli(p=0) # Placeholder value
+
+        return
+
+    def __len__(self):
+        try:
+            return len(self.pars.dst)
+        except:
+            return 0
+
+    def init_post(self):
+        super().init_post()
+
+        if len(self.pars.diseases) == 0:
+            self.diseases = [d for d in self.sim.diseases.values() if isinstance(d, ss.Infection)] # Assume the user wants all communicable diseases
+        else:
+            self.diseases = []
+            for d in self.pars.diseases:
+                if not isinstance(d, str):
+                    raise TypeError(f'Diseases can be specified as ss.Disease objects or strings, not {type(d)}')
+                if d not in self.sim.diseases:
+                    raise KeyError(f'Could not find disease with name {d} in the list of diseases.')
+
+                dis = self.sim.diseases[d]
+                if not isinstance(dis, ss.Infection):
+                    raise TypeError(f'Cannot create a mixing pool for disease {d}. Mixing pools only work for communicable diseases.')
+                self.diseases.append(dis)
+
+            if len(self.diseases) == 0:
+                raise ValueError('You must specify at least one transmissible disease to use mixing pools')
+        return
+
+    def get_uids(self, func_or_array):
+        if func_or_array is None:
+            return self.sim.people.auids
+        elif callable(func_or_array):
+            return func_or_array(self.sim)
+        elif isinstance(func_or_array, ss.uids):
+            return func_or_array
+        raise Exception('src must be either a callable function, e.g. lambda sim: ss.uids(sim.people.age<5), or an array of uids.')
+
+    def remove_uids(self, uids):
+        """ If UIDs are supplied explicitly, remove them if people die """
+        for key in ['src', 'dst']:
+            inds = self.pars[key]
+            if isinstance(inds, ss.uids):
+                self.pars[key] = inds.remove(uids)
+        return
+
+    def step(self):
+        super().step()
+        self.src_uids = self.get_uids(self.pars.src)
+        self.dst_uids = self.get_uids(self.pars.dst)
+
+        if self.pars.beta == 0:
+            return 0
+
+        if len(self.src_uids) == 0 or len(self.dst_uids) == 0:
+            return 0
+
+        n_new_cases = 0
+        for disease in self.diseases:
+            trans = np.mean(disease.infectious[self.src_uids] * disease.rel_trans[self.src_uids])
+            acq = self.eff_contacts[self.dst_uids] * disease.susceptible[self.dst_uids] * disease.rel_sus[self.dst_uids]
+            p = self.pars.beta * trans * acq #1 - np.exp(-self.pars.beta * trans * acq)
+
+            self.p_acquire.set(p=p)
+            new_cases = self.p_acquire.filter(self.dst_uids)
+            n_new_cases += len(new_cases)
+
+            disease.set_prognoses(new_cases)
+
+        return n_new_cases

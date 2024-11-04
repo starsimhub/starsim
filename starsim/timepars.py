@@ -7,7 +7,7 @@ import starsim as ss
 
 # Classes that are externally visible
 __all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff', 'make_timevec', 'make_abs_tvec',
-           'TimePar', 'dur', 'days', 'years', 'rate', 'perday', 'peryear', 'time_prob', 'beta']
+           'TimePar', 'dur', 'days', 'years', 'rate', 'perday', 'peryear', 'time_prob', 'beta', 'rate_prob']
 
 
 #%% Helper functions
@@ -19,6 +19,8 @@ time_units = sc.dictobj(
     month = 30.4375, # 365.25/12 -- more accurate and nicer fraction
     year = 365, # For simplicity with days
 )
+
+
 
 def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0, as_int=False):
     """
@@ -97,7 +99,7 @@ def make_timevec(start, stop, dt, unit):
     else:
         day_delta = time_ratio(unit1=unit, dt1=dt, unit2='day', dt2=1.0, as_int=True)
         if day_delta > 0:
-            timevec = sc.daterange(start, stop, interval={'days':day_delta})
+            timevec = np.array(sc.daterange(start, stop, interval={'days':day_delta}))
         else:
             errormsg = f'Timestep {dt} is too small; must be at least 1 day'
             raise ValueError(errormsg)
@@ -108,15 +110,16 @@ def make_abs_tvec(tv, unit, sim_unit):
     """ Convert a module time vector into a numerical time array with the same units as the sim """
 
     # It's an array of days or years: easy
-    if sc.isarray(tv):
+
+    if sc.isnumber(tv[0]):
         ratio = time_ratio(unit1=unit, unit2=sim_unit)
         abstv = tv*ratio # Get the units right
         abstv -= abstv[0] # Start at 0
 
     # It's a date: convert to fractional years and then subtract the
     else:
-        yearvec = [sc.datetoyear(d) for d in tv]
-        absyearvec = np.array(yearvec) - yearvec[0] # Subtract start date
+        yearvec = np.vectorize(sc.datetoyear)(tv)
+        absyearvec = yearvec - yearvec[0] # Subtract start date
         abstv = absyearvec*time_ratio(unit1='year', unit2=sim_unit)
 
     # Round to the value of epsilon; alternative to np.round(abstv/eps)*eps, which has floating point error
@@ -157,6 +160,21 @@ class TimePar(ss.BaseArr):
         self.values = None
         self.parent_name = None
         self.initialized = False
+        self.validate_units()
+        return
+
+    def validate_units(self):
+        """ Check that the units entered are valid """
+        try:
+            self.unit = unit_mapping[self.unit]
+        except KeyError:
+            errormsg = f'Invalid unit "{self.unit}"; must be one of: {sc.strjoin(time_units.keys())}'
+            raise ValueError(errormsg)
+        try:
+            self.parent_unit = unit_mapping[self.parent_unit]
+        except KeyError:
+            errormsg = f'Invalid parent unit "{self.parent_unit}"; must be one of: {sc.strjoin(time_units.keys())}'
+            raise ValueError(errormsg)
         return
 
     def init(self, parent=None, parent_unit=None, parent_dt=None, update_values=True, die=True):
@@ -183,6 +201,7 @@ class TimePar(ss.BaseArr):
         # Calculate the actual conversion factor to be used in the calculations
         self.update_cached(update_values=update_values, die=die)
         self.initialized = True
+        self.validate_units()
         return self
 
     def __repr__(self):
@@ -201,7 +220,32 @@ class TimePar(ss.BaseArr):
         else:
             parentstr = ''
 
-        return f'ss.{name}({self.v}, unit={self.unit}{parentstr}{xstr})'
+        default_dt = sc.ifelse(self.self_dt, 1.0) == 1.0
+        if not default_dt:
+            dtstr = f', self_dt={self.self_dt}'
+        else:
+            dtstr = ''
+
+        # Rather than ss.dur(3, unit='day'), dispaly as ss.days(3)
+        prefixstr = 'ss.'
+        key = (name, self.unit)
+        mapping = {
+            ('dur',  'day'):  'days',
+            ('dur',  'year'): 'years',
+            ('rate', 'day'):  'perday',
+            ('rate', 'year'): 'peryear',
+        }
+
+        if key in mapping and default_dt:
+            prefixstr += mapping[key]
+            unitstr = ''
+        else:
+            prefixstr += name
+            unitstr = f', unit={self.unit}'
+
+        suffixstr = unitstr + parentstr + dtstr + xstr
+
+        return f'{prefixstr}({self.v}{suffixstr})'
 
     @property
     def isarray(self):
@@ -216,6 +260,7 @@ class TimePar(ss.BaseArr):
         if self_dt     is not None: self.self_dt     = self_dt
         if self.initialized or force: # Don't try to set these unless it's been initialized
             self.update_cached()
+        self.validate_units()
         return self
 
     def update_cached(self, update_values=True, die=True):
@@ -252,10 +297,12 @@ class TimePar(ss.BaseArr):
         new = self.asnew()
         unit = sc.ifelse(unit, self.parent_unit, self.unit)
         parent_dt = sc.ifelse(dt, 1.0)
-        new.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=unit, dt2=parent_dt) # Calculaet the new factor
+        new.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=unit, dt2=parent_dt) # Calculate the new factor
         new.update_values() # Update values
         new.v = new.values # Reset the base value
         new.factor = 1.0 # Reset everything else to be 1
+        new.unit = unit
+        new.self_dt = parent_dt
         new.parent_unit = unit
         new.parent_dt = parent_dt
         return new
@@ -305,43 +352,41 @@ class dur(TimePar):
         return self.values
 
 
-class days(dur):
+def days(v, parent_unit=None, parent_dt=None):
     """ Shortcut to ss.dur(value, units='day') """
-    def __init__(self, v, parent_unit=None, parent_dt=None):
-        super().__init__(v=v, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
-        return
+    return dur(v=v, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
 
 
-class years(dur):
+def years(v, parent_unit=None, parent_dt=None):
     """ Shortcut to ss.dur(value, units='year') """
-    def __init__(self, v, parent_unit=None, parent_dt=None):
-        super().__init__(v=v, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
-        return
+    return dur(v=v, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
 
 
-class rate(TimePar): # TODO: should all rates just be time_prob?
+class rate(TimePar):
     """ Any number that acts like a rate; can be greater than 1 """
     def update_values(self):
         self.values = self.v/self.factor
         return self.values
 
 
-class perday(rate):
+def perday(v, parent_unit=None, parent_dt=None):
     """ Shortcut to ss.rate(value, units='day') """
-    def __init__(self, v, parent_unit=None, parent_dt=None):
-        super().__init__(v=v, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
-        return
+    return rate(v=v, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
 
 
-class peryear(rate):
+def peryear(v, parent_unit=None, parent_dt=None):
     """ Shortcut to ss.rate(value, units='year') """
-    def __init__(self, v, parent_unit=None, parent_dt=None):
-        super().__init__(v=v, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
-        return
+    return rate(v=v, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
 
 
 class time_prob(TimePar):
-    """ A probability over time (a.k.a. a cumulative hazard rate); must be >0 and <1 """
+    """
+    A probability over time (a.k.a. a cumulative hazard rate); must be >=0 and <=1.
+
+    Note: ``ss.time_prob()`` converts one cumulative hazard rate to another with a
+    different time unit. ``ss.rate_prob()`` converts an exponential rate to a cumulative
+    hazard rate.
+    """
     def update_values(self):
         v = self.v
         if self.isarray:
@@ -350,6 +395,10 @@ class time_prob(TimePar):
             if inds.sum():
                 rates = -np.log(1 - v[inds])
                 self.values[inds] = 1 - np.exp(-rates/self.factor)
+            invalid = np.logical_or(v < 0.0, 1.0 < v)
+            if invalid.sum():
+                errormsg = f'Invalid value {self.v} for {self}: must be 0-1. If using in a calculation, use .values instead.'
+                raise ValueError(errormsg)
         else:
             if v == 0:
                 self.values = 0
@@ -359,7 +408,37 @@ class time_prob(TimePar):
                 rate = -np.log(1 - v)
                 self.values = 1 - np.exp(-rate/self.factor)
             else:
-                errormsg = f'Invalid value {self.value} for {self}: must be 0-1'
+                errormsg = f'Invalid value {self.v} for {self}: must be 0-1. If using in a calculation, use .values instead.'
+                raise ValueError(errormsg)
+        return self.values
+
+
+class rate_prob(TimePar):
+    """
+    An instantaneous rate converted to a probability; must be >=0.
+
+    Note: ``ss.time_prob()`` converts one cumulative hazard rate to another with a
+    different time unit. ``ss.rate_prob()`` converts an exponential rate to a cumulative
+    hazard rate.
+    """
+    def update_values(self):
+        v = self.v
+        if self.isarray:
+            self.values = v.copy()
+            inds = v > 0.0
+            if inds.sum():
+                self.values[inds] = 1 - np.exp(-v[inds]/self.factor)
+            invalid = v < 0.0
+            if invalid.sum():
+                errormsg = f'Invalid value {self.v} for {self}: must be >=0. If using in a calculation, use .values instead.'
+                raise ValueError(errormsg)
+        else:
+            if v == 0:
+                self.values = 0
+            elif v > 0:
+                self.values = 1 - np.exp(-v/self.factor)
+            else:
+                errormsg = f'Invalid value {self.value} for {self}: must be >=0. If using in a calculation, use .values instead.'
                 raise ValueError(errormsg)
         return self.values
 
@@ -367,3 +446,14 @@ class time_prob(TimePar):
 class beta(time_prob):
     """ A container for beta (i.e. the disease transmission rate) """
     pass
+
+
+# Map different units onto the time units -- placed at the end to include the functions
+unit_mapping_reverse = {
+    None: [None, 'none'],
+    'day': ['d', 'day', 'days', 'perday', days, perday],
+    'year': ['y', 'yr', 'year', 'years', 'peryear', years, peryear],
+    'week': ['w', 'wk', 'week', 'weeks'],
+    'month': ['m', 'mo', 'month', 'months'],
+}
+unit_mapping = {v:k for k,vlist in unit_mapping_reverse.items() for v in vlist}

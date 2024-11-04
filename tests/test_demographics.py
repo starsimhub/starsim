@@ -33,7 +33,7 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
         demographics += pregnancy
 
     death_rates = pd.read_csv(datadir/'nigeria_deaths.csv')
-    death = ss.Deaths(pars={'death_rate': death_rates, 'units': 1})
+    death = ss.Deaths(pars={'death_rate': death_rates, 'rate_units': 1})
     demographics += death
 
     # Make people

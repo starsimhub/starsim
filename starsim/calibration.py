@@ -81,6 +81,7 @@ class Calibration(sc.prettyobj):
         self.reseed     = reseed
         self.die        = die
         self.verbose    = verbose
+        self.save_results = save_results
         self.calibrated = False
         self.before_sim = None
         self.after_sim  = None
@@ -179,7 +180,7 @@ class Calibration(sc.prettyobj):
 
         return nll
 
-    def run_trial(self, trial, save=False):
+    def run_trial(self, trial):
         """ Define the objective for Optuna """
         if self.calib_pars is not None:
             pars = self._sample_from_trial(self.calib_pars, trial)
@@ -385,7 +386,7 @@ class Calibration(sc.prettyobj):
             kwargs (dict): passed to MultiSim.plot()
         """
         if self.before_sim is None:
-            self.comfirm_fit()
+            self.confirm_fit()
         msim = ss.MultiSim([self.before_sim, self.after_sim])
         fig = msim.plot(**kwargs)
         return fig

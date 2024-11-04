@@ -5,6 +5,7 @@ defines Analyzers and Connectors.
 import sciris as sc
 import starsim as ss
 from functools import partial
+import datetime as dt
 
 __all__ = ['module_map', 'find_modules', 'Module', 'Analyzer', 'Connector']
 
@@ -55,7 +56,7 @@ class Module(sc.quickobj):
         dt (float): the timestep (e.g. 1.0, 0.1); inherits from sim if not supplied
     """
 
-    def __init__(self, name=None, label=None, unit=None, dt=None):
+    def __init__(self, name=None, label=None, unit=None, dt=None, **kwargs):
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
@@ -135,8 +136,8 @@ class Module(sc.quickobj):
         self.pars.update(matches)
 
         # Update module attributes
-        metadata = {key:pars.pop(key, None) for key in ['name', 'label']}
-        timepars = {key:pars.pop(key, None) for key in ['unit', 'dt']}
+        metadata = {key:pars.pop(key, self.pars.pop(key, None)) for key in ['name', 'label']}
+        timepars = {key:pars.pop(key, self.pars.pop(key, None)) for key in ['unit', 'dt']}
         self.set_metadata(**metadata)
         self.set_time_pars(**timepars)
 
@@ -206,10 +207,29 @@ class Module(sc.quickobj):
     def now(self):
         """ Return the current time, i.e. the time vector at the current timestep """
         try:
-            return self.timevec[self.ti]
+            if self.ti >= 0:
+                return self.timevec[self.ti]
+            else:
+                if sc.isnumber(self.sim.pars.start):
+                    return self.sim.pars.start + self.ti * self.dt * ss.time_ratio(unit1=self.unit, unit2='year')
+                else:
+                    assert isinstance(self.sim.pars.start, dt.date), 'Expected a datetime'
+                    if self.unit == 'day':
+                        return self.sim.pars.start + dt.timedelta(days=int(self.ti * self.dt))
+                    else:
+                        assert self.unit == 'year', 'Expected unit of "year"'
+                        return self.sim.pars.start + dt.timedelta(days=int(365.25 * self.ti * self.dt))
         except Exception as E:
             ss.warn(f'Encountered exception when getting the current time in {self.name}: {E}')
             return None
+
+    @property
+    def now_year(self):
+        """ Like now, but convert datetime to floating point year """
+        now = self.now
+        if isinstance(now, dt.date):
+            return sc.datetoyear(now)
+        return now
 
     def start_step(self):
         """ Tasks to perform at the beginning of the step """
