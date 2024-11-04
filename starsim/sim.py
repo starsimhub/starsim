@@ -160,7 +160,7 @@ class Sim:
         # Validation and initialization
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.validate() # Validate parameters
-        self.init_time_attrs() # Initialize time
+        self.init_time() # Initialize time
         self.init_people(**kwargs) # Initialize the people
 
         # Move initialized modules to the sim
@@ -190,15 +190,11 @@ class Sim:
         self.initialized = True
         return self
 
-    def init_time_attrs(self):
+    def init_time(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
-        pars = self.pars
-        self.timevec = ss.make_timevec(pars.start, pars.stop, pars.dt, pars.unit)
-        self.results.timevec = self.timevec # Store the timevec in the results for plotting
-        self.npts = len(self.timevec) # The number of points in the sim
-        self.abs_tvec = np.arange(self.npts)*pars.dt # Absolute time array
-        self.ti = 0  # The time index, e.g. 0, 1, 2
-        self.dt_year = ss.time_ratio(pars.unit, pars.dt, 'year', 1.0) # Figure out what dt is in years; used for demographics # TODO: handle None
+        p = self.pars
+        self.t = ss.Time(start=p.start, stop=p.stop, dt=p.dt, unit=p.unit)
+        self.results.timevec = self.t.timevec # Store the timevec in the results for plotting
         return
 
     def init_people(self, verbose=None, **kwargs):

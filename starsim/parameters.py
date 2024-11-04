@@ -256,11 +256,10 @@ class SimPars(Pars):
         return
 
     def validate_sim_pars(self):
-        """ Validate each of the parameter values """
+        """ Validate each of the parameter values (except time; validated separately) """
         self.validate_verbose()
         self.validate_agents()
         self.validate_total_pop()
-        self.validate_time()
         return
 
     def validate_verbose(self):
@@ -302,34 +301,6 @@ class SimPars(Pars):
         self.total_pop = total_pop
         if self.pop_scale is None:
             self.pop_scale = total_pop / self.n_agents
-        return
-
-    def validate_time(self):
-        """ Ensure at least one of dur and stop is defined, but not both """
-        if self.start is None:
-            if self.unit == 'year':
-                self.start = 2000
-            else:
-                self.start = '2000-01-01'
-        if isinstance(self.start, str):
-            self.start = sc.date(self.start)
-        if isinstance(self.stop, str):
-            self.stop = sc.date(self.stop)
-        if self.stop is not None:
-            if self.is_default('dur'):
-                self.dur = ss.date_diff(self.start, self.stop, self.unit)
-            else:
-                errormsg = f'You can supply either stop ({self.stop}) or dur ({self.dur}) but not both, since one is calculated from the other'
-                raise ValueError(errormsg)
-            if self.dur <= 0:
-                errormsg = f"Duration must be >0, but you supplied start={str(self.start)} and stop={str(self.stop)}, which gives dur={self.dur}"
-                raise ValueError(errormsg)
-        else:
-            if self.dur is not None:
-                self.stop = ss.date_add(self.start, self.dur, self.unit)
-            else:
-                errormsg = 'You must supply either "dur" or "stop".'
-                raise ValueError(errormsg)
         return
 
     def validate_modules(self):
