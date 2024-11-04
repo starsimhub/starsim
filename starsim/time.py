@@ -218,15 +218,29 @@ class Time(sc.prettyobj):
     """
     Handle time vectors for both simulations and modules
     """
-    def __init__(self, start, stop, dt, unit):
-        self.unit = validate_unit(unit)
-        self.is_numeric = sc.isnumber(start)
-        self.start = start if self.is_numeric else date(start)
-        self.stop  = stop  if self.is_numeric else date(stop)
+    def __init__(self, start=None, stop=None, dt=None, unit=None, pars=None, parent=None, init=True):
+        self.update(pars=pars, parent=parent, start=start, stop=stop, dt=dt, unit=unit)
+        self.unit = validate_unit(self.unit)
+        self.is_numeric = sc.isnumber(self.start)
+        self.start = self.start if self.is_numeric else date(self.start)
+        self.stop  = self.stop  if self.is_numeric else date(self.stop)
         self.dt = dt
         self.ti = 0 # The time index, e.g. 0, 1, 2
-        self.initialize()
+        if init:
+            self.initialize()
         return
+
+    def update(self, pars=None, parent=None, **kwargs):
+        """ Reconcile different ways of supplying inputs """
+        pars = sc.mergedicts(pars)
+        keys = ['start', 'stop', 'dt', 'unit']
+        # SET FLAG TO UPDATE HERE?
+        for key in keys:
+            value = sc.ifelse(kwargs.get(key), pars.get(key), getattr(parent, key, None))
+            setattr(self, key, value)
+        return
+
+    def update(self, **kwargs):
 
     def initialize(self):
         """ Initialize all vectors """

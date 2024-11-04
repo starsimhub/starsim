@@ -126,7 +126,7 @@ class Sim:
         )
 
     def init(self, **kwargs):
-        """ Perform all initializations for the sim; most heavy lifting is done by the parameters """
+        """ Perform all initializations for the sim """
 
         # Validation and initialization -- this is "pre"
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
@@ -152,8 +152,7 @@ class Sim:
 
     def init_time(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
-        p = self.pars
-        self.t = ss.Time(start=p.start, stop=p.stop, dt=p.dt, unit=p.unit)
+        self.t = ss.Time(pars=self.pars)
         self.results.timevec = self.t.timevec # Store the timevec in the results for plotting
         return
 

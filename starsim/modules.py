@@ -56,23 +56,16 @@ class Module(sc.quickobj):
         dt (float): the timestep (e.g. 1.0, 0.1); inherits from sim if not supplied
     """
 
-    def __init__(self, name=None, label=None, unit=None, dt=None, **kwargs):
+    def __init__(self, name=None, label=None, **kwargs):
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
-        self.set_time_pars(unit, dt)
+        self.t = ss.Time(**kwargs, init=False)
 
         # Properties to be added by init_pre()
         self.sim = None
         self.dists = None # Turned into a Dists object by sim.init_dists() if this module has dists
         self.results = ss.Results(self.name)
-
-        # Time properties, added by init_time_pars()
-        self.unit = None
-        self.dt = None
-        self.timevec = None
-        self.npts = None
-        self.ti = None
 
         # Finish initialization
         self.pre_initialized = False
@@ -96,6 +89,13 @@ class Module(sc.quickobj):
         else:
             return out
 
+    def _reconcile(self, key, value=None, default=None):
+        """ Reconcile module attributes, parameters, and input arguments """
+        parval = self.pars.get(key)
+        attrval = getattr(self, key, parval)
+        val = sc.ifelse(value, attrval, default)
+        return val
+
     def set_metadata(self, name=None, label=None):
         """ Set metadata for the module """
         # Validation
@@ -106,14 +106,13 @@ class Module(sc.quickobj):
                     raise TypeError(errormsg)
 
         # Set values
-        self.name  = sc.ifelse(name,  getattr(self, 'name',  self.pars.get('name', self.__class__.__name__.lower()))) # Default name is the class name
-        self.label = sc.ifelse(label, getattr(self, 'label', self.pars.get('label', self.name)))
+        self.name = self._reconcile('name', name, self.__class__.__name__.lower())
+        self.label = self._reconcile('label', label, self.name)
         return
 
-    def set_time_pars(self, unit=None, dt=None):
+    def set_time_pars(self, **kwargs):
         """ Set time units for the module """
-        self.unit  = sc.ifelse(unit,  getattr(self, 'unit', self.pars.get('unit')))
-        self.dt    = sc.ifelse(dt,    getattr(self, 'dt',   self.pars.get('dt')))
+        self.t.update(pars=kwargs) # DON"T NEED A METHOD FOR THIS, RIGHT? WHEN POP PARS?
         return
 
     def define_pars(self, inherit=True, **kwargs): # TODO: think if inherit should default to true or false
@@ -137,7 +136,7 @@ class Module(sc.quickobj):
 
         # Update module attributes
         metadata = {key:pars.pop(key, self.pars.pop(key, None)) for key in ['name', 'label']}
-        timepars = {key:pars.pop(key, self.pars.pop(key, None)) for key in ['unit', 'dt']}
+        timepars = {key:pars.pop(key, self.pars.pop(key, None)) for key in ['unit', 'dt', 'start', 'stop']}
         self.set_metadata(**metadata)
         self.set_time_pars(**timepars)
 

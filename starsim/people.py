@@ -135,7 +135,6 @@ class People(sc.prettyobj):
             errormsg = 'Cannot re-initialize a People object directly; use sim.init(reset=True)'
             raise RuntimeError(errormsg)
         self.sim = sim # Store the sim
-        self.timevec = sim.timevec # Also store the timevec in the People object (not used, but for completeness)
         ss.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module])
         return
 
