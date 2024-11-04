@@ -53,7 +53,7 @@ def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0, as_int=False):
     if unit1 == unit2:
         unit_ratio = 1.0
     else:
-        if unit1 is None or unit2 is None:
+        if unit1 in ['none', None] or unit2 in ['none', None]:
             errormsg = f'Cannot convert between units when one is None ({unit1}, {unit2})'
             raise ValueError(errormsg)
         u1 = time_units[unit1]
@@ -92,6 +92,14 @@ def date_diff(start, stop, unit):
         else:
             raise NotImplementedError
     return dur
+
+
+def round_tvec(tvec):
+    """ Round time vectors to a certain level of precision, to avoid floating point errors """
+    decimals = int(-np.log10(ss.options.time_eps))
+    tvec = np.round(tvec, decimals=decimals)
+    return tvec
+
 
 
 #%% Time classes
@@ -217,7 +225,51 @@ class Time(sc.prettyobj):
 
     def initialize(self):
         """ Initialize all vectors """
+        # Convert start and stop to dates
+        date_start = self.start
+        date_stop = self.stop
+        date_unit = 'year' if no_unit(self.unit) else self.unit
+        dt_year = ss.time_ratio(date_unit, self.dt, 'year', 1.0)
+        if self.is_numeric and date_start == 0:
+            date_start = ss.date(ss.time.default_start_date)
+            date_stop = date_start + ss.dur(date_stop, unit=self.unit)
 
+        # If numeric, treat that as the ground truth
+        if self.is_numeric:
+            timevec = sc.inclusiverange(self.start, self.stop, self.dt)
+            yearvec = timevec*dt_year
+            datevec = np.array([sc.datetoyear(y, reverse=True) for y in yearvec])
+
+        # Otherwise, use dates
+        else:
+            int_dt = int(self.dt)
+            if int_dt == self.dt: # The step is integer-like, use exactly
+                key = date_unit + 's' # e.g. day -> days
+                datelist = sc.daterange(start, stop, interval={key:int_dt})
+            else: # Convert to days instead
+                day_delta = time_ratio(unit1=unit, dt1=dt, unit2='day', dt2=1.0, as_int=True)
+                if day_delta > 0:
+                    datelist = sc.daterange(start, stop, interval={'days':day_delta})
+                else:
+                    errormsg = f'Timestep {dt} is too small; must be at least 1 day'
+                    raise ValueError(errormsg)
+
+            # Tidy
+            datevec = np.vectorize(ss.date)(datelist)
+            yearvec = np.vectorize(sc.datetoyear)(datevec)
+            timevec = datevec
+
+
+
+        # Create the year vector
+        year_start = sc.datetoyear(date_start)
+        year_stop = sc.datetoyear(date_stop)
+
+        yearvec = sc.inclusiverange(year_start, year_stop, dt_year)
+
+        # Create the date vector
+
+            self.datevec =
 
         self.timevec = self.make_timevec()
         self.datevec = self.make_datevec()
@@ -226,7 +278,7 @@ class Time(sc.prettyobj):
         self.absvec = np.arange(npts)*self.dt # Absolute time array
         self.npts = npts
         self.ti = 0  # The time index, e.g. 0, 1, 2
-        self.dt_year = ss.time_ratio(self.unit, self.dt, 'year', 1.0) # Figure out what dt is in years; used for demographics # TODO: handle None
+
         return
 
     def make_timevec(self):
@@ -264,8 +316,7 @@ class Time(sc.prettyobj):
             abstv = absyearvec*time_ratio(unit1='year', unit2=sim_unit)
 
         # Round to the value of epsilon; alternative to np.round(abstv/eps)*eps, which has floating point error
-        decimals = int(-np.log10(ss.options.time_eps))
-        abstv = np.round(abstv, decimals=decimals)
+
 
         return abstv
 
@@ -608,3 +659,8 @@ def validate_unit(unit):
     except KeyError as E:
         errormsg = f'Invalid unit "{unit}". Valid units are:\n{sc.pp(unit_mapping_reverse, output=True)}'
         raise sc.KeyNotFoundError(errormsg) from E
+
+
+def no_unit(unit):
+    """ Check if the unit is None-like """
+    return unit in unit_mapping_reverse['none']
