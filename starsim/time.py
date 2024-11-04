@@ -268,8 +268,7 @@ class Time(sc.prettyobj):
         self.dt_year = dt_year
         self.ti = 0 # The time index, e.g. 0, 1, 2
         self.npts = len(timevec) # The number of points in the sim
-        self.tivec = np.arange(self.npts)
-        self.tvec = self.tivec*self.dt # Absolute time array
+        self.tvec = np.arange(self.npts)*self.dt # Absolute time array
         self.timevec = timevec
         self.datevec = datevec
         self.yearvec = yearvec
@@ -280,12 +279,20 @@ class Time(sc.prettyobj):
         Get the current simulation time
 
         Args:
-            which (str): which type of time to get: default (None), or "year", "date", or "abs"
+            which (str): which type of time to get: default (None), or "year", "date", or "tvec"
+
+        **Examples**::
+
+            t = ss.Time(start='2021-01-01', stop='2022-02-02', dt=1, unit='week')
+            t.ti = 25
+            t.now() # Returns <2021-06-25>
+            t.now('date') # Returns <2021-06-25>
+            t.now('year') # Returns 2021.479
         """
         if key in [None, 'none', 'time']:
             vec = self.timevec
-        elif key == 'abs':
-            vec = self.absvec
+        elif key == 'tvec':
+            vec = self.tvec
         elif key == 'date':
             vec = self.datevec
         elif key == 'year':
@@ -293,8 +300,7 @@ class Time(sc.prettyobj):
         else:
             errormsg = f'Invalid key "{key}": must be None, abs, date, or year'
             raise ValueError(errormsg)
-        return vec[self.ti]
-
+        return vec[min(self.ti, len(vec)-1)]
 
 
 #%% TimePar classes

@@ -113,35 +113,6 @@ class Sim:
         return string
 
     @property
-    def now(self):
-        """ Return the current time, i.e. the time vector at the current timestep """
-        try:
-            if self.ti >= 0:
-                ti = min(self.ti, len(self.timevec)-1) # During integration, ti can go one past the end of the time vector
-                return self.timevec[ti]
-            else:
-                if sc.isnumber(self.pars.start):
-                    return self.pars.start + self.ti * self.dt * ss.time_ratio(unit1=self.unit, unit2='year')
-                else:
-                    assert isinstance(self.pars.start, dt.date), 'Expected a datetime'
-                    if self.unit == 'day':
-                        return self.pars.start + dt.timedelta(days=int(self.ti * self.dt))
-                    else:
-                        assert self.unit == 'year', 'Expected unit of "year"'
-                        return self.pars.start + dt.timedelta(days=int(365.25 * self.ti * self.dt))
-        except Exception as E:
-            ss.warn(f'Encountered exception when getting the current time in {self.name}: {E}')
-            return None
-
-    @property
-    def now_year(self):
-        """ Like now, but convert datetime to floating point year """
-        now = self.now
-        if isinstance(now, dt.date):
-            return sc.datetoyear(now)
-        return now
-
-    @property
     def modules(self):
         """ Return iterator over all Module instances (stored in standard places) in the Sim """
         return itertools.chain(
