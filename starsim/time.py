@@ -205,22 +205,38 @@ class Time:
     """
     Handle time vectors for both simulations and modules
     """
-    def __init__(self, start=None, stop=None, dt=None, unit=None):
+    def __init__(self, start=None, stop=None, dt=None, unit=None, sim_unit=None):
         self.unit = validate_unit(unit)
-        self.start = date(start)
-        self.stop = date(stop)
+        self.is_numeric = sc.isnumber(start)
+        self.start = start if self.is_numeric else date(start)
+        self.stop  = stop  if self.is_numeric else date(stop)
         self.dt = dt
+        self.sim_unit = sim_unit
+
+        # For plotting, figure out what type of plot to use
+        if sc.isnumber(self.start) and self.unit == 'year':
+            self.archetype = 'numeric-year'
+        elif self.unit == 'none':
+            self.archetype = 'none'
+        else:
+            self.archetype = 'date'
+
+        # Initialize the vectors
         self.initialize()
         return
 
+
+
     def initialize(self):
         """ Initialize all vectors """
+
+
         self.timevec = self.make_timevec()
         self.datevec = self.make_datevec()
         self.yearvec = self.make_yearvec()
-        self.absvec = np.arange(self.npts)*dt # Absolute time array
-        self.npts = len(self.timevec) # The number of points in the sim
-
+        npts = len(self.timevec) # The number of points in the sim
+        self.absvec = np.arange(npts)*self.dt # Absolute time array
+        self.npts = npts
         self.ti = 0  # The time index, e.g. 0, 1, 2
         self.dt_year = ss.time_ratio(self.unit, self.dt, 'year', 1.0) # Figure out what dt is in years; used for demographics # TODO: handle None
         return
