@@ -125,7 +125,12 @@ class date(pd.Timestamp):
     """
     def __new__(cls, *args, **kwargs):
         # Check if a year was supplied, and preprocess it
-        single_arg = (len(args) == 1 and sc.isnumber(args[0]))
+        single_arg = False
+        if len(args) == 1:
+            if args[0] is None:
+                return pd.Timestamp(None)
+            elif sc.isnumber(args[0]):
+                single_arg = True
         year_kwarg = len(args) == 0 and len(kwargs) == 1 and 'year' in kwargs
         if single_arg:
             return cls.from_year(args[0])
@@ -213,13 +218,12 @@ class Time(sc.prettyobj):
     """
     Handle time vectors for both simulations and modules
     """
-    def __init__(self, start=None, stop=None, dt=None, unit='', sim_unit=''):
+    def __init__(self, start, stop, dt, unit):
         self.unit = validate_unit(unit)
         self.is_numeric = sc.isnumber(start)
         self.start = start if self.is_numeric else date(start)
         self.stop  = stop  if self.is_numeric else date(stop)
         self.dt = dt
-        self.sim_unit = sim_unit
         self.initialize()
         return
 
@@ -230,32 +234,34 @@ class Time(sc.prettyobj):
         date_stop = self.stop
         date_unit = 'year' if no_unit(self.unit) else self.unit
         dt_year = ss.time_ratio(date_unit, self.dt, 'year', 1.0)
+        offset = 0
         if self.is_numeric and date_start == 0:
             date_start = ss.date(ss.time.default_start_date)
-            date_stop = date_start + ss.dur(date_stop, unit=self.unit)
+            date_stop = date_start + ss.dur(date_stop, unit=date_unit)
+            offset = date_start.year
 
         # If numeric, treat that as the ground truth
         if self.is_numeric:
             timevec = sc.inclusiverange(self.start, self.stop, self.dt)
-            yearvec = timevec*dt_year
-            datevec = np.array([sc.datetoyear(y, reverse=True) for y in yearvec])
+            yearvec = timevec*dt_year + offset
+            datevec = np.array([date(sc.datetoyear(y, reverse=True)) for y in yearvec])
 
         # Otherwise, use dates as the ground truth
         else:
             if int(self.dt) == self.dt: # The step is integer-like, use exactly
                 key = date_unit + 's' # e.g. day -> days
-                datelist = sc.daterange(start, stop, interval={key:int(self.dt)})
+                datelist = sc.daterange(date_start, date_stop, interval={key:int(self.dt)})
             else: # Convert to days instead
-                day_delta = time_ratio(unit1=unit, dt1=dt, unit2='day', dt2=1.0, as_int=True)
+                day_delta = time_ratio(unit1=date_unit, dt1=dt, unit2='day', dt2=1.0, as_int=True)
                 if day_delta > 0:
-                    datelist = sc.daterange(start, stop, interval={'days':day_delta})
+                    datelist = sc.daterange(date_start, date_stop, interval={'days':day_delta})
                 else:
                     errormsg = f'Timestep {dt} is too small; must be at least 1 day'
                     raise ValueError(errormsg)
 
             # Tidy
             datevec = np.vectorize(ss.date)(datelist)
-            yearvec = np.vectorize(sc.datetoyear)(datevec)
+            yearvec = np.array([sc.datetoyear(d.to_pydate()) for d in datevec])
             timevec = datevec
 
         # Store things
@@ -266,30 +272,8 @@ class Time(sc.prettyobj):
         self.timevec = timevec
         self.datevec = datevec
         self.yearvec = yearvec
-        if self.sim_unit:
-            self.make_sim_tvec()
         return
 
-
-    def make_abs_tvec(self):
-        """ Convert a module time vector into a numerical time array with the same units as the sim """
-        tv = self.timevec
-
-        # It's an array of days or years: easy
-        if sc.isnumber(tv[0]):
-            ratio = time_ratio(unit1=self.unit, unit2=self.sim_unit)
-            abstv = tv*ratio # Get the units right
-            abstv -= abstv[0] # Start at 0
-
-        # It's a date: convert to fractional years and then subtract the
-        else:
-            yearvec = np.vectorize(sc.datetoyear)(tv)
-            absyearvec = yearvec - yearvec[0] # Subtract start date
-            abstv = absyearvec*time_ratio(unit1='year', unit2=self.sim_unit)
-
-        # Round to the value of epsilon; alternative to np.round(abstv/eps)*eps, which has floating point error
-        self.abs_tvec = round_tvec(abstv)
-        return abstv
 
 
 #%% TimePar classes
@@ -614,6 +598,8 @@ class beta(time_prob):
     pass
 
 
+#%% Final helper functions
+
 # Map different units onto the time units -- placed at the end to include the functions
 unit_mapping_reverse = {
     'none': [None, 'none'],
@@ -624,12 +610,14 @@ unit_mapping_reverse = {
 }
 unit_mapping = {v:k for k,vlist in unit_mapping_reverse.items() for v in vlist}
 
+
 def validate_unit(unit):
     try:
         unit = unit_mapping[unit]
     except KeyError as E:
         errormsg = f'Invalid unit "{unit}". Valid units are:\n{sc.pp(unit_mapping_reverse, output=True)}'
         raise sc.KeyNotFoundError(errormsg) from E
+    return unit
 
 
 def no_unit(unit):
