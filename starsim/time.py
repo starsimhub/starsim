@@ -201,7 +201,7 @@ class date(pd.Timestamp):
     def __isub__(self, other): return self.__sub__(other)
 
 
-class Time:
+class Time(sc.prettyobj):
     """
     Handle time vectors for both simulations and modules
     """
@@ -214,8 +214,6 @@ class Time:
         self.sim_unit = sim_unit
         self.initialize()
         return
-
-
 
     def initialize(self):
         """ Initialize all vectors """
