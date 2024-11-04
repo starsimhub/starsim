@@ -128,29 +128,18 @@ class Sim:
     def init(self, **kwargs):
         """ Perform all initializations for the sim; most heavy lifting is done by the parameters """
 
-        # Validation and initialization
+        # Validation and initialization -- this is "pre"
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.validate() # Validate parameters
         self.init_time() # Initialize time
         self.init_people(**kwargs) # Initialize the people
+        self.init_sim_attrs()
+        self.init_mods_pre()
 
-        # Move initialized modules to the sim
-        keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
-        for key in keys:
-            setattr(self, key, self.pars.pop(key))
-
-        # Initialize all the modules with the sim
-        for mod in self.modules:
-            mod.init_pre(self)
-
-        # Initialize products # TODO: think about moving with other modules
-        for intv in self.interventions():
-            if hasattr(intv, 'product') and intv.product is not None: # TODO: simplify
-                intv.product.init_pre(self)
-
-        # Final initializations
+        # Final initializations -- this is "post"
         self.init_dists() # Initialize distributions
-        self.init_vals() # Initialize the values in all the states and networks
+        self.init_people_vals() # Initialize the values in all the states and networks
+        self.init_mod_vals() # Initialize the module values
         self.init_results() # Initialize the results
         self.init_data() # Initialize the data
         self.loop.init() # Initialize the integration loop
@@ -195,6 +184,19 @@ class Sim:
         self.people.link_sim(self)
         return self.people
 
+    def init_sim_attrs(self):
+        """ Move initialized modules to the sim """
+        keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
+        for key in keys:
+            setattr(self, key, self.pars.pop(key))
+        return
+
+    def init_mods_pre(self):
+        """ Initialize all the modules with the sim """
+        for mod in self.modules:
+            mod.init_pre(self)
+        return
+
     def init_dists(self):
         """ Initialize the distributions """
         # Initialize all distributions now that everything else is in place
@@ -205,13 +207,13 @@ class Sim:
             self.dists.copy_to_module(mod)
         return
 
-    def init_vals(self):
-        """ Initialize the states and other objects with values """
-
-        # Initialize values in people
+    def init_people_vals(self):
+        """ Initialize the People states with actual values """
         self.people.init_vals()
+        return
 
-        # Initialize values in other modules, including networks and time parameters
+    def init_mod_vals(self):
+        """ Initialize values in other modules, including networks and time parameters """
         for mod in self.modules:
             mod.init_post()
         return
@@ -224,7 +226,7 @@ class Sim:
 
     def init_results(self):
         """ Create initial results that are present in all simulations """
-        kw = dict(shape=self.npts, timevec=self.timevec, dtype=int, scale=True)
+        kw = dict(shape=self.npts, timevec=self.t.timevec, dtype=int, scale=True)
         self.results += [
             ss.Result('n_alive',    label='Number alive', **kw),
             ss.Result('new_deaths', label='Deaths', **kw),
@@ -250,19 +252,19 @@ class Sim:
         self.elapsed = self.timer.toc(output=True)
         if self.verbose: # Print progress
             simlabel = f'"{self.label}": ' if self.label else ''
-            timepoint = self.timevec[self.ti]
-            timelabel = f'{timepoint:0.1f}' if isinstance(timepoint, float) else str(timepoint) # TODO: fix
-            string = f'  Running {simlabel}{timelabel} ({self.ti:2.0f}/{self.npts}) ({self.elapsed:0.2f} s) '
+            now = self.t.now()
+            timelabel = f'{now:0.1f}' if isinstance(now, float) else str(now) # TODO: fix
+            string = f'  Running {simlabel}{timelabel} ({self.t.ti:2.0f}/{self.npts}) ({self.elapsed:0.2f} s) '
             if self.verbose >= 1:
                 sc.heading(string)
             elif self.verbose > 0:
-                if not (self.ti % int(1.0 / self.verbose)):
-                    sc.progressbar(self.ti + 1, self.npts, label=string, length=20, newline=True)
+                if not (self.t.ti % int(1.0 / self.verbose)):
+                    sc.progressbar(self.t.ti + 1, self.npts, label=string, length=20, newline=True)
         return
 
     def finish_step(self):
         """ Finish the simulation timestep """
-        self.ti += 1
+        self.t.ti += 1
         return
 
     def run_one_step(self, verbose=None):
@@ -302,9 +304,9 @@ class Sim:
 
         # If simulation reached the end, finalize the results
         if self.complete:
-            self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
+            self.t.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
             for mod in self.modules: # May not be needed, but keeps it consistent with the sim
-                mod.ti -= 1
+                mod.t.ti -= 1
             self.finalize()
             sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 1, self.verbose)
         return self # Allows e.g. ss.Sim().run().plot()

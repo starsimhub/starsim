@@ -21,6 +21,12 @@ class Intervention(ss.Module):
         self.eligibility = eligibility
         return
 
+    def init_pre(self, sim):
+        super().init_pre(sim)
+        if hasattr(self, 'product') and self.product is not None: # TODO: simplify
+            self.product.init_pre(self)
+        return
+
     def _parse_product(self, product):
         """
         Parse the product input

@@ -224,6 +224,7 @@ class Time(sc.prettyobj):
         self.start = start if self.is_numeric else date(start)
         self.stop  = stop  if self.is_numeric else date(stop)
         self.dt = dt
+        self.ti = 0 # The time index, e.g. 0, 1, 2
         self.initialize()
         return
 
@@ -266,7 +267,6 @@ class Time(sc.prettyobj):
 
         # Store things
         self.dt_year = dt_year
-        self.ti = 0 # The time index, e.g. 0, 1, 2
         self.npts = len(timevec) # The number of points in the sim
         self.tvec = np.arange(self.npts)*self.dt # Absolute time array
         self.timevec = timevec
