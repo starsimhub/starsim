@@ -260,40 +260,24 @@ class Time(sc.prettyobj):
 
         # Store things
         self.dt_year = dt_year
+        self.ti = 0 # The time index, e.g. 0, 1, 2
+        self.npts = len(timevec) # The number of points in the sim
+        self.absvec = np.arange(self.npts)*self.dt # Absolute time array
         self.timevec = timevec
         self.datevec = datevec
         self.yearvec = yearvec
-
-
-
-        # Create the year vector
-        year_start = sc.datetoyear(date_start)
-        year_stop = sc.datetoyear(date_stop)
-
-        yearvec = sc.inclusiverange(year_start, year_stop, dt_year)
-
-        # Create the date vector
-
-            self.datevec =
-
-        self.timevec = self.make_timevec()
-        self.datevec = self.make_datevec()
-        self.yearvec = self.make_yearvec()
-        npts = len(self.timevec) # The number of points in the sim
-        self.absvec = np.arange(npts)*self.dt # Absolute time array
-        self.npts = npts
-        self.ti = 0  # The time index, e.g. 0, 1, 2
-
+        if self.sim_unit:
+            self.make_sim_tvec()
         return
 
 
     def make_abs_tvec(self):
         """ Convert a module time vector into a numerical time array with the same units as the sim """
+        tv = self.timevec
 
         # It's an array of days or years: easy
-
         if sc.isnumber(tv[0]):
-            ratio = time_ratio(unit1=unit, unit2=sim_unit)
+            ratio = time_ratio(unit1=self.unit, unit2=self.sim_unit)
             abstv = tv*ratio # Get the units right
             abstv -= abstv[0] # Start at 0
 
@@ -301,11 +285,10 @@ class Time(sc.prettyobj):
         else:
             yearvec = np.vectorize(sc.datetoyear)(tv)
             absyearvec = yearvec - yearvec[0] # Subtract start date
-            abstv = absyearvec*time_ratio(unit1='year', unit2=sim_unit)
+            abstv = absyearvec*time_ratio(unit1='year', unit2=self.sim_unit)
 
         # Round to the value of epsilon; alternative to np.round(abstv/eps)*eps, which has floating point error
-
-
+        self.abs_tvec = round_tvec(abstv)
         return abstv
 
 
