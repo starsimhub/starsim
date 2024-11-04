@@ -213,7 +213,7 @@ class Time(sc.prettyobj):
     """
     Handle time vectors for both simulations and modules
     """
-    def __init__(self, start=None, stop=None, dt=None, unit=None, sim_unit=None):
+    def __init__(self, start=None, stop=None, dt=None, unit='', sim_unit=''):
         self.unit = validate_unit(unit)
         self.is_numeric = sc.isnumber(start)
         self.start = start if self.is_numeric else date(start)
@@ -240,12 +240,11 @@ class Time(sc.prettyobj):
             yearvec = timevec*dt_year
             datevec = np.array([sc.datetoyear(y, reverse=True) for y in yearvec])
 
-        # Otherwise, use dates
+        # Otherwise, use dates as the ground truth
         else:
-            int_dt = int(self.dt)
-            if int_dt == self.dt: # The step is integer-like, use exactly
+            if int(self.dt) == self.dt: # The step is integer-like, use exactly
                 key = date_unit + 's' # e.g. day -> days
-                datelist = sc.daterange(start, stop, interval={key:int_dt})
+                datelist = sc.daterange(start, stop, interval={key:int(self.dt)})
             else: # Convert to days instead
                 day_delta = time_ratio(unit1=unit, dt1=dt, unit2='day', dt2=1.0, as_int=True)
                 if day_delta > 0:
@@ -258,6 +257,12 @@ class Time(sc.prettyobj):
             datevec = np.vectorize(ss.date)(datelist)
             yearvec = np.vectorize(sc.datetoyear)(datevec)
             timevec = datevec
+
+        # Store things
+        self.dt_year = dt_year
+        self.timevec = timevec
+        self.datevec = datevec
+        self.yearvec = yearvec
 
 
 
@@ -280,23 +285,6 @@ class Time(sc.prettyobj):
         self.ti = 0  # The time index, e.g. 0, 1, 2
 
         return
-
-    def make_timevec(self):
-        """ Parse start, stop, and dt into an appropriate time vector """
-        if sc.isnumber(self.start):
-            try:
-                timevec = sc.inclusiverange(start=start, stop=stop, step=dt) # The time points of the sim
-            except Exception as E:
-                errormsg = f'Incompatible set of time inputs: start={start}, stop={stop}, dt={dt}. You can use dates or numbers but not both.'
-                raise ValueError(errormsg) from E
-        else:
-            day_delta = time_ratio(unit1=unit, dt1=dt, unit2='day', dt2=1.0, as_int=True)
-            if day_delta > 0:
-                timevec = np.array(sc.daterange(start, stop, interval={'days':day_delta}))
-            else:
-                errormsg = f'Timestep {dt} is too small; must be at least 1 day'
-                raise ValueError(errormsg)
-        return timevec
 
 
     def make_abs_tvec(self):
