@@ -314,11 +314,11 @@ class SimPars(Pars):
 
         # Handle start
         if self.start is None:
-            self.start = ss.time.default_start_date.get(self.unit)
+            self.start = ss.time.default_start_date
 
         # Handle stop and dur
         if self.stop is not None:
-            if self.is_default('dur'):
+            if self.dur is None:
                 self.dur = ss.date_diff(self.start, self.stop, self.unit)
             else:
                 errormsg = f'You can supply either stop ({self.stop}) or dur ({self.dur}) but not both, since one is calculated from the other'
@@ -327,11 +327,9 @@ class SimPars(Pars):
                 errormsg = f"Duration must be >0, but you supplied start={str(self.start)} and stop={str(self.stop)}, which gives dur={self.dur}"
                 raise ValueError(errormsg)
         else:
-            if self.dur is not None:
-                self.stop = ss.date_add(self.start, self.dur, self.unit)
-            else:
-                errormsg = 'You must supply either "dur" or "stop".'
-                raise ValueError(errormsg)
+            if self.dur is None:
+                self.dur = ss.time.default_dur
+            self.stop = ss.date_add(self.start, self.dur, self.unit)
         return
 
     def validate_modules(self):

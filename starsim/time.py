@@ -16,11 +16,8 @@ __all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff']
 
 # Define defaults
 default_unit = 'year'
-default_start_date = dict(
-    none = 0,
-    year = 2000,
-    day  = '2000-01-01',
-)
+default_start_date = '2000-01-01'
+default_dur = 50
 
 # Define available time units
 time_units = sc.dictobj(
