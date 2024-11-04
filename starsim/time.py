@@ -268,7 +268,8 @@ class Time(sc.prettyobj):
         self.dt_year = dt_year
         self.ti = 0 # The time index, e.g. 0, 1, 2
         self.npts = len(timevec) # The number of points in the sim
-        self.absvec = np.arange(self.npts)*self.dt # Absolute time array
+        self.tivec = np.arange(self.npts)
+        self.tvec = self.tivec*self.dt # Absolute time array
         self.timevec = timevec
         self.datevec = datevec
         self.yearvec = yearvec
@@ -279,7 +280,7 @@ class Time(sc.prettyobj):
         Get the current simulation time
 
         Args:
-            which (str):
+            which (str): which type of time to get: default (None), or "year", "date", or "abs"
         """
         if key in [None, 'none', 'time']:
             vec = self.timevec
