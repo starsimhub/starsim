@@ -274,6 +274,26 @@ class Time(sc.prettyobj):
         self.yearvec = yearvec
         return
 
+    def now(self, key=None):
+        """
+        Get the current simulation time
+
+        Args:
+            which (str):
+        """
+        if key in [None, 'none', 'time']:
+            vec = self.timevec
+        elif key == 'abs':
+            vec = self.absvec
+        elif key == 'date':
+            vec = self.datevec
+        elif key == 'year':
+            vec = self.yearvec
+        else:
+            errormsg = f'Invalid key "{key}": must be None, abs, date, or year'
+            raise ValueError(errormsg)
+        return vec[self.ti]
+
 
 
 #%% TimePar classes
