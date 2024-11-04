@@ -212,16 +212,6 @@ class Time:
         self.stop  = stop  if self.is_numeric else date(stop)
         self.dt = dt
         self.sim_unit = sim_unit
-
-        # For plotting, figure out what type of plot to use
-        if sc.isnumber(self.start) and self.unit == 'year':
-            self.archetype = 'numeric-year'
-        elif self.unit == 'none':
-            self.archetype = 'none'
-        else:
-            self.archetype = 'date'
-
-        # Initialize the vectors
         self.initialize()
         return
 
