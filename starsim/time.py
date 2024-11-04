@@ -16,14 +16,18 @@ __all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff']
 
 # Define defaults
 default_unit = 'year'
-default_start_date = '2000-01-01'
+default_start_date = dict(
+    none = 0,
+    year = 2000,
+    day  = '2000-01-01',
+)
 
 # Define available time units
 time_units = sc.dictobj(
     day = 1,
     week = 7,
-    month = 30.4375, # 365.25/12 -- more accurate and nicer fraction
-    year = 365.25, # For simplicity with days
+    month = 30.4375, # 365.25/12
+    year = 365.25, # For consistency with months
 )
 
 
@@ -205,45 +209,11 @@ class Time:
     Handle time vectors for both simulations and modules
     """
     def __init__(self, start=None, stop=None, dt=None, unit=None):
-        self.unit = unit
-        self.start = start
-        self.stop = stop
+        self.unit = validate_unit(unit)
+        self.start = date(start)
+        self.stop = date(stop)
         self.dt = dt
-        self.validate()
         self.initialize()
-        return
-
-    def validate(self):
-        """ Ensure at least one of dur and stop is defined, but not both """
-
-        # Handle the unit
-        if self.unit is None:
-            self.unit = default_unit
-        self.unit = validate_unit(self.unit)
-
-        # Handle start and stop initialization
-        if self.start is None:
-            self.start = default_start_date
-        self.start = date(self.start)
-        if not isinstance(self.stop, date):
-            self.stop = date(self.stop)
-
-        # Handle dur
-        if self.stop is not None:
-            if self.is_default('dur'):
-                self.dur = ss.date_diff(self.start, self.stop, self.unit)
-            else:
-                errormsg = f'You can supply either stop ({self.stop}) or dur ({self.dur}) but not both, since one is calculated from the other'
-                raise ValueError(errormsg)
-            if self.dur <= 0:
-                errormsg = f"Duration must be >0, but you supplied start={str(self.start)} and stop={str(self.stop)}, which gives dur={self.dur}"
-                raise ValueError(errormsg)
-        else:
-            if self.dur is not None:
-                self.stop = ss.date_add(self.start, self.dur, self.unit)
-            else:
-                errormsg = 'You must supply either "dur" or "stop".'
-                raise ValueError(errormsg)
         return
 
     def initialize(self):
@@ -623,7 +593,7 @@ class beta(time_prob):
 
 # Map different units onto the time units -- placed at the end to include the functions
 unit_mapping_reverse = {
-    None: [None, 'none'],
+    'none': [None, 'none'],
     'day': ['d', 'day', 'days', 'perday', days, perday],
     'year': ['y', 'yr', 'year', 'years', 'peryear', years, peryear],
     'week': ['w', 'wk', 'week', 'weeks'],

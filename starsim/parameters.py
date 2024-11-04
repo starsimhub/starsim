@@ -211,17 +211,17 @@ class SimPars(Pars):
         self.verbose = ss.options.verbose # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
 
         # Population parameters
-        self.n_agents  = 10e3  # Number of agents
-        self.total_pop = None  # If defined, used for calculating the scale factor
-        self.pop_scale = None  # How much to scale the population
+        self.n_agents  = 10e3 # Number of agents
+        self.total_pop = None # If defined, used for calculating the scale factor
+        self.pop_scale = None # How much to scale the population
 
         # Simulation parameters
-        self.unit       = 'year' # The time unit to use; options are 'year' (default), 'day', and 'none'
-        self.start      = None   # Start of the simulation
-        self.stop       = None   # End of the simulation
-        self.dur        = 50     # Duration of time to run, if stop isn't specified
-        self.dt         = 1.0    # Timestep (in units of self.unit)
-        self.rand_seed  = 1      # Random seed; if None, don't reset
+        self.unit      = ''    # The time unit to use; options are 'year' (default), 'day', 'week', 'month', or 'none'
+        self.start     = None  # Start of the simulation (default 2020)
+        self.stop      = None  # End of the simulation
+        self.dur       = None  # Duration of time to run, if stop isn't specified (default 50 steps of self.unit)
+        self.dt        = 1.0   # Timestep (in units of self.unit)
+        self.rand_seed = 1     # Random seed; if None, don't reset
 
         # Demographic parameters
         self.birth_rate = None
@@ -256,10 +256,11 @@ class SimPars(Pars):
         return
 
     def validate_sim_pars(self):
-        """ Validate each of the parameter values (except time; validated separately) """
+        """ Validate each of the parameter values """
         self.validate_verbose()
         self.validate_agents()
         self.validate_total_pop()
+        self.validate_time()
         return
 
     def validate_verbose(self):
@@ -301,6 +302,36 @@ class SimPars(Pars):
         self.total_pop = total_pop
         if self.pop_scale is None:
             self.pop_scale = total_pop / self.n_agents
+        return
+
+    def validate_time(self):
+        """ Ensure at least one of dur and stop is defined, but not both """
+
+        # Handle the unit
+        if self.unit == '':
+            self.unit = ss.time.default_unit
+        self.unit = ss.time.validate_unit(self.unit)
+
+        # Handle start
+        if self.start is None:
+            self.start = ss.time.default_start_date.get(self.unit)
+
+        # Handle stop and dur
+        if self.stop is not None:
+            if self.is_default('dur'):
+                self.dur = ss.date_diff(self.start, self.stop, self.unit)
+            else:
+                errormsg = f'You can supply either stop ({self.stop}) or dur ({self.dur}) but not both, since one is calculated from the other'
+                raise ValueError(errormsg)
+            if self.dur <= 0:
+                errormsg = f"Duration must be >0, but you supplied start={str(self.start)} and stop={str(self.stop)}, which gives dur={self.dur}"
+                raise ValueError(errormsg)
+        else:
+            if self.dur is not None:
+                self.stop = ss.date_add(self.start, self.dur, self.unit)
+            else:
+                errormsg = 'You must supply either "dur" or "stop".'
+                raise ValueError(errormsg)
         return
 
     def validate_modules(self):
