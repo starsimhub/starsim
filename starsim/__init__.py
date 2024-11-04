@@ -9,7 +9,7 @@ if options.license:
 # Finish imports
 from .utils         import *
 from .arrays        import *
-from .timepars      import *
+from .time          import *
 from .parameters    import *
 from .distributions import *
 from .people        import *
