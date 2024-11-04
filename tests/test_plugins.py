@@ -28,12 +28,12 @@ class hiv_syph(ss.Connector):
 
     def step(self):
         """ Specify HIV-syphilis interactions """
-        
+
         diseases = self.sim.diseases
         syph = diseases.syphilis
         hiv = diseases.hiv
         cd4 = self.sim.people.hiv.cd4
-        
+
         # People with HIV are more likely to acquire syphilis
         syph.rel_sus[cd4 < 500] = self.pars.rel_sus_syph_hiv
         syph.rel_sus[cd4 < 200] = self.pars.rel_sus_syph_aids
@@ -90,23 +90,23 @@ def make_args():
 def test_connectors(do_plot=False):
     """ Test connector example """
     sc.heading('Testing connectors')
-    
+
     # Make arguments
     args = make_args()
     sims = sc.objdict() # List of sims
-    
+
     # Make a sim with a connector, and run
     sims.con = ss.Sim(label='With connector', connectors=hiv_syph(), **args)
     sims.con.run()
-    
+
     # Make a sim without a connector, and run
     sims.nocon = ss.Sim(label='Without connector', **args)
     sims.nocon.run()
-    
+
     # Make a sim with a connector and syph treatment, and run
     sims.treat = ss.Sim(label='With treatment', connectors=hiv_syph(), interventions=Penicillin(), **args)
     sims.treat.run()
-    
+
     # Parse results
     results = sc.odict()
     diseases = ['syphilis', 'hiv']
@@ -118,7 +118,7 @@ def test_connectors(do_plot=False):
     # Plot
     if do_plot:
         plt.figure()
-        
+
         plt.subplot(2,1,1)
         x = sims.con.timevec
         for label,res in results.items():
@@ -128,7 +128,7 @@ def test_connectors(do_plot=False):
         plt.ylabel('Count')
         plt.axvline(2020)
         plt.legend()
-        
+
         plt.subplot(2,1,2)
         for label,res in results.items():
             plt.plot(x, res.hiv, label=label)
@@ -137,15 +137,15 @@ def test_connectors(do_plot=False):
         plt.ylabel('Count')
         plt.axvline(2020)
         plt.legend()
-        
+
         sc.figlayout()
         plt.show()
-    
+
     # Check results
     for disease in diseases:
         assert results[0][disease].sum() > results[1][disease].sum(), f'{disease.title()} infections should be higher with connector'
         assert results[0][disease].sum() > results[2][disease].sum(), f'{disease.title()} infections should be lower with treatment'
-   
+
     return sims
 
 
@@ -153,8 +153,8 @@ if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
     T = sc.timer()
-    
+
     sims = test_connectors(do_plot=do_plot)
-    
+
     T.toc()
-    
+

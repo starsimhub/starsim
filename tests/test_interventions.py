@@ -18,7 +18,7 @@ def run_sir_vaccine(efficacy, leaky=True, do_plot=False):
     sim = ss.Sim(
         n_agents = 1000,
         pars = dict(
-          networks = dict(     
+          networks = dict(
                 type = 'random',
                 n_contacts = 4
           ),
@@ -34,14 +34,14 @@ def run_sir_vaccine(efficacy, leaky=True, do_plot=False):
         dt  = 0.01
     )
     sim.init(verbose=False)
-    
+
     # work out who to vaccinate
     in_trial = sim.people.sir.susceptible.uids
     n_vac = round(len(in_trial) * v_frac)
     in_vac = np.random.choice(in_trial, n_vac, replace=False)
     in_pla = np.setdiff1d(in_trial, in_vac)
     uids = ss.uids(in_vac)
-    
+
     # create and apply the vaccination
     vac = ss.sir_vaccine(efficacy=efficacy, leaky=leaky)
     vac.init_pre(sim)
