@@ -18,6 +18,7 @@ __all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff']
 default_unit = 'year'
 default_start_date = '2000-01-01'
 default_dur = 50
+time_args = ['start', 'stop', 'dt', 'unit'] # Allowable time arguments
 
 # Define available time units
 time_units = sc.dictobj(
@@ -219,25 +220,53 @@ class Time(sc.prettyobj):
     Handle time vectors for both simulations and modules
     """
     def __init__(self, start=None, stop=None, dt=None, unit=None, pars=None, parent=None, init=True):
+        self.start = start
+        self.stop = stop
+        self.dt = dt
+        self.unit = unit
         self.update(pars=pars, parent=parent, start=start, stop=stop, dt=dt, unit=unit)
-        self.unit = validate_unit(self.unit)
-        self.is_numeric = sc.isnumber(self.start)
         self.start = self.start if self.is_numeric else date(self.start)
         self.stop  = self.stop  if self.is_numeric else date(self.stop)
-        self.dt = dt
+        self.unit = validate_unit(self.unit)
         self.ti = 0 # The time index, e.g. 0, 1, 2
         if init:
             self.initialize()
         return
 
-    def update(self, pars=None, parent=None, **kwargs):
+    @property
+    def is_numeric(self):
+        try:
+            return sc.isnumber(self.start)
+        except:
+            return False
+
+    def update(self, pars=None, parent=None, reset=True, force=None, **kwargs):
         """ Reconcile different ways of supplying inputs """
         pars = sc.mergedicts(pars)
-        keys = ['start', 'stop', 'dt', 'unit']
-        # SET FLAG TO UPDATE HERE?
-        for key in keys:
-            value = sc.ifelse(kwargs.get(key), pars.get(key), getattr(parent, key, None))
-            setattr(self, key, value)
+        stale = False
+
+        for key in time_args:
+            current_val = getattr(self, key, None)
+            parent_val = getattr(parent, key, None)
+            kw_val = kwargs.get(key)
+            par_val = pars.get(key)
+
+            if force == False: # Only update missing (None) values
+                val = sc.ifelse(current_val, kw_val, par_val, parent_val)
+            elif force is None: # Prioritize current value
+                val = sc.ifelse(kw_val, par_val, current_val, parent_val)
+            elif force == True: # Prioritize parent value
+                val = sc.ifelse(kw_val, par_val, parent_val, current_val)
+            else:
+                errormsg = f'Invalid value {force} for force: must be False, None, or True'
+                raise ValueError(errormsg)
+
+            if val != current_val:
+                setattr(self, key, val)
+                stale = True
+
+        if stale and reset:
+            self.initialize()
         return
 
     def initialize(self):
@@ -273,7 +302,7 @@ class Time(sc.prettyobj):
                     raise ValueError(errormsg)
 
             # Tidy
-            datevec = np.vectorize(ss.date)(datelist)
+            datevec = np.array([ss.date(d) for d in datelist])
             yearvec = np.array([sc.datetoyear(d.to_pydate()) for d in datevec])
             timevec = datevec
 
@@ -347,7 +376,6 @@ class TimePar(ss.BaseArr):
         self.self_dt = self_dt
         self.factor = None
         self.values = None
-        self.parent_name = None
         self.initialized = False
         self.validate_units()
         return
@@ -374,7 +402,6 @@ class TimePar(ss.BaseArr):
             if parent_dt is not None:
                 errormsg = f'Cannot override parent {parent} by setting parent_dt; set in parent object instead'
                 raise ValueError(errormsg)
-            self.parent_name = parent.__class__.__name__ # TODO: or parent.name for Starsim objects?
 
         if parent.unit is not None:
             self.parent_unit = parent.unit
@@ -504,7 +531,7 @@ class TimePar(ss.BaseArr):
 
     def to_json(self):
         """ Export to JSON """
-        attrs = ['v', 'unit', 'parent_unit', 'parent_dt', 'parent_name', 'self_dt', 'factor']
+        attrs = ['v', 'unit', 'parent_unit', 'parent_dt', 'self_dt', 'factor']
         out = {'classname': self.__class__.__name__}
         out.update({attr:getattr(self, attr) for attr in attrs})
         out['values'] = sc.jsonify(self.values)

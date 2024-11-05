@@ -9,6 +9,8 @@ import datetime as dt
 
 __all__ = ['module_map', 'find_modules', 'Module', 'Analyzer', 'Connector']
 
+module_args = ['name', 'label'] # Define allowable module arguments
+
 
 def module_map(key=None):
     """ Define the mapping between module names and types """
@@ -110,11 +112,6 @@ class Module(sc.quickobj):
         self.label = self._reconcile('label', label, self.name)
         return
 
-    def set_time_pars(self, **kwargs):
-        """ Set time units for the module """
-        self.t.update(pars=kwargs) # DON"T NEED A METHOD FOR THIS, RIGHT? WHEN POP PARS?
-        return
-
     def define_pars(self, inherit=True, **kwargs): # TODO: think if inherit should default to true or false
         """ Create or merge Pars objects """
         if inherit: # Merge with existing
@@ -131,18 +128,19 @@ class Module(sc.quickobj):
         matches = {}
         for key in list(pars.keys()): # Need to cast to list to avoid "dict changed during iteration"
             if key in self.pars:
-                matches[key] = pars.pop(key)
+                matches[key] = pars[key]
         self.pars.update(matches)
 
         # Update module attributes
-        metadata = {key:pars.pop(key, self.pars.pop(key, None)) for key in ['name', 'label']}
-        timepars = {key:pars.pop(key, self.pars.pop(key, None)) for key in ['unit', 'dt', 'start', 'stop']}
+        metadata = {key:pars.get(key, self.pars.get(key)) for key in module_args}
+        timepars = {key:pars.get(key, self.pars.get(key)) for key in ss.time.time_args}
         self.set_metadata(**metadata)
-        self.set_time_pars(**timepars)
+        self.t.update(**timepars)
 
         # Should be no remaining pars
-        if len(pars):
-            errormsg = f'{len(pars)} unrecognized arguments for {self.name}: {sc.strjoin(pars.keys())}'
+        remaining = set(pars.keys()) - set(module_args + ss.time.time_args)
+        if len(remaining):
+            errormsg = f'{len(pars)} unrecognized arguments for {self.name}: {sc.strjoin(remaining)}'
             raise ValueError(errormsg)
         return
 
@@ -167,7 +165,7 @@ class Module(sc.quickobj):
 
     def init_results(self):
         """ Initialize any results required; part of init_pre() """
-        self.results.timevec = self.timevec # Store the timevec in the results for plotting
+        self.results.timevec = self.t.timevec # Store the timevec in the results for plotting
         return
 
     def init_post(self):
@@ -178,15 +176,12 @@ class Module(sc.quickobj):
         self.initialized = True
         return
 
-    def init_time_pars(self, force=False):
+    def init_time_pars(self, force=None):
         """ Initialize all time parameters by ensuring all parameters are initialized; part of init_post() """
         pars = self.sim.pars
 
-        # Find all modules and set the timestep
-        if force or self.unit is None:
-            self.unit = pars.unit
-        if force or self.dt is None:
-            self.dt = pars.dt
+        # Update time pars
+        self.t.update(parent=pars, force=force)
 
         # Find all time parameters in the module
         timepars = sc.search(self.pars, type=ss.TimePar) # Should it be self or self.pars?
@@ -194,41 +189,8 @@ class Module(sc.quickobj):
         # Initialize them with the parent module
         for timepar in timepars.values():
             if force or not timepar.initialized:
-                timepar.init(parent=self, die=False) # In some cases, the values can't be initialized; that's OK here
-
-        # Create the module-specific time vector
-        self.timevec = ss.make_timevec(pars.start, pars.stop, self.dt, self.unit)
-        self.npts = len(self.timevec)
-        self.ti = 0 # Track the current timestep, which may or may not match the sim's
+                timepar.init(parent=self.t, die=False) # In some cases, the values can't be initialized; that's OK here
         return
-
-    @property
-    def now(self):
-        """ Return the current time, i.e. the time vector at the current timestep """
-        try:
-            if self.ti >= 0:
-                return self.timevec[self.ti]
-            else:
-                if sc.isnumber(self.sim.pars.start):
-                    return self.sim.pars.start + self.ti * self.dt * ss.time_ratio(unit1=self.unit, unit2='year')
-                else:
-                    assert isinstance(self.sim.pars.start, dt.date), 'Expected a datetime'
-                    if self.unit == 'day':
-                        return self.sim.pars.start + dt.timedelta(days=int(self.ti * self.dt))
-                    else:
-                        assert self.unit == 'year', 'Expected unit of "year"'
-                        return self.sim.pars.start + dt.timedelta(days=int(365.25 * self.ti * self.dt))
-        except Exception as E:
-            ss.warn(f'Encountered exception when getting the current time in {self.name}: {E}')
-            return None
-
-    @property
-    def now_year(self):
-        """ Like now, but convert datetime to floating point year """
-        now = self.now
-        if isinstance(now, dt.date):
-            return sc.datetoyear(now)
-        return now
 
     def start_step(self):
         """ Tasks to perform at the beginning of the step """
@@ -242,7 +204,7 @@ class Module(sc.quickobj):
 
     def finish_step(self):
         """ Define what should happen at the end of the step; at minimum, increment ti """
-        self.ti += 1
+        self.t.ti += 1
         return
 
     def update_results(self):
@@ -297,7 +259,7 @@ class Module(sc.quickobj):
                 result = arg
 
             # Update with module information
-            result.update(module=self.name, shape=self.npts, timevec=self.timevec)
+            result.update(module=self.name, shape=self.npts, timevec=self.t.timevec)
 
             # Add the result to the dict of results; does automatic checking
             self.results += result
@@ -365,7 +327,7 @@ class Module(sc.quickobj):
         """ Plot all results in the module """
         with sc.options.with_style('fancy'):
             flat = sc.flattendict(self.results, sep=': ')
-            timevec = self.timevec
+            timevec = self.t.timevec
             fig, axs = sc.getrowscols(len(flat), make=True)
             for ax, (k, v) in zip(axs.flatten(), flat.items()):
                 ax.plot(timevec, v)
