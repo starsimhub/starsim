@@ -222,14 +222,14 @@ class Time(sc.prettyobj):
     def __init__(self, start=None, stop=None, dt=None, unit=None, pars=None, parent=None, init=True):
         self.start = start
         self.stop = stop
-        self.dt = dt
+        self.dt = sc.ifelse(dt, 1.0) # Assume dt of 1.0
         self.unit = unit
         self.update(pars=pars, parent=parent, start=start, stop=stop, dt=dt, unit=unit)
         self.start = self.start if self.is_numeric else date(self.start)
         self.stop  = self.stop  if self.is_numeric else date(self.stop)
         self.unit = validate_unit(self.unit)
         self.ti = 0 # The time index, e.g. 0, 1, 2
-        if init:
+        if init and self.dt and self.unit:
             self.initialize()
         return
 
@@ -265,7 +265,7 @@ class Time(sc.prettyobj):
                 setattr(self, key, val)
                 stale = True
 
-        if stale and reset:
+        if stale and reset and self.dt and self.unit:
             self.initialize()
         return
 
