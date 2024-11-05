@@ -240,8 +240,6 @@ class Time(sc.prettyobj):
             setattr(self, key, value)
         return
 
-    def update(self, **kwargs):
-
     def initialize(self):
         """ Initialize all vectors """
         # Convert start and stop to dates
