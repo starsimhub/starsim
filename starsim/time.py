@@ -328,20 +328,26 @@ class Time(sc.prettyobj):
             yearvec = round_tvec(timevec)
             datevec = timevec
 
+        # If the unit is years, handle that
+        elif date_unit == 'year': # For years, the yearvec is the most robust representation
+            start_year = sc.datetoyear(date_start.to_pydate())
+            stop_year = sc.datetoyear(date_stop.to_pydate())
+            yearvec = round_tvec(sc.inclusiverange(start_year, stop_year, self.dt))
+            datevec = years_to_dates(yearvec)
+            timevec = datevec
+
         # Otherwise, use dates as the ground truth
         else:
             if int(self.dt) == self.dt: # The step is integer-like, use exactly
                 key = date_unit + 's' # e.g. day -> days
                 datelist = sc.daterange(date_start, date_stop, interval={key:int(self.dt)})
-            else: # Convert to days instead
-                day_delta = time_ratio(unit1=date_unit, dt1=dt, unit2='day', dt2=1.0, as_int=True)
+            else: # Convert to the sim unit instead
+                day_delta = time_ratio(unit1=date_unit, dt1=self.dt, unit2='day', dt2=1.0, as_int=True)
                 if day_delta >= 1:
                     datelist = sc.daterange(date_start, date_stop, interval={'days':day_delta})
                 else:
                     errormsg = f'Timestep {dt} is too small; must be at least 1 day'
                     raise ValueError(errormsg)
-
-            # Tidy
             datevec = np.array([ss.date(d) for d in datelist])
             yearvec = dates_to_years(datevec)
             timevec = datevec
@@ -381,8 +387,8 @@ class Time(sc.prettyobj):
             if start_diff != 0.0:
                 abstvec += start_diff  # TODO: CHECK THAT ORDER IS CORRECT
 
-        # Both use years; use yearvec
-        elif self.unit == 'year' and sim.t.year == 'year':
+        # The sim uses years; use yearvec
+        elif sim.t.unit == 'year':
             abstvec = self.yearvec.copy()
             abstvec -= sim.t.yearvec[0] # Start relative to sim start
 
