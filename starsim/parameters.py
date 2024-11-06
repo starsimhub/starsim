@@ -119,6 +119,12 @@ class Pars(sc.objdict):
                 self[key] = new # TODO: use an actual set here
             else:
                 old.set(**new)
+
+        # Give up
+        else:
+            errormsg = f'Updating timepar from {type(old)} to {type(new)} is not supported'
+            raise TypeError(errormsg)
+
         return
 
     def _update_dist(self, key, old, new):
@@ -140,6 +146,16 @@ class Pars(sc.objdict):
         elif isinstance(new, list):
             old.set(*new)
 
+        # It's a timepar, set it like a number, e.g. dur_inf = ss.dur(6)
+        elif isinstance(new, ss.TimePar):
+            oldpar = old.pars[0]
+            if isinstance(oldpar, ss.TimePar): # If changing from one timepar to another, validate
+                dur_mismatch = isinstance(oldpar, ss.dur) != isinstance(new, ss.dur)
+                if dur_mismatch:
+                    errormsg = f'Cannot change a duration to a non-duration vice versa: old={type(oldpar)}, new={type(new)}'
+                    raise TypeError(errormsg)
+            old.set(new)
+
         # It's a dict, figure out what to do
         elif isinstance(new, dict):
             newtype = new.get('type')
@@ -152,6 +168,12 @@ class Pars(sc.objdict):
                 else:
                     dist = ss.make_dist(new)
                     self[key] = dist
+
+        # Give up
+        else:
+            errormsg = f'Updating dist from {type(old)} to {type(new)} is not supported'
+            raise TypeError(errormsg)
+
         return
 
     def check_key_mismatch(self, pars):

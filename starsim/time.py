@@ -479,8 +479,11 @@ class TimePar(ss.BaseArr):
 
         # Special distribution handling
         if isinstance(v, ss.Dist):
+            if len(args):
+                errormsg = f'When wrapping a distribution with a TimePar, args not allowed ({args}); use kwargs'
+                raise ValueError(errormsg)
             dist = v
-            dist.pars[0] = cls(dist.pars[0], *args, **kwargs) # Convert the first parameter to a TimePar (the same scale is applied to all parameters)
+            dist.pars[0] = cls(dist.pars[0], **kwargs) # Convert the first parameter to a TimePar (the same scale is applied to all parameters)
             return dist
 
         # Otherwise, do the usual initialization
