@@ -5,7 +5,6 @@ defines Analyzers and Connectors.
 import sciris as sc
 import starsim as ss
 from functools import partial
-import datetime as dt
 
 __all__ = ['module_map', 'find_modules', 'Module', 'Analyzer', 'Connector']
 
@@ -93,11 +92,15 @@ class Module(sc.quickobj):
 
     @property
     def ti(self):
-        """ Get the current timestep """
-        try:
-            return self.t.ti
-        except:
-            return None
+        """ Get the current module timestep """
+        try:    return self.t.ti
+        except: return None
+
+    @property
+    def dt(self):
+        """ Get the timestep size """
+        try:    return self.t.dt
+        except: return None
 
     def _reconcile(self, key, value=None, default=None):
         """ Reconcile module attributes, parameters, and input arguments """
