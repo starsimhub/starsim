@@ -86,8 +86,9 @@ class SIR(ss.Infection):
         """ Default plot for SIR model """
         fig = plt.figure()
         kw = sc.mergedicts(dict(lw=2, alpha=0.8), kwargs)
+        res = self.results
         for rkey in ['n_susceptible', 'n_infected', 'n_recovered']:
-            plt.plot(self.timevec, self.results[rkey], label=self.results[rkey].label, **kw)
+            plt.plot(res.timevec, res[rkey], label=res[rkey].label, **kw)
         plt.legend(frameon=False)
         plt.xlabel('Time')
         plt.ylabel('Number of people')
@@ -170,8 +171,9 @@ class SIS(ss.Infection):
         """ Default plot for SIS model """
         fig = plt.figure()
         kw = sc.mergedicts(dict(lw=2, alpha=0.8), kwargs)
+        res = self.results
         for rkey in ['n_susceptible', 'n_infected']:
-            plt.plot(self.timevec, self.results[rkey], label=self.results[rkey].label, **kw)
+            plt.plot(res.timevec, res[rkey], label=res[rkey].label, **kw)
         plt.legend(frameon=False)
         plt.xlabel('Time')
         plt.ylabel('Number of people')
