@@ -307,7 +307,7 @@ class Time(sc.prettyobj):
         # Convert start and stop to dates
         date_start = self.start
         date_stop = self.stop
-        date_unit = 'year' if self.unit is None else self.unit # Use year by default
+        date_unit = 'year' if not has_units(self.unit) else self.unit # Use year by default
         dt_year = time_ratio(unit1=date_unit, dt1=self.dt, unit2='year', dt2=1.0) # Timestep in units of years
         offset = 0
         if self.is_numeric and date_start == 0:
@@ -380,12 +380,12 @@ class Time(sc.prettyobj):
         both_numeric = self.is_numeric and sim.t.is_numeric
         if both_unitless or both_numeric:
             abstvec = self.tvec.copy() # Start by copying the current time vector
-            ratio = time_ratio(unit1=self.unit, dt1=self.dt, unit2=sim.t.unit, dt2=1.0) # tvec has sim units, but not dt
+            ratio = time_ratio(unit1=self.unit, dt1=1.0, unit2=sim.t.unit, dt2=1.0) # tvec has sim units, but not dt
             if ratio != 1.0:
-                abstvec *= ratio # TODO: CHECK THAT ORDER IS CORRECT
+                abstvec *= ratio # TODO: CHECK
             start_diff = self.start - sim.t.start
             if start_diff != 0.0:
-                abstvec += start_diff  # TODO: CHECK THAT ORDER IS CORRECT
+                abstvec += start_diff
 
         # The sim uses years; use yearvec
         elif sim.t.unit == 'year':
