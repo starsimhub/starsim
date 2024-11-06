@@ -64,7 +64,7 @@ def test_microsim(do_plot=False):
     return sim
 
 
-def test_ppl_construction():
+def test_ppl_construction(do_plot=False):
     sc.heading('Test making people and providing them to a sim')
 
     def init_debut(module, sim, uids):
@@ -83,9 +83,10 @@ def test_ppl_construction():
     sim = ss.Sim(pars=sim_pars, diseases=[gon])
     sim.init()
     sim.run()
-    plt.figure()
-    plt.plot(sim.timevec, sim.results.gonorrhea.n_infected)
-    plt.title('Number of gonorrhea infections')
+    if do_plot:
+        plt.figure()
+        plt.plot(sim.timevec, sim.results.gonorrhea.n_infected)
+        plt.title('Number of gonorrhea infections')
 
     return sim
 
@@ -193,7 +194,7 @@ if __name__ == '__main__':
     # Run tests
     ppl = test_people()
     sim1 = test_microsim(do_plot)
-    sim2 = test_ppl_construction()
+    sim2 = test_ppl_construction(do_plot)
     sims = test_arrs()
     sims2 = test_deepcopy()
     sims3 = test_deepcopy_until()

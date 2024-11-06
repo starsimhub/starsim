@@ -65,7 +65,7 @@ class NCD(ss.Disease):
         new_cases = (self.ti_affected == ti).uids
         self.affected[new_cases] = True
         prog_years = self.pars.prognosis.rvs(new_cases)
-        self.ti_dead[new_cases] = ti + sc.randround(prog_years / self.dt)
+        self.ti_dead[new_cases] = ti + sc.randround(prog_years / self.t.dt) # TODO: update to allow non-year units
         super().set_prognoses(new_cases)
         return new_cases
 

@@ -30,7 +30,7 @@ def make_dists(**kwargs):
 def test_seed():
     """ Test assignment of seeds """
     sc.heading('Testing assignment of seeds')
-    
+
     # Create and initialize two distributions
     dists = make_dists()
     dist0, dist1 = dists.dists.values()
@@ -46,7 +46,7 @@ def test_reset(n=n):
     dists = make_dists()
     distlist = dists.dists.values()
 
-    # Reset via the container, but only 
+    # Reset via the container, but only
     before = sc.autolist()
     after = sc.autolist()
     for dist in distlist:
@@ -58,7 +58,7 @@ def test_reset(n=n):
     print(f'Initial sample:\n{before}')
     print(f'After reset sample:\n{after}')
     assert np.array_equal(before, after)
-    
+
     return before, after
 
 
@@ -80,7 +80,7 @@ def test_jump(n=n):
     print(f'Initial sample:\n{before}')
     print(f'After jump sample:\n{after}')
     assert not np.array_equal(before, after)
-    
+
     return before, after
 
 
@@ -93,9 +93,9 @@ def test_order(n=n):
     # Sample d0, d1
     before = d0(n)
     _ = d1(n)
-    
+
     dists.reset()
-    
+
     # Sample d1, d0
     _ = d1(n)
     after = d0(n)
@@ -114,10 +114,10 @@ class CountInf(ss.Intervention):
     def init_pre(self, sim):
         super().init_pre(sim)
         n_agents = len(sim.people)
-        self.arr = np.zeros((sim.npts, n_agents))
+        self.arr = np.zeros((len(sim), n_agents))
         self.n_agents = n_agents
         return
-    
+
     def step(self):
         self.arr[self.sim.ti, :] = np.array(self.sim.diseases.sir.infected)[:self.n_agents]
         return
@@ -129,26 +129,26 @@ class OneMore(ss.Intervention):
         super().__init__()
         self.ti_apply = ti_apply
         return
-    
+
     def init_pre(self, sim):
         super().init_pre(sim)
         one_birth = ss.Pregnancy(name='one_birth', rel_fertility=0) # Ensure no default births
         one_birth.init_pre(sim)
         self.one_birth = one_birth
         return
-    
+
     def step(self):
         """ Create an extra agent """
         sim = self.sim
         if sim.ti == self.ti_apply:
             new_uids = self.one_birth.make_embryos(ss.uids(0)) # Assign 0th agent to be the "mother"
             sim.people.age[new_uids] = -100 # Set to a very low number to never reach debut age
-            
+
             # Infect that agent and immediately recover
             sir = sim.diseases.sir
             sir.set_prognoses(new_uids)
             sir.ti_recovered[new_uids] = sim.ti + 1 # Reset recovery time to next timestep
-            
+
             # Reset the random states
             p = sir.pars
             for dist in [p.dur_inf, p.p_death]:
@@ -161,22 +161,22 @@ def plot_infs(s1, s2):
     """ Compare infection arrays from two sims """
     a1 = s1.interventions.countinf.arr
     a2 = s2.interventions.countinf.arr
-    
+
     fig = plt.figure()
     plt.subplot(1,3,1)
     plt.pcolormesh(a1.T)
     plt.xlabel('Timestep')
     plt.ylabel('Person')
     plt.title('Baseline')
-    
+
     plt.subplot(1,3,2)
     plt.pcolormesh(a2.T)
     plt.title('OneMore')
-    
+
     plt.subplot(1,3,3)
     plt.pcolormesh(a2.T - a1.T)
     plt.title('Difference')
-    
+
     sc.figlayout()
     return fig
 
@@ -184,9 +184,9 @@ def plot_infs(s1, s2):
 def test_worlds(do_plot=False):
     """ Test that one extra birth leads to one extra infection """
     sc.heading('Testing worlds...')
-    
+
     res = sc.objdict()
-    
+
     pars = dict(
         start = 2000,
         stop = 2100,
@@ -206,20 +206,20 @@ def test_worlds(do_plot=False):
     )
     s1 = ss.Sim(pars=pars, interventions=CountInf())
     s2 = ss.Sim(pars=pars, interventions=[CountInf(), OneMore()])
-    
+
     s1.run()
     s2.run()
-    
+
     sum1 = s1.summarize()
     sum2 = s2.summarize()
     res.sum1 = sum1
     res.sum2 = sum2
-    
+
     if do_plot:
         s1.plot()
         plot_infs(s1, s2)
         plt.show()
-    
+
     l1 = len(s1.people)
     l2 = len(s2.people)
     i1 = sum1.sir_cum_infections
@@ -229,14 +229,14 @@ def test_worlds(do_plot=False):
     assert l2 == l1 + 1, f'Expected one more person in s2 ({l2}) than s1 ({l1})'
     assert i2 == i1 + 1, f'Expected one more infection in s2 ({i2}) than s1 ({i1})'
     assert (a1 != a2).sum() == 0, f'Expected infection arrays to match:\n{a1}\n{a2}'
-        
+
     return res
 
 
 def test_independence(do_plot=False, thresh=0.1):
     """ Test that when variables are created, they are uncorrelated """
     sc.heading('Testing independence...')
-    
+
     # Create the sim and initialize (do not run)
     sim = ss.Sim(
         n_agents = 1000,
@@ -251,7 +251,7 @@ def test_independence(do_plot=False, thresh=0.1):
         ]
     )
     sim.init()
-    
+
     # Assemble measures
     st = sim.people.states
     arrs = sc.objdict()
@@ -265,7 +265,7 @@ def test_independence(do_plot=False, thresh=0.1):
             for uid in network.edges[p]:
                 data[uid] += 1 # Could also use a histogram
         arrs[key] = data
-    
+
     # Compute the correlations
     n = len(arrs)
     stats = np.zeros((n,n))
@@ -273,7 +273,7 @@ def test_independence(do_plot=False, thresh=0.1):
         for j,arr2 in arrs.enumvals():
             if i != j:
                 stats[i,j] = np.corrcoef(arr1, arr2)[0,1]
-                
+
     # Optionally plot
     if do_plot:
         plt.figure()
@@ -286,13 +286,13 @@ def test_independence(do_plot=False, thresh=0.1):
         plt.colorbar()
         sc.figlayout()
         plt.show()
-            
+
     # Test that everything is independent
     max_corr = abs(stats).max()
     assert max_corr < thresh, f'The maximum correlation between variables was {max_corr}, above the threshold {thresh}'
-    
+
     return sim
-    
+
 
 def test_combine_rands(do_plot=False):
     n = int(1e6)
@@ -310,7 +310,7 @@ def test_combine_rands(do_plot=False):
             plt.title(k)
         sc.figlayout()
         plt.show()
-    
+
     mean = c.mean()
     assert np.isclose(mean, target, atol=atol), f'Expected value to be 0.5±{atol}, not {mean}'
     ks = sps.kstest(c, sps.uniform(0,1).cdf)

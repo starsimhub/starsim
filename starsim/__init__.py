@@ -1,8 +1,15 @@
+# Start imports: version and settings
 from .version import __version__, __versiondate__, __license__
-from .settings      import *
+from .settings import *
+
+# Optionally print the license
+if options.license:
+    print(__license__)
+
+# Finish imports
 from .utils         import *
 from .arrays        import *
-from .timepars      import *
+from .time          import *
 from .parameters    import *
 from .distributions import *
 from .people        import *
@@ -25,12 +32,8 @@ from .samples       import *
 import sciris as sc
 root = sc.thispath(__file__).parent
 
-# Import the version and print the license
-if options.verbose:
-    print(__license__)
-
-# Double-check key requirements -- should match setup.py
-reqs = ['sciris>=3.2.0', 'pandas>=2.0.0', 'scipy', 'numba', 'networkx']
+# Double-check key requirements -- should match pyproject.toml
+reqs = ['sciris>=3.2.0', 'pandas>=2.0.0']
 msg = f'The following dependencies for Starsim {__version__} were not met: <MISSING>.'
 sc.require(reqs, message=msg)
 del sc, reqs, msg # Don't keep this in the module
