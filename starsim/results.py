@@ -245,23 +245,29 @@ class Results(ss.ndict):
             out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
         return out
 
-    def to_df(self, sep='_', flatten=False):
+    def to_df(self, sep='_', descend=False):
         """ Merge all results dataframes into one """
-        if not flatten:
+        if not descend:
             dfs = [res.to_df(sep=sep, rename=True) for res in self.all_results]
-            df = dfs[0]
-            for df2 in dfs[1:]:
-                df = df.merge(df2)
+            if len(dfs):
+                df = dfs[0]
+                for df2 in dfs[1:]:
+                    df = df.merge(df2)
+            else:
+                df = None
         else:
             if self.equal_len:
-                flat = self.flatten(sep=sep, only_results=False)
+                flat = self.flatten(sep=sep, only_results=True)
+                flat = dict(timevec=self.timevec) | flat # Prepend the timevec
                 df = sc.dataframe.from_dict(flat)
             else:
                 df = sc.objdict() # For non-equal lengths, actually return an objdict rather than a dataframe
-                df.sim = self.to_df(sep=sep, flatten=False)
-                for k,v in self.values():
+                df.sim = self.to_df(sep=sep, descend=False)
+                for k,v in self.items():
                     if isinstance(v, Results):
-                        df[k] = v.to_df(sep=sep, flatten=True)
+                        thisdf = v.to_df(sep=sep, descend=False) # Only allow one level of nesting
+                        if thisdf is not None:
+                            df[k] = thisdf
         return df
 
     def plot(self, style='fancy', fig_kw=None, plot_kw=None):

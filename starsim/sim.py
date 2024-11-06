@@ -419,7 +419,7 @@ class Sim(ss.Base):
             errormsg = 'Please run the sim before exporting the results'
             raise RuntimeError(errormsg)
 
-        df = self.results.to_df(sep=sep, flatten=True)
+        df = self.results.to_df(sep=sep, descend=True)
         return df
 
     def save(self, filename=None, keep_people=None, skip_attrs=None, **kwargs):
