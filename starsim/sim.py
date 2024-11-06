@@ -5,6 +5,7 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
@@ -577,10 +578,10 @@ class Sim(ss.Base):
                 # Plot results
                 ax.plot(res.timevec, res.values, **plot_kw, label=self.label)
                 ax.set_title(res.full_label)
-                ax.set_xlabel('Time')
-
-            if res.has_dates:
-                sc.dateformatter(ax)
+                sc.commaticks(ax)
+                if res.has_dates:
+                    locator = mpl.dates.AutoDateLocator(minticks=2, maxticks=5) # Fewer ticks since lots of plots
+                    sc.dateformatter(ax, locator=locator)
 
         if self.label is not None:
             fig.suptitle(self.label)
