@@ -419,8 +419,7 @@ class Sim(ss.Base):
             errormsg = 'Please run the sim before exporting the results'
             raise RuntimeError(errormsg)
 
-        flat = self.results.flatten(sep=sep, only_results=False)
-        df = sc.dataframe.from_dict(flat)
+        df = self.results.to_df(sep=sep, flatten=True)
         return df
 
     def save(self, filename=None, keep_people=None, skip_attrs=None, **kwargs):
