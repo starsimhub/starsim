@@ -413,12 +413,17 @@ class Sim(ss.Base):
         else:
             return shrunken
 
+    def check_results_ready(self, errormsg=None):
+        """ Check that results are ready """
+        if errormsg is None:
+            errormsg = 'Please run the sim first'
+        if not self.results_ready:  # pragma: no cover
+            raise RuntimeError(errormsg)
+        return
+
     def to_df(self, sep='_'):
         """ Export results as a Pandas dataframe """
-        if not self.results_ready:  # pragma: no cover
-            errormsg = 'Please run the sim before exporting the results'
-            raise RuntimeError(errormsg)
-
+        self.check_results_ready('Please run the sim before exporting the results')
         df = self.results.to_df(sep=sep, descend=True)
         return df
 
@@ -529,6 +534,8 @@ class Sim(ss.Base):
             plot_kw (dict): passed to ``plt.plot()``
             scatter_kw (dict): passed to ``plt.scatter()``, for plotting the data
         """
+        self.check_results_ready('Please run the sim before plotting')
+
         # Configuration
         flat = self.results.flatten()
         n_cols = np.ceil(np.sqrt(len(flat))) # Number of columns of axes
