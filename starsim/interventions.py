@@ -21,10 +21,15 @@ class Intervention(ss.Module):
         self.eligibility = eligibility
         return
 
+    @property
+    def has_product(self):
+        """ Check if the intervention has a product """
+        return hasattr(self, 'product') and self.product is not None
+
     def init_pre(self, sim):
         super().init_pre(sim)
-        if hasattr(self, 'product') and self.product is not None: # TODO: simplify
-            self.product.init_pre(self)
+        if self.has_product:
+            self.product.init_pre(self.sim)
         return
 
     def _parse_product(self, product):
@@ -97,7 +102,8 @@ class RoutineDelivery(Intervention):
             self.end_year = self.years[-1]
 
         # More validation
-        if not(any(np.isclose(self.start_year, sim.timevec)) and any(np.isclose(self.end_year, sim.timevec))):
+        yearvec = sim.t.yearvec
+        if not(any(np.isclose(self.start_year, yearvec)) and any(np.isclose(self.end_year, yearvec))):
             errormsg = 'Years must be within simulation start and end dates.'
             raise ValueError(errormsg)
 
@@ -106,11 +112,11 @@ class RoutineDelivery(Intervention):
         adj_factor = int(1/dt) - 1 if dt < 1 else 1
 
         # Determine the timepoints at which the intervention will be applied
-        self.start_point = sc.findfirst(sim.timevec, self.start_year)
-        self.end_point   = sc.findfirst(sim.timevec, self.end_year) + adj_factor
+        self.start_point = sc.findfirst(yearvec, self.start_year)
+        self.end_point   = sc.findfirst(yearvec, self.end_year) + adj_factor
         self.years       = sc.inclusiverange(self.start_year, self.end_year)
         self.timepoints  = sc.inclusiverange(self.start_point, self.end_point)
-        self.yearvec     = np.arange(self.start_year, self.end_year + adj_factor, dt)
+        self.yearvec     = np.arange(self.start_year, self.end_year + adj_factor, dt) # TODO: integrate with self.t
 
         # Get the probability input into a format compatible with timepoints
         if len(self.years) != len(self.prob):
