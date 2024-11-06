@@ -125,6 +125,14 @@ class Sim:
             self.analyzers(),
         )
 
+    @property
+    def ti(self):
+        """ Get the current timestep """
+        try:
+            return self.t.ti
+        except:
+            return None
+
     def init(self, **kwargs):
         """ Perform all initializations for the sim """
 

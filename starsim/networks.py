@@ -349,7 +349,7 @@ class DynamicNetwork(Network):
 
     def end_pairs(self):
         people = self.sim.people
-        self.edges.dur = self.edges.dur - self.dt # TODO: think about whether this is right # Update: it is, if duration is *NOT* a ss.dur! Otherwise it should be -1, in timestep units
+        self.edges.dur = self.edges.dur - self.t.dt # TODO: think about whether this is right # Update: it is, if duration is *NOT* a ss.dur! Otherwise it should be -1, in timestep units
 
         # Non-alive agents are removed
         active = (self.edges.dur > 0) & people.alive[self.edges.p1] & people.alive[self.edges.p2]
