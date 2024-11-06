@@ -42,7 +42,7 @@ def test_sir():
     plt.figure()
     res = sim.results
     plt.stackplot(
-        sim.timevec,
+        sim.t.timevec,
         res.sir.n_susceptible,
         res.sir.n_infected,
         res.sir.n_recovered,
@@ -134,7 +134,7 @@ def test_ncd():
 
     plt.figure()
     plt.stackplot(
-        sim.timevec,
+        sim.t.timevec,
         ncd.results.n_not_at_risk,
         ncd.results.n_at_risk - ncd.results.n_affected,
         ncd.results.n_affected,
