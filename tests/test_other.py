@@ -58,7 +58,7 @@ def test_microsim(do_plot=False):
 
     if do_plot:
         plt.figure()
-        plt.plot(hiv.t.timevec, hiv.results.n_infected)
+        plt.plot(hiv.timevec, hiv.results.n_infected)
         plt.title('HIV number of infections')
 
     return sim
@@ -85,7 +85,7 @@ def test_ppl_construction(do_plot=False):
     sim.run()
     if do_plot:
         plt.figure()
-        plt.plot(sim.t.timevec, sim.results.gonorrhea.n_infected)
+        plt.plot(sim.timevec, sim.results.gonorrhea.n_infected)
         plt.title('Number of gonorrhea infections')
 
     return sim

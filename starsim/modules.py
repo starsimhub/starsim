@@ -78,10 +78,11 @@ class Base(sc.quickobj):
         """ Shortcut to self.t.now() """
         try:    return self.t.now()
         except: return None
+
     @property
     def timevec(self):
-        """ Shortcut to self.t.now() """
-        try:    return self.t.timevec()
+        """ Shortcut to self.t.timevec """
+        try:    return self.t.timevec
         except: return None
 
 

@@ -94,7 +94,7 @@ def test_syph(dt=1, n_agents=500, do_plot=False):
     pi = int(burnin/dt)
 
     if do_plot:
-        tvec = sim.t.timevec[pi:]
+        tvec = sim.timevec[pi:]
         res = sim.results.syphilis
         fig, ax = plt.subplots(2, 2)
         ax = ax.ravel()
@@ -162,8 +162,8 @@ def test_syph_intvs(dt=1, n_agents=500, do_plot=False):
         syph_i = sim_intv.diseases.syphilis
         pi = int(burnin/syph_b.t.dt)
         plt.figure()
-        plt.plot(syph_b.t.timevec[pi:], syph_b.results.prevalence[pi:], label='Baseline')
-        plt.plot(syph_i.t.timevec[pi:], syph_i.results.prevalence[pi:], label='S&T')
+        plt.plot(syph_b.timevec[pi:], syph_b.results.prevalence[pi:], label='Baseline')
+        plt.plot(syph_i.timevec[pi:], syph_i.results.prevalence[pi:], label='S&T')
         plt.axvline(x=2020, color='k', ls='--')
         plt.title('Syphilis prevalence')
         plt.legend()
