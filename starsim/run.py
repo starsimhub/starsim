@@ -251,7 +251,7 @@ class MultiSim:
         rflat = reduced_sim.results.flatten()
         rkeys = list(rflat.keys())
         for rkey in rkeys:
-            raw[rkey] = np.zeros((reduced_sim.npts, len(self.sims)))
+            raw[rkey] = np.zeros((len(reduced_sim), len(self.sims)))
             for s, sim in enumerate(self.sims):
                 flat = sim.results.flatten()
                 raw[rkey][:, s] = flat[rkey]

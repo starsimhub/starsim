@@ -5,13 +5,12 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
-import datetime as dt
 import matplotlib.pyplot as plt
 
 __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
 
 
-class Sim:
+class Sim(ss.Base):
     """
     The Sim object
 
@@ -112,13 +111,6 @@ class Sim:
 
         return string
 
-    def __len__(self):
-        """ The length of a sim is the number of timepoints; see also len(sim.people) """
-        try:
-            return self.t.npts
-        except:
-            return 0
-
     @property
     def modules(self):
         """ Return iterator over all Module instances (stored in standard places) in the Sim """
@@ -131,14 +123,6 @@ class Sim:
             [intv.product for intv in self.interventions() if hasattr(intv, 'product') and intv.product is not None], # TODO: simplify
             self.analyzers(),
         )
-
-    @property
-    def ti(self):
-        """ Get the current timestep """
-        try:
-            return self.t.ti
-        except:
-            return None
 
     def init(self, **kwargs):
         """ Perform all initializations for the sim """
@@ -394,11 +378,6 @@ class Sim:
                 summary[key] = entry
         self.summary = summary
         return summary
-
-    def disp(self):
-        """ Print a full version of the sim """
-        sc.pr(self)
-        return
 
     def shrink(self, skip_attrs=None, in_place=True):
         """

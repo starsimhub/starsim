@@ -6,7 +6,7 @@ import sciris as sc
 import starsim as ss
 from functools import partial
 
-__all__ = ['module_map', 'find_modules', 'Module', 'Analyzer', 'Connector']
+__all__ = ['module_map', 'find_modules', 'Base', 'Module', 'Analyzer', 'Connector']
 
 module_args = ['name', 'label'] # Define allowable module arguments
 
@@ -46,15 +46,42 @@ def find_modules(key=None, flat=False):
     return modules if key is None else modules[key]
 
 
-class Module(sc.quickobj):
+class Base(sc.quickobj):
+    """
+    The parent class for Sim and Module objects
+    """
+    def __bool__(self):
+        """ Ensure that zero-length modules (e.g. networks) are still truthy """
+        return True
+
+    def __len__(self):
+        """ The length of a module is the number of timepoints; see also len(sim) """
+        try:    return self.t.npts
+        except: return 0
+
+    def disp(self, output=False, **kwargs):
+        """ Display the full object """
+        out = sc.prepr(self, **kwargs)
+        if not output:
+            print(out)
+        else:
+            return out
+
+    @property
+    def ti(self):
+        """ Get the current module timestep """
+        try:    return self.t.ti
+        except: return None
+
+
+class Module(Base):
     """
     The main base class for all Starsim modules: diseases, networks, interventions, etc.
 
     Args:
         name (str): a short, key-like name for the module (e.g. "randomnet")
         label (str): the full, human-readable name for the module (e.g. "Random network")
-        unit (str): the time unit (e.g. 'day', 'year'); inherits from sim if not supplied
-        dt (float): the timestep (e.g. 1.0, 0.1); inherits from sim if not supplied
+        kwargs (dict): passed to ss.Time() (e.g. start, stop, unit, dt)
     """
 
     def __init__(self, name=None, label=None, **kwargs):
@@ -74,27 +101,9 @@ class Module(sc.quickobj):
         self.finalized = False
         return
 
-    def __bool__(self):
-        """ Ensure that zero-length modules (e.g. networks) are still truthy """
-        return True
-
     def __call__(self, *args, **kwargs):
         """ Allow modules to be called like functions """
         return self.step(*args, **kwargs)
-
-    def disp(self, output=False):
-        """ Display the full object """
-        out = sc.prepr(self)
-        if not output:
-            print(out)
-        else:
-            return out
-
-    @property
-    def ti(self):
-        """ Get the current module timestep """
-        try:    return self.t.ti
-        except: return None
 
     def _reconcile(self, key, value=None, default=None):
         """ Reconcile module attributes, parameters, and input arguments """
