@@ -101,7 +101,7 @@ def date_diff(start, stop, unit):
 def round_tvec(tvec):
     """ Round time vectors to a certain level of precision, to avoid floating point errors """
     decimals = int(-np.log10(ss.options.time_eps))
-    tvec = np.round(tvec, decimals=decimals)
+    tvec = np.round(np.array(tvec), decimals=decimals)
     return tvec
 
 
@@ -222,7 +222,9 @@ class Time(sc.prettyobj):
     """
     Handle time vectors for both simulations and modules
     """
-    def __init__(self, start=None, stop=None, dt=None, unit=None, pars=None, parent=None, init=True):
+    def __init__(self, start=None, stop=None, dt=None, unit=None, pars=None, parent=None,
+                 name=None, init=True, sim=None):
+        self.name = name
         self.start = start
         self.stop = stop
         self.dt = dt
@@ -231,7 +233,7 @@ class Time(sc.prettyobj):
         self.initialized = False
         self.update(pars=pars, parent=parent)
         if init:
-            self.initialize()
+            self.init(sim=sim)
         return
 
     @property
@@ -271,10 +273,10 @@ class Time(sc.prettyobj):
                 stale = True
 
         if stale and reset and self.initialized:
-            self.initialize()
+            self.init()
         return
 
-    def initialize(self):
+    def init(self, sim=None):
         """ Initialize all vectors """
         # Initial validation
         self.start = self.start if self.is_numeric else date(self.start)
@@ -285,7 +287,7 @@ class Time(sc.prettyobj):
         date_start = self.start
         date_stop = self.stop
         date_unit = 'year' if self.unit is None else self.unit # Use year by default
-        dt_year = ss.time_ratio(date_unit, self.dt, 'year', 1.0)
+        dt_year = time_ratio(date_unit, self.dt, 'year', 1.0)
         offset = 0
         if self.is_numeric and date_start == 0:
             date_start = ss.date(ss.time.default_start_date)
@@ -294,14 +296,14 @@ class Time(sc.prettyobj):
 
         # If numeric, treat that as the ground truth
         if self.is_numeric:
-            timevec = sc.inclusiverange(self.start, self.stop, self.dt)
-            yearvec = timevec*dt_year + offset
+            timevec = round_tvec(sc.inclusiverange(self.start, self.stop, self.dt))
+            yearvec = round_tvec(timevec*dt_year + offset)
             datevec = np.array([date(sc.datetoyear(y, reverse=True)) for y in yearvec])
 
         # If unitless, just use that
         elif self.is_unitless:
-            timevec = sc.inclusiverange(self.start, self.stop, self.dt)
-            yearvec = timevec
+            timevec = round_tvec(sc.inclusiverange(self.start, self.stop, self.dt))
+            yearvec = round_tvec(timevec)
             datevec = timevec
 
         # Otherwise, use dates as the ground truth
@@ -311,7 +313,7 @@ class Time(sc.prettyobj):
                 datelist = sc.daterange(date_start, date_stop, interval={key:int(self.dt)})
             else: # Convert to days instead
                 day_delta = time_ratio(unit1=date_unit, dt1=dt, unit2='day', dt2=1.0, as_int=True)
-                if day_delta > 0:
+                if day_delta >= 1:
                     datelist = sc.daterange(date_start, date_stop, interval={'days':day_delta})
                 else:
                     errormsg = f'Timestep {dt} is too small; must be at least 1 day'
@@ -319,17 +321,52 @@ class Time(sc.prettyobj):
 
             # Tidy
             datevec = np.array([ss.date(d) for d in datelist])
-            yearvec = np.array([sc.datetoyear(d.to_pydate()) for d in datevec])
+            yearvec = round_tvec([sc.datetoyear(d.to_pydate()) for d in datevec])
             timevec = datevec
 
         # Store things
         self.dt_year = dt_year
         self.npts = len(timevec) # The number of points in the sim
-        self.tvec = np.arange(self.npts)*self.dt # Absolute time array
+        self.tvec = round_tvec(np.arange(self.npts)*self.dt) # Absolute time array
         self.timevec = timevec
         self.datevec = datevec
         self.yearvec = yearvec
+        if sim == True: # It's the sim itself, the tvec is the absolute time vector
+            self.abstvec = self.tvec
+        elif sim is not None:
+            self.make_abstvec(sim)
+        else:
+            self.abstvec = None # Intentionally set to None, cannot be used in the sim loop until populated
         self.initialized = True
+        return
+
+    def make_abstvec(self, sim):
+        """ Convert the current time vector into sim units """
+        # Validation
+        if self.is_unitless != sim.t.is_unitless:
+            errormsg = f'Cannot mix units with unitless time: sim.unit={sim.t.unit} {self.name}.unit={self.unit}'
+            raise ValueError(errormsg)
+
+        # Both are unitless or numeric
+        both_unitless = self.is_unitless and sim.t.is_unitless
+        both_numeric = self.is_numeric and sim.t.is_numeric
+        if both_unitless or both_numeric:
+            abstvec = self.tvec.copy() # Start by copying the current time vector
+            ratio = time_ratio(unit1=self.unit, dt1=self.dt, unit2=sim.t.unit, dt2=sim.t.dt)
+            if ratio != 1.0:
+                abstvec *= ratio # TODO: CHECK THAT ORDER IS CORRECT
+            start_diff = self.start - sim.t.start
+            if start_diff != 0.0:
+                abstvec += start_diff  # TODO: CHECK THAT ORDER IS CORRECT
+
+        # Otherwise, use yearvec (for simplicity) and convert to sim time units
+        else:
+            abstvec = self.yearvec.copy()
+            abstvec -= sim.t.yearvec[0] # Start relative to sim start
+            ratio = time_ratio(unit1='year', dt1=1.0, unit2=sim.t.unit, dt2=sim.t.dt)
+            abstvec *= ratio # Convert into sim time units
+
+        self.abstvec = round_tvec(abstvec) # Avoid floating point inconsistencies
         return
 
     def now(self, key=None):

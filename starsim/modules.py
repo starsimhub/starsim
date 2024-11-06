@@ -62,7 +62,7 @@ class Module(sc.quickobj):
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
-        self.t = ss.Time(**kwargs, init=False)
+        self.t = ss.Time(**kwargs, name=self.name, init=False)
 
         # Properties to be added by init_pre()
         self.sim = None
@@ -182,7 +182,7 @@ class Module(sc.quickobj):
 
         # Update time and initialize
         self.t.update(parent=pars, force=force)
-        self.t.initialize()
+        self.t.init(sim=self.sim) # Sets the absolute sim time vector
 
         # Find all time parameters in the module
         timepars = sc.search(self.pars, type=ss.TimePar) # Should it be self or self.pars?
