@@ -110,7 +110,7 @@ class Births(Demographics):
 
         # Calculate crude birth rate (CBR)
         inv_rate_units = 1.0/self.pars.rate_units
-        births_per_year = self.n_births/self.sim.dt_year
+        births_per_year = self.n_births/self.sim.t.dt_year
         denom = self.sim.results.n_alive[self.ti]
         self.results.cbr[self.ti] = inv_rate_units*births_per_year/denom
         return
@@ -249,7 +249,9 @@ class Deaths(Demographics):
         super().finalize()
         n_alive = self.sim.results.n_alive
         self.results.cumulative[:] = np.cumsum(self.results.new)
-        self.results.cmr[:] = 1/self.pars.rate_units*np.divide(self.results.new / self.sim.dt_year, n_alive, where=n_alive>0)
+        units = self.pars.rate_units*self.sim.t.dt_year
+        deaths = np.divide(self.results.new, n_alive, where=n_alive>0)
+        self.results.cmr[:] = deaths/units
         return
 
 
@@ -504,7 +506,7 @@ class Pregnancy(Demographics):
                     layer.add_pairs(conceive_uids, new_uids, dur=durs, start=start)
 
         if self.ti < 0:
-            people.age[new_uids] += -self.ti * self.sim.dt_year # Age to ti=0
+            people.age[new_uids] += -self.ti * self.sim.t.dt_year # Age to ti=0
 
         return new_uids
 
