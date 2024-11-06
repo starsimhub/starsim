@@ -1050,7 +1050,7 @@ class MixingPools(Route):
         sim.plot()
     """
     def __init__(self, pars=None, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__()
         self.define_pars(
             diseases = None,
             src = None,
@@ -1162,8 +1162,7 @@ class MixingPool(Route):
         sim.plot()
     """
     def __init__(self, pars=None, **kwargs):
-        super().__init__(**kwargs)
-
+        super().__init__()
         self.define_pars(
             diseases = None,
             src = None,
