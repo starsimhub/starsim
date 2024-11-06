@@ -225,7 +225,7 @@ class Sim:
 
     def init_results(self):
         """ Create initial results that are present in all simulations """
-        kw = dict(shape=self.npts, timevec=self.t.timevec, dtype=int, scale=True)
+        kw = dict(shape=self.t.npts, timevec=self.t.timevec, dtype=int, scale=True)
         self.results += [
             ss.Result('n_alive',    label='Number alive', **kw),
             ss.Result('new_deaths', label='Deaths', **kw),

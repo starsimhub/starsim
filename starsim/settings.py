@@ -72,7 +72,7 @@ class Options(sc.objdict):
         options.warnings = sc.parse_env('STARSIM_WARNINGS', 'warn', 'str')
 
         optdesc.time_eps = 'Set size of smallest possible time unit (in units of sim time, e.g. "year" or "day")'
-        options.time_eps = sc.parse_env('STARSIM_TIME_EPS', 1e-6, 'float')
+        options.time_eps = sc.parse_env('STARSIM_TIME_EPS', 1e-6, 'float') # If unit = 'year', corresponds to ~30 seconds
 
         optdesc.sep = 'Set thousands seperator for text output'
         options.sep = sc.parse_env('STARSIM_SEP', ',', 'str')

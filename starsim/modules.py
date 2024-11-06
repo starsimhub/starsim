@@ -180,15 +180,16 @@ class Module(sc.quickobj):
         """ Initialize all time parameters by ensuring all parameters are initialized; part of init_post() """
         pars = self.sim.pars
 
-        # Update time pars
+        # Update time and initialize
         self.t.update(parent=pars, force=force)
+        self.t.initialize()
 
         # Find all time parameters in the module
         timepars = sc.search(self.pars, type=ss.TimePar) # Should it be self or self.pars?
 
         # Initialize them with the parent module
         for timepar in timepars.values():
-            if force or not timepar.initialized:
+            if force != False or not timepar.initialized:
                 timepar.init(parent=self.t, die=False) # In some cases, the values can't be initialized; that's OK here
         return
 
@@ -259,7 +260,7 @@ class Module(sc.quickobj):
                 result = arg
 
             # Update with module information
-            result.update(module=self.name, shape=self.npts, timevec=self.t.timevec)
+            result.update(module=self.name, shape=self.t.npts, timevec=self.t.timevec)
 
             # Add the result to the dict of results; does automatic checking
             self.results += result

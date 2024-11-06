@@ -56,7 +56,7 @@ class SIR(ss.Infection):
 
     def set_prognoses(self, uids, source_uids=None):
         """ Set prognoses """
-        ti = self.ti
+        ti = self.t.ti
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = ti

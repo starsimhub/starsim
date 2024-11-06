@@ -16,7 +16,7 @@ __all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff']
 
 # Define defaults
 default_unit = 'year'
-default_start_date = '2000-01-01'
+default_start_date = 2000
 default_dur = 50
 time_args = ['start', 'stop', 'dt', 'unit'] # Allowable time arguments
 
@@ -54,8 +54,11 @@ def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0, as_int=False):
     if unit1 == unit2:
         unit_ratio = 1.0
     else:
-        if unit1 in ['none', None] or unit2 in ['none', None]:
-            errormsg = f'Cannot convert between units when one is None ({unit1}, {unit2})'
+        if is_unitless(unit1) or is_unitless(unit2):
+            errormsg = f'Cannot convert between units if only one is unitless (unit1={unit1}, unit2={unit2})'
+            raise ValueError(errormsg)
+        if unit1 is None or unit2 is None:
+            errormsg = f'Cannot convert between units when only one has been initialized (unit1={unit1}, unit2={unit2})'
             raise ValueError(errormsg)
         u1 = time_units[unit1]
         u2 = time_units[unit2]
@@ -222,14 +225,12 @@ class Time(sc.prettyobj):
     def __init__(self, start=None, stop=None, dt=None, unit=None, pars=None, parent=None, init=True):
         self.start = start
         self.stop = stop
-        self.dt = sc.ifelse(dt, 1.0) # Assume dt of 1.0
+        self.dt = dt
         self.unit = unit
-        self.update(pars=pars, parent=parent, start=start, stop=stop, dt=dt, unit=unit)
-        self.start = self.start if self.is_numeric else date(self.start)
-        self.stop  = self.stop  if self.is_numeric else date(self.stop)
-        self.unit = validate_unit(self.unit)
         self.ti = 0 # The time index, e.g. 0, 1, 2
-        if init and self.dt and self.unit:
+        self.initialized = False
+        self.update(pars=pars, parent=parent)
+        if init:
             self.initialize()
         return
 
@@ -239,6 +240,10 @@ class Time(sc.prettyobj):
             return sc.isnumber(self.start)
         except:
             return False
+
+    @property
+    def is_unitless(self):
+        return is_unitless(self.unit)
 
     def update(self, pars=None, parent=None, reset=True, force=None, **kwargs):
         """ Reconcile different ways of supplying inputs """
@@ -265,16 +270,21 @@ class Time(sc.prettyobj):
                 setattr(self, key, val)
                 stale = True
 
-        if stale and reset and self.dt and self.unit:
+        if stale and reset and self.initialized:
             self.initialize()
         return
 
     def initialize(self):
         """ Initialize all vectors """
+        # Initial validation
+        self.start = self.start if self.is_numeric else date(self.start)
+        self.stop  = self.stop  if self.is_numeric else date(self.stop)
+        self.unit = validate_unit(self.unit)
+
         # Convert start and stop to dates
         date_start = self.start
         date_stop = self.stop
-        date_unit = 'year' if no_unit(self.unit) else self.unit
+        date_unit = 'year' if self.unit is None else self.unit # Use year by default
         dt_year = ss.time_ratio(date_unit, self.dt, 'year', 1.0)
         offset = 0
         if self.is_numeric and date_start == 0:
@@ -287,6 +297,12 @@ class Time(sc.prettyobj):
             timevec = sc.inclusiverange(self.start, self.stop, self.dt)
             yearvec = timevec*dt_year + offset
             datevec = np.array([date(sc.datetoyear(y, reverse=True)) for y in yearvec])
+
+        # If unitless, just use that
+        elif self.is_unitless:
+            timevec = sc.inclusiverange(self.start, self.stop, self.dt)
+            yearvec = timevec
+            datevec = timevec
 
         # Otherwise, use dates as the ground truth
         else:
@@ -313,6 +329,7 @@ class Time(sc.prettyobj):
         self.timevec = timevec
         self.datevec = datevec
         self.yearvec = yearvec
+        self.initialized = True
         return
 
     def now(self, key=None):
@@ -664,11 +681,12 @@ class beta(time_prob):
     pass
 
 
-#%% Final helper functions
+#%% Unit handling
 
 # Map different units onto the time units -- placed at the end to include the functions
 unit_mapping_reverse = {
-    'none': [None, 'none'],
+    None: [None],
+    'unitless': ['unitless', 'none'],
     'day': ['d', 'day', 'days', 'perday', days, perday],
     'year': ['y', 'yr', 'year', 'years', 'peryear', years, peryear],
     'week': ['w', 'wk', 'week', 'weeks'],
@@ -678,6 +696,7 @@ unit_mapping = {v:k for k,vlist in unit_mapping_reverse.items() for v in vlist}
 
 
 def validate_unit(unit):
+    """ Check that the unit is valid, and convert to a standard type """
     try:
         unit = unit_mapping[unit]
     except KeyError as E:
@@ -686,6 +705,17 @@ def validate_unit(unit):
     return unit
 
 
-def no_unit(unit):
-    """ Check if the unit is None-like """
-    return unit in unit_mapping_reverse['none']
+def is_unitless(unit):
+    """ Check if explicitly unitless (excludes None; use not has_units() for that) """
+    return unit in unit_mapping_reverse['unitless']
+
+
+def has_units(unit):
+    """ Check that the unit is valid and is not unitless or None """
+    unit = validate_unit(unit)
+    if unit is None:
+        return False
+    elif is_unitless(unit):
+        return False
+    else:
+        return True
