@@ -73,6 +73,12 @@ class Base(sc.quickobj):
         try:    return self.t.ti
         except: return None
 
+    @property
+    def now(self):
+        """ Shortcut to self.t.now() """
+        try:    return self.t.now()
+        except: return None
+
 
 class Module(Base):
     """

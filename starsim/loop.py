@@ -194,7 +194,7 @@ class Loop:
             # Tidy up
             self.index += 1 # Increment the count
             self.store_time()
-            if until and self.sim.t.now() > until: # Terminate if asked to
+            if until and self.sim.now > until: # Terminate if asked to
                 break
         return
 

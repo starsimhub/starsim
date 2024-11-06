@@ -202,7 +202,7 @@ class Deaths(Demographics):
             assert len(uids) == len(ppl.auids)
 
             available_years = drd.index.get_level_values('year')
-            year_ind = sc.findnearest(available_years, sim.now_year) # TODO: make work with different timesteps
+            year_ind = sc.findnearest(available_years, sim.t.now('year')) # TODO: make work with different timesteps
             nearest_year = available_years[year_ind]
 
             death_rate = np.empty(uids.shape, dtype=ss_float_)
@@ -319,7 +319,7 @@ class Pregnancy(Demographics):
             if isinstance(frd, ss.TimePar):
                 time_factor = 1 # Time conversion performed automatically by TimePar
         else:
-            year_ind = sc.findnearest(frd.index, self.now_year-self.pars.dur_pregnancy.to('year')) # TODO: make time-unit-aware
+            year_ind = sc.findnearest(frd.index, self.t.now('year')-self.pars.dur_pregnancy.to('year')) # TODO: make time-unit-aware
             nearest_year = frd.index[year_ind]
 
             # Assign agents to age bins

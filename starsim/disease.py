@@ -127,7 +127,7 @@ class Disease(ss.Module):
         return
 
     def log_infections(self, uids, sources=None):
-        self.log.add_entries(uids, sources, self.t.now())
+        self.log.add_entries(uids, sources, self.now)
         return
 
     def update_results(self):
