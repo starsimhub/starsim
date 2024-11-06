@@ -92,7 +92,7 @@ def date_diff(start, stop, unit):
         if unit == 'year':
             dur = sc.datetoyear(stop) - sc.datetoyear(start) # TODO: allow non-integer amounts
         elif unit == 'day':
-            dur = (stop - start).days
+            dur = (ss.date(stop) - ss.date(start)).days
         else:
             raise NotImplementedError
     return dur
