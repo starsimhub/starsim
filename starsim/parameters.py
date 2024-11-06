@@ -336,7 +336,7 @@ class SimPars(Pars):
 
         # Handle start
         if self.start is None:
-            self.start = ss.time.default_start_date
+            self.start = ss.time.default_start[self.unit]
 
         # Handle stop and dur
         if self.stop is not None:

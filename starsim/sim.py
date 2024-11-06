@@ -579,6 +579,9 @@ class Sim(ss.Base):
                 ax.set_title(res.full_label)
                 ax.set_xlabel('Time')
 
+            if res.has_dates:
+                sc.dateformatter(ax)
+
         if self.label is not None:
             fig.suptitle(self.label)
         sc.figlayout(fig=fig)

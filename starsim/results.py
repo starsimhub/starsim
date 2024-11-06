@@ -48,6 +48,12 @@ class Result(ss.BaseArr):
     def initialized(self):
         return self.values is not None
 
+    @property
+    def has_dates(self):
+        """ Check whether the time vector uses dates (rather than numbers) """
+        try:    return not sc.isnumber(self.timevec[0])
+        except: return False
+
     def init_values(self, values=None, dtype=None, shape=None, force=False):
         """ Handle values """
         if not self.initialized or force:
@@ -151,7 +157,9 @@ class Result(ss.BaseArr):
         plt.plot(self.timevec, self.values, **plot_kw)
         plt.title(self.full_label)
         plt.xlabel('Time')
-        sc.commaticks()
+        sc.commaticks(ax)
+        if self.has_dates:
+            sc.dateformatter(ax)
         if (self.values.min() >= 0) and (plt.ylim()[0]<0): # Don't allow axis to go negative if results don't
             plt.ylim(bottom=0)
         return fig

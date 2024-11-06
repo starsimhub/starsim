@@ -14,18 +14,25 @@ import starsim as ss
 # Classes and objects that are externally visible
 __all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff']
 
-# Define defaults
-default_unit = 'year'
-default_start_date = 2000
-default_dur = 50
-time_args = ['start', 'stop', 'dt', 'unit'] # Allowable time arguments
+# Allowable time arguments
+time_args = ['start', 'stop', 'dt', 'unit']
 
 # Define available time units
-time_units = sc.dictobj(
-    day = 1,
-    week = 7,
+time_units = sc.objdict(
+    day   = 1.0,
+    week  = 7.0,
     month = 30.4375, # 365.25/12
-    year = 365.25, # For consistency with months
+    year  = 365.25, # For consistency with months
+)
+
+# Define defaults
+default_dur = 50
+default_unit = 'year'
+default_start_year = 2000
+default_start_date = '2000-01-01'
+default_start = sc.objdict(
+    {k:default_start_date for k in ['day', 'week', 'month']} |
+    {k:default_start_year for k in ['year', 'unitless']}
 )
 
 
@@ -113,7 +120,7 @@ def years_to_dates(yearvec):
 
 def dates_to_years(datevec):
     """ Convert a date vector to a numeric year vector"""
-    yearvec = round_tvec([sc.datetoyear(d.to_pydate()) for d in datevec])
+    yearvec = round_tvec([sc.datetoyear(d.date()) for d in datevec])
     return yearvec
 
 
@@ -167,13 +174,20 @@ class date(pd.Timestamp):
         out.__class__ = cls
         return out
 
-    def __repr__(self):
-        """ Show the date in brackets, e.g. <2024-04-04> """
-        return f'<{self.year:04d}-{self.month:02d}-{self.day:02d}>'
+    def __repr__(self, bracket=True):
+        """ Show the date in brackets, e.g. <2024.04.04> """
+        _ = ss.options.date_sep
+        y = f'{self.year:04d}'
+        m = f'{self.month:02d}'
+        d = f'{self.day:02d}'
+        string = y + _ + m + _ + d
+        if bracket:
+            string = '<' + string + '>'
+        return string
 
     def __str__(self):
-        """ Like repr, but just the date, e.g. 2024-04-04 """
-        return f'{self.year:04d}-{self.month:02d}-{self.day:02d}'
+        """ Like repr, but just the date, e.g. 2024.04.04 """
+        return self.__repr__(bracket=False)
 
     def disp(self, **kwargs):
         """ Show the full object """
@@ -195,10 +209,6 @@ class date(pd.Timestamp):
             dateobj = sc.datetoyear(year, reverse=True)
             return cls(dateobj)
 
-    def to_pydate(self):
-        """ Convert to datetime.date """
-        return self.to_pydatetime().date()
-
     def to_year(self):
         """
         Convert a date to a floating-point year
@@ -208,7 +218,7 @@ class date(pd.Timestamp):
             ss.date('2020-01-01').to_year() # Returns 2020.0
             ss.date('2024-10-01').to_year() # Returns 2024.7486
         """
-        return sc.datetoyear(self.to_pydate())
+        return sc.datetoyear(self.date())
 
     def to_pandas(self):
         """ Convert to a standard pd.Timestamp instance """
@@ -339,7 +349,7 @@ class Time(sc.prettyobj):
         dt_year = time_ratio(unit1=date_unit, dt1=self.dt, unit2='year', dt2=1.0) # Timestep in units of years
         offset = 0
         if self.is_numeric and date_start == 0:
-            date_start = ss.date(ss.time.default_start_date)
+            date_start = ss.date(ss.time.default_start[date_unit])
             date_stop = date_start + ss.dur(date_stop, unit=date_unit)
             offset = date_start.year
 

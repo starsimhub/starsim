@@ -77,6 +77,9 @@ class Options(sc.objdict):
         optdesc.sep = 'Set thousands seperator for text output'
         options.sep = sc.parse_env('STARSIM_SEP', ',', 'str')
 
+        optdesc.date_sep = 'Set seperator for dates'
+        options.date_sep = sc.parse_env('STARSIM_DATE_SEP', '.', 'str')
+
         optdesc.precision = 'Set arithmetic precision'
         options.precision = sc.parse_env('STARSIM_PRECISION', 64, 'int')
 
