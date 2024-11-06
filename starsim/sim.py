@@ -290,7 +290,7 @@ class Sim:
 
         Note: the verbose here is only for the Loop object, not the sim.
         """
-        self.loop.run(self.now, verbose)
+        self.loop.run(self.t.now(), verbose)
         return self
 
     def run(self, until=None, verbose=None):
