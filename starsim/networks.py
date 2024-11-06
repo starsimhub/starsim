@@ -1168,7 +1168,7 @@ class MixingPool(Route):
             src = None,
             dst = None, # Same as src
             beta = ss.beta(0.2),
-            contacts = ss.constant(1.0),
+            contacts = ss.poisson(1.0),
         )
         self.update_pars(pars, **kwargs)
 

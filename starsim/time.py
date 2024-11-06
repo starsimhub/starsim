@@ -301,6 +301,12 @@ class Time(sc.prettyobj):
             kw_val = kwargs.get(key)
             par_val = pars.get(key)
 
+            # Special handling for dt: don't inherit dt if the units are different
+            if key == 'dt':
+                if isinstance(parent, Time):
+                    if parent.unit != self.unit:
+                        parent_val = 1.0
+
             if force == False: # Only update missing (None) values
                 val = sc.ifelse(current_val, kw_val, par_val, parent_val)
             elif force is None: # Prioritize current value
@@ -326,15 +332,16 @@ class Time(sc.prettyobj):
 
         # Copy missing values from sim
         if isinstance(sim, ss.Sim):
-            self.dt = sc.ifelse(self.dt, sim.t.dt)
             self.unit = sc.ifelse(self.unit, sim.t.unit)
-
             if self.unit == sim.t.unit: # Units match, use directly
+                sim_dt = sim.t.dt
                 sim_start = sim.t.start
                 sim_stop = sim.t.stop
             else: # Units don't match, use datevec instead
+                sim_dt = 1.0 # Don't try to reset the dt if the units don't match
                 sim_start = sim.t.datevec[0]
                 sim_stop = sim.t.datevec[-1]
+            self.dt = sc.ifelse(self.dt, sim_dt)
             self.start = sc.ifelse(self.start, sim_start)
             self.stop = sc.ifelse(self.stop, sim_stop)
 
