@@ -112,6 +112,13 @@ class Sim:
 
         return string
 
+    def __len__(self):
+        """ The length of a sim is the number of timepoints; see also len(sim.people) """
+        try:
+            return self.t.npts
+        except:
+            return 0
+
     @property
     def modules(self):
         """ Return iterator over all Module instances (stored in standard places) in the Sim """

@@ -114,7 +114,7 @@ class CountInf(ss.Intervention):
     def init_pre(self, sim):
         super().init_pre(sim)
         n_agents = len(sim.people)
-        self.arr = np.zeros((sim.npts, n_agents))
+        self.arr = np.zeros((len(sim), n_agents))
         self.n_agents = n_agents
         return
 
