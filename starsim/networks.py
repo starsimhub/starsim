@@ -1168,7 +1168,7 @@ class MixingPool(Route):
             src = None,
             dst = None, # Same as src
             beta = ss.beta(0.2),
-            contacts = ss.constant(lam=1),
+            contacts = ss.constant(1.0),
         )
         self.update_pars(pars, **kwargs)
 
@@ -1253,7 +1253,6 @@ class MixingPool(Route):
             self.p_acquire.set(p=p)
             new_cases = self.p_acquire.filter(self.dst_uids)
             n_new_cases += len(new_cases)
-
             disease.set_prognoses(new_cases)
 
         return n_new_cases
