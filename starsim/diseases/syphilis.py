@@ -266,7 +266,7 @@ class Syphilis(ss.Infection):
                 time_to_birth = -sim.people.age.raw # TODO: make nicer
 
                 # Schedule events
-                ratio = ss.time_ratio(unit1='year', dt1=1.0, unit2=self.unit, dt2=self.dt) # TODO: think about simplifying
+                ratio = ss.time_ratio(unit1='year', dt1=1.0, unit2=self.t.unit, dt2=self.t.dt) # TODO: think about simplifying
                 for oi, outcome in enumerate(self.pars.birth_outcome_keys):
                     o_uids = state_uids[assigned_outcomes == oi]
                     if len(o_uids) > 0:

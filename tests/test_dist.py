@@ -11,6 +11,7 @@ import pytest
 
 n = 1_000_000 # For testing statistical properties and performance of distributions
 m = 5 # For just testing that drawing works
+dpy = 365.25 # Number of days per year
 sc.options(interactive=False)
 
 
@@ -340,7 +341,7 @@ def test_timepar_dists():
 
     # Check special distributions
     print('Testing Poisson distribution ...')
-    lam1 = ss.rate(365, 'year', parent_unit='year').init()
+    lam1 = ss.rate(dpy, 'year', parent_unit='year').init()
     lam2 = ss.rate(1,   'day',  parent_unit='year').init()
     poi1 = ss.poisson(lam=lam1, strict=False).init()
     poi2 = ss.poisson(lam=lam2, strict=False).init()
@@ -377,7 +378,7 @@ def test_timepar_callable():
     def age_day(module, sim, uids):
         """ Extract age as a day """
         out = sim.people.age[uids].copy()
-        out *= 365 # Convert to days manually
+        out *= dpy # Convert to days manually
         return out
 
     scale = 1e-3 # Set to a very small but nonzero scale
@@ -387,7 +388,7 @@ def test_timepar_callable():
     d4 = ss.lognorm_ex(name='callable', mean=mean, std=scale).init(sim=sim)
     draws3 = d3.rvs(uids)
     draws4 = d4.rvs(uids)
-    age_in_days = sim.people.age[uids]*365
+    age_in_days = sim.people.age[uids]*dpy
     draw_diff = np.abs(draws3 - draws4).mean()
     age_diff = np.abs(age_in_days - draws3).mean()
     print(f'Input ages were:\n{sim.people.age[uids]}')

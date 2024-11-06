@@ -95,27 +95,28 @@ def test_syph(dt=1, n_agents=500, do_plot=False):
 
     if do_plot:
         tvec = sim.timevec[pi:]
+        res = sim.results.syphilis
         fig, ax = plt.subplots(2, 2)
         ax = ax.ravel()
         ax[0].stackplot(
             tvec,
-            # sim.results.syphilis.n_susceptible[pi:],
-            sim.results.syphilis.n_congenital[pi:],
-            sim.results.syphilis.n_exposed[pi:],
-            sim.results.syphilis.n_primary[pi:],
-            sim.results.syphilis.n_secondary[pi:],
-            (sim.results.syphilis.n_latent_temp[pi:]+sim.results.syphilis.n_latent_long[pi:]),
-            sim.results.syphilis.n_tertiary[pi:],
+            # res.n_susceptible[pi:],
+            res.n_congenital[pi:],
+            res.n_exposed[pi:],
+            res.n_primary[pi:],
+            res.n_secondary[pi:],
+            (res.n_latent_temp[pi:]+res.n_latent_long[pi:]),
+            res.n_tertiary[pi:],
         )
         ax[0].legend(['Congenital', 'Exposed', 'Primary', 'Secondary', 'Latent', 'Tertiary'], loc='lower right')
 
-        ax[1].plot(tvec, sim.results.syphilis.prevalence[pi:])
+        ax[1].plot(tvec, res.prevalence[pi:])
         ax[1].set_title('Syphilis prevalence')
 
         ax[2].plot(tvec, sim.results.n_alive[pi:])
         ax[2].set_title('Population')
 
-        ax[3].plot(tvec, sim.results.syphilis.new_infections[pi:])
+        ax[3].plot(tvec, res.new_infections[pi:])
         ax[3].set_title('New infections')
 
         fig.tight_layout()
@@ -159,7 +160,7 @@ def test_syph_intvs(dt=1, n_agents=500, do_plot=False):
         burnin = 10
         syph_b = sim_base.diseases.syphilis
         syph_i = sim_intv.diseases.syphilis
-        pi = int(burnin/syph_b.dt)
+        pi = int(burnin/syph_b.t.dt)
         plt.figure()
         plt.plot(syph_b.timevec[pi:], syph_b.results.prevalence[pi:], label='Baseline')
         plt.plot(syph_i.timevec[pi:], syph_i.results.prevalence[pi:], label='S&T')

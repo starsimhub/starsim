@@ -135,12 +135,11 @@ class Loop:
         # Handle the sim and people first
         sim = self.sim
         for key in ['sim', 'people']:
-            self.abs_tvecs[key] = sim.abs_tvec
+            self.abs_tvecs[key] = sim.t.abstvec
 
         # Handle all other modules
         for mod in sim.modules:
-            abs_tvec = ss.make_abs_tvec(mod.timevec, mod.unit, sim.pars.unit)
-            self.abs_tvecs[mod.name] = abs_tvec
+            self.abs_tvecs[mod.name] = mod.t.abstvec
 
         return self.abs_tvecs
 

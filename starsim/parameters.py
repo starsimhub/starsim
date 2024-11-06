@@ -119,6 +119,12 @@ class Pars(sc.objdict):
                 self[key] = new # TODO: use an actual set here
             else:
                 old.set(**new)
+
+        # Give up
+        else:
+            errormsg = f'Updating timepar from {type(old)} to {type(new)} is not supported'
+            raise TypeError(errormsg)
+
         return
 
     def _update_dist(self, key, old, new):
@@ -140,6 +146,16 @@ class Pars(sc.objdict):
         elif isinstance(new, list):
             old.set(*new)
 
+        # It's a timepar, set it like a number, e.g. dur_inf = ss.dur(6)
+        elif isinstance(new, ss.TimePar):
+            oldpar = old.pars[0]
+            if isinstance(oldpar, ss.TimePar): # If changing from one timepar to another, validate
+                dur_mismatch = isinstance(oldpar, ss.dur) != isinstance(new, ss.dur)
+                if dur_mismatch:
+                    errormsg = f'Cannot change a duration to a non-duration vice versa: old={type(oldpar)}, new={type(new)}'
+                    raise TypeError(errormsg)
+            old.set(new)
+
         # It's a dict, figure out what to do
         elif isinstance(new, dict):
             newtype = new.get('type')
@@ -152,6 +168,12 @@ class Pars(sc.objdict):
                 else:
                     dist = ss.make_dist(new)
                     self[key] = dist
+
+        # Give up
+        else:
+            errormsg = f'Updating dist from {type(old)} to {type(new)} is not supported'
+            raise TypeError(errormsg)
+
         return
 
     def check_key_mismatch(self, pars):
@@ -211,17 +233,17 @@ class SimPars(Pars):
         self.verbose = ss.options.verbose # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
 
         # Population parameters
-        self.n_agents  = 10e3  # Number of agents
-        self.total_pop = None  # If defined, used for calculating the scale factor
-        self.pop_scale = None  # How much to scale the population
+        self.n_agents  = 10e3 # Number of agents
+        self.total_pop = None # If defined, used for calculating the scale factor
+        self.pop_scale = None # How much to scale the population
 
         # Simulation parameters
-        self.unit       = 'year' # The time unit to use; options are 'year' (default), 'day', and 'none'
-        self.start      = None   # Start of the simulation
-        self.stop       = None   # End of the simulation
-        self.dur        = 50     # Duration of time to run, if stop isn't specified
-        self.dt         = 1.0    # Timestep (in units of self.unit)
-        self.rand_seed  = 1      # Random seed; if None, don't reset
+        self.unit      = ''    # The time unit to use; options are 'year' (default), 'day', 'week', 'month', or 'none'
+        self.start     = None  # Start of the simulation (default 2020)
+        self.stop      = None  # End of the simulation
+        self.dur       = None  # Duration of time to run, if stop isn't specified (default 50 steps of self.unit)
+        self.dt        = 1.0   # Timestep (in units of self.unit)
+        self.rand_seed = 1     # Random seed; if None, don't reset
 
         # Demographic parameters
         self.birth_rate = None
@@ -306,17 +328,19 @@ class SimPars(Pars):
 
     def validate_time(self):
         """ Ensure at least one of dur and stop is defined, but not both """
+
+        # Handle the unit
+        if self.unit == '':
+            self.unit = ss.time.default_unit
+        self.unit = ss.time.validate_unit(self.unit)
+
+        # Handle start
         if self.start is None:
-            if self.unit == 'year':
-                self.start = 2000
-            else:
-                self.start = '2000-01-01'
-        if isinstance(self.start, str):
-            self.start = sc.date(self.start)
-        if isinstance(self.stop, str):
-            self.stop = sc.date(self.stop)
+            self.start = ss.time.default_start[self.unit]
+
+        # Handle stop and dur
         if self.stop is not None:
-            if self.is_default('dur'):
+            if self.dur is None:
                 self.dur = ss.date_diff(self.start, self.stop, self.unit)
             else:
                 errormsg = f'You can supply either stop ({self.stop}) or dur ({self.dur}) but not both, since one is calculated from the other'
@@ -325,11 +349,9 @@ class SimPars(Pars):
                 errormsg = f"Duration must be >0, but you supplied start={str(self.start)} and stop={str(self.stop)}, which gives dur={self.dur}"
                 raise ValueError(errormsg)
         else:
-            if self.dur is not None:
-                self.stop = ss.date_add(self.start, self.dur, self.unit)
-            else:
-                errormsg = 'You must supply either "dur" or "stop".'
-                raise ValueError(errormsg)
+            if self.dur is None:
+                self.dur = ss.time.default_dur
+            self.stop = ss.date_add(self.start, self.dur, self.unit)
         return
 
     def validate_modules(self):
