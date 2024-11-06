@@ -96,12 +96,6 @@ class Module(sc.quickobj):
         try:    return self.t.ti
         except: return None
 
-    @property
-    def dt(self):
-        """ Get the timestep size """
-        try:    return self.t.dt
-        except: return None
-
     def _reconcile(self, key, value=None, default=None):
         """ Reconcile module attributes, parameters, and input arguments """
         parval = self.pars.get(key)

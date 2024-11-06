@@ -385,7 +385,7 @@ class SexualNetwork(DynamicNetwork):
 
     def net_beta(self, disease_beta=None, inds=None, disease=None):
         if inds is None: inds = Ellipsis
-        return self.edges.beta[inds] * (1 - (1 - disease_beta) ** (self.edges.acts[inds] * self.dt))
+        return self.edges.beta[inds] * (1 - (1 - disease_beta) ** (self.edges.acts[inds] * self.t.dt))
 
 
 # %% Specific instances of networks
@@ -643,30 +643,29 @@ class DiskNet(Network):
         return
 
     def step(self):
-
         # Motion step
-        vdt = self.pars.v * self.dt
+        vdt = self.pars.v * self.t.dt
         self.x[:] = self.x + vdt * np.cos(self.theta)
         self.y[:] = self.y + vdt * np.sin(self.theta)
 
         # Wall bounce
 
-        # Right edge
+        ## Right edge
         inds = (self.x > 1).uids
         self.x[inds] = 2 - self.x[inds]
         self.theta[inds] = np.pi - self.theta[inds]
 
-        # Left edge
+        ## Left edge
         inds = (self.x < 0).uids
         self.x[inds] =  -self.x[inds]
         self.theta[inds] = np.pi - self.theta[inds]
 
-        # Top edge
+        ## Top edge
         inds = (self.y > 1).uids
         self.y[inds] = 2 - self.y[inds]
         self.theta[inds] = - self.theta[inds]
 
-        # Bottom edge
+        ## Bottom edge
         inds = (self.y < 0).uids
         self.y[inds] = -self.y[inds]
         self.theta[inds] = - self.theta[inds]
@@ -812,7 +811,7 @@ class MFNet(SexualNetwork):
 
     def step(self):
         self.end_pairs()
-        self.set_network_states(upper_age=self.dt) # TODO: check
+        self.set_network_states(upper_age=self.t.dt) # TODO: check
         self.add_pairs()
         return
 

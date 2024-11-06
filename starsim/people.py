@@ -279,7 +279,7 @@ class People(sc.prettyobj):
         """ Final updates at the very end of the timestep """
         sim = self.sim
         if sim.pars.use_aging:
-            self.age[self.alive.uids] += sim.dt_year
+            self.age[self.alive.uids] += sim.t.dt_year
         return
 
     def request_death(self, uids):
