@@ -250,15 +250,14 @@ class Sim:
         # Print out progress if needed
         self.elapsed = self.timer.toc(output=True)
         if self.verbose: # Print progress
+            t = self.t
             simlabel = f'"{self.label}": ' if self.label else ''
-            now = self.t.now()
-            timelabel = f'{now:0.1f}' if isinstance(now, float) else str(now) # TODO: fix
-            string = f'  Running {simlabel}{timelabel} ({self.t.ti:2.0f}/{self.npts}) ({self.elapsed:0.2f} s) '
+            string = f'  Running {simlabel}{t.now("str")} ({t.ti:2.0f}/{t.npts}) ({self.elapsed:0.2f} s) '
             if self.verbose >= 1:
                 sc.heading(string)
             elif self.verbose > 0:
-                if not (self.t.ti % int(1.0 / self.verbose)):
-                    sc.progressbar(self.t.ti + 1, self.npts, label=string, length=20, newline=True)
+                if not (t.ti % int(1.0 / self.verbose)):
+                    sc.progressbar(t.ti + 1, t.npts, label=string, length=20, newline=True)
         return
 
     def finish_step(self):

@@ -361,7 +361,7 @@ class Dist:
             ti (int): if specified, jump to this timestep (default: current module timestep plus one)
         """
         if ti is None:
-            ti = self.module.ti + 1
+            ti = self.module.t.ti + 1
         to = self.dt_jump_size*ti
         return self.jump(to=to, force=force)
 

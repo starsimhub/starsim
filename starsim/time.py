@@ -168,10 +168,16 @@ class date(pd.Timestamp):
         return out
 
     def __repr__(self):
+        """ Show the date in brackets, e.g. <2024-04-04> """
         return f'<{self.year:04d}-{self.month:02d}-{self.day:02d}>'
 
     def __str__(self):
-        return repr(self)
+        """ Like repr, but just the date, e.g. 2024-04-04 """
+        return f'{self.year:04d}-{self.month:02d}-{self.day:02d}'
+
+    def disp(self, **kwargs):
+        """ Show the full object """
+        return sc.pr(self, **kwargs)
 
     @classmethod
     def from_year(cls, year):
@@ -406,7 +412,7 @@ class Time(sc.prettyobj):
         Get the current simulation time
 
         Args:
-            which (str): which type of time to get: default (None), or "year", "date", or "tvec"
+            which (str): which type of time to get: default (None), "year", "date", "tvec", or "str"
 
         **Examples**::
 
@@ -415,8 +421,9 @@ class Time(sc.prettyobj):
             t.now() # Returns <2021-06-25>
             t.now('date') # Returns <2021-06-25>
             t.now('year') # Returns 2021.479
+            t.now('str') # Returns '2021-06-25'
         """
-        if key in [None, 'none', 'time']:
+        if key in [None, 'none', 'time', 'str']:
             vec = self.timevec
         elif key == 'tvec':
             vec = self.tvec
@@ -427,7 +434,11 @@ class Time(sc.prettyobj):
         else:
             errormsg = f'Invalid key "{key}": must be None, abs, date, or year'
             raise ValueError(errormsg)
-        return vec[min(self.ti, len(vec)-1)]
+
+        now = vec[min(self.ti, len(vec)-1)]
+        if key == 'str':
+            now = f'{now:0.1f}' if isinstance(now, float) else str(now)
+        return now
 
 
 #%% TimePar classes
