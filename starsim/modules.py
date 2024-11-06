@@ -136,7 +136,7 @@ class Module(sc.quickobj):
         matches = {}
         for key in list(pars.keys()): # Need to cast to list to avoid "dict changed during iteration"
             if key in self.pars:
-                matches[key] = pars[key]
+                matches[key] = pars.pop(key)
         self.pars.update(matches)
 
         # Update module attributes
