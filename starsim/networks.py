@@ -1064,10 +1064,8 @@ class MixingPools(Route):
         return
 
     def __len__(self):
-        try:
-            return len(self.pools)
-        except:
-            return 0
+        try:    return len(self.pools)
+        except: return 0
 
     def validate_pars(self):
         """ Check that src and dst have correct types, and contacts is the correct shape """
@@ -1083,6 +1081,8 @@ class MixingPools(Route):
         p.dst = sc.objdict(p.dst)
 
         # Validate the contacts
+        if p.contacts is None:
+            p.contacts = np.ones((len(p.src), len(p.dst)))
         p.contacts = np.array(p.contacts)
         actual = p.contacts.shape
         expected = (len(p.src), len(p.dst))
@@ -1168,7 +1168,7 @@ class MixingPool(Route):
             src = None,
             dst = None, # Same as src
             beta = ss.beta(0.2),
-            contacts = ss.poisson(lam=1),
+            contacts = ss.constant(lam=1),
         )
         self.update_pars(pars, **kwargs)
 
@@ -1234,8 +1234,11 @@ class MixingPool(Route):
         super().step()
         self.src_uids = self.get_uids(self.pars.src)
         self.dst_uids = self.get_uids(self.pars.dst)
+        beta = self.pars.beta
+        if isinstance(beta, ss.beta):
+            beta = beta.values # Don't use as a time probability
 
-        if self.pars.beta == 0:
+        if beta == 0:
             return 0
 
         if len(self.src_uids) == 0 or len(self.dst_uids) == 0:
@@ -1245,7 +1248,7 @@ class MixingPool(Route):
         for disease in self.diseases:
             trans = np.mean(disease.infectious[self.src_uids] * disease.rel_trans[self.src_uids])
             acq = self.eff_contacts[self.dst_uids] * disease.susceptible[self.dst_uids] * disease.rel_sus[self.dst_uids]
-            p = self.pars.beta * trans * acq #1 - np.exp(-self.pars.beta * trans * acq)
+            p = beta*trans*acq
 
             self.p_acquire.set(p=p)
             new_cases = self.p_acquire.filter(self.dst_uids)
