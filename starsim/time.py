@@ -129,14 +129,17 @@ class date(pd.Timestamp):
     """
     def __new__(cls, *args, **kwargs):
         # Check if a year was supplied, and preprocess it
-        single_arg = False
+        single_year_arg = False
         if len(args) == 1:
-            if args[0] is None:
+            arg = args[0]
+            if arg is None:
                 return pd.Timestamp(None)
-            elif sc.isnumber(args[0]):
-                single_arg = True
+            elif sc.isnumber(arg):
+                single_year_arg = True
+            elif isinstance(arg, pd.Timedelta):
+                return pd.Timedelta(arg)
         year_kwarg = len(args) == 0 and len(kwargs) == 1 and 'year' in kwargs
-        if single_arg:
+        if single_year_arg:
             return cls.from_year(args[0])
         if year_kwarg:
             return cls.from_year(kwargs['year'])
@@ -287,7 +290,7 @@ class Time(sc.prettyobj):
         date_start = self.start
         date_stop = self.stop
         date_unit = 'year' if self.unit is None else self.unit # Use year by default
-        dt_year = time_ratio(date_unit, self.dt, 'year', 1.0)
+        dt_year = time_ratio(unit1=date_unit, dt1=self.dt, unit2='year', dt2=1.0) # Timestep in units of years
         offset = 0
         if self.is_numeric and date_start == 0:
             date_start = ss.date(ss.time.default_start_date)
@@ -296,8 +299,9 @@ class Time(sc.prettyobj):
 
         # If numeric, treat that as the ground truth
         if self.is_numeric:
+            ratio = time_ratio(unit1=date_unit, unit2='year')
             timevec = round_tvec(sc.inclusiverange(self.start, self.stop, self.dt))
-            yearvec = round_tvec(timevec*dt_year + offset)
+            yearvec = round_tvec((timevec-timevec[0])*ratio + offset + timevec[0]) # TODO: simplify
             datevec = np.array([date(sc.datetoyear(y, reverse=True)) for y in yearvec])
 
         # If unitless, just use that
@@ -352,18 +356,18 @@ class Time(sc.prettyobj):
         both_numeric = self.is_numeric and sim.t.is_numeric
         if both_unitless or both_numeric:
             abstvec = self.tvec.copy() # Start by copying the current time vector
-            ratio = time_ratio(unit1=self.unit, dt1=self.dt, unit2=sim.t.unit, dt2=sim.t.dt)
+            ratio = time_ratio(unit1=self.unit, dt1=self.dt, unit2=sim.t.unit, dt2=1.0) # tvec has sim units, but not dt
             if ratio != 1.0:
                 abstvec *= ratio # TODO: CHECK THAT ORDER IS CORRECT
             start_diff = self.start - sim.t.start
             if start_diff != 0.0:
                 abstvec += start_diff  # TODO: CHECK THAT ORDER IS CORRECT
 
-        # Otherwise, use yearvec (for simplicity) and convert to sim time units
+        # Otherwise, use datevec (for simplicity) and convert to sim time units
         else:
             abstvec = self.yearvec.copy()
             abstvec -= sim.t.yearvec[0] # Start relative to sim start
-            ratio = time_ratio(unit1='year', dt1=1.0, unit2=sim.t.unit, dt2=sim.t.dt)
+            ratio = time_ratio(unit1='year', dt1=1.0, unit2=sim.t.unit, dt2=1.0)
             abstvec *= ratio # Convert into sim time units
 
         self.abstvec = round_tvec(abstvec) # Avoid floating point inconsistencies
