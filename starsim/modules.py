@@ -217,6 +217,17 @@ class Module(Base):
                 timepar.init(parent=self.t, die=False) # In some cases, the values can't be initialized; that's OK here
         return
 
+    def match_time_inds(self, inds=None):
+         """ Find the nearest matching sim time indices for the current module """
+         if inds is None: inds = Ellipsis
+         self_tvec = self.t.abstvec
+         sim_tvec = self.sim.t.abstvec
+         if len(self_tvec) == len(sim_tvec): # Shortcut to avoid doing matching
+             return inds
+         else:
+             out = sc.findnearest(sim_tvec, [inds])
+             return out
+
     def start_step(self):
         """ Tasks to perform at the beginning of the step """
         if self.dists is not None: # Will be None if no distributions are defined

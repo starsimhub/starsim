@@ -268,10 +268,8 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
           they appeared in the metadata (except for year and age appearing first).
         - An ``ss.Dist`` instance - if the ``data`` input is an ``ss.Dist``, that same object will be returned by this function
     """
-
-    if isinstance(data, ss.Dist):
-        return data
-    elif sc.isnumber(data):
+    # It's a format that can be used directly: return immediately
+    if sc.isnumber(data) or isinstance(data, (ss.Dist, ss.TimePar)):
         return data
 
     # Convert series and dataframe inputs into dicts
