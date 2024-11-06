@@ -368,8 +368,8 @@ class Time(sc.prettyobj):
 
         # If the unit is years, handle that
         elif date_unit == 'year': # For years, the yearvec is the most robust representation
-            start_year = sc.datetoyear(date_start.to_pydate())
-            stop_year = sc.datetoyear(date_stop.to_pydate())
+            start_year = sc.datetoyear(date_start.date())
+            stop_year = sc.datetoyear(date_stop.date())
             yearvec = round_tvec(sc.inclusiverange(start_year, stop_year, self.dt))
             datevec = years_to_dates(yearvec)
             timevec = datevec

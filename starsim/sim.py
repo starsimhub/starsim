@@ -363,7 +363,7 @@ class Sim(ss.Base):
 
         # Convert "how" from a string to a dict
         if how == 'default':
-            how = {'n_':'mean', 'new_':'mean', 'cum_':'last', '':'mean'}
+            how = {'n_':'mean', 'new_':'mean', 'cum_':'last', 'timevec':'last', '':'mean'}
         elif isinstance(how, str):
             how = {'':how} # Match everything
 
