@@ -221,7 +221,7 @@ class date(pd.Timestamp):
             days = other.days + tu.month*other.months + tu.year*other.years
             int_days = int(round(days))
             other = dt.timedelta(days=int_days)
-        if isinstance(other, ss.dur):
+        elif isinstance(other, ss.dur):
             factor = ss.time.time_units[other.unit]
             int_days = int(round(factor*other.v))
             other = dt.timedelta(days=int_days)
@@ -241,7 +241,7 @@ class date(pd.Timestamp):
 
     def __radd__(self, other): return self.__add__(other)
     def __iadd__(self, other): return self.__add__(other)
-    def __rsub__(self, other): return self.__sub__(other)
+    def __rsub__(self, other): return self.__sub__(other) # TODO: check if this should be reversed
     def __isub__(self, other): return self.__sub__(other)
 
 
@@ -259,12 +259,18 @@ class Time(sc.prettyobj):
         self.ti = 0 # The time index, e.g. 0, 1, 2
         self.initialized = False
         self.update(pars=pars, parent=parent)
-        if init:
+        if init and self.ready:
             self.init(sim=sim)
         return
 
     @property
+    def ready(self):
+        """ Check if all parameters are in place to be initialized """
+        return not any([getattr(self, k) is None for k in time_args])
+
+    @property
     def is_numeric(self):
+        """ Check whether the fundamental simulation unit is numeric (as opposed to date-based) """
         try:
             return sc.isnumber(self.start)
         except:
@@ -306,9 +312,25 @@ class Time(sc.prettyobj):
     def init(self, sim=None):
         """ Initialize all vectors """
         # Initial validation
+        self.unit = validate_unit(self.unit)
+
+        # Copy missing values from sim
+        if isinstance(sim, ss.Sim):
+            self.dt = sc.ifelse(self.dt, sim.t.dt)
+            self.unit = sc.ifelse(self.unit, sim.t.unit)
+
+            if self.unit == sim.t.unit: # Units match, use directly
+                sim_start = sim.t.start
+                sim_stop = sim.t.stop
+            else: # Units don't match, use datevec instead
+                sim_start = sim.t.datevec[0]
+                sim_stop = sim.t.datevec[-1]
+            self.start = sc.ifelse(self.start, sim_start)
+            self.stop = sc.ifelse(self.stop, sim_stop)
+
+        # Handle start and stop
         self.start = self.start if self.is_numeric else date(self.start)
         self.stop  = self.stop  if self.is_numeric else date(self.stop)
-        self.unit = validate_unit(self.unit)
 
         # Convert start and stop to dates
         date_start = self.start

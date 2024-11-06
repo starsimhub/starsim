@@ -185,7 +185,7 @@ class Module(Base):
             sim.pars[self.name] = self.pars
             sim.results[self.name] = self.results
             sim.people.add_module(self) # Connect the states to the people
-            self.init_time_pars() # Initialize the modules' time parameters and link them to the sim
+            self.init_time() # Initialize the modules' time parameters and link them to the sim
             self.init_results()
             self.pre_initialized = True
         return
@@ -203,12 +203,9 @@ class Module(Base):
         self.initialized = True
         return
 
-    def init_time_pars(self, force=None):
+    def init_time(self, force=False):
         """ Initialize all time parameters by ensuring all parameters are initialized; part of init_post() """
-        pars = self.sim.pars
-
         # Update time and initialize
-        self.t.update(parent=pars, force=force)
         self.t.init(sim=self.sim) # Sets the absolute sim time vector
 
         # Find all time parameters in the module
@@ -216,7 +213,7 @@ class Module(Base):
 
         # Initialize them with the parent module
         for timepar in timepars.values():
-            if force != False or not timepar.initialized:
+            if force or not timepar.initialized:
                 timepar.init(parent=self.t, die=False) # In some cases, the values can't be initialized; that's OK here
         return
 
