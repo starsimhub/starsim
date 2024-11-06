@@ -105,6 +105,24 @@ def round_tvec(tvec):
     return tvec
 
 
+def years_to_dates(yearvec):
+    """ Convert a numeric year vector to a date vector """
+    datevec = np.array([date(sc.datetoyear(y, reverse=True)) for y in yearvec])
+    return datevec
+
+
+def dates_to_years(datevec):
+    """ Convert a date vector to a numeric year vector"""
+    yearvec = round_tvec([sc.datetoyear(d.to_pydate()) for d in datevec])
+    return yearvec
+
+
+def dates_to_days(datevec, start_date):
+    """ Convert a date vector into relative days since start date """
+    start_date = date(start_date)
+    dayvec = np.array([(d - start_date).days for d in datevec])
+    return dayvec
+
 
 #%% Time classes
 
@@ -302,7 +320,7 @@ class Time(sc.prettyobj):
             ratio = time_ratio(unit1=date_unit, unit2='year')
             timevec = round_tvec(sc.inclusiverange(self.start, self.stop, self.dt))
             yearvec = round_tvec((timevec-timevec[0])*ratio + offset + timevec[0]) # TODO: simplify
-            datevec = np.array([date(sc.datetoyear(y, reverse=True)) for y in yearvec])
+            datevec = years_to_dates(yearvec)
 
         # If unitless, just use that
         elif self.is_unitless:
@@ -325,7 +343,7 @@ class Time(sc.prettyobj):
 
             # Tidy
             datevec = np.array([ss.date(d) for d in datelist])
-            yearvec = round_tvec([sc.datetoyear(d.to_pydate()) for d in datevec])
+            yearvec = dates_to_years(datevec)
             timevec = datevec
 
         # Store things
@@ -363,12 +381,16 @@ class Time(sc.prettyobj):
             if start_diff != 0.0:
                 abstvec += start_diff  # TODO: CHECK THAT ORDER IS CORRECT
 
-        # Otherwise, use datevec (for simplicity) and convert to sim time units
-        else:
+        # Both use years; use yearvec
+        elif self.unit == 'year' and sim.t.year == 'year':
             abstvec = self.yearvec.copy()
             abstvec -= sim.t.yearvec[0] # Start relative to sim start
-            ratio = time_ratio(unit1='year', dt1=1.0, unit2=sim.t.unit, dt2=1.0)
-            abstvec *= ratio # Convert into sim time units
+
+        # Otherwise (days, weeks, months), use datevec and convert to days
+        else:
+            dayvec = dates_to_days(self.datevec, start_date=sim.t.datevec[0])
+            ratio = time_ratio(unit1='day', dt1=1.0, unit2=sim.t.unit, dt2=1.0)
+            abstvec = dayvec*ratio # Convert into sim time units
 
         self.abstvec = round_tvec(abstvec) # Avoid floating point inconsistencies
         return
