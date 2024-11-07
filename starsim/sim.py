@@ -522,7 +522,7 @@ class Sim(ss.Base):
         return d
 
     def plot(self, key=None, fig=None, style='fancy', show_data=True, show_skipped=False,
-             fig_kw=None, plot_kw=None, scatter_kw=None):
+             show_module=15, fig_kw=None, plot_kw=None, scatter_kw=None):
         """
         Plot all results in the Sim object
 
@@ -532,6 +532,7 @@ class Sim(ss.Base):
             style (str): the plotting style to use (default "fancy"; other options are "simple", None, or any Matplotlib style)
             show_data (bool): plot the data, if available
             show_skipped (bool): show even results that are skipped by default
+            show_module (bool): whether to show the module as well as the result name; if an int, show if the label is less than that length
             fig_kw (dict): passed to ``plt.subplots()``
             plot_kw (dict): passed to ``plt.plot()``
             scatter_kw (dict): passed to ``plt.scatter()``, for plotting the data
@@ -552,6 +553,8 @@ class Sim(ss.Base):
         fig_kw = sc.mergedicts({'figsize':figsize}, fig_kw)
         plot_kw = sc.mergedicts({'lw':2}, plot_kw)
         scatter_kw = sc.mergedicts({'alpha':0.3, 'color':'k'}, scatter_kw)
+        if show_module is True: # Set no limit for the label length
+            show_module = 999
 
         # Do the plotting
         with sc.options.with_style(style):
@@ -564,6 +567,8 @@ class Sim(ss.Base):
 
             # Get the figure
             if fig is None:
+                if self.label is not None:
+                    fig_kw['num'] = self.label
                 fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
                 if isinstance(axs, np.ndarray):
                     axs = axs.flatten()
@@ -596,8 +601,6 @@ class Sim(ss.Base):
                     locator = mpl.dates.AutoDateLocator(minticks=2, maxticks=5) # Fewer ticks since lots of plots
                     sc.dateformatter(ax, locator=locator)
 
-        if self.label is not None:
-            fig.suptitle(self.label)
         sc.figlayout(fig=fig)
 
         return fig
