@@ -522,7 +522,7 @@ class Sim(ss.Base):
         return d
 
     def plot(self, key=None, fig=None, style='fancy', show_data=True, show_skipped=False,
-             show_module=15, fig_kw=None, plot_kw=None, scatter_kw=None):
+             show_module=26, show_label=False, fig_kw=None, plot_kw=None, scatter_kw=None):
         """
         Plot all results in the Sim object
 
@@ -532,7 +532,8 @@ class Sim(ss.Base):
             style (str): the plotting style to use (default "fancy"; other options are "simple", None, or any Matplotlib style)
             show_data (bool): plot the data, if available
             show_skipped (bool): show even results that are skipped by default
-            show_module (bool): whether to show the module as well as the result name; if an int, show if the label is less than that length
+            show_module (bool): whether to show the module as well as the result name; if an int, show if the label is less than that length; if -1, use a newline
+            show_label (str): if 'fig', reset the fignum; if 'title', set the figure suptitle
             fig_kw (dict): passed to ``plt.subplots()``
             plot_kw (dict): passed to ``plt.plot()``
             scatter_kw (dict): passed to ``plt.scatter()``, for plotting the data
@@ -567,8 +568,13 @@ class Sim(ss.Base):
 
             # Get the figure
             if fig is None:
-                if self.label is not None:
-                    fig_kw['num'] = self.label
+                if show_label in ['fig', 'fignum'] and self.label:
+                    plotlabel = self.label
+                    figlist = sc.autolist()
+                    while plt.fignum_exists(plotlabel):
+                        figlist += plotlabel
+                        plotlabel = sc.uniquename(self.label, figlist, human=True)
+                    fig_kw['num'] = plotlabel
                 fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
                 if isinstance(axs, np.ndarray):
                     axs = axs.flatten()
@@ -595,11 +601,21 @@ class Sim(ss.Base):
 
                 # Plot results
                 ax.plot(res.timevec, res.values, **plot_kw, label=self.label)
-                ax.set_title(res.full_label)
+                if show_module == -1:
+                    label = res.full_label.replace(':', '\n')
+                elif len(res.full_label) > show_module:
+                    label = res.label
+                else:
+                    label = res.full_label
+
+                ax.set_title(label)
                 sc.commaticks(ax)
                 if res.has_dates:
                     locator = mpl.dates.AutoDateLocator(minticks=2, maxticks=5) # Fewer ticks since lots of plots
                     sc.dateformatter(ax, locator=locator)
+
+        if show_label in ['title', 'suptitle'] and self.label:
+            fig.suptitle(self.label, weight='bold')
 
         sc.figlayout(fig=fig)
 
