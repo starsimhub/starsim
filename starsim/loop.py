@@ -211,7 +211,7 @@ class Loop:
         """ Return a user-friendly version of the plan, omitting object columns """
         # Compute the main dataframe
         cols = ['time', 'func_order', 'module', 'func_name', 'func_label']
-        if self.plan:
+        if self.plan is not None:
             df = self.plan[cols].copy() # Need to copy, otherwise it's messed up
         else:
             errormsg = f'Simulation "{self.sim}" needs to be initialized before exporting the Loop dataframe'
