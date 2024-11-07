@@ -234,8 +234,8 @@ class Deaths(Demographics):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('new',        dtype=int,   scale=True,  label='Deaths'),
-            ss.Result('cumulative', dtype=int,   scale=True,  label='Cumulative deaths'),
+            ss.Result('new',        dtype=int,   scale=True,  label='Deaths', auto_plot=False), # Use sim deaths instead
+            ss.Result('cumulative', dtype=int,   scale=True,  label='Cumulative deaths', auto_plot=False),
             ss.Result('cmr',        dtype=float, scale=False, label='Crude mortality rate'),
         )
         return

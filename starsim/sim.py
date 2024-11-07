@@ -521,7 +521,8 @@ class Sim(ss.Base):
         d = sc.jsonify(d)
         return d
 
-    def plot(self, key=None, fig=None, style='fancy', show_data=True, fig_kw=None, plot_kw=None, scatter_kw=None):
+    def plot(self, key=None, fig=None, style='fancy', show_data=True, show_skipped=False,
+             fig_kw=None, plot_kw=None, scatter_kw=None):
         """
         Plot all results in the Sim object
 
@@ -530,6 +531,7 @@ class Sim(ss.Base):
             fig (Figure): if provided, plot results into an existing figure
             style (str): the plotting style to use (default "fancy"; other options are "simple", None, or any Matplotlib style)
             show_data (bool): plot the data, if available
+            show_skipped (bool): show even results that are skipped by default
             fig_kw (dict): passed to ``plt.subplots()``
             plot_kw (dict): passed to ``plt.plot()``
             scatter_kw (dict): passed to ``plt.scatter()``, for plotting the data
@@ -538,6 +540,11 @@ class Sim(ss.Base):
 
         # Configuration
         flat = self.results.flatten()
+        if not show_skipped:
+            for k in list(flat.keys()): # NB: can't call it "key", shadows argument
+                res = flat[k]
+                if isinstance(res, ss.Result) and not res.auto_plot:
+                    flat.pop(k)
         n_cols = np.ceil(np.sqrt(len(flat))) # Number of columns of axes
         default_figsize = np.array([8, 6])
         figsize_factor = np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size based on the number of rows and columns
