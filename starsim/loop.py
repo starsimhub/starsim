@@ -322,7 +322,7 @@ class Loop:
         new = cls.__new__(cls)
         memo[id(self)] = new
         for k, v in self.__dict__.items():
-            if k == 'plan':
+            if k == 'plan' and isinstance(v, sc.dataframe):
                 origdict = v.to_dict() # Convert to a dictionary
                 newdict = sc.dcp(origdict, memo=memo) # Copy the dict
                 newdf = sc.dataframe(newdict)
