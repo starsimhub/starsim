@@ -370,7 +370,7 @@ class Sim(ss.Base):
         summary = sc.objdict()
         flat = sc.flattendict(self.results, sep='_')
         for key, res in flat.items():
-            if '_timevec' not in key: # Skip module-specific time vectors
+            if 'timevec' not in key: # Skip module-specific time vectors
                 try:
                     func = get_func(key, how)
                     entry = get_result(res, func)

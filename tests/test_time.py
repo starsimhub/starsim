@@ -102,8 +102,8 @@ def test_units(do_plot=False):
     )
 
     sims = sc.objdict()
-    sims.y = ss.Sim(pars, unit='year', label='Year', start=2000, stop=2002, dt=1/365)
-    sims.d = ss.Sim(pars, unit='day', label='Day', start='2000-01-01', stop='2002-01-01', dt=1)
+    sims.y = ss.Sim(pars, unit='year', label='Year', start=2000, stop=2002, dt=1/365, verbose=0)
+    sims.d = ss.Sim(pars, unit='day', label='Day', start='2000-01-01', stop='2002-01-01', dt=1, verbose=0)
 
     for sim in sims.values():
         sim.run()
@@ -126,6 +126,7 @@ def test_multi_timestep(do_plot=False):
         demographics = ss.Births(unit='year', dt=0.25),
         networks = ss.RandomNet(unit='week'),
         n_agents = small,
+        verbose = 0,
     )
 
     sim = ss.Sim(pars, unit='day', dt=2, start='2000-01-01', stop='2002-01-01')
@@ -143,6 +144,93 @@ def test_multi_timestep(do_plot=False):
     return sim
 
 
+def test_mixed_timesteps():
+    sc.heading('Test behavior of different commbinations of timesteps')
+
+    siskw = dict(dur_inf=ss.dur(50, 'day'), beta=ss.beta(0.01, 'day'), waning=ss.rate(0.005, 'day'))
+    kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
+
+    print('Year-year')
+    sis1 = ss.SIS(unit='year', dt=1/365, **sc.dcp(siskw))
+    sim1 = ss.Sim(unit='year', dt=1/365, diseases=sis1, label='year-year', **kw)
+
+    print('Day-day')
+    sis2 = ss.SIS(unit='day', dt=1.0, **sc.dcp(siskw))
+    sim2 = ss.Sim(unit='day', dt=1.0, diseases=sis2, label='day-day', **kw)
+
+    print('Day-year')
+    sis3 = ss.SIS(unit='day', dt=1.0, **sc.dcp(siskw))
+    sim3 = ss.Sim(unit='year', dt=1/365, diseases=sis3, label='day-year', **kw)
+
+    print('Year-day')
+    sis4 = ss.SIS(unit='year', dt=1/365, **sc.dcp(siskw))
+    sim4 = ss.Sim(unit='day', dt=1.0, diseases=sis4, label='year-day', **kw)
+
+    msim = ss.parallel(sim1, sim2, sim3, sim4)
+
+    # Check that al results are close
+    threshold = 0.01
+    summary = msim.summarize()
+    for key,res in summary.items():
+        if res.mean:
+            ratio = res.std/res.mean
+            assert ratio < threshold, f'Result {key} exceeds threshold: {ratio:n} > {threshold}'
+            print(f'✓ Result {key} within threshold: {ratio:n} < {threshold}')
+    return msim
+
+
+def test_time_class():
+    sc.heading('Test different instances of ss.Time')
+
+    def sim(start, stop, dt, unit):
+        """ Generate a fake sim """
+        sim = sc.prettyobj()
+        sim.t = ss.Time(start=start, stop=stop, dt=dt, unit=unit, sim=True)
+        return sim
+
+    print('Testing dates vs. numeric')
+    s1 = sim(start=2000, stop=2002, dt=0.1, unit='year')
+    t1 = ss.Time(start='2001-01-01', stop='2001-06-30', dt=2.0, unit='day')
+    t1.init(sim=s1)
+    assert np.array_equal(s1.t.timevec, s1.t.yearvec)
+    assert len(s1.t.timevec) == 21
+    assert t1.npts == sc.daydiff('2001-01-01', '2001-06-30')//2 + 1
+    assert sc.isnumber(s1.t.start)
+    assert isinstance(t1.start, ss.date)
+    assert s1.t.datevec[-1] == ss.date('2002-01-01')
+    assert t1.datevec[-1] == ss.date('2001-06-30')
+    assert t1.abstvec[0] == 1.0
+
+    print('Testing weeks vs. days')
+    s2 = sim(start='2000-06-01', stop='2001-05-01', dt=1, unit='day')
+    t2 = ss.Time(start='2000-06-01', stop='2001-05-01', dt=1, unit='week')
+    t2.init(sim=s2)
+    assert np.array_equal(s2.t.timevec, s2.t.datevec)
+    assert isinstance(s2.t.start, ss.date)
+    assert t2.npts*7 == s2.t.npts + 1
+    assert np.array_equal(t2.abstvec, s2.t.abstvec[::7])
+
+    print('Testing different units and dt')
+    s3 = sim(start='2001-01-01', stop='2003-01-01', dt=0.1, unit='year')
+    t3 = ss.Time(start='2001-01-01', stop='2003-01-01', dt=2.0, unit='day')
+    t3.init(sim=s3)
+    assert np.array_equal(s3.t.timevec, s3.t.datevec)
+    assert s3.t.datevec[-1] == ss.date('2003-01-01')
+    assert s3.t.npts == 21
+    assert np.isclose(s3.t.abstvec.mean(), t3.abstvec.mean(), atol=1e-3)
+
+    print('Testing unitless')
+    s4 = sim(start=0, stop=10, dt=1.0, unit='unitless')
+    t4 = ss.Time(start=2, stop=9, dt=0.1, unit='unitless')
+    t4.init(sim=s4)
+    assert np.array_equal(s4.t.timevec, s4.t.abstvec)
+    assert s4.t.datevec[0] == ss.date(ss.time.default_start_year)
+    assert len(s4.t) == 11
+    assert len(t4) == (9-2)/0.1+1
+
+    return [s1, t1, s2, t2]
+
+
 # %% Run as a script
 if __name__ == '__main__':
     do_plot = True
@@ -154,5 +242,7 @@ if __name__ == '__main__':
     o2 = test_classes()
     o3 = test_units(do_plot)
     o4 = test_multi_timestep(do_plot)
+    o5 = test_mixed_timesteps()
+    o6 = test_time_class()
 
     T.toc()

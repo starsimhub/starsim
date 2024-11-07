@@ -294,6 +294,14 @@ class Time(sc.prettyobj):
             self.init(sim=sim)
         return
 
+    def __bool__(self):
+        """ Always truthy """
+        return True
+
+    def __len__(self):
+        """ Length is the number of timepoints """
+        return sc.ifelse(self.npts, 0)
+
     @property
     def ready(self):
         """ Check if all parameters are in place to be initialized """
