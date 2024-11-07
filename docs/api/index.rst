@@ -13,6 +13,7 @@ This page lists Starsim's full API, including all functions and classes.
    :nosignatures:
 
    arrays
+   calibration
    demographics
    disease
    distributions
@@ -28,4 +29,5 @@ This page lists Starsim's full API, including all functions and classes.
    samples
    settings
    sim
+   time
    utils

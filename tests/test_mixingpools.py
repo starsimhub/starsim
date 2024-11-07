@@ -3,12 +3,12 @@ Test Sim API
 """
 
 # %% Imports and settings
-import pytest
-import starsim as ss
+import sys
+import numpy as np
 import sciris as sc
 import matplotlib.pyplot as plt
-import numpy as np
-import sys
+import starsim as ss
+import pytest
 
 n_agents = 1_000
 do_plot = False
