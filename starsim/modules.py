@@ -236,7 +236,8 @@ class Module(Base):
 
     def step(self):
         """ Define how the module updates over time -- the key part of Starsim!! """
-        pass
+        errormsg = f'Module "{self.name}" does not define a "step" method: use "def step(self): pass" if this is intentional'
+        raise NotImplementedError(errormsg)
 
     def finish_step(self):
         """ Define what should happen at the end of the step; at minimum, increment ti """

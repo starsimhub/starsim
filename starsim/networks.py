@@ -724,6 +724,10 @@ class NullNet(Network):
         self.append(dict(p1=indices, p2=indices, beta=np.zeros_like(indices)))
         return
 
+    def step(self):
+        """ Not used for NullNet """
+        pass
+
 
 class MFNet(SexualNetwork):
     """
@@ -1231,7 +1235,6 @@ class MixingPool(Route):
         return
 
     def step(self):
-        super().step()
         self.src_uids = self.get_uids(self.pars.src)
         self.dst_uids = self.get_uids(self.pars.dst)
         beta = self.pars.beta
