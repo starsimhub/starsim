@@ -54,8 +54,9 @@ class SIR(ss.Infection):
             sim.people.request_death(deaths)
         return
 
-    def set_prognoses(self, uids, source_uids=None):
+    def set_prognoses(self, uids, sources=None):
         """ Set prognoses """
+        super().set_prognoses(uids, sources)
         ti = self.t.ti
         self.susceptible[uids] = False
         self.infected[uids] = True
@@ -137,9 +138,9 @@ class SIS(ss.Infection):
         self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])
         return
 
-    def set_prognoses(self, uids, source_uids=None):
+    def set_prognoses(self, uids, sources=None):
         """ Set prognoses """
-        super().set_prognoses(uids, source_uids)
+        super().set_prognoses(uids, sources)
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = self.ti

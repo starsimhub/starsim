@@ -86,6 +86,7 @@ disable=raw-checker-failed,
         useless-suppression,
         deprecated-pragma,
         use-symbolic-message-instead,
+        C0103, # Starsim: allow lowercase constants
         C0321, # Starsim: multiple statements on a line
         C0325, # Starsim: allow parentheses in if
         C0411, # Starsim: allow different import order

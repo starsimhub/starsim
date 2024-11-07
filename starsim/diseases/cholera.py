@@ -124,9 +124,9 @@ class Cholera(ss.Infection):
         r.env_conc[ti] = r.env_prev[ti] / (r.env_prev[ti] + p.half_sat_rate)
         return
 
-    def set_prognoses(self, uids, source_uids=None):
+    def set_prognoses(self, uids, sources=None):
         """ Set prognoses for those who get infected """
-        super().set_prognoses(uids, source_uids)
+        super().set_prognoses(uids, sources)
         ti = self.ti
 
         self.susceptible[uids] = False

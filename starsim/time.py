@@ -170,9 +170,19 @@ class date(pd.Timestamp):
             return cls.from_year(kwargs['year'])
 
         # Otherwise, proceed as normal
-        out = super().__new__(cls, *args, **kwargs)
-        out.__class__ = cls
+        out = super(date, cls).__new__(cls, *args, **kwargs)
+        out = cls._reset_class(out)
         return out
+
+    @classmethod
+    def _reset_class(cls, obj):
+        """ Manually reset the class from pd.Timestamp to ss.date """
+        try:
+            obj.__class__ = date
+        except:
+            warnmsg = f'Unable to convert {out} to ss.date(); proceeding with pd.Timestamp'
+            ss.warn(warnmsg)
+        return obj
 
     def __repr__(self, bracket=True):
         """ Show the date in brackets, e.g. <2024.04.04> """
@@ -267,7 +277,18 @@ class Time(sc.prettyobj):
         self.dt = dt
         self.unit = unit
         self.ti = 0 # The time index, e.g. 0, 1, 2
+
+        # Prepare for later initialization
+        self.dt_year = None
+        self.npts    = None
+        self.tvec    = None
+        self.timevec = None
+        self.datevec = None
+        self.yearvec = None
+        self.abstvec = None
         self.initialized = False
+
+        # Finalize
         self.update(pars=pars, parent=parent)
         if init and self.ready:
             self.init(sim=sim)
@@ -290,6 +311,22 @@ class Time(sc.prettyobj):
     def is_unitless(self):
         return is_unitless(self.unit)
 
+    def __setstate__(self, state):
+        """ Custom setstate to unpickle ss.date() instances correctly """
+        self.__dict__.update(state)
+        self._convert_timestamps()
+        return
+
+    def _convert_timestamps(self):
+        """ Replace pd.Timestamp instances with ss.date(); required due to pandas limitations with pickling """
+        objs = [self.start, self.stop]
+        objs += sc.tolist(self.datevec, coerce='full')
+        objs += sc.tolist(self.timevec, coerce='full')
+        objs = [obj for obj in objs if type(obj) == pd.Timestamp]
+        for obj in objs:
+            date._reset_class(obj)
+        return
+
     def update(self, pars=None, parent=None, reset=True, force=None, **kwargs):
         """ Reconcile different ways of supplying inputs """
         pars = sc.mergedicts(pars)
@@ -307,11 +344,11 @@ class Time(sc.prettyobj):
                     if parent.unit != self.unit:
                         parent_val = 1.0
 
-            if force == False: # Only update missing (None) values
+            if force is False: # Only update missing (None) values
                 val = sc.ifelse(current_val, kw_val, par_val, parent_val)
             elif force is None: # Prioritize current value
                 val = sc.ifelse(kw_val, par_val, current_val, parent_val)
-            elif force == True: # Prioritize parent value
+            elif force is True: # Prioritize parent value
                 val = sc.ifelse(kw_val, par_val, parent_val, current_val)
             else:
                 errormsg = f'Invalid value {force} for force: must be False, None, or True'
@@ -546,7 +583,7 @@ class TimePar(ss.BaseArr):
             self.parent_unit = parent.unit
 
         if parent.dt is not None:
-           self.parent_dt = parent.dt
+            self.parent_dt = parent.dt
 
         # Set defaults if not yet set
         self.unit = sc.ifelse(self.unit, self.parent_unit) # If unit isn't defined but parent is, set to parent
@@ -604,6 +641,7 @@ class TimePar(ss.BaseArr):
 
     @property
     def isarray(self):
+        """ Check if the value is an array """
         return isinstance(self.v, np.ndarray)
 
     def set(self, v=None, unit=None, parent_unit=None, parent_dt=None, self_dt=None, force=False):

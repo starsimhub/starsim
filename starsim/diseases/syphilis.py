@@ -4,8 +4,8 @@ Define default syphilis disease module
 
 import numpy as np
 import sciris as sc
-from sciris import randround as rr # Since used frequently
 import starsim as ss
+rr = sc.randround # Since used frequently
 
 
 __all__ = ['Syphilis']
@@ -248,14 +248,14 @@ class Syphilis(ss.Infection):
 
         return
 
-    def set_congenital(self, uids, source_uids=None):
+    def set_congenital(self, uids, sources=None):
         """ Natural history of syphilis for congenital infection """
         sim = self.sim
 
         # Determine outcomes
         for state in ['active', 'latent']:
 
-            source_state_inds = getattr(self, state)[source_uids].nonzero()[0]
+            source_state_inds = getattr(self, state)[sources].nonzero()[0]
             state_uids = uids[source_state_inds]
 
             if len(state_uids) > 0:

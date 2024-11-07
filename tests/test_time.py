@@ -131,6 +131,12 @@ def test_multi_timestep(do_plot=False):
     sim = ss.Sim(pars, unit='day', dt=2, start='2000-01-01', stop='2002-01-01')
     sim.run()
 
+    twoyears = 366*2
+    quarters = 2/0.25
+    assert len(sim) == twoyears//2
+    assert len(sim.diseases.sis) == twoyears
+    assert len(sim.demographics.births) == quarters
+
     if do_plot:
         sim.plot()
 
