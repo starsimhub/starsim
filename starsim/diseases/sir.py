@@ -54,9 +54,10 @@ class SIR(ss.Infection):
             sim.people.request_death(deaths)
         return
 
-    def set_prognoses(self, uids, source_uids=None):
+    def set_prognoses(self, uids, sources=None):
         """ Set prognoses """
-        ti = self.ti
+        super().set_prognoses(uids, sources)
+        ti = self.t.ti
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = ti
@@ -86,8 +87,9 @@ class SIR(ss.Infection):
         """ Default plot for SIR model """
         fig = plt.figure()
         kw = sc.mergedicts(dict(lw=2, alpha=0.8), kwargs)
+        res = self.results
         for rkey in ['n_susceptible', 'n_infected', 'n_recovered']:
-            plt.plot(self.timevec, self.results[rkey], label=self.results[rkey].label, **kw)
+            plt.plot(res.timevec, res[rkey], label=res[rkey].label, **kw)
         plt.legend(frameon=False)
         plt.xlabel('Time')
         plt.ylabel('Number of people')
@@ -136,9 +138,9 @@ class SIS(ss.Infection):
         self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])
         return
 
-    def set_prognoses(self, uids, source_uids=None):
+    def set_prognoses(self, uids, sources=None):
         """ Set prognoses """
-        super().set_prognoses(uids, source_uids)
+        super().set_prognoses(uids, sources)
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = self.ti
@@ -170,8 +172,9 @@ class SIS(ss.Infection):
         """ Default plot for SIS model """
         fig = plt.figure()
         kw = sc.mergedicts(dict(lw=2, alpha=0.8), kwargs)
+        res = self.results
         for rkey in ['n_susceptible', 'n_infected']:
-            plt.plot(self.timevec, self.results[rkey], label=self.results[rkey].label, **kw)
+            plt.plot(res.timevec, res[rkey], label=res[rkey].label, **kw)
         plt.legend(frameon=False)
         plt.xlabel('Time')
         plt.ylabel('Number of people')

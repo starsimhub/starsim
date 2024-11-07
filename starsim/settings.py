@@ -4,7 +4,6 @@ All options should be set using set() or directly, e.g.::
 
     ss.options(verbose=False)
 """
-import os
 import numpy as np
 import sciris as sc
 
@@ -64,22 +63,28 @@ class Options(sc.objdict):
         options = sc.objdict()  # The options
 
         optdesc.verbose = 'Set default level of verbosity (i.e. logging detail): e.g., 0.1 is an update every 10 simulated timesteps.'
-        options.verbose = float(os.getenv('STARSIM_VERBOSE', 0.1))
+        options.verbose = sc.parse_env('STARSIM_VERBOSE', 0.1, 'float')
+
+        optdesc.license = 'Whether to print the license on import'
+        options.license = sc.parse_env('STARSIM_LICENSE', False, 'bool')
 
         optdesc.warnings = 'How warnings are handled: options are "warn" (default), "print", and "error"'
-        options.warnings = str(os.getenv('STARSIM_WARNINGS', 'warn'))
+        options.warnings = sc.parse_env('STARSIM_WARNINGS', 'warn', 'str')
 
         optdesc.time_eps = 'Set size of smallest possible time unit (in units of sim time, e.g. "year" or "day")'
-        options.time_eps = float(os.getenv('STARSIM_TIME_EPS', 1e-6))
+        options.time_eps = sc.parse_env('STARSIM_TIME_EPS', 1e-6, 'float') # If unit = 'year', corresponds to ~30 seconds
 
         optdesc.sep = 'Set thousands seperator for text output'
-        options.sep = str(os.getenv('STARSIM_SEP', ','))
+        options.sep = sc.parse_env('STARSIM_SEP', ',', 'str')
+
+        optdesc.date_sep = 'Set seperator for dates'
+        options.date_sep = sc.parse_env('STARSIM_DATE_SEP', '.', 'str')
 
         optdesc.precision = 'Set arithmetic precision'
-        options.precision = int(os.getenv('STARSIM_PRECISION', 64))
+        options.precision = sc.parse_env('STARSIM_PRECISION', 64, 'int')
 
         optdesc._centralized = 'If True, revert to centralized random number generation (NOT ADVISED).'
-        options._centralized = False
+        options._centralized = sc.parse_env('STARSIM_CENTRALIZED', False, 'bool')
 
         return optdesc, options
 

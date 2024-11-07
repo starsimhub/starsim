@@ -44,9 +44,40 @@ class Result(ss.BaseArr):
         self.init_values()
         return
 
+    def __repr__(self):
+        cls_name = self.__class__.__name__
+        arrstr = super().__repr__().removeprefix(cls_name)
+        out = f'{cls_name}({self.key}):\narray{arrstr}'
+        return out
+
+    def __str__(self):
+        cls_name = self.__class__.__name__
+        try:
+            minval = self.values.min()
+            meanval = self.values.mean()
+            maxval = self.values.max()
+            valstr = f'min={minval:n}, mean={meanval:n}, max={maxval:n}'
+        except:
+            valstr = f'{self.values}'
+        out = f'{cls_name}({self.key}: {valstr})'
+        return out
+
+    def __getitem__(self, key):
+        """ Allow e.g. result['low'] """
+        if isinstance(key, str):
+            return getattr(self, key)
+        else:
+            return super().__getitem__(key)
+
     @property
     def initialized(self):
         return self.values is not None
+
+    @property
+    def has_dates(self):
+        """ Check whether the time vector uses dates (rather than numbers) """
+        try:    return not sc.isnumber(self.timevec[0])
+        except: return False
 
     def init_values(self, values=None, dtype=None, shape=None, force=False):
         """ Handle values """
@@ -96,19 +127,6 @@ class Result(ss.BaseArr):
             full = f'{modlabel}: {reslabel}'
         return full
 
-    def __repr__(self):
-        cls_name = self.__class__.__name__
-        arrstr = super().__repr__().removeprefix(cls_name)
-        out = f'{cls_name}({self.key}):\narray{arrstr}'
-        return out
-
-    def __getitem__(self, key):
-        """ Allow e.g. result['low'] """
-        if isinstance(key, str):
-            return getattr(self, key)
-        else:
-            return super().__getitem__(key)
-
     def to_df(self, sep='_', rename=False):
         """
         Convert to a dataframe with timevec, value, low, and high columns
@@ -151,7 +169,9 @@ class Result(ss.BaseArr):
         plt.plot(self.timevec, self.values, **plot_kw)
         plt.title(self.full_label)
         plt.xlabel('Time')
-        sc.commaticks()
+        sc.commaticks(ax)
+        if self.has_dates:
+            sc.dateformatter(ax)
         if (self.values.min() >= 0) and (plt.ylim()[0]<0): # Don't allow axis to go negative if results don't
             plt.ylim(bottom=0)
         return fig
@@ -166,8 +186,24 @@ class Results(ss.ndict):
         super().__init__(type=Result, strict=strict, *args, **kwargs)
         return
 
-    def __repr__(self, *args, **kwargs): # TODO: replace with dataframe summary
-        return super().__repr__(*args, **kwargs)
+    def __repr__(self, indent=2, **kwargs): # kwargs are not used, but are needed for disp() to work
+        string = f'Results({self._module})\n'
+        for i,k,v in self.enumitems():
+            if k != 'timevec':
+                entry = f'{v}'
+                if '\n' in entry: # Check if the string is multi-line
+                    lines = entry.splitlines()
+                    entry = f'{i}. {lines[0]}\n'
+                    entry += '\n'.join(' '*indent + f'{i}.' + line for line in lines[1:])
+                    string += entry + '\n'
+                else:
+                    string += f'{i}. {v}\n'
+        string = string.rstrip()
+        return string
+
+    def disp(self, *args, **kwargs):
+        print(super().__repr__(*args, **kwargs))
+        return
 
     def append(self, arg, key=None):
         """ This is activated by adding as well, e.g. results += result """
@@ -196,6 +232,12 @@ class Results(ss.ndict):
         """ Iterator over all results, skipping any nested values """
         return iter(res for res in self.values() if isinstance(res, Result))
 
+    @property
+    def equal_len(self):
+        """ Check if all results are equal length """
+        lengths = [len(res) for res in self.flatten().values()]
+        return len(set(lengths)) == 1
+
     def flatten(self, sep='_', only_results=True):
         """ Turn from a nested dictionary into a flat dictionary, keeping only results by default """
         out = sc.flattendict(self, sep=sep)
@@ -203,12 +245,29 @@ class Results(ss.ndict):
             out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
         return out
 
-    def to_df(self, sep='_'):
+    def to_df(self, sep='_', descend=False):
         """ Merge all results dataframes into one """
-        dfs = [res.to_df(sep=sep, rename=True) for res in self.all_results]
-        df = dfs[0]
-        for df2 in dfs[1:]:
-            df = df.merge(df2)
+        if not descend:
+            dfs = [res.to_df(sep=sep, rename=True) for res in self.all_results]
+            if len(dfs):
+                df = dfs[0]
+                for df2 in dfs[1:]:
+                    df = df.merge(df2)
+            else:
+                df = None
+        else:
+            if self.equal_len:
+                flat = self.flatten(sep=sep, only_results=True)
+                flat = dict(timevec=self.timevec) | flat # Prepend the timevec
+                df = sc.dataframe.from_dict(flat)
+            else:
+                df = sc.objdict() # For non-equal lengths, actually return an objdict rather than a dataframe
+                df.sim = self.to_df(sep=sep, descend=False)
+                for k,v in self.items():
+                    if isinstance(v, Results):
+                        thisdf = v.to_df(sep=sep, descend=False) # Only allow one level of nesting
+                        if thisdf is not None:
+                            df[k] = thisdf
         return df
 
     def plot(self, style='fancy', fig_kw=None, plot_kw=None):

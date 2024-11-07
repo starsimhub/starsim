@@ -5,12 +5,13 @@ import itertools
 import numpy as np
 import sciris as sc
 import starsim as ss
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 
 __all__ = ['Sim', 'AlreadyRunError', 'demo', 'diff_sims', 'check_sims_match']
 
 
-class Sim:
+class Sim(ss.Base):
     """
     The Sim object
 
@@ -29,7 +30,7 @@ class Sim:
         connectors (str/Connector/list): as above, for connectors
         copy_inputs (bool): if True, copy modules as they're inserted into the sim (allowing reuse in other sims, but meaning they won't be updated)
         data (df): a dataframe (or dict) of data, with a column "time" plus data of the form "module.result", e.g. "hiv.new_infections" (used for plotting only)
-        kwargs (dict): merged with pars
+        kwargs (dict): merged with pars; see ss.SimPars for all parameter values
 
     **Examples**::
 
@@ -112,16 +113,6 @@ class Sim:
         return string
 
     @property
-    def now(self):
-        """ Return the current time, i.e. the time vector at the current timestep """
-        try:
-            ti = min(self.ti, len(self.timevec)-1) # During integration, ti can go one past the end of the time vector
-            return self.timevec[ti]
-        except Exception as E:
-            ss.warn(f'Encountered exception in sim when getting the current time: {E}')
-            return None
-
-    @property
     def modules(self):
         """ Return iterator over all Module instances (stored in standard places) in the Sim """
         return itertools.chain(
@@ -135,31 +126,20 @@ class Sim:
         )
 
     def init(self, **kwargs):
-        """ Perform all initializations for the sim; most heavy lifting is done by the parameters """
+        """ Perform all initializations for the sim """
 
-        # Validation and initialization
+        # Validation and initialization -- this is "pre"
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.validate() # Validate parameters
-        self.init_time_attrs() # Initialize time
+        self.init_time() # Initialize time
         self.init_people(**kwargs) # Initialize the people
+        self.init_sim_attrs()
+        self.init_mods_pre()
 
-        # Move initialized modules to the sim
-        keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
-        for key in keys:
-            setattr(self, key, self.pars.pop(key))
-
-        # Initialize all the modules with the sim
-        for mod in self.modules:
-            mod.init_pre(self)
-
-        # Initialize products # TODO: think about moving with other modules
-        for intv in self.interventions():
-            if hasattr(intv, 'product'): # TODO: simplify
-                intv.product.init_pre(self)
-
-        # Final initializations
+        # Final initializations -- this is "post"
         self.init_dists() # Initialize distributions
-        self.init_vals() # Initialize the values in all of the states and networks
+        self.init_people_vals() # Initialize the values in all the states and networks
+        self.init_mod_vals() # Initialize the module values
         self.init_results() # Initialize the results
         self.init_data() # Initialize the data
         self.loop.init() # Initialize the integration loop
@@ -170,15 +150,10 @@ class Sim:
         self.initialized = True
         return self
 
-    def init_time_attrs(self):
+    def init_time(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
-        pars = self.pars
-        self.timevec = ss.make_timevec(pars.start, pars.stop, pars.dt, pars.unit)
+        self.t = ss.Time(pars=self.pars, name='sim', sim=True)
         self.results.timevec = self.timevec # Store the timevec in the results for plotting
-        self.npts = len(self.timevec) # The number of points in the sim
-        self.abs_tvec = np.arange(self.npts)*pars.dt # Absolute time array
-        self.ti = 0  # The time index, e.g. 0, 1, 2
-        self.dt_year = ss.time_ratio(pars.unit, pars.dt, 'year', 1.0) # Figure out what dt is in years; used for demographics # TODO: handle None
         return
 
     def init_people(self, verbose=None, **kwargs):
@@ -208,6 +183,19 @@ class Sim:
         self.people.link_sim(self)
         return self.people
 
+    def init_sim_attrs(self):
+        """ Move initialized modules to the sim """
+        keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
+        for key in keys:
+            setattr(self, key, self.pars.pop(key))
+        return
+
+    def init_mods_pre(self):
+        """ Initialize all the modules with the sim """
+        for mod in self.modules:
+            mod.init_pre(self)
+        return
+
     def init_dists(self):
         """ Initialize the distributions """
         # Initialize all distributions now that everything else is in place
@@ -218,13 +206,13 @@ class Sim:
             self.dists.copy_to_module(mod)
         return
 
-    def init_vals(self):
-        """ Initialize the states and other objects with values """
-
-        # Initialize values in people
+    def init_people_vals(self):
+        """ Initialize the People states with actual values """
         self.people.init_vals()
+        return
 
-        # Initialize values in other modules, including networks and time parameters
+    def init_mod_vals(self):
+        """ Initialize values in other modules, including networks and time parameters """
         for mod in self.modules:
             mod.init_post()
         return
@@ -237,7 +225,7 @@ class Sim:
 
     def init_results(self):
         """ Create initial results that are present in all simulations """
-        kw = dict(shape=self.npts, timevec=self.timevec, dtype=int, scale=True)
+        kw = dict(shape=self.t.npts, timevec=self.t.timevec, dtype=int, scale=True)
         self.results += [
             ss.Result('n_alive',    label='Number alive', **kw),
             ss.Result('new_deaths', label='Deaths', **kw),
@@ -262,20 +250,19 @@ class Sim:
         # Print out progress if needed
         self.elapsed = self.timer.toc(output=True)
         if self.verbose: # Print progress
+            t = self.t
             simlabel = f'"{self.label}": ' if self.label else ''
-            timepoint = self.timevec[self.ti]
-            timelabel = f'{timepoint:0.1f}' if isinstance(timepoint, float) else str(timepoint) # TODO: fix
-            string = f'  Running {simlabel}{timelabel} ({self.ti:2.0f}/{self.npts}) ({self.elapsed:0.2f} s) '
-            if self.verbose >= 2:
+            string = f'  Running {simlabel}{t.now("str")} ({t.ti:2.0f}/{t.npts}) ({self.elapsed:0.2f} s) '
+            if self.verbose >= 1:
                 sc.heading(string)
             elif self.verbose > 0:
-                if not (self.ti % int(1.0 / self.verbose)):
-                    sc.progressbar(self.ti + 1, self.npts, label=string, length=20, newline=True)
+                if not (t.ti % int(1.0 / self.verbose)):
+                    sc.progressbar(t.ti + 1, t.npts, label=string, length=20, newline=True)
         return
 
     def finish_step(self):
         """ Finish the simulation timestep """
-        self.ti += 1
+        self.t.ti += 1
         return
 
     def run_one_step(self, verbose=None):
@@ -288,7 +275,7 @@ class Sim:
 
         Note: the verbose here is only for the Loop object, not the sim.
         """
-        self.loop.run(self.now, verbose)
+        self.loop.run(self.t.now(), verbose)
         return self
 
     def run(self, until=None, verbose=None):
@@ -315,9 +302,9 @@ class Sim:
 
         # If simulation reached the end, finalize the results
         if self.complete:
-            self.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
+            self.t.ti -= 1  # During the run, this keeps track of the next step; restore this be the final day of the sim
             for mod in self.modules: # May not be needed, but keeps it consistent with the sim
-                mod.ti -= 1
+                mod.t.ti -= 1
             self.finalize()
             sc.printv(f'Run finished after {self.elapsed:0.2f} s.\n', 1, self.verbose)
         return self # Allows e.g. ss.Sim().run().plot()
@@ -376,14 +363,14 @@ class Sim:
 
         # Convert "how" from a string to a dict
         if how == 'default':
-            how = {'n_':'mean', 'new_':'mean', 'cum_':'last', '':'mean'}
+            how = {'n_':'mean', 'new_':'mean', 'cum_':'last', 'timevec':'last', '':'mean'}
         elif isinstance(how, str):
             how = {'':how} # Match everything
 
         summary = sc.objdict()
         flat = sc.flattendict(self.results, sep='_')
         for key, res in flat.items():
-            if '_timevec' not in key: # Skip module-specific time vectors
+            if 'timevec' not in key: # Skip module-specific time vectors
                 try:
                     func = get_func(key, how)
                     entry = get_result(res, func)
@@ -392,11 +379,6 @@ class Sim:
                 summary[key] = entry
         self.summary = summary
         return summary
-
-    def disp(self):
-        """ Print a full version of the sim """
-        sc.pr(self)
-        return
 
     def shrink(self, skip_attrs=None, in_place=True):
         """
@@ -431,14 +413,18 @@ class Sim:
         else:
             return shrunken
 
+    def check_results_ready(self, errormsg=None):
+        """ Check that results are ready """
+        if errormsg is None:
+            errormsg = 'Please run the sim first'
+        if not self.results_ready:  # pragma: no cover
+            raise RuntimeError(errormsg)
+        return
+
     def to_df(self, sep='_'):
         """ Export results as a Pandas dataframe """
-        if not self.results_ready:  # pragma: no cover
-            errormsg = 'Please run the sim before exporting the results'
-            raise RuntimeError(errormsg)
-
-        flat = self.results.flatten(sep=sep, only_results=False)
-        df = sc.dataframe.from_dict(flat)
+        self.check_results_ready('Please run the sim before exporting the results')
+        df = self.results.to_df(sep=sep, descend=True)
         return df
 
     def save(self, filename=None, keep_people=None, skip_attrs=None, **kwargs):
@@ -548,6 +534,8 @@ class Sim:
             plot_kw (dict): passed to ``plt.plot()``
             scatter_kw (dict): passed to ``plt.scatter()``, for plotting the data
         """
+        self.check_results_ready('Please run the sim before plotting')
+
         # Configuration
         flat = self.results.flatten()
         n_cols = np.ceil(np.sqrt(len(flat))) # Number of columns of axes
@@ -596,8 +584,13 @@ class Sim:
                 # Plot results
                 ax.plot(res.timevec, res.values, **plot_kw, label=self.label)
                 ax.set_title(res.full_label)
-                ax.set_xlabel('Time')
+                sc.commaticks(ax)
+                if res.has_dates:
+                    locator = mpl.dates.AutoDateLocator(minticks=2, maxticks=5) # Fewer ticks since lots of plots
+                    sc.dateformatter(ax, locator=locator)
 
+        if self.label is not None:
+            fig.suptitle(self.label)
         sc.figlayout(fig=fig)
 
         return fig

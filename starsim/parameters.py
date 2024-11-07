@@ -68,6 +68,8 @@ class Pars(sc.objdict):
                     self._update_dist(key, old, new)
                 elif callable(old): # It's a function: update directly
                     self[key] = new
+                elif isinstance(old, dict):
+                    self[key] = new # Take dictionaries directly, without warning the user
                 else: # Everything else; not used currently but could be
                     warnmsg = f'No known mechanism for handling {type(old)} → {type(new)}; using default'
                     ss.warn(warnmsg)
@@ -101,13 +103,11 @@ class Pars(sc.objdict):
 
         # It's a TimePar, e.g. dur_inf = ss.dur(6); use directly
         if isinstance(new, ss.TimePar):
-            new_cls = new.__class__
-            old_cls = old.__class__
-            if new_cls == old_cls:
-                self[key] = new
-            else:
-                errormsg = f'When updating a time parameter, the new class ({new_cls}) should match the original class ({old_cls})'
-                raise TypeError(errormsg)
+            self[key] = new
+
+        # It's a dataframe, allow the update -- used for demographics
+        elif isinstance(new, (pd.Series, pd.DataFrame)):
+            self[key] = new # TODO: add validation or convert to timepar
 
         # It's a single number, e.g. dur_inf = 6; set parameters
         elif isinstance(new, Number):
@@ -123,6 +123,12 @@ class Pars(sc.objdict):
                 self[key] = new # TODO: use an actual set here
             else:
                 old.set(**new)
+
+        # Give up
+        else:
+            errormsg = f'Updating timepar from {type(old)} to {type(new)} is not supported'
+            raise TypeError(errormsg)
+
         return
 
     def _update_dist(self, key, old, new):
@@ -144,6 +150,16 @@ class Pars(sc.objdict):
         elif isinstance(new, list):
             old.set(*new)
 
+        # It's a timepar, set it like a number, e.g. dur_inf = ss.dur(6)
+        elif isinstance(new, ss.TimePar):
+            oldpar = old.pars[0]
+            if isinstance(oldpar, ss.TimePar): # If changing from one timepar to another, validate
+                dur_mismatch = isinstance(oldpar, ss.dur) != isinstance(new, ss.dur)
+                if dur_mismatch:
+                    errormsg = f'Cannot change a duration to a non-duration vice versa: old={type(oldpar)}, new={type(new)}'
+                    raise TypeError(errormsg)
+            old.set(new)
+
         # It's a dict, figure out what to do
         elif isinstance(new, dict):
             newtype = new.get('type')
@@ -156,6 +172,12 @@ class Pars(sc.objdict):
                 else:
                     dist = ss.make_dist(new)
                     self[key] = dist
+
+        # Give up
+        else:
+            errormsg = f'Updating dist from {type(old)} to {type(new)} is not supported'
+            raise TypeError(errormsg)
+
         return
 
     def check_key_mismatch(self, pars):
@@ -186,7 +208,27 @@ class SimPars(Pars):
     directly.
 
     Args:
-        kwargs (dict): any additional kwargs are interpreted as parameter names
+        label (str): The name of the simulation
+        n_agents (int/float): The number of agents to run (default 10,000)
+        total_pop (int/float): If provided, scale the agents to this effective population size
+        pop_scale (float): If provided, use this agent-to-population scale factor (total_pop = n_agents*pop_scale)
+        unit (str): The time unit for the simulation (default 'year'; other choices are 'day', 'week', 'month')
+        start (float/str/date): The starting date for the simulation (default 2000); can be a year or date
+        stop (float/str/date): If provided, the ending date for the simulation (if not provided, calculate from "dur")
+        dur (int): How many timesteps to simulate, if "stop" is not provided (default 50)
+        dt (float): The timestep, in units of "unit" (default 1.0)
+        rand_seed (int): The overall random seed for the simulation (used to set module-specific random seeds)
+        birth_rate (float): If provided, include births with this rate (per 1000 people per year)
+        death_rate (float): If provided, include deaths with this rate (per 1000 people per year)
+        use_aging (bool): Specify whether agents age (by default, agents age if and only if births and/or deaths are included)
+        people (People): If provided, use a pre-existing People object rather than creating one (in which case n_agents will be ignored)
+        networks (str/list/Module): The network module(s); can be a string, single module (i.e. Network), or list
+        demographics (str/list/Module): As above
+        diseases (str/list/Module): As above
+        connectors (str/list/Module): As above
+        interventions (str/list/Module): As above
+        analyzers (str/list/Module): As above
+        verbose (float): How much detail to print (1 = every timestep, 0.1 = every 10 timesteps, etc.)
     """
     def __init__(self, **kwargs):
 
@@ -195,19 +237,17 @@ class SimPars(Pars):
         self.verbose = ss.options.verbose # Whether or not to display information during the run -- options are 0 (silent), 0.1 (some; default), 1 (default), 2 (everything)
 
         # Population parameters
-        self.n_agents  = 10e3  # Number of agents
-        self.total_pop = None  # If defined, used for calculating the scale factor
-        self.pop_scale = None  # How much to scale the population
+        self.n_agents  = 10e3 # Number of agents
+        self.total_pop = None # If defined, used for calculating the scale factor
+        self.pop_scale = None # How much to scale the population
 
         # Simulation parameters
-        self.unit       = 'year' # The time unit to use; options are 'year' (default), 'day', and 'none'
-        self.start      = 2000   # Start of the simulation
-        self.stop       = None   # End of the simulation
-        self.dur        = 50     # Duration of time to run, if stop isn't specified
-        self.dt         = 1.0    # Timestep (in units of self.unit)
-        self.rand_seed  = 1      # Random seed; if None, don't reset
-        self.slot_scale = 5      # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
-        self.min_slots  = 100  # Minimum number of slots, useful if the population size is very small
+        self.unit      = ''    # The time unit to use; options are 'year' (default), 'day', 'week', 'month', or 'none'
+        self.start     = None  # Start of the simulation (default 2020)
+        self.stop      = None  # End of the simulation
+        self.dur       = None  # Duration of time to run, if stop isn't specified (default 50 steps of self.unit)
+        self.dt        = 1.0   # Timestep (in units of self.unit)
+        self.rand_seed = 1     # Random seed; if None, don't reset
 
         # Demographic parameters
         self.birth_rate = None
@@ -292,12 +332,19 @@ class SimPars(Pars):
 
     def validate_time(self):
         """ Ensure at least one of dur and stop is defined, but not both """
-        if isinstance(self.start, str):
-            self.start = sc.date(self.start)
-        if isinstance(self.stop, str):
-            self.stop = sc.date(self.stop)
+
+        # Handle the unit
+        if self.unit == '':
+            self.unit = ss.time.default_unit
+        self.unit = ss.time.validate_unit(self.unit)
+
+        # Handle start
+        if self.start is None:
+            self.start = ss.time.default_start[self.unit]
+
+        # Handle stop and dur
         if self.stop is not None:
-            if self.is_default('dur'):
+            if self.dur is None:
                 self.dur = ss.date_diff(self.start, self.stop, self.unit)
             else:
                 errormsg = f'You can supply either stop ({self.stop}) or dur ({self.dur}) but not both, since one is calculated from the other'
@@ -306,11 +353,9 @@ class SimPars(Pars):
                 errormsg = f"Duration must be >0, but you supplied start={str(self.start)} and stop={str(self.stop)}, which gives dur={self.dur}"
                 raise ValueError(errormsg)
         else:
-            if self.dur is not None:
-                self.stop = ss.date_add(self.start, self.dur, self.unit)
-            else:
-                errormsg = 'You must supply either "dur" or "stop".'
-                raise ValueError(errormsg)
+            if self.dur is None:
+                self.dur = ss.time.default_dur
+            self.stop = ss.date_add(self.start, self.dur, self.unit)
         return
 
     def validate_modules(self):
@@ -369,8 +414,12 @@ class SimPars(Pars):
     def validate_networks(self):
         """ Validate networks """
         # Don't allow more than one prenatal or postnatal network
-        prenatal_nets  = {k:nw for k,nw in self.networks.items() if nw.prenatal}
-        postnatal_nets = {k:nw for k,nw in self.networks.items() if nw.postnatal}
+        prenatal_nets = []
+        postnatal_nets = []
+        for k,nw in self.networks.items():
+            if isinstance(nw, ss.Network):
+                if nw.prenatal: prenatal_nets.append(k)
+                if nw.postnatal: postnatal_nets.append(k)
         if len(prenatal_nets) > 1:
             errormsg = f'Starsim currently only supports one prenatal network; prenatal networks are: {prenatal_nets.keys()}'
             raise ValueError(errormsg)

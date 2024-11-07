@@ -58,9 +58,9 @@ class Gonorrhea(ss.Infection):
 
         return
 
-    def set_prognoses(self, uids, source_uids=None):
+    def set_prognoses(self, uids, sources=None):
         """ Natural history of gonorrhea for adult infection """
-        super().set_prognoses(uids, source_uids)
+        super().set_prognoses(uids, sources)
         ti = self.ti
 
         # Set infection status

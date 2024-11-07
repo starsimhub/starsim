@@ -152,7 +152,7 @@ class Infection(Disease):
     operate on to capture co-infection
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, pars=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.define_states(
             ss.State('susceptible', default=True, label='Susceptible'),
@@ -161,6 +161,11 @@ class Infection(Disease):
             ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
             ss.FloatArr('ti_infected', label='Time of infection' ),
         )
+
+        self.define_pars(
+            init_prev = None, # Replace None with a ss.bernoulli to seed infections
+        )
+        self.update_pars(pars, **kwargs)
 
         # Define random number generator for determining transmission
         self.trans_rng = ss.multi_random('source', 'target')
@@ -296,7 +301,7 @@ class Infection(Disease):
 
         for i, (nkey,net) in enumerate(self.sim.networks.items()):
             nk = ss.standardize_netkey(nkey)
-            if len(net): # Skip networks with no edges
+            if isinstance(net, ss.Network) and len(net): # Skip networks with no edges
                 edges = net.edges
                 p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
                 p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1

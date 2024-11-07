@@ -135,7 +135,6 @@ class People(sc.prettyobj):
             errormsg = 'Cannot re-initialize a People object directly; use sim.init(reset=True)'
             raise RuntimeError(errormsg)
         self.sim = sim # Store the sim
-        self.timevec = sim.timevec # Also store the timevec in the People object (not used, but for completeness)
         ss.link_dists(obj=self.states, sim=sim, module=self, skip=[ss.Sim, ss.Module])
         return
 
@@ -280,7 +279,7 @@ class People(sc.prettyobj):
         """ Final updates at the very end of the timestep """
         sim = self.sim
         if sim.pars.use_aging:
-            self.age[self.alive.uids] += sim.dt_year
+            self.age[self.alive.uids] += sim.t.dt_year
         return
 
     def request_death(self, uids):
