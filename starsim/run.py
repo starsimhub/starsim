@@ -387,7 +387,7 @@ class MultiSim:
         return fig
 
 
-def single_run(sim, ind=0, reseed=True, keep_people=False, run_args=None, sim_args=None,
+def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=None,
                verbose=None, do_run=True, **kwargs):
     """
     Convenience function to perform a single simulation run. Mostly used for
@@ -399,7 +399,7 @@ def single_run(sim, ind=0, reseed=True, keep_people=False, run_args=None, sim_ar
         reseed      (bool)  : whether to generate a fresh seed for each run
         noise       (float) : the amount of noise to add to each run
         noisepar    (str)   : the name of the parameter to add noise to
-        keep_people (bool)  : whether to keep the people after the sim run
+        shrink      (bool)  : whether to shrink the sim after the sim run
         run_args    (dict)  : arguments passed to sim.run()
         sim_args    (dict)  : extra parameters to pass to the sim, e.g. 'n_infected'
         verbose     (int)   : detail to print
@@ -446,13 +446,13 @@ def single_run(sim, ind=0, reseed=True, keep_people=False, run_args=None, sim_ar
         sim.run(**run_args)
 
     # Shrink the sim to save memory
-    if not keep_people:
+    if shrink:
         sim.shrink()
 
     return sim
 
 
-def multi_run(sim, n_runs=4, reseed=None, iterpars=None, keep_people=None, run_args=None, sim_args=None,
+def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=None, sim_args=None,
               par_args=None, do_run=True, parallel=True, n_cpus=None, verbose=None, **kwargs):
     """
     For running multiple sims in parallel. If the first argument is a list of sims
@@ -464,7 +464,7 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, keep_people=None, run_a
         n_runs      (int)   : the number of parallel runs
         reseed      (bool)  : whether or not to generate a fresh seed for each run (default: true for single, false for list of sims)
         iterpars    (dict)  : any other parameters to iterate over the runs; see sc.parallelize() for syntax
-        keep_people (bool)  : whether to keep the people after the sim run (default false)
+        shrink      (bool)  : whether to shrink the sim after the sim run
         run_args    (dict)  : arguments passed to sim.run()
         sim_args    (dict)  : extra parameters to pass to the sim
         par_args    (dict)  : arguments passed to sc.parallelize()
@@ -506,12 +506,12 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, keep_people=None, run_a
         if reseed is None: reseed = True
         iterkwargs = dict(ind=np.arange(n_runs))
         iterkwargs.update(iterpars)
-        kwargs = dict(sim=sim, reseed=reseed, verbose=verbose, keep_people=keep_people,
+        kwargs = dict(sim=sim, reseed=reseed, verbose=verbose, shrink=shrink,
                       sim_args=sim_args, run_args=run_args, do_run=do_run)
     elif isinstance(sim, list):  # List of sims
         if reseed is None: reseed = False
         iterkwargs = dict(sim=sim, ind=np.arange(len(sim)))
-        kwargs = dict(reseed=reseed, verbose=verbose, keep_people=keep_people, sim_args=sim_args, run_args=run_args,
+        kwargs = dict(reseed=reseed, verbose=verbose, shrink=shrink, sim_args=sim_args, run_args=run_args,
                       do_run=do_run)
     else:
         errormsg = f'Must be Sim object or list, not {type(sim)}'
@@ -571,7 +571,7 @@ def parallel(*args, **kwargs):
         s1 = ss.Sim(n_agents=1000, label='Small', diseases='sis', networks='random')
         s2 = ss.Sim(n_agents=2000, label='Large', diseases='sis', networks='random')
         ss.parallel(s1, s2).plot()
-        msim = ss.parallel([s1, s2], keep_people=True)
+        msim = ss.parallel([s1, s2], shrink=False)
     """
     sims = sc.mergelists(*args)
     msim = MultiSim(sims=sims, **kwargs)

@@ -227,6 +227,13 @@ def set_seed(seed=None):
     return
 
 
+class shrink:
+    """ Define a class to indicate an object has been shrunken """
+    def __repr__(self):
+        s = 'This object has been intentionally "shrunken"; it is a placeholder and has no functionality. Use the non-shrunken object instead.'
+        return s
+
+
 # %% Data cleaning and processing
 
 

@@ -380,7 +380,7 @@ class Sim(ss.Base):
         self.summary = summary
         return summary
 
-    def shrink(self, skip_attrs=None, in_place=True):
+    def shrink(self, inplace=True, size_limit=1.0):
         """
         "Shrinks" the simulation by removing the people and other memory-intensive
         attributes (e.g., some interventions and analyzers), and returns a copy of
@@ -388,30 +388,60 @@ class Sim(ss.Base):
         for saved files.
 
         Args:
-            skip_attrs (list): a list of attributes to skip (remove) in order to perform the shrinking; default "people"
-            in_place (bool): whether to perform the shrinking in place (default), or return a shrunken copy instead
+            inplace (bool): whether to perform the shrinking in place (default), or return a shrunken copy instead
+            size_limit (float): print a warning if any module is larger than this size limit (set to None to disable)
 
         Returns:
             shrunken (Sim): a Sim object with the listed attributes removed
         """
-        # By default, skip people
-        if skip_attrs is None:
-            skip_attrs = ['people'] # TODO: think about skipping all states in all modules
-
         # Create the new object, and copy original dict, skipping the skipped attributes
-        if in_place:
-            shrunken = self
-            for attr in skip_attrs:
-                setattr(self, attr, None)
+        if inplace:
+            sim = self
         else:
-            shrunken = object.__new__(self.__class__)
-            shrunken.__dict__ = {k: (v if k not in skip_attrs else None) for k, v in self.__dict__.items()}
+            sim = self.copy() # We need to do a deep copy to avoid modifying other objects
 
-        # Don't return if in place
-        if in_place:
-            return
-        else:
-            return shrunken
+        # Shrink the people and loop
+        shrunk = ss.utils.shrink()
+        sim.people = shrunk
+        with sc.tryexcept():
+            sim.loop.funcs = shrunk
+            sim.loop.plan = shrunk
+
+        # Shrink the networks
+        for network in sim.networks():
+            with sc.tryexcept():
+                network.edges = shrunk
+                network.participant = shrunk
+
+        # Shrink the distributions
+        for dist in sim.dists.dists.values():
+            with sc.tryexcept():
+                dist.slots = shrunk
+                dist._slots = shrunk
+                dist.module = shrunk
+                dist._n = shrunk
+                dist._uids = shrunk
+                dist.history = shrunk
+
+        # Finally, shrink the modules
+        for mod in sim.modules:
+            mod.sim = shrunk
+            for state in mod.states:
+                with sc.tryexcept():
+                    state.people = shrunk
+                    state.raw = shrunk
+
+            # Check that the module successfully shrunk
+        if size_limit:
+            for mod in sim.modules:
+                size = sc.checkmem(mod, descend=0).bytesize[0]/1e6
+                if size > size_limit:
+                    warnmsg = f'Module {mod.name} did not successfully shrink: {size:0.1f} MB > {size_limit:0.1f} MB'
+                    ss.warn(warnmsg)
+
+        # Finally, set a flag that the sim has been shrunken
+        sim.shrunken = True
+        return sim
 
     def check_results_ready(self, errormsg=None):
         """ Check that results are ready """
@@ -427,14 +457,13 @@ class Sim(ss.Base):
         df = self.results.to_df(sep=sep, descend=True)
         return df
 
-    def save(self, filename=None, keep_people=None, skip_attrs=None, **kwargs):
+    def save(self, filename=None, shrink=None, **kwargs):
         """
         Save to disk as a gzipped pickle.
 
         Args:
             filename (str or None): the name or path of the file to save to; if None, uses stored
-            keep_people (bool or None): whether to keep the people
-            skip_attrs (list): attributes to skip saving
+            shrink (bool or None): whether to shrink the sim prior to saving (reduces size by ~99%)
             kwargs: passed to sc.makefilepath()
 
         Returns:
@@ -444,13 +473,9 @@ class Sim(ss.Base):
 
             sim.save() # Saves to a .sim file
         """
-
-        # Set keep_people based on whether we're in the middle of a run
-        if keep_people is None:
-            if self.initialized and not self.results_ready:
-                keep_people = True
-            else:
-                keep_people = False
+        # Set shrink based on whether we're in the middle of a run
+        if shrink is None:
+            shrink = False if self.initialized and not self.results_ready else True
 
         # Handle the filename
         if filename is None:
@@ -459,11 +484,8 @@ class Sim(ss.Base):
         self.filename = filename  # Store the actual saved filename
 
         # Handle the shrinkage and save
-        if skip_attrs or not keep_people:
-            obj = self.shrink(skip_attrs=skip_attrs, in_place=False)
-        else:
-            obj = self
-        sc.save(filename=filename, obj=obj)
+        sim = self.shrink(inplace=False) if shrink else self
+        sc.save(filename=filename, obj=sim)
         return filename
 
     @staticmethod
