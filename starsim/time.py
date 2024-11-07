@@ -281,13 +281,14 @@ class Time(sc.prettyobj):
         sim (bool/Sim): if True, initializes as a sim-specific ``Time`` instance; if a Sim instance, initialize the absolute time vector
 
     The ``Time`` object, after initialization, has the following attributes:
+
     - ``ti`` (int): the current timestep
     -  ``dt_year`` (float): the timestep in units of years
     - ``npts`` (int): the number of timesteps
-    - ``tvec`` (array): time starting at 0, in self units (e.g. [0, 0.1, 0.2, ... 10.0] if start=0, stop=10, dt=0.1)
-    - ``absvec`` (array): time relative to sim start, in units of sim units (e.g. [366, 373, 380, ...] if sim-start=2001, start=2002, sim-unit='day', unit='week')
-    - ``yearvec`` (array): time represented as floating-point years (e.g. [2000, 2000.1, 2000.2, ... 2010.0] if start=2000, stop=2010, dt=0.1)
-    - ``datevec`` (array): time represented as an array of ``ss.date`` objects (e.g. [<2000.01.01>, <2000.02.07>, ... <2010.01.01>] if start=2000, stop=2010, dt=0.1)
+    - ``tvec`` (array): time starting at 0, in self units (e.g. ``[0, 0.1, 0.2, ... 10.0]`` if start=0, stop=10, dt=0.1)
+    - ``absvec`` (array): time relative to sim start, in units of sim units (e.g. ``[366, 373, 380, ...]`` if sim-start=2001, start=2002, sim-unit='day', unit='week')
+    - ``yearvec`` (array): time represented as floating-point years (e.g. ``[2000, 2000.1, 2000.2, ... 2010.0]`` if start=2000, stop=2010, dt=0.1)
+    - ``datevec`` (array): time represented as an array of ``ss.date`` objects (e.g. ``[<2000.01.01>, <2000.02.07>, ... <2010.01.01>]`` if start=2000, stop=2010, dt=0.1)
     - ``timevec`` (array): the "native" time vector, which always matches one of ``tvec``, ``yearvec``, or ``datevec``
 
     **Examples**::
