@@ -98,10 +98,10 @@ def date_diff(start, stop, unit):
     else:
         if unit == 'year':
             dur = sc.datetoyear(stop) - sc.datetoyear(start) # TODO: allow non-integer amounts
-        elif unit == 'day':
-            dur = (ss.date(stop) - ss.date(start)).days
         else:
-            raise NotImplementedError
+            dur = (ss.date(stop) - ss.date(start)).days
+            if unit != 'day':
+                dur *= time_ratio(unit1='day', unit2=unit)
     return dur
 
 
