@@ -80,6 +80,9 @@ class Options(sc.objdict):
         optdesc.date_sep = 'Set seperator for dates'
         options.date_sep = sc.parse_env('STARSIM_DATE_SEP', '.', 'str')
 
+        optdesc.jupyter = 'Set whether to use Jupyter settings: -1=auto, 0=False, 1=True'
+        options.jupyter = sc.parse_env('STARSIM_JUPYTER', -1, 'int')
+
         optdesc.precision = 'Set arithmetic precision'
         options.precision = sc.parse_env('STARSIM_PRECISION', 64, 'int')
 
@@ -90,8 +93,11 @@ class Options(sc.objdict):
 
     def __call__(self, *args, **kwargs):
         """Allow ``ss.options(dpi=150)`` instead of ``ss.options.set(dpi=150)`` """
-
         return self.set(*args, **kwargs)
+
+    def to_dict(self):
+        ''' Pull out only the settings from the options object '''
+        return {k:v for k,v in self.items()}
 
     def __repr__(self):
         """ Brief representation """

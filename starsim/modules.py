@@ -379,7 +379,7 @@ class Module(Base):
                 ax.plot(timevec, v)
                 ax.set_title(k)
                 ax.set_xlabel('Year')
-        return fig
+        return ss.utils.return_fig(fig)
 
 
 class Analyzer(Module):

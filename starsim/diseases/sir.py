@@ -19,7 +19,6 @@ class SIR(ss.Infection):
     results.
     """
     def __init__(self, pars=None, **kwargs):
-        """ The current implementation """
         super().__init__()
         self.define_pars(
             beta = ss.beta(0.1),
@@ -96,7 +95,7 @@ class SIR(ss.Infection):
         plt.ylim(bottom=0)
         sc.boxoff()
         sc.commaticks()
-        return fig
+        return ss.utils.return_fig(fig)
 
 
 class SIS(ss.Infection):
@@ -181,7 +180,7 @@ class SIS(ss.Infection):
         plt.ylim(bottom=0)
         sc.boxoff()
         sc.commaticks()
-        return fig
+        return ss.utils.return_fig(fig)
 
 
 # %% Interventions

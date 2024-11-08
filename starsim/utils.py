@@ -6,6 +6,7 @@ import numpy as np
 import numba as nb
 import pandas as pd
 import sciris as sc
+import matplotlib.pyplot as plt
 import starsim as ss
 
 # %% Helper functions
@@ -389,9 +390,11 @@ class shrink:
         return s
 
 
-def process_fig(fig, **kwargs):
+def return_fig(fig, **kwargs):
     """ Do postprocessing on the figure: by default, don't return if in Jupyter """
-    if sc.isjupyter():
+    is_jupyter = [False, True, sc.isjupyter()][ss.options.jupyter]
+    if is_jupyter:
+        plt.show()
         return None
     else:
         return fig

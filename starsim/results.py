@@ -176,7 +176,7 @@ class Result(ss.BaseArr):
             sc.dateformatter(ax)
         if (self.values.min() >= 0) and (plt.ylim()[0]<0): # Don't allow axis to go negative if results don't
             plt.ylim(bottom=0)
-        return fig
+        return ss.utils.return_fig(fig)
 
 
 class Results(ss.ndict):
@@ -287,7 +287,7 @@ class Results(ss.ndict):
                 ax = plt.subplot(nrows, ncols, i+1)
                 res.plot(ax=ax, **plot_kw)
             sc.figlayout()
-        return fig
+        return ss.utils.return_fig(fig)
 
 
 

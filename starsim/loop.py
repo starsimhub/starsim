@@ -270,7 +270,7 @@ class Loop:
         plt.grid(True)
         sc.figlayout()
         sc.boxoff()
-        return fig
+        return ss.utils.return_fig(fig)
 
     def plot_cpu(self, bytime=True, fig_kw=None, bar_kw=None):
         """
@@ -317,7 +317,7 @@ class Loop:
         plt.grid(True)
         sc.figlayout()
         sc.boxoff()
-        return fig
+        return ss.utils.return_fig(fig)
 
     def __deepcopy__(self, memo):
         """ A dataframe that has functions in it doesn't copy well; convert to a dict first """

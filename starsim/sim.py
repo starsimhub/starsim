@@ -645,7 +645,7 @@ class Sim(ss.Base):
 
         sc.figlayout(fig=fig)
 
-        return fig
+        return ss.utils.return_fig(fig)
 
 
 class AlreadyRunError(RuntimeError):
