@@ -580,7 +580,7 @@ class Sim(ss.Base):
 
         # Set plotting defaults
         fig_kw     = sc.mergedicts(dict(figsize=figsize), fig_kw)
-        plot_kw    = sc.mergedicts(dict(lw=2, c='darkslateblue', alpha=0.9), plot_kw)
+        plot_kw    = sc.mergedicts(dict(lw=2), plot_kw)
         scatter_kw = sc.mergedicts(dict(alpha=0.3, color='k'), scatter_kw)
 
         # Do the plotting

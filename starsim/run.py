@@ -354,8 +354,9 @@ class MultiSim:
             fig = None
             alpha = 0.7 if len(self) < 5 else 0.5
             plot_kw = sc.mergedicts({'alpha':alpha}, plot_kw)
-            for sim in self.sims:
-                fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw)
+            with ss.options.context(jupyter=False): # Always return the figure
+                for sim in self.sims:
+                    fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw)
             plt.legend()
 
         # Has been reduced, plot with uncertainty bounds
