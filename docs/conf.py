@@ -116,11 +116,7 @@ def setup(app):
 
 
 # Modify this to not rerun the Jupyter notebook cells -- usually set by build_docs
-nb_ex_default = ['always', 'auto', 'never'][0]
-nb_ex = os.getenv('NBSPHINX_EXECUTE')
-if not nb_ex: nb_ex = nb_ex_default
-print(f'\n\nBuilding Jupyter notebooks with build option: {nb_ex}\n\n')
-nbsphinx_execute = nb_ex
+nbsphinx_execute = 'always'
 nbsphinx_timeout = 300
 
 # OpenSearch options
