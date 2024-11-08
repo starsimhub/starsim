@@ -564,20 +564,24 @@ class Sim(ss.Base):
 
         # Configuration
         flat = self.results.flatten()
-        if not show_skipped:
+        if not show_skipped: # Skip plots with auto_plot set to False
             for k in list(flat.keys()): # NB: can't call it "key", shadows argument
                 res = flat[k]
                 if isinstance(res, ss.Result) and not res.auto_plot:
                     flat.pop(k)
+
+        # Set figure defaults
         n_cols = np.ceil(np.sqrt(len(flat))) # Number of columns of axes
         default_figsize = np.array([8, 6])
         figsize_factor = np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size based on the number of rows and columns
         figsize = default_figsize*figsize_factor
-        fig_kw = sc.mergedicts({'figsize':figsize}, fig_kw)
-        plot_kw = sc.mergedicts({'lw':2}, plot_kw)
-        scatter_kw = sc.mergedicts({'alpha':0.3, 'color':'k'}, scatter_kw)
         if show_module is True: # Set no limit for the label length
             show_module = 999
+
+        # Set plotting defaults
+        fig_kw     = sc.mergedicts(dict(figsize=figsize), fig_kw)
+        plot_kw    = sc.mergedicts(dict(lw=2, c='darkslateblue', alpha=0.9), plot_kw)
+        scatter_kw = sc.mergedicts(dict(alpha=0.3, color='k'), scatter_kw)
 
         # Do the plotting
         with sc.options.with_style(style):

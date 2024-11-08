@@ -227,19 +227,12 @@ def set_seed(seed=None):
     return
 
 
-class shrink:
-    """ Define a class to indicate an object has been shrunken """
-    def __repr__(self):
-        s = 'This object has been intentionally "shrunken"; it is a placeholder and has no functionality. Use the non-shrunken object instead.'
-        return s
-
-
 # %% Data cleaning and processing
-
 
 def standardize_netkey(key):
     """ Networks can be upper or lowercase, and have a suffix 'net' or not; this function standardizes them """
     return key.lower().removesuffix('net')
+
 
 def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, default_age=0, default_year=2024):
     """
@@ -385,3 +378,20 @@ def combine_rands(a, b):
     c = np.bitwise_xor(a*b, a-b)
     u = c / np.iinfo(np.uint64).max
     return u
+
+
+#%% Other helper functions
+
+class shrink:
+    """ Define a class to indicate an object has been shrunken """
+    def __repr__(self):
+        s = 'This object has been intentionally "shrunken"; it is a placeholder and has no functionality. Use the non-shrunken object instead.'
+        return s
+
+
+def process_fig(fig, **kwargs):
+    """ Do postprocessing on the figure: by default, don't return if in Jupyter """
+    if sc.isjupyter():
+        return None
+    else:
+        return fig
