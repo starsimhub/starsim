@@ -82,7 +82,6 @@ class Calibration(sc.prettyobj):
         self.reseed     = reseed
         self.die        = die
         self.verbose    = verbose
-        self.save_results = save_results
         self.calibrated = False
         self.before_sim = None
         self.after_sim  = None
