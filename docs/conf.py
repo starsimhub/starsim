@@ -6,10 +6,8 @@ import os
 import sys
 import sciris as sc
 import starsim as ss
-
-# Set environment
-os.environ['SPHINX_BUILD'] = 'True' # This is used so ss.options.set('jupyter') doesn't reset the Matplotlib renderer
 on_rtd = os.environ.get('READTHEDOCS') == 'True'
+
 
 
 # -- Project information -----------------------------------------------------
