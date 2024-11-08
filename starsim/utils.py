@@ -13,7 +13,7 @@ import starsim as ss
 
 # What functions are externally visible
 __all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'standardize_netkey',
-           'standardize_data', 'validate_sim_data', ]
+           'standardize_data', 'validate_sim_data', 'return_fig']
 
 
 class ndict(sc.objdict):

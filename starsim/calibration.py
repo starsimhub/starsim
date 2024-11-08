@@ -533,7 +533,7 @@ class Calibration(sc.prettyobj): # pragma: no cover
             self.confirm_fit()
         msim = ss.MultiSim([self.before_sim, self.after_sim])
         fig = msim.plot(**kwargs)
-        return ss.utils.return_fig(fig)
+        return ss.return_fig(fig)
 
     def plot_trend(self, best_thresh=None, fig_kw=None):
         """
@@ -570,4 +570,4 @@ class Calibration(sc.prettyobj): # pragma: no cover
             plt.xlabel('Trial number')
             plt.ylabel('Mismatch')
         sc.figlayout()
-        return ss.utils.return_fig(fig)
+        return ss.return_fig(fig)

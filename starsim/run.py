@@ -385,7 +385,7 @@ class MultiSim:
                     ax.set_title(getattr(res, 'label', key))
                     ax.set_xlabel('Year')
 
-        return ss.utils.return_fig(fig)
+        return ss.return_fig(fig)
 
 
 def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=None,

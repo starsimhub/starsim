@@ -95,7 +95,7 @@ class SIR(ss.Infection):
         plt.ylim(bottom=0)
         sc.boxoff()
         sc.commaticks()
-        return ss.utils.return_fig(fig)
+        return ss.return_fig(fig)
 
 
 class SIS(ss.Infection):
@@ -180,7 +180,7 @@ class SIS(ss.Infection):
         plt.ylim(bottom=0)
         sc.boxoff()
         sc.commaticks()
-        return ss.utils.return_fig(fig)
+        return ss.return_fig(fig)
 
 
 # %% Interventions
