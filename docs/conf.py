@@ -7,7 +7,8 @@ import sys
 import sciris as sc
 import starsim as ss
 on_rtd = os.environ.get('READTHEDOCS') == 'True'
-
+if on_rtd:
+    os.environ['STARSIM_JUPYTER'] = '0'
 
 
 # -- Project information -----------------------------------------------------
