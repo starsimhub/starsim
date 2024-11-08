@@ -1,0 +1,12 @@
+#!/bin/bash
+# Check code quality by running pylint
+
+echo 'Running pylint...'
+cd ..
+start=$(date +%s)
+pylint starsim | tee tests/pylint_report.txt
+end=$(date +%s)
+
+echo 
+echo "Took $(($end - $start)) s; output saved to:"
+echo "pylint_report.txt"
