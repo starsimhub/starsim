@@ -7,8 +7,6 @@ import sys
 import sciris as sc
 import starsim as ss
 on_rtd = os.environ.get('READTHEDOCS') == 'True'
-if on_rtd:
-    os.environ['STARSIM_JUPYTER'] = '0'
 
 
 # -- Project information -----------------------------------------------------
@@ -123,6 +121,7 @@ nb_ex = os.getenv('NBSPHINX_EXECUTE')
 if not nb_ex: nb_ex = nb_ex_default
 print(f'\n\nBuilding Jupyter notebooks with build option: {nb_ex}\n\n')
 nbsphinx_execute = nb_ex
+nbsphinx_timeout = 300
 
 # OpenSearch options
 html_use_opensearch = 'docs.idmod.org/projects/starsim/en/latest'
