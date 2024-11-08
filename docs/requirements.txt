@@ -1,6 +1,6 @@
 pandoc
 pypandoc
-sphinx
+sphinx>=7.3.7
 sphinx-autodoc-typehints
 pydata-sphinx-theme
 sphinx-design
