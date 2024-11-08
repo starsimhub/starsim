@@ -1,0 +1,30 @@
+#!/usr/bin/env python
+"""
+Normalize Jupyter notebooks
+"""
+
+import sciris as sc
+import nbformat
+
+T = sc.timer()
+
+filenames = sc.getfilelist('*.ipynb')
+
+print('Normalizing notebooks...')
+for filename in filenames:
+
+    # Load file
+    print(filename)
+    with open(filename, "r") as file:
+        nb_orig = nbformat.reader.read(file)
+
+    # Perform validation
+    nbformat.validator.validate(nb_orig)
+    nb_fixed = nbformat.validator.normalize(nb_orig)
+    nbformat.validator.validate(nb_fixed[1])
+
+    # Write output
+    with open(filename, "w") as file:
+        nbformat.write(nb_fixed[1], file)
+
+T.toc()
