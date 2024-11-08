@@ -395,6 +395,7 @@ def return_fig(fig, **kwargs):
     is_jupyter = [False, True, sc.isjupyter()][ss.options.jupyter]
     if is_jupyter:
         print(fig)
+        plt.show()
         return None
     else:
         return fig
