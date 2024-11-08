@@ -19,7 +19,6 @@ class SIR(ss.Infection):
     results.
     """
     def __init__(self, pars=None, **kwargs):
-        """ The current implementation """
         super().__init__()
         self.define_pars(
             beta = ss.beta(0.1),
@@ -54,8 +53,9 @@ class SIR(ss.Infection):
             sim.people.request_death(deaths)
         return
 
-    def set_prognoses(self, uids, source_uids=None):
+    def set_prognoses(self, uids, sources=None):
         """ Set prognoses """
+        super().set_prognoses(uids, sources)
         ti = self.t.ti
         self.susceptible[uids] = False
         self.infected[uids] = True
@@ -95,7 +95,7 @@ class SIR(ss.Infection):
         plt.ylim(bottom=0)
         sc.boxoff()
         sc.commaticks()
-        return fig
+        return ss.return_fig(fig)
 
 
 class SIS(ss.Infection):
@@ -137,9 +137,9 @@ class SIS(ss.Infection):
         self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])
         return
 
-    def set_prognoses(self, uids, source_uids=None):
+    def set_prognoses(self, uids, sources=None):
         """ Set prognoses """
-        super().set_prognoses(uids, source_uids)
+        super().set_prognoses(uids, sources)
         self.susceptible[uids] = False
         self.infected[uids] = True
         self.ti_infected[uids] = self.ti
@@ -180,7 +180,7 @@ class SIS(ss.Infection):
         plt.ylim(bottom=0)
         sc.boxoff()
         sc.commaticks()
-        return fig
+        return ss.return_fig(fig)
 
 
 # %% Interventions

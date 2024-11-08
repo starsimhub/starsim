@@ -27,7 +27,7 @@ class Births(Demographics):
         super().__init__()
         self.define_pars(
             unit = 'year',
-            birth_rate = 30,
+            birth_rate = ss.peryear(20),
             rel_birth = 1,
             rate_units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
         )
@@ -80,15 +80,20 @@ class Births(Demographics):
 
         if isinstance(p.birth_rate, (pd.Series, pd.DataFrame)):
             available_years = p.birth_rate.index
-            year_ind = sc.findnearest(available_years, sim.now) # TODO: make robust to timestep
+            year_ind = sc.findnearest(available_years, sim.t.now('year'))
             nearest_year = available_years[year_ind]
             this_birth_rate = p.birth_rate.loc[nearest_year]
         else:
             this_birth_rate = p.birth_rate
 
-        scaled_birth_prob = this_birth_rate * p.rate_units * p.rel_birth * sim.pars.dt
+        if isinstance(this_birth_rate, ss.TimePar):
+            factor = 1.0
+        else:
+            factor = ss.time_ratio(unit1=self.t.unit, dt1=self.t.dt, unit2='year', dt2=1.0)
+
+        scaled_birth_prob = this_birth_rate * p.rate_units * p.rel_birth * factor
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
-        n_new = int(np.floor(sim.people.alive.count() * scaled_birth_prob))
+        n_new = np.random.binomial(n=sim.people.alive.count(), p=scaled_birth_prob) # Not CRN safe, see issue #404
         return n_new
 
     def step(self):
@@ -111,7 +116,7 @@ class Births(Demographics):
         # Calculate crude birth rate (CBR)
         inv_rate_units = 1.0/self.pars.rate_units
         births_per_year = self.n_births/self.sim.t.dt_year
-        denom = self.sim.results.n_alive[self.ti]
+        denom = self.sim.people.alive.sum()
         self.results.cbr[self.ti] = inv_rate_units*births_per_year/denom
         return
 
@@ -154,7 +159,7 @@ class Deaths(Demographics):
         self.define_pars(
             unit = 'year',
             rel_death = 1,
-            death_rate = 20,  # Default = a fixed rate of 2%/year, overwritten if data provided
+            death_rate = ss.peryear(20),  # Default = a fixed rate of 2%/year, overwritten if data provided
             rate_units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
         self.update_pars(pars, **kwargs)
@@ -186,15 +191,12 @@ class Deaths(Demographics):
     @staticmethod # Needs to be static since called externally, although it sure looks like a class method!
     def make_death_prob_fn(self, sim, uids):
         """ Take in the module, sim, and uids, and return the probability of death for each UID on this timestep """
-
         drd = self.death_rate_data
-        time_factor = ss.time_ratio(unit1=self.t.unit, unit2='year')
-        if sc.isnumber(drd):
+        if sc.isnumber(drd) or isinstance(drd, ss.TimePar):
             death_rate = drd
-            if isinstance(death_rate, ss.TimePar):
-                time_factor = 1 # Time conversion performed automatically by TimePar
-        else:
 
+        # Process data
+        else:
             ppl = sim.people
 
             # Performance optimization - the Deaths module checks for deaths for all agents
@@ -220,7 +222,11 @@ class Deaths(Demographics):
                 death_rate[:] = s.values[binned_ages]
 
         # Scale from rate to probability. Consider an exponential here.
-        death_prob = death_rate * (self.pars.rate_units * self.pars.rel_death * sim.pars.dt) * time_factor
+        if isinstance(death_rate, ss.TimePar):
+            factor = self.t.dt # TODO: figure out why this isn't 1.0
+        else:
+            factor = ss.time_ratio(unit1=self.t.unit, dt1=self.t.dt, unit2='year', dt2=1.0)
+        death_prob = death_rate * self.pars.rate_units * self.pars.rel_death * factor
         death_prob = np.clip(death_prob, a_min=0, a_max=1)
 
         return death_prob
@@ -228,8 +234,8 @@ class Deaths(Demographics):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('new',        dtype=int,   scale=True,  label='Deaths'),
-            ss.Result('cumulative', dtype=int,   scale=True,  label='Cumulative deaths'),
+            ss.Result('new',        dtype=int,   scale=True,  label='Deaths', auto_plot=False), # Use sim deaths instead
+            ss.Result('cumulative', dtype=int,   scale=True,  label='Cumulative deaths', auto_plot=False),
             ss.Result('cmr',        dtype=float, scale=False, label='Crude mortality rate'),
         )
         return
@@ -247,9 +253,10 @@ class Deaths(Demographics):
 
     def finalize(self):
         super().finalize()
-        n_alive = self.sim.results.n_alive
         self.results.cumulative[:] = np.cumsum(self.results.new)
         units = self.pars.rate_units*self.sim.t.dt_year
+        inds = self.match_time_inds()
+        n_alive = self.sim.results.n_alive[inds]
         deaths = np.divide(self.results.new, n_alive, where=n_alive>0)
         self.results.cmr[:] = deaths/units
         return
@@ -576,8 +583,9 @@ class Pregnancy(Demographics):
 
     def finalize(self):
         super().finalize()
-        n_alive = self.sim.results.n_alive
         units = self.pars.rate_units*self.sim.t.dt_year
+        inds = self.match_time_inds()
+        n_alive = self.sim.results.n_alive[inds]
         births = np.divide(self.results['births'], n_alive, where=n_alive>0)
         self.results['cbr'][:] = births/units
         return

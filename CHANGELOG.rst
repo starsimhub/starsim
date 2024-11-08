@@ -7,9 +7,47 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
-Version 2.1.0 (2024-11-01)
+
+Version 2.1.1 (2024-11-08)
 ---------------------------
-- Adds a new approach to disease transmission called mixing pools. A mixing pool is a "mean field" coupling wherein susceptible agents are exposed to the average infectious agent. The user can create a single mixing pool using the ``MixingPool`` class, or create many pools using ``MixingPools``. Such mixing pools could be used to simulate contact matrices, for example as published by Prem et al.
+- Adds improved Jupyter support for plotting (to prevent plots from appearing twice); you can disable this by setting ``ss.options.set(jupyter=False)``.
+- Adds ``auto_plot`` to ``Result`` objects, to indicate if it should appear in ``sim.plot()`` by default.
+- Adds ``copy()`` to the Sim and modules.
+- Networks now store their length on each timestep as a result.
+- Improves ``sim.shrink()``, with typical size reductions of >99%.
+- Adds additional plotting options ``show_module`` (include the module name in the plot title), ``show_label`` (use the simulation label as the figure title), and ``show_skipped`` (shows results even if ``auto_plot=False``).
+- *GitHub info*: PR `745 <https://github.com/starsimhub/starsim/pull/745>`_
+
+
+Version 2.1.0 (2024-11-07)
+---------------------------
+
+Summary
+~~~~~~~
+- Time in simulations is now handled by an ``ss.Time()`` class, which unifies how time is represented between the ``Sim`` and each module.
+- In addition to networks, there is now a new way of implementing disease transmission via mixing pools.
+
+Time
+~~~~
+- Time handling now performed by the ``ss.Time()`` class. This has inputs similar to before (``start``, ``stop``, ``unit``, ``dt``, with ``dur`` still available as a sim input). However, instead of the previous ``timevec`` and ``abs_tvec`` arrays, there are now multiple ways of representing time (including ``datevec`` and ``yearvec``), regardless of what the inputs were.
+- Dates are now represented in a native format, ``ss.date``, that is based on ``pd.Timestamp``.
+
+Mixing pools
+~~~~~~~~~~~~
+- Adds a new approach to disease transmission called mixing pools. A mixing pool is a "mean field" coupling wherein susceptible agents are exposed to the average infectious agent. The user can create a single mixing pool using the ``ss.MixingPool`` class, or create many pools using ``MixingPools``. Such mixing pools could be used to simulate contact matrices, for example as published by Prem et al.
+- There is a new ``ss.Route`` class, which is the base class for ``ss.Network`` and ``ss.MixingPool``.
+
+Other changes
+~~~~~~~~~~~~~
+- Demographic modules have been updated to fix various bugs around different time units.
+- The method for hashing distribution trace strings into seeds has changed, meaning that results will be stochastically different compared to Starsim v2.0.
+- Fixed a bug with how timepars were updated in parameters.
+- There is a new ``ss.Base`` class, which both ``ss.Sim`` and ``ss.Module`` inherit from.
+- Results now print as a single line rather than the full array. The latter is available as ``result.disp()``.
+- ``sim.to_df()`` now works even if different modules have different numbers of timepoints.
+- The ``timepars`` module has been renamed to ``time``.
+- In demographics modules, ``units`` has been renamed ``rate_units``.
+- There are two new options, ``ss.options.date_sep`` and  ``ss.options.license``. The former sets the date separator (default ``.``, e.g. ``2024.04.0.4``), and the latter sets if the license prints when Starsim is imported.
 - *GitHub info*: PR `724 <https://github.com/starsimhub/starsim/pull/724>`_
 
 

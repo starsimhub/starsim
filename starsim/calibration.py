@@ -9,6 +9,7 @@ import datetime as dt
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
+from enum import Enum
 
 
 __all__ = ['Calibration', 'CalibComponent', 'eConform', 'eLikelihood']
@@ -389,7 +390,7 @@ class Calibration(sc.prettyobj):
             self.confirm_fit()
         msim = ss.MultiSim([self.before_sim, self.after_sim])
         fig = msim.plot(**kwargs)
-        return fig
+        return ss.return_fig(fig)
 
     def plot_trend(self, best_thresh=None, fig_kw=None):
         """
@@ -428,8 +429,7 @@ class Calibration(sc.prettyobj):
         sc.figlayout()
         return fig
 
-
-from enum import Enum
+#############
 
 class eConform(Enum):
     PREVALENT = 0

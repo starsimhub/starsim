@@ -211,13 +211,16 @@ class Loop:
         """ Return a user-friendly version of the plan, omitting object columns """
         # Compute the main dataframe
         cols = ['time', 'func_order', 'module', 'func_name', 'func_label']
-        df = self.plan[cols].copy() # Need to copy, otherwise it's messed up
+        if self.plan is not None:
+            df = self.plan[cols].copy() # Need to copy, otherwise it's messed up
+        else:
+            errormsg = f'Simulation "{self.sim}" needs to be initialized before exporting the Loop dataframe'
+            raise RuntimeError(errormsg)
         times = np.diff(self.cpu_time)
         if len(times) == len(df):
             df['cpu_time'] = times
         else:
-            warnmsg = f'Not adding timings since length mismatch ({len(df)} expected, {len(times)} actual'
-            ss.warn(warnmsg)
+            df['cpu_time'] = np.nan
         self.df = df
 
         # Compute the CPU dataframe
@@ -267,7 +270,7 @@ class Loop:
         plt.grid(True)
         sc.figlayout()
         sc.boxoff()
-        return fig
+        return ss.return_fig(fig)
 
     def plot_cpu(self, bytime=True, fig_kw=None, bar_kw=None):
         """
@@ -314,7 +317,7 @@ class Loop:
         plt.grid(True)
         sc.figlayout()
         sc.boxoff()
-        return fig
+        return ss.return_fig(fig)
 
     def __deepcopy__(self, memo):
         """ A dataframe that has functions in it doesn't copy well; convert to a dict first """
@@ -322,7 +325,7 @@ class Loop:
         new = cls.__new__(cls)
         memo[id(self)] = new
         for k, v in self.__dict__.items():
-            if k == 'plan':
+            if k == 'plan' and isinstance(v, sc.dataframe):
                 origdict = v.to_dict() # Convert to a dictionary
                 newdict = sc.dcp(origdict, memo=memo) # Copy the dict
                 newdf = sc.dataframe(newdict)

@@ -56,7 +56,7 @@ class check_states(ss.Analyzer):
         self.okay = True
         return
 
-    def update_results(self):
+    def step(self):
         """
         Checks states that should be mutually exlusive and collectively exhaustive
         """
@@ -79,7 +79,6 @@ class check_states(ss.Analyzer):
         checkall = np.array([s1a, s1b, s2a, s2b, s3])
         if not checkall.all():
             self.okay = False
-
         return
 
 

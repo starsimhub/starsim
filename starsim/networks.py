@@ -108,16 +108,23 @@ class Network(Route):
         """ Relative transmission on each network edge """
         return self.edges['beta'] if 'beta' in self.edges else None
 
+    def init_results(self):
+        """ Store network length by default """
+        super().init_results()
+        self.define_results(
+            ss.Result('n_edges', dtype=int, scale=True, label='Number of edges', auto_plot=False)
+        )
+        return
+
     def init_post(self, add_pairs=True):
         super().init_post()
         if add_pairs: self.add_pairs()
         return
 
     def __len__(self):
-        try:
-            return len(self.edges.p1)
-        except:  # pragma: no cover
-            return 0
+        """ The length is the number of edges """
+        try:    return len(self.edges.p1)
+        except: return 0
 
     def __repr__(self, **kwargs):
         """ Convert to a dataframe for printing """
@@ -235,6 +242,11 @@ class Network(Route):
                 raise KeyError(errormsg)
             self.edges[key] = np.concatenate([curr_arr, new_arr])  # Resize to make room, preserving dtype
         self.validate_uids()
+        return
+
+    def update_results(self):
+        """ Store the number of edges in the network """
+        self.results['n_edges'][self.ti] = len(self)
         return
 
     def to_graph(self): # pragma: no cover
@@ -724,6 +736,10 @@ class NullNet(Network):
         self.append(dict(p1=indices, p2=indices, beta=np.zeros_like(indices)))
         return
 
+    def step(self):
+        """ Not used for NullNet """
+        pass
+
 
 class MFNet(SexualNetwork):
     """
@@ -1168,7 +1184,7 @@ class MixingPool(Route):
             src = None,
             dst = None, # Same as src
             beta = ss.beta(0.2),
-            contacts = ss.constant(1.0),
+            contacts = ss.poisson(1.0),
         )
         self.update_pars(pars, **kwargs)
 
@@ -1231,7 +1247,6 @@ class MixingPool(Route):
         return
 
     def step(self):
-        super().step()
         self.src_uids = self.get_uids(self.pars.src)
         self.dst_uids = self.get_uids(self.pars.dst)
         beta = self.pars.beta

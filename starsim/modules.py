@@ -85,6 +85,15 @@ class Base(sc.quickobj):
         try:    return self.t.timevec
         except: return None
 
+    def copy(self, die=True):
+        """
+        Perform a deep copy of the module/sim
+
+        Args:
+            die (bool): whether to raise an exception if copy fails (else, try a shallow copy)
+        """
+        out = sc.dcp(self, die=die)
+        return out
 
 
 class Module(Base):
@@ -217,6 +226,16 @@ class Module(Base):
                 timepar.init(parent=self.t, die=False) # In some cases, the values can't be initialized; that's OK here
         return
 
+    def match_time_inds(self, inds=None):
+         """ Find the nearest matching sim time indices for the current module """
+         self_tvec = self.t.abstvec
+         sim_tvec = self.sim.t.abstvec
+         if len(self_tvec) == len(sim_tvec): # Shortcut to avoid doing matching
+             return Ellipsis if inds is None else inds
+         else:
+             out = sc.findnearest(sim_tvec, self_tvec)
+             return out
+
     def start_step(self):
         """ Tasks to perform at the beginning of the step """
         if self.dists is not None: # Will be None if no distributions are defined
@@ -225,7 +244,8 @@ class Module(Base):
 
     def step(self):
         """ Define how the module updates over time -- the key part of Starsim!! """
-        pass
+        errormsg = f'Module "{self.name}" does not define a "step" method: use "def step(self): pass" if this is intentional'
+        raise NotImplementedError(errormsg)
 
     def finish_step(self):
         """ Define what should happen at the end of the step; at minimum, increment ti """
@@ -358,7 +378,7 @@ class Module(Base):
                 ax.plot(timevec, v)
                 ax.set_title(k)
                 ax.set_xlabel('Year')
-        return fig
+        return ss.return_fig(fig)
 
 
 class Analyzer(Module):

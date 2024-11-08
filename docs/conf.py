@@ -6,9 +6,6 @@ import os
 import sys
 import sciris as sc
 import starsim as ss
-
-# Set environment
-os.environ['SPHINX_BUILD'] = 'True' # This is used so ss.options.set('jupyter') doesn't reset the Matplotlib renderer
 on_rtd = os.environ.get('READTHEDOCS') == 'True'
 
 
@@ -119,11 +116,8 @@ def setup(app):
 
 
 # Modify this to not rerun the Jupyter notebook cells -- usually set by build_docs
-nb_ex_default = ['auto', 'never'][0]
-nb_ex = os.getenv('NBSPHINX_EXECUTE')
-if not nb_ex: nb_ex = nb_ex_default
-print(f'\n\nBuilding Jupyter notebooks with build option: {nb_ex}\n\n')
-nbsphinx_execute = nb_ex
+nbsphinx_execute = 'always'
+nbsphinx_timeout = 300
 
 # OpenSearch options
 html_use_opensearch = 'docs.idmod.org/projects/starsim/en/latest'

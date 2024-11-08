@@ -103,7 +103,7 @@ class Dists(sc.prettyobj):
     def check_seeds(self):
         """ Check that no two distributions share the same seed """
         checked = dict()
-        for trace,dist in self.dists.items():
+        for dist in self.dists.values():
             seed = dist.seed
             if seed in checked.keys():
                 raise DistSeedRepeatError(checked[seed], dist)

@@ -98,10 +98,10 @@ def date_diff(start, stop, unit):
     else:
         if unit == 'year':
             dur = sc.datetoyear(stop) - sc.datetoyear(start) # TODO: allow non-integer amounts
-        elif unit == 'day':
-            dur = (ss.date(stop) - ss.date(start)).days
         else:
-            raise NotImplementedError
+            dur = (ss.date(stop) - ss.date(start)).days
+            if unit != 'day':
+                dur *= time_ratio(unit1='day', unit2=unit)
     return dur
 
 
@@ -170,9 +170,19 @@ class date(pd.Timestamp):
             return cls.from_year(kwargs['year'])
 
         # Otherwise, proceed as normal
-        out = super().__new__(cls, *args, **kwargs)
-        out.__class__ = cls
+        out = super(date, cls).__new__(cls, *args, **kwargs)
+        out = cls._reset_class(out)
         return out
+
+    @classmethod
+    def _reset_class(cls, obj):
+        """ Manually reset the class from pd.Timestamp to ss.date """
+        try:
+            obj.__class__ = date
+        except:
+            warnmsg = f'Unable to convert {out} to ss.date(); proceeding with pd.Timestamp'
+            ss.warn(warnmsg)
+        return obj
 
     def __repr__(self, bracket=True):
         """ Show the date in brackets, e.g. <2024.04.04> """
@@ -257,7 +267,34 @@ class date(pd.Timestamp):
 
 class Time(sc.prettyobj):
     """
-    Handle time vectors for both simulations and modules
+    Handle time vectors for both simulations and modules.
+
+    Args:
+        start (float/str/date): the start date for the simulation/module
+        stop (float/str/date): the end date for the simulation/module
+        dt (float): the step size, in units of "unit"
+        unit (str): the time unit; choices are "day", "week", "month", "year", or "unitless"
+        pars (dict): if provided, populate parameter values from this dictionary
+        parent (obj): if provided, populate missing parameter values from a 'parent" ``Time`` instance
+        name (str): if provided, name the ``Time`` object
+        init (bool): whether or not to immediately initialize the Time object
+        sim (bool/Sim): if True, initializes as a sim-specific ``Time`` instance; if a Sim instance, initialize the absolute time vector
+
+    The ``Time`` object, after initialization, has the following attributes:
+
+    - ``ti`` (int): the current timestep
+    -  ``dt_year`` (float): the timestep in units of years
+    - ``npts`` (int): the number of timesteps
+    - ``tvec`` (array): time starting at 0, in self units (e.g. ``[0, 0.1, 0.2, ... 10.0]`` if start=0, stop=10, dt=0.1)
+    - ``absvec`` (array): time relative to sim start, in units of sim units (e.g. ``[366, 373, 380, ...]`` if sim-start=2001, start=2002, sim-unit='day', unit='week')
+    - ``yearvec`` (array): time represented as floating-point years (e.g. ``[2000, 2000.1, 2000.2, ... 2010.0]`` if start=2000, stop=2010, dt=0.1)
+    - ``datevec`` (array): time represented as an array of ``ss.date`` objects (e.g. ``[<2000.01.01>, <2000.02.07>, ... <2010.01.01>]`` if start=2000, stop=2010, dt=0.1)
+    - ``timevec`` (array): the "native" time vector, which always matches one of ``tvec``, ``yearvec``, or ``datevec``
+
+    **Examples**::
+
+        t1 = ss.Time(start=2000, stop=2020, dt=1.0, unit='year') # Years, numeric units
+        t2 = ss.Time(start='2021-01-01', stop='2021-04-04', dt=2.0, unit='day') # Days, date units
     """
     def __init__(self, start=None, stop=None, dt=None, unit=None, pars=None, parent=None,
                  name=None, init=True, sim=None):
@@ -267,11 +304,30 @@ class Time(sc.prettyobj):
         self.dt = dt
         self.unit = unit
         self.ti = 0 # The time index, e.g. 0, 1, 2
+
+        # Prepare for later initialization
+        self.dt_year = None
+        self.npts    = None
+        self.tvec    = None
+        self.timevec = None
+        self.datevec = None
+        self.yearvec = None
+        self.abstvec = None
         self.initialized = False
+
+        # Finalize
         self.update(pars=pars, parent=parent)
         if init and self.ready:
             self.init(sim=sim)
         return
+
+    def __bool__(self):
+        """ Always truthy """
+        return True
+
+    def __len__(self):
+        """ Length is the number of timepoints """
+        return sc.ifelse(self.npts, 0)
 
     @property
     def ready(self):
@@ -290,6 +346,22 @@ class Time(sc.prettyobj):
     def is_unitless(self):
         return is_unitless(self.unit)
 
+    def __setstate__(self, state):
+        """ Custom setstate to unpickle ss.date() instances correctly """
+        self.__dict__.update(state)
+        self._convert_timestamps()
+        return
+
+    def _convert_timestamps(self):
+        """ Replace pd.Timestamp instances with ss.date(); required due to pandas limitations with pickling """
+        objs = [self.start, self.stop]
+        objs += sc.tolist(self.datevec, coerce='full')
+        objs += sc.tolist(self.timevec, coerce='full')
+        objs = [obj for obj in objs if type(obj) == pd.Timestamp]
+        for obj in objs:
+            date._reset_class(obj)
+        return
+
     def update(self, pars=None, parent=None, reset=True, force=None, **kwargs):
         """ Reconcile different ways of supplying inputs """
         pars = sc.mergedicts(pars)
@@ -301,11 +373,17 @@ class Time(sc.prettyobj):
             kw_val = kwargs.get(key)
             par_val = pars.get(key)
 
-            if force == False: # Only update missing (None) values
+            # Special handling for dt: don't inherit dt if the units are different
+            if key == 'dt':
+                if isinstance(parent, Time):
+                    if parent.unit != self.unit:
+                        parent_val = 1.0
+
+            if force is False: # Only update missing (None) values
                 val = sc.ifelse(current_val, kw_val, par_val, parent_val)
             elif force is None: # Prioritize current value
                 val = sc.ifelse(kw_val, par_val, current_val, parent_val)
-            elif force == True: # Prioritize parent value
+            elif force is True: # Prioritize parent value
                 val = sc.ifelse(kw_val, par_val, parent_val, current_val)
             else:
                 errormsg = f'Invalid value {force} for force: must be False, None, or True'
@@ -326,15 +404,16 @@ class Time(sc.prettyobj):
 
         # Copy missing values from sim
         if isinstance(sim, ss.Sim):
-            self.dt = sc.ifelse(self.dt, sim.t.dt)
             self.unit = sc.ifelse(self.unit, sim.t.unit)
-
             if self.unit == sim.t.unit: # Units match, use directly
+                sim_dt = sim.t.dt
                 sim_start = sim.t.start
                 sim_stop = sim.t.stop
             else: # Units don't match, use datevec instead
+                sim_dt = 1.0 # Don't try to reset the dt if the units don't match
                 sim_start = sim.t.datevec[0]
                 sim_stop = sim.t.datevec[-1]
+            self.dt = sc.ifelse(self.dt, sim_dt)
             self.start = sc.ifelse(self.start, sim_start)
             self.stop = sc.ifelse(self.stop, sim_stop)
 
@@ -539,7 +618,7 @@ class TimePar(ss.BaseArr):
             self.parent_unit = parent.unit
 
         if parent.dt is not None:
-           self.parent_dt = parent.dt
+            self.parent_dt = parent.dt
 
         # Set defaults if not yet set
         self.unit = sc.ifelse(self.unit, self.parent_unit) # If unit isn't defined but parent is, set to parent
@@ -597,6 +676,7 @@ class TimePar(ss.BaseArr):
 
     @property
     def isarray(self):
+        """ Check if the value is an array """
         return isinstance(self.v, np.ndarray)
 
     def set(self, v=None, unit=None, parent_unit=None, parent_dt=None, self_dt=None, force=False):

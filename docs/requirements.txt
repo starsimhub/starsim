@@ -1,6 +1,6 @@
 pandoc
 pypandoc
-sphinx
+sphinx>=7.3.7
 sphinx-autodoc-typehints
 pydata-sphinx-theme
 sphinx-design
@@ -8,8 +8,8 @@ readthedocs-sphinx-search
 sphinxcontrib-napoleon
 ipykernel # For tutorials
 ipywidgets # For the tutorials
-nbconvert # For tutorials
-nbsphinx # For tutorials
+nbconvert>=7.10.0 # For tutorials
+nbsphinx>=0.9.5 # For tutorials
 plantweb
 optuna
 seaborn

@@ -18,6 +18,7 @@ class Result(ss.BaseArr):
         name (str): the name of this result, e.g. 'new_infections'
         shape (int/tuple): the shape of the result array (usually module.npts)
         scale (bool): whether or not the result scales by population size (e.g. a count does, a prevalence does not)
+        auto_plot (bool): whether to include automatically in sim.plot() results
         label (str): a human-readable label for the result
         values (array): prepopulate the Result with these values
         timevec (array): an array of time points
@@ -28,13 +29,14 @@ class Result(ss.BaseArr):
     the additional fields listed above. To see everything contained in a result,
     you can use result.disp().
     """
-    def __init__(self, name=None, label=None, dtype=float, shape=None, scale=True,
+    def __init__(self, name=None, label=None, dtype=float, shape=None, scale=True, auto_plot=True,
                  module=None, values=None, timevec=None, low=None, high=None):
         # Copy inputs
         self.name = name
         self.label = label
         self.module = module
         self.scale = scale
+        self.auto_plot = auto_plot
         self.timevec = timevec
         self.low = low
         self.high = high
@@ -174,7 +176,7 @@ class Result(ss.BaseArr):
             sc.dateformatter(ax)
         if (self.values.min() >= 0) and (plt.ylim()[0]<0): # Don't allow axis to go negative if results don't
             plt.ylim(bottom=0)
-        return fig
+        return ss.return_fig(fig)
 
 
 class Results(ss.ndict):
@@ -285,7 +287,7 @@ class Results(ss.ndict):
                 ax = plt.subplot(nrows, ncols, i+1)
                 res.plot(ax=ax, **plot_kw)
             sc.figlayout()
-        return fig
+        return ss.return_fig(fig)
 
 
 

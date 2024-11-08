@@ -105,6 +105,10 @@ class Pars(sc.objdict):
         if isinstance(new, ss.TimePar):
             self[key] = new
 
+        # It's a dataframe, allow the update -- used for demographics
+        elif isinstance(new, (pd.Series, pd.DataFrame)):
+            self[key] = new # TODO: add validation or convert to timepar
+
         # It's a single number, e.g. dur_inf = 6; set parameters
         elif isinstance(new, Number):
             old.set(new)

@@ -91,6 +91,7 @@ The submodules of the Starsim folder are as follows:
 •	``samples.py``: Class to store data from a large number of simulations.
 •	``settings.py``: User-customizable options for Starsim (e.g. default font size).
 •	``sim.py``: The Sim class, which performs most of the heavy lifting: initializing the model, running, and plotting.
+• ``time.py``: The Time class, which coordinates time between the Sim and different modules.
 •	``utils.py``: Helper functions.
 •	``version.py``: Version, date, and license information.
 
