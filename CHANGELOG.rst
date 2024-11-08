@@ -7,6 +7,18 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+
+Version 2.1.1 (2024-11-08)
+---------------------------
+- Adds improved Jupyter support for plotting (to prevent plots from appearing twice); you can disable this by setting ``ss.options.set(jupyter=False)``.
+- Adds ``auto_plot`` to ``Result`` objects, to indicate if it should appear in ``sim.plot()`` by default.
+- Adds ``copy()`` to the Sim and modules.
+- Networks now store their length on each timestep as a result.
+- Improves ``sim.shrink()``, with typical size reductions of >99%.
+- Adds additional plotting options ``show_module`` (include the module name in the plot title), ``show_label`` (use the simulation label as the figure title), and ``show_skipped`` (shows results even if ``auto_plot=False``).
+- *GitHub info*: PR `745 <https://github.com/starsimhub/starsim/pull/745>`_
+
+
 Version 2.1.0 (2024-11-07)
 ---------------------------
 

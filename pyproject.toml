@@ -8,7 +8,7 @@ dynamic = ["version"]
 description = "A fast, flexible agent-based disease modeling framework"
 readme = "README.rst"
 requires-python = ">=3.8"
-license = {file = "LICENSE.txt"}
+license = {file = "LICENSE"}
 keywords = ["agent-based model", "simulation", "disease", "epidemiology"]
 
 authors = [

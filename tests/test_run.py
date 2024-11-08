@@ -30,7 +30,7 @@ def test_parallel():
 
     # Check that two identical sims match
     msim = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars, label='Sim2')])
-    msim.run(keep_people=True)
+    msim.run(shrink=False)
     s1, s2 = msim.sims
     assert np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True), "Sims don't match and should"
 
@@ -38,7 +38,7 @@ def test_parallel():
     pars2 = sc.dcp(pars)
     pars2.diseases.beta *= 2
     sims = ss.MultiSim([ss.Sim(pars, label='Sim1'), ss.Sim(pars2, label='Sim2')])
-    sims.run(keep_people=True)
+    sims.run(shrink=False)
     s1, s2 = sims.sims
     assert not np.allclose(s1.summary[:], s2.summary[:], rtol=0, atol=0, equal_nan=True), "Sims do match and shouldn't"
 

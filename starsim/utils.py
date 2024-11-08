@@ -6,13 +6,14 @@ import numpy as np
 import numba as nb
 import pandas as pd
 import sciris as sc
+import matplotlib.pyplot as plt
 import starsim as ss
 
 # %% Helper functions
 
 # What functions are externally visible
 __all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'standardize_netkey',
-           'standardize_data', 'validate_sim_data', ]
+           'standardize_data', 'validate_sim_data', 'return_fig']
 
 
 class ndict(sc.objdict):
@@ -229,10 +230,10 @@ def set_seed(seed=None):
 
 # %% Data cleaning and processing
 
-
 def standardize_netkey(key):
     """ Networks can be upper or lowercase, and have a suffix 'net' or not; this function standardizes them """
     return key.lower().removesuffix('net')
+
 
 def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, default_age=0, default_year=2024):
     """
@@ -378,3 +379,23 @@ def combine_rands(a, b):
     c = np.bitwise_xor(a*b, a-b)
     u = c / np.iinfo(np.uint64).max
     return u
+
+
+#%% Other helper functions
+
+class shrink:
+    """ Define a class to indicate an object has been shrunken """
+    def __repr__(self):
+        s = 'This object has been intentionally "shrunken"; it is a placeholder and has no functionality. Use the non-shrunken object instead.'
+        return s
+
+
+def return_fig(fig, **kwargs):
+    """ Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead """
+    is_jupyter = [False, True, sc.isjupyter()][ss.options.jupyter]
+    if is_jupyter:
+        print(fig)
+        plt.show()
+        return None
+    else:
+        return fig

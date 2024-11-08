@@ -380,7 +380,7 @@ class Sim(ss.Base):
         self.summary = summary
         return summary
 
-    def shrink(self, skip_attrs=None, in_place=True):
+    def shrink(self, inplace=True, size_limit=1.0):
         """
         "Shrinks" the simulation by removing the people and other memory-intensive
         attributes (e.g., some interventions and analyzers), and returns a copy of
@@ -388,30 +388,60 @@ class Sim(ss.Base):
         for saved files.
 
         Args:
-            skip_attrs (list): a list of attributes to skip (remove) in order to perform the shrinking; default "people"
-            in_place (bool): whether to perform the shrinking in place (default), or return a shrunken copy instead
+            inplace (bool): whether to perform the shrinking in place (default), or return a shrunken copy instead
+            size_limit (float): print a warning if any module is larger than this size limit (set to None to disable)
 
         Returns:
             shrunken (Sim): a Sim object with the listed attributes removed
         """
-        # By default, skip people
-        if skip_attrs is None:
-            skip_attrs = ['people'] # TODO: think about skipping all states in all modules
-
         # Create the new object, and copy original dict, skipping the skipped attributes
-        if in_place:
-            shrunken = self
-            for attr in skip_attrs:
-                setattr(self, attr, None)
+        if inplace:
+            sim = self
         else:
-            shrunken = object.__new__(self.__class__)
-            shrunken.__dict__ = {k: (v if k not in skip_attrs else None) for k, v in self.__dict__.items()}
+            sim = self.copy() # We need to do a deep copy to avoid modifying other objects
 
-        # Don't return if in place
-        if in_place:
-            return
-        else:
-            return shrunken
+        # Shrink the people and loop
+        shrunk = ss.utils.shrink()
+        sim.people = shrunk
+        with sc.tryexcept():
+            sim.loop.funcs = shrunk
+            sim.loop.plan = shrunk
+
+        # Shrink the networks
+        for network in sim.networks():
+            with sc.tryexcept():
+                network.edges = shrunk
+                network.participant = shrunk
+
+        # Shrink the distributions
+        for dist in sim.dists.dists.values():
+            with sc.tryexcept():
+                dist.slots = shrunk
+                dist._slots = shrunk
+                dist.module = shrunk
+                dist._n = shrunk
+                dist._uids = shrunk
+                dist.history = shrunk
+
+        # Finally, shrink the modules
+        for mod in sim.modules:
+            mod.sim = shrunk
+            for state in mod.states:
+                with sc.tryexcept():
+                    state.people = shrunk
+                    state.raw = shrunk
+
+            # Check that the module successfully shrunk
+        if size_limit:
+            for mod in sim.modules:
+                size = sc.checkmem(mod, descend=0).bytesize[0]/1e6
+                if size > size_limit:
+                    warnmsg = f'Module {mod.name} did not successfully shrink: {size:0.1f} MB > {size_limit:0.1f} MB'
+                    ss.warn(warnmsg)
+
+        # Finally, set a flag that the sim has been shrunken
+        sim.shrunken = True
+        return sim
 
     def check_results_ready(self, errormsg=None):
         """ Check that results are ready """
@@ -427,14 +457,13 @@ class Sim(ss.Base):
         df = self.results.to_df(sep=sep, descend=True)
         return df
 
-    def save(self, filename=None, keep_people=None, skip_attrs=None, **kwargs):
+    def save(self, filename=None, shrink=None, **kwargs):
         """
         Save to disk as a gzipped pickle.
 
         Args:
             filename (str or None): the name or path of the file to save to; if None, uses stored
-            keep_people (bool or None): whether to keep the people
-            skip_attrs (list): attributes to skip saving
+            shrink (bool or None): whether to shrink the sim prior to saving (reduces size by ~99%)
             kwargs: passed to sc.makefilepath()
 
         Returns:
@@ -444,13 +473,9 @@ class Sim(ss.Base):
 
             sim.save() # Saves to a .sim file
         """
-
-        # Set keep_people based on whether we're in the middle of a run
-        if keep_people is None:
-            if self.initialized and not self.results_ready:
-                keep_people = True
-            else:
-                keep_people = False
+        # Set shrink based on whether we're in the middle of a run
+        if shrink is None:
+            shrink = False if self.initialized and not self.results_ready else True
 
         # Handle the filename
         if filename is None:
@@ -459,11 +484,8 @@ class Sim(ss.Base):
         self.filename = filename  # Store the actual saved filename
 
         # Handle the shrinkage and save
-        if skip_attrs or not keep_people:
-            obj = self.shrink(skip_attrs=skip_attrs, in_place=False)
-        else:
-            obj = self
-        sc.save(filename=filename, obj=obj)
+        sim = self.shrink(inplace=False) if shrink else self
+        sc.save(filename=filename, obj=sim)
         return filename
 
     @staticmethod
@@ -521,7 +543,8 @@ class Sim(ss.Base):
         d = sc.jsonify(d)
         return d
 
-    def plot(self, key=None, fig=None, style='fancy', show_data=True, fig_kw=None, plot_kw=None, scatter_kw=None):
+    def plot(self, key=None, fig=None, style='fancy', show_data=True, show_skipped=False,
+             show_module=26, show_label=False, fig_kw=None, plot_kw=None, scatter_kw=None):
         """
         Plot all results in the Sim object
 
@@ -530,6 +553,9 @@ class Sim(ss.Base):
             fig (Figure): if provided, plot results into an existing figure
             style (str): the plotting style to use (default "fancy"; other options are "simple", None, or any Matplotlib style)
             show_data (bool): plot the data, if available
+            show_skipped (bool): show even results that are skipped by default
+            show_module (bool): whether to show the module as well as the result name; if an int, show if the label is less than that length; if -1, use a newline
+            show_label (str): if 'fig', reset the fignum; if 'title', set the figure suptitle
             fig_kw (dict): passed to ``plt.subplots()``
             plot_kw (dict): passed to ``plt.plot()``
             scatter_kw (dict): passed to ``plt.scatter()``, for plotting the data
@@ -538,13 +564,24 @@ class Sim(ss.Base):
 
         # Configuration
         flat = self.results.flatten()
+        if not show_skipped: # Skip plots with auto_plot set to False
+            for k in list(flat.keys()): # NB: can't call it "key", shadows argument
+                res = flat[k]
+                if isinstance(res, ss.Result) and not res.auto_plot:
+                    flat.pop(k)
+
+        # Set figure defaults
         n_cols = np.ceil(np.sqrt(len(flat))) # Number of columns of axes
         default_figsize = np.array([8, 6])
         figsize_factor = np.clip((n_cols-3)/6+1, 1, 1.5) # Scale the default figure size based on the number of rows and columns
         figsize = default_figsize*figsize_factor
-        fig_kw = sc.mergedicts({'figsize':figsize}, fig_kw)
-        plot_kw = sc.mergedicts({'lw':2}, plot_kw)
-        scatter_kw = sc.mergedicts({'alpha':0.3, 'color':'k'}, scatter_kw)
+        if show_module is True: # Set no limit for the label length
+            show_module = 999
+
+        # Set plotting defaults
+        fig_kw     = sc.mergedicts(dict(figsize=figsize), fig_kw)
+        plot_kw    = sc.mergedicts(dict(lw=2), plot_kw)
+        scatter_kw = sc.mergedicts(dict(alpha=0.3, color='k'), scatter_kw)
 
         # Do the plotting
         with sc.options.with_style(style):
@@ -557,6 +594,13 @@ class Sim(ss.Base):
 
             # Get the figure
             if fig is None:
+                if show_label in ['fig', 'fignum'] and self.label:
+                    plotlabel = self.label
+                    figlist = sc.autolist()
+                    while plt.fignum_exists(plotlabel):
+                        figlist += plotlabel
+                        plotlabel = sc.uniquename(self.label, figlist, human=True)
+                    fig_kw['num'] = plotlabel
                 fig, axs = sc.getrowscols(len(flat), make=True, **fig_kw)
                 if isinstance(axs, np.ndarray):
                     axs = axs.flatten()
@@ -583,17 +627,25 @@ class Sim(ss.Base):
 
                 # Plot results
                 ax.plot(res.timevec, res.values, **plot_kw, label=self.label)
-                ax.set_title(res.full_label)
+                if show_module == -1:
+                    label = res.full_label.replace(':', '\n')
+                elif len(res.full_label) > show_module:
+                    label = res.label
+                else:
+                    label = res.full_label
+
+                ax.set_title(label)
                 sc.commaticks(ax)
                 if res.has_dates:
                     locator = mpl.dates.AutoDateLocator(minticks=2, maxticks=5) # Fewer ticks since lots of plots
                     sc.dateformatter(ax, locator=locator)
 
-        if self.label is not None:
-            fig.suptitle(self.label)
+        if show_label in ['title', 'suptitle'] and self.label:
+            fig.suptitle(self.label, weight='bold')
+
         sc.figlayout(fig=fig)
 
-        return fig
+        return ss.return_fig(fig)
 
 
 class AlreadyRunError(RuntimeError):

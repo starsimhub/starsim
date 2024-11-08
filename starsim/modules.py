@@ -85,6 +85,15 @@ class Base(sc.quickobj):
         try:    return self.t.timevec
         except: return None
 
+    def copy(self, die=True):
+        """
+        Perform a deep copy of the module/sim
+
+        Args:
+            die (bool): whether to raise an exception if copy fails (else, try a shallow copy)
+        """
+        out = sc.dcp(self, die=die)
+        return out
 
 
 class Module(Base):
@@ -370,7 +379,7 @@ class Module(Base):
                 ax.plot(timevec, v)
                 ax.set_title(k)
                 ax.set_xlabel('Year')
-        return fig
+        return ss.return_fig(fig)
 
 
 class Analyzer(Module):
