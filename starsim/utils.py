@@ -394,7 +394,7 @@ def return_fig(fig, **kwargs):
     """ Do postprocessing on the figure: by default, don't return if in Jupyter """
     is_jupyter = [False, True, sc.isjupyter()][ss.options.jupyter]
     if is_jupyter:
-        plt.show()
+        print(fig)
         return None
     else:
         return fig
