@@ -689,8 +689,8 @@ class Dist:
 
 # Add common distributions so they can be imported directly; assigned to a variable since used in help messages
 dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
-             'poisson', 'weibull', 'gamma', 'constant', 'randint', 'rand_raw', 'bernoulli',
-             'choice', 'histogram']
+             'poisson', 'negative_binomial', 'weibull', 'gamma', 'constant',
+             'randint', 'rand_raw', 'bernoulli', 'choice', 'histogram']
 __all__ += dist_list
 __all__ += ['multi_random'] # Not a dist in the same sense as the others
 
@@ -877,6 +877,20 @@ class poisson(Dist): # TODO: does not currently scale correctly with dt
 
         self._pars[key] = timepar.values # Use the raw value, since it could be anything (including a function)
         return timepar.values # Also use this for the rest of the loop
+
+
+class negative_binomial(Dist):
+    """
+    Negative Binomial distribution
+
+    Args:
+        n (float): the number of successes, > 1 (default 1.0)
+        p (float): the probability of success in [0,1], (default 0.5)
+
+    """
+    def __init__(self, n=1, p=0.5, **kwargs):
+        super().__init__(distname='negative_binomial', dist=sps.nbinom, n=n, p=p, **kwargs)
+        return
 
 
 class randint(Dist):
