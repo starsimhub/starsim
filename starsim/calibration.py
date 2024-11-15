@@ -9,6 +9,7 @@ import datetime as dt
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
+from scipy.special import gammaln as gln
 from enum import Enum
 
 
@@ -34,6 +35,7 @@ class Calibration(sc.prettyobj):
         components (list of CalibComponent objects): CalibComponents independently assess pseudo-likelihood as part of evaluating the quality of input parameters
 
         eval_fn  (callable): Function mapping a sim to a float (e.g. negative log likelihood) to be maximized. If None, the default will use CalibComponents.
+        eval_kwargs  (dict): Additional keyword arguments to pass to the eval_fn
 
         label        (str)  : a label for this calibration object
         study_name   (str)  : name of the optuna study
@@ -51,7 +53,7 @@ class Calibration(sc.prettyobj):
     """
     def __init__(self, sim, calib_pars, n_workers=None, total_trials=None,
                  reseed=True,
-                 build_fn=None, build_kwargs=None, eval_fn=None,
+                 build_fn=None, build_kwargs=None, eval_fn=None, eval_kwargs=None,
                  components=None,
 
                  label=None, study_name=None, db_name=None, keep_db=None, storage=None,
@@ -68,6 +70,7 @@ class Calibration(sc.prettyobj):
         self.build_fn       = build_fn or self.translate_pars
         self.build_kwargs   = build_kwargs or dict()
         self.eval_fn        = eval_fn or self._eval_fit
+        self.eval_kwargs    = eval_kwargs or dict()
         self.components     = components
 
         n_trials = int(np.ceil(total_trials/n_workers))
@@ -83,15 +86,15 @@ class Calibration(sc.prettyobj):
         self.die        = die
         self.verbose    = verbose
         self.calibrated = False
-        self.before_sim = None
-        self.after_sim  = None
+        self.before_msim = None
+        self.after_msim  = None
 
         # Temporarily store a filename
         self.tmp_filename = 'tmp_calibration_%05i.obj'
 
         # Initialize sim
-        if not self.sim.initialized:
-            self.sim.init()
+        #if not self.sim.initialized:
+        #    self.sim.init()
 
         return
 
@@ -173,7 +176,7 @@ class Calibration(sc.prettyobj):
 
         return pars
 
-    def _eval_fit(self, sim):
+    def _eval_fit(self, sim, **kwargs):
         nll = 0 # Negative log likelihood
         for c in self.components:
             nll += c(sim)
@@ -193,7 +196,7 @@ class Calibration(sc.prettyobj):
         sim = self.run_sim(pars)
 
         # Compute fit
-        fit = self.eval_fn(sim)
+        fit = self.eval_fn(sim, **self.eval_kwargs)
         return fit
 
     def worker(self):
@@ -315,19 +318,28 @@ class Calibration(sc.prettyobj):
         for parname, spec in after_pars.items():
             spec['value'] = self.best_pars[parname]
 
-        self.before_sim = self.run_sim(calib_pars=before_pars, label='Before calibration')
-        self.after_sim  = self.run_sim(calib_pars=after_pars, label='After calibration')
-        self.before_fit = self.eval_fn(self.before_sim, **self.eval_kwargs)
-        self.after_fit  = self.eval_fn(self.after_sim, **self.eval_kwargs)
 
-        print(f'Fit with original pars: {self.before_fit:n}')
-        print(f'Fit with best-fit pars: {self.after_fit:n}')
-        if self.after_fit <= self.before_fit:
+        n_runs = 25
+        before_sim = self.build_fn(self.sim, calib_pars=before_pars, **self.build_kwargs)
+        before_sim.label = 'Before calibration'
+        self.before_msim = ss.MultiSim(before_sim, n_runs=n_runs)
+        self.before_msim.run()
+        self.before_fits = np.array([self.eval_fn(sim, **self.eval_kwargs) for sim in self.before_msim.sims])
+
+        after_sim = self.build_fn(self.sim, calib_pars=after_pars, **self.build_kwargs)
+        after_sim.label = 'Before calibration'
+        self.after_msim = ss.MultiSim(after_sim, n_runs=n_runs)
+        self.after_msim.run()
+        self.after_fits = np.array([self.eval_fn(sim, **self.eval_kwargs) for sim in self.after_msim.sims])
+
+        print(f'Fit with original pars: {self.before_fits.mean()}')
+        print(f'Fit with best-fit pars: {self.after_fits.mean()}')
+        if self.after_fits.mean() <= self.before_fits.mean():
             print('✓ Calibration improved fit')
         else:
             print('✗ Calibration did not improve fit, but this sometimes happens stochastically and is not necessarily an error')
 
-        return self.before_fit, self.after_fit
+        return self.before_fits, self.after_fits
 
     def parse_study(self, study):
         """Parse the study into a data frame -- called automatically """
@@ -385,11 +397,22 @@ class Calibration(sc.prettyobj):
         Args:
             kwargs (dict): passed to MultiSim.plot()
         """
-        if self.before_sim is None:
+        if self.before_msim is None:
             self.confirm_fit()
-        msim = ss.MultiSim([self.before_sim, self.after_sim])
-        fig = msim.plot(**kwargs)
-        return ss.return_fig(fig)
+
+        self.before_msim.reduce()
+        fig = self.before_msim.plot()#, label='Before calibration')
+
+        self.after_msim.reduce()
+        self.after_msim.plot(fig=fig)#, label='After calibration')
+
+        plt.legend()
+
+        return fig
+        #msim = ss.MultiSim([self.before_msim, self.after_msim])
+        #fig = msim.plot(**kwargs)
+        #plt.legend()
+        #return ss.return_fig(fig)
 
     def plot_trend(self, best_thresh=None, fig_kw=None):
         """
@@ -435,7 +458,7 @@ class eConform(Enum):
     INCIDENT = 1
 
 class eLikelihood(Enum):
-    POISSON = 0
+    BETA_BINOMIAL = 0
 
 class CalibComponent(sc.prettyobj):
     """
@@ -453,20 +476,20 @@ class CalibComponent(sc.prettyobj):
             If eMode.PREVALENT, simulation outputs will be interpolated to observed timepoints.
             If eMode.INCIDENT, ...
     """
-    def __init__(self, name, real_data, sim_data_fn, conform, likelihood, weight=1):
+    def __init__(self, name, real_data, sim_data_fn, conform, nll_fn, weight=1):
         self.name = name
         self.real_data = real_data
         self.sim_data_fn = sim_data_fn
         self.weight = weight
 
-        if isinstance(likelihood, eLikelihood):
-            if likelihood == eLikelihood.POISSON:
-                self.likelihood = self.poisson_nll # Actually negative log-likelihood
+        if isinstance(nll_fn, eLikelihood):
+            if nll_fn == eLikelihood.BETA_BINOMIAL:
+                self.nll_fn = self.beta_binomial # Actually negative log-likelihood
         else:
             if not callable(conform):
-                msg = f'The likelihood argument must be an eLikelihood or callable function, not {type(likelihood)}.'
+                msg = f'The nll_fn argument must be an eLikelihood or callable function, not {type(nll_fn)}.'
                 raise Exception(msg)
-            self.likelihood = likelihood
+            self.nll_fn = nll_fn
 
         if isinstance(conform, eConform):
             if conform == eConform.INCIDENT:
@@ -482,10 +505,26 @@ class CalibComponent(sc.prettyobj):
         pass
 
     @staticmethod
-    def poisson_nll(real_data, sim_data):
-        print('poisson')
+    def beta_binomial(real_data, sim_data):
+        # For the beta-binomial log likelihood, we begin with a Beta(1,1) prior
+        # and subsequently observe sim_data['x'] successes (positives) in sim_data['n'] trials (total observations).
+        # The result is a Beta(sim_data['x']+1, sim_data['n']-sim_data['x']+1) posterior.
+        # We then compare this to the real data, which has real_data['x'] successes (positives) in real_data['n'] trials (total observations).
+        # To do so, we use a beta-binomial likelihood:
+        # p(x|n, x, a, b) = (n choose x) B(x+a, n-x+b) / B(a, b)
+        # where
+        #   x=real_data['x']
+        #   n=real_data['n']
+        #   a=sim_data['x']+1
+        #   b=sim_data['n']-sim_data['x']+1 
+        # and B is the beta function, B(x, y) = Gamma(x)Gamma(y)/Gamma(x+y)
 
-        return 0
+        # We compute the log of p(x|n, x, a, b), noting that gln is the log of the gamma function
+        logL = gln(real_data['n'] + 1) - gln(real_data['x'] + 1) - gln(real_data['n'] - real_data['x'] + 1)
+        logL += gln(real_data['x'] + sim_data['x'] + 1) + gln(real_data['n'] - real_data['x'] + sim_data['n'] - sim_data['x'] + 1) - gln(real_data['n'] + sim_data['n'] + 2)
+        logL += gln(sim_data['n'] + 2) - gln(sim_data['x'] + 1) - gln(sim_data['n'] - sim_data['x'] + 1)
+
+        return -logL
 
     @staticmethod
     def linear_interp(real_data, sim_data):
@@ -494,11 +533,13 @@ class CalibComponent(sc.prettyobj):
         Use for prevalent data like prevalence
         """
         t = real_data.index
-        sim_t = np.array([sc.datetoyear(t) for t in sim_data.index if isinstance(t, dt.date)])
+        #sim_t = np.array([sc.datetoyear(t.date()) for t in sim_data.index if isinstance(t, dt.date)])
 
-        sdi = np.interp(x=t, xp=sim_t, fp=sim_data)
-        df = pd.Series(sdi, index=t)
-        return df
+        conformed = pd.DataFrame(index=real_data.index)
+        for k in sim_data:
+            conformed[k] = np.interp(x=t, xp=sim_data.index, fp=sim_data[k])
+
+        return conformed
 
     @staticmethod
     def linear_accum(real_data, sim_data):
@@ -520,12 +561,12 @@ class CalibComponent(sc.prettyobj):
     def eval(self, sim):
         # Compute and return the negative log likelihood
 
-        sim_data = self.sim_data_fn(sim)
-        sim_data = self.conform(self.real_data, sim_data)
+        sim_data = self.sim_data_fn(sim) # Extract
+        sim_data = self.conform(self.real_data, sim_data) # Conform
 
-        nll = self.likelihood(self.real_data, sim_data)
+        self.nll = self.nll_fn(self.real_data, sim_data) # Negative log likelihood
 
-        return self.weight * nll
+        return self.weight * np.sum(self.nll)
 
     def __call__(self, sim):
         return self.eval(sim)
