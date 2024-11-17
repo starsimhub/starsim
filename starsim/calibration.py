@@ -332,8 +332,8 @@ class Calibration(sc.prettyobj):
         self.after_msim.run()
         self.after_fits = np.array([self.eval_fn(sim, **self.eval_kwargs) for sim in self.after_msim.sims])
 
-        print(f'Fit with original pars: {self.before_fits.mean()}')
-        print(f'Fit with best-fit pars: {self.after_fits.mean()}')
+        print(f'Fit with original pars: {self.before_fits}')
+        print(f'Fit with best-fit pars: {self.after_fits}')
         if self.after_fits.mean() <= self.before_fits.mean():
             print('✓ Calibration improved fit')
         else:
@@ -405,14 +405,8 @@ class Calibration(sc.prettyobj):
 
         self.after_msim.reduce()
         self.after_msim.plot(fig=fig)#, label='After calibration')
-
-        plt.legend()
-
+        fig.legend()
         return fig
-        #msim = ss.MultiSim([self.before_msim, self.after_msim])
-        #fig = msim.plot(**kwargs)
-        #plt.legend()
-        #return ss.return_fig(fig)
 
     def plot_trend(self, best_thresh=None, fig_kw=None):
         """
