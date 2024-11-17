@@ -243,13 +243,12 @@ class Calibration(sc.prettyobj):
         output = op.create_study(storage=self.run_args.storage, study_name=self.run_args.study_name)
         return output
 
-    def calibrate(self, calib_pars=None, confirm_fit=False, load=False, tidyup=True, **kwargs):
+    def calibrate(self, calib_pars=None, load=False, tidyup=True, **kwargs):
         """
         Perform calibration.
 
         Args:
             calib_pars (dict): if supplied, overwrite stored calib_pars
-            confirm_fit (bool): if True, run simulations with parameters from before and after calibration
             load (bool): whether to load existing trials from the database (if rerunning the same calibration)
             tidyup (bool): whether to delete temporary files from trial runs
             verbose (bool): whether to print output from each trial
@@ -299,13 +298,9 @@ class Calibration(sc.prettyobj):
         if not self.run_args.keep_db:
             self.remove_db()
 
-        # Optionally compute the sims before and after the fit
-        if confirm_fit:
-            self.confirm_fit()
-
         return self
 
-    def confirm_fit(self):
+    def confirm_fit(self, n_runs=25):
         """ Run before and after simulations to validate the fit """
 
         if self.verbose: print('\nConfirming fit...')
@@ -318,8 +313,6 @@ class Calibration(sc.prettyobj):
         for parname, spec in after_pars.items():
             spec['value'] = self.best_pars[parname]
 
-
-        n_runs = 25
         before_sim = self.build_fn(self.sim, calib_pars=before_pars, **self.build_kwargs)
         before_sim.label = 'Before calibration'
         self.before_msim = ss.MultiSim(before_sim, n_runs=n_runs)
@@ -400,13 +393,21 @@ class Calibration(sc.prettyobj):
         if self.before_msim is None:
             self.confirm_fit()
 
+        # Turn off jupyter mode so we can receive the figure handles
+        jup = ss.options.jupyter if 'jupyter' in ss.options else sc.isjupyter()
+        ss.options.jupyter = False
+
         self.before_msim.reduce()
-        fig = self.before_msim.plot()#, label='Before calibration')
+        fig_before = self.before_msim.plot()
+        fig_before.suptitle('Before calibration')
 
         self.after_msim.reduce()
-        self.after_msim.plot(fig=fig)#, label='After calibration')
-        fig.legend()
-        return fig
+        fig_after = self.after_msim.plot(fig=fig_before)
+        fig_after.suptitle('After calibration')
+
+        ss.options.jupyter = jup
+
+        return fig_before, fig_after
 
     def plot_trend(self, best_thresh=None, fig_kw=None):
         """
