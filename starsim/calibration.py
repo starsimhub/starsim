@@ -459,6 +459,7 @@ class eConform(Enum):
 
 class eLikelihood(Enum):
     BETA_BINOMIAL = 0
+    GAMMA_POISSON = 1
 
 class CalibComponent(sc.prettyobj):
     """
@@ -484,7 +485,9 @@ class CalibComponent(sc.prettyobj):
 
         if isinstance(nll_fn, eLikelihood):
             if nll_fn == eLikelihood.BETA_BINOMIAL:
-                self.nll_fn = self.beta_binomial # Actually negative log-likelihood
+                self.nll_fn = self.beta_binomial
+            elif nll_fn == eLikelihood.GAMMA_POISSON:
+                self.nll_fn = self.gamma_poisson
         else:
             if not callable(conform):
                 msg = f'The nll_fn argument must be an eLikelihood or callable function, not {type(nll_fn)}.'
@@ -523,6 +526,25 @@ class CalibComponent(sc.prettyobj):
         logL = gln(real_data['n'] + 1) - gln(real_data['x'] + 1) - gln(real_data['n'] - real_data['x'] + 1)
         logL += gln(real_data['x'] + sim_data['x'] + 1) + gln(real_data['n'] - real_data['x'] + sim_data['n'] - sim_data['x'] + 1) - gln(real_data['n'] + sim_data['n'] + 2)
         logL += gln(sim_data['n'] + 2) - gln(sim_data['x'] + 1) - gln(sim_data['n'] - sim_data['x'] + 1)
+
+        return -logL
+
+    @staticmethod
+    def gamma_poisson(real_data, sim_data):
+        # Also called negative binomial, but parameterized differently
+        # The gamma-poisson likelihood is a Poisson likelihood with a gamma-distributed rate parameter
+        #
+
+        logL = gammaln(real_data['x'] + sim_data['x'] + 1) \
+            - gammaln(real_data['x'] + 1) \
+            - gammaln(sim_data['x'] + 1)
+
+        logL += (real_data['x'] + 1) * np.log(real_data['n'])
+
+        logL += (sim_data['x'] + 1) * np.log(sim_data['n'])
+
+        logL -= (real_data['x'] + sim_data['x'] + 1) \
+                  * np.log(real_data['n'] + sim_data['n'])
 
         return -logL
 
