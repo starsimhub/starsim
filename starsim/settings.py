@@ -83,6 +83,9 @@ class Options(sc.objdict):
         optdesc.jupyter = 'Set whether to use Jupyter settings: -1=auto, 0=False, 1=True'
         options.jupyter = sc.parse_env('STARSIM_JUPYTER', -1, 'int')
 
+        optdesc.reticulate = 'Set whether to use Reticulate (R) settings'
+        options.reticulate = sc.parse_env('STARSIM_RETICULATE', False, 'bool')
+
         optdesc.precision = 'Set arithmetic precision'
         options.precision = sc.parse_env('STARSIM_PRECISION', 64, 'int')
 
