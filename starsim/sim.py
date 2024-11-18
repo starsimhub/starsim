@@ -498,15 +498,6 @@ class Sim(ss.Base):
         sc.save(filename=filename, obj=sim)
         return filename
 
-    @staticmethod
-    def load(filename, *args, **kwargs):
-        """ Load from disk from a gzipped pickle """
-        sim = sc.load(filename, *args, **kwargs)
-        if not isinstance(sim, Sim):  # pragma: no cover
-            errormsg = f'Cannot load object of {type(sim)} as a Sim object'
-            raise TypeError(errormsg)
-        return sim
-
     def to_json(self, filename=None, keys=None, tostring=False, indent=2, verbose=False, **kwargs):
         """
         Export results and parameters as JSON.
