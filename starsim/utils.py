@@ -393,7 +393,8 @@ class shrink:
 def return_fig(fig, **kwargs):
     """ Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead """
     is_jupyter = [False, True, sc.isjupyter()][ss.options.jupyter]
-    if is_jupyter:
+    is_reticulate = ss.options.reticulate
+    if is_jupyter or is_reticulate:
         print(fig)
         plt.show()
         return None
