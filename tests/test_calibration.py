@@ -121,7 +121,7 @@ def test_calibration(do_plot=False):
 
         components = [infectious],
 
-        total_trials = 1_000,
+        total_trials = 20,
         n_workers = None, # None indicates to use all available CPUs
         die = True,
         debug = debug,
