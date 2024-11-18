@@ -25,24 +25,18 @@ class Calibration(sc.prettyobj):
         calib_pars   (dict) : a dictionary of the parameters to calibrate of the format dict(key1=dict(low=1, high=2, guess=1.5, **kwargs), key2=...), where kwargs can include "suggest_type" to choose the suggest method of the trial (e.g. suggest_float) and args passed to the trial suggest function like "log" and "step"
         n_workers    (int)  : the number of parallel workers (if None, will use all available CPUs)
         total_trials (int)  : the total number of trials to run, each worker will run approximately n_trials = total_trial / n_workers
-
         reseed       (bool) : whether to generate new random seeds for each trial
-
         build_fn  (callable): function that takes a sim object and calib_pars dictionary and returns a modified sim
-        build_kwargs  (dict): a dictionary of options that are passed to build_fn to aid in modifying the base simulation. The API is self.build_fn(sim, calib_pars=calib_pars, **self.build_kwargs), where sim is a copy of the base simulation to be modified with calib_pars
-
-        components (list of CalibComponent objects): CalibComponents independently assess pseudo-likelihood as part of evaluating the quality of input parameters
-
+        build_kw  (dict): a dictionary of options that are passed to build_fn to aid in modifying the base simulation. The API is self.build_fn(sim, calib_pars=calib_pars, **self.build_kw), where sim is a copy of the base simulation to be modified with calib_pars
+        components (list): CalibComponents independently assess pseudo-likelihood as part of evaluating the quality of input parameters
         eval_fn  (callable): Function mapping a sim to a float (e.g. negative log likelihood) to be maximized. If None, the default will use CalibComponents.
         eval_kwargs  (dict): Additional keyword arguments to pass to the eval_fn
-
         label        (str)  : a label for this calibration object
         study_name   (str)  : name of the optuna study
         db_name      (str)  : the name of the database file (default: 'starsim_calibration.db')
         keep_db      (bool) : whether to keep the database after calibration (default: false)
         storage      (str)  : the location of the database (default: sqlite)
         sampler (BaseSampler): the sampler used by optuna, like optuna.samplers.TPESampler
-
         die          (bool) : whether to stop if an exception is encountered (default: false)
         debug        (bool) : if True, do not run in parallel
         verbose      (bool) : whether to print details of the calibration
@@ -50,11 +44,8 @@ class Calibration(sc.prettyobj):
     Returns:
         A Calibration object
     """
-    def __init__(self, sim, calib_pars, n_workers=None, total_trials=None,
-                 reseed=True,
-                 build_fn=None, build_kwargs=None, eval_fn=None, eval_kwargs=None,
-                 components=None,
-
+    def __init__(self, sim, calib_pars, n_workers=None, total_trials=None, reseed=True,
+                 build_fn=None, build_kw=None, eval_fn=None, eval_kwargs=None, components=None,
                  label=None, study_name=None, db_name=None, keep_db=None, storage=None,
                  sampler=None, die=False, debug=False, verbose=True):
 
@@ -67,7 +58,7 @@ class Calibration(sc.prettyobj):
         if storage      is None: storage        = f'sqlite:///{db_name}'
         
         self.build_fn       = build_fn or self.translate_pars
-        self.build_kwargs   = build_kwargs or dict()
+        self.build_kw   = build_kw or dict()
         self.eval_fn        = eval_fn or self._eval_fit
         self.eval_kwargs    = eval_kwargs or dict()
         self.components     = components
@@ -88,13 +79,8 @@ class Calibration(sc.prettyobj):
         self.before_msim = None
         self.after_msim  = None
 
-        # Temporarily store a filename
-        self.tmp_filename = 'tmp_calibration_%05i.obj'
-
-        # Initialize sim
-        #if not self.sim.initialized:
-        #    self.sim.init()
-
+        # Temporarily store a filename for storing intermediate results
+        self.tmp_filename = 'tmp_calibration_%06i.obj'
         return
 
     def run_sim(self, calib_pars=None, label=None):
@@ -102,7 +88,7 @@ class Calibration(sc.prettyobj):
         sim = sc.dcp(self.sim)
         if label: sim.label = label
 
-        sim = self.build_fn(sim, calib_pars=calib_pars, **self.build_kwargs)
+        sim = self.build_fn(sim, calib_pars=calib_pars, **self.build_kw)
 
         # Run the sim
         try:
@@ -176,10 +162,10 @@ class Calibration(sc.prettyobj):
         return pars
 
     def _eval_fit(self, sim, **kwargs):
+        """ Evaluate the fit by evaluating the negative log likelihood """
         nll = 0 # Negative log likelihood
-        for c in self.components:
-            nll += c(sim)
-
+        for component in sc.tolist(self.components):
+            nll += component(sim)
         return nll
 
     def run_trial(self, trial):
@@ -299,10 +285,10 @@ class Calibration(sc.prettyobj):
 
         return self
 
-    def confirm_fit(self, n_runs=5):
+    def check_fit(self, n_runs=5):
         """ Run before and after simulations to validate the fit """
 
-        if self.verbose: print('\nConfirming fit...')
+        if self.verbose: print('\nChecking fit...')
 
         before_pars = sc.dcp(self.calib_pars)
         for spec in before_pars.values():
@@ -312,13 +298,13 @@ class Calibration(sc.prettyobj):
         for parname, spec in after_pars.items():
             spec['value'] = self.best_pars[parname]
 
-        before_sim = self.build_fn(self.sim, calib_pars=before_pars, **self.build_kwargs)
+        before_sim = self.build_fn(self.sim, calib_pars=before_pars, **self.build_kw)
         before_sim.label = 'Before calibration'
         self.before_msim = ss.MultiSim(before_sim, n_runs=n_runs)
         self.before_msim.run()
         self.before_fits = np.array([self.eval_fn(sim, **self.eval_kwargs) for sim in self.before_msim.sims])
 
-        after_sim = self.build_fn(self.sim, calib_pars=after_pars, **self.build_kwargs)
+        after_sim = self.build_fn(self.sim, calib_pars=after_pars, **self.build_kw)
         after_sim.label = 'Before calibration'
         self.after_msim = ss.MultiSim(after_sim, n_runs=n_runs)
         self.after_msim.run()
@@ -390,7 +376,7 @@ class Calibration(sc.prettyobj):
             kwargs (dict): passed to MultiSim.plot()
         """
         if self.before_msim is None:
-            self.confirm_fit()
+            self.check_fit()
 
         # Turn off jupyter mode so we can receive the figure handles
         jup = ss.options.jupyter if 'jupyter' in ss.options else sc.isjupyter()

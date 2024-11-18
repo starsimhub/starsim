@@ -99,12 +99,8 @@ def test_calibration(do_plot=False):
     calib = ss.Calibration(
         calib_pars = calib_pars,
         sim = sim,
-
         build_fn = build_sim, # Use default builder, Calibration.translate_pars
-        build_kwargs = None,
-
-        components = [infectious],
-
+        components = infectious,
         total_trials = 20,
         n_workers = None, # None indicates to use all available CPUs
         die = True,
@@ -113,11 +109,11 @@ def test_calibration(do_plot=False):
 
     # Perform the calibration
     sc.printcyan('\nPeforming calibration...')
-    calib.calibrate(confirm_fit=False)
+    calib.calibrate()
 
-    # Confirm
-    sc.printcyan('\nConfirming fit...')
-    calib.confirm_fit()
+    # Check
+    sc.printcyan('\nChecking fit...')
+    calib.check_fit()
     print(f'Fit with original pars: {calib.before_fits}')
     print(f'Fit with best-fit pars: {calib.after_fits}')
     if calib.after_fits.mean() <= calib.before_fits.mean():
