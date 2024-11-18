@@ -52,7 +52,7 @@ class Result(ss.BaseArr):
         out = f'{cls_name}({self.key}):\narray{arrstr}'
         return out
 
-    def __str__(self):
+    def __str__(self, label=True):
         cls_name = self.__class__.__name__
         try:
             minval = self.values.min()
@@ -61,8 +61,16 @@ class Result(ss.BaseArr):
             valstr = f'min={minval:n}, mean={meanval:n}, max={maxval:n}'
         except:
             valstr = f'{self.values}'
-        out = f'{cls_name}({self.key}: {valstr})'
+        labelstr = f'{self.key}: ' if label else ''
+        out = f'{cls_name}({labelstr}{valstr})'
         return out
+
+    def disp(self, label=True, output=False):
+        string = self.__str__(label=label)
+        if not output:
+            print(string)
+        else:
+            return string
 
     def __getitem__(self, key):
         """ Allow e.g. result['low'] """
@@ -188,23 +196,43 @@ class Results(ss.ndict):
         super().__init__(type=Result, strict=strict, *args, **kwargs)
         return
 
-    def __repr__(self, indent=2, **kwargs): # kwargs are not used, but are needed for disp() to work
-        string = f'Results({self._module})\n'
+    def __repr__(self, indent=4, head_col=None, key_col=None, **kwargs): # kwargs are not used, but are needed for disp() to work
+
+        def format_head(string):
+            string = sc.colorize(head_col, string, output=True) if head_col else string
+            return string
+
+        def format_key(k):
+            keystr = sc.colorize(key_col, k, output=True) if key_col else k
+            return keystr
+
+        # Make the heading
+        string = format_head(f'Results({self._module})') + '\n'
+
+        # Loop over the other items
         for i,k,v in self.enumitems():
-            if k != 'timevec':
+            if k == 'timevec':
+                entry = f'array(start={v[0]}, stop={v[-1]})'
+            elif isinstance(v, Result):
+                entry = v.disp(label=False, output=True)
+            else:
                 entry = f'{v}'
-                if '\n' in entry: # Check if the string is multi-line
-                    lines = entry.splitlines()
-                    entry = f'{i}. {lines[0]}\n'
-                    entry += '\n'.join(' '*indent + f'{i}.' + line for line in lines[1:])
-                    string += entry + '\n'
-                else:
-                    string += f'{i}. {v}\n'
+
+            if '\n' in entry: # Check if the string is multi-line
+                lines = entry.splitlines()
+                entry = f'{i}. {format_key(k)}: {lines[0]}\n'
+                entry += '\n'.join(' '*indent + f'{i}.' + line for line in lines[1:])
+                string += entry + '\n'
+            else:
+                string += f'{i}. {format_key(k)}: {entry}\n'
         string = string.rstrip()
         return string
 
+    def __str__(self, indent=4, head_col='cyan', key_col='green'):
+        return self.__repr__(indent=indent, head_col=head_col, key_col=key_col)
+
     def disp(self, *args, **kwargs):
-        print(super().__repr__(*args, **kwargs))
+        print(super().__str__(*args, **kwargs))
         return
 
     def append(self, arg, key=None):
