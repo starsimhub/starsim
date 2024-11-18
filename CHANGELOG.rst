@@ -13,7 +13,7 @@ Version 2.2.0 (2024-11-18)
 - The ``Calibration`` class has been completely rewritten. See the calibration tutorial for more information.
 - A negative binomial distribution is now available as ``ss.nbinom()``.
 - ``ss.Births()`` now uses a binomial draw of births per timestep, rather than the expected value.
-- 
+- Added ``ss.load()`` and ``ss.save()`` functions, and removed ``ss.Sim.load()``.
 - *GitHub info*: PR `778 <https://github.com/starsimhub/starsim/pull/778>`_
 
 
