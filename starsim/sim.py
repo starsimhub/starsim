@@ -598,9 +598,9 @@ class Sim(ss.Base):
 
             if key is not None:
                 if isinstance(key, str):
-                    flat = {k:v for k,v in flat.items() if (key in k)}
+                    flat = {k:v for k,v in flat.items() if (key.lower() in k)}
                 else:
-                    flat = {k:flat[k] for k in key}
+                    flat = {k.lower():flat[k.lower()] for k in key}
 
             # Get the figure
             if fig is None:
