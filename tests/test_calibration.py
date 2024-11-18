@@ -77,20 +77,20 @@ def test_calibration(do_plot=False):
     infectious = ss.CalibComponent(
         name = 'Infectious',
 
-        # "real_data" actually from a simulation with pars
+        # "expected" actually from a simulation with pars
         #   beta=0.075, init_prev=0.02, n_contacts=4
-        real_data = pd.DataFrame({
+        expected = pd.DataFrame({
             'n': [200, 197, 195], # Number of individuals sampled
             'x': [30, 30, 10],    # Number of individuals found to be infectious
         }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
         
-        sim_data_fn = lambda sim: pd.DataFrame({
+        extract_fn = lambda sim: pd.DataFrame({
             'n': sim.results.n_alive,
             'x': sim.results.sir.n_infected,
         }, index=pd.Index(sim.results.timevec, name='t')),
 
-        conform = ss.eConform.PREVALENT,
-        nll_fn = ss.eLikelihood.BETA_BINOMIAL,
+        conform = 'prevalent',
+        nll_fn = 'beta',
 
         weight = 1,
     )
@@ -135,7 +135,7 @@ def test_calibration(do_plot=False):
 #%% Run as a script
 if __name__ == '__main__':
 
-    # Useful for generating fake "real_data"
+    # Useful for generating fake "expected" data
     if False:
         sim = make_sim()
         pars = {

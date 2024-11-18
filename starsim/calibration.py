@@ -9,11 +9,10 @@ import datetime as dt
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
-from scipy.special import gammaln as gln
-from enum import Enum
+from scipy.special import gammaln
 
 
-__all__ = ['Calibration', 'CalibComponent', 'eConform', 'eLikelihood']
+__all__ = ['Calibration', 'CalibComponent']
 
 
 class Calibration(sc.prettyobj):
@@ -446,15 +445,6 @@ class Calibration(sc.prettyobj):
         sc.figlayout()
         return fig
 
-#############
-
-class eConform(Enum):
-    PREVALENT = 0
-    INCIDENT = 1
-
-class eLikelihood(Enum):
-    BETA_BINOMIAL = 0
-    GAMMA_POISSON = 1
 
 class CalibComponent(sc.prettyobj):
     """
@@ -464,125 +454,124 @@ class CalibComponent(sc.prettyobj):
     observed data.
 
     Args:
-        name (str) : the of this component. Importantly,
-            sim_extract_fn is None, the code will attempt to use the name, like
+        name (str) : the name of this component. Importantly, if
+            extract_fn is None, the code will attempt to use the name, like
             "hiv.prevalence" to automatically extract data from the simulation.
         data (df) : pandas Series containing calibration data. The index should be the time in either floating point years or datetime.
-        mode (eMode): To handle misaligned timepoints between observed data and simulation output, it's important to know if the data are incident (like new cases) or prevalent (like the number infected).
-            If eMode.PREVALENT, simulation outputs will be interpolated to observed timepoints.
-            If eMode.INCIDENT, ...
+        mode (str/func): To handle misaligned timepoints between observed data and simulation output, it's important to know if the data are incident (like new cases) or prevalent (like the number infected).
+            If 'prevalent', simulation outputs will be interpolated to observed timepoints.
+            If 'incident', outputs will be interpolated to cumulative incidence.
     """
-    def __init__(self, name, real_data, sim_data_fn, conform, nll_fn, weight=1):
+    def __init__(self, name, expected, extract_fn, conform, nll_fn, weight=1):
         self.name = name
-        self.real_data = real_data
-        self.sim_data_fn = sim_data_fn
+        self.expected = expected
+        self.extract_fn = extract_fn
         self.weight = weight
 
-        if isinstance(nll_fn, eLikelihood):
-            if nll_fn == eLikelihood.BETA_BINOMIAL:
-                self.nll_fn = self.beta_binomial
-            elif nll_fn == eLikelihood.GAMMA_POISSON:
-                self.nll_fn = self.gamma_poisson
+        if isinstance(nll_fn, str):
+            if nll_fn == 'beta':
+                self.nll_fn = self.nll_beta
+            elif nll_fn == 'gamma':
+                self.nll_fn = self.nll_gamma
+            else:
+                errormsg = f'The nll_fn (negative log-likelihood function) argument must be "beta" or "gamma", not {conform}.'
+                raise ValueError(errormsg)
         else:
             if not callable(conform):
-                msg = f'The nll_fn argument must be an eLikelihood or callable function, not {type(nll_fn)}.'
+                msg = f'The nll_fn (negative log-likelihood function) argument must be a string or a callable function, not {type(nll_fn)}.'
                 raise Exception(msg)
             self.nll_fn = nll_fn
 
-        if isinstance(conform, eConform):
-            if conform == eConform.INCIDENT:
+        if isinstance(conform, str):
+            if conform == 'incident':
                 self.conform = self.linear_accum
-            elif conform == eConform.PREVALENT:
+            elif conform == 'prevalent':
                 self.conform = self.linear_interp
+            else:
+                errormsg = f'The conform argument must be "prevalent" or "incident", not {conform}.'
+                raise ValueError(errormsg)
         else:
             if not callable(conform):
-                msg = f'The conform argument must be an eConform or callable function, not {type(conform)}.'
-                raise Exception(msg)
+                errormsg = f'The conform argument must be a string or a callable function, not {type(conform)}.'
+                raise TypeError(errormsg)
             self.conform = conform
 
         pass
 
     @staticmethod
-    def beta_binomial(real_data, sim_data):
-        # For the beta-binomial log likelihood, we begin with a Beta(1,1) prior
-        # and subsequently observe sim_data['x'] successes (positives) in sim_data['n'] trials (total observations).
-        # The result is a Beta(sim_data['x']+1, sim_data['n']-sim_data['x']+1) posterior.
-        # We then compare this to the real data, which has real_data['x'] successes (positives) in real_data['n'] trials (total observations).
-        # To do so, we use a beta-binomial likelihood:
-        # p(x|n, x, a, b) = (n choose x) B(x+a, n-x+b) / B(a, b)
-        # where
-        #   x=real_data['x']
-        #   n=real_data['n']
-        #   a=sim_data['x']+1
-        #   b=sim_data['n']-sim_data['x']+1 
-        # and B is the beta function, B(x, y) = Gamma(x)Gamma(y)/Gamma(x+y)
+    def nll_beta(expected, actual):
+        """
+        For the beta-binomial negative log-likelihood, we begin with a Beta(1,1) prior
+        and subsequently observe actual['x'] successes (positives) in actual['n'] trials (total observations).
+        The result is a Beta(actual['x']+1, actual['n']-actual['x']+1) posterior.
+        We then compare this to the real data, which has expected['x'] successes (positives) in expected['n'] trials (total observations).
+        To do so, we use a beta-binomial likelihood:
+        p(x|n, x, a, b) = (n choose x) B(x+a, n-x+b) / B(a, b)
+        where
+          x=expected['x']
+          n=expected['n']
+          a=actual['x']+1
+          b=actual['n']-actual['x']+1 
+        and B is the beta function, B(x, y) = Gamma(x)Gamma(y)/Gamma(x+y)
 
-        # We compute the log of p(x|n, x, a, b), noting that gln is the log of the gamma function
-        logL = gln(real_data['n'] + 1) - gln(real_data['x'] + 1) - gln(real_data['n'] - real_data['x'] + 1)
-        logL += gln(real_data['x'] + sim_data['x'] + 1) + gln(real_data['n'] - real_data['x'] + sim_data['n'] - sim_data['x'] + 1) - gln(real_data['n'] + sim_data['n'] + 2)
-        logL += gln(sim_data['n'] + 2) - gln(sim_data['x'] + 1) - gln(sim_data['n'] - sim_data['x'] + 1)
-
+        We compute the log of p(x|n, x, a, b), noting that gammaln is the log of the gamma function
+        """
+        e_n, e_x = expected['n'], expected['x']
+        a_n, a_x = actual['n'], actual['x']
+        logL = gammaln(e_n + 1) - gammaln(e_x + 1) - gammaln(e_n - e_x + 1)
+        logL += gammaln(e_x + a_x + 1) + gammaln(e_n - e_x + a_n - a_x + 1) - gammaln(e_n + a_n + 2)
+        logL += gammaln(a_n + 2) - gammaln(a_x + 1) - gammaln(a_n - a_x + 1)
         return -logL
 
     @staticmethod
-    def gamma_poisson(real_data, sim_data):
-        # Also called negative binomial, but parameterized differently
-        # The gamma-poisson likelihood is a Poisson likelihood with a gamma-distributed rate parameter
-        #
-
-        logL = gammaln(real_data['x'] + sim_data['x'] + 1) \
-            - gammaln(real_data['x'] + 1) \
-            - gammaln(sim_data['x'] + 1)
-
-        logL += (real_data['x'] + 1) * np.log(real_data['n'])
-
-        logL += (sim_data['x'] + 1) * np.log(sim_data['n'])
-
-        logL -= (real_data['x'] + sim_data['x'] + 1) \
-                  * np.log(real_data['n'] + sim_data['n'])
-
+    def nll_gamma(expected, actual):
+        """
+        Also called negative binomial, but parameterized differently
+        The gamma-poisson likelihood is a Poisson likelihood with a gamma-distributed rate parameter
+        """
+        e_n, e_x = expected['n'], expected['x']
+        a_n, a_x = actual['n'], actual['x']
+        logL = gammaln(e_x + a_x + 1) - gammaln(e_x + 1) - gammaln(e_x + 1)
+        logL += (e_x + 1) * np.log(e_n)
+        logL += (a_x + 1) * np.log(a_n)
+        logL -= (e_x + a_x + 1) * np.log(e_n + a_n)
         return -logL
 
     @staticmethod
-    def linear_interp(real_data, sim_data):
+    def linear_interp(expected, actual):
         """
         Simply interpolate
         Use for prevalent data like prevalence
         """
-        t = real_data.index
-        #sim_t = np.array([sc.datetoyear(t.date()) for t in sim_data.index if isinstance(t, dt.date)])
-
-        conformed = pd.DataFrame(index=real_data.index)
-        for k in sim_data:
-            conformed[k] = np.interp(x=t, xp=sim_data.index, fp=sim_data[k])
+        t = expected.index
+        conformed = pd.DataFrame(index=expected.index)
+        for k in actual:
+            conformed[k] = np.interp(x=t, xp=actual.index, fp=actual[k])
 
         return conformed
 
     @staticmethod
-    def linear_accum(real_data, sim_data):
+    def linear_accum(expected, actual):
         """
         Interpolate in the accumulation, then difference.
         Use for incident data like incidence or new_deaths
         """
-        t = real_data.index
+        t = expected.index
         t_step = np.diff(t)
         assert np.all(t_step == t_step[0])
         ti = np.append(t, t[-1] + t_step) # Add one more because later we'll diff
 
-        sim_t = np.array([sc.datetoyear(t) for t in sim_data.index if isinstance(t, dt.date)])
+        sim_t = np.array([sc.datetoyear(t) for t in actual.index if isinstance(t, dt.date)])
 
-        sdi = np.interp(x=ti, xp=sim_t, fp=sim_data.cumsum())
+        sdi = np.interp(x=ti, xp=sim_t, fp=actual.cumsum())
         df = pd.Series(sdi.diff(), index=t)
         return df
 
     def eval(self, sim):
-        # Compute and return the negative log likelihood
-
-        sim_data = self.sim_data_fn(sim) # Extract
-        sim_data = self.conform(self.real_data, sim_data) # Conform
-
-        self.nll = self.nll_fn(self.real_data, sim_data) # Negative log likelihood
-
+        """ Compute and return the negative log likelihood """
+        actual = self.extract_fn(sim) # Extract
+        actual = self.conform(self.expected, actual) # Conform
+        self.nll = self.nll_fn(self.expected, actual) # Negative log likelihood
         return self.weight * np.sum(self.nll)
 
     def __call__(self, sim):
@@ -592,4 +581,4 @@ class CalibComponent(sc.prettyobj):
         return f'Calibration component with name {self.name}'
 
     def plot(self):
-        pass
+        NotImplementedError
