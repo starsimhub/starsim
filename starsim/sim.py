@@ -48,7 +48,7 @@ class Sim(ss.Base):
         self.pars.update(input_pars)  # Update the parameters
 
         # Set attributes; see also sim.init() for more
-        self.label = None # Usually overwritten during initialization by the parameters
+        self.label = label # Usually overwritten during initialization by the parameters
         self.created = sc.now()  # The datetime the sim was created
         self.version = ss.__version__ # The Starsim version
         self.metadata = sc.metadata(version=self.version, pipfreeze=False)
@@ -194,8 +194,9 @@ class Sim(ss.Base):
         for key in keys:
             orig = getattr(self, key, None)
             if not force and orig is not None:
-                warnmsg = f'Skipping key "{key}" in parameters since already present in sim and force=False'
-                ss.warn(warnmsg)
+                if key != 'label': # Don't worry about overwriting the label
+                    warnmsg = f'Skipping key "{key}" in parameters since already present in sim and force=False'
+                    ss.warn(warnmsg)
             else:
                 setattr(self, key, self.pars.pop(key))
         return

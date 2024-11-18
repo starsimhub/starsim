@@ -7,6 +7,15 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 2.2.0 (2024-11-18)
+---------------------------
+- Starsim is now available for R! See https://r.starsim.org for details.
+- The ``Calibration`` class has been completely rewritten. See the calibration tutorial for more information.
+- A negative binomial distribution is now available as ``ss.nbinom()``.
+- ``ss.Births()`` now uses a binomial draw of births per timestep, rather than the expected value.
+- 
+- *GitHub info*: PR `778 <https://github.com/starsimhub/starsim/pull/778>`_
+
 
 Version 2.1.1 (2024-11-08)
 ---------------------------
