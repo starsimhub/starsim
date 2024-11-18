@@ -12,6 +12,7 @@ User tutorials
     tutorials/tut_diseases.ipynb
     tutorials/tut_transmission.ipynb
     tutorials/tut_interventions.ipynb
+    tutorials/tut_calibration.ipynb
 
 Developer tutorials
 -------------------

@@ -173,6 +173,10 @@ class Pars(sc.objdict):
                     dist = ss.make_dist(new)
                     self[key] = dist
 
+        # It's a function, treat it like a number
+        elif sc.isfunc(new):
+            old.set(new)
+
         # Give up
         else:
             errormsg = f'Updating dist from {type(old)} to {type(new)} is not supported'

@@ -13,7 +13,7 @@ import starsim as ss
 
 # What functions are externally visible
 __all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'standardize_netkey',
-           'standardize_data', 'validate_sim_data', 'return_fig']
+           'standardize_data', 'validate_sim_data', 'load', 'save', 'return_fig']
 
 
 class ndict(sc.objdict):
@@ -382,6 +382,39 @@ def combine_rands(a, b):
 
 
 #%% Other helper functions
+
+def load(filename, **kwargs):
+    """
+    Alias to Sciris sc.loadany()
+
+    Since Starsim uses Sciris for saving objects, they can be loaded back using
+    this function. This can also be used to load other objects of known type
+    (e.g. JSON), although this usage is discouraged.
+
+    Args:
+        filename (str/path): the name of the file to load
+        kwargs (dict): passed to sc.loadany()
+
+    Returns:
+        The loaded object
+    """
+    return sc.loadany(filename, **kwargs)
+
+
+def save(filename, obj, **kwargs):
+    """
+    Alias to Sciris sc.save()
+
+    While some Starsim objects have their own save methods, this function can be
+    used to save any arbitrary object. It can then be loaded with ss.load().
+
+    Args:
+        filename (str/path): the name of the file to save
+        obj (any): the object to save
+        kwargs (dict): passed to sc.save()
+    """
+    return sc.save(filename=filename, obj=obj, **kwargs)
+
 
 class shrink:
     """ Define a class to indicate an object has been shrunken """
