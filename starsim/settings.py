@@ -68,6 +68,9 @@ class Options(sc.objdict):
         optdesc.license = 'Whether to print the license on import'
         options.license = sc.parse_env('STARSIM_LICENSE', False, 'bool')
 
+        optdesc.show_type = 'Whether to show the type of different numbers (e.g. np.float64(1.3) instead of 1.3)'
+        options.show_type = sc.parse_env('STARSIM_SHOW_TYPE', False, 'bool')
+
         optdesc.warnings = 'How warnings are handled: options are "warn" (default), "print", and "error"'
         options.warnings = sc.parse_env('STARSIM_WARNINGS', 'warn', 'str')
 
@@ -175,7 +178,9 @@ class Options(sc.objdict):
 
                 # Handle special cases
                 if key == 'precision':
-                    self.reset_precision()
+                    self.set_precision()
+                elif key == 'show_type':
+                    self.set_show_type()
 
         return
 
@@ -218,6 +223,7 @@ class Options(sc.objdict):
             return None
 
     def set_precision(self):
+        """ Change the arithmetic precision used by Starsim/NumPy """
         if self.precision == 32:
             dtypes.int = np.int32
             dtypes.float = np.float32
@@ -229,6 +235,15 @@ class Options(sc.objdict):
             raise ValueError(errormsg)
         return
 
+    def set_show_type(self):
+        """ Set NumPy to show numbers as just e.g. 1.3 (Starsim default) or np.float64(1.3) (NumPy default) """
+        if self.show_type:
+            np.set_printoptions(legacy=False)
+        else:
+            np.set_printoptions(legacy='1.25')
+        return
+
 
 # Create the options on module load
 options = Options()
+options.set_show_type()
