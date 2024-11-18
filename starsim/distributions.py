@@ -689,7 +689,7 @@ class Dist:
 
 # Add common distributions so they can be imported directly; assigned to a variable since used in help messages
 dist_list = ['random', 'uniform', 'normal', 'lognorm_ex', 'lognorm_im', 'expon',
-             'poisson', 'negative_binomial', 'weibull', 'gamma', 'constant',
+             'poisson', 'nbinom', 'weibull', 'gamma', 'constant',
              'randint', 'rand_raw', 'bernoulli', 'choice', 'histogram']
 __all__ += dist_list
 __all__ += ['multi_random'] # Not a dist in the same sense as the others
@@ -879,7 +879,7 @@ class poisson(Dist): # TODO: does not currently scale correctly with dt
         return timepar.values # Also use this for the rest of the loop
 
 
-class negative_binomial(Dist):
+class nbinom(Dist):
     """
     Negative Binomial distribution
 
