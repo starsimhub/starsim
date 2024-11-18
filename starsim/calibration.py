@@ -3,129 +3,40 @@ Define the calibration class
 """
 import os
 import numpy as np
-import pandas as pd
-import sciris as sc
 import optuna as op
-import matplotlib.pyplot as plt
+import pandas as pd
+import datetime as dt
+import sciris as sc
 import starsim as ss
+import matplotlib.pyplot as plt
+from scipy.special import gammaln
 
 
-__all__ = ['Calibration', 'compute_gof']
+__all__ = ['Calibration', 'CalibComponent']
 
 
-def compute_gof(actual, predicted, normalize=True, use_frac=False, use_squared=False,
-                as_scalar='none', eps=1e-9, skestimator=None, estimator=None, **kwargs):
-    """
-    Calculate the goodness of fit. By default use normalized absolute error, but
-    highly customizable. For example, mean squared error is equivalent to
-    setting normalize=False, use_squared=True, as_scalar='mean'.
-
-    Args:
-        actual      (arr):   array of actual (data) points
-        predicted   (arr):   corresponding array of predicted (model) points
-        normalize   (bool):  whether to divide the values by the largest value in either series
-        use_frac    (bool):  convert to fractional mismatches rather than absolute
-        use_squared (bool):  square the mismatches
-        as_scalar   (str):   return as a scalar instead of a time series: choices are sum, mean, median
-        eps         (float): to avoid divide-by-zero
-        skestimator (str):   if provided, use this scikit-learn estimator instead
-        estimator   (func):  if provided, use this custom estimator instead
-        kwargs      (dict):  passed to the scikit-learn or custom estimator
-
-    Returns:
-        gofs (arr): array of goodness-of-fit values, or a single value if as_scalar is True
-
-    **Examples**::
-
-        x1 = np.cumsum(np.random.random(100))
-        x2 = np.cumsum(np.random.random(100))
-
-        e1 = compute_gof(x1, x2) # Default, normalized absolute error
-        e2 = compute_gof(x1, x2, normalize=False, use_frac=False) # Fractional error
-        e3 = compute_gof(x1, x2, normalize=False, use_squared=True, as_scalar='mean') # Mean squared error
-        e4 = compute_gof(x1, x2, skestimator='mean_squared_error') # Scikit-learn's MSE method
-        e5 = compute_gof(x1, x2, as_scalar='median') # Normalized median absolute error -- highly robust
-    """
-
-    # Handle inputs
-    actual    = np.array(sc.dcp(actual), dtype=float)
-    predicted = np.array(sc.dcp(predicted), dtype=float)
-
-    # Scikit-learn estimator is supplied: use that
-    if skestimator is not None: # pragma: no cover
-        try:
-            import sklearn.metrics as sm
-            sklearn_gof = getattr(sm, skestimator) # Shortcut to e.g. sklearn.metrics.max_error
-        except ImportError as E:
-            errormsg = f'You must have scikit-learn >=0.22.2 installed: {str(E)}'
-            raise ImportError(errormsg) from E
-        except AttributeError as E:
-            errormsg = f'Estimator {skestimator} is not available; see https://scikit-learn.org/stable/modules/model_evaluation.html#scoring-parameter for options'
-            raise AttributeError(errormsg) from E
-        gof = sklearn_gof(actual, predicted, **kwargs)
-        return gof
-
-    # Custom estimator is supplied: use that
-    if estimator is not None: # pragma: no cover
-        try:
-            gof = estimator(actual, predicted, **kwargs)
-        except Exception as E:
-            errormsg = f'Custom estimator "{estimator}" must be a callable function that accepts actual and predicted arrays, plus optional kwargs'
-            raise RuntimeError(errormsg) from E
-        return gof
-
-    # Default case: calculate it manually
-    else:
-        # Key step -- calculate the mismatch!
-        gofs = abs(np.array(actual) - np.array(predicted))
-
-        if normalize and not use_frac:
-            actual_max = abs(actual).max()
-            if actual_max > 0:
-                gofs /= actual_max
-
-        if use_frac:
-            if (actual<0).any() or (predicted<0).any():
-                print('Warning: Calculating fractional errors for non-positive quantities is ill-advised!')
-            else:
-                maxvals = np.maximum(actual, predicted) + eps
-                gofs /= maxvals
-
-        if use_squared:
-            gofs = gofs**2
-
-        if as_scalar == 'sum':
-            gofs = np.sum(gofs)
-        elif as_scalar == 'mean':
-            gofs = np.mean(gofs)
-        elif as_scalar == 'median':
-            gofs = np.median(gofs)
-
-        return gofs
-
-
-class Calibration(sc.prettyobj): # pragma: no cover
+class Calibration(sc.prettyobj):
     """
     A class to handle calibration of Starsim simulations. Uses the Optuna hyperparameter
     optimization library (optuna.org).
 
     Args:
-        sim          (Sim)  : the simulation to calibrate
-        data         (df)   : pandas dataframe (or dataframe-compatible dict) of the data to calibrate to
-        calib_pars   (dict) : a dictionary of the parameters to calibrate of the format dict(key1=[best, low, high])
-        n_trials     (int)  : the number of trials per worker
-        n_workers    (int)  : the number of parallel workers (default: maximum number of available CPUs)
-        total_trials (int)  : if n_trials is not supplied, calculate by dividing this number by n_workers
+        sim          (Sim)  : the base simulation to calibrate
+        calib_pars   (dict) : a dictionary of the parameters to calibrate of the format dict(key1=dict(low=1, high=2, guess=1.5, **kwargs), key2=...), where kwargs can include "suggest_type" to choose the suggest method of the trial (e.g. suggest_float) and args passed to the trial suggest function like "log" and "step"
+        n_workers    (int)  : the number of parallel workers (if None, will use all available CPUs)
+        total_trials (int)  : the total number of trials to run, each worker will run approximately n_trials = total_trial / n_workers
         reseed       (bool) : whether to generate new random seeds for each trial
-        weights      (dict) : the relative weights of each data source
-        fit_args     (dict) : a dictionary of options that are passed to sim.compute_fit() to calculate the goodness-of-fit
-        sep          (str)  : the separate between different types of results, e.g. 'hiv.deaths' vs 'hiv_deaths'
-        name         (str)  : the name of the database (default: 'starsim_calibration')
+        build_fn  (callable): function that takes a sim object and calib_pars dictionary and returns a modified sim
+        build_kw  (dict): a dictionary of options that are passed to build_fn to aid in modifying the base simulation. The API is self.build_fn(sim, calib_pars=calib_pars, **self.build_kw), where sim is a copy of the base simulation to be modified with calib_pars
+        components (list): CalibComponents independently assess pseudo-likelihood as part of evaluating the quality of input parameters
+        eval_fn  (callable): Function mapping a sim to a float (e.g. negative log likelihood) to be maximized. If None, the default will use CalibComponents.
+        eval_kwargs  (dict): Additional keyword arguments to pass to the eval_fn
+        label        (str)  : a label for this calibration object
+        study_name   (str)  : name of the optuna study
         db_name      (str)  : the name of the database file (default: 'starsim_calibration.db')
         keep_db      (bool) : whether to keep the database after calibration (default: false)
         storage      (str)  : the location of the database (default: sqlite)
-        rand_seed    (int)  : if provided, use this random seed to initialize Optuna runs (for reproducibility)
-        label        (str)  : a label for this calibration object
+        sampler (BaseSampler): the sampler used by optuna, like optuna.samplers.TPESampler
         die          (bool) : whether to stop if an exception is encountered (default: false)
         debug        (bool) : if True, do not run in parallel
         verbose      (bool) : whether to print details of the calibration
@@ -133,20 +44,28 @@ class Calibration(sc.prettyobj): # pragma: no cover
     Returns:
         A Calibration object
     """
-    def __init__(self, sim, data, calib_pars, n_trials=None, n_workers=None, total_trials=None, reseed=True,
-                 weights=None, fit_args=None, sep='.', name=None, db_name=None, keep_db=None, storage=None,
-                 rand_seed=None, sampler=None, label=None, die=False, debug=False, verbose=True, save_results=False):
+    def __init__(self, sim, calib_pars, n_workers=None, total_trials=None, reseed=True,
+                 build_fn=None, build_kw=None, eval_fn=None, eval_kwargs=None, components=None,
+                 label=None, study_name=None, db_name=None, keep_db=None, storage=None,
+                 sampler=None, die=False, debug=False, verbose=True):
 
         # Handle run arguments
-        if n_trials  is None: n_trials  = 20
-        if n_workers is None: n_workers = sc.cpu_count()
-        if name      is None: name      = 'starsim_calibration'
-        if db_name   is None: db_name   = f'{name}.db'
-        if keep_db   is None: keep_db   = False
-        if storage   is None: storage   = f'sqlite:///{db_name}'
-        if total_trials is not None: n_trials = int(np.ceil(total_trials/n_workers))
-        kw = dict(n_trials=int(n_trials), n_workers=int(n_workers), debug=debug, name=name, db_name=db_name,
-                  keep_db=keep_db, storage=storage, rand_seed=rand_seed, sampler=sampler)
+        if total_trials is None: total_trials   = 100
+        if n_workers    is None: n_workers      = sc.cpu_count()
+        if study_name   is None: study_name     = 'starsim_calibration'
+        if db_name      is None: db_name        = f'{study_name}.db'
+        if keep_db      is None: keep_db        = False
+        if storage      is None: storage        = f'sqlite:///{db_name}'
+        
+        self.build_fn       = build_fn or self.translate_pars
+        self.build_kw   = build_kw or dict()
+        self.eval_fn        = eval_fn or self._eval_fit
+        self.eval_kwargs    = eval_kwargs or dict()
+        self.components     = components
+
+        n_trials = int(np.ceil(total_trials/n_workers))
+        kw = dict(n_trials=n_trials, n_workers=int(n_workers), debug=debug, study_name=study_name,
+                  db_name=db_name, keep_db=keep_db, storage=storage, sampler=sampler)
         self.run_args = sc.objdict(kw)
 
         # Handle other inputs
@@ -154,29 +73,14 @@ class Calibration(sc.prettyobj): # pragma: no cover
         self.sim        = sim
         self.calib_pars = calib_pars
         self.reseed     = reseed
-        self.sep        = sep
-        self.weights    = sc.mergedicts(weights)
-        self.fit_args   = sc.mergedicts(fit_args)
         self.die        = die
         self.verbose    = verbose
-        self.save_results = save_results
         self.calibrated = False
-        self.before_sim = None
-        self.after_sim  = None
+        self.before_msim = None
+        self.after_msim  = None
 
-        # Load data -- this is expecting a dataframe with a column for 'time' and other columns for to sim results
-        self.data = ss.validate_sim_data(data, die=True)
-
-        # Temporarily store a filename
-        self.tmp_filename = 'tmp_calibration_%05i.obj'
-
-        # Initialize sim
-        if not self.sim.initialized:
-            self.sim.init()
-
-        # Figure out which sim results to get
-        self.sim_result_list = self.data.cols
-
+        # Temporarily store a filename for storing intermediate results
+        self.tmp_filename = 'tmp_calibration_%06i.obj'
         return
 
     def run_sim(self, calib_pars=None, label=None):
@@ -184,7 +88,7 @@ class Calibration(sc.prettyobj): # pragma: no cover
         sim = sc.dcp(self.sim)
         if label: sim.label = label
 
-        sim = self.translate_pars(sim, calib_pars=calib_pars)
+        sim = self.build_fn(sim, calib_pars=calib_pars, **self.build_kw)
 
         # Run the sim
         try:
@@ -204,17 +108,15 @@ class Calibration(sc.prettyobj): # pragma: no cover
         """ Take the nested dict of calibration pars and modify the sim """
 
         if 'rand_seed' in calib_pars:
-            sim.pars['rand_seed'] = calib_pars['rand_seed']
+            sim.pars['rand_seed'] = calib_pars.pop('rand_seed')
 
         for parname, spec in calib_pars.items():
-            if parname == 'rand_seed':
-                continue
-
             if 'path' not in spec:
                 raise ValueError(f'Cannot map {parname} because "path" is missing from the parameter configuration.')
 
             p = spec['path']
 
+            # TODO: Allow longer paths
             if len(p) != 3:
                 raise ValueError(f'Cannot map {parname} because "path" must be a tuple of length 3.')
 
@@ -234,14 +136,9 @@ class Calibration(sc.prettyobj): # pragma: no cover
 
         return sim
 
-    def trial_to_sim_pars(self, pardict=None, trial=None):
+    def _sample_from_trial(self, pardict=None, trial=None):
         """
         Take in an optuna trial and sample from pars, after extracting them from the structure they're provided in
-
-        Different use cases:
-            - pardict is self.calib_pars, i.e. {'diseases':{'hiv':{'art_efficacy':[0.96, 0.9, 0.99]}}}, need to sample
-            - pardict is self.initial_pars, i.e. {'diseases':{'hiv':{'art_efficacy':[0.96, 0.9, 0.99]}}}, pull 1st vals
-            - pardict is self.best_pars, i.e. {'diseases':{'hiv':{'art_efficacy':0.96786}}}, pull single vals
         """
         pars = sc.dcp(pardict)
         for parname, spec in pars.items():
@@ -250,84 +147,41 @@ class Calibration(sc.prettyobj): # pragma: no cover
                 # Already have a value, likely running initial or final values as part of checking the fit
                 continue
 
-            if 'sampler' in spec:
-                sampler = spec.pop('sampler')
-                sampler_fn = getattr(trial, sampler)
+            if 'suggest_type' in spec:
+                suggest_type = spec.pop('suggest_type')
+                sampler_fn = getattr(trial, suggest_type)
             else:
                 sampler_fn = trial.suggest_float
 
-            path = spec.pop('path', None) # remove path
-            guess = spec.pop('guess', None) # remove guess
-            spec['value'] = sampler_fn(name=parname, **spec) # Sample!
+            path = spec.pop('path', None) # remove path for the sampler
+            guess = spec.pop('guess', None) # remove guess for the sampler
+            spec['value'] = sampler_fn(name=parname, **spec) # suggest values!
             spec['path'] = path
             spec['guess'] = guess
 
         return pars
 
-    @staticmethod
-    def sim_to_df(sim): # TODO: remove this method
-        """ Convert a sim to the expected dataframe type """
-        df_res = sim.to_df(sep='.')
-        df_res['t'] = df_res['timevec']
-        df_res = df_res.set_index('t')
-        df_res['time'] = np.floor(np.round(df_res.index, 1)).astype(int)
-        return df_res
+    def _eval_fit(self, sim, **kwargs):
+        """ Evaluate the fit by evaluating the negative log likelihood """
+        nll = 0 # Negative log likelihood
+        for component in sc.tolist(self.components):
+            nll += component(sim)
+        return nll
 
     def run_trial(self, trial):
         """ Define the objective for Optuna """
         if self.calib_pars is not None:
-            calib_pars = self.trial_to_sim_pars(self.calib_pars, trial)
+            pars = self._sample_from_trial(self.calib_pars, trial)
         else:
-            calib_pars = None
+            pars = None
 
         if self.reseed:
-            calib_pars['rand_seed'] = trial.suggest_int('rand_seed', 0, 1_000_000) # Choose a random rand_seed
+            pars['rand_seed'] = trial.suggest_int('rand_seed', 0, 1_000_000) # Choose a random rand_seed
 
-        sim = self.run_sim(calib_pars)
-
-        # Export results # TODO: make more robust
-        df_res = self.sim_to_df(sim)
-        sim_results = sc.objdict()
-
-        for skey in self.sim_result_list:
-            if 'prevalence' in skey or skey.startswith('n_'):
-                model_output = df_res.groupby(by='time')[skey].mean()
-            else:
-                model_output = df_res.groupby(by='time')[skey].sum()
-            sim_results[skey] = model_output.values
-
-        sim_results['time'] = model_output.index.values
-        # Store results in temporary files
-        if self.save_results:
-            filename = self.tmp_filename % trial.number
-            sc.save(filename, sim_results)
+        sim = self.run_sim(pars)
 
         # Compute fit
-        fit = self.compute_fit(df_res=df_res)
-        return fit
-
-    def compute_fit(self, sim=None, df_res=None):
-        """ Compute goodness-of-fit """
-        fit = 0
-
-        # TODO: reduce duplication with above
-        if df_res is None:
-            df_res = self.sim_to_df(sim)
-        for skey in self.sim_result_list:
-            if 'prevalence' in skey or skey.startswith('n_'):
-                model_output = df_res.groupby(by='time')[skey].mean()
-            else:
-                model_output = df_res.groupby(by='time')[skey].sum()
-
-            data = self.data[skey]
-            combined = pd.merge(data, model_output, how='left', on='time')
-            combined['diffs'] = combined[skey+'_x'] - combined[skey+'_y']
-            gofs = compute_gof(combined.dropna()[skey+'_x'], combined.dropna()[skey+'_y'])
-
-            losses = gofs  #* self.weights[skey]
-            mismatch = losses.sum()
-            fit += mismatch
-
+        fit = self.eval_fn(sim, **self.eval_kwargs)
         return fit
 
     def worker(self):
@@ -336,7 +190,7 @@ class Calibration(sc.prettyobj): # pragma: no cover
             op.logging.set_verbosity(op.logging.DEBUG)
         else:
             op.logging.set_verbosity(op.logging.ERROR)
-        study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.name, sampler = self.run_args.sampler)
+        study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
         output = study.optimize(self.run_trial, n_trials=self.run_args.n_trials, callbacks=None)
         return output
 
@@ -358,8 +212,8 @@ class Calibration(sc.prettyobj): # pragma: no cover
                 if self.verbose: print(f'Removed existing calibration file {self.run_args.db_name}')
             else:
                 # Delete the study from the database e.g., mysql
-                op.delete_study(study_name=self.run_args.name, storage=self.run_args.storage)
-                if self.verbose: print(f'Deleted study {self.run_args.name} in {self.run_args.storage}')
+                op.delete_study(study_name=self.run_args.study_name, storage=self.run_args.storage)
+                if self.verbose: print(f'Deleted study {self.run_args.study_name} in {self.run_args.storage}')
         except Exception as E:
             if self.verbose:
                 print('Could not delete study, skipping...')
@@ -370,23 +224,16 @@ class Calibration(sc.prettyobj): # pragma: no cover
         """ Make a study, deleting one if it already exists """
         if not self.run_args.keep_db:
             self.remove_db()
-        if self.run_args.rand_seed is not None:
-            sampler = op.samplers.RandomSampler(self.run_args.rand_seed)
-            sampler.reseed_rng()
-            raise NotImplementedError('Implemented but does not work')
-        else:
-            sampler = None
         if self.verbose: print(self.run_args.storage)
-        output = op.create_study(storage=self.run_args.storage, study_name=self.run_args.name, sampler=sampler)
+        output = op.create_study(storage=self.run_args.storage, study_name=self.run_args.study_name)
         return output
 
-    def calibrate(self, calib_pars=None, confirm_fit=False, load=False, tidyup=True, **kwargs):
+    def calibrate(self, calib_pars=None, load=False, tidyup=True, **kwargs):
         """
         Perform calibration.
 
         Args:
             calib_pars (dict): if supplied, overwrite stored calib_pars
-            confirm_fit (bool): if True, run simulations with parameters from before and after calibration
             load (bool): whether to load existing trials from the database (if rerunning the same calibration)
             tidyup (bool): whether to delete temporary files from trial runs
             verbose (bool): whether to print output from each trial
@@ -401,7 +248,7 @@ class Calibration(sc.prettyobj): # pragma: no cover
         t0 = sc.tic()
         self.make_study()
         self.run_workers()
-        study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.name, sampler = self.run_args.sampler)
+        study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
         self.best_pars = sc.objdict(study.best_params)
         self.elapsed = sc.toc(t0, output=True)
 
@@ -436,16 +283,12 @@ class Calibration(sc.prettyobj): # pragma: no cover
         if not self.run_args.keep_db:
             self.remove_db()
 
-        # Optionally compute the sims before and after the fit
-        if confirm_fit:
-            self.confirm_fit()
-
         return self
 
-    def confirm_fit(self):
+    def check_fit(self, n_runs=5):
         """ Run before and after simulations to validate the fit """
 
-        if self.verbose: print('\nConfirming fit...')
+        if self.verbose: print('\nChecking fit...')
 
         before_pars = sc.dcp(self.calib_pars)
         for spec in before_pars.values():
@@ -455,23 +298,26 @@ class Calibration(sc.prettyobj): # pragma: no cover
         for parname, spec in after_pars.items():
             spec['value'] = self.best_pars[parname]
 
-        self.before_sim = self.run_sim(calib_pars=before_pars, label='Before calibration')
-        self.after_sim  = self.run_sim(calib_pars=after_pars, label='After calibration')
-        self.before_fit = self.compute_fit(self.before_sim)
-        self.after_fit  = self.compute_fit(self.after_sim)
+        before_sim = self.build_fn(self.sim, calib_pars=before_pars, **self.build_kw)
+        before_sim.label = 'Before calibration'
+        self.before_msim = ss.MultiSim(before_sim, n_runs=n_runs)
+        self.before_msim.run()
+        self.before_fits = np.array([self.eval_fn(sim, **self.eval_kwargs) for sim in self.before_msim.sims])
 
-        # Add the data to the sims
-        for sim in [self.before_sim, self.after_sim]:
-            sim.init_data(self.data)
+        after_sim = self.build_fn(self.sim, calib_pars=after_pars, **self.build_kw)
+        after_sim.label = 'Before calibration'
+        self.after_msim = ss.MultiSim(after_sim, n_runs=n_runs)
+        self.after_msim.run()
+        self.after_fits = np.array([self.eval_fn(sim, **self.eval_kwargs) for sim in self.after_msim.sims])
 
-        print(f'Fit with original pars: {self.before_fit:n}')
-        print(f'Fit with best-fit pars: {self.after_fit:n}')
-        if self.after_fit <= self.before_fit:
+        print(f'Fit with original pars: {self.before_fits}')
+        print(f'Fit with best-fit pars: {self.after_fits}')
+        if self.after_fits.mean() <= self.before_fits.mean():
             print('✓ Calibration improved fit')
         else:
             print('✗ Calibration did not improve fit, but this sometimes happens stochastically and is not necessarily an error')
 
-        return self.before_fit, self.after_fit
+        return self.before_fits, self.after_fits
 
     def parse_study(self, study):
         """Parse the study into a data frame -- called automatically """
@@ -529,11 +375,24 @@ class Calibration(sc.prettyobj): # pragma: no cover
         Args:
             kwargs (dict): passed to MultiSim.plot()
         """
-        if self.before_sim is None:
-            self.confirm_fit()
-        msim = ss.MultiSim([self.before_sim, self.after_sim])
-        fig = msim.plot(**kwargs)
-        return ss.return_fig(fig)
+        if self.before_msim is None:
+            self.check_fit()
+
+        # Turn off jupyter mode so we can receive the figure handles
+        jup = ss.options.jupyter if 'jupyter' in ss.options else sc.isjupyter()
+        ss.options.jupyter = False
+
+        self.before_msim.reduce()
+        fig_before = self.before_msim.plot()
+        fig_before.suptitle('Before calibration')
+
+        self.after_msim.reduce()
+        fig_after = self.after_msim.plot(fig=fig_before)
+        fig_after.suptitle('After calibration')
+
+        ss.options.jupyter = jup
+
+        return fig_before, fig_after
 
     def plot_trend(self, best_thresh=None, fig_kw=None):
         """
@@ -570,4 +429,142 @@ class Calibration(sc.prettyobj): # pragma: no cover
             plt.xlabel('Trial number')
             plt.ylabel('Mismatch')
         sc.figlayout()
-        return ss.return_fig(fig)
+        return fig
+
+
+class CalibComponent(sc.prettyobj):
+    """
+    A class to compare a single channel of observed data with output from a
+    simulation. The Calibration class can use several CalibComponent objects to
+    form an overall understanding of how will a given simulation reflects
+    observed data.
+
+    Args:
+        name (str) : the name of this component. Importantly, if
+            extract_fn is None, the code will attempt to use the name, like
+            "hiv.prevalence" to automatically extract data from the simulation.
+        data (df) : pandas Series containing calibration data. The index should be the time in either floating point years or datetime.
+        mode (str/func): To handle misaligned timepoints between observed data and simulation output, it's important to know if the data are incident (like new cases) or prevalent (like the number infected).
+            If 'prevalent', simulation outputs will be interpolated to observed timepoints.
+            If 'incident', outputs will be interpolated to cumulative incidence.
+    """
+    def __init__(self, name, expected, extract_fn, conform, nll_fn, weight=1):
+        self.name = name
+        self.expected = expected
+        self.extract_fn = extract_fn
+        self.weight = weight
+
+        if isinstance(nll_fn, str):
+            if nll_fn == 'beta':
+                self.nll_fn = self.nll_beta
+            elif nll_fn == 'gamma':
+                self.nll_fn = self.nll_gamma
+            else:
+                errormsg = f'The nll_fn (negative log-likelihood function) argument must be "beta" or "gamma", not {conform}.'
+                raise ValueError(errormsg)
+        else:
+            if not callable(conform):
+                msg = f'The nll_fn (negative log-likelihood function) argument must be a string or a callable function, not {type(nll_fn)}.'
+                raise Exception(msg)
+            self.nll_fn = nll_fn
+
+        if isinstance(conform, str):
+            if conform == 'incident':
+                self.conform = self.linear_accum
+            elif conform == 'prevalent':
+                self.conform = self.linear_interp
+            else:
+                errormsg = f'The conform argument must be "prevalent" or "incident", not {conform}.'
+                raise ValueError(errormsg)
+        else:
+            if not callable(conform):
+                errormsg = f'The conform argument must be a string or a callable function, not {type(conform)}.'
+                raise TypeError(errormsg)
+            self.conform = conform
+
+        pass
+
+    @staticmethod
+    def nll_beta(expected, actual):
+        """
+        For the beta-binomial negative log-likelihood, we begin with a Beta(1,1) prior
+        and subsequently observe actual['x'] successes (positives) in actual['n'] trials (total observations).
+        The result is a Beta(actual['x']+1, actual['n']-actual['x']+1) posterior.
+        We then compare this to the real data, which has expected['x'] successes (positives) in expected['n'] trials (total observations).
+        To do so, we use a beta-binomial likelihood:
+        p(x|n, x, a, b) = (n choose x) B(x+a, n-x+b) / B(a, b)
+        where
+          x=expected['x']
+          n=expected['n']
+          a=actual['x']+1
+          b=actual['n']-actual['x']+1 
+        and B is the beta function, B(x, y) = Gamma(x)Gamma(y)/Gamma(x+y)
+
+        We compute the log of p(x|n, x, a, b), noting that gammaln is the log of the gamma function
+        """
+        e_n, e_x = expected['n'], expected['x']
+        a_n, a_x = actual['n'], actual['x']
+        logL = gammaln(e_n + 1) - gammaln(e_x + 1) - gammaln(e_n - e_x + 1)
+        logL += gammaln(e_x + a_x + 1) + gammaln(e_n - e_x + a_n - a_x + 1) - gammaln(e_n + a_n + 2)
+        logL += gammaln(a_n + 2) - gammaln(a_x + 1) - gammaln(a_n - a_x + 1)
+        return -logL
+
+    @staticmethod
+    def nll_gamma(expected, actual):
+        """
+        Also called negative binomial, but parameterized differently
+        The gamma-poisson likelihood is a Poisson likelihood with a gamma-distributed rate parameter
+        """
+        e_n, e_x = expected['n'], expected['x']
+        a_n, a_x = actual['n'], actual['x']
+        logL = gammaln(e_x + a_x + 1) - gammaln(e_x + 1) - gammaln(e_x + 1)
+        logL += (e_x + 1) * np.log(e_n)
+        logL += (a_x + 1) * np.log(a_n)
+        logL -= (e_x + a_x + 1) * np.log(e_n + a_n)
+        return -logL
+
+    @staticmethod
+    def linear_interp(expected, actual):
+        """
+        Simply interpolate
+        Use for prevalent data like prevalence
+        """
+        t = expected.index
+        conformed = pd.DataFrame(index=expected.index)
+        for k in actual:
+            conformed[k] = np.interp(x=t, xp=actual.index, fp=actual[k])
+
+        return conformed
+
+    @staticmethod
+    def linear_accum(expected, actual):
+        """
+        Interpolate in the accumulation, then difference.
+        Use for incident data like incidence or new_deaths
+        """
+        t = expected.index
+        t_step = np.diff(t)
+        assert np.all(t_step == t_step[0])
+        ti = np.append(t, t[-1] + t_step) # Add one more because later we'll diff
+
+        sim_t = np.array([sc.datetoyear(t) for t in actual.index if isinstance(t, dt.date)])
+
+        sdi = np.interp(x=ti, xp=sim_t, fp=actual.cumsum())
+        df = pd.Series(sdi.diff(), index=t)
+        return df
+
+    def eval(self, sim):
+        """ Compute and return the negative log likelihood """
+        actual = self.extract_fn(sim) # Extract
+        actual = self.conform(self.expected, actual) # Conform
+        self.nll = self.nll_fn(self.expected, actual) # Negative log likelihood
+        return self.weight * np.sum(self.nll)
+
+    def __call__(self, sim):
+        return self.eval(sim)
+
+    def __repr__(self):
+        return f'Calibration component with name {self.name}'
+
+    def plot(self):
+        NotImplementedError
