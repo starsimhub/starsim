@@ -3,14 +3,15 @@ Test calibration
 """
 
 #%% Imports and settings
-import sciris as sc
 import starsim as ss
+import numpy as np
 import pandas as pd
+import sciris as sc
 
-debug = False # If true, will run in serial
-do_plot = 1
-do_save = 0
+debug = True # If true, will run in serial
+n_reps = 10
 n_agents = 2e3
+do_plot = 1
 
 
 #%% Helper functions
@@ -38,26 +39,33 @@ def make_sim():
 def build_sim(sim, calib_pars, **kwargs):
     """ Modify the base simulation by applying calib_pars """
 
-    sir = sim.pars.diseases # There is only one disease in this simulation and it is a SIR
-    net = sim.pars.networks # There is only one network in this simulation and it is a RandomNet
+    sims = []
+    reps = kwargs.get('n_reps', n_reps)
 
-    # Capture any parameters that need special handling here
-    for k, pars in calib_pars.items():
-        if k == 'rand_seed':
-            sim.pars.rand_seed = v
-            continue
+    for rand_seed in np.random.randint(0, 1e6, reps):
+        s = sim.copy()
+        s.pars.rand_seed = rand_seed
 
-        v = pars['value']
-        if k == 'beta':
-            sir.pars.beta = ss.beta(v)
-        elif k == 'init_prev':
-            sir.pars.init_prev = ss.bernoulli(v)
-        elif k == 'n_contacts':
-            net.pars.n_contacts = ss.poisson(v)
-        else:
-            raise NotImplementedError(f'Parameter {k} not recognized')
+        sir = s.pars.diseases # There is only one disease in this simulation and it is a SIR
+        net = s.pars.networks # There is only one network in this simulation and it is a RandomNet
 
-    return sim
+        for k, pars in calib_pars.items():
+            if k == 'rand_seed':
+                continue
+
+            v = pars['value']
+            if k == 'beta':
+                sir.pars.beta = ss.beta(v)
+            elif k == 'init_prev':
+                sir.pars.init_prev = ss.bernoulli(v)
+            elif k == 'n_contacts':
+                net.pars.n_contacts = ss.poisson(v)
+            else:
+                raise NotImplementedError(f'Parameter {k} not recognized')
+        sims.append(s)
+
+    ret = s if n_reps == 1 else ss.MultiSim(sims)
+    return ret
 
 
 #%% Define the tests
@@ -139,9 +147,18 @@ if __name__ == '__main__':
             'init_prev' : dict(value=0.02),
             'n_contacts': dict(value=4),
         }
-        sim = build_sim(sim, pars)
-        ms = ss.MultiSim(sim, n_runs=25)
+        ms = build_sim(sim, pars, n_reps=25)
         ms.run().plot()
+
+        dfs = []
+        for sim in ms.sims:
+            df = sim.to_df()
+            df['prevalence'] = df['sir_n_infected']/df['n_alive']
+            df['rand_seed'] = sim.pars.rand_seed
+            dfs.append(df)
+        df = pd.concat(dfs)
+        import seaborn as sns
+        sns.relplot(data=df, x='timevec', y='prevalence', hue='rand_seed', kind='line')
 
     T = sc.timer()
     do_plot = True
