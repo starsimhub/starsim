@@ -881,7 +881,7 @@ class poisson(Dist): # TODO: does not currently scale correctly with dt
 
 class nbinom(Dist):
     """
-    Negative Binomial distribution
+    Negative binomial distribution
 
     Args:
         n (float): the number of successes, > 1 (default 1.0)
