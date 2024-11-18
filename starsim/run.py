@@ -26,7 +26,6 @@ class MultiSim:
     def __init__(self, sims=None, base_sim=None, label=None, n_runs=4, initialize=False,
                  inplace=True, debug=False, **kwargs):
         # Handle inputs
-        super().__init__(**kwargs)
         if base_sim is None:
             if isinstance(sims, ss.Sim):
                 base_sim = sims

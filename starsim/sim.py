@@ -125,15 +125,20 @@ class Sim(ss.Base):
             self.analyzers(),
         )
 
-    def init(self, **kwargs):
-        """ Perform all initializations for the sim """
+    def init(self, force=False, **kwargs):
+        """
+        Perform all initializations for the sim
 
+        Args:
+            force (bool): whether to overwrite sim attributes even if they already exist
+            kwargs (dict): passed to ss.People()
+        """
         # Validation and initialization -- this is "pre"
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.validate() # Validate parameters
         self.init_time() # Initialize time
         self.init_people(**kwargs) # Initialize the people
-        self.init_sim_attrs()
+        self.init_sim_attrs(force=force)
         self.init_mods_pre()
 
         # Final initializations -- this is "post"
@@ -183,11 +188,17 @@ class Sim(ss.Base):
         self.people.link_sim(self)
         return self.people
 
-    def init_sim_attrs(self):
+    def init_sim_attrs(self, force=False):
         """ Move initialized modules to the sim """
         keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
         for key in keys:
-            setattr(self, key, self.pars.pop(key))
+            orig = getattr(self, key, None)
+            if not force and orig is not None:
+                if key != 'label': # Don't worry about overwriting the label
+                    warnmsg = f'Skipping key "{key}" in parameters since already present in sim and force=False'
+                    ss.warn(warnmsg)
+            else:
+                setattr(self, key, self.pars.pop(key))
         return
 
     def init_mods_pre(self):
@@ -488,15 +499,6 @@ class Sim(ss.Base):
         sc.save(filename=filename, obj=sim)
         return filename
 
-    @staticmethod
-    def load(filename, *args, **kwargs):
-        """ Load from disk from a gzipped pickle """
-        sim = sc.load(filename, *args, **kwargs)
-        if not isinstance(sim, Sim):  # pragma: no cover
-            errormsg = f'Cannot load object of {type(sim)} as a Sim object'
-            raise TypeError(errormsg)
-        return sim
-
     def to_json(self, filename=None, keys=None, tostring=False, indent=2, verbose=False, **kwargs):
         """
         Export results and parameters as JSON.
@@ -588,9 +590,9 @@ class Sim(ss.Base):
 
             if key is not None:
                 if isinstance(key, str):
-                    flat = {k:v for k,v in flat.items() if (key in k)}
+                    flat = {k:v for k,v in flat.items() if (key.lower() in k)}
                 else:
-                    flat = {k:flat[k] for k in key}
+                    flat = {k.lower():flat[k.lower()] for k in key}
 
             # Get the figure
             if fig is None:

@@ -145,7 +145,7 @@ def test_multi_timestep(do_plot=False):
 
 
 def test_mixed_timesteps():
-    sc.heading('Test behavior of different commbinations of timesteps')
+    sc.heading('Test behavior of different combinations of timesteps')
 
     siskw = dict(dur_inf=ss.dur(50, 'day'), beta=ss.beta(0.01, 'day'), waning=ss.rate(0.005, 'day'))
     kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
@@ -168,7 +168,7 @@ def test_mixed_timesteps():
 
     msim = ss.parallel(sim1, sim2, sim3, sim4)
 
-    # Check that al results are close
+    # Check that all results are close
     threshold = 0.01
     summary = msim.summarize()
     for key,res in summary.items():

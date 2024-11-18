@@ -480,6 +480,9 @@ class StaticNet(Network):
         self.append(edges)
         return
 
+    def step(self):
+        pass
+
 
 class RandomNet(DynamicNetwork):
     """ Random connectivity between agents """

@@ -218,6 +218,8 @@ class Arr(BaseArr):
             return self.auids[key]
         elif not np.isscalar(key) and len(key) == 0: # Handle [], np.array([]), etc.
             return uids()
+        elif isinstance(key, np.ndarray) and ss.options.reticulate: # TODO: fix ss.uids
+            return key.astype(int)
         else:
             errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.'
             raise Exception(errormsg)

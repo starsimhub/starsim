@@ -93,7 +93,7 @@ class Births(Demographics):
 
         scaled_birth_prob = this_birth_rate * p.rate_units * p.rel_birth * factor
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
-        n_new = int(sc.randround(sim.people.alive.count() * scaled_birth_prob))
+        n_new = np.random.binomial(n=sim.people.alive.count(), p=scaled_birth_prob) # Not CRN safe, see issue #404
         return n_new
 
     def step(self):

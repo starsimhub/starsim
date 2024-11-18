@@ -228,13 +228,12 @@ class Module(Base):
 
     def match_time_inds(self, inds=None):
          """ Find the nearest matching sim time indices for the current module """
-         if inds is None: inds = Ellipsis
          self_tvec = self.t.abstvec
          sim_tvec = self.sim.t.abstvec
          if len(self_tvec) == len(sim_tvec): # Shortcut to avoid doing matching
-             return inds
+             return Ellipsis if inds is None else inds
          else:
-             out = sc.findnearest(sim_tvec, [inds])
+             out = sc.findnearest(sim_tvec, self_tvec)
              return out
 
     def start_step(self):
