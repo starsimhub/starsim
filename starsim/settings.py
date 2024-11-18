@@ -239,7 +239,7 @@ class Options(sc.objdict):
         """ Set NumPy to show numbers as just e.g. 1.3 (Starsim default) or np.float64(1.3) (NumPy default) """
         if self.show_type:
             np.set_printoptions(legacy=False)
-        else:
+        elif sc.compareversions(np, '>=2.0'): # Numpy crashes with this option otherwise
             np.set_printoptions(legacy='1.25')
         return
 
