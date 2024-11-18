@@ -24,11 +24,10 @@ def make_sim():
 
     sim = ss.Sim(
         n_agents = n_agents,
-        start = sc.date('1990-01-01'),
+        start = sc.date('2020-01-01'),
         dur = 40,
         dt = 1,
         unit = 'day',
-        #total_pop = 10000,
         diseases = sir,
         networks = random,
     )
@@ -75,21 +74,6 @@ def test_calibration(do_plot=False):
     # Make the sim and data
     sim = make_sim()
 
-    '''
-    prevalence = ss.CalibComponent(
-        name = 'hiv.prevalence',
-
-        # By default, automate these based on name
-        real_data = data['hiv.prevalence'],
-        sim_data_fn = lambda sim: pd.Series(sim.results.hiv.prevalence, index=sim.results.hiv.timevec),
-
-        conform = ss.eConform.PREVALENT,
-        likelihood = ss.eLikelihood.POISSON,
-
-        weight = 1,
-    )
-    '''
-
     infectious = ss.CalibComponent(
         name = 'Infectious',
 
@@ -98,7 +82,7 @@ def test_calibration(do_plot=False):
         real_data = pd.DataFrame({
             'n': [200, 197, 195], # Number of individuals sampled
             'x': [30, 30, 10],    # Number of individuals found to be infectious
-        }, index=pd.Index([ss.date(d) for d in ['1990-01-12', '1990-01-25', '1990-02-02']], name='t')), # On these dates
+        }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
         
         sim_data_fn = lambda sim: pd.DataFrame({
             'n': sim.results.n_alive,
