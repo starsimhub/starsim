@@ -7,13 +7,13 @@ Examples of diseases that have already been implemented in Starsim include sexua
 
 Note: Starsim is a general-purpose, multi-disease framework that builds on our previous suite of disease-specific models, which included `Covasim <https://covasim.org>`_, `HPVsim <https://hpvsim.org>`_, and `FPsim <https://fpsim.org>`_. In cases where a distinction needs to be made, Starsim is also known as the "Starsim framework", while this collection of other models is known as the "Starsim suite".
 
-For more information about Starsim, please see the `documentation <https://docs.starsim.org>`__.
+For more information about Starsim, please see the `documentation <https://docs.starsim.org>`__. Information about Starsim for R is available at `r.starsim.org <https://r.starsim.org>`__.
 
 
 Requirements
 ------------
 
-Python 3.9-3.12.
+Python 3.9-3.12 or R.
 
 We recommend, but do not require, installing Starsim in a virtual environment, such as `Anaconda <https://www.anaconda.com/products>`__.
 
@@ -21,11 +21,21 @@ We recommend, but do not require, installing Starsim in a virtual environment, s
 Installation
 ------------
 
+Python
+~~~~~~
+
 Starsim is most easily installed via PyPI: ``pip install starsim``.
 
 Starsim can also be installed locally. To do this, clone first this repository, then run ``pip install -e .`` (don't forget the dot at the end!).
 
-*Note:* Starsim leverages Intel's `short vector math library <https://numba.readthedocs.io/en/stable/user/performance-tips.html#intel-svml>`_. If you want to use this (for a ~10% speed improvement), install via `conda install intel-cmplr-lib-rt`.
+R
+~
+R-Starsim is still under development. You can install it with::
+
+  # install.packages("devtools")
+  devtools::install_github("starsimhub/rstarsim")
+  library(starsim)
+  init_starsim()
 
 
 Usage and documentation
