@@ -125,15 +125,20 @@ class Sim(ss.Base):
             self.analyzers(),
         )
 
-    def init(self, **kwargs):
-        """ Perform all initializations for the sim """
+    def init(self, force=False, **kwargs):
+        """
+        Perform all initializations for the sim
 
+        Args:
+            force (bool): whether to overwrite sim attributes even if they already exist
+            kwargs (dict): passed to ss.People()
+        """
         # Validation and initialization -- this is "pre"
         ss.set_seed(self.pars.rand_seed) # Reset the seed before the population is created -- shouldn't matter if only using Dist objects
         self.pars.validate() # Validate parameters
         self.init_time() # Initialize time
         self.init_people(**kwargs) # Initialize the people
-        self.init_sim_attrs()
+        self.init_sim_attrs(force=force)
         self.init_mods_pre()
 
         # Final initializations -- this is "post"
@@ -183,11 +188,16 @@ class Sim(ss.Base):
         self.people.link_sim(self)
         return self.people
 
-    def init_sim_attrs(self):
+    def init_sim_attrs(self, force=False):
         """ Move initialized modules to the sim """
         keys = ['label', 'demographics', 'networks', 'diseases', 'interventions', 'analyzers', 'connectors']
         for key in keys:
-            setattr(self, key, self.pars.pop(key))
+            orig = getattr(self, key, None)
+            if not force and orig is not None:
+                warnmsg = f'Skipping key "{key}" in parameters since already present in sim and force=False'
+                ss.warn(warnmsg)
+            else:
+                setattr(self, key, self.pars.pop(key))
         return
 
     def init_mods_pre(self):
