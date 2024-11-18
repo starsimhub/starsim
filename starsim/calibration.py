@@ -299,7 +299,7 @@ class Calibration(sc.prettyobj):
 
         return self
 
-    def confirm_fit(self, n_runs=25):
+    def confirm_fit(self, n_runs=5):
         """ Run before and after simulations to validate the fit """
 
         if self.verbose: print('\nConfirming fit...')
