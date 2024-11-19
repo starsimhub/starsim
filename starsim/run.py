@@ -158,6 +158,9 @@ class MultiSim:
         inplace = kwargs.pop('inplace', True)
         debug = kwargs.pop('debug', False)
         if debug:
+            kwargs.pop('n_runs', None)
+            kwargs.pop('iterpars', None)
+            kwargs.pop('parallel', None)
             run_sims = [single_run(sim, **kwargs) for sim in sims]
         else: # The next line does all the work!
             run_sims = multi_run(sims, **kwargs) # Output sims are copies due to the pickling during parallelization
@@ -431,7 +434,6 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
 
     # Handle additional arguments
     for key, val in sim_args.items():
-        print(f'Processing {key}:{val}')
         if key in sim.pars.keys():
             if verbose >= 1:
                 print(f'Setting key {key} from {sim[key]} to {val}')

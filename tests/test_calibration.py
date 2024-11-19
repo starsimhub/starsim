@@ -8,9 +8,10 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 
-debug = True # If true, will run in serial
-n_reps = 10
-n_agents = 2e3
+debug = False # If true, will run in serial
+n_reps = 25 # Per trial
+total_trials = 250
+n_agents = 50_000
 do_plot = 1
 
 
@@ -31,6 +32,7 @@ def make_sim():
         unit = 'day',
         diseases = sir,
         networks = random,
+        verbose = 0,
     )
 
     return sim
@@ -39,33 +41,31 @@ def make_sim():
 def build_sim(sim, calib_pars, **kwargs):
     """ Modify the base simulation by applying calib_pars """
 
-    sims = []
     reps = kwargs.get('n_reps', n_reps)
 
-    for rand_seed in np.random.randint(0, 1e6, reps):
-        s = sim.copy()
-        s.pars.rand_seed = rand_seed
+    sir = sim.pars.diseases # There is only one disease in this simulation and it is a SIR
+    net = sim.pars.networks # There is only one network in this simulation and it is a RandomNet
 
-        sir = s.pars.diseases # There is only one disease in this simulation and it is a SIR
-        net = s.pars.networks # There is only one network in this simulation and it is a RandomNet
+    for k, pars in calib_pars.items():
+        if k == 'rand_seed':
+            sim.pars.rand_seed = pars
+            continue
 
-        for k, pars in calib_pars.items():
-            if k == 'rand_seed':
-                continue
+        v = pars['value']
+        if k == 'beta':
+            sir.pars.beta = ss.beta(v)
+        elif k == 'init_prev':
+            sir.pars.init_prev = ss.bernoulli(v)
+        elif k == 'n_contacts':
+            net.pars.n_contacts = ss.poisson(v)
+        else:
+            raise NotImplementedError(f'Parameter {k} not recognized')
 
-            v = pars['value']
-            if k == 'beta':
-                sir.pars.beta = ss.beta(v)
-            elif k == 'init_prev':
-                sir.pars.init_prev = ss.bernoulli(v)
-            elif k == 'n_contacts':
-                net.pars.n_contacts = ss.poisson(v)
-            else:
-                raise NotImplementedError(f'Parameter {k} not recognized')
-        sims.append(s)
+    if n_reps == 1:
+        return sim
 
-    ret = s if n_reps == 1 else ss.MultiSim(sims)
-    return ret
+    ms = ss.MultiSim(sim, iterpars=dict(rand_seed=np.random.randint(0, 1e6, n_reps)), initialize=True, debug=True, parallel=False) # Run in serial
+    return ms
 
 
 #%% Define the tests
@@ -109,7 +109,9 @@ def test_calibration(do_plot=False):
         sim = sim,
         build_fn = build_sim, # Use default builder, Calibration.translate_pars
         components = infectious,
-        total_trials = 20,
+        #eval_fn = my_function, # Will call my_function(msim, eval_kwargs)
+        #eval_kwargs = dict(expected=TRIAL_DATA),
+        total_trials = total_trials,
         n_workers = None, # None indicates to use all available CPUs
         die = True,
         debug = debug,
@@ -122,12 +124,6 @@ def test_calibration(do_plot=False):
     # Check
     sc.printcyan('\nChecking fit...')
     calib.check_fit()
-    print(f'Fit with original pars: {calib.before_fits}')
-    print(f'Fit with best-fit pars: {calib.after_fits}')
-    if calib.after_fits.mean() <= calib.before_fits.mean():
-        print('✓ Calibration improved fit')
-    else:
-        print('✗ Calibration did not improve fit, but this sometimes happens stochastically and is not necessarily an error')
 
     if do_plot:
         calib.plot_sims()

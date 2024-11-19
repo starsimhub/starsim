@@ -51,7 +51,7 @@ class Calibration(sc.prettyobj):
 
         # Handle run arguments
         if total_trials is None: total_trials   = 100
-        if n_workers    is None: n_workers      = sc.cpu_count()
+        if n_workers    is None: n_workers      = 1 if debug else sc.cpu_count()
         if study_name   is None: study_name     = 'starsim_calibration'
         if db_name      is None: db_name        = f'{study_name}.db'
         if keep_db      is None: keep_db        = False
@@ -165,7 +165,7 @@ class Calibration(sc.prettyobj):
         """ Evaluate the fit by evaluating the negative log likelihood """
         nll = 0 # Negative log likelihood
         for component in sc.tolist(self.components):
-            nll += component(sim)
+            nll += component(sim, **kwargs)
         return nll
 
     def run_trial(self, trial):
@@ -225,7 +225,7 @@ class Calibration(sc.prettyobj):
         if not self.run_args.keep_db:
             self.remove_db()
         if self.verbose: print(self.run_args.storage)
-        output = op.create_study(storage=self.run_args.storage, study_name=self.run_args.study_name)
+        output = op.create_study(storage=self.run_args.storage, study_name=self.run_args.study_name, direction='minimize')
         return output
 
     def calibrate(self, calib_pars=None, load=False, tidyup=True, **kwargs):
@@ -298,17 +298,14 @@ class Calibration(sc.prettyobj):
         for parname, spec in after_pars.items():
             spec['value'] = self.best_pars[parname]
 
-        before_sim = self.build_fn(self.sim, calib_pars=before_pars, **self.build_kw)
-        before_sim.label = 'Before calibration'
-        self.before_msim = ss.MultiSim(before_sim, n_runs=n_runs)
+        self.before_msim = self.build_fn(self.sim, calib_pars=before_pars, n_reps=n_runs, **self.build_kw)
         self.before_msim.run()
-        self.before_fits = np.array([self.eval_fn(sim, **self.eval_kwargs) for sim in self.before_msim.sims])
+        #self.before_fits = np.array([self.eval_fn(sim, **self.eval_kwargs) for sim in self.before_msim.sims])
+        self.before_fits = self.eval_fn(self.before_msim, **self.eval_kwargs, plot='before.png')
 
-        after_sim = self.build_fn(self.sim, calib_pars=after_pars, **self.build_kw)
-        after_sim.label = 'Before calibration'
-        self.after_msim = ss.MultiSim(after_sim, n_runs=n_runs)
+        self.after_msim = self.build_fn(self.sim, calib_pars=after_pars, n_reps=n_runs, **self.build_kw)
         self.after_msim.run()
-        self.after_fits = np.array([self.eval_fn(sim, **self.eval_kwargs) for sim in self.after_msim.sims])
+        self.after_fits = self.eval_fn(self.after_msim, **self.eval_kwargs, plot='after.png')
 
         print(f'Fit with original pars: {self.before_fits}')
         print(f'Fit with best-fit pars: {self.after_fits}')
@@ -485,7 +482,7 @@ class CalibComponent(sc.prettyobj):
         pass
 
     @staticmethod
-    def nll_beta(expected, actual):
+    def nll_beta(expected, actual, **kwargs):
         """
         For the beta-binomial negative log-likelihood, we begin with a Beta(1,1) prior
         and subsequently observe actual['x'] successes (positives) in actual['n'] trials (total observations).
@@ -502,15 +499,51 @@ class CalibComponent(sc.prettyobj):
 
         We compute the log of p(x|n, x, a, b), noting that gammaln is the log of the gamma function
         """
+
+        plot = kwargs.pop('plot', False)
+
+        logLs = []
         e_n, e_x = expected['n'], expected['x']
-        a_n, a_x = actual['n'], actual['x']
-        logL = gammaln(e_n + 1) - gammaln(e_x + 1) - gammaln(e_n - e_x + 1)
-        logL += gammaln(e_x + a_x + 1) + gammaln(e_n - e_x + a_n - a_x + 1) - gammaln(e_n + a_n + 2)
-        logL += gammaln(a_n + 2) - gammaln(a_x + 1) - gammaln(a_n - a_x + 1)
-        return -logL
+
+        if plot:
+            # TEMP
+            import scipy.stats as sps
+            ti = 0
+            xx = np.linspace(0, 1, 10000)
+            kk = np.arange(int(e_x.iloc[ti]/2), int(2*e_x.iloc[ti]))
+            fig, axv = plt.subplots(1,2, figsize=(16,10))
+            ###
+
+        for seed, rep in actual.groupby('rand_seed'):
+            a_n, a_x = rep['n'], rep['x']
+            logL = gammaln(e_n + 1) - gammaln(e_x + 1) - gammaln(e_n - e_x + 1) \
+                + gammaln(e_x + a_x + 1) + gammaln(e_n - e_x + a_n - a_x + 1) - gammaln(e_n + a_n + 2) \
+                + gammaln(a_n + 2) - gammaln(a_x + 1) - gammaln(a_n - a_x + 1)
+            logLs.append(logL)
+
+            if plot:
+                alpha = a_x.iloc[ti] + 2
+                beta = a_n.iloc[ti] - a_x.iloc[ti] + 2
+                d = sps.beta(alpha, beta)
+                yy = d.pdf(xx)
+                axv[0].plot(xx, yy, label=f'{seed}')
+
+                q = sps.betabinom(n=e_n.iloc[ti], a=alpha, b=beta)
+                yy = q.pmf(kk)
+                axv[1].step(kk, yy)
+
+        nlls = np.array(logLs)
+
+        if plot:
+            axv[1].axvline(e_x.iloc[ti], color='k', linestyle='--')
+            fig.suptitle(f'Mean negative log likelihood: {nlls.mean()}')
+            fig.savefig(plot)
+            plt.close(fig)
+
+        return -nlls
 
     @staticmethod
-    def nll_gamma(expected, actual):
+    def nll_gamma(expected, actual, **kwargs):
         """
         Also called negative binomial, but parameterized differently
         The gamma-poisson likelihood is a Poisson likelihood with a gamma-distributed rate parameter
@@ -553,15 +586,27 @@ class CalibComponent(sc.prettyobj):
         df = pd.Series(sdi.diff(), index=t)
         return df
 
-    def eval(self, sim):
+    def eval(self, sim, **kwargs):
         """ Compute and return the negative log likelihood """
-        actual = self.extract_fn(sim) # Extract
-        actual = self.conform(self.expected, actual) # Conform
-        self.nll = self.nll_fn(self.expected, actual) # Negative log likelihood
+        actuals = []
+        if isinstance(sim, ss.MultiSim):
+            for s in sim.sims:
+                actual = self.extract_fn(s)
+                actual = self.conform(self.expected, actual) # Conform
+                actual['rand_seed'] = s.pars.rand_seed
+                actuals.append(actual)
+        else:
+            actual = self.extract_fn(sim) # Extract
+            actual = self.conform(self.expected, actual) # Conform
+            actual['rand_seed'] = sim.pars.rand_seed
+            actuals = [actual]
+
+        df = pd.concat(actuals).reset_index().set_index(['rand_seed', 't'])
+        self.nll = self.nll_fn(self.expected, df, **kwargs) # Negative log likelihood
         return self.weight * np.sum(self.nll)
 
-    def __call__(self, sim):
-        return self.eval(sim)
+    def __call__(self, sim, **kwargs):
+        return self.eval(sim, **kwargs)
 
     def __repr__(self):
         return f'Calibration component with name {self.name}'
