@@ -10,7 +10,7 @@ import sciris as sc
 
 debug = False # If true, will run in serial
 n_reps = 10 # Per trial
-total_trials = 100
+total_trials = 25
 n_agents = 2_000
 do_plot = 1
 

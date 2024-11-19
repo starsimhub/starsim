@@ -507,17 +507,16 @@ class CalibComponent(sc.prettyobj):
 
         logLs = []
         e_n, e_x = expected['n'], expected['x']
-
         for seed, rep in actual.groupby('rand_seed'):
             a_n, a_x = rep['n'], rep['x']
-            logL = gammaln(e_n + 1) - gammaln(e_x + 1) - gammaln(e_n - e_x + 1) \
-                + gammaln(e_x + a_x + 1) + gammaln(e_n - e_x + a_n - a_x + 1) - gammaln(e_n + a_n + 2) \
-                + gammaln(a_n + 2) - gammaln(a_x + 1) - gammaln(a_n - a_x + 1)
+            #logL = gammaln(e_n + 1) - gammaln(e_x + 1) - gammaln(e_n - e_x + 1) \
+            #    + gammaln(e_x + a_x + 1) + gammaln(e_n - e_x + a_n - a_x + 1) - gammaln(e_n + a_n + 2) \
+            #    + gammaln(a_n + 2) - gammaln(a_x + 1) - gammaln(a_n - a_x + 1)
+            logL = sps.betabinom.logpmf(k=e_x, n=e_n, a=a_x+1, b=a_n-a_x+1)
             logLs.append(logL)
 
-        nlls = np.array(logLs)
-
-        return -nlls
+        nlls = -np.array(logLs)
+        return nlls
 
     @staticmethod
     def nll_gammapoisson(expected, actual, **kwargs):
@@ -525,13 +524,19 @@ class CalibComponent(sc.prettyobj):
         Also called negative binomial, but parameterized differently
         The gamma-poisson likelihood is a Poisson likelihood with a gamma-distributed rate parameter
         """
+        #logL = gammaln(e_x + a_x + 1) - gammaln(e_x + 1) - gammaln(e_x + 1)
+        #logL += (e_x + 1) * np.log(e_n)
+        #logL += (a_x + 1) * np.log(a_n)
+        #logL -= (e_x + a_x + 1) * np.log(e_n + a_n)
+        logLs = []
         e_n, e_x = expected['n'], expected['x']
-        a_n, a_x = actual['n'], actual['x']
-        logL = gammaln(e_x + a_x + 1) - gammaln(e_x + 1) - gammaln(e_x + 1)
-        logL += (e_x + 1) * np.log(e_n)
-        logL += (a_x + 1) * np.log(a_n)
-        logL -= (e_x + a_x + 1) * np.log(e_n + a_n)
-        return -logL
+        for seed, rep in actual.groupby('rand_seed'):
+            a_n, a_x = rep['n'], rep['x']
+            logL = sps.nbinom.logpmf(k=e_x, n=1+a_x, p=a_n/(a_n+1))
+            logLs.append(logL)
+
+        nlls = -np.array(logLs)
+        return nlls
 
     @staticmethod
     def linear_interp(expected, actual):
@@ -599,10 +604,12 @@ class CalibComponent(sc.prettyobj):
             q = sps.betabinom(n=e_n, a=alpha, b=beta)
             yy = q.pmf(kk)
             plt.step(kk, yy, label=f"{row['rand_seed']}")
+            yy = q.pmf(e_x)
+            plt.plot(e_x, yy, 'x', ms=10, color='k')
         plt.axvline(e_x, color='k', linestyle='--')
         return
 
     def plot(self):
         g = sns.FacetGrid(data=self.actual.reset_index(), col='t', col_wrap=3, sharex=False)
         g.map_dataframe(self._betabinom_facet)
-        return g
+        return g.fig
