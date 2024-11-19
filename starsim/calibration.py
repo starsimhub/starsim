@@ -9,6 +9,8 @@ import datetime as dt
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
+import seaborn as sns
+import scipy.stats as sps
 from scipy.special import gammaln
 
 
@@ -58,10 +60,10 @@ class Calibration(sc.prettyobj):
         if storage      is None: storage        = f'sqlite:///{db_name}'
         
         self.build_fn       = build_fn or self.translate_pars
-        self.build_kw   = build_kw or dict()
+        self.build_kw       = build_kw or dict()
         self.eval_fn        = eval_fn or self._eval_fit
         self.eval_kwargs    = eval_kwargs or dict()
-        self.components     = components
+        self.components     = sc.tolist(components)
 
         n_trials = int(np.ceil(total_trials/n_workers))
         kw = dict(n_trials=n_trials, n_workers=int(n_workers), debug=debug, study_name=study_name,
@@ -164,8 +166,11 @@ class Calibration(sc.prettyobj):
     def _eval_fit(self, sim, **kwargs):
         """ Evaluate the fit by evaluating the negative log likelihood """
         nll = 0 # Negative log likelihood
-        for component in sc.tolist(self.components):
+        plot_fn = kwargs.pop('plot', False)
+        for component in self.components:
             nll += component(sim, **kwargs)
+            if plot_fn:
+                component.plot()
         return nll
 
     def run_trial(self, trial):
@@ -452,10 +457,10 @@ class CalibComponent(sc.prettyobj):
         self.weight = weight
 
         if isinstance(nll_fn, str):
-            if nll_fn == 'beta':
-                self.nll_fn = self.nll_beta
-            elif nll_fn == 'gamma':
-                self.nll_fn = self.nll_gamma
+            if nll_fn == 'betabinomial':
+                self.nll_fn = self.nll_betabinomial
+            elif nll_fn == 'gammapoisson':
+                self.nll_fn = self.nll_gammapoisson
             else:
                 errormsg = f'The nll_fn (negative log-likelihood function) argument must be "beta" or "gamma", not {conform}.'
                 raise ValueError(errormsg)
@@ -482,7 +487,7 @@ class CalibComponent(sc.prettyobj):
         pass
 
     @staticmethod
-    def nll_beta(expected, actual, **kwargs):
+    def nll_betabinomial(expected, actual, **kwargs):
         """
         For the beta-binomial negative log-likelihood, we begin with a Beta(1,1) prior
         and subsequently observe actual['x'] successes (positives) in actual['n'] trials (total observations).
@@ -500,19 +505,8 @@ class CalibComponent(sc.prettyobj):
         We compute the log of p(x|n, x, a, b), noting that gammaln is the log of the gamma function
         """
 
-        plot = kwargs.pop('plot', False)
-
         logLs = []
         e_n, e_x = expected['n'], expected['x']
-
-        if plot:
-            # TEMP
-            import scipy.stats as sps
-            ti = 0
-            xx = np.linspace(0, 1, 10000)
-            kk = np.arange(int(e_x.iloc[ti]/2), int(2*e_x.iloc[ti]))
-            fig, axv = plt.subplots(1,2, figsize=(16,10))
-            ###
 
         for seed, rep in actual.groupby('rand_seed'):
             a_n, a_x = rep['n'], rep['x']
@@ -521,29 +515,12 @@ class CalibComponent(sc.prettyobj):
                 + gammaln(a_n + 2) - gammaln(a_x + 1) - gammaln(a_n - a_x + 1)
             logLs.append(logL)
 
-            if plot:
-                alpha = a_x.iloc[ti] + 2
-                beta = a_n.iloc[ti] - a_x.iloc[ti] + 2
-                d = sps.beta(alpha, beta)
-                yy = d.pdf(xx)
-                axv[0].plot(xx, yy, label=f'{seed}')
-
-                q = sps.betabinom(n=e_n.iloc[ti], a=alpha, b=beta)
-                yy = q.pmf(kk)
-                axv[1].step(kk, yy)
-
         nlls = np.array(logLs)
-
-        if plot:
-            axv[1].axvline(e_x.iloc[ti], color='k', linestyle='--')
-            fig.suptitle(f'Mean negative log likelihood: {nlls.mean()}')
-            fig.savefig(plot)
-            plt.close(fig)
 
         return -nlls
 
     @staticmethod
-    def nll_gamma(expected, actual, **kwargs):
+    def nll_gammapoisson(expected, actual, **kwargs):
         """
         Also called negative binomial, but parameterized differently
         The gamma-poisson likelihood is a Poisson likelihood with a gamma-distributed rate parameter
@@ -601,8 +578,8 @@ class CalibComponent(sc.prettyobj):
             actual['rand_seed'] = sim.pars.rand_seed
             actuals = [actual]
 
-        df = pd.concat(actuals).reset_index().set_index(['rand_seed', 't'])
-        self.nll = self.nll_fn(self.expected, df, **kwargs) # Negative log likelihood
+        self.actual = pd.concat(actuals).reset_index().set_index(['rand_seed', 't'])
+        self.nll = self.nll_fn(self.expected, self.actual, **kwargs) # Negative log likelihood
         return self.weight * np.sum(self.nll)
 
     def __call__(self, sim, **kwargs):
@@ -611,5 +588,21 @@ class CalibComponent(sc.prettyobj):
     def __repr__(self):
         return f'Calibration component with name {self.name}'
 
+    def _betabinom_facet(self, data, color, **kwargs):
+        t = data.iloc[0]['t']
+        expected = self.expected.loc[t]
+        e_n, e_x = expected['n'], expected['x']
+        kk = np.arange(int(e_x/2), int(2*e_x))
+        for idx, row in data.iterrows():
+            alpha = row['x'] + 1
+            beta = row['n'] - row['x'] + 1
+            q = sps.betabinom(n=e_n, a=alpha, b=beta)
+            yy = q.pmf(kk)
+            plt.step(kk, yy, label=f"{row['rand_seed']}")
+        plt.axvline(e_x, color='k', linestyle='--')
+        return
+
     def plot(self):
-        NotImplementedError
+        g = sns.FacetGrid(data=self.actual.reset_index(), col='t', col_wrap=3, sharex=False)
+        g.map_dataframe(self._betabinom_facet)
+        return g

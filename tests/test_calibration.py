@@ -9,9 +9,9 @@ import pandas as pd
 import sciris as sc
 
 debug = False # If true, will run in serial
-n_reps = 25 # Per trial
-total_trials = 250
-n_agents = 50_000
+n_reps = 10 # Per trial
+total_trials = 100
+n_agents = 2_000
 do_plot = 1
 
 
@@ -98,7 +98,7 @@ def test_calibration(do_plot=False):
         }, index=pd.Index(sim.results.timevec, name='t')),
 
         conform = 'prevalent',
-        nll_fn = 'beta',
+        nll_fn = 'betabinomial',
 
         weight = 1,
     )
