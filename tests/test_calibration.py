@@ -7,7 +7,7 @@ import sciris as sc
 import starsim as ss
 import pandas as pd
 
-debug = False # If true, will run in serial
+debug = False  # If true, will run in serial
 do_plot = 1
 do_save = 0
 n_agents = 2e3
@@ -43,11 +43,11 @@ def build_sim(sim, calib_pars, **kwargs):
 
     # Capture any parameters that need special handling here
     for k, pars in calib_pars.items():
+        v = pars['value']
         if k == 'rand_seed':
             sim.pars.rand_seed = v
             continue
 
-        v = pars['value']
         if k == 'beta':
             sir.pars.beta = ss.beta(v)
         elif k == 'init_prev':
@@ -66,8 +66,8 @@ def test_calibration(do_plot=False):
 
     # Define the calibration parameters
     calib_pars = dict(
-        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True), # Log scale and no "path", will be handled by build_sim (ablve)
-        init_prev = dict(low=0.01, high=0.05, guess=0.15, path=('diseases', 'hiv', 'init_prev')), # Default type is suggest_float, no need to re-specify
+        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True, path=('diseases', 'sir', 'beta')), # Log scale and no "path", will be handled by build_sim (ablve)
+        init_prev = dict(low=0.01, high=0.05, guess=0.15, path=('diseases', 'sir', 'init_prev')), # Default type is suggest_float, no need to re-specify
         n_contacts = dict(low=2, high=10, guess=3, suggest_type='suggest_int', path=('networks', 'randomnet', 'n_contacts')), # Suggest int just for demo
     )
 
