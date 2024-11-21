@@ -463,7 +463,7 @@ class CalibComponent(sc.prettyobj):
                 errormsg = f'The nll_fn (negative log-likelihood function) argument must be "beta" or "gamma", not {conform}.'
                 raise ValueError(errormsg)
         else:
-            if not callable(conform):
+            if not callable(nll_fn):
                 msg = f'The nll_fn (negative log-likelihood function) argument must be a string or a callable function, not {type(nll_fn)}.'
                 raise Exception(msg)
             self.nll_fn = nll_fn
