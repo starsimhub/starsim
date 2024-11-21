@@ -43,11 +43,11 @@ def build_sim(sim, calib_pars, **kwargs):
 
     # Capture any parameters that need special handling here
     for k, pars in calib_pars.items():
+        v = pars['value']
         if k == 'rand_seed':
             sim.pars.rand_seed = v
             continue
 
-        v = pars['value']
         if k == 'beta':
             sir.pars.beta = ss.beta(v)
         elif k == 'init_prev':
