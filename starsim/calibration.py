@@ -320,8 +320,8 @@ class Calibration(sc.prettyobj):
         print(f'Fit with original pars: {self.before_fits}')
         print(f'Fit with best-fit pars: {self.after_fits}')
         
-        before = self.before_fits.mean if isinstance(self.before_fits, np.ndarray) else self.before_fits
-        after = self.after_fits.mean if isinstance(self.after_fits, np.ndarray) else self.after_fits
+        before = self.before_fits.mean() if isinstance(self.before_fits, np.ndarray) else self.before_fits
+        after = self.after_fits.mean() if isinstance(self.after_fits, np.ndarray) else self.after_fits
 
         if after <= before:
             print('✓ Calibration improved fit')
