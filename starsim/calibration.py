@@ -14,7 +14,7 @@ import scipy.stats as sps
 from scipy.special import gammaln
 
 
-__all__ = ['Calibration', 'CalibComponent']
+__all__ = ['Calibration', 'CalibComponent', 'BetaBinomial', 'GammaPoisson']
 
 
 class Calibration(sc.prettyobj):
@@ -32,7 +32,7 @@ class Calibration(sc.prettyobj):
         build_kw  (dict): a dictionary of options that are passed to build_fn to aid in modifying the base simulation. The API is self.build_fn(sim, calib_pars=calib_pars, **self.build_kw), where sim is a copy of the base simulation to be modified with calib_pars
         components (list): CalibComponents independently assess pseudo-likelihood as part of evaluating the quality of input parameters
         eval_fn  (callable): Function mapping a sim to a float (e.g. negative log likelihood) to be maximized. If None, the default will use CalibComponents.
-        eval_kwargs  (dict): Additional keyword arguments to pass to the eval_fn
+        eval_kw       (dict): Additional keyword arguments to pass to the eval_fn
         label        (str)  : a label for this calibration object
         study_name   (str)  : name of the optuna study
         db_name      (str)  : the name of the database file (default: 'starsim_calibration.db')
@@ -47,7 +47,7 @@ class Calibration(sc.prettyobj):
         A Calibration object
     """
     def __init__(self, sim, calib_pars, n_workers=None, total_trials=None, reseed=True,
-                 build_fn=None, build_kw=None, eval_fn=None, eval_kwargs=None, components=None,
+                 build_fn=None, build_kw=None, eval_fn=None, eval_kw=None, components=None,
                  label=None, study_name=None, db_name=None, keep_db=None, storage=None,
                  sampler=None, die=False, debug=False, verbose=True):
 
@@ -62,7 +62,7 @@ class Calibration(sc.prettyobj):
         self.build_fn       = build_fn or self.translate_pars
         self.build_kw       = build_kw or dict()
         self.eval_fn        = eval_fn or self._eval_fit
-        self.eval_kwargs    = eval_kwargs or dict()
+        self.eval_kw        = eval_kw or dict()
         self.components     = sc.tolist(components)
 
         n_trials = int(np.ceil(total_trials/n_workers))
@@ -107,6 +107,7 @@ class Calibration(sc.prettyobj):
 
     @staticmethod
     def translate_pars(sim=None, calib_pars=None):
+        # TODO: FIX OR REMOVE. SIM NOT INITIALIZED, SO WILL NOT WORK
         """ Take the nested dict of calibration pars and modify the sim """
 
         if 'rand_seed' in calib_pars:
@@ -140,11 +141,11 @@ class Calibration(sc.prettyobj):
 
     def _sample_from_trial(self, pardict=None, trial=None):
         """
-        Take in an optuna trial and sample from pars, after extracting them from the structure they're provided in
+        Take in an optuna trial and sample from pars, after extracting them from
+        the structure they're provided in
         """
         pars = sc.dcp(pardict)
         for parname, spec in pars.items():
-
             if 'value' in spec:
                 # Already have a value, likely running initial or final values as part of checking the fit
                 continue
@@ -166,12 +167,16 @@ class Calibration(sc.prettyobj):
     def _eval_fit(self, sim, **kwargs):
         """ Evaluate the fit by evaluating the negative log likelihood """
         nll = 0 # Negative log likelihood
-        plot_fn = kwargs.pop('plot', False)
         for component in self.components:
             nll += component(sim, **kwargs)
-            if plot_fn:
-                component.plot()
         return nll
+
+    def plot(self):
+        figs = []
+        for component in self.components:
+            fig = component.plot()
+            figs.append(fig)
+        return figs
 
     def run_trial(self, trial):
         """ Define the objective for Optuna """
@@ -186,7 +191,7 @@ class Calibration(sc.prettyobj):
         sim = self.run_sim(pars)
 
         # Compute fit
-        fit = self.eval_fn(sim, **self.eval_kwargs)
+        fit = self.eval_fn(sim, **self.eval_kw)
         return fit
 
     def worker(self):
@@ -292,8 +297,7 @@ class Calibration(sc.prettyobj):
 
     def check_fit(self, n_runs=5):
         """ Run before and after simulations to validate the fit """
-
-        if self.verbose: print('\nChecking fit...')
+        if self.verbose: sc.printcyan('\nChecking fit...')
 
         before_pars = sc.dcp(self.calib_pars)
         for spec in before_pars.values():
@@ -305,16 +309,21 @@ class Calibration(sc.prettyobj):
 
         self.before_msim = self.build_fn(self.sim, calib_pars=before_pars, n_reps=n_runs, **self.build_kw)
         self.before_msim.run()
-        #self.before_fits = np.array([self.eval_fn(sim, **self.eval_kwargs) for sim in self.before_msim.sims])
-        self.before_fits = self.eval_fn(self.before_msim, **self.eval_kwargs, plot='before.png')
+        self.before_fits = self.eval_fn(self.before_msim, **self.eval_kw)
+        before_figs = self.plot()
 
         self.after_msim = self.build_fn(self.sim, calib_pars=after_pars, n_reps=n_runs, **self.build_kw)
         self.after_msim.run()
-        self.after_fits = self.eval_fn(self.after_msim, **self.eval_kwargs, plot='after.png')
+        self.after_fits = self.eval_fn(self.after_msim, **self.eval_kw)
+        after_figs = self.plot()
 
         print(f'Fit with original pars: {self.before_fits}')
         print(f'Fit with best-fit pars: {self.after_fits}')
-        if self.after_fits.mean() <= self.before_fits.mean():
+        
+        before = self.before_fits.mean if isinstance(self.before_fits, np.ndarray) else self.before_fits
+        after = self.after_fits.mean if isinstance(self.after_fits, np.ndarray) else self.after_fits
+
+        if after <= before:
             print('✓ Calibration improved fit')
         else:
             print('✗ Calibration did not improve fit, but this sometimes happens stochastically and is not necessarily an error')
@@ -450,25 +459,11 @@ class CalibComponent(sc.prettyobj):
             If 'prevalent', simulation outputs will be interpolated to observed timepoints.
             If 'incident', outputs will be interpolated to cumulative incidence.
     """
-    def __init__(self, name, expected, extract_fn, conform, nll_fn, weight=1):
+    def __init__(self, name, expected, extract_fn, conform, weight=1):
         self.name = name
         self.expected = expected
         self.extract_fn = extract_fn
         self.weight = weight
-
-        if isinstance(nll_fn, str):
-            if nll_fn == 'betabinomial':
-                self.nll_fn = self.nll_betabinomial
-            elif nll_fn == 'gammapoisson':
-                self.nll_fn = self.nll_gammapoisson
-            else:
-                errormsg = f'The nll_fn (negative log-likelihood function) argument must be "beta" or "gamma", not {conform}.'
-                raise ValueError(errormsg)
-        else:
-            if not callable(conform):
-                msg = f'The nll_fn (negative log-likelihood function) argument must be a string or a callable function, not {type(nll_fn)}.'
-                raise Exception(msg)
-            self.nll_fn = nll_fn
 
         if isinstance(conform, str):
             if conform == 'incident':
@@ -484,59 +479,7 @@ class CalibComponent(sc.prettyobj):
                 raise TypeError(errormsg)
             self.conform = conform
 
-        pass
-
-    @staticmethod
-    def nll_betabinomial(expected, actual, **kwargs):
-        """
-        For the beta-binomial negative log-likelihood, we begin with a Beta(1,1) prior
-        and subsequently observe actual['x'] successes (positives) in actual['n'] trials (total observations).
-        The result is a Beta(actual['x']+1, actual['n']-actual['x']+1) posterior.
-        We then compare this to the real data, which has expected['x'] successes (positives) in expected['n'] trials (total observations).
-        To do so, we use a beta-binomial likelihood:
-        p(x|n, x, a, b) = (n choose x) B(x+a, n-x+b) / B(a, b)
-        where
-          x=expected['x']
-          n=expected['n']
-          a=actual['x']+1
-          b=actual['n']-actual['x']+1 
-        and B is the beta function, B(x, y) = Gamma(x)Gamma(y)/Gamma(x+y)
-
-        We compute the log of p(x|n, x, a, b), noting that gammaln is the log of the gamma function
-        """
-
-        logLs = []
-        e_n, e_x = expected['n'], expected['x']
-        for seed, rep in actual.groupby('rand_seed'):
-            a_n, a_x = rep['n'], rep['x']
-            #logL = gammaln(e_n + 1) - gammaln(e_x + 1) - gammaln(e_n - e_x + 1) \
-            #    + gammaln(e_x + a_x + 1) + gammaln(e_n - e_x + a_n - a_x + 1) - gammaln(e_n + a_n + 2) \
-            #    + gammaln(a_n + 2) - gammaln(a_x + 1) - gammaln(a_n - a_x + 1)
-            logL = sps.betabinom.logpmf(k=e_x, n=e_n, a=a_x+1, b=a_n-a_x+1)
-            logLs.append(logL)
-
-        nlls = -np.array(logLs)
-        return nlls
-
-    @staticmethod
-    def nll_gammapoisson(expected, actual, **kwargs):
-        """
-        Also called negative binomial, but parameterized differently
-        The gamma-poisson likelihood is a Poisson likelihood with a gamma-distributed rate parameter
-        """
-        #logL = gammaln(e_x + a_x + 1) - gammaln(e_x + 1) - gammaln(e_x + 1)
-        #logL += (e_x + 1) * np.log(e_n)
-        #logL += (a_x + 1) * np.log(a_n)
-        #logL -= (e_x + a_x + 1) * np.log(e_n + a_n)
-        logLs = []
-        e_n, e_x = expected['n'], expected['x']
-        for seed, rep in actual.groupby('rand_seed'):
-            a_n, a_x = rep['n'], rep['x']
-            logL = sps.nbinom.logpmf(k=e_x, n=1+a_x, p=a_n/(a_n+1))
-            logLs.append(logL)
-
-        nlls = -np.array(logLs)
-        return nlls
+        return
 
     @staticmethod
     def linear_interp(expected, actual):
@@ -557,15 +500,23 @@ class CalibComponent(sc.prettyobj):
         Interpolate in the accumulation, then difference.
         Use for incident data like incidence or new_deaths
         """
-        t = expected.index
-        t_step = np.diff(t)
-        assert np.all(t_step == t_step[0])
-        ti = np.append(t, t[-1] + t_step) # Add one more because later we'll diff
+        t0 = np.array([sc.datetoyear(t) for t in expected.index.get_level_values('t0').date])
+        t1 = np.array([sc.datetoyear(t) for t in expected.index.get_level_values('t1').date])
+        sim_t = np.array([sc.datetoyear(t) for t in actual.index.date if isinstance(t, dt.date)])
 
-        sim_t = np.array([sc.datetoyear(t) for t in actual.index if isinstance(t, dt.date)])
-
-        sdi = np.interp(x=ti, xp=sim_t, fp=actual.cumsum())
-        df = pd.Series(sdi.diff(), index=t)
+        fp = actual.cumsum()
+        events = fp['x'].values.flatten()
+        py = fp['n'].values.flatten()
+        et0 = np.interp(x=t0, xp=sim_t, fp=events)
+        et1 = np.interp(x=t1, xp=sim_t, fp=events)
+        pt0 = np.interp(x=t0, xp=sim_t, fp=py)
+        pt1 = np.interp(x=t1, xp=sim_t, fp=py)
+        df = pd.DataFrame({
+            'Events': et1-et0,
+            'Exposure': pt1-pt0,
+        }, index=expected.index)
+        df['Rate'] = 0
+        df.loc[df['Exposure']>0]['Rate'] = df['Events'] / df['Exposure']
         return df
 
     def eval(self, sim, **kwargs):
@@ -583,8 +534,8 @@ class CalibComponent(sc.prettyobj):
             actual['rand_seed'] = sim.pars.rand_seed
             actuals = [actual]
 
-        self.actual = pd.concat(actuals).reset_index().set_index(['rand_seed', 't'])
-        self.nll = self.nll_fn(self.expected, self.actual, **kwargs) # Negative log likelihood
+        self.actual = pd.concat(actuals).reset_index().set_index('rand_seed', append=True)
+        self.nll = self.compute_nll(self.expected, self.actual, **kwargs) # Negative log likelihood
         return self.weight * np.sum(self.nll)
 
     def __call__(self, sim, **kwargs):
@@ -593,7 +544,41 @@ class CalibComponent(sc.prettyobj):
     def __repr__(self):
         return f'Calibration component with name {self.name}'
 
-    def _betabinom_facet(self, data, color, **kwargs):
+    def plot(self):
+        g = sns.FacetGrid(data=self.actual.reset_index(), col='t', col_wrap=3, sharex=False)
+        g.map_dataframe(self.plot_facet)
+        return g.fig
+
+class BetaBinomial(CalibComponent):
+    def compute_nll(self, expected, actual, **kwargs):
+        """
+        For the beta-binomial negative log-likelihood, we begin with a Beta(1,1) prior
+        and subsequently observe actual['x'] successes (positives) in actual['n'] trials (total observations).
+        The result is a Beta(actual['x']+1, actual['n']-actual['x']+1) posterior.
+        We then compare this to the real data, which has expected['x'] successes (positives) in expected['n'] trials (total observations).
+        To do so, we use a beta-binomial likelihood:
+        p(x|n, a, b) = (n choose x) B(x+a, n-x+b) / B(a, b)
+        where
+          x=expected['x']
+          n=expected['n']
+          a=actual['x']+1
+          b=actual['n']-actual['x']+1 
+        and B is the beta function, B(x, y) = Gamma(x)Gamma(y)/Gamma(x+y)
+
+        We return the log of p(x|n, a, b)
+        """
+
+        logLs = []
+        e_n, e_x = expected['n'], expected['x']
+        for seed, rep in actual.groupby('rand_seed'):
+            a_n, a_x = rep['n'], rep['x']
+            logL = sps.betabinom.logpmf(k=e_x, n=e_n, a=a_x+1, b=a_n-a_x+1)
+            logLs.append(logL)
+
+        nlls = -np.array(logLs)
+        return nlls
+
+    def plot_facet(self, data, color, **kwargs):
         t = data.iloc[0]['t']
         expected = self.expected.loc[t]
         e_n, e_x = expected['n'], expected['x']
@@ -609,7 +594,52 @@ class CalibComponent(sc.prettyobj):
         plt.axvline(e_x, color='k', linestyle='--')
         return
 
-    def plot(self):
-        g = sns.FacetGrid(data=self.actual.reset_index(), col='t', col_wrap=3, sharex=False)
-        g.map_dataframe(self._betabinom_facet)
-        return g.fig
+class GammaPoisson(CalibComponent):
+    def compute_nll(self, expected, actual, **kwargs):
+        """
+        The gamma-poisson likelihood is a Poisson likelihood with a
+        gamma-distributed rate parameter. Through a parameter transformation, we
+        end up calling a negative binomial, which is functionally equivalent.
+        
+        For the gamma-poisson negative log-likelihood, we begin with a
+        gamma(1,1) and subsequently observe actual['x'] successes (positives) in
+        actual['n'] trials (total observations). The result is a
+        gamma(1+actual['x']+1, 1+actual['n']) posterior.  Here, 'x' is typically
+        the number of events observed and 'n' is the number of person-years of
+        observation.
+        
+        To evaluate the gamma-poisson likelihood as a negative binomial, we use
+        the following: n = alpha p = beta / (beta + 1)
+        
+        The final piece of the puzzle is that the simulation and real data may
+        have differing numbers of person-years of observation. To account for
+        this discrepancy, we scale beta by the ratio of observed person-years to
+        simulated person-years.
+        """
+        logLs = []
+        e_n, e_x = expected['n'], expected['x']
+        for seed, rep in actual.groupby('rand_seed'):
+            a_n, a_x = rep['n'], rep['x']
+            beta = (a_n+1) * e_n / a_n
+            logL = sps.nbinom.logpmf(k=e_x, n=1+a_x, p=beta/(beta+1))
+            x = sps.gamma_gen()
+            logLs.append(logL)
+
+        nlls = -np.array(logLs)
+        return nlls
+
+    def plot_facet(self, data, color, **kwargs):
+        t = data.iloc[0]['t']
+        expected = self.expected.loc[t]
+        e_n, e_x = expected['n'], expected['x']
+        kk = np.arange(int(e_x/2), int(2*e_x))
+        for idx, row in data.iterrows():
+            n = row['x'] + 1
+            p = row['n'] / (row['n'] + 1)
+            q = sps.nbinom(n=a, p=p) # CHECK
+            yy = q.pmf(kk)
+            plt.step(kk, yy, label=f"{row['rand_seed']}")
+            yy = q.pmf(e_x)
+            plt.plot(e_x, yy, 'x', ms=10, color='k')
+        plt.axvline(e_x, color='k', linestyle='--')
+        return

@@ -8,9 +8,9 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 
-debug = False # If true, will run in serial
+debug = True # If true, will run in serial
 n_reps = 10 # Per trial
-total_trials = 25
+total_trials = 100
 n_agents = 2_000
 do_plot = 1
 
@@ -82,8 +82,10 @@ def test_calibration(do_plot=False):
     # Make the sim and data
     sim = make_sim()
 
-    infectious = ss.CalibComponent(
-        name = 'Infectious',
+    infectious = ss.BetaBinomial(
+        name = 'Number Infectious',
+        weight = 0,
+        conform = 'prevalent',
 
         # "expected" actually from a simulation with pars
         #   beta=0.075, init_prev=0.02, n_contacts=4
@@ -96,11 +98,26 @@ def test_calibration(do_plot=False):
             'n': sim.results.n_alive,
             'x': sim.results.sir.n_infected,
         }, index=pd.Index(sim.results.timevec, name='t')),
+    )
 
-        conform = 'prevalent',
-        nll_fn = 'betabinomial',
-
+    incidence = ss.GammaPoisson(
+        name = 'Incidence Cases',
         weight = 1,
+        conform = 'incident',
+
+        # "expected" actually from a simulation with pars
+        #   beta=0.075, init_prev=0.02, n_contacts=4
+        expected = pd.DataFrame({
+            'n': [160, 140, 70], # Number of susceptible person-years
+            'x': [5, 6, 2],      # Number of new infections
+            't0': [ss.date(d) for d in ['2020-01-08', '2020-01-15', '2020-01-28']], # Between t0 and t1
+            't1': [ss.date(d) for d in ['2020-01-09', '2020-01-15', '2020-01-28']],
+        }).set_index(['t0', 't1']),
+
+        extract_fn = lambda sim: pd.DataFrame({
+            'x': sim.results.sir.new_infections, # Events
+            'n': sim.results.sir.n_susceptible * sim.t.dt, # Person-years at risk
+        }, index=pd.Index(sim.results.timevec, name='t'))
     )
 
     # Make the calibration
@@ -108,7 +125,7 @@ def test_calibration(do_plot=False):
         calib_pars = calib_pars,
         sim = sim,
         build_fn = build_sim, # Use default builder, Calibration.translate_pars
-        components = infectious,
+        components = incidence, #infectious,
         #eval_fn = my_function, # Will call my_function(msim, eval_kwargs)
         #eval_kwargs = dict(expected=TRIAL_DATA),
         total_trials = total_trials,
@@ -122,7 +139,6 @@ def test_calibration(do_plot=False):
     calib.calibrate()
 
     # Check
-    sc.printcyan('\nChecking fit...')
     calib.check_fit()
 
     if do_plot:
@@ -134,6 +150,7 @@ def test_calibration(do_plot=False):
 
 #%% Run as a script
 if __name__ == '__main__':
+    import matplotlib.pyplot as plt
 
     # Useful for generating fake "expected" data
     if False:
@@ -155,6 +172,7 @@ if __name__ == '__main__':
         df = pd.concat(dfs)
         import seaborn as sns
         sns.relplot(data=df, x='timevec', y='prevalence', hue='rand_seed', kind='line')
+        plt.show()
 
     T = sc.timer()
     do_plot = True
@@ -163,5 +181,4 @@ if __name__ == '__main__':
 
     T.toc()
 
-    import matplotlib.pyplot as plt
     plt.show()
