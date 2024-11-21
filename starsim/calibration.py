@@ -88,6 +88,9 @@ class Calibration(sc.prettyobj):
         sim = sc.dcp(self.sim)
         if label: sim.label = label
 
+        if 'rand_seed' in calib_pars:
+            sim.pars['rand_seed'] = calib_pars.pop('rand_seed')
+
         sim = self.build_fn(sim, calib_pars=calib_pars, **self.build_kw)
 
         # Run the sim
@@ -106,7 +109,7 @@ class Calibration(sc.prettyobj):
     @staticmethod
     def translate_pars(sim=None, calib_pars=None):
         """ Take the nested dict of calibration pars and modify the sim """
-
+        # TODO: remove if handleded in run_sim()?
         if 'rand_seed' in calib_pars:
             sim.pars['rand_seed'] = calib_pars.pop('rand_seed')
 
