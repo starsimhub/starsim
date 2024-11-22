@@ -4,6 +4,7 @@ Define the calibration class
 import os
 import numpy as np
 import optuna as op
+import optuna.visualization as vis
 import pandas as pd
 import datetime as dt
 import sciris as sc
@@ -80,6 +81,8 @@ class Calibration(sc.prettyobj):
         self.calibrated = False
         self.before_msim = None
         self.after_msim  = None
+
+        self.study = None
 
         # Temporarily store a filename for storing intermediate results
         self.tmp_filename = 'tmp_calibration_%06i.obj'
@@ -256,7 +259,7 @@ class Calibration(sc.prettyobj):
 
         # Run the optimization
         t0 = sc.tic()
-        self.make_study()
+        self.study = self.make_study()
         self.run_workers()
         study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
         self.best_pars = sc.objdict(study.best_params)
@@ -325,10 +328,10 @@ class Calibration(sc.prettyobj):
 
         if after <= before:
             print('✓ Calibration improved fit')
-        else:
-            print('✗ Calibration did not improve fit, but this sometimes happens stochastically and is not necessarily an error')
-
-        return self.before_fits, self.after_fits
+            return True
+        
+        print('✗ Calibration did not improve fit, but this sometimes happens stochastically and is not necessarily an error')
+        return False
 
     def parse_study(self, study):
         """Parse the study into a data frame -- called automatically """
@@ -441,6 +444,37 @@ class Calibration(sc.prettyobj):
             plt.ylabel('Mismatch')
         sc.figlayout()
         return fig
+
+    def plot_param_importances(self):
+        """ Plot the parameter importances using Optuna's visualization tool.  """
+        fig = vis.plot_param_importances(self.study)
+        fig.show()
+        return fig
+
+    def plot_all(self):
+        """ Plot Optuna's visualizations """
+        figs = []
+        for method in [
+            'plot_contour',
+            'plot_edf',
+            'plot_hypervolume_history',
+            'plot_intermediate_values',
+            'plot_optimization_history',
+            'plot_parallel_coordinate',
+            'plot_param_importances',
+            'plot_pareto_front',
+            'plot_rank',
+            'plot_slice',
+            'plot_terminator_improvement',
+            'plot_timeline',
+        ]:
+            try:
+                fig = getattr(vis, method)(self.study)
+                fig.show()
+                figs.append(fig)
+            except Exception as E:
+                print(f'Could not run {method}: {str(E)}')
+        return figs
 
 
 class CalibComponent(sc.prettyobj):
@@ -600,27 +634,23 @@ class GammaPoisson(CalibComponent):
         end up calling a negative binomial, which is functionally equivalent.
         
         For the gamma-poisson negative log-likelihood, we begin with a
-        gamma(1,1) and subsequently observe actual['x'] successes (positives) in
-        actual['n'] trials (total observations). The result is a
-        gamma(1+actual['x']+1, 1+actual['n']) posterior.  Here, 'x' is typically
-        the number of events observed and 'n' is the number of person-years of
-        observation.
-        
+        gamma(1,1) and subsequently observe actual['x'] events (positives) in
+        actual['n'] trials (total person years). The result is a
+        gamma(alpha=1+actual['x'], beta=1+actual['n']) posterior.
+
         To evaluate the gamma-poisson likelihood as a negative binomial, we use
-        the following: n = alpha p = beta / (beta + 1)
-        
-        The final piece of the puzzle is that the simulation and real data may
-        have differing numbers of person-years of observation. To account for
-        this discrepancy, we scale beta by the ratio of observed person-years to
-        simulated person-years.
+        the following: n = alpha, p = beta / (beta + 1)
+
+        However, the gamma is estimating a rate, and the observation is a count over a some period of time, say T person-years. To account for T other than 1, we scale beta by 1/T to arrive at beta' = beta / T. When passing into the negative binomial, alpha remains the same, but p = beta' / (beta' + 1) or equivalently p = beta / (beta + T).
         """
         logLs = []
         e_n, e_x = expected['n'].values, expected['x'].values
         for seed, rep in actual.groupby('rand_seed'):
             a_n, a_x = rep['n'].values, rep['x'].values
             beta = np.zeros_like(a_n, dtype=float) # Avoid division by zero
-            beta[a_n > 0] = (a_n[a_n > 0]+1) * e_n[a_n > 0] / a_n[a_n > 0]
-            logL = sps.nbinom.logpmf(k=e_x, n=1+a_x, p=beta/(beta+1))
+            T = e_n
+            beta = 1 + a_n
+            logL = sps.nbinom.logpmf(k=e_x, n=1+a_x, p=beta/(beta+T))
             np.nan_to_num(logL, nan=-np.inf, copy=False)
             logLs.append(logL)
 
@@ -632,15 +662,18 @@ class GammaPoisson(CalibComponent):
         expected = self.expected.loc[t]
         e_n, e_x = expected['n'].values[0], expected['x'].values[0]
         kk = np.arange(int(e_x/2), int(2*e_x))
+        nll = 0
         for idx, row in data.iterrows():
-            shape = row['x'] + 1
-            scale = row['n'] + 1
-            scale *= e_n / row['n'] # scale beta by the ratio of observed person-years to simulated person-years
-            p = scale / (scale + 1)
-            q = sps.nbinom(n=shape, p=p) # Check
+            a_n, a_x = row['n'], row['x']
+            beta = (a_n+1)
+            T = e_n
+            q = sps.nbinom(n=1+a_x, p=beta/(beta+T))
+
             yy = q.pmf(kk)
             plt.step(kk, yy, label=f"{row['rand_seed']}")
             yy = q.pmf(e_x)
+            nll += -q.logpmf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
+        plt.gca().set_title(f't={t} | nll={nll:.2f}')
         plt.axvline(e_x, color='k', linestyle='--')
         return

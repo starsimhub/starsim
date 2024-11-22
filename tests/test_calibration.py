@@ -75,7 +75,7 @@ def test_calibration(do_plot=False):
     # Define the calibration parameters
     calib_pars = dict(
         beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True), # Log scale and no "path", will be handled by build_sim (ablve)
-        init_prev = dict(low=0.01, high=0.05, guess=0.15, path=('diseases', 'hiv', 'init_prev')), # Default type is suggest_float, no need to re-specify
+        init_prev = dict(low=0.01, high=0.25, guess=0.15, path=('diseases', 'hiv', 'init_prev')), # Default type is suggest_float, no need to re-specify
         n_contacts = dict(low=2, high=10, guess=3, suggest_type='suggest_int', path=('networks', 'randomnet', 'n_contacts')), # Suggest int just for demo
     )
 
@@ -84,7 +84,7 @@ def test_calibration(do_plot=False):
 
     infectious = ss.BetaBinomial(
         name = 'Number Infectious',
-        weight = 0,
+        weight = 1,
         conform = 'prevalent',
 
         # "expected" actually from a simulation with pars
@@ -108,15 +108,17 @@ def test_calibration(do_plot=False):
         # "expected" actually from a simulation with pars
         #   beta=0.075, init_prev=0.02, n_contacts=4
         expected = pd.DataFrame({
-            'n': [170, 140, 75], # Number of susceptible person-years
-            'x': [4, 6, 2],      # Number of new infections
-            't': [ss.date(d) for d in ['2020-01-08', '2020-01-14', '2020-01-27']], # Between t and t1
-            't1': [ss.date(d) for d in ['2020-01-09', '2020-01-15', '2020-01-28']],
+            #'n': [1700, 1400, 750], # Number of susceptible person-years
+            'n': [1999, 1997, 1990], # Number of susceptible person-years
+            'x': [40, 60, 20],      # Number of new infections
+            't': [ss.date(d) for d in ['2020-01-07', '2020-01-13', '2020-01-26']], # Between t and t1
+            't1': [ss.date(d) for d in ['2020-01-08', '2020-01-14', '2020-01-27']],
         }).set_index(['t', 't1']),
 
         extract_fn = lambda sim: pd.DataFrame({
             'x': sim.results.sir.new_infections, # Events
-            'n': sim.results.sir.n_susceptible * sim.t.dt, # Person-years at risk
+            ###'n': sim.results.sir.n_susceptible * sim.t.dt, # Person-years at risk
+            'n': sim.results.n_alive * sim.t.dt, # Person-years at risk
         }, index=pd.Index(sim.results.timevec, name='t'))
     )
 
@@ -125,7 +127,8 @@ def test_calibration(do_plot=False):
         calib_pars = calib_pars,
         sim = sim,
         build_fn = build_sim, # Use default builder, Calibration.translate_pars
-        components = incidence, #infectious,
+        reseed = False,
+        components = [incidence, infectious], #infectious, incidence
         #eval_fn = my_function, # Will call my_function(msim, eval_kwargs)
         #eval_kwargs = dict(expected=TRIAL_DATA),
         total_trials = total_trials,
@@ -139,11 +142,7 @@ def test_calibration(do_plot=False):
     calib.calibrate()
 
     # Check
-    calib.check_fit()
-
-    if do_plot:
-        calib.plot_sims()
-        calib.plot_trend()
+    assert calib.check_fit(do_plot), 'Calibration did not improve the fit'
 
     return sim, calib
 
@@ -170,6 +169,7 @@ if __name__ == '__main__':
             df['rand_seed'] = sim.pars.rand_seed
             dfs.append(df)
         df = pd.concat(dfs)
+
         import seaborn as sns
         sns.relplot(data=df, x='timevec', y='prevalence', hue='rand_seed', kind='line')
         plt.show()
@@ -181,4 +181,8 @@ if __name__ == '__main__':
 
     T.toc()
 
+    if do_plot:
+        calib.plot_sims()
+        calib.plot_trend()
+        calib.plot_all()
     plt.show()
