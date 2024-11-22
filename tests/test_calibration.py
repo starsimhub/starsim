@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 import sciris as sc
 
-debug = True # If true, will run in serial
+debug = False # If true, will run in serial
 n_reps = 10 # Per trial
 total_trials = 100
 n_agents = 2_000
@@ -108,11 +108,11 @@ def test_calibration(do_plot=False):
         # "expected" actually from a simulation with pars
         #   beta=0.075, init_prev=0.02, n_contacts=4
         expected = pd.DataFrame({
-            'n': [160, 140, 70], # Number of susceptible person-years
-            'x': [5, 6, 2],      # Number of new infections
-            't0': [ss.date(d) for d in ['2020-01-08', '2020-01-15', '2020-01-28']], # Between t0 and t1
+            'n': [170, 140, 75], # Number of susceptible person-years
+            'x': [4, 6, 2],      # Number of new infections
+            't': [ss.date(d) for d in ['2020-01-08', '2020-01-14', '2020-01-27']], # Between t and t1
             't1': [ss.date(d) for d in ['2020-01-09', '2020-01-15', '2020-01-28']],
-        }).set_index(['t0', 't1']),
+        }).set_index(['t', 't1']),
 
         extract_fn = lambda sim: pd.DataFrame({
             'x': sim.results.sir.new_infections, # Events

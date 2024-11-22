@@ -500,7 +500,7 @@ class CalibComponent(sc.prettyobj):
         Interpolate in the accumulation, then difference.
         Use for incident data like incidence or new_deaths
         """
-        t0 = np.array([sc.datetoyear(t) for t in expected.index.get_level_values('t0').date])
+        t0 = np.array([sc.datetoyear(t) for t in expected.index.get_level_values('t').date])
         t1 = np.array([sc.datetoyear(t) for t in expected.index.get_level_values('t1').date])
         sim_t = np.array([sc.datetoyear(t) for t in actual.index.date if isinstance(t, dt.date)])
 
@@ -512,11 +512,9 @@ class CalibComponent(sc.prettyobj):
         pt0 = np.interp(x=t0, xp=sim_t, fp=py)
         pt1 = np.interp(x=t1, xp=sim_t, fp=py)
         df = pd.DataFrame({
-            'Events': et1-et0,
-            'Exposure': pt1-pt0,
+            'x': et1-et0,
+            'n': pt1-pt0,
         }, index=expected.index)
-        df['Rate'] = 0
-        df.loc[df['Exposure']>0]['Rate'] = df['Events'] / df['Exposure']
         return df
 
     def eval(self, sim, **kwargs):
@@ -617,12 +615,13 @@ class GammaPoisson(CalibComponent):
         simulated person-years.
         """
         logLs = []
-        e_n, e_x = expected['n'], expected['x']
+        e_n, e_x = expected['n'].values, expected['x'].values
         for seed, rep in actual.groupby('rand_seed'):
-            a_n, a_x = rep['n'], rep['x']
-            beta = (a_n+1) * e_n / a_n
+            a_n, a_x = rep['n'].values, rep['x'].values
+            beta = np.zeros_like(a_n, dtype=float) # Avoid division by zero
+            beta[a_n > 0] = (a_n[a_n > 0]+1) * e_n[a_n > 0] / a_n[a_n > 0]
             logL = sps.nbinom.logpmf(k=e_x, n=1+a_x, p=beta/(beta+1))
-            x = sps.gamma_gen()
+            np.nan_to_num(logL, nan=-np.inf, copy=False)
             logLs.append(logL)
 
         nlls = -np.array(logLs)
@@ -631,12 +630,14 @@ class GammaPoisson(CalibComponent):
     def plot_facet(self, data, color, **kwargs):
         t = data.iloc[0]['t']
         expected = self.expected.loc[t]
-        e_n, e_x = expected['n'], expected['x']
+        e_n, e_x = expected['n'].values[0], expected['x'].values[0]
         kk = np.arange(int(e_x/2), int(2*e_x))
         for idx, row in data.iterrows():
-            n = row['x'] + 1
-            p = row['n'] / (row['n'] + 1)
-            q = sps.nbinom(n=a, p=p) # CHECK
+            shape = row['x'] + 1
+            scale = row['n'] + 1
+            scale *= e_n / row['n'] # scale beta by the ratio of observed person-years to simulated person-years
+            p = scale / (scale + 1)
+            q = sps.nbinom(n=shape, p=p) # Check
             yy = q.pmf(kk)
             plt.step(kk, yy, label=f"{row['rand_seed']}")
             yy = q.pmf(e_x)
