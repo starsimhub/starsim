@@ -387,7 +387,7 @@ class Samples:
 
         if item not in self._cache:
             with self.zipfile.open(self._seedfile(item)) as f:
-                self._cache[item] = sc.dataframe.read_csv(f, index_col="t")
+                self._cache[item] = sc.dataframe.read_csv(f, index_col="timevec")
 
         return self._cache[item].copy()
 
