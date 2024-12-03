@@ -25,6 +25,13 @@ def get_outputs(p_death):
         outputs.append((df, summary))
     return outputs
 
+def test_samples_no_identifier():
+    outputs = get_outputs(0.2)
+    resultsdir = tempdir/'samples_results'
+    resultsdir.mkdir(exist_ok=True)
+    s = ss.Samples.new(resultsdir, outputs)
+    return s
+
 def test_samples():
     outputs = get_outputs(0.2)
     resultsdir = tempdir/'samples_results'
@@ -41,7 +48,7 @@ def test_dataset():
     results = ss.Dataset(resultsdir)
     return results
 
-
 if __name__ == '__main__':
     samples = test_samples()
+    samples = test_samples_no_identifier()
     results = test_dataset()
