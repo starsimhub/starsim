@@ -440,11 +440,11 @@ class Results(ss.ndict):
                 flat = dict(timevec=timevec) | flat  # Prepend the timevec
                 df = sc.dataframe.from_dict(flat)
             else:
-                df = sc.objdict() # For non-equal lengths, actually return an objdict rather than a dataframe
+                df = sc.objdict()  # For non-equal lengths, actually return an objdict rather than a dataframe
                 df.sim = self.to_df(sep=sep, descend=False)
                 for k,v in self.items():
                     if isinstance(v, Results):
-                        thisdf = v.to_df(sep=sep, descend=False) # Only allow one level of nesting
+                        thisdf = v.to_df(sep=sep, descend=False)  # Only allow one level of nesting
                         if thisdf is not None:
                             df[k] = thisdf
         return df
