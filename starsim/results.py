@@ -24,13 +24,14 @@ class Result(ss.BaseArr):
         timevec (array): an array of time points
         low (array): values for the lower bound
         high (array): values for the upper bound
+        summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
 
     In most cases, ``ss.Result`` behaves exactly like ``np.array()``, except with
     the additional fields listed above. To see everything contained in a result,
     you can use result.disp().
     """
     def __init__(self, name=None, label=None, dtype=float, shape=None, scale=True, auto_plot=True,
-                 module=None, values=None, timevec=None, low=None, high=None):
+                 module=None, values=None, timevec=None, low=None, high=None, summerize_by=None, **kwargs):
         # Copy inputs
         self.name = name
         self.label = label
@@ -43,6 +44,7 @@ class Result(ss.BaseArr):
         self.dtype = dtype
         self.shape = shape
         self.values = values
+        self.summarize_by = summerize_by
         self.init_values()
 
         return
@@ -173,7 +175,10 @@ class Result(ss.BaseArr):
 
         # Handle summarization method
         if summarize_by is None:
-            summarize_by = self.summary_method(die=die)
+            if self.summarize_by is not None:
+                summarize_by = self.summarize_by
+            else:
+                summarize_by = self.summary_method(die=die)
         if summarize_by not in ['sum', 'mean', 'last']:
             raise ValueError(f'Unrecognized summarize_by method: {summarize_by}')
 
