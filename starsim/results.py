@@ -24,7 +24,6 @@ class Result(ss.BaseArr):
         timevec (array): an array of time points
         low (array): values for the lower bound
         high (array): values for the upper bound
-        summarize_by (str): how to summarize the result, e.g. 'sum' or 'mean'
 
     In most cases, ``ss.Result`` behaves exactly like ``np.array()``, except with
     the additional fields listed above. To see everything contained in a result,
@@ -167,14 +166,6 @@ class Result(ss.BaseArr):
             full = f'{modlabel}: {reslabel}'
         return full
 
-    @staticmethod
-    def compare_units(u1, u2):
-        valid_units = ['day', 'week', 'month', 'year']
-        if u1 not in valid_units or u2 not in valid_units:
-            raise ValueError(f'Invalid units: {u1}, {u2}')
-        unit_lengths = dict(day=1, week=7, month=30, year=365)
-        return unit_lengths[u1] / unit_lengths[u2]
-
     def summary_method(self, die=False):
         # If no summarization method is provided, try to figure it out from the name
         if self.name.startswith('new_'):
@@ -190,7 +181,7 @@ class Result(ss.BaseArr):
                 summarize_by = 'mean'
         return summarize_by
 
-    def resample(self, new_unit='year', summarize_by=None, rename=False, die=False, as_df=False, date_index=False, use_years=False, convert_years=True):
+    def resample(self, new_unit='year', summarize_by=None, rename=False, die=False, as_df=False, date_index=False, use_years=False):
         """
         Resample the result, e.g. from days to years. Leverages the pandas resample method.
         Accepts all the Starsim units, plus the Pandas ones documented here:
@@ -198,6 +189,7 @@ class Result(ss.BaseArr):
         Args:
             new_unit (str): the new unit to resample to, e.g. 'year', 'month', 'week', 'day', '1W', '2M', etc.
             summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
+            rename (bool): whether to rename the columns with the name of the result
             die (bool): whether to raise an error if the summarization method cannot be determined
             as_df (bool): whether to return a dataframe rather than a result
             date_index (bool): whether to use the date as the index in the dataframe
@@ -219,7 +211,7 @@ class Result(ss.BaseArr):
             new_unit = unit_mapper[new_unit]
 
         # Summarize
-        df = self.to_df(set_date_index=True, convert_years=convert_years, rename=rename)
+        df = self.to_df(set_date_index=True, rename=rename)
         if summarize_by == 'sum':
             df = df.resample(new_unit).sum()
         elif summarize_by == 'mean':
@@ -246,7 +238,7 @@ class Result(ss.BaseArr):
 
         return out
 
-    def to_df(self, sep='_', rename=False, set_date_index=False, resample=None, convert_years=False, **kwargs):
+    def to_df(self, sep='_', rename=False, set_date_index=False, resample=None, **kwargs):
         """
         Convert to a dataframe with timevec, value, low, and high columns
 
@@ -268,9 +260,9 @@ class Result(ss.BaseArr):
         if self.timevec is None and set_date_index:
             raise ValueError('Cannot convert to dataframe with date index: timevec is not set')
 
-        # If there's a timevec, decide whether to convert it to dates
+        # Make sure we're using a timevec that's in the right format i.e. dates
         if self.timevec is not None:
-            if convert_years and not self.has_dates:
+            if not self.has_dates:
                 timevec = [ss.date(t) for t in self.timevec]
             else:
                 timevec = self.timevec
