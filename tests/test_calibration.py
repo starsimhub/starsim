@@ -122,13 +122,42 @@ def test_calibration(do_plot=False):
         }, index=pd.Index(sim.results.timevec, name='t'))
     )
 
+    def extract_dow(sim):
+        ret = pd.DataFrame({
+            'x': sim.results.sir.new_infections, # Events
+        }, index=pd.Index(sim.results.timevec, name='t'))
+        print(ret)
+        return ret
+
+    dow = ss.DirichletMultinomial(
+        name = 'Cases by day of week',
+        weight = 1,
+        conform = 'incident',
+
+        # "expected" actually from a simulation with pars
+        #   beta=0.075, init_prev=0.02, n_contacts=4
+        expected = pd.DataFrame({
+            'x_mon': [40, 60],      # Number of new infections
+            'x_tue': [40, 60],      # Number of new infections
+            'x_wed': [40, 60],      # Number of new infections
+            'x_thu': [40, 60],      # Number of new infections
+            'x_fri': [40, 60],      # Number of new infections
+            'x_sat': [40, 60],      # Number of new infections
+            'x_sun': [40, 60],      # Number of new infections
+            't': [ss.date(d) for d in ['2020-01-07', '2020-01-21']], # Between t and t1
+            't1': [ss.date(d) for d in ['2020-01-21', '2020-02-11']],
+        }).set_index(['t', 't1']),
+
+        extract_fn = extract_dow
+    )
+
     # Make the calibration
     calib = ss.Calibration(
         calib_pars = calib_pars,
         sim = sim,
         build_fn = build_sim, # Use default builder, Calibration.translate_pars
         reseed = False,
-        components = [incidence, infectious], #infectious, incidence
+        components = [incidence, infectious, dow], #infectious, incidence
         #eval_fn = my_function, # Will call my_function(msim, eval_kwargs)
         #eval_kwargs = dict(expected=TRIAL_DATA),
         total_trials = total_trials,

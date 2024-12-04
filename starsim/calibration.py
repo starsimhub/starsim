@@ -15,7 +15,7 @@ import scipy.stats as sps
 from scipy.special import gammaln
 
 
-__all__ = ['Calibration', 'CalibComponent', 'BetaBinomial', 'GammaPoisson']
+__all__ = ['Calibration', 'CalibComponent', 'BetaBinomial', 'DirichletMultinomial', 'GammaPoisson']
 
 
 class Calibration(sc.prettyobj):
@@ -605,6 +605,49 @@ class BetaBinomial(CalibComponent):
         for seed, rep in actual.groupby('rand_seed'):
             a_n, a_x = rep['n'], rep['x']
             logL = sps.betabinom.logpmf(k=e_x, n=e_n, a=a_x+1, b=a_n-a_x+1)
+            logLs.append(logL)
+
+        nlls = -np.array(logLs)
+        return nlls
+
+    def plot_facet(self, data, color, **kwargs):
+        t = data.iloc[0]['t']
+        expected = self.expected.loc[t]
+        e_n, e_x = expected['n'], expected['x']
+        kk = np.arange(int(e_x/2), int(2*e_x))
+        for idx, row in data.iterrows():
+            alpha = row['x'] + 1
+            beta = row['n'] - row['x'] + 1
+            q = sps.betabinom(n=e_n, a=alpha, b=beta)
+            yy = q.pmf(kk)
+            plt.step(kk, yy, label=f"{row['rand_seed']}")
+            yy = q.pmf(e_x)
+            plt.plot(e_x, yy, 'x', ms=10, color='k')
+        plt.axvline(e_x, color='k', linestyle='--')
+        return
+
+class DirichletMultinomial(CalibComponent):
+    def compute_nll(self, expected, actual, **kwargs):
+        """
+        The Dirichlet-multinomial negative log-likelihood is the
+        multi-dimensional analog of the beta-binomial likelihood. We begin with
+        a Dirichlet(1,1,...,1) prior and subsequently observe:
+            actual['x1'], actual['x2'], ..., actual['xk']
+        successes (positives). The result is a
+            Dirichlet(alpha=actual[x_vars]+1)
+        We then compare this to the real data, which has outcomes:
+            expected['x1'], expected['x2'], ..., expected['xk']
+
+        The count variables are any keys in the expected dataframe that start with 'x'.
+        """
+
+        logLs = []
+        x_vars = [xkey for xkey in expected.columns if xkey.startswith('x')]
+        e_x = expected[x_var]
+        n = e_x.sum()
+        for seed, rep in actual.groupby('rand_seed'):
+            a_x = rep[x_vars]
+            logL = sps.dirichlet_multinomial.logpmf(x=e_x, n=n, alpha=rep['x']+1)
             logLs.append(logL)
 
         nlls = -np.array(logLs)
