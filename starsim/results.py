@@ -190,7 +190,7 @@ class Result(ss.BaseArr):
                 summarize_by = 'mean'
         return summarize_by
 
-    def resample(self, new_unit='year', summarize_by=None, rename=False, die=False, as_df=False, keep_date_index=False, use_years=False):
+    def resample(self, new_unit='year', summarize_by=None, rename=False, die=False, as_df=False, date_index=False, use_years=False, convert_years=True):
         """
         Resample the result, e.g. from days to years. Leverages the pandas resample method.
         Accepts all the Starsim units, plus the Pandas ones documented here:
@@ -200,9 +200,10 @@ class Result(ss.BaseArr):
             summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
             die (bool): whether to raise an error if the summarization method cannot be determined
             as_df (bool): whether to return a dataframe rather than a result
-            keep_date_index (bool): whether to keep the date as the index in the dataframe
+            date_index (bool): whether to use the date as the index in the dataframe
             use_years (bool): whether to use years as the unit of time
         """
+        # Manage timevec
         if self.timevec is None:
             raise ValueError('Cannot resample: timevec is not set')
 
@@ -218,7 +219,7 @@ class Result(ss.BaseArr):
             new_unit = unit_mapper[new_unit]
 
         # Summarize
-        df = self.to_df(date_index=True, rename=rename)
+        df = self.to_df(set_date_index=True, convert_years=convert_years, rename=rename)
         if summarize_by == 'sum':
             df = df.resample(new_unit).sum()
         elif summarize_by == 'mean':
@@ -233,7 +234,7 @@ class Result(ss.BaseArr):
         # Optionally convert back to a result
         if as_df:
             # Handle form of index
-            if keep_date_index:
+            if date_index:
                 out = df
             else:
                 out = df.reset_index(names='timevec')
@@ -245,15 +246,16 @@ class Result(ss.BaseArr):
 
         return out
 
-    def to_df(self, sep='_', rename=False, date_index=False, resample=None, **kwargs):
+    def to_df(self, sep='_', rename=False, set_date_index=False, resample=None, convert_years=False, **kwargs):
         """
         Convert to a dataframe with timevec, value, low, and high columns
 
         Args:
             sep (str): separator for the column names
             rename (bool): if True, rename the columns with the name of the result (else value, low, high)
-            date_index (bool): if True, use the timevec as the index
+            set_date_index (bool): if True, use the timevec as the index
             resample (str): if provided, resample the data to this frequency
+            convert_years (bool): if True, use dates rather than numbers for the timevec
             kwargs: passed to the resample method
         """
         data = dict()
@@ -263,12 +265,19 @@ class Result(ss.BaseArr):
             return self.resample(new_unit=resample, as_df=True, rename=rename, **kwargs)
 
         # Checks
-        if self.timevec is None and date_index:
+        if self.timevec is None and set_date_index:
             raise ValueError('Cannot convert to dataframe with date index: timevec is not set')
 
-        # Prepare the data
-        if self.timevec is not None and not date_index:
-            data['timevec'] = self.timevec
+        # If there's a timevec, decide whether to convert it to dates
+        if self.timevec is not None:
+            if convert_years and not self.has_dates:
+                timevec = [ss.date(t) for t in self.timevec]
+            else:
+                timevec = self.timevec
+
+        if not set_date_index:
+            data['timevec'] = timevec
+
         valcol = self.name if rename else 'value'
         data[valcol] = self.values
         for key in ['low', 'high']:
@@ -278,8 +287,8 @@ class Result(ss.BaseArr):
                 data[valcol] = val
 
         # Convert to dataframe, optionally with a date index
-        if date_index:
-            df = sc.dataframe(data, index=self.timevec)
+        if set_date_index:
+            df = sc.dataframe(data, index=timevec)
         else:
             df = sc.dataframe(data)
 
@@ -400,7 +409,7 @@ class Results(ss.ndict):
             resample = kwargs.pop('resample')
             for k,v in out.items():
                 if isinstance(v, Result):
-                    out[k] = v.resample(new_unit=resample, **kwargs)
+                    out[k] = v.resample(new_unit=resample, convert_years=True, **kwargs)
         if only_results:
             out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
         return out

@@ -167,9 +167,13 @@ def test_results():
     dfs = sis.to_df()
     assert df.value.sum() == dfs.cum_infections.values[-1] == sim.summary.sis_cum_infections
 
-    # Export annual summary to dataframe
-    dfy = sis.to_df(resample='year', use_years=True)
+    # Export annual summary of SIS results to dataframe
+    dfy = sis.to_df(resample='year')
     assert dfs.new_infections[:12].sum() == dfy.new_infections[0]
+
+    # Export whole sim to unified annualized dataframe
+    sim_df = sim.to_df(resample='year', use_years=True)
+    assert sim_df.sis_n_infected.values[0] == sis.n_infected[:12].mean()
 
     # Plot
     res.plot()
@@ -197,14 +201,14 @@ if __name__ == '__main__':
     T = sc.tic()
 
     # Run tests
-    ppl = test_people()
-    sim1 = test_microsim(do_plot)
-    sim2 = test_ppl_construction(do_plot)
-    sims = test_arrs()
-    sims2 = test_deepcopy()
-    sims3 = test_deepcopy_until()
-    sim4 = test_results()
-    sim5 = test_check_requires()
+    # ppl = test_people()
+    # sim1 = test_microsim(do_plot)
+    # sim2 = test_ppl_construction(do_plot)
+    # sims = test_arrs()
+    # sims2 = test_deepcopy()
+    # sims3 = test_deepcopy_until()
+    sim = test_results()
+    # sim5 = test_check_requires()
 
     sc.toc(T)
     plt.show()
