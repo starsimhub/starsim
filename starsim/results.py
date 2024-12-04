@@ -99,25 +99,6 @@ class Result(ss.BaseArr):
             raise ValueError('Cannot calculate dt: timevec is not set')
         return dt
 
-    @property
-    def unit(self):
-        """ Return the time unit """
-        month_lengths = [28, 29, 30, 31]
-        year_lengths = [365, 366]
-        week_lengths = [7]
-        dt_days = self.dt.days
-        if dt_days in month_lengths:
-            unit = 'month'
-        elif dt_days in year_lengths:
-            unit = 'year'
-        elif dt_days in week_lengths:
-            unit = 'week'
-        elif dt_days == 1:
-            unit = 'day'
-        else:
-            raise ValueError(f'Unrecognized time unit: {dt_days} days')
-        return unit
-
     def init_values(self, values=None, dtype=None, shape=None, force=False):
         """ Handle values """
         if not self.initialized or force:
