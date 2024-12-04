@@ -24,6 +24,7 @@ class Result(ss.BaseArr):
         timevec (array): an array of time points
         low (array): values for the lower bound
         high (array): values for the upper bound
+        summarize_by (str): how to summarize the result, e.g. 'sum' or 'mean'
 
     In most cases, ``ss.Result`` behaves exactly like ``np.array()``, except with
     the additional fields listed above. To see everything contained in a result,
@@ -44,6 +45,7 @@ class Result(ss.BaseArr):
         self.shape = shape
         self.values = values
         self.init_values()
+
         return
 
     def __repr__(self):
@@ -88,6 +90,34 @@ class Result(ss.BaseArr):
         """ Check whether the time vector uses dates (rather than numbers) """
         try:    return not sc.isnumber(self.timevec[0])
         except: return False
+
+    @property
+    def dt(self):
+        """ Return the time delta """
+        try:
+            dt = self.timevec[1] - self.timevec[0]
+        except:
+            raise ValueError('Cannot calculate dt: timevec is not set')
+        return dt
+
+    @property
+    def unit(self):
+        """ Return the time unit """
+        month_lengths = [28, 29, 30, 31]
+        year_lengths = [365, 366]
+        week_lengths = [7]
+        dt_days = self.dt.days
+        if dt_days in month_lengths:
+            unit = 'month'
+        elif dt_days in year_lengths:
+            unit = 'year'
+        elif dt_days in week_lengths:
+            unit = 'week'
+        elif dt_days == 1:
+            unit = 'day'
+        else:
+            raise ValueError(f'Unrecognized time unit: {dt_days} days')
+        return unit
 
     def init_values(self, values=None, dtype=None, shape=None, force=False):
         """ Handle values """
@@ -137,15 +167,107 @@ class Result(ss.BaseArr):
             full = f'{modlabel}: {reslabel}'
         return full
 
-    def to_df(self, sep='_', rename=False):
+    @staticmethod
+    def compare_units(u1, u2):
+        valid_units = ['day', 'week', 'month', 'year']
+        if u1 not in valid_units or u2 not in valid_units:
+            raise ValueError(f'Invalid units: {u1}, {u2}')
+        unit_lengths = dict(day=1, week=7, month=30, year=365)
+        return unit_lengths[u1] / unit_lengths[u2]
+
+    def summary_method(self, die=False):
+        # If no summarization method is provided, try to figure it out from the name
+        if self.name.startswith('new_'):
+            summarize_by = 'sum'
+        elif self.name.startswith('n_'):
+            summarize_by = 'mean'
+        elif self.name.startswith('cum_'):
+            summarize_by = 'last'
+        else:
+            if die:
+                raise ValueError(f'Cannot figure out how to summarize {self.name}')
+            else:
+                summarize_by = 'mean'
+        return summarize_by
+
+    def resample(self, new_unit='year', summarize_by=None, rename=False, die=False, as_df=False, keep_date_index=False, use_years=False):
+        """
+        Resample the result, e.g. from days to years. Leverages the pandas resample method.
+        Accepts all the Starsim units, plus the Pandas ones documented here:
+            https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
+        Args:
+            new_unit (str): the new unit to resample to, e.g. 'year', 'month', 'week', 'day', '1W', '2M', etc.
+            summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
+            die (bool): whether to raise an error if the summarization method cannot be determined
+            as_df (bool): whether to return a dataframe rather than a result
+            keep_date_index (bool): whether to keep the date as the index in the dataframe
+            use_years (bool): whether to use years as the unit of time
+        """
+        if self.timevec is None:
+            raise ValueError('Cannot resample: timevec is not set')
+
+        # Handle summarization method
+        if summarize_by is None:
+            summarize_by = self.summary_method(die=die)
+        if summarize_by not in ['sum', 'mean', 'last']:
+            raise ValueError(f'Unrecognized summarize_by method: {summarize_by}')
+
+        # Map Starsim units to the ones Pandas understands
+        unit_mapper = dict(week='1w', month='1m', year='1y')
+        if new_unit in unit_mapper:
+            new_unit = unit_mapper[new_unit]
+
+        # Summarize
+        df = self.to_df(date_index=True, rename=rename)
+        if summarize_by == 'sum':
+            df = df.resample(new_unit).sum()
+        elif summarize_by == 'mean':
+            df = df.resample(new_unit).mean()
+        elif summarize_by == 'last':
+            df = df.resample(new_unit).last()
+
+        # Handle years
+        if use_years:
+            df.index = df.index.year
+
+        # Optionally convert back to a result
+        if as_df:
+            # Handle form of index
+            if keep_date_index:
+                out = df
+            else:
+                out = df.reset_index(names='timevec')
+        else:
+            new_res = sc.dcp(self)
+            new_res.timevec = df.index
+            new_res.values = df['value'].values
+            out = new_res
+
+        return out
+
+    def to_df(self, sep='_', rename=False, date_index=False, resample=None, **kwargs):
         """
         Convert to a dataframe with timevec, value, low, and high columns
 
         Args:
+            sep (str): separator for the column names
             rename (bool): if True, rename the columns with the name of the result (else value, low, high)
+            date_index (bool): if True, use the timevec as the index
+            resample (str): if provided, resample the data to this frequency
+            kwargs: passed to the resample method
         """
         data = dict()
-        if self.timevec is not None:
+
+        # Return a resampled version if requested
+        if resample is not None:
+            return self.resample(new_unit=resample, as_df=True, rename=rename, **kwargs)
+
+        # Checks
+        if self.timevec is None and date_index:
+            raise ValueError('Cannot convert to dataframe with date index: timevec is not set')
+
+        # Prepare the data
+        if self.timevec is not None and not date_index:
             data['timevec'] = self.timevec
         valcol = self.name if rename else 'value'
         data[valcol] = self.values
@@ -154,7 +276,13 @@ class Result(ss.BaseArr):
             valcol = f'{self.name}{sep}{key}' if rename else key
             if val is not None:
                 data[valcol] = val
-        df = sc.dataframe(data)
+
+        # Convert to dataframe, optionally with a date index
+        if date_index:
+            df = sc.dataframe(data, index=self.timevec)
+        else:
+            df = sc.dataframe(data)
+
         return df
 
     def plot(self, fig=None, ax=None, fig_kw=None, plot_kw=None, fill_kw=None, **kwargs):
@@ -265,17 +393,28 @@ class Results(ss.ndict):
         lengths = [len(res) for res in self.flatten().values()]
         return len(set(lengths)) == 1
 
-    def flatten(self, sep='_', only_results=True):
+    def flatten(self, sep='_', only_results=True, **kwargs):
         """ Turn from a nested dictionary into a flat dictionary, keeping only results by default """
         out = sc.flattendict(self, sep=sep)
+        if 'resample' in kwargs and kwargs['resample'] is not None:
+            resample = kwargs.pop('resample')
+            for k,v in out.items():
+                if isinstance(v, Result):
+                    out[k] = v.resample(new_unit=resample, **kwargs)
         if only_results:
             out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
         return out
 
-    def to_df(self, sep='_', descend=False):
-        """ Merge all results dataframes into one """
+    def to_df(self, sep='_', descend=False, **kwargs):
+        """
+        Merge all results dataframes into one
+        Args:
+            sep (str): separator for the column names
+            descend (bool): whether to descend into nested results
+            kwargs: passed to the to_df method, can include instructions for summarizing results by time
+        """
         if not descend:
-            dfs = [res.to_df(sep=sep, rename=True) for res in self.all_results]
+            dfs = [res.to_df(sep=sep, rename=True, **kwargs) for res in self.all_results]
             if len(dfs):
                 df = dfs[0]
                 for df2 in dfs[1:]:
@@ -283,9 +422,13 @@ class Results(ss.ndict):
             else:
                 df = None
         else:
-            if self.equal_len:
-                flat = self.flatten(sep=sep, only_results=True)
-                flat = dict(timevec=self.timevec) | flat # Prepend the timevec
+            if self.equal_len or 'resample' in kwargs:  # If we're resampling, all results will end up the same length
+                flat = self.flatten(sep=sep, only_results=True, **kwargs)
+                if 'resample' in kwargs and kwargs['resample'] is not None:
+                    timevec = flat[0].timevec
+                else:
+                    timevec = self.timevec
+                flat = dict(timevec=timevec) | flat  # Prepend the timevec
                 df = sc.dataframe.from_dict(flat)
             else:
                 df = sc.objdict() # For non-equal lengths, actually return an objdict rather than a dataframe

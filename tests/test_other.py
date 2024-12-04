@@ -156,7 +156,8 @@ def test_deepcopy_until():
 
 def test_results():
     sc.heading('Testing results export and plotting')
-    sim = ss.Sim(diseases='sis', networks='random', n_agents=medium)
+    dis = ss.SIS(unit='month')
+    sim = ss.Sim(diseases=dis, networks='random', n_agents=medium)
     sim.run()
 
     # Export to dataframe
@@ -166,6 +167,10 @@ def test_results():
     dfs = sis.to_df()
     assert df.value.sum() == dfs.cum_infections.values[-1] == sim.summary.sis_cum_infections
 
+    # Export annual summary to dataframe
+    dfy = sis.to_df(resample='year', use_years=True)
+    assert dfs.new_infections[:12].sum() == dfy.new_infections[0]
+
     # Plot
     res.plot()
     sim.results.sis.plot()
@@ -173,7 +178,7 @@ def test_results():
     return sim
 
 
-def test_check_reqiures():
+def test_check_requires():
     sc.heading('Testing check_requires')
     s1 = ss.Sim(diseases='sis', networks='random', n_agents=medium).init()
     ss.check_requires(s1, 'sis')
@@ -199,7 +204,7 @@ if __name__ == '__main__':
     sims2 = test_deepcopy()
     sims3 = test_deepcopy_until()
     sim4 = test_results()
-    sim5 = test_check_reqiures()
+    sim5 = test_check_requires()
 
     sc.toc(T)
     plt.show()
