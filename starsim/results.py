@@ -90,15 +90,6 @@ class Result(ss.BaseArr):
         try:    return not sc.isnumber(self.timevec[0])
         except: return False
 
-    @property
-    def dt(self):
-        """ Return the time delta """
-        try:
-            dt = self.timevec[1] - self.timevec[0]
-        except:
-            raise ValueError('Cannot calculate dt: timevec is not set')
-        return dt
-
     def init_values(self, values=None, dtype=None, shape=None, force=False):
         """ Handle values """
         if not self.initialized or force:
