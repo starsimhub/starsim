@@ -80,10 +80,10 @@ def test_nigeria(which='births', dt=1, start=1995, dur=15, do_plot=False):
         assert sum(sim.results.pregnancy.births) <= sum(sim.results.pregnancy.pregnancies)
         print('✓ (births <= pregnancies)')
 
-        # if dt == 1:
-        #     print("Checking that births equal pregnancies with dt=1")
-        #     assert np.array_equal(sim.results.pregnancy.pregnancies, sim.results.pregnancy.births)
-        #     print('✓ (births == pregnancies)')
+        if dt == 1:
+            print("Checking that births equal pregnancies with dt=1")
+            assert np.array_equal(sim.results.pregnancy.pregnancies, sim.results.pregnancy.births)
+            print('✓ (births == pregnancies)')
 
     rtol = 0.05
     print(f'Check final pop size within {rtol*100:n}% of data')
@@ -186,8 +186,9 @@ def test_aging():
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
-    s1 = test_nigeria(do_plot=do_plot, dt=1/12, which='pregnancy')
-    # s2 = test_constant_pop(do_plot=do_plot)
-    # s3 = test_module_adding()
-    # s4 = test_aging()
+    s1 = test_nigeria(do_plot=do_plot)
+    s2 = test_nigeria(do_plot=do_plot, dt=1/12, which='pregnancy')
+    s3 = test_constant_pop(do_plot=do_plot)
+    s4 = test_module_adding()
+    s5 = test_aging()
     plt.show()

@@ -401,7 +401,7 @@ class Results(ss.ndict):
             resample = kwargs.pop('resample')
             for k,v in out.items():
                 if isinstance(v, Result):
-                    out[k] = v.resample(new_unit=resample, convert_years=True, **kwargs)
+                    out[k] = v.resample(new_unit=resample, **kwargs)
         if only_results:
             out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
         return out
