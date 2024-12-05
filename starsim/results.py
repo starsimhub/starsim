@@ -143,11 +143,11 @@ class Result(ss.BaseArr):
 
     def summary_method(self, die=False):
         # If no summarization method is provided, try to figure it out from the name
-        if self.name.startswith('new_'):
+        if 'new_' in self.name:  # Not using startswith because msim results are prefixed with the module name
             summarize_by = 'sum'
-        elif self.name.startswith('n_'):
+        elif self.name.startswith('n_') or '_n_' in self.name:  # Second option is for msim results
             summarize_by = 'mean'
-        elif self.name.startswith('cum_'):
+        elif 'cum_' in self.name:
             summarize_by = 'last'
         else:
             if die:
@@ -189,7 +189,7 @@ class Result(ss.BaseArr):
 
         # Convert to a Pandas dataframe then summarize. Note that we use a dataframe
         # rather than a series so that we can have multiple columns (low/high/value)
-        df = self.to_df(col_names=col_names, set_date_index=True, sep='_')
+        df = self.to_df(col_names=col_names, set_date_index=True, sep=sep)
         if summarize_by == 'sum':
             df = df.resample(new_unit).sum()
         elif summarize_by == 'mean':
@@ -231,7 +231,7 @@ class Result(ss.BaseArr):
         """
         # Return a resampled version if requested
         if resample is not None:
-            return self.resample(new_unit=resample, set_name=set_name, set='_', **kwargs)
+            return self.resample(new_unit=resample, set_name=set_name, sep=sep, **kwargs)
         name = self.name if set_name else None
         timevec = self.convert_timevec()
         s = pd.Series(self.values, index=timevec, name=name)
@@ -442,7 +442,6 @@ class Results(ss.ndict):
                 col_names = rname if self.is_msim else None
                 res_df = res.to_df(sep=sep, col_names=col_names, **kwargs)
                 dfs.append(res_df)
-            # dfs = [res.to_df(sep=sep, col_names=col_names, **kwargs) for res in self.all_results]
             if len(dfs):
                 df = pd.concat(dfs, axis=1)
             else:

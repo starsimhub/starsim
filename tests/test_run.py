@@ -105,9 +105,9 @@ if __name__ == '__main__':
     sc.options(interactive=do_plot)
     T = sc.timer()
 
-    # s1, s2 = test_parallel()
+    s1, s2 = test_parallel()
     msim = test_multisim()
-    # s3,s4 = test_other()
+    s3,s4 = test_other()
 
     T.toc()
 
