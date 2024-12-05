@@ -156,7 +156,7 @@ class Result(ss.BaseArr):
                 summarize_by = 'mean'
         return summarize_by
 
-    def resample(self, new_unit='year', summarize_by=None, set_name=False, die=False, output_form='series', date_index=False, use_years=False):
+    def resample(self, new_unit='year', summarize_by=None, col_names='vlh', die=False, output_form='series', use_years=False, sep='_'):
         """
         Resample the result, e.g. from days to years. Leverages the pandas resample method.
         Accepts all the Starsim units, plus the Pandas ones documented here:
@@ -164,10 +164,9 @@ class Result(ss.BaseArr):
         Args:
             new_unit (str): the new unit to resample to, e.g. 'year', 'month', 'week', 'day', '1W', '2M', etc.
             summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
-            set_name (bool): whether to rename the columns with the name of the result
+            col_names (str): whether to rename the columns with the name of the result
             die (bool): whether to raise an error if the summarization method cannot be determined
             output_form (str): 'series', 'dataframe', or 'result'
-            date_index (bool): whether to use the date as the index in the dataframe
             use_years (bool): whether to use years as the unit of time
         """
         # Manage timevec
@@ -188,33 +187,41 @@ class Result(ss.BaseArr):
         if new_unit in unit_mapper:
             new_unit = unit_mapper[new_unit]
 
-        # Convert to a Pandas series then summarize
-        series = self.to_series(set_name=set_name)
+        # Convert to a Pandas dataframe then summarize. Note that we use a dataframe
+        # rather than a series so that we can have multiple columns (low/high/value)
+        df = self.to_df(col_names=col_names, set_date_index=True, sep='_')
         if summarize_by == 'sum':
-            series = series.resample(new_unit).sum()
+            df = df.resample(new_unit).sum()
         elif summarize_by == 'mean':
-            series = series.resample(new_unit).mean()
+            df = df.resample(new_unit).mean()
         elif summarize_by == 'last':
-            series = series.resample(new_unit).last()
+            df = df.resample(new_unit).last()
 
         # Handle years
-        if use_years: series.index = series.index.year
+        if use_years: df.index = df.index.year
 
         # Figure out return format
         if output_form == 'series':
-            out = series
+            out = pd.Series(df.value.values, index=df.timevec)
         elif output_form == 'dataframe':
-            out = series.to_frame()
-            out.columns = [series.name]
+            out = df
         elif output_form == 'result':
-            new_res = sc.dcp(self)
-            new_res.timevec = series.index
-            new_res.values = series.values
-            out = new_res
+            out = self.from_df(df)
 
         return out
 
-    def to_series(self, set_name=False, resample=None, **kwargs):
+    def from_df(self, df):
+        """ Make a copy of the result with new values from a dataframe """
+        new_res = sc.dcp(self)
+        new_res.timevec = df.index
+        new_res.values = df.value.values
+        if 'low' in df.columns:
+            new_res.low = df.low.values
+        if 'high' in df.columns:
+            new_res.high = df.high.values
+        return new_res
+
+    def to_series(self, set_name=False, resample=None, sep='_', **kwargs):
         """
         Convert to a series with timevec as the index and value as the data
         Args:
@@ -224,12 +231,10 @@ class Result(ss.BaseArr):
         """
         # Return a resampled version if requested
         if resample is not None:
-            return self.resample(new_unit=resample, set_name=set_name, **kwargs)
-
+            return self.resample(new_unit=resample, set_name=set_name, set='_', **kwargs)
         name = self.name if set_name else None
         timevec = self.convert_timevec()
         s = pd.Series(self.values, index=timevec, name=name)
-
         return s
 
     def convert_timevec(self):
@@ -241,13 +246,13 @@ class Result(ss.BaseArr):
                 timevec = self.timevec
         return timevec
 
-    def to_df(self, sep='_', set_name=False, resample=None, set_date_index=False, **kwargs):
+    def to_df(self, sep='_', col_names='vlh', resample=None, set_date_index=False, **kwargs):
         """
         Convert to a dataframe with timevec, value, low, and high columns
 
         Args:
             sep (str): separator for the column names
-            set_name (bool): if True, set the column to be the name of the result (else value, low, high)
+            col_names (str or None): if None, uses the name of the result. Default is 'vlh' which uses value, low, high
             set_date_index (bool): if True, use the timevec as the index
             resample (str): if provided, resample the data to this frequency
             kwargs: passed to the resample method
@@ -256,7 +261,7 @@ class Result(ss.BaseArr):
 
         # Return a resampled version if requested
         if resample is not None:
-            return self.resample(new_unit=resample, output_form='dataframe', set_name=set_name, **kwargs)
+            return self.resample(new_unit=resample, output_form='dataframe', col_names=col_names, **kwargs)
 
         # Checks
         if self.timevec is None and set_date_index:
@@ -267,12 +272,21 @@ class Result(ss.BaseArr):
         if not set_date_index:
             data['timevec'] = timevec
 
-        # Deal with value columns
-        valcol = self.name if set_name else 'value'
+        # Determine how to label columns
+        if col_names is None:
+            valcol = self.name
+            prefix = self.name+sep
+        elif col_names == 'vlh':
+            valcol = 'value'
+            prefix = ''
+        else:
+            valcol = col_names
+            prefix = col_names+sep
+
         data[valcol] = self.values
         for key in ['low', 'high']:
             val = self[key]
-            valcol = f'{self.name}{sep}{key}' if set_name else key
+            valcol = f'{prefix}{key}'
             if val is not None:
                 data[valcol] = val
 
@@ -382,9 +396,19 @@ class Results(ss.ndict):
         return
 
     @property
+    def is_msim(self):
+        """ Check if this is a MultiSim """
+        return self._module == 'MultiSim'
+
+    @property
     def all_results(self):
         """ Iterator over all results, skipping any nested values """
         return iter(res for res in self.values() if isinstance(res, Result))
+
+    @property
+    def all_results_dict(self):
+        """ Dictionary of all results, skipping any nested values """
+        return {rname: res for rname, res in self.items() if isinstance(res, Result)}
 
     @property
     def equal_len(self):
@@ -413,7 +437,12 @@ class Results(ss.ndict):
             kwargs: passed to the to_df method, can include instructions for summarizing results by time
         """
         if not descend:
-            dfs = [res.to_series(set_name=True, **kwargs) for res in self.all_results]
+            dfs = []
+            for rname, res in self.all_results_dict.items():
+                col_names = rname if self.is_msim else None
+                res_df = res.to_df(sep=sep, col_names=col_names, **kwargs)
+                dfs.append(res_df)
+            # dfs = [res.to_df(sep=sep, col_names=col_names, **kwargs) for res in self.all_results]
             if len(dfs):
                 df = pd.concat(dfs, axis=1)
             else:
