@@ -2,6 +2,7 @@
 Result structures.
 """
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
@@ -31,7 +32,7 @@ class Result(ss.BaseArr):
     you can use result.disp().
     """
     def __init__(self, name=None, label=None, dtype=float, shape=None, scale=True, auto_plot=True,
-                 module=None, values=None, timevec=None, low=None, high=None, summerize_by=None, **kwargs):
+                 module=None, values=None, timevec=None, low=None, high=None, summarize_by=None, **kwargs):
         # Copy inputs
         self.name = name
         self.label = label
@@ -44,7 +45,7 @@ class Result(ss.BaseArr):
         self.dtype = dtype
         self.shape = shape
         self.values = values
-        self.summarize_by = summerize_by
+        self.summarize_by = summarize_by
         self.init_values()
 
         return
@@ -155,7 +156,7 @@ class Result(ss.BaseArr):
                 summarize_by = 'mean'
         return summarize_by
 
-    def resample(self, new_unit='year', summarize_by=None, rename=False, die=False, as_df=False, date_index=False, use_years=False):
+    def resample(self, new_unit='year', summarize_by=None, set_name=False, die=False, output_form='series', date_index=False, use_years=False):
         """
         Resample the result, e.g. from days to years. Leverages the pandas resample method.
         Accepts all the Starsim units, plus the Pandas ones documented here:
@@ -163,9 +164,9 @@ class Result(ss.BaseArr):
         Args:
             new_unit (str): the new unit to resample to, e.g. 'year', 'month', 'week', 'day', '1W', '2M', etc.
             summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
-            rename (bool): whether to rename the columns with the name of the result
+            set_name (bool): whether to rename the columns with the name of the result
             die (bool): whether to raise an error if the summarization method cannot be determined
-            as_df (bool): whether to return a dataframe rather than a result
+            output_form (str): 'series', 'dataframe', or 'result'
             date_index (bool): whether to use the date as the index in the dataframe
             use_years (bool): whether to use years as the unit of time
         """
@@ -187,71 +188,91 @@ class Result(ss.BaseArr):
         if new_unit in unit_mapper:
             new_unit = unit_mapper[new_unit]
 
-        # Summarize
-        df = self.to_df(set_date_index=True, rename=rename)
+        # Convert to a Pandas series then summarize
+        series = self.to_series(set_name=set_name)
         if summarize_by == 'sum':
-            df = df.resample(new_unit).sum()
+            series = series.resample(new_unit).sum()
         elif summarize_by == 'mean':
-            df = df.resample(new_unit).mean()
+            series = series.resample(new_unit).mean()
         elif summarize_by == 'last':
-            df = df.resample(new_unit).last()
+            series = series.resample(new_unit).last()
 
         # Handle years
-        if use_years:
-            df.index = df.index.year
+        if use_years: series.index = series.index.year
 
-        # Optionally convert back to a result
-        if as_df:
-            # Handle form of index
-            if date_index:
-                out = df
-            else:
-                out = df.reset_index(names='timevec')
-        else:
+        # Figure out return format
+        if output_form == 'series':
+            out = series
+        elif output_form == 'dataframe':
+            out = series.to_frame()
+            out.columns = [series.name]
+        elif output_form == 'result':
             new_res = sc.dcp(self)
-            new_res.timevec = df.index
-            new_res.values = df['value'].values
+            new_res.timevec = series.index
+            new_res.values = series.values
             out = new_res
 
         return out
 
-    def to_df(self, sep='_', rename=False, set_date_index=False, resample=None, **kwargs):
+    def to_series(self, set_name=False, resample=None, **kwargs):
         """
-        Convert to a dataframe with timevec, value, low, and high columns
-
+        Convert to a series with timevec as the index and value as the data
         Args:
-            sep (str): separator for the column names
-            rename (bool): if True, rename the columns with the name of the result (else value, low, high)
-            set_date_index (bool): if True, use the timevec as the index
+            set_name (bool): whether to set the name of the series to the name of the result
             resample (str): if provided, resample the data to this frequency
-            convert_years (bool): if True, use dates rather than numbers for the timevec
             kwargs: passed to the resample method
         """
-        data = dict()
-
         # Return a resampled version if requested
         if resample is not None:
-            return self.resample(new_unit=resample, as_df=True, rename=rename, **kwargs)
+            return self.resample(new_unit=resample, set_name=set_name, **kwargs)
 
-        # Checks
-        if self.timevec is None and set_date_index:
-            raise ValueError('Cannot convert to dataframe with date index: timevec is not set')
+        name = self.name if set_name else None
+        timevec = self.convert_timevec()
+        s = pd.Series(self.values, index=timevec, name=name)
 
+        return s
+
+    def convert_timevec(self):
         # Make sure we're using a timevec that's in the right format i.e. dates
         if self.timevec is not None:
             if not self.has_dates:
                 timevec = [ss.date(t) for t in self.timevec]
             else:
                 timevec = self.timevec
+        return timevec
 
+    def to_df(self, sep='_', set_name=False, resample=None, set_date_index=False, **kwargs):
+        """
+        Convert to a dataframe with timevec, value, low, and high columns
+
+        Args:
+            sep (str): separator for the column names
+            set_name (bool): if True, set the column to be the name of the result (else value, low, high)
+            set_date_index (bool): if True, use the timevec as the index
+            resample (str): if provided, resample the data to this frequency
+            kwargs: passed to the resample method
+        """
+        data = dict()
+
+        # Return a resampled version if requested
+        if resample is not None:
+            return self.resample(new_unit=resample, output_form='dataframe', set_name=set_name, **kwargs)
+
+        # Checks
+        if self.timevec is None and set_date_index:
+            raise ValueError('Cannot convert to dataframe with date index: timevec is not set')
+
+        # Deal with timevec
+        timevec = self.convert_timevec()
         if not set_date_index:
             data['timevec'] = timevec
 
-        valcol = self.name if rename else 'value'
+        # Deal with value columns
+        valcol = self.name if set_name else 'value'
         data[valcol] = self.values
         for key in ['low', 'high']:
             val = self[key]
-            valcol = f'{self.name}{sep}{key}' if rename else key
+            valcol = f'{self.name}{sep}{key}' if set_name else key
             if val is not None:
                 data[valcol] = val
 
@@ -378,7 +399,7 @@ class Results(ss.ndict):
             resample = kwargs.pop('resample')
             for k,v in out.items():
                 if isinstance(v, Result):
-                    out[k] = v.resample(new_unit=resample, **kwargs)
+                    out[k] = v.resample(new_unit=resample, output_form='result', **kwargs)
         if only_results:
             out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
         return out
@@ -392,11 +413,9 @@ class Results(ss.ndict):
             kwargs: passed to the to_df method, can include instructions for summarizing results by time
         """
         if not descend:
-            dfs = [res.to_df(sep=sep, rename=True, **kwargs) for res in self.all_results]
+            dfs = [res.to_series(set_name=True, **kwargs) for res in self.all_results]
             if len(dfs):
-                df = dfs[0]
-                for df2 in dfs[1:]:
-                    df = df.merge(df2)
+                df = pd.concat(dfs, axis=1)
             else:
                 df = None
         else:
