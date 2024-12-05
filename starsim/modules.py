@@ -218,7 +218,7 @@ class Module(Base):
         self.t.init(sim=self.sim) # Sets the absolute sim time vector
 
         # Find all time parameters in the module
-        timepars = sc.search(self.pars, type=ss.TimePar) # Should it be self or self.pars?
+        timepars = sc.search(self.pars, type=ss.TimePar, skip=dict(keys='sim')) # Should it be self or self.pars?
 
         # Initialize them with the parent module
         for timepar in timepars.values():
