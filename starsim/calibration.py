@@ -15,7 +15,7 @@ import scipy.stats as sps
 from scipy.special import gammaln
 
 
-__all__ = ['Calibration', 'CalibComponent', 'BetaBinomial', 'DirichletMultinomial', 'GammaPoisson']
+__all__ = ['Calibration', 'CalibComponent', 'BetaBinomial', 'DirichletMultinomial', 'GammaPoisson', 'Normal']
 
 
 class Calibration(sc.prettyobj):
@@ -488,10 +488,13 @@ class CalibComponent(sc.prettyobj):
         name (str) : the name of this component. Importantly, if
             extract_fn is None, the code will attempt to use the name, like
             "hiv.prevalence" to automatically extract data from the simulation.
-        data (df) : pandas Series containing calibration data. The index should be the time in either floating point years or datetime.
-        mode (str/func): To handle misaligned timepoints between observed data and simulation output, it's important to know if the data are incident (like new cases) or prevalent (like the number infected).
-            If 'prevalent', simulation outputs will be interpolated to observed timepoints.
-            If 'incident', outputs will be interpolated to cumulative incidence.
+        expected (df) : pandas DataFrame containing calibration data. The index should be the time 't' in either floating point years or datetime.
+        extract_fn (callable) : A callable function used to extract data from a sim object, which is passed as the lone argument - should look like expected.
+        conform (str/callable): To handle misaligned timepoints between observed data and simulation output, it's important to know if the data are incident (like new cases) or prevalent (like the number infected).
+            If 'prevalent', simulation outputs will be interpolated to observed timepoints using 't'.
+            If 'incident', outputs will be computed as differences between cumulative values at 't' and 't1'.
+        weight (float): The weight applied to the log likelihood of this component. The total log likelihood is the sum of the log likelihoods of all components, each multiplied by its weight.
+        kwargs: Additional arguments to pass to the likelihood function
     """
     def __init__(self, name, expected, extract_fn, conform, weight=1):
         self.name = name
@@ -566,7 +569,7 @@ class CalibComponent(sc.prettyobj):
             actual['rand_seed'] = sim.pars.rand_seed
             actuals = [actual]
 
-        self.actual = pd.concat(actuals).reset_index().set_index('rand_seed', append=True)
+        self.actual = pd.concat(actuals).reset_index().set_index('rand_seed')
         self.nll = self.compute_nll(self.expected, self.actual, **kwargs) # Negative log likelihood
         return self.weight * np.sum(self.nll)
 
@@ -606,6 +609,8 @@ class BetaBinomial(CalibComponent):
         and B is the beta function, B(x, y) = Gamma(x)Gamma(y)/Gamma(x+y)
 
         We return the log of p(x|n, a, b)
+
+        kwargs will contain any eval_kwargs that were specified when instantiating the Calibration
         """
 
         logLs = []
@@ -647,6 +652,8 @@ class DirichletMultinomial(CalibComponent):
             expected['x1'], expected['x2'], ..., expected['xk']
 
         The count variables are any keys in the expected dataframe that start with 'x'.
+
+        kwargs will contain any eval_kwargs that were specified when instantiating the Calibration
         """
 
         logLs = []
@@ -704,6 +711,8 @@ class GammaPoisson(CalibComponent):
         the following: n = alpha, p = beta / (beta + 1)
 
         However, the gamma is estimating a rate, and the observation is a count over a some period of time, say T person-years. To account for T other than 1, we scale beta by 1/T to arrive at beta' = beta / T. When passing into the negative binomial, alpha remains the same, but p = beta' / (beta' + 1) or equivalently p = beta / (beta + T).
+
+        kwargs will contain any eval_kwargs that were specified when instantiating the Calibration
         """
         logLs = []
         e_n, e_x = expected['n'].values, expected['x'].values
@@ -735,6 +744,78 @@ class GammaPoisson(CalibComponent):
             plt.step(kk, yy, label=f"{row['rand_seed']}")
             yy = q.pmf(e_x)
             nll += -q.logpmf(e_x)
+            plt.plot(e_x, yy, 'x', ms=10, color='k')
+        plt.gca().set_title(f't={t} | nll={nll:.2f}')
+        plt.axvline(e_x, color='k', linestyle='--')
+        return
+
+
+class Normal(CalibComponent):
+    def __init__(self, name, expected, extract_fn, conform, weight=1, sigma2=None, **kwargs):
+        super().__init__(name, expected, extract_fn, conform, weight, **kwargs)
+        self.sigma2 = sigma2
+        return
+
+    def compute_nll(self, expected, actual, **kwargs):
+        """
+        Normal log-likelihood component.
+        
+        Note that minimizing the negative log likelihood of a Gaussian likelihood is
+        equivalent to minimizing the Euclidean distance between the expected and
+        actual values.
+
+        User-provided variance can be passed as a keyword argument named sigma2 when creating this component.
+
+        Args:
+            expected (pd.DataFrame): dataframe with column "x", the quantity or metric of interest, from the reference dataset.
+            predicted (pd.DataFrame): dataframe with column "x", the quantity or metric of interest, from simulated dataset.
+            kwargs (dict): contains any eval_kwargs that were specified when instantiating the Calibration
+
+        Returns:
+            nll (float): negative Euclidean distance between expected and predicted values.
+        """
+
+        logLs = []
+        sigma2 = self.sigma2
+        compute_var = sigma2 is None
+        self._s2 = {}
+
+        for seed, rep in actual.groupby('rand_seed'):
+            a_x = rep.set_index('t')['x']
+            if compute_var:
+                # In the absense of a user-provided variance, we compute the maximum likelihood estimate
+                diffs = expected['x'] - a_x
+                SSE = np.sum(diffs**2)
+                N = len(expected)
+                sigma2 = SSE/N
+
+            self._s2[seed] = sigma2
+            logL = sps.norm.logpdf(x=expected['x'], loc=a_x, scale=np.sqrt(sigma2))
+            logLs.append(logL)
+
+        nlls = -np.array(logLs)
+        return nlls
+
+    def plot_facet(self, data, color, **kwargs):
+        t = data.iloc[0]['t']
+        expected = self.expected.loc[t]
+        e_x = expected['x']
+        kk = np.linspace(0, 1, 1000)
+        nll = 0
+        for idx, row in data.iterrows():
+            a_x = row['x']
+            sigma2 = self._s2[row['rand_seed']]
+            if len(sigma2) == len(self.expected):
+                # User provided a vector of variances
+                ti = self.expected.index.get_loc(t)
+                sigma2 = sigma2[ti]
+
+            q = sps.norm(loc=a_x, scale=np.sqrt(sigma2))
+
+            yy = q.pdf(kk)
+            plt.step(kk, yy, label=f"{row['rand_seed']}")
+            yy = q.pdf(e_x)
+            nll += -q.logpdf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
         plt.gca().set_title(f't={t} | nll={nll:.2f}')
         plt.axvline(e_x, color='k', linestyle='--')

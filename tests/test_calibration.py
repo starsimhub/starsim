@@ -9,8 +9,8 @@ import pandas as pd
 import sciris as sc
 
 debug = False # If true, will run in serial
-n_reps = [10,2][debug] # Per trial
-total_trials = [100,10][debug]
+n_reps = [10, 2][debug] # Per trial
+total_trials = [100, 10][debug]
 n_agents = 2_000
 do_plot = 1
 
@@ -157,13 +157,32 @@ def test_calibration(do_plot=False):
         extract_fn = by_dow
     )
 
+    prevalence = ss.Normal(
+        name = 'Disease prevalence',
+        weight = 1,
+        conform = 'prevalent',
+
+        # "expected" actually from a simulation with pars
+        #   beta=0.075, init_prev=0.02, n_contacts=4
+        expected = pd.DataFrame({
+            'x': [0.13, 0.16, 0.06],    # Number of individuals found to be infectious
+        }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
+        
+        extract_fn = lambda sim: pd.DataFrame({
+            'x': sim.results.sir.prevalence,
+        }, index=pd.Index(sim.results.timevec, name='t')),
+        
+        #sigma2 = 0.05, # (num_replicates/sigma2_model + 1/sigma2_data)^-1
+        sigma2 = np.array([0.05, 0.25, 0.01])
+    )
+
     # Make the calibration
     calib = ss.Calibration(
         calib_pars = calib_pars,
         sim = sim,
         build_fn = build_sim, # Use default builder, Calibration.translate_pars
         reseed = False,
-        components = [incidence, infectious, dow], #infectious, incidence
+        components = [incidence, infectious, dow, prevalence],
         #eval_fn = my_function, # Will call my_function(msim, eval_kwargs)
         #eval_kwargs = dict(expected=TRIAL_DATA),
         total_trials = total_trials,
@@ -219,5 +238,5 @@ if __name__ == '__main__':
     if do_plot:
         calib.plot_sims()
         calib.plot_trend()
-        calib.plot_all()
+        #calib.plot_all()
     plt.show()
