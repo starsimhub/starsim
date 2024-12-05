@@ -539,16 +539,16 @@ class CalibComponent(sc.prettyobj):
         sim_t = np.array([sc.datetoyear(t) for t in actual.index.date if isinstance(t, dt.date)])
 
         fp = actual.cumsum()
-        events = fp['x'].values.flatten()
-        py = fp['n'].values.flatten()
-        et0 = np.interp(x=t0, xp=sim_t, fp=events)
-        et1 = np.interp(x=t1, xp=sim_t, fp=events)
-        pt0 = np.interp(x=t0, xp=sim_t, fp=py)
-        pt1 = np.interp(x=t1, xp=sim_t, fp=py)
-        df = pd.DataFrame({
-            'x': et1-et0,
-            'n': pt1-pt0,
-        }, index=expected.index)
+        ret = {}
+        for c in fp.columns:
+            vals = fp[c].values.flatten()
+            v0 = np.interp(x=t0, xp=sim_t, fp=vals) # Cum value at t0
+            v1 = np.interp(x=t1, xp=sim_t, fp=vals) # Cum value at t1
+
+            # Difference between end of step t1 and end of step t
+            ret[c] = v1 - v0
+
+        df = pd.DataFrame(ret, index=expected.index)
         return df
 
     def eval(self, sim, **kwargs):
@@ -577,7 +577,15 @@ class CalibComponent(sc.prettyobj):
         return f'Calibration component with name {self.name}'
 
     def plot(self):
-        g = sns.FacetGrid(data=self.actual.reset_index(), col='t', col_wrap=3, sharex=False)
+        if isinstance(self, DirichletMultinomial):
+            x_vars = [xkey for xkey in self.expected.columns if xkey.startswith('x')]
+            actual = self.actual \
+                .reset_index() \
+                [['t', 'rand_seed']+x_vars] \
+                .melt(id_vars=['t', 'rand_seed'], var_name='var', value_name='x')
+            g = sns.FacetGrid(data=actual, col='t', row='var', sharex=False, height=2, aspect=1.7)
+        else:
+            g = sns.FacetGrid(data=self.actual.reset_index(), col='t', col_wrap=3, sharex=False)
         g.map_dataframe(self.plot_facet)
         return g.fig
 
@@ -643,24 +651,35 @@ class DirichletMultinomial(CalibComponent):
 
         logLs = []
         x_vars = [xkey for xkey in expected.columns if xkey.startswith('x')]
-        e_x = expected[x_var]
-        n = e_x.sum()
-        for seed, rep in actual.groupby('rand_seed'):
-            a_x = rep[x_vars]
-            logL = sps.dirichlet_multinomial.logpmf(x=e_x, n=n, alpha=rep['x']+1)
-            logLs.append(logL)
+        for t, rep_t in actual.groupby('t'):
+            for seed, rep in rep_t.groupby('rand_seed'):
+                e_x = expected.loc[t, x_vars].values[0]
+                n = e_x.sum()
+                a_x = rep[x_vars].values[0]
+                logL = sps.dirichlet_multinomial.logpmf(x=e_x, n=n, alpha=a_x+1)
+                logLs.append(logL)
 
         nlls = -np.array(logLs)
         return nlls
 
     def plot_facet(self, data, color, **kwargs):
+        # It's challenging to plot the Dirichlet-multinomial likelihood, so we use Beta binomial as a stand-in
         t = data.iloc[0]['t']
+        var = data.iloc[0]['var']
         expected = self.expected.loc[t]
-        e_n, e_x = expected['n'], expected['x']
+        actual = self.actual.reset_index().set_index('t').loc[t]
+
+        x_vars = [xkey for xkey in expected.columns if xkey.startswith('x')]
+
+        e_x = expected[var].values
+        e_n = expected[x_vars].sum(axis=1)
+
         kk = np.arange(int(e_x/2), int(2*e_x))
-        for idx, row in data.iterrows():
-            alpha = row['x'] + 1
-            beta = row['n'] - row['x'] + 1
+        for idx, row in actual.iterrows(): # Over rand seeds
+            a_x = row[var]
+            a_n = row[x_vars].sum()
+            alpha = a_x + 1
+            beta = a_n - a_x + 1
             q = sps.betabinom(n=e_n, a=alpha, b=beta)
             yy = q.pmf(kk)
             plt.step(kk, yy, label=f"{row['rand_seed']}")

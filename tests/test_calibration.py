@@ -9,8 +9,8 @@ import pandas as pd
 import sciris as sc
 
 debug = False # If true, will run in serial
-n_reps = 10 # Per trial
-total_trials = 100
+n_reps = [10,2][debug] # Per trial
+total_trials = [100,10][debug]
 n_agents = 2_000
 do_plot = 1
 
@@ -27,7 +27,7 @@ def make_sim():
     sim = ss.Sim(
         n_agents = n_agents,
         start = sc.date('2020-01-01'),
-        dur = 40,
+        stop = sc.date('2020-02-12'),
         dt = 1,
         unit = 'day',
         diseases = sir,
@@ -122,11 +122,14 @@ def test_calibration(do_plot=False):
         }, index=pd.Index(sim.results.timevec, name='t'))
     )
 
-    def extract_dow(sim):
+    def by_dow(sim):
         ret = pd.DataFrame({
             'x': sim.results.sir.new_infections, # Events
         }, index=pd.Index(sim.results.timevec, name='t'))
-        print(ret)
+        ret['var'] = [f'x_{d.weekday()}' for d in ret.index]
+        ret = ret.reset_index() \
+            .pivot(columns='var', index='t', values='x') \
+            .fillna(0)
         return ret
 
     dow = ss.DirichletMultinomial(
@@ -137,18 +140,21 @@ def test_calibration(do_plot=False):
         # "expected" actually from a simulation with pars
         #   beta=0.075, init_prev=0.02, n_contacts=4
         expected = pd.DataFrame({
-            'x_mon': [40, 60],      # Number of new infections
-            'x_tue': [40, 60],      # Number of new infections
-            'x_wed': [40, 60],      # Number of new infections
-            'x_thu': [40, 60],      # Number of new infections
-            'x_fri': [40, 60],      # Number of new infections
-            'x_sat': [40, 60],      # Number of new infections
-            'x_sun': [40, 60],      # Number of new infections
-            't': [ss.date(d) for d in ['2020-01-07', '2020-01-21']], # Between t and t1
+            'x_0': [40, 60], # Monday
+            'x_1': [40, 60], # Tuesday
+            'x_2': [40, 60], # Wednesday
+            'x_3': [40, 60], # Thursday
+            'x_4': [40, 60], # Friday
+            'x_5': [40, 60], # Saturday
+            'x_6': [40, 60], # Sunday
+
+            # incident conform will compute different in comulative counts between the
+            # end of step t1 and the end of step t
+            't': [ss.date(d) for d in ['2020-01-07', '2020-01-21']],
             't1': [ss.date(d) for d in ['2020-01-21', '2020-02-11']],
         }).set_index(['t', 't1']),
 
-        extract_fn = extract_dow
+        extract_fn = by_dow
     )
 
     # Make the calibration
