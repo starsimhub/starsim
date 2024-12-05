@@ -156,24 +156,47 @@ def test_deepcopy_until():
 
 def test_results():
     sc.heading('Testing results export and plotting')
-    sim = ss.Sim(diseases='sis', networks='random', n_agents=medium)
-    sim.run()
 
-    # Export to dataframe
-    sis = sim.results.sis
-    res = sis.new_infections
-    df = res.to_df()
-    dfs = sis.to_df()
-    assert df.value.sum() == dfs.cum_infections.values[-1] == sim.summary.sis_cum_infections
+    # Make a sim with 2 SIS models with varying units and dt
+    d1 = ss.SIS(unit='month', name='sis1')
+    d2 = ss.SIS(dt=0.5, unit='year', name='sis2')
+    sim = ss.Sim(diseases=[d1, d2], networks='random')
+
+    # Run sim and pull out disease results
+    sim.run()
+    rs1 = sim.results.sis1
+    rs2 = sim.results.sis2
+
+    # Export a single result to a series or dataframe
+    res = rs1.new_infections
+    res_df = res.to_df()
+    res_series = res.to_series()
+    assert res[-1] == res_df.iloc[-1].value == res_series.iloc[-1]
+
+    # Export results of a whole module to a dataframe
+    dfs = rs1.to_df()
+    assert res_df.value.sum() == dfs.cum_infections.values[-1] == sim.summary.sis1_cum_infections
+
+    # Export resampled summary of results to dataframe
+    dfy1 = rs1.to_df(resample='year')
+    dfy2 = rs2.to_df(resample='5y')
+    assert dfs.new_infections[:12].sum() == dfy1.new_infections[0]
+    assert rs2.n_susceptible[:2].mean() == dfy2.n_susceptible[0]  # Entries 0 and 1 represent 2000
+    assert rs2.n_susceptible[2:12].mean() == dfy2.n_susceptible[1]  # Entries 2-12 correspond to 2001-2005
+
+    # Export whole sim to unified annualized dataframe
+    sim_df = sim.to_df(resample='year', use_years=True)
+    assert sim_df.sis1_n_infected.values[0] == rs1.n_infected[:12].mean()
+    assert sim_df.sis2_n_infected.values[0] == rs2.n_infected[:2].mean()
 
     # Plot
     res.plot()
-    sim.results.sis.plot()
+    sim.results.sis1.plot()
 
     return sim
 
 
-def test_check_reqiures():
+def test_check_requires():
     sc.heading('Testing check_requires')
     s1 = ss.Sim(diseases='sis', networks='random', n_agents=medium).init()
     ss.check_requires(s1, 'sis')
@@ -199,7 +222,7 @@ if __name__ == '__main__':
     sims2 = test_deepcopy()
     sims3 = test_deepcopy_until()
     sim4 = test_results()
-    sim5 = test_check_reqiures()
+    sim5 = test_check_requires()
 
     sc.toc(T)
     plt.show()
