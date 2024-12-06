@@ -9,7 +9,7 @@ import pandas as pd
 import sciris as sc
 from functools import partial
 
-debug = True # If true, will run in serial
+debug = False # If true, will run in serial
 total_trials = [100, 10][debug]
 n_agents = 2_000
 do_plot = 1
@@ -64,7 +64,8 @@ def build_sim(sim, calib_pars, **kwargs):
     if reps == 1:
         return sim
 
-    ms = ss.MultiSim(sim, iterpars=dict(rand_seed=np.random.randint(0, 1e6, reps)), initialize=True, debug=True, parallel=False) # Run in serial
+    # Ignoring the random seed if provided via the reseed=True option in Calibration
+    ms = ss.MultiSim(sim, iterpars=dict(rand_seed=np.random.randint(0, 1e6, reps)), initialize=True, debug=True, parallel=False)
     return ms
 
 
@@ -75,7 +76,7 @@ def test_onepar_normal(do_plot=True):
 
     # Define the calibration parameters
     calib_pars = dict(
-        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True), # Log scale and no "path", will be handled by build_sim (above)
+        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True),
     )
 
     # Make the sim and data
@@ -116,7 +117,7 @@ def test_onepar_normal(do_plot=True):
     calib.calibrate()
 
     # Check
-    assert calib.check_fit(do_plot), 'Calibration did not improve the fit'
+    assert calib.check_fit(), 'Calibration did not improve the fit'
     return sim, calib
 
 def test_twopar_betabin_gammapois(do_plot=True):
@@ -124,7 +125,7 @@ def test_twopar_betabin_gammapois(do_plot=True):
 
     # Define the calibration parameters
     calib_pars = dict(
-        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True), # Log scale and no "path", will be handled by build_sim (above)
+        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True), # Float par with log scale
         init_prev = dict(low=0.01, high=0.25, guess=0.15), # Default type is suggest_float, no need to re-specify
     )
 
@@ -133,12 +134,12 @@ def test_twopar_betabin_gammapois(do_plot=True):
 
     num_infectious = ss.BetaBinomial(
         name = 'Number Infectious',
-        weight = 1,
+        weight = 0.75,
         conform = 'prevalent',
 
         expected = pd.DataFrame({
             'n': [200, 197, 195], # Number of individuals sampled
-            'x': [30, 30, 10],    # Number of individuals found to be infectious
+            'x': [30, 35, 10],    # Number of individuals found to be infectious
         }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
         
         extract_fn = lambda sim: pd.DataFrame({
@@ -149,19 +150,19 @@ def test_twopar_betabin_gammapois(do_plot=True):
 
     incident_cases = ss.GammaPoisson(
         name = 'Incidence Cases',
-        weight = 1,
+        weight = 1.5,
         conform = 'incident',
 
         expected = pd.DataFrame({
-            'n': [1999, 1997, 1990], # Number of susceptible person-years
-            'x': [40, 60, 20],      # Number of new infections
-            't': [ss.date(d) for d in ['2020-01-07', '2020-01-13', '2020-01-26']], # Between t and t1
-            't1': [ss.date(d) for d in ['2020-01-08', '2020-01-14', '2020-01-27']],
+            'n': [100, 27, 54], # Number of person-years
+            'x': [740, 325, 200],      # Number of new infections
+            't': [ss.date(d) for d in ['2020-01-07', '2020-01-14', '2020-01-27']], # Between t and t1
+            't1': [ss.date(d) for d in ['2020-01-08', '2020-01-15', '2020-01-29']],
         }).set_index(['t', 't1']),
 
         extract_fn = lambda sim: pd.DataFrame({
             'x': sim.results.sir.new_infections, # Events
-            'n': sim.results.n_alive * sim.t.dt, # Person-years at risk
+            'n': sim.results.n_alive * sim.t.dt_year, # Person-years at risk
         }, index=pd.Index(sim.results.timevec, name='t'))
     )
 
@@ -170,7 +171,7 @@ def test_twopar_betabin_gammapois(do_plot=True):
         calib_pars = calib_pars,
         sim = sim,
         build_fn = build_sim,
-        reseed = False,
+        reseed = True,
         components = [num_infectious, incident_cases],
         total_trials = total_trials,
         n_workers = None, # None indicates to use all available CPUs
@@ -183,7 +184,7 @@ def test_twopar_betabin_gammapois(do_plot=True):
     calib.calibrate()
 
     # Check
-    assert calib.check_fit(do_plot), 'Calibration did not improve the fit'
+    assert calib.check_fit(), 'Calibration did not improve the fit'
     return sim, calib
 
 
@@ -192,8 +193,8 @@ def test_threepar_dirichletmultinomial_10reps(do_plot=True):
 
     # Define the calibration parameters
     calib_pars = dict(
-        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True), # Log scale and no "path", will be handled by build_sim (ablve)
-        init_prev = dict(low=0.01, high=0.25, guess=0.15), # Default type is suggest_float, no need to re-specify
+        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True),
+        init_prev = dict(low=0.01, high=0.25, guess=0.15),
         n_contacts = dict(low=2, high=10, guess=3, suggest_type='suggest_int'), # Suggest int just for demo
     )
 
@@ -254,7 +255,7 @@ def test_threepar_dirichletmultinomial_10reps(do_plot=True):
     calib.calibrate()
 
     # Check
-    assert calib.check_fit(do_plot), 'Calibration did not improve the fit'
+    assert calib.check_fit(), 'Calibration did not improve the fit'
     return sim, calib
 
 
@@ -285,15 +286,12 @@ if __name__ == '__main__':
         sns.relplot(data=df, x='timevec', y='prevalence', hue='rand_seed', kind='line')
         plt.show()
 
-    T = sc.timer()
+
     do_plot = True
-
-    sim, calib = test_calibration(do_plot=do_plot)
-
-    T.toc()
-
-    if do_plot:
+    for f in[test_onepar_normal, test_twopar_betabin_gammapois, test_threepar_dirichletmultinomial_10reps]:
+        T = sc.timer()
+        sim, calib = f(do_plot=do_plot)
+        T.toc()
         calib.plot_sims()
-        calib.plot_trend()
-        #calib.plot_all()
+        calib.plot_optuna(['plot_param_importances', 'plot_optimization_history'])
     plt.show()

@@ -4,7 +4,7 @@ Define the calibration class
 import os
 import numpy as np
 import optuna as op
-import optuna.visualization as vis
+import optuna.visualization.matplotlib as vis
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
@@ -19,25 +19,25 @@ class Calibration(sc.prettyobj):
     optimization library (optuna.org).
 
     Args:
-        sim          (Sim)  : the base simulation to calibrate
-        calib_pars   (dict) : a dictionary of the parameters to calibrate of the format dict(key1=dict(low=1, high=2, guess=1.5, **kwargs), key2=...), where kwargs can include "suggest_type" to choose the suggest method of the trial (e.g. suggest_float) and args passed to the trial suggest function like "log" and "step"
-        n_workers    (int)  : the number of parallel workers (if None, will use all available CPUs)
-        total_trials (int)  : the total number of trials to run, each worker will run approximately n_trials = total_trial / n_workers
-        reseed       (bool) : whether to generate new random seeds for each trial
-        build_fn  (callable): function that takes a sim object and calib_pars dictionary and returns a modified sim
-        build_kw  (dict): a dictionary of options that are passed to build_fn to aid in modifying the base simulation. The API is self.build_fn(sim, calib_pars=calib_pars, **self.build_kw), where sim is a copy of the base simulation to be modified with calib_pars
-        components (list): CalibComponents independently assess pseudo-likelihood as part of evaluating the quality of input parameters
-        eval_fn  (callable): Function mapping a sim to a float (e.g. negative log likelihood) to be maximized. If None, the default will use CalibComponents.
-        eval_kw       (dict): Additional keyword arguments to pass to the eval_fn
-        label        (str)  : a label for this calibration object
-        study_name   (str)  : name of the optuna study
-        db_name      (str)  : the name of the database file (default: 'starsim_calibration.db')
-        keep_db      (bool) : whether to keep the database after calibration (default: false)
-        storage      (str)  : the location of the database (default: sqlite)
+        sim          (Sim)   : the base simulation to calibrate
+        calib_pars   (dict)  : a dictionary of the parameters to calibrate of the format dict(key1=dict(low=1, high=2, guess=1.5, **kwargs), key2=...), where kwargs can include "suggest_type" to choose the suggest method of the trial (e.g. suggest_float) and args passed to the trial suggest function like "log" and "step"
+        n_workers    (int)   : the number of parallel workers (if None, will use all available CPUs)
+        total_trials (int)   : the total number of trials to run, each worker will run approximately n_trials = total_trial / n_workers
+        reseed       (bool)  : whether to generate new random seeds for each trial
+        build_fn  (callable) : function that takes a sim object and calib_pars dictionary and returns a modified sim
+        build_kw      (dict) : a dictionary of options that are passed to build_fn to aid in modifying the base simulation. The API is self.build_fn(sim, calib_pars=calib_pars, **self.build_kw), where sim is a copy of the base simulation to be modified with calib_pars
+        components    (list) : CalibComponents independently assess pseudo-likelihood as part of evaluating the quality of input parameters
+        eval_fn   (callable) : Function mapping a sim to a float (e.g. negative log likelihood) to be maximized. If None, the default will use CalibComponents.
+        eval_kw       (dict) : Additional keyword arguments to pass to the eval_fn
+        label        (str)   : a label for this calibration object
+        study_name   (str)   : name of the optuna study
+        db_name      (str)   : the name of the database file (default: 'starsim_calibration.db')
+        keep_db      (bool)  : whether to keep the database after calibration (default: false)
+        storage      (str)   : the location of the database (default: sqlite)
         sampler (BaseSampler): the sampler used by optuna, like optuna.samplers.TPESampler
-        die          (bool) : whether to stop if an exception is encountered (default: false)
-        debug        (bool) : if True, do not run in parallel
-        verbose      (bool) : whether to print details of the calibration
+        die          (bool)  : whether to stop if an exception is encountered (default: false)
+        debug        (bool)  : if True, do not run in parallel
+        verbose      (bool)  : whether to print details of the calibration
 
     Returns:
         A Calibration object
@@ -293,7 +293,7 @@ class Calibration(sc.prettyobj):
 
         return self
 
-    def check_fit(self, n_runs=5):
+    def check_fit(self, n_runs=10):
         """ Run before and after simulations to validate the fit """
         if self.verbose: sc.printcyan('\nChecking fit...')
 
@@ -403,69 +403,34 @@ class Calibration(sc.prettyobj):
 
         return fig_before, fig_after
 
-    def plot_trend(self, best_thresh=None, fig_kw=None):
-        """
-        Plot the trend in best mismatch over time.
-
-        Args:
-            best_thresh (int): Define the threshold for the "best" fits, relative to the lowest mismatch value (if None, show all)
-            fig_kw (dict): passed to plt.figure()
-        """
-        df = self.df.sort_values('index') # Make a copy of the dataframe, sorted by trial number
-        mismatch = sc.dcp(df['mismatch'].values)
-        best_mismatch = np.zeros(len(mismatch))
-        for i in range(len(mismatch)):
-            best_mismatch[i] = mismatch[:i+1].min()
-        smoothed_mismatch = sc.smooth(mismatch)
-        fig = plt.figure(**sc.mergedicts(fig_kw))
-
-        ax1 = plt.subplot(2,1,1)
-        plt.plot(mismatch, alpha=0.2, label='Original')
-        plt.plot(smoothed_mismatch, lw=3, label='Smoothed')
-        plt.plot(best_mismatch, lw=3, label='Best')
-
-        ax2 = plt.subplot(2,1,2)
-        max_mismatch = mismatch.min()*best_thresh if best_thresh is not None else np.inf
-        inds = sc.findinds(mismatch<=max_mismatch)
-        plt.plot(best_mismatch, lw=3, label='Best')
-        plt.scatter(inds, mismatch[inds], c=mismatch[inds], label='Trials')
-        for ax in [ax1, ax2]:
-            plt.sca(ax)
-            plt.grid(True)
-            plt.legend()
-            sc.setylim()
-            sc.setxlim()
-            plt.xlabel('Trial number')
-            plt.ylabel('Mismatch')
-        sc.figlayout()
-        return fig
-
     def plot_param_importances(self):
         """ Plot the parameter importances using Optuna's visualization tool.  """
-        fig = vis.plot_param_importances(self.study)
-        fig.show()
-        return fig
+        ax = vis.plot_param_importances(self.study)
+        return ax
 
-    def plot_all(self):
+    def plot_optuna(self, methods=None):
         """ Plot Optuna's visualizations """
         figs = []
-        for method in [
-            'plot_contour',
-            'plot_edf',
-            'plot_hypervolume_history',
-            'plot_intermediate_values',
-            'plot_optimization_history',
-            'plot_parallel_coordinate',
-            'plot_param_importances',
-            'plot_pareto_front',
-            'plot_rank',
-            'plot_slice',
-            'plot_terminator_improvement',
-            'plot_timeline',
-        ]:
+
+        if methods is None:
+            methods = [
+                'plot_contour',
+                'plot_edf',
+                'plot_hypervolume_history',
+                'plot_intermediate_values',
+                'plot_optimization_history',
+                'plot_parallel_coordinate',
+                'plot_param_importances',
+                'plot_pareto_front',
+                'plot_rank',
+                'plot_slice',
+                'plot_terminator_improvement',
+                'plot_timeline',
+            ]
+
+        for method in methods:
             try:
                 fig = getattr(vis, method)(self.study)
-                fig.show()
                 figs.append(fig)
             except Exception as E:
                 print(f'Could not run {method}: {str(E)}')
