@@ -7,9 +7,9 @@ import starsim as ss
 import numpy as np
 import pandas as pd
 import sciris as sc
+from functools import partial
 
-debug = False # If true, will run in serial
-n_reps = [10, 2][debug] # Per trial
+debug = True # If true, will run in serial
 total_trials = [100, 10][debug]
 n_agents = 2_000
 do_plot = 1
@@ -41,7 +41,7 @@ def make_sim():
 def build_sim(sim, calib_pars, **kwargs):
     """ Modify the base simulation by applying calib_pars """
 
-    reps = kwargs.get('n_reps', n_reps)
+    reps = kwargs.get('n_reps', 1)
 
     sir = sim.pars.diseases # There is only one disease in this simulation and it is a SIR
     net = sim.pars.networks # There is only one network in this simulation and it is a RandomNet
@@ -61,34 +61,81 @@ def build_sim(sim, calib_pars, **kwargs):
         else:
             raise NotImplementedError(f'Parameter {k} not recognized')
 
-    if n_reps == 1:
+    if reps == 1:
         return sim
 
-    ms = ss.MultiSim(sim, iterpars=dict(rand_seed=np.random.randint(0, 1e6, n_reps)), initialize=True, debug=True, parallel=False) # Run in serial
+    ms = ss.MultiSim(sim, iterpars=dict(rand_seed=np.random.randint(0, 1e6, reps)), initialize=True, debug=True, parallel=False) # Run in serial
     return ms
 
 
 #%% Define the tests
-def test_calibration(do_plot=False):
-    sc.heading('Testing calibration')
+
+def test_onepar_normal(do_plot=True):
+    sc.heading('Testing a single parameter (beta) with a normally distributed likelihood')
 
     # Define the calibration parameters
     calib_pars = dict(
-        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True), # Log scale and no "path", will be handled by build_sim (ablve)
-        init_prev = dict(low=0.01, high=0.25, guess=0.15, path=('diseases', 'hiv', 'init_prev')), # Default type is suggest_float, no need to re-specify
-        n_contacts = dict(low=2, high=10, guess=3, suggest_type='suggest_int', path=('networks', 'randomnet', 'n_contacts')), # Suggest int just for demo
+        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True), # Log scale and no "path", will be handled by build_sim (above)
     )
 
     # Make the sim and data
     sim = make_sim()
 
-    infectious = ss.BetaBinomial(
+    prevalence = ss.Normal(
+        name = 'Disease prevalence',
+        conform = 'prevalent',
+
+        expected = pd.DataFrame({
+            'x': [0.13, 0.16, 0.06],    # Prevalence of infection
+        }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
+        
+        extract_fn = lambda sim: pd.DataFrame({
+            'x': sim.results.sir.prevalence,
+        }, index=pd.Index(sim.results.timevec, name='t')),
+
+        # User can specify sigma2, e.g.:
+        #sigma2 = 0.05, # (num_replicates/sigma2_model + 1/sigma2_data)^-1
+        #sigma2 = np.array([0.05, 0.25, 0.01])
+    )
+
+    # Make the calibration
+    calib = ss.Calibration(
+        calib_pars = calib_pars,
+        sim = sim,
+        build_fn = build_sim,
+        reseed = False,
+        components = [prevalence],
+        total_trials = total_trials,
+        n_workers = None, # None indicates to use all available CPUs
+        die = True,
+        debug = debug,
+    )
+
+    # Perform the calibration
+    sc.printcyan('\nPeforming calibration...')
+    calib.calibrate()
+
+    # Check
+    assert calib.check_fit(do_plot), 'Calibration did not improve the fit'
+    return sim, calib
+
+def test_twopar_betabin_gammapois(do_plot=True):
+    sc.heading('Testing a two parameters (beta and initial prevalence) with a two likelihoods (BetaBinomial and GammaPoisson)')
+
+    # Define the calibration parameters
+    calib_pars = dict(
+        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True), # Log scale and no "path", will be handled by build_sim (above)
+        init_prev = dict(low=0.01, high=0.25, guess=0.15), # Default type is suggest_float, no need to re-specify
+    )
+
+    # Make the sim and data
+    sim = make_sim()
+
+    num_infectious = ss.BetaBinomial(
         name = 'Number Infectious',
         weight = 1,
         conform = 'prevalent',
 
-        # "expected" actually from a simulation with pars
-        #   beta=0.075, init_prev=0.02, n_contacts=4
         expected = pd.DataFrame({
             'n': [200, 197, 195], # Number of individuals sampled
             'x': [30, 30, 10],    # Number of individuals found to be infectious
@@ -100,15 +147,12 @@ def test_calibration(do_plot=False):
         }, index=pd.Index(sim.results.timevec, name='t')),
     )
 
-    incidence = ss.GammaPoisson(
+    incident_cases = ss.GammaPoisson(
         name = 'Incidence Cases',
         weight = 1,
         conform = 'incident',
 
-        # "expected" actually from a simulation with pars
-        #   beta=0.075, init_prev=0.02, n_contacts=4
         expected = pd.DataFrame({
-            #'n': [1700, 1400, 750], # Number of susceptible person-years
             'n': [1999, 1997, 1990], # Number of susceptible person-years
             'x': [40, 60, 20],      # Number of new infections
             't': [ss.date(d) for d in ['2020-01-07', '2020-01-13', '2020-01-26']], # Between t and t1
@@ -117,12 +161,47 @@ def test_calibration(do_plot=False):
 
         extract_fn = lambda sim: pd.DataFrame({
             'x': sim.results.sir.new_infections, # Events
-            ###'n': sim.results.sir.n_susceptible * sim.t.dt, # Person-years at risk
             'n': sim.results.n_alive * sim.t.dt, # Person-years at risk
         }, index=pd.Index(sim.results.timevec, name='t'))
     )
 
+    # Make the calibration
+    calib = ss.Calibration(
+        calib_pars = calib_pars,
+        sim = sim,
+        build_fn = build_sim,
+        reseed = False,
+        components = [num_infectious, incident_cases],
+        total_trials = total_trials,
+        n_workers = None, # None indicates to use all available CPUs
+        die = True,
+        debug = debug,
+    )
+
+    # Perform the calibration
+    sc.printcyan('\nPeforming calibration...')
+    calib.calibrate()
+
+    # Check
+    assert calib.check_fit(do_plot), 'Calibration did not improve the fit'
+    return sim, calib
+
+
+def test_threepar_dirichletmultinomial_10reps(do_plot=True):
+    sc.heading('Testing a three parameters (beta, initial prevalence, and number of contacts) with a DirichletMultinomial likelihood')
+
+    # Define the calibration parameters
+    calib_pars = dict(
+        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True), # Log scale and no "path", will be handled by build_sim (ablve)
+        init_prev = dict(low=0.01, high=0.25, guess=0.15), # Default type is suggest_float, no need to re-specify
+        n_contacts = dict(low=2, high=10, guess=3, suggest_type='suggest_int'), # Suggest int just for demo
+    )
+
+    # Make the sim and data
+    sim = make_sim()
+
     def by_dow(sim):
+        # Extract the number of new infections by day of week
         ret = pd.DataFrame({
             'x': sim.results.sir.new_infections, # Events
         }, index=pd.Index(sim.results.timevec, name='t'))
@@ -132,13 +211,11 @@ def test_calibration(do_plot=False):
             .fillna(0)
         return ret
 
-    dow = ss.DirichletMultinomial(
+    cases_by_dow = ss.DirichletMultinomial(
         name = 'Cases by day of week',
         weight = 1,
         conform = 'incident',
 
-        # "expected" actually from a simulation with pars
-        #   beta=0.075, init_prev=0.02, n_contacts=4
         expected = pd.DataFrame({
             'x_0': [40, 60], # Monday
             'x_1': [40, 60], # Tuesday
@@ -157,32 +234,13 @@ def test_calibration(do_plot=False):
         extract_fn = by_dow
     )
 
-    prevalence = ss.Normal(
-        name = 'Disease prevalence',
-        weight = 1,
-        conform = 'prevalent',
-
-        # "expected" actually from a simulation with pars
-        #   beta=0.075, init_prev=0.02, n_contacts=4
-        expected = pd.DataFrame({
-            'x': [0.13, 0.16, 0.06],    # Number of individuals found to be infectious
-        }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
-        
-        extract_fn = lambda sim: pd.DataFrame({
-            'x': sim.results.sir.prevalence,
-        }, index=pd.Index(sim.results.timevec, name='t')),
-        
-        #sigma2 = 0.05, # (num_replicates/sigma2_model + 1/sigma2_data)^-1
-        sigma2 = np.array([0.05, 0.25, 0.01])
-    )
-
     # Make the calibration
     calib = ss.Calibration(
         calib_pars = calib_pars,
         sim = sim,
-        build_fn = build_sim, # Use default builder, Calibration.translate_pars
+        build_fn = partial(build_sim, n_reps=10),
         reseed = False,
-        components = [incidence, infectious, dow, prevalence],
+        components = [cases_by_dow],
         #eval_fn = my_function, # Will call my_function(msim, eval_kwargs)
         #eval_kwargs = dict(expected=TRIAL_DATA),
         total_trials = total_trials,
@@ -197,7 +255,6 @@ def test_calibration(do_plot=False):
 
     # Check
     assert calib.check_fit(do_plot), 'Calibration did not improve the fit'
-
     return sim, calib
 
 
