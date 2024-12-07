@@ -90,11 +90,9 @@ class Calibration(sc.prettyobj):
 
         sim = self.build_fn(sim, calib_pars=calib_pars, **self.build_kw)
 
-        # Run the sim
         try:
-            sim.run()
+            sim.run() # Run the simulation (or MultiSim)
             return sim
-
         except Exception as E:
             if self.die:
                 raise E
@@ -102,40 +100,6 @@ class Calibration(sc.prettyobj):
                 print(f'Encountered error running sim!\nParameters:\n{calib_pars}\nTraceback:\n{sc.traceback()}')
                 output = None
                 return output
-
-    @staticmethod
-    def translate_pars(sim=None, calib_pars=None):
-        # TODO: FIX OR REMOVE. SIM NOT INITIALIZED, SO WILL NOT WORK
-        """ Take the nested dict of calibration pars and modify the sim """
-
-        if 'rand_seed' in calib_pars:
-            sim.pars['rand_seed'] = calib_pars.pop('rand_seed')
-
-        for parname, spec in calib_pars.items():
-            if 'path' not in spec:
-                raise ValueError(f'Cannot map {parname} because "path" is missing from the parameter configuration.')
-
-            p = spec['path']
-
-            # TODO: Allow longer paths
-            if len(p) != 3:
-                raise ValueError(f'Cannot map {parname} because "path" must be a tuple of length 3.')
-
-            modtype = p[0]
-            dkey = p[1]
-            dparkey = p[2]
-            dparval = spec['value']
-            targetpar = sim[modtype][dkey].pars[dparkey]
-
-            if sc.isnumber(targetpar):
-                sim[modtype][dkey].pars[dparkey] = dparval
-            elif isinstance(targetpar, ss.Dist):
-                sim[modtype][dkey].pars[dparkey].set(dparval)
-            else:
-                errormsg = 'Type not implemented'
-                raise ValueError(errormsg)
-
-        return sim
 
     def _sample_from_trial(self, pardict=None, trial=None):
         """
@@ -163,16 +127,20 @@ class Calibration(sc.prettyobj):
         return pars
 
     def _eval_fit(self, sim, **kwargs):
-        """ Evaluate the fit by evaluating the negative log likelihood """
+        """ Evaluate the fit by evaluating the negative log likelihood, used only for components"""
         nll = 0 # Negative log likelihood
         for component in self.components:
             nll += component(sim, **kwargs)
         return nll
 
-    def plot(self):
+    def plot(self, **kwargs):
+        """"
+        Plot the calibration results. For a component-based likelihood, it only
+        makes sense to directly call plot after calling eval_fn.
+        """
         figs = []
         for component in self.components:
-            fig = component.plot()
+            fig = component.plot(**kwargs)
             figs.append(fig)
         return figs
 
@@ -306,14 +274,15 @@ class Calibration(sc.prettyobj):
             spec['value'] = self.best_pars[parname]
 
         self.before_msim = self.build_fn(self.sim.copy(), calib_pars=before_pars, n_reps=n_runs, **self.build_kw)
-        self.before_msim.run()
-        self.before_fits = self.eval_fn(self.before_msim, **self.eval_kw)
-        before_figs = self.plot()
-
         self.after_msim = self.build_fn(self.sim.copy(), calib_pars=after_pars, n_reps=n_runs, **self.build_kw)
-        self.after_msim.run()
+        for sim in self.before_msim.sims: sim.label = 'Before calibration'
+        for sim in self.after_msim.sims: sim.label = 'After calibration'
+        msim = ss.MultiSim(self.before_msim.sims + self.after_msim.sims)
+        msim.run()
+        self.before_fits = self.eval_fn(self.before_msim, **self.eval_kw)
         self.after_fits = self.eval_fn(self.after_msim, **self.eval_kw)
-        after_figs = self.plot()
+        fits = self.eval_fn(msim, **self.eval_kw)
+        figs = self.plot()
 
         print(f'Fit with original pars: {self.before_fits}')
         print(f'Fit with best-fit pars: {self.after_fits}')
@@ -377,36 +346,31 @@ class Calibration(sc.prettyobj):
         else:
             return json
 
-    def plot_sims(self, **kwargs):
+    def plot_final(self, n_runs=10, **kwargs):
         """
-        Plot sims, before and after calibration.
+        Plot sims after calibration
 
         Args:
             kwargs (dict): passed to MultiSim.plot()
         """
-        if self.before_msim is None:
-            self.check_fit()
 
-        # Turn off jupyter mode so we can receive the figure handles
         jup = ss.options.jupyter if 'jupyter' in ss.options else sc.isjupyter()
         ss.options.jupyter = False
 
-        self.before_msim.reduce()
-        fig_before = self.before_msim.plot()
-        fig_before.suptitle('Before calibration')
-
-        self.after_msim.reduce()
-        fig_after = self.after_msim.plot(fig=fig_before)
-        fig_after.suptitle('After calibration')
+        pars = sc.dcp(self.calib_pars)
+        for parname, spec in pars.items():
+            spec['value'] = self.best_pars[parname]
+        msim = self.build_fn(self.sim.copy(), calib_pars=pars, n_reps=n_runs, **self.build_kw)
+        for sim in msim.sims: sim.label = 'Calibration'
+        msim.run()
+        fits = self.eval_fn(msim, **self.eval_kw)
+        
+        msim.reduce()
+        fig = msim.plot()
+        fig.suptitle('After calibration')
 
         ss.options.jupyter = jup
-
-        return fig_before, fig_after
-
-    def plot_param_importances(self):
-        """ Plot the parameter importances using Optuna's visualization tool.  """
-        ax = vis.plot_param_importances(self.study)
-        return ax
+        return fig
 
     def plot_optuna(self, methods=None):
         """ Plot Optuna's visualizations """

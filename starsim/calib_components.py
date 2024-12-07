@@ -94,11 +94,13 @@ class CalibComponent(sc.prettyobj):
                 actual = self.extract_fn(s)
                 actual = self.conform(self.expected, actual) # Conform
                 actual['rand_seed'] = s.pars.rand_seed
+                actual['label'] = s.label
                 actuals.append(actual)
         else:
             actual = self.extract_fn(sim) # Extract
             actual = self.conform(self.expected, actual) # Conform
             actual['rand_seed'] = sim.pars.rand_seed
+            actual['label'] = sim.label
             actuals = [actual]
 
         self.actual = pd.concat(actuals).reset_index().set_index('rand_seed')
@@ -111,17 +113,16 @@ class CalibComponent(sc.prettyobj):
     def __repr__(self):
         return f'Calibration component with name {self.name}'
 
-    def plot(self):
-        if isinstance(self, DirichletMultinomial):
-            x_vars = [xkey for xkey in self.expected.columns if xkey.startswith('x')]
-            actual = self.actual \
-                .reset_index() \
-                [['t', 'rand_seed']+x_vars] \
-                .melt(id_vars=['t', 'rand_seed'], var_name='var', value_name='x')
-            g = sns.FacetGrid(data=actual, col='t', row='var', sharex=False, height=2, aspect=1.7)
-        else:
-            g = sns.FacetGrid(data=self.actual.reset_index(), col='t', col_wrap=3, sharex=False)
+    def plot(self, **kwargs):
+        g = sns.FacetGrid(data=self.actual.reset_index(), col='t', row='label', sharex=False, margin_titles=True, height=3, aspect=1.5, **kwargs)
         g.map_dataframe(self.plot_facet)
+        g.set_titles(row_template='{row_name}')
+        for (row_val, col_val), ax in g.axes_dict.items():
+            if row_val == g.row_names[0] and isinstance(col_val, dt.datetime):
+                ax.set_title(col_val.strftime('%Y-%m-%d'))
+
+        g.fig.subplots_adjust(top=0.9)
+        g.fig.suptitle(self.name)
         return g.fig
 
 class BetaBinomial(CalibComponent):
@@ -201,12 +202,31 @@ class DirichletMultinomial(CalibComponent):
         nlls = -np.array(logLs)
         return nlls
 
+
+    def plot(self, **kwargs):
+        x_vars = [xkey for xkey in self.expected.columns if xkey.startswith('x')]
+        actual = self.actual \
+            .reset_index() \
+            [['t', 'label', 'rand_seed']+x_vars] \
+            .melt(id_vars=['t', 'label', 'rand_seed'], var_name='var', value_name='x')
+        g = sns.FacetGrid(data=actual, col='t', row='var', hue='label', sharex=False, height=2, aspect=1.7, **kwargs)
+        g.map_dataframe(self.plot_facet)
+        g.set_titles(row_template='{row_name}')
+        for (row_val, col_val), ax in g.axes_dict.items():
+            if row_val == g.row_names[0] and isinstance(col_val, dt.datetime):
+                ax.set_title(col_val.strftime('%Y-%m-%d'))
+
+        g.fig.subplots_adjust(top=0.9)
+        g.fig.suptitle(self.name)
+        return g.fig
+
     def plot_facet(self, data, color, **kwargs):
         # It's challenging to plot the Dirichlet-multinomial likelihood, so we use Beta binomial as a stand-in
         t = data.iloc[0]['t']
+        label = data.iloc[0]['label']
         var = data.iloc[0]['var']
         expected = self.expected.loc[t]
-        actual = self.actual.reset_index().set_index('t').loc[[t]]
+        actual = self.actual.reset_index().set_index(['t', 'label']).loc[[(t, label)]]
 
         x_vars = [xkey for xkey in expected.columns if xkey.startswith('x')]
 
@@ -221,9 +241,10 @@ class DirichletMultinomial(CalibComponent):
             beta = a_n - a_x + 1
             q = sps.betabinom(n=e_n, a=alpha, b=beta)
             yy = q.pmf(kk)
-            plt.step(kk, yy, label=f"{row['rand_seed']}")
+            plt.step(kk, yy, color=color, label=f"{row['rand_seed']}")
             yy = q.pmf(e_x)
-            plt.plot(e_x, yy, 'x', ms=10, color='k')
+            darker = [0.8*c for c in color]
+            plt.plot(e_x, yy, 'x', ms=10, color=darker)
         plt.axvline(e_x, color='k', linestyle='--')
         return
 
@@ -277,7 +298,6 @@ class GammaPoisson(CalibComponent):
             yy = q.pmf(e_x)
             nll += -q.logpmf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
-        plt.gca().set_title(f't={t} | nll={nll:.2f}')
         plt.axvline(e_x, color='k', linestyle='--')
         return
 
@@ -350,6 +370,5 @@ class Normal(CalibComponent):
             yy = q.pdf(e_x)
             nll += -q.logpdf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
-        plt.gca().set_title(f't={t} | nll={nll:.2f}')
         plt.axvline(e_x, color='k', linestyle='--')
         return

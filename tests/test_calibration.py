@@ -116,9 +116,62 @@ def test_onepar_normal(do_plot=True):
     sc.printcyan('\nPeforming calibration...')
     calib.calibrate()
 
+    # Call plotting to look for exceptions
+    calib.plot_final()
+    calib.plot_optuna(['plot_param_importances', 'plot_optimization_history'])
+
     # Check
     assert calib.check_fit(), 'Calibration did not improve the fit'
     return sim, calib
+
+
+def test_onepar_custom(do_plot=True):
+    sc.heading('Testing a single parameter (beta) with a custom likelihood')
+
+    # Define the calibration parameters
+    calib_pars = dict(
+        beta = dict(low=0.01, high=0.30, guess=0.15, suggest_type='suggest_float', log=True),
+    )
+
+    # Make the sim and data
+    sim = make_sim()
+
+    def eval(sim, expected):
+        # Compute the squared error at one point in time
+        # NOTE the fragility that the date must be in the simulation timevec
+        date, p = expected
+        if not isinstance(sim, ss.MultiSim):
+            sim = ss.MultiSim(sims=[sim])
+
+        ret = 0
+        for s in sim.sims:
+            ind = sc.findfirst(s.results.timevec == date)
+            prev = s.results.sir.prevalence[ind]
+            ret += (prev - p)**2
+        return ret
+
+    # Make the calibration
+    calib = ss.Calibration(
+        calib_pars = calib_pars,
+        sim = sim,
+        build_fn = partial(build_sim, n_reps=2),
+        reseed = True,
+        eval_fn = eval, # Will call my_function(msim, eval_kwargs)
+        eval_kw = dict(expected=(ss.date('2020-01-12'), 0.13)), # Will call eval(sim, eval_kw)
+        total_trials = total_trials,
+        n_workers = None, # None indicates to use all available CPUs
+        die = True,
+        debug = debug,
+    )
+
+    # Perform the calibration
+    sc.printcyan('\nPeforming calibration...')
+    calib.calibrate()
+
+    # Check
+    assert calib.check_fit(), 'Calibration did not improve the fit'
+    return sim, calib
+
 
 def test_twopar_betabin_gammapois(do_plot=True):
     sc.heading('Testing a two parameters (beta and initial prevalence) with a two likelihoods (BetaBinomial and GammaPoisson)')
@@ -149,14 +202,14 @@ def test_twopar_betabin_gammapois(do_plot=True):
     )
 
     incident_cases = ss.GammaPoisson(
-        name = 'Incidence Cases',
+        name = 'Incident Cases',
         weight = 1.5,
         conform = 'incident',
 
         expected = pd.DataFrame({
-            'n': [100, 27, 54], # Number of person-years
-            'x': [740, 325, 200],      # Number of new infections
-            't': [ss.date(d) for d in ['2020-01-07', '2020-01-14', '2020-01-27']], # Between t and t1
+            'n':  [100, 27, 54],   # Number of person-years
+            'x':  [740, 325, 200], # Number of new infections
+            't':  [ss.date(d) for d in ['2020-01-07', '2020-01-14', '2020-01-27']], # Between t and t1
             't1': [ss.date(d) for d in ['2020-01-08', '2020-01-15', '2020-01-29']],
         }).set_index(['t', 't1']),
 
@@ -288,10 +341,10 @@ if __name__ == '__main__':
 
 
     do_plot = True
-    for f in[test_onepar_normal, test_twopar_betabin_gammapois, test_threepar_dirichletmultinomial_10reps]:
+    for f in [test_onepar_normal, test_onepar_custom, test_twopar_betabin_gammapois, test_threepar_dirichletmultinomial_10reps]:
         T = sc.timer()
         sim, calib = f(do_plot=do_plot)
         T.toc()
-        calib.plot_sims()
+        calib.plot_final()
         calib.plot_optuna(['plot_param_importances', 'plot_optimization_history'])
     plt.show()
