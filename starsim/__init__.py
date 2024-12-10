@@ -11,26 +11,27 @@ if options.license:
     print(__license__)
 
 # Finish imports
-from .utils         import *
-from .arrays        import *
-from .time          import *
-from .parameters    import *
-from .distributions import *
-from .people        import *
-from .modules       import *
-from .networks      import *
-from .results       import *
-from .demographics  import *
-from .products      import *
-from .interventions import *
-from .demographics  import *
-from .disease       import *
-from .diseases      import *
-from .loop          import *
-from .sim           import *
-from .run           import *
-from .calibration   import *
-from .samples       import *
+from .utils            import *
+from .arrays           import *
+from .time             import *
+from .parameters       import *
+from .distributions    import *
+from .people           import *
+from .modules          import *
+from .networks         import *
+from .results          import *
+from .demographics     import *
+from .products         import *
+from .interventions    import *
+from .demographics     import *
+from .disease          import *
+from .diseases         import *
+from .loop             import *
+from .sim              import *
+from .run              import *
+from .calibration      import *
+from .calib_components import *
+from .samples          import *
 
 # Assign the root folder
 import sciris as sc
