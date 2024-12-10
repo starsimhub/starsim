@@ -275,6 +275,18 @@ class Calibration(sc.prettyobj):
 
         self.before_msim = self.build_fn(self.sim.copy(), calib_pars=before_pars, n_reps=n_runs, **self.build_kw)
         self.after_msim = self.build_fn(self.sim.copy(), calib_pars=after_pars, n_reps=n_runs, **self.build_kw)
+
+        fix_before = isinstance(self.before_msim, ss.Sim)
+        fix_after = isinstance(self.after_msim, ss.Sim)
+        if fix_after or fix_after:
+            ss.warn('Calibration was expecting the build function to return a MultiSim, but instead got a single Sim; wrapping it in a MultiSim')
+
+            if fix_before:
+                self.before_msim = ss.MultiSim(self.before_msim, iterpars=dict(rand_seed=np.random.randint(0, 1e6, n_runs)), initialize=True, debug=True, parallel=False)
+
+            if fix_after:
+                self.after_msim = ss.MultiSim(self.after_msim, iterpars=dict(rand_seed=np.random.randint(0, 1e6, n_runs)), initialize=True, debug=True, parallel=False)
+
         for sim in self.before_msim.sims: sim.label = 'Before calibration'
         for sim in self.after_msim.sims: sim.label = 'After calibration'
         msim = ss.MultiSim(self.before_msim.sims + self.after_msim.sims)
@@ -361,6 +373,11 @@ class Calibration(sc.prettyobj):
         for parname, spec in pars.items():
             spec['value'] = self.best_pars[parname]
         msim = self.build_fn(self.sim.copy(), calib_pars=pars, n_reps=n_runs, **self.build_kw)
+
+        if isinstance(msim, ss.Sim):
+            ss.warn('Calibration was expecting the build function to return a MultiSim, but instead got a single Sim; wrapping it in a MultiSim')
+            msim = ss.MultiSim(msim, iterpars=dict(rand_seed=np.random.randint(0, 1e6, n_runs)), initialize=True, debug=True, parallel=False)
+
         for sim in msim.sims: sim.label = 'Calibration'
         msim.run()
         fits = self.eval_fn(msim, **self.eval_kw)
