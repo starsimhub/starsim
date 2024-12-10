@@ -223,7 +223,7 @@ class Deaths(Demographics):
 
         # Scale from rate to probability. Consider an exponential here.
         if isinstance(death_rate, ss.TimePar):
-            factor = self.t.dt # TODO: figure out why this isn't 1.0
+            factor = 1.0
         else:
             factor = ss.time_ratio(unit1=self.t.unit, dt1=self.t.dt, unit2='year', dt2=1.0)
         death_prob = death_rate * self.pars.rate_units * self.pars.rel_death * factor
