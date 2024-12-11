@@ -26,13 +26,15 @@ class CalibComponent(sc.prettyobj):
             If 'prevalent', simulation outputs will be interpolated to observed timepoints using 't'.
             If 'incident', outputs will be computed as differences between cumulative values at 't' and 't1'.
         weight (float): The weight applied to the log likelihood of this component. The total log likelihood is the sum of the log likelihoods of all components, each multiplied by its weight.
+        include_fn (callable): A function accepting a single simulation and returning a boolean to determine if the simulation should be included in the current component. If None, all simulations are included.
         kwargs: Additional arguments to pass to the likelihood function
     """
-    def __init__(self, name, expected, extract_fn, conform, weight=1):
+    def __init__(self, name, expected, extract_fn, conform, weight=1, include_fn=None):
         self.name = name
         self.expected = expected
         self.extract_fn = extract_fn
         self.weight = weight
+        self.include_fn = include_fn
 
         if isinstance(conform, str):
             if conform == 'incident':
@@ -91,16 +93,19 @@ class CalibComponent(sc.prettyobj):
         actuals = []
         if isinstance(sim, ss.MultiSim):
             for s in sim.sims:
+                if self.include_fn is not None and not self.include_fn(s):
+                    continue # Skip this simulation
                 actual = self.extract_fn(s)
                 actual = self.conform(self.expected, actual) # Conform
                 actual['rand_seed'] = s.pars.rand_seed
-                actual['label'] = s.label
+                actual['calibrated'] = 'After Calibration' if getattr(s, 'calibrated', False) else 'Before Calibration'
                 actuals.append(actual)
         else:
+            assert self.include_fn is None, 'The include_fn argument is only valid for MultiSim objects'
             actual = self.extract_fn(sim) # Extract
             actual = self.conform(self.expected, actual) # Conform
             actual['rand_seed'] = sim.pars.rand_seed
-            actual['label'] = sim.label
+            actual['calibrated'] = 'After Calibration' if getattr(s, 'calibrated', False) else 'Before Calibration'
             actuals = [actual]
 
         self.actual = pd.concat(actuals).reset_index().set_index('rand_seed')
@@ -114,7 +119,7 @@ class CalibComponent(sc.prettyobj):
         return f'Calibration component with name {self.name}'
 
     def plot(self, **kwargs):
-        g = sns.FacetGrid(data=self.actual.reset_index(), col='t', row='label', sharex=False, margin_titles=True, height=3, aspect=1.5, **kwargs)
+        g = sns.FacetGrid(data=self.actual.reset_index(), col='t', row='calibrated', sharex=False, margin_titles=True, height=3, aspect=1.5, **kwargs)
         g.map_dataframe(self.plot_facet)
         g.set_titles(row_template='{row_name}')
         for (row_val, col_val), ax in g.axes_dict.items():
@@ -207,9 +212,9 @@ class DirichletMultinomial(CalibComponent):
         x_vars = [xkey for xkey in self.expected.columns if xkey.startswith('x')]
         actual = self.actual \
             .reset_index() \
-            [['t', 'label', 'rand_seed']+x_vars] \
-            .melt(id_vars=['t', 'label', 'rand_seed'], var_name='var', value_name='x')
-        g = sns.FacetGrid(data=actual, col='t', row='var', hue='label', sharex=False, height=2, aspect=1.7, **kwargs)
+            [['t', 'calibrated', 'rand_seed']+x_vars] \
+            .melt(id_vars=['t', 'calibrated', 'rand_seed'], var_name='var', value_name='x')
+        g = sns.FacetGrid(data=actual, col='t', row='var', hue='calibrated', sharex=False, height=2, aspect=1.7, **kwargs)
         g.map_dataframe(self.plot_facet)
         g.set_titles(row_template='{row_name}')
         for (row_val, col_val), ax in g.axes_dict.items():
@@ -223,10 +228,10 @@ class DirichletMultinomial(CalibComponent):
     def plot_facet(self, data, color, **kwargs):
         # It's challenging to plot the Dirichlet-multinomial likelihood, so we use Beta binomial as a stand-in
         t = data.iloc[0]['t']
-        label = data.iloc[0]['label']
+        calibrated = data.iloc[0]['calibrated']
         var = data.iloc[0]['var']
         expected = self.expected.loc[t]
-        actual = self.actual.reset_index().set_index(['t', 'label']).loc[[(t, label)]]
+        actual = self.actual.reset_index().set_index(['t', 'calibrated']).loc[[(t, calibrated)]]
 
         x_vars = [xkey for xkey in expected.columns if xkey.startswith('x')]
 

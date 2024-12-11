@@ -287,8 +287,8 @@ class Calibration(sc.prettyobj):
             if fix_after:
                 self.after_msim = ss.MultiSim(self.after_msim, iterpars=dict(rand_seed=np.random.randint(0, 1e6, n_runs)), initialize=True, debug=True, parallel=False)
 
-        for sim in self.before_msim.sims: sim.label = 'Before calibration'
-        for sim in self.after_msim.sims: sim.label = 'After calibration'
+        for sim in self.before_msim.sims: sim.calibrated = False
+        for sim in self.after_msim.sims: sim.calibrated = True
         msim = ss.MultiSim(self.before_msim.sims + self.after_msim.sims)
         msim.run()
         self.before_fits = self.eval_fn(self.before_msim, **self.eval_kw)
@@ -378,7 +378,7 @@ class Calibration(sc.prettyobj):
             ss.warn(f'Calibration was expecting the build function to return a MultiSim, but instead got a single Sim; wrapping it in a MultiSim with {n_runs} runs')
             msim = ss.MultiSim(msim, iterpars=dict(rand_seed=np.random.randint(0, 1e6, n_runs)), initialize=True, debug=True, parallel=False)
 
-        for sim in msim.sims: sim.label = 'Calibration'
+        #for sim in msim.sims: sim.label = 'Calibration'
         msim.run()
         fits = self.eval_fn(msim, **self.eval_kw)
 
