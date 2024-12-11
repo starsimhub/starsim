@@ -282,7 +282,7 @@ class Samples:
         return f'seed_{seed}.csv'
 
     @classmethod
-    def new(cls, folder, outputs, identifiers=None, fname=None):
+    def new(cls, folder, outputs, identifiers=None, fname=None, verbose=True):
         """
         Args:
             folder: The folder name
@@ -322,7 +322,7 @@ class Samples:
         folder.mkdir(parents=True, exist_ok=True)
 
         # Save the zip file
-        sc.savezip(folder/fname, data=zipdata, tobytes=False)
+        sc.savezip(folder/fname, data=zipdata, tobytes=False, verbose=verbose)
 
         return cls(folder/fname, memory_buffer=False)
 

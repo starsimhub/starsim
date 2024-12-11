@@ -48,7 +48,15 @@ def test_dataset():
     results = ss.Dataset(resultsdir)
     return results
 
+def test_verbose():
+    outputs = get_outputs(0.2)
+    resultsdir = tempdir/'samples_results'
+    resultsdir.mkdir(exist_ok=True)
+    s = ss.Samples.new(resultsdir, outputs, identifiers=["p_death"], verbose=False)
+    return s
+
 if __name__ == '__main__':
     samples = test_samples()
     samples = test_samples_no_identifier()
+    samples = test_verbose()
     results = test_dataset()
