@@ -55,8 +55,17 @@ def test_verbose():
     s = ss.Samples.new(resultsdir, outputs, identifiers=["p_death"], verbose=False)
     return s
 
+def test_seed_result():
+    outputs = get_outputs(0.2)
+    resultsdir = tempdir/'samples_results'
+    resultsdir.mkdir(exist_ok=True)
+    s = ss.Samples.new(resultsdir, outputs, identifiers=["p_death"], verbose=False)
+    return s[0]
+
+
 if __name__ == '__main__':
     samples = test_samples()
     samples = test_samples_no_identifier()
     samples = test_verbose()
+    seed_result = test_seed_result()
     results = test_dataset()
