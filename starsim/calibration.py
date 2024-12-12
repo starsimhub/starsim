@@ -261,13 +261,17 @@ class Calibration(sc.prettyobj):
 
         return self
 
-    def check_fit(self, n_runs=10):
+    def check_fit(self, n_runs=10, do_plot=True):
         """ Run before and after simulations to validate the fit """
         if self.verbose: sc.printcyan('\nChecking fit...')
 
         before_pars = sc.dcp(self.calib_pars)
         for spec in before_pars.values():
             spec['value'] = spec['guess'] # Use guess values
+
+        # Load in case calibration was interrupted
+        study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
+        self.best_pars = sc.objdict(study.best_params)
 
         after_pars = sc.dcp(self.calib_pars)
         for parname, spec in after_pars.items():
@@ -294,7 +298,9 @@ class Calibration(sc.prettyobj):
         self.before_fits = self.eval_fn(self.before_msim, **self.eval_kw)
         self.after_fits = self.eval_fn(self.after_msim, **self.eval_kw)
         fits = self.eval_fn(msim, **self.eval_kw)
-        figs = self.plot()
+
+        if do_plot:
+            figs = self.plot()
 
         print(f'Fit with original pars: {self.before_fits}')
         print(f'Fit with best-fit pars: {self.after_fits}')
