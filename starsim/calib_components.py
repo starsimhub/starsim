@@ -98,14 +98,12 @@ class CalibComponent(sc.prettyobj):
                 actual = self.extract_fn(s)
                 actual = self.conform(self.expected, actual) # Conform
                 actual['rand_seed'] = s.pars.rand_seed
-                actual['calibrated'] = 'After Calibration' if getattr(s, 'calibrated', False) else 'Before Calibration'
                 actuals.append(actual)
         else:
             assert self.include_fn is None, 'The include_fn argument is only valid for MultiSim objects'
             actual = self.extract_fn(sim) # Extract
             actual = self.conform(self.expected, actual) # Conform
             actual['rand_seed'] = sim.pars.rand_seed
-            actual['calibrated'] = 'After Calibration' if getattr(s, 'calibrated', False) else 'Before Calibration'
             actuals = [actual]
 
         self.actual = pd.concat(actuals).reset_index().set_index('rand_seed')
@@ -118,8 +116,14 @@ class CalibComponent(sc.prettyobj):
     def __repr__(self):
         return f'Calibration component with name {self.name}'
 
-    def plot(self, **kwargs):
-        g = sns.FacetGrid(data=self.actual.reset_index(), col='t', row='calibrated', sharex=False, margin_titles=True, height=3, aspect=1.5, **kwargs)
+    def plot(self, actual=None, **kwargs):
+        if actual is None:
+            actual = self.actual
+
+        if 'calibrated' not in actual.columns:
+            actual['calibrated'] = 'Calibration'
+
+        g = sns.FacetGrid(data=actual.reset_index(), col='t', row='calibrated', sharex=False, margin_titles=True, height=3, aspect=1.5, **kwargs)
         g.map_dataframe(self.plot_facet)
         g.set_titles(row_template='{row_name}')
         for (row_val, col_val), ax in g.axes_dict.items():
@@ -208,9 +212,15 @@ class DirichletMultinomial(CalibComponent):
         return nlls
 
 
-    def plot(self, **kwargs):
+    def plot(self, actual=None, **kwargs):
+        if actual is None:
+            actual = self.actual
+
+        if 'calibrated' not in actual.columns:
+            actual['calibrated'] = 'Calibration'
+
         x_vars = [xkey for xkey in self.expected.columns if xkey.startswith('x')]
-        actual = self.actual \
+        actual = actual \
             .reset_index() \
             [['t', 'calibrated', 'rand_seed']+x_vars] \
             .melt(id_vars=['t', 'calibrated', 'rand_seed'], var_name='var', value_name='x')

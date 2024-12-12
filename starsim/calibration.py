@@ -4,6 +4,7 @@ Define the calibration class
 import os
 import numpy as np
 import optuna as op
+import pandas as pd
 import optuna.visualization.matplotlib as vis
 import sciris as sc
 import starsim as ss
@@ -138,9 +139,19 @@ class Calibration(sc.prettyobj):
         Plot the calibration results. For a component-based likelihood, it only
         makes sense to directly call plot after calling eval_fn.
         """
+        assert self.before_msim is not None and self.after_msim is not None, 'Please run check_fit() before plotting'
         figs = []
         for component in self.components:
-            fig = component.plot(**kwargs)
+            component.eval(self.before_msim)
+            before_actual = component.actual
+            before_actual['calibrated'] = 'Before Calibration'
+
+            component.eval(self.after_msim)
+            after_actual = component.actual
+            after_actual['calibrated'] = 'After Calibration'
+
+            actual = pd.concat([before_actual, after_actual])
+            fig = component.plot(actual, **kwargs)
             figs.append(fig)
         return figs
 
@@ -291,13 +302,12 @@ class Calibration(sc.prettyobj):
             if fix_after:
                 self.after_msim = ss.MultiSim(self.after_msim, iterpars=dict(rand_seed=np.random.randint(0, 1e6, n_runs)), initialize=True, debug=True, parallel=False)
 
-        for sim in self.before_msim.sims: sim.calibrated = False
-        for sim in self.after_msim.sims: sim.calibrated = True
         msim = ss.MultiSim(self.before_msim.sims + self.after_msim.sims)
         msim.run()
+
         self.before_fits = self.eval_fn(self.before_msim, **self.eval_kw)
+
         self.after_fits = self.eval_fn(self.after_msim, **self.eval_kw)
-        fits = self.eval_fn(msim, **self.eval_kw)
 
         if do_plot:
             figs = self.plot()
