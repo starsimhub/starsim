@@ -281,8 +281,12 @@ class Calibration(sc.prettyobj):
             spec['value'] = spec['guess'] # Use guess values
 
         # Load in case calibration was interrupted
-        study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
-        self.best_pars = sc.objdict(study.best_params)
+        if self.best_pars is None:
+            try:
+                study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
+                self.best_pars = sc.objdict(study.best_params)
+            except:
+                raise ValueError('Seems like calibration did not finish successfully and also unable to obtain best parameters from the {self.run_args.storage}:{self.run_args.study_name} as the study was likely automatically deleted, see keep_db.')
 
         after_pars = sc.dcp(self.calib_pars)
         for parname, spec in after_pars.items():
