@@ -173,6 +173,10 @@ class Calibration(sc.prettyobj):
 
     def worker(self):
         """ Run a single worker """
+
+        # Sleep a random time to avoid overwhelming the database
+        sc.timedsleep(np.random.uniform(0, 2))
+
         if self.verbose:
             op.logging.set_verbosity(op.logging.DEBUG)
         else:

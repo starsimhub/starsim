@@ -345,23 +345,27 @@ class Normal(CalibComponent):
         logLs = []
         sigma2 = self.sigma2
         compute_var = sigma2 is None
-        self._s2 = {}
 
         for seed, rep in actual.groupby('rand_seed'):
             a_x = rep.set_index('t')['x']
             if compute_var:
-                # In the absense of a user-provided variance, we compute the maximum likelihood estimate
-                diffs = expected['x'] - a_x
-                SSE = np.sum(diffs**2)
-                N = len(expected)
-                sigma2 = SSE/N
+                sigma2 = self.compute_var(expected['x'], a_x)
 
-            self._s2[seed] = sigma2
             logL = sps.norm.logpdf(x=expected['x'], loc=a_x, scale=np.sqrt(sigma2))
             logLs.append(logL)
 
         nlls = -np.array(logLs)
         return nlls
+
+    def compute_var(self, expected_x, actual_x):
+        """
+        Compute the maximum-likelihood variance of the residuals between expected and actual values.
+        """
+        diffs = expected_x - actual_x
+        SSE = np.sum(diffs**2)
+        N = len(expected_x) if sc.isiterable(expected_x) else 1
+        sigma2 = SSE/N
+        return sigma2
 
     def plot_facet(self, data, color, **kwargs):
         t = data.iloc[0]['t']
@@ -371,7 +375,7 @@ class Normal(CalibComponent):
         nll = 0
         for idx, row in data.iterrows():
             a_x = row['x']
-            sigma2 = self._s2[row['rand_seed']]
+            sigma2 = self.sigma2 or self.compute_var(e_x, a_x)
             if isinstance(sigma2, (list, np.ndarray)):
                 assert len(sigma2) == len(self.expected), 'Length of sigma2 must match the number of timepoints'
                 # User provided a vector of variances
