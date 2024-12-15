@@ -264,6 +264,13 @@ class DirichletMultinomial(CalibComponent):
         return
 
 class GammaPoisson(CalibComponent):
+    def __init__(self, name, expected, extract_fn, conform, weight=1, include_fn=None):
+        super().__init__(name, expected, extract_fn, conform, weight, include_fn)
+
+        assert expected['n'].dtype == int, 'The expected must have an integer column named "n" for the total number of person-years'
+        assert expected['x'].dtype == int, 'The expected must have an integer column named "x" for the total number of events'
+        return
+
     def compute_nll(self, expected, actual, **kwargs):
         """
         The gamma-poisson likelihood is a Poisson likelihood with a
@@ -283,9 +290,11 @@ class GammaPoisson(CalibComponent):
         kwargs will contain any eval_kwargs that were specified when instantiating the Calibration
         """
         logLs = []
-        e_n, e_x = expected['n'].values, expected['x'].values
-        for seed, rep in actual.groupby('rand_seed'):
-            a_n, a_x = rep['n'].values, rep['x'].values
+
+        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t', 't1'], suffixes=('_e', '_a'))
+        for seed, rep in combined.groupby('rand_seed'):
+            e_n, e_x = rep['n_e'].values, rep['x_e'].values
+            a_n, a_x = rep['n_a'].values, rep['x_a'].values
             beta = np.zeros_like(a_n, dtype=float) # Avoid division by zero
             T = e_n
             beta = 1 + a_n
