@@ -41,8 +41,10 @@ class CalibComponent(sc.prettyobj):
                 self.conform = self.linear_accum
             elif conform == 'prevalent':
                 self.conform = self.linear_interp
+            elif conform == 'step_containing':
+                self.conform = self.step_containing
             else:
-                errormsg = f'The conform argument must be "prevalent" or "incident", not {conform}.'
+                errormsg = f'The conform argument must be "prevalent", "incident", or "step_containing" not {conform}.'
                 raise ValueError(errormsg)
         else:
             if not callable(conform):
@@ -62,6 +64,20 @@ class CalibComponent(sc.prettyobj):
         conformed = pd.DataFrame(index=expected.index)
         for k in actual:
             conformed[k] = np.interp(x=t, xp=actual.index, fp=actual[k])
+
+        return conformed
+
+    @staticmethod
+    def step_containing(expected, actual):
+        """
+        Find the step containing the the timepoint
+        Use for prevalent data like prevalence
+        """
+        t = expected.index
+        inds = np.searchsorted(actual.index, t, side='left')
+        conformed = pd.DataFrame(index=expected.index)
+        for k in actual:
+            conformed[k] = actual[k].values[inds] # .values because indices differ
 
         return conformed
 
