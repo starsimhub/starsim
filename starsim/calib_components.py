@@ -27,14 +27,18 @@ class CalibComponent(sc.prettyobj):
             If 'incident', outputs will be computed as differences between cumulative values at 't' and 't1'.
         weight (float): The weight applied to the log likelihood of this component. The total log likelihood is the sum of the log likelihoods of all components, each multiplied by its weight.
         include_fn (callable): A function accepting a single simulation and returning a boolean to determine if the simulation should be included in the current component. If None, all simulations are included.
+        n_boot (int): The number of bootstrap samples to use when calculating the confidence interval. If None, will compute sims independently and sum negative log likelihoods.
+        boot_size (int): Number of simulations to include in each bootstrap sample. If n_boot is None, this argument is ignored. Default is 1, which does not do bootstrapping.
         kwargs: Additional arguments to pass to the likelihood function
     """
-    def __init__(self, name, expected, extract_fn, conform, weight=1, include_fn=None):
+    def __init__(self, name, expected, extract_fn, conform, weight=1, include_fn=None, n_boot=None, boot_size=1):
         self.name = name
         self.expected = expected
         self.extract_fn = extract_fn
         self.weight = weight
         self.include_fn = include_fn
+        self.n_boot = n_boot
+        self.boot_size = boot_size
 
         if isinstance(conform, str):
             if conform == 'incident':
@@ -115,6 +119,9 @@ class CalibComponent(sc.prettyobj):
                 actual = self.conform(self.expected, actual) # Conform
                 actual['rand_seed'] = s.pars.rand_seed
                 actuals.append(actual)
+
+            if len(actuals) == 0: # No sims met the include criteria
+                return -np.inf
         else:
             assert self.include_fn is None, 'The include_fn argument is only valid for MultiSim objects'
             actual = self.extract_fn(sim) # Extract
@@ -123,8 +130,26 @@ class CalibComponent(sc.prettyobj):
             actuals = [actual]
 
         self.actual = pd.concat(actuals).reset_index().set_index('rand_seed')
-        self.nll = self.compute_nll(self.expected, self.actual, **kwargs) # Negative log likelihood
-        return self.weight * np.sum(self.nll)
+
+        if self.n_boot is None or self.n_boot == 1 or self.boot_size == 1:
+            self.nll = self.compute_nll(self.expected, self.actual, **kwargs) # Negative log likelihood
+            return self.weight * np.sum(self.nll)
+
+        # Bootstrapping
+        seeds = self.actual.index.unique()
+        nlls = np.zeros(self.n_boot)
+        for bi in range(self.n_boot):
+            use_seeds = np.random.choice(seeds, self.boot_size, replace=True)
+            actual = self.actual.loc[use_seeds]
+            timecols = [c for c in actual.columns if isinstance(actual[c].iloc[0], dt.datetime)] # Not very robust
+            a_boot = actual.groupby(timecols).sum() # Sum over seeds
+            a_boot['rand_seed'] = bi # Fake the seed
+            a_boot = a_boot.reset_index().set_index('rand_seed') # Make it look like self.actual
+            nll = self.compute_nll(self.expected, a_boot, **kwargs)
+            nlls[bi] = np.sum(nll)
+        self.nll = np.mean(nlls) # Mean of bootstrapped nlls
+
+        return self.weight * self.nll
 
     def __call__(self, sim, **kwargs):
         return self.eval(sim, **kwargs)
