@@ -172,9 +172,12 @@ class BetaBinomial(CalibComponent):
         """
 
         logLs = []
-        e_n, e_x = expected['n'], expected['x']
-        for seed, rep in actual.groupby('rand_seed'):
-            a_n, a_x = rep['n'], rep['x']
+
+        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
+        for seed, rep in combined.groupby('rand_seed'):
+            e_n, e_x = rep['n_e'].values, rep['x_e'].values
+            a_n, a_x = rep['n_a'].values, rep['x_a'].values
+
             logL = sps.betabinom.logpmf(k=e_x, n=e_n, a=a_x+1, b=a_n-a_x+1)
             logLs.append(logL)
 
@@ -374,12 +377,15 @@ class Normal(CalibComponent):
         sigma2 = self.sigma2
         compute_var = sigma2 is None
 
-        for seed, rep in actual.groupby('rand_seed'):
-            a_x = rep.set_index('t')['x']
+        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
+        for seed, rep in combined.groupby('rand_seed'):
+            e_x = rep['x_e'].values
+            a_x = rep['x_a'].values
+
             if compute_var:
                 sigma2 = self.compute_var(expected['x'], a_x)
 
-            logL = sps.norm.logpdf(x=expected['x'], loc=a_x, scale=np.sqrt(sigma2))
+            logL = sps.norm.logpdf(x=e_x, loc=a_x, scale=np.sqrt(sigma2))
             logLs.append(logL)
 
         nlls = -np.array(logLs)
