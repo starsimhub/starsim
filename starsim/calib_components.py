@@ -241,7 +241,7 @@ class DirichletMultinomial(CalibComponent):
             [['t', 'calibrated', 'rand_seed']+x_vars] \
             .melt(id_vars=['t', 'calibrated', 'rand_seed'], var_name='var', value_name='x')
         g = sns.FacetGrid(data=actual, col='t', row='var', hue='calibrated', sharex=False, height=2, aspect=1.7, **kwargs)
-        g.map_dataframe(self.plot_facet)
+        g.map_dataframe(self.plot_facet, full_actual=actual)
         g.set_titles(row_template='{row_name}')
         for (row_val, col_val), ax in g.axes_dict.items():
             if row_val == g.row_names[0] and isinstance(col_val, dt.datetime):
@@ -254,10 +254,12 @@ class DirichletMultinomial(CalibComponent):
     def plot_facet(self, data, color, **kwargs):
         # It's challenging to plot the Dirichlet-multinomial likelihood, so we use Beta binomial as a stand-in
         t = data.iloc[0]['t']
-        calibrated = data.iloc[0]['calibrated']
         var = data.iloc[0]['var']
+        cal = data.iloc[0]['calibrated']
+
         expected = self.expected.loc[t]
-        actual = self.actual.reset_index().set_index(['t', 'calibrated']).loc[[(t, calibrated)]]
+        actual = kwargs.get('full_actual', self.actual)
+        actual = actual[(actual['t'] == t) & (actual['calibrated'] == cal)]
 
         x_vars = [xkey for xkey in expected.columns if xkey.startswith('x')]
 
@@ -265,14 +267,15 @@ class DirichletMultinomial(CalibComponent):
         e_n = expected[x_vars].sum(axis=1)
 
         kk = np.arange(int(e_x/2), int(2*e_x))
-        for idx, row in actual.iterrows(): # Over rand seeds
-            a_x = row[var]
-            a_n = row[x_vars].sum()
+        for seed, row in actual.groupby('rand_seed'):
+            a = row.set_index('var')['x']
+            a_x = a[var]
+            a_n = a[x_vars].sum()
             alpha = a_x + 1
             beta = a_n - a_x + 1
             q = sps.betabinom(n=e_n, a=alpha, b=beta)
             yy = q.pmf(kk)
-            plt.step(kk, yy, color=color, label=f"{row['rand_seed']}")
+            plt.step(kk, yy, color=color, label=f"{seed}")
             yy = q.pmf(e_x)
             darker = [0.8*c for c in color]
             plt.plot(e_x, yy, 'x', ms=10, color=darker)
