@@ -213,8 +213,13 @@ class Calibration(sc.prettyobj):
         if not self.run_args.keep_db:
             self.remove_db()
         if self.verbose: print(self.run_args.storage)
-        output = op.create_study(storage=self.run_args.storage, study_name=self.run_args.study_name, direction='minimize')
-        return output
+        try:
+            study = op.create_study(storage=self.run_args.storage, study_name=self.run_args.study_name, direction='minimize')
+        except op.exceptions.DuplicatedStudyError:
+            ss.warn(f'Study named {self.run_args.study_name} already exists in storage {self.run_args.storage}, loading...')
+            study = op.create_study(storage=self.run_args.storage, study_name=self.run_args.study_name, direction='minimize', load_if_exists=True)
+            self.best_pars = sc.objdict(study.best_params)
+        return study
 
     def calibrate(self, calib_pars=None, load=False, tidyup=True, **kwargs):
         """

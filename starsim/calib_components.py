@@ -164,8 +164,13 @@ class CalibComponent(sc.prettyobj):
         if 'calibrated' not in actual.columns:
             actual['calibrated'] = 'Calibration'
 
-        g = sns.FacetGrid(data=actual.reset_index(), col='t', row='calibrated', sharex=False, margin_titles=True, height=3, aspect=1.5, **kwargs)
-        g.map_dataframe(self.plot_facet)
+        g = sns.FacetGrid(data=actual.reset_index(), col='t', row='calibrated', sharex=False, margin_titles=True, height=3, aspect=1.5)
+
+        bootstrap = kwargs.get('bootstrap', False)
+        if bootstrap:
+            g.map_dataframe(self.plot_facet_bootstrap)
+        else:
+            g.map_dataframe(self.plot_facet)
         g.set_titles(row_template='{row_name}')
         for (row_val, col_val), ax in g.axes_dict.items():
             if row_val == g.row_names[0] and isinstance(col_val, dt.datetime):
@@ -213,7 +218,8 @@ class BetaBinomial(CalibComponent):
         t = data.iloc[0]['t']
         expected = self.expected.loc[t]
         e_n, e_x = expected['n'], expected['x']
-        kk = np.arange(int(e_x/2), int(2*e_x))
+        #kk = np.arange(int(e_x/2), int(2*e_x))
+        kk = np.arange(0, int(2*e_x))
         for idx, row in data.iterrows():
             alpha = row['x'] + 1
             beta = row['n'] - row['x'] + 1
@@ -222,6 +228,28 @@ class BetaBinomial(CalibComponent):
             plt.step(kk, yy, label=f"{row['rand_seed']}")
             yy = q.pmf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
+        plt.axvline(e_x, color='k', linestyle='--')
+        return
+
+    def plot_facet_bootstrap(self, data, color, **kwargs):
+        t = data.iloc[0]['t']
+        expected = self.expected.loc[t]
+        e_n, e_x = expected['n'], expected['x']
+
+        n_boot = kwargs.get('n_boot', 1000)
+        boot_size = kwargs.get('boot_size', 60)
+        seeds = data['rand_seed'].unique()
+        means = np.zeros(n_boot)
+        for bi in np.arange(n_boot):
+            use_seeds = np.random.choice(seeds, boot_size, replace=True)
+            row = data.set_index('rand_seed').loc[use_seeds].groupby('t').sum()
+
+            alpha = row['x'] + 1
+            beta = row['n'] - row['x'] + 1
+            q = sps.betabinom(n=e_n, a=alpha, b=beta)
+            means[bi] = q.mean()
+
+        sns.kdeplot(means)
         plt.axvline(e_x, color='k', linestyle='--')
         return
 
@@ -294,7 +322,8 @@ class DirichletMultinomial(CalibComponent):
         e_x = expected[var].values[0]
         e_n = expected[x_vars].sum(axis=1)
 
-        kk = np.arange(int(e_x/2), int(2*e_x))
+        #kk = np.arange(int(e_x/2), int(2*e_x))
+        kk = np.arange(0, int(2*e_x))
         for seed, row in actual.groupby('rand_seed'):
             a = row.set_index('var')['x']
             a_x = a[var]
@@ -308,6 +337,9 @@ class DirichletMultinomial(CalibComponent):
             darker = [0.8*c for c in color]
             plt.plot(e_x, yy, 'x', ms=10, color=darker)
         plt.axvline(e_x, color='k', linestyle='--')
+        return
+
+    def plot_facet_bootstrap(self, data, color, **kwargs):
         return
 
 class GammaPoisson(CalibComponent):
@@ -356,7 +388,8 @@ class GammaPoisson(CalibComponent):
         t = data.iloc[0]['t']
         expected = self.expected.loc[t]
         e_n, e_x = expected['n'].values[0], expected['x'].values[0]
-        kk = np.arange(int(e_x/2), int(2*e_x))
+        #kk = np.arange(int(e_x/2), int(2*e_x))
+        kk = np.arange(0, int(2*e_x))
         nll = 0
         for idx, row in data.iterrows():
             a_n, a_x = row['n'], row['x']
@@ -369,6 +402,29 @@ class GammaPoisson(CalibComponent):
             yy = q.pmf(e_x)
             nll += -q.logpmf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
+        plt.axvline(e_x, color='k', linestyle='--')
+        return
+
+    def plot_facet_bootstrap(self, data, color, **kwargs):
+        t = data.iloc[0]['t']
+        expected = self.expected.loc[t]
+        e_n, e_x = expected['n'].values[0], expected['x'].values[0]
+
+        n_boot = kwargs.get('n_boot', 1000)
+        boot_size = kwargs.get('boot_size', 60)
+        seeds = data['rand_seed'].unique()
+        means = np.zeros(n_boot)
+        for bi in np.arange(n_boot):
+            use_seeds = np.random.choice(seeds, boot_size, replace=True)
+            row = data.set_index('rand_seed').loc[use_seeds].groupby(['t', 't1']).sum()
+
+            a_n, a_x = row['n'], row['x']
+            beta = (a_n+1)
+            T = e_n
+            q = sps.nbinom(n=1+a_x, p=beta/(beta+T))
+            means[bi] = q.mean()
+
+        sns.kdeplot(means)
         plt.axvline(e_x, color='k', linestyle='--')
         return
 
@@ -448,5 +504,33 @@ class Normal(CalibComponent):
             yy = q.pdf(e_x)
             nll += -q.logpdf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
+        plt.axvline(e_x, color='k', linestyle='--')
+        return
+
+    def plot_facet_bootstrap(self, data, color, **kwargs):
+        t = data.iloc[0]['t']
+        expected = self.expected.loc[t]
+        e_x = expected['x']
+
+        n_boot = kwargs.get('n_boot', 1000)
+        boot_size = kwargs.get('boot_size', 60)
+        seeds = data['rand_seed'].unique()
+        means = np.zeros(n_boot)
+        for bi in np.arange(n_boot):
+            use_seeds = np.random.choice(seeds, boot_size, replace=True)
+            row = data.set_index('rand_seed').loc[use_seeds].groupby('t').sum()
+
+            a_x = row['x']
+            sigma2 = self.sigma2 or self.compute_var(e_x, a_x)
+            if isinstance(sigma2, (list, np.ndarray)):
+                assert len(sigma2) == len(self.expected), 'Length of sigma2 must match the number of timepoints'
+                # User provided a vector of variances
+                ti = self.expected.index.get_loc(t)
+                sigma2 = sigma2[ti]
+
+            q = sps.norm(loc=a_x, scale=np.sqrt(sigma2))
+            means[bi] = q.mean()
+
+        sns.kdeplot(means)
         plt.axvline(e_x, color='k', linestyle='--')
         return
