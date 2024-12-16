@@ -156,7 +156,7 @@ class Infection(Disease):
         super().__init__(*args, **kwargs)
         self.define_states(
             ss.State('susceptible', default=True, label='Susceptible'),
-            ss.State('infected', label='Infectious'),
+            ss.State('infected', label='Infected'),
             ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
             ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
             ss.FloatArr('ti_infected', label='Time of infection' ),
