@@ -462,10 +462,15 @@ class Sim(ss.Base):
             raise RuntimeError(errormsg)
         return
 
-    def to_df(self, sep='_'):
-        """ Export results as a Pandas dataframe """
+    def to_df(self, sep='_', **kwargs):
+        """
+        Export results as a Pandas dataframe
+        Args:
+            sep (str): separator for the keys
+            kwargs: passed to results.to_df()
+        """
         self.check_results_ready('Please run the sim before exporting the results')
-        df = self.results.to_df(sep=sep, descend=True)
+        df = self.results.to_df(sep=sep, descend=True, **kwargs)
         return df
 
     def save(self, filename=None, shrink=None, **kwargs):
