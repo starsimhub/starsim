@@ -253,6 +253,15 @@ class BetaBinomial(CalibComponent):
         return
 
 class Binomial(CalibComponent):
+
+    @staticmethod
+    def get_p(df, x_col='x', n_col='n'):
+        if 'p' in df:
+            p = df['p'].values
+        else:
+            p = (df[x_col]+1) / (df[n_col]+2)
+        return p
+
     def compute_nll(self, expected, actual, **kwargs):
         """
         Binomial log likelihood component.
@@ -263,10 +272,17 @@ class Binomial(CalibComponent):
 
         logLs = []
 
-        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'])
+        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
         for seed, rep in combined.groupby('rand_seed'):
-            e_n, e_x = rep['n'].values, rep['x'].values
-            p = rep['p'].values
+            if 'p' in rep:
+                # p specified, no collision
+                e_n, e_x = rep['n'].values, rep['x'].values 
+                p = self.get_p(rep)
+            else:
+                assert 'n_e' in rep and 'x_e' in rep, 'Expected columns n_e and x_e not found'
+                # Collision in merge, get _e and _a values
+                e_n, e_x = rep['n_e'].values, rep['x_e'].values 
+                p = self.get_p(rep, 'x_a', 'n_a')
 
             logL = sps.binom.logpmf(k=e_x, n=e_n, p=p)
             logLs.append(logL)
@@ -281,7 +297,7 @@ class Binomial(CalibComponent):
         #kk = np.arange(int(e_x/2), int(2*e_x))
         kk = np.arange(0, int(2*e_x))
         for idx, row in data.iterrows():
-            p = row['p']
+            p = self.get_p(row)
             q = sps.binom(n=e_n, p=p)
             yy = q.pmf(kk)
             plt.step(kk, yy, label=f"{row['rand_seed']}")
@@ -301,9 +317,14 @@ class Binomial(CalibComponent):
         means = np.zeros(n_boot)
         for bi in np.arange(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
-            row = data.set_index('rand_seed').loc[use_seeds].groupby('t').mean(numeric_only=True) # Mean over seeds for p
+            if 'p' in data:
+                # Mean over seeds for p
+                row = data.set_index('rand_seed').loc[use_seeds].groupby('t').mean(numeric_only=True)
+            else:
+                # Sum over seeds for x and n
+                row = data.set_index('rand_seed').loc[use_seeds].groupby('t').sum()
 
-            p = row['p']
+            p = self.get_p(row)
             q = sps.binom(n=e_n, p=p)
             means[bi] = q.mean()
 
