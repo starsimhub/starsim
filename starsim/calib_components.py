@@ -7,7 +7,7 @@ import sciris as sc
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-__all__ = ['CalibComponent', 'BetaBinomial', 'DirichletMultinomial', 'GammaPoisson', 'Normal']
+__all__ = ['CalibComponent', 'BetaBinomial', 'Binomial', 'DirichletMultinomial', 'GammaPoisson', 'Normal']
 
 class CalibComponent(sc.prettyobj):
     """
@@ -28,17 +28,15 @@ class CalibComponent(sc.prettyobj):
         weight (float): The weight applied to the log likelihood of this component. The total log likelihood is the sum of the log likelihoods of all components, each multiplied by its weight.
         include_fn (callable): A function accepting a single simulation and returning a boolean to determine if the simulation should be included in the current component. If None, all simulations are included.
         n_boot (int): The number of bootstrap samples to use when calculating the confidence interval. If None, will compute sims independently and sum negative log likelihoods.
-        boot_size (int): Number of simulations to include in each bootstrap sample. If n_boot is None, this argument is ignored. Default is 1, which does not do bootstrapping.
         kwargs: Additional arguments to pass to the likelihood function
     """
-    def __init__(self, name, expected, extract_fn, conform, weight=1, include_fn=None, n_boot=None, boot_size=1):
+    def __init__(self, name, expected, extract_fn, conform, weight=1, include_fn=None, n_boot=None):
         self.name = name
         self.expected = expected
         self.extract_fn = extract_fn
         self.weight = weight
         self.include_fn = include_fn
         self.n_boot = n_boot
-        self.boot_size = boot_size
 
         if isinstance(conform, str):
             if conform == 'incident':
@@ -130,16 +128,17 @@ class CalibComponent(sc.prettyobj):
             actuals = [actual]
 
         self.actual = pd.concat(actuals).reset_index().set_index('rand_seed')
+        seeds = self.actual.index.unique()
 
-        if self.n_boot is None or self.n_boot == 1 or self.boot_size == 1:
+        if self.n_boot is None or self.n_boot == 1 or len(seeds) == 1:
             self.nll = self.compute_nll(self.expected, self.actual, **kwargs) # Negative log likelihood
             return self.weight * np.sum(self.nll)
 
-        # Bootstrapping
-        seeds = self.actual.index.unique()
+        # Bootstrapped aggregation
+        boot_size = len(seeds)
         nlls = np.zeros(self.n_boot)
         for bi in range(self.n_boot):
-            use_seeds = np.random.choice(seeds, self.boot_size, replace=True)
+            use_seeds = np.random.choice(seeds, boot_size, replace=True)
             actual = self.actual.loc[use_seeds]
             timecols = [c for c in actual.columns if isinstance(actual[c].iloc[0], dt.datetime)] # Not very robust
             a_boot = actual.groupby(timecols).sum() # Sum over seeds
@@ -157,7 +156,7 @@ class CalibComponent(sc.prettyobj):
     def __repr__(self):
         return f'Calibration component with name {self.name}'
 
-    def plot(self, actual=None, **kwargs):
+    def plot(self, actual=None, bootstrap=False, **kwargs):
         if actual is None:
             actual = self.actual
 
@@ -166,7 +165,6 @@ class CalibComponent(sc.prettyobj):
 
         g = sns.FacetGrid(data=actual.reset_index(), col='t', row='calibrated', sharex=False, margin_titles=True, height=3, aspect=1.5)
 
-        bootstrap = kwargs.get('bootstrap', False)
         if bootstrap:
             g.map_dataframe(self.plot_facet_bootstrap)
         else:
@@ -237,8 +235,8 @@ class BetaBinomial(CalibComponent):
         e_n, e_x = expected['n'], expected['x']
 
         n_boot = kwargs.get('n_boot', 1000)
-        boot_size = kwargs.get('boot_size', 60)
         seeds = data['rand_seed'].unique()
+        boot_size = len(seeds)
         means = np.zeros(n_boot)
         for bi in np.arange(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
@@ -249,8 +247,69 @@ class BetaBinomial(CalibComponent):
             q = sps.betabinom(n=e_n, a=alpha, b=beta)
             means[bi] = q.mean()
 
-        sns.kdeplot(means)
+        ax = sns.kdeplot(means)
+        sns.rugplot(means, ax=ax)
+        ax.axvline(e_x, color='k', linestyle='--')
+        return
+
+class Binomial(CalibComponent):
+    def compute_nll(self, expected, actual, **kwargs):
+        """
+        Binomial log likelihood component.
+        We return the log of p(x|n, p)
+
+        kwargs will contain any eval_kwargs that were specified when instantiating the Calibration
+        """
+
+        logLs = []
+
+        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'])
+        for seed, rep in combined.groupby('rand_seed'):
+            e_n, e_x = rep['n'].values, rep['x'].values
+            p = rep['p'].values
+
+            logL = sps.binom.logpmf(k=e_x, n=e_n, p=p)
+            logLs.append(logL)
+
+        nlls = -np.array(logLs)
+        return nlls
+
+    def plot_facet(self, data, color, **kwargs):
+        t = data.iloc[0]['t']
+        expected = self.expected.loc[t]
+        e_n, e_x = expected['n'], expected['x']
+        #kk = np.arange(int(e_x/2), int(2*e_x))
+        kk = np.arange(0, int(2*e_x))
+        for idx, row in data.iterrows():
+            p = row['p']
+            q = sps.binom(n=e_n, p=p)
+            yy = q.pmf(kk)
+            plt.step(kk, yy, label=f"{row['rand_seed']}")
+            yy = q.pmf(e_x)
+            plt.plot(e_x, yy, 'x', ms=10, color='k')
         plt.axvline(e_x, color='k', linestyle='--')
+        return
+
+    def plot_facet_bootstrap(self, data, color, **kwargs):
+        t = data.iloc[0]['t']
+        expected = self.expected.loc[t]
+        e_n, e_x = expected['n'], expected['x']
+
+        n_boot = kwargs.get('n_boot', 1000)
+        seeds = data['rand_seed'].unique()
+        boot_size = len(seeds)
+        means = np.zeros(n_boot)
+        for bi in np.arange(n_boot):
+            use_seeds = np.random.choice(seeds, boot_size, replace=True)
+            row = data.set_index('rand_seed').loc[use_seeds].groupby('t').mean(numeric_only=True) # Mean over seeds for p
+
+            p = row['p']
+            q = sps.binom(n=e_n, p=p)
+            means[bi] = q.mean()
+
+        ax = sns.kdeplot(means)
+        sns.rugplot(means, ax=ax)
+        ax.axvline(e_x, color='k', linestyle='--')
         return
 
 class DirichletMultinomial(CalibComponent):
@@ -411,8 +470,8 @@ class GammaPoisson(CalibComponent):
         e_n, e_x = expected['n'].values[0], expected['x'].values[0]
 
         n_boot = kwargs.get('n_boot', 1000)
-        boot_size = kwargs.get('boot_size', 60)
         seeds = data['rand_seed'].unique()
+        boot_size = len(seeds)
         means = np.zeros(n_boot)
         for bi in np.arange(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
@@ -424,7 +483,8 @@ class GammaPoisson(CalibComponent):
             q = sps.nbinom(n=1+a_x, p=beta/(beta+T))
             means[bi] = q.mean()
 
-        sns.kdeplot(means)
+        ax = sns.kdeplot(means)
+        sns.rugplot(means, ax=ax)
         plt.axvline(e_x, color='k', linestyle='--')
         return
 
@@ -513,8 +573,8 @@ class Normal(CalibComponent):
         e_x = expected['x']
 
         n_boot = kwargs.get('n_boot', 1000)
-        boot_size = kwargs.get('boot_size', 60)
         seeds = data['rand_seed'].unique()
+        boot_size = len(seeds)
         means = np.zeros(n_boot)
         for bi in np.arange(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
@@ -531,6 +591,7 @@ class Normal(CalibComponent):
             q = sps.norm(loc=a_x, scale=np.sqrt(sigma2))
             means[bi] = q.mean()
 
-        sns.kdeplot(means)
+        ax = sns.kdeplot(means)
+        sns.rugplot(means, ax=ax)
         plt.axvline(e_x, color='k', linestyle='--')
         return
