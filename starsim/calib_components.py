@@ -454,7 +454,6 @@ class GammaPoisson(CalibComponent):
         for seed, rep in combined.groupby('rand_seed'):
             e_n, e_x = rep['n_e'].values, rep['x_e'].values
             a_n, a_x = rep['n_a'].values, rep['x_a'].values
-            beta = np.zeros_like(a_n, dtype=float) # Avoid division by zero
             T = e_n
             beta = 1 + a_n
             logL = sps.nbinom.logpmf(k=e_x, n=1+a_x, p=beta/(beta+T))
