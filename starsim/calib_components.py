@@ -7,7 +7,71 @@ import sciris as sc
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-__all__ = ['CalibComponent', 'BetaBinomial', 'DirichletMultinomial', 'GammaPoisson', 'Normal']
+__all__ = ['linear_interp', 'linear_accum', 'step_containing'] # Conformers
+__all__ += ['CalibComponent'] # Calib component base class
+__all__ += ['BetaBinomial', 'DirichletMultinomial', 'GammaPoisson', 'Normal'] # Specific calib components
+
+def linear_interp(expected, actual):
+    """
+    Simply interpolate, use for prevalent (stock) data like prevalence
+
+    Args:
+        expected (pd.DataFrame): The expected data from field observation, must have 't' in the index and columns corresponding to specific needs of the selected component.
+        actual (pd.DataFrame): The actual data from the simulation, must have 't' in the index and columns corresponding to specific needs of the selected component.
+    """
+    t = expected.index
+    conformed = pd.DataFrame(index=expected.index)
+    for k in actual:
+        conformed[k] = np.interp(x=t, xp=actual.index, fp=actual[k])
+
+    return conformed
+
+def step_containing(expected, actual):
+    """
+    Find the step containing the the timepoint.  Use for prevalent data like
+    prevalence where you want to match a specific time point rather than
+    interpolate.
+
+    Args:
+        expected (pd.DataFrame): The expected data from field observation, must have 't' in the index and columns corresponding to specific needs of the selected component.
+        actual (pd.DataFrame): The actual data from the simulation, must have 't' in the index and columns corresponding to specific needs of the selected component.
+    """
+    t = expected.index
+    inds = np.searchsorted(actual.index, t, side='left')
+    conformed = pd.DataFrame(index=expected.index)
+    for k in actual:
+        conformed[k] = actual[k].values[inds] # .values because indices differ
+
+    return conformed
+
+def linear_accum(expected, actual):
+    """
+    Interpolate in the cumulative sum, then difference. Use for incident data
+    (flows) like incidence or new_deaths. The accumulation is done between 't'
+    and 't1', both of which must be present in the index of expected and actual
+    dataframes.
+
+    Args:
+        expected (pd.DataFrame): The expected data from field observation, must have 't' and 't1' in the index and columns corresponding to specific needs of the selected component.
+        actual (pd.DataFrame): The actual data from the simulation, must have 't' and 't1' in the index and columns corresponding to specific needs of the selected component.
+    """
+    t0 = np.array([sc.datetoyear(t) for t in expected.index.get_level_values('t').date])
+    t1 = np.array([sc.datetoyear(t) for t in expected.index.get_level_values('t1').date])
+    sim_t = np.array([sc.datetoyear(t) for t in actual.index.date if isinstance(t, dt.date)])
+
+    fp = actual.cumsum()
+    ret = {}
+    for c in fp.columns:
+        vals = fp[c].values.flatten()
+        v0 = np.interp(x=t0, xp=sim_t, fp=vals) # Cum value at t0
+        v1 = np.interp(x=t1, xp=sim_t, fp=vals) # Cum value at t1
+
+        # Difference between end of step t1 and end of step t
+        ret[c] = v1 - v0
+
+    df = pd.DataFrame(ret, index=expected.index)
+    return df
+
 
 class CalibComponent(sc.prettyobj):
     """
@@ -21,10 +85,29 @@ class CalibComponent(sc.prettyobj):
             extract_fn is None, the code will attempt to use the name, like
             "hiv.prevalence" to automatically extract data from the simulation.
         expected (df) : pandas DataFrame containing calibration data. The index should be the time 't' in either floating point years or datetime.
-        extract_fn (callable) : A callable function used to extract data from a sim object, which is passed as the lone argument - should look like expected.
-        conform (str/callable): To handle misaligned timepoints between observed data and simulation output, it's important to know if the data are incident (like new cases) or prevalent (like the number infected).
-            If 'prevalent', simulation outputs will be interpolated to observed timepoints using 't'.
-            If 'incident', outputs will be computed as differences between cumulative values at 't' and 't1'.
+        extract_fn (callable) : a function to extract predicted/actual data in the same  
+            format and with the same columns as `expected`.
+        conform (str | callable): specify how to handle timepoints that don't
+            align exactly between the expected and the actual/predicted/simulated
+            data so they "conform" to a common time grid. Whether the data represents
+            a 'prevalent' or an 'incident' quantity impacts how this alignment is performed.
+
+            If 'prevalent', it means data in expected & actual dataframes represent
+            the current state of the system, stocks like the number of currently infected
+            individuals. In this case, the data in 'simulated' or 'actual' will be interpolated
+            to match the timepoints in 'expected', allowing for pointwise comparisons
+            between the expected and actual data. 
+
+            If 'incident', it means data in expected & actual dataframes represent the accumulation
+            of system states over a period of time, flows like the incidence of new infections. In
+            this case, teh data in 'simulated' or 'actual' will be interpolated at the start ('t')
+            and the end ('t1') of the period of interest in 'expected'. The difference between these
+            two interpolated values will be used for comparison.
+
+            Finally, 'step_containing' is a special case for prevalent data where the actual data is
+            interpolated using a "zero order hold" method. This means that the value of the actual (simulated) data
+            is matched to the timepoint in the expected data that contains the timepoint of the actual data.
+
         weight (float): The weight applied to the log likelihood of this component. The total log likelihood is the sum of the log likelihoods of all components, each multiplied by its weight.
         include_fn (callable): A function accepting a single simulation and returning a boolean to determine if the simulation should be included in the current component. If None, all simulations are included.
         kwargs: Additional arguments to pass to the likelihood function
@@ -36,73 +119,26 @@ class CalibComponent(sc.prettyobj):
         self.weight = weight
         self.include_fn = include_fn
 
-        if isinstance(conform, str):
-            if conform == 'incident':
-                self.conform = self.linear_accum
-            elif conform == 'prevalent':
-                self.conform = self.linear_interp
-            elif conform == 'step_containing':
-                self.conform = self.step_containing
-            else:
-                errormsg = f'The conform argument must be "prevalent", "incident", or "step_containing" not {conform}.'
-                raise ValueError(errormsg)
-        else:
-            if not callable(conform):
-                errormsg = f'The conform argument must be a string or a callable function, not {type(conform)}.'
-                raise TypeError(errormsg)
-            self.conform = conform
+        self.avail_conforms = {
+            'incident':  linear_accum,  # or self.linear_accum if left as staticmethod  
+            'prevalent': linear_interp,
+            'step_containing': step_containing,
+        }
+        self.conform = self._validate_conform(conform)  
+        return 
 
-        return
-
-    @staticmethod
-    def linear_interp(expected, actual):
-        """
-        Simply interpolate
-        Use for prevalent data like prevalence
-        """
-        t = expected.index
-        conformed = pd.DataFrame(index=expected.index)
-        for k in actual:
-            conformed[k] = np.interp(x=t, xp=actual.index, fp=actual[k])
-
-        return conformed
-
-    @staticmethod
-    def step_containing(expected, actual):
-        """
-        Find the step containing the the timepoint
-        Use for prevalent data like prevalence
-        """
-        t = expected.index
-        inds = np.searchsorted(actual.index, t, side='left')
-        conformed = pd.DataFrame(index=expected.index)
-        for k in actual:
-            conformed[k] = actual[k].values[inds] # .values because indices differ
-
-        return conformed
-
-    @staticmethod
-    def linear_accum(expected, actual):
-        """
-        Interpolate in the accumulation, then difference.
-        Use for incident data like incidence or new_deaths
-        """
-        t0 = np.array([sc.datetoyear(t) for t in expected.index.get_level_values('t').date])
-        t1 = np.array([sc.datetoyear(t) for t in expected.index.get_level_values('t1').date])
-        sim_t = np.array([sc.datetoyear(t) for t in actual.index.date if isinstance(t, dt.date)])
-
-        fp = actual.cumsum()
-        ret = {}
-        for c in fp.columns:
-            vals = fp[c].values.flatten()
-            v0 = np.interp(x=t0, xp=sim_t, fp=vals) # Cum value at t0
-            v1 = np.interp(x=t1, xp=sim_t, fp=vals) # Cum value at t1
-
-            # Difference between end of step t1 and end of step t
-            ret[c] = v1 - v0
-
-        df = pd.DataFrame(ret, index=expected.index)
-        return df
+    def _validate_conform(self, conform):  
+        ''' Validate the conform argument '''
+        if not isinstance(conform, str) and not callable(conform):  
+            raise Exception(f"The conform argument must be a string or a callable function, not {type(conform)}.")  
+        elif isinstance(conform, str):  
+            conform_ = self.avail_conforms.get(conform)  
+            if conform_ is None:  
+                avail = self.avail_conforms.keys()  
+                raise ValueError(f"The conform argument must be one of {avail}, not {conform}.")  
+        else:  
+            conform_ = conform  
+        return conform_  
 
     def eval(self, sim, **kwargs):
         """ Compute and return the negative log likelihood """
