@@ -55,9 +55,9 @@ def linear_accum(expected, actual):
         expected (pd.DataFrame): The expected data from field observation, must have 't' and 't1' in the index and columns corresponding to specific needs of the selected component.
         actual (pd.DataFrame): The actual data from the simulation, must have 't' and 't1' in the index and columns corresponding to specific needs of the selected component.
     """
-    t0 = np.array([sc.datetoyear(t) for t in expected.index.get_level_values('t').date])
-    t1 = np.array([sc.datetoyear(t) for t in expected.index.get_level_values('t1').date])
-    sim_t = np.array([sc.datetoyear(t) for t in actual.index.date if isinstance(t, dt.date)])
+    t0 = expected.index.get_level_values('t')
+    t1 = expected.index.get_level_values('t1')
+    sim_t = actual.index
 
     fp = actual.cumsum()
     ret = {}
