@@ -53,7 +53,7 @@ class Intervention(ss.Module):
         Return an array of indices of agents eligible for screening at time t
         """
         if self.eligibility is not None:
-            is_eligible = self.eligibility(self)
+            is_eligible = self.eligibility(self.sim)
             if is_eligible is not None and len(is_eligible): # Only worry if non-None/nonzero length
                 if isinstance(is_eligible, ss.BoolArr):
                     is_eligible = is_eligible.uids
