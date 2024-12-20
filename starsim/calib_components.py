@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 __all__ = ['linear_interp', 'linear_accum', 'step_containing'] # Conformers
 __all__ += ['CalibComponent'] # Calib component base class
-__all__ += ['BetaBinomial', 'DirichletMultinomial', 'GammaPoisson', 'Normal'] # Specific calib components
+__all__ += ['BetaBinomial', 'Binomial', 'DirichletMultinomial', 'GammaPoisson', 'Normal'] # Specific calib components
 
 def linear_interp(expected, actual):
     """
@@ -110,14 +110,16 @@ class CalibComponent(sc.prettyobj):
 
         weight (float): The weight applied to the log likelihood of this component. The total log likelihood is the sum of the log likelihoods of all components, each multiplied by its weight.
         include_fn (callable): A function accepting a single simulation and returning a boolean to determine if the simulation should be included in the current component. If None, all simulations are included.
+        n_boot (int): The number of bootstrap samples to use when calculating the confidence interval. If None, will compute sims independently and sum negative log likelihoods.
         kwargs: Additional arguments to pass to the likelihood function
     """
-    def __init__(self, name, expected, extract_fn, conform, weight=1, include_fn=None):
+    def __init__(self, name, expected, extract_fn, conform, weight=1, include_fn=None, n_boot=None):
         self.name = name
         self.expected = expected
         self.extract_fn = extract_fn
         self.weight = weight
         self.include_fn = include_fn
+        self.n_boot = n_boot
 
         self.avail_conforms = {
             'incident':  linear_accum,  # or self.linear_accum if left as staticmethod  
@@ -151,6 +153,9 @@ class CalibComponent(sc.prettyobj):
                 actual = self.conform(self.expected, actual) # Conform
                 actual['rand_seed'] = s.pars.rand_seed
                 actuals.append(actual)
+
+            if len(actuals) == 0: # No sims met the include criteria
+                return -np.inf
         else:
             assert self.include_fn is None, 'The include_fn argument is only valid for MultiSim objects'
             actual = self.extract_fn(sim) # Extract
@@ -159,8 +164,27 @@ class CalibComponent(sc.prettyobj):
             actuals = [actual]
 
         self.actual = pd.concat(actuals).reset_index().set_index('rand_seed')
-        self.nll = self.compute_nll(self.expected, self.actual, **kwargs) # Negative log likelihood
-        return self.weight * np.sum(self.nll)
+        seeds = self.actual.index.unique()
+
+        if self.n_boot is None or self.n_boot == 1 or len(seeds) == 1:
+            self.nll = self.compute_nll(self.expected, self.actual, **kwargs) # Negative log likelihood
+            return self.weight * np.sum(self.nll)
+
+        # Bootstrapped aggregation
+        boot_size = len(seeds)
+        nlls = np.zeros(self.n_boot)
+        for bi in range(self.n_boot):
+            use_seeds = np.random.choice(seeds, boot_size, replace=True)
+            actual = self.actual.loc[use_seeds]
+            timecols = [c for c in actual.columns if isinstance(actual[c].iloc[0], dt.datetime)] # Not very robust
+            a_boot = actual.groupby(timecols).sum() # Sum over seeds
+            a_boot['rand_seed'] = bi # Fake the seed
+            a_boot = a_boot.reset_index().set_index('rand_seed') # Make it look like self.actual
+            nll = self.compute_nll(self.expected, a_boot, **kwargs)
+            nlls[bi] = np.sum(nll)
+        self.nll = np.mean(nlls) # Mean of bootstrapped nlls
+
+        return self.weight * self.nll
 
     def __call__(self, sim, **kwargs):
         return self.eval(sim, **kwargs)
@@ -168,15 +192,19 @@ class CalibComponent(sc.prettyobj):
     def __repr__(self):
         return f'Calibration component with name {self.name}'
 
-    def plot(self, actual=None, **kwargs):
+    def plot(self, actual=None, bootstrap=False, **kwargs):
         if actual is None:
             actual = self.actual
 
         if 'calibrated' not in actual.columns:
             actual['calibrated'] = 'Calibration'
 
-        g = sns.FacetGrid(data=actual.reset_index(), col='t', row='calibrated', sharex=False, margin_titles=True, height=3, aspect=1.5, **kwargs)
-        g.map_dataframe(self.plot_facet)
+        g = sns.FacetGrid(data=actual.reset_index(), col='t', row='calibrated', sharex=False, margin_titles=True, height=3, aspect=1.5)
+
+        if bootstrap:
+            g.map_dataframe(self.plot_facet_bootstrap)
+        else:
+            g.map_dataframe(self.plot_facet)
         g.set_titles(row_template='{row_name}')
         for (row_val, col_val), ax in g.axes_dict.items():
             if row_val == g.row_names[0] and isinstance(col_val, dt.datetime):
@@ -224,7 +252,8 @@ class BetaBinomial(CalibComponent):
         t = data.iloc[0]['t']
         expected = self.expected.loc[t]
         e_n, e_x = expected['n'], expected['x']
-        kk = np.arange(int(e_x/2), int(2*e_x))
+        #kk = np.arange(int(e_x/2), int(2*e_x))
+        kk = np.arange(0, int(2*e_x))
         for idx, row in data.iterrows():
             alpha = row['x'] + 1
             beta = row['n'] - row['x'] + 1
@@ -234,6 +263,110 @@ class BetaBinomial(CalibComponent):
             yy = q.pmf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
         plt.axvline(e_x, color='k', linestyle='--')
+        return
+
+    def plot_facet_bootstrap(self, data, color, **kwargs):
+        t = data.iloc[0]['t']
+        expected = self.expected.loc[t]
+        e_n, e_x = expected['n'], expected['x']
+
+        n_boot = kwargs.get('n_boot', 1000)
+        seeds = data['rand_seed'].unique()
+        boot_size = len(seeds)
+        means = np.zeros(n_boot)
+        for bi in np.arange(n_boot):
+            use_seeds = np.random.choice(seeds, boot_size, replace=True)
+            row = data.set_index('rand_seed').loc[use_seeds].groupby('t').sum()
+
+            alpha = row['x'] + 1
+            beta = row['n'] - row['x'] + 1
+            q = sps.betabinom(n=e_n, a=alpha, b=beta)
+            means[bi] = q.mean()
+
+        ax = sns.kdeplot(means)
+        sns.rugplot(means, ax=ax)
+        ax.axvline(e_x, color='k', linestyle='--')
+        return
+
+class Binomial(CalibComponent):
+
+    @staticmethod
+    def get_p(df, x_col='x', n_col='n'):
+        if 'p' in df:
+            p = df['p'].values
+        else:
+            p = (df[x_col]+1) / (df[n_col]+2)
+        return p
+
+    def compute_nll(self, expected, actual, **kwargs):
+        """
+        Binomial log likelihood component.
+        We return the log of p(x|n, p)
+
+        kwargs will contain any eval_kwargs that were specified when instantiating the Calibration
+        """
+
+        logLs = []
+
+        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
+        for seed, rep in combined.groupby('rand_seed'):
+            if 'p' in rep:
+                # p specified, no collision
+                e_n, e_x = rep['n'].values, rep['x'].values 
+                p = self.get_p(rep)
+            else:
+                assert 'n_e' in rep and 'x_e' in rep, 'Expected columns n_e and x_e not found'
+                # Collision in merge, get _e and _a values
+                e_n, e_x = rep['n_e'].values, rep['x_e'].values 
+                p = self.get_p(rep, 'x_a', 'n_a')
+
+            logL = sps.binom.logpmf(k=e_x, n=e_n, p=p)
+            logLs.append(logL)
+
+        nlls = -np.array(logLs)
+        return nlls
+
+    def plot_facet(self, data, color, **kwargs):
+        t = data.iloc[0]['t']
+        expected = self.expected.loc[t]
+        e_n, e_x = expected['n'], expected['x']
+        #kk = np.arange(int(e_x/2), int(2*e_x))
+        kk = np.arange(0, int(2*e_x))
+        for idx, row in data.iterrows():
+            p = self.get_p(row)
+            q = sps.binom(n=e_n, p=p)
+            yy = q.pmf(kk)
+            plt.step(kk, yy, label=f"{row['rand_seed']}")
+            yy = q.pmf(e_x)
+            plt.plot(e_x, yy, 'x', ms=10, color='k')
+        plt.axvline(e_x, color='k', linestyle='--')
+        return
+
+    def plot_facet_bootstrap(self, data, color, **kwargs):
+        t = data.iloc[0]['t']
+        expected = self.expected.loc[t]
+        e_n, e_x = expected['n'], expected['x']
+
+        n_boot = kwargs.get('n_boot', 1000)
+        seeds = data['rand_seed'].unique()
+        boot_size = len(seeds)
+        means = np.zeros(n_boot)
+        for bi in np.arange(n_boot):
+            use_seeds = np.random.choice(seeds, boot_size, replace=True)
+            if 'p' in data:
+                # Mean over seeds for p
+                row = data.set_index('rand_seed').loc[use_seeds].groupby('t').mean(numeric_only=True)
+            else:
+                # Sum over seeds for x and n
+                row = data.set_index('rand_seed').loc[use_seeds].groupby('t').sum()
+
+            p = self.get_p(row)
+            q = sps.binom(n=e_n, p=p)
+            means[bi] = q.mean()
+
+        ax = sns.kdeplot(means)
+        sns.rugplot(means, ax=ax)
+        ax.axvline(e_x, color='k', linestyle='--')
         return
 
 class DirichletMultinomial(CalibComponent):
@@ -305,7 +438,8 @@ class DirichletMultinomial(CalibComponent):
         e_x = expected[var].values[0]
         e_n = expected[x_vars].sum(axis=1)
 
-        kk = np.arange(int(e_x/2), int(2*e_x))
+        #kk = np.arange(int(e_x/2), int(2*e_x))
+        kk = np.arange(0, int(2*e_x))
         for seed, row in actual.groupby('rand_seed'):
             a = row.set_index('var')['x']
             a_x = a[var]
@@ -319,6 +453,9 @@ class DirichletMultinomial(CalibComponent):
             darker = [0.8*c for c in color]
             plt.plot(e_x, yy, 'x', ms=10, color=darker)
         plt.axvline(e_x, color='k', linestyle='--')
+        return
+
+    def plot_facet_bootstrap(self, data, color, **kwargs):
         return
 
 class GammaPoisson(CalibComponent):
@@ -353,7 +490,6 @@ class GammaPoisson(CalibComponent):
         for seed, rep in combined.groupby('rand_seed'):
             e_n, e_x = rep['n_e'].values, rep['x_e'].values
             a_n, a_x = rep['n_a'].values, rep['x_a'].values
-            beta = np.zeros_like(a_n, dtype=float) # Avoid division by zero
             T = e_n
             beta = 1 + a_n
             logL = sps.nbinom.logpmf(k=e_x, n=1+a_x, p=beta/(beta+T))
@@ -367,7 +503,8 @@ class GammaPoisson(CalibComponent):
         t = data.iloc[0]['t']
         expected = self.expected.loc[t]
         e_n, e_x = expected['n'].values[0], expected['x'].values[0]
-        kk = np.arange(int(e_x/2), int(2*e_x))
+        #kk = np.arange(int(e_x/2), int(2*e_x))
+        kk = np.arange(0, int(2*e_x))
         nll = 0
         for idx, row in data.iterrows():
             a_n, a_x = row['n'], row['x']
@@ -380,6 +517,30 @@ class GammaPoisson(CalibComponent):
             yy = q.pmf(e_x)
             nll += -q.logpmf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
+        plt.axvline(e_x, color='k', linestyle='--')
+        return
+
+    def plot_facet_bootstrap(self, data, color, **kwargs):
+        t = data.iloc[0]['t']
+        expected = self.expected.loc[t]
+        e_n, e_x = expected['n'].values[0], expected['x'].values[0]
+
+        n_boot = kwargs.get('n_boot', 1000)
+        seeds = data['rand_seed'].unique()
+        boot_size = len(seeds)
+        means = np.zeros(n_boot)
+        for bi in np.arange(n_boot):
+            use_seeds = np.random.choice(seeds, boot_size, replace=True)
+            row = data.set_index('rand_seed').loc[use_seeds].groupby(['t', 't1']).sum()
+
+            a_n, a_x = row['n'], row['x']
+            beta = (a_n+1)
+            T = e_n
+            q = sps.nbinom(n=1+a_x, p=beta/(beta+T))
+            means[bi] = q.mean()
+
+        ax = sns.kdeplot(means)
+        sns.rugplot(means, ax=ax)
         plt.axvline(e_x, color='k', linestyle='--')
         return
 
@@ -459,5 +620,34 @@ class Normal(CalibComponent):
             yy = q.pdf(e_x)
             nll += -q.logpdf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
+        plt.axvline(e_x, color='k', linestyle='--')
+        return
+
+    def plot_facet_bootstrap(self, data, color, **kwargs):
+        t = data.iloc[0]['t']
+        expected = self.expected.loc[t]
+        e_x = expected['x']
+
+        n_boot = kwargs.get('n_boot', 1000)
+        seeds = data['rand_seed'].unique()
+        boot_size = len(seeds)
+        means = np.zeros(n_boot)
+        for bi in np.arange(n_boot):
+            use_seeds = np.random.choice(seeds, boot_size, replace=True)
+            row = data.set_index('rand_seed').loc[use_seeds].groupby('t').sum()
+
+            a_x = row['x']
+            sigma2 = self.sigma2 or self.compute_var(e_x, a_x)
+            if isinstance(sigma2, (list, np.ndarray)):
+                assert len(sigma2) == len(self.expected), 'Length of sigma2 must match the number of timepoints'
+                # User provided a vector of variances
+                ti = self.expected.index.get_loc(t)
+                sigma2 = sigma2[ti]
+
+            q = sps.norm(loc=a_x, scale=np.sqrt(sigma2))
+            means[bi] = q.mean()
+
+        ax = sns.kdeplot(means)
+        sns.rugplot(means, ax=ax)
         plt.axvline(e_x, color='k', linestyle='--')
         return
