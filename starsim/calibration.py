@@ -56,7 +56,7 @@ class Calibration(sc.prettyobj):
         if keep_db      is None: keep_db        = False
         if storage      is None: storage        = f'sqlite:///{db_name}'
         
-        self.build_fn       = build_fn or self.translate_pars
+        self.build_fn       = build_fn
         self.build_kw       = build_kw or dict()
         self.eval_fn        = eval_fn or self._eval_fit
         self.eval_kw        = eval_kw or dict()
@@ -418,6 +418,8 @@ class Calibration(sc.prettyobj):
     def plot_optuna(self, methods=None):
         """ Plot Optuna's visualizations """
         figs = []
+
+        methods = sc.tolist(methods)
 
         if methods is None:
             methods = [

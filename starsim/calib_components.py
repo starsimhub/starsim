@@ -199,7 +199,7 @@ class CalibComponent(sc.prettyobj):
         if 'calibrated' not in actual.columns:
             actual['calibrated'] = 'Calibration'
 
-        g = sns.FacetGrid(data=actual.reset_index(), col='t', row='calibrated', sharex=False, margin_titles=True, height=3, aspect=1.5)
+        g = sns.FacetGrid(data=actual.reset_index(), col='t', row='calibrated', sharex='col', sharey=False, margin_titles=True, height=3, aspect=1.5)
 
         if bootstrap:
             g.map_dataframe(self.plot_facet_bootstrap)
@@ -634,7 +634,7 @@ class Normal(CalibComponent):
         means = np.zeros(n_boot)
         for bi in np.arange(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
-            row = data.set_index('rand_seed').loc[use_seeds].groupby('t').sum()
+            row = data.set_index('rand_seed').loc[use_seeds].groupby('t').mean(numeric_only=True)
 
             a_x = row['x']
             sigma2 = self.sigma2 or self.compute_var(e_x, a_x)
