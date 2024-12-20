@@ -346,7 +346,7 @@ class Infection(Disease):
         res = self.results
         ti = self.ti
         res.prevalence[ti] = res.n_infected[ti] / np.count_nonzero(self.sim.people.alive)
-        res.new_infections[ti] = np.count_nonzero(self.ti_infected == ti)
+        res.new_infections[ti] = np.count_nonzero(np.round(self.ti_infected) == ti)
         res.cum_infections[ti] = np.sum(res['new_infections'][:ti+1]) # TODO: can compute at end
         return
 
