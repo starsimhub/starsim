@@ -110,7 +110,7 @@ class CalibComponent(sc.prettyobj):
 
         weight (float): The weight applied to the log likelihood of this component. The total log likelihood is the sum of the log likelihoods of all components, each multiplied by its weight.
         include_fn (callable): A function accepting a single simulation and returning a boolean to determine if the simulation should be included in the current component. If None, all simulations are included.
-        n_boot (int): The number of bootstrap samples to use when calculating the confidence interval. If None, will compute sims independently and sum negative log likelihoods.
+        n_boot (int): Experimental! Bootstrap sum sim results over seeds before comparing against expected results. Not appropriate for all component types.
         kwargs: Additional arguments to pass to the likelihood function
     """
     def __init__(self, name, expected, extract_fn, conform, weight=1, include_fn=None, n_boot=None):
