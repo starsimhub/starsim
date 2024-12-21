@@ -258,7 +258,6 @@ class BetaBinomial(CalibComponent):
         t = data.iloc[0]['t']
         expected = self.expected.loc[t]
         e_n, e_x = expected['n'], expected['x']
-        #kk = np.arange(int(e_x/2), int(2*e_x))
         kk = np.arange(0, int(2*e_x))
         for idx, row in data.iterrows():
             alpha = row['x'] + 1
@@ -336,7 +335,6 @@ class Binomial(CalibComponent):
         t = data.iloc[0]['t']
         expected = self.expected.loc[t]
         e_n, e_x = expected['n'], expected['x']
-        #kk = np.arange(int(e_x/2), int(2*e_x))
         kk = np.arange(0, int(2*e_x))
         for idx, row in data.iterrows():
             p = self.get_p(row)
@@ -400,7 +398,6 @@ class DirichletMultinomial(CalibComponent):
         nlls = -np.array(logLs)
         return nlls
 
-
     def plot(self, actual=None, **kwargs):
         if actual is None:
             actual = self.actual
@@ -439,7 +436,6 @@ class DirichletMultinomial(CalibComponent):
         e_x = expected[var].values[0]
         e_n = expected[x_vars].sum(axis=1)
 
-        #kk = np.arange(int(e_x/2), int(2*e_x))
         kk = np.arange(0, int(2*e_x))
         for seed, row in actual.groupby('rand_seed'):
             a = row.set_index('var')['x']
@@ -504,7 +500,6 @@ class GammaPoisson(CalibComponent):
         t = data.iloc[0]['t']
         expected = self.expected.loc[t]
         e_n, e_x = expected['n'].values[0], expected['x'].values[0]
-        #kk = np.arange(int(e_x/2), int(2*e_x))
         kk = np.arange(0, int(2*e_x))
         nll = 0
         for idx, row in data.iterrows():
