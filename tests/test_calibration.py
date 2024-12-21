@@ -154,7 +154,8 @@ def test_onepar_custom(do_plot=True):
     calib = ss.Calibration(
         calib_pars = calib_pars,
         sim = sim,
-        build_fn = partial(build_sim, n_reps=2),
+        build_fn = build_sim,
+        build_kw = dict(n_reps=2), # Two reps per point
         reseed = True,
         eval_fn = eval, # Will call my_function(msim, eval_kwargs)
         eval_kw = dict(expected=(ss.date('2020-01-12'), 0.13)), # Will call eval(sim, eval_kw)
@@ -190,6 +191,9 @@ def test_twopar_betabin_gammapois(do_plot=True):
         weight = 0.75,
         conform = 'prevalent',
 
+        n_boot = 1000, # Testing bootstrap
+        combine_reps = 'mean',
+
         expected = pd.DataFrame({
             'n': [200, 197, 195], # Number of individuals sampled
             'x': [30, 35, 10],    # Number of individuals found to be infectious
@@ -205,6 +209,9 @@ def test_twopar_betabin_gammapois(do_plot=True):
         name = 'Incident Cases',
         weight = 1.5,
         conform = 'incident',
+
+        n_boot = 1000, # Testing bootstrap
+        combine_reps = 'sum',
 
         expected = pd.DataFrame({
             'n':  [100, 27, 54],   # Number of person-years
@@ -224,6 +231,7 @@ def test_twopar_betabin_gammapois(do_plot=True):
         calib_pars = calib_pars,
         sim = sim,
         build_fn = build_sim,
+        build_kw = dict(n_reps=3), # 3 reps per point
         reseed = True,
         components = [num_infectious, incident_cases],
         total_trials = total_trials,

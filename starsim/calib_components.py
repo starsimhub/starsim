@@ -111,15 +111,19 @@ class CalibComponent(sc.prettyobj):
         weight (float): The weight applied to the log likelihood of this component. The total log likelihood is the sum of the log likelihoods of all components, each multiplied by its weight.
         include_fn (callable): A function accepting a single simulation and returning a boolean to determine if the simulation should be included in the current component. If None, all simulations are included.
         n_boot (int): Experimental! Bootstrap sum sim results over seeds before comparing against expected results. Not appropriate for all component types.
+        combine_reps (str): How to combine multiple repetitions of the same pars. Options are 'mean' and 'sum'. Default is 'mean'. Used if n_boot>1 and for plotting with bootstrap=True.
         kwargs: Additional arguments to pass to the likelihood function
     """
-    def __init__(self, name, expected, extract_fn, conform, weight=1, include_fn=None, n_boot=None):
+    def __init__(self, name, expected, extract_fn, conform, weight=1, include_fn=None, n_boot=None, combine_reps='mean'):
         self.name = name
         self.expected = expected
         self.extract_fn = extract_fn
         self.weight = weight
         self.include_fn = include_fn
         self.n_boot = n_boot
+
+        self.combine_reps = combine_reps
+        self.combine_kwargs = dict(numeric_only=True)
 
         self.avail_conforms = {
             'incident':  linear_accum,  # or self.linear_accum if left as staticmethod  
@@ -177,7 +181,7 @@ class CalibComponent(sc.prettyobj):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
             actual = self.actual.loc[use_seeds]
             timecols = [c for c in actual.columns if isinstance(actual[c].iloc[0], dt.datetime)] # Not very robust
-            a_boot = actual.groupby(timecols).sum() # Sum over seeds
+            a_boot = actual.groupby(timecols).aggregate(func=self.combine_reps, **self.combine_kwargs)
             a_boot['rand_seed'] = bi # Fake the seed
             a_boot = a_boot.reset_index().set_index('rand_seed') # Make it look like self.actual
             nll = self.compute_nll(self.expected, a_boot, **kwargs)
@@ -276,7 +280,7 @@ class BetaBinomial(CalibComponent):
         means = np.zeros(n_boot)
         for bi in np.arange(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
-            row = data.set_index('rand_seed').loc[use_seeds].groupby('t').sum()
+            row = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
 
             alpha = row['x'] + 1
             beta = row['n'] - row['x'] + 1
@@ -353,12 +357,7 @@ class Binomial(CalibComponent):
         means = np.zeros(n_boot)
         for bi in np.arange(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
-            if 'p' in data:
-                # Mean over seeds for p
-                row = data.set_index('rand_seed').loc[use_seeds].groupby('t').mean(numeric_only=True)
-            else:
-                # Sum over seeds for x and n
-                row = data.set_index('rand_seed').loc[use_seeds].groupby('t').sum()
+            row = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
 
             p = self.get_p(row)
             q = sps.binom(n=e_n, p=p)
@@ -459,11 +458,11 @@ class DirichletMultinomial(CalibComponent):
         return
 
 class GammaPoisson(CalibComponent):
-    def __init__(self, name, expected, extract_fn, conform, weight=1, include_fn=None):
-        super().__init__(name, expected, extract_fn, conform, weight, include_fn)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
-        assert expected['n'].dtype == int, 'The expected must have an integer column named "n" for the total number of person-years'
-        assert expected['x'].dtype == int, 'The expected must have an integer column named "x" for the total number of events'
+        assert self.expected['n'].dtype == int, 'The expected must have an integer column named "n" for the total number of person-years'
+        assert self.expected['x'].dtype == int, 'The expected must have an integer column named "x" for the total number of events'
         return
 
     def compute_nll(self, expected, actual, **kwargs):
@@ -531,7 +530,7 @@ class GammaPoisson(CalibComponent):
         means = np.zeros(n_boot)
         for bi in np.arange(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
-            row = data.set_index('rand_seed').loc[use_seeds].groupby(['t', 't1']).sum()
+            row = data.set_index('rand_seed').loc[use_seeds].groupby(['t', 't1']).aggregate(func=self.combine_reps, **self.combine_kwargs)
 
             a_n, a_x = row['n'], row['x']
             beta = (a_n+1)
@@ -634,7 +633,7 @@ class Normal(CalibComponent):
         means = np.zeros(n_boot)
         for bi in np.arange(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
-            row = data.set_index('rand_seed').loc[use_seeds].groupby('t').mean(numeric_only=True)
+            row = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
 
             a_x = row['x']
             sigma2 = self.sigma2 or self.compute_var(e_x, a_x)
