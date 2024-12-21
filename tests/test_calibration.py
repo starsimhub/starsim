@@ -138,14 +138,13 @@ def test_onepar_custom(do_plot=True):
 
     def eval(sim, expected):
         # Compute the squared error at one point in time
-        # NOTE the fragility that the date must be in the simulation timevec
         date, p = expected
         if not isinstance(sim, ss.MultiSim):
             sim = ss.MultiSim(sims=[sim])
 
         ret = 0
         for s in sim.sims:
-            ind = sc.findfirst(s.results.timevec == date)
+            ind = np.searchsorted(s.results.timevec, date, side='left')
             prev = s.results.sir.prevalence[ind]
             ret += (prev - p)**2
         return ret
@@ -158,7 +157,7 @@ def test_onepar_custom(do_plot=True):
         build_kw = dict(n_reps=2), # Two reps per point
         reseed = True,
         eval_fn = eval, # Will call my_function(msim, eval_kwargs)
-        eval_kw = dict(expected=(ss.date('2020-01-12'), 0.13)), # Will call eval(sim, eval_kw)
+        eval_kw = dict(expected=(ss.date('2020-01-12'), 0.13)), # Will call eval(sim, **eval_kw)
         total_trials = total_trials,
         n_workers = None, # None indicates to use all available CPUs
         die = True,
