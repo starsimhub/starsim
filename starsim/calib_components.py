@@ -123,7 +123,9 @@ class CalibComponent(sc.prettyobj):
         self.n_boot = n_boot
 
         self.combine_reps = combine_reps
-        self.combine_kwargs = dict(numeric_only=True)
+        if isinstance(self.combine_reps, str) and hasattr(pd.core.groupby.DataFrameGroupBy, self.combine_reps):
+            # Most of these methods take numeric_only, which can help with stability
+            self.combine_kwargs = dict(numeric_only=True)
 
         self.avail_conforms = {
             'incident':  linear_accum,  # or self.linear_accum if left as staticmethod  
