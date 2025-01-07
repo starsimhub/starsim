@@ -33,7 +33,8 @@ class Calibration(sc.prettyobj):
         label        (str)   : a label for this calibration object
         study_name   (str)   : name of the optuna study
         db_name      (str)   : the name of the database file (default: 'starsim_calibration.db')
-        keep_db      (bool)  : whether to keep the database after calibration (default: false)
+        continue_db  (bool)  : whether to continue if the database already exists, removes the database if false (default: false, any existing database will be deleted)
+        keep_db      (bool)  : whether to keep the database after calibration (default: false, the database will be deleted)
         storage      (str)   : the location of the database (default: sqlite)
         sampler (BaseSampler): the sampler used by optuna, like optuna.samplers.TPESampler
         die          (bool)  : whether to stop if an exception is encountered (default: false)
@@ -45,7 +46,7 @@ class Calibration(sc.prettyobj):
     """
     def __init__(self, sim, calib_pars, n_workers=None, total_trials=None, reseed=True,
                  build_fn=None, build_kw=None, eval_fn=None, eval_kw=None, components=None,
-                 label=None, study_name=None, db_name=None, keep_db=None, storage=None,
+                 label=None, study_name=None, db_name=None, keep_db=None, continue_db=None, storage=None,
                  sampler=None, die=False, debug=False, verbose=True):
 
         # Handle run arguments
@@ -53,6 +54,7 @@ class Calibration(sc.prettyobj):
         if n_workers    is None: n_workers      = 1 if debug else sc.cpu_count()
         if study_name   is None: study_name     = 'starsim_calibration'
         if db_name      is None: db_name        = f'{study_name}.db'
+        if continue_db  is None: continue_db    = False
         if keep_db      is None: keep_db        = False
         if storage      is None: storage        = f'sqlite:///{db_name}'
         
@@ -64,7 +66,7 @@ class Calibration(sc.prettyobj):
 
         n_trials = int(np.ceil(total_trials/n_workers))
         kw = dict(n_trials=n_trials, n_workers=int(n_workers), debug=debug, study_name=study_name,
-                  db_name=db_name, keep_db=keep_db, storage=storage, sampler=sampler)
+                  db_name=db_name, continue_db=continue_db, keep_db=keep_db, storage=storage, sampler=sampler)
         self.run_args = sc.objdict(kw)
 
         # Handle other inputs
@@ -209,8 +211,8 @@ class Calibration(sc.prettyobj):
         return
 
     def make_study(self):
-        """ Make a study, deleting one if it already exists """
-        if not self.run_args.keep_db:
+        """ Make a study, deleting if it already exists and user does not want to continue_db """
+        if not self.run_args.continue_db:
             self.remove_db()
         if self.verbose: print(self.run_args.storage)
         try:
@@ -277,6 +279,15 @@ class Calibration(sc.prettyobj):
             self.remove_db()
 
         return self
+
+    def save_csv(self, filename):
+        """ Save the results to a CSV file """
+        if self.study is None:
+            raise ValueError('Please run calibrate() before saving results')
+
+        df = self.study.trials_dataframe()
+        df.to_csv(filename)
+        return df
 
     def check_fit(self, do_plot=True):
         """ Run before and after simulations to validate the fit """
