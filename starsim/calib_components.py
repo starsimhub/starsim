@@ -161,7 +161,7 @@ class CalibComponent(sc.prettyobj):
                 actuals.append(actual)
 
             if len(actuals) == 0: # No sims met the include criteria
-                return -np.inf
+                return np.inf
         else:
             assert self.include_fn is None, 'The include_fn argument is only valid for MultiSim objects'
             actual = self.extract_fn(sim) # Extract
