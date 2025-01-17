@@ -233,12 +233,47 @@ class Arr(BaseArr):
         self.raw[key] = value
         return
 
-    def __gt__(self, other): return self.asnew(self.values > other,  cls=BoolArr)
-    def __lt__(self, other): return self.asnew(self.values < other,  cls=BoolArr)
-    def __ge__(self, other): return self.asnew(self.values >= other, cls=BoolArr)
-    def __le__(self, other): return self.asnew(self.values <= other, cls=BoolArr)
-    def __eq__(self, other): return self.asnew(self.values == other, cls=BoolArr)
-    def __ne__(self, other): return self.asnew(self.values != other, cls=BoolArr)
+    def _use_raw(self):
+        """Internal performance optimization for operators to use raw arrays if the active fraction is high
+
+        If most of the agents are active, then it's cheaper to perform logical operations on the inactive agents
+        than it is to work out which array indices to insert the result of those logical operations into. This
+        also removes the need to create an intermediate array, so there is a corresponding speedup there as well.
+
+        The current threshold of 0.5 is arbitrary and should eventually be adjusted based on a suite of use cases.
+        """
+        return len(self)/len(self.raw) > 0.5
+
+    def __gt__(self, other):
+        if isinstance(other, Arr) and self._use_raw:
+            return self.asnew(raw = self.raw > other.raw, cls=BoolArr)
+        else:
+            return self.asnew(self.values > other,  cls=BoolArr)
+    def __lt__(self, other):
+        if isinstance(other, Arr) and self._use_raw:
+            return self.asnew(raw = self.raw < other.raw, cls=BoolArr)
+        else:
+            return self.asnew(self.values < other,  cls=BoolArr)
+    def __ge__(self, other):
+        if isinstance(other, Arr) and self._use_raw:
+            return self.asnew(raw = self.raw >= other.raw, cls=BoolArr)
+        else:
+            return self.asnew(self.values >= other, cls=BoolArr)
+    def __le__(self, other):
+        if isinstance(other, Arr) and self._use_raw:
+            return self.asnew(raw = self.raw <= other.raw, cls=BoolArr)
+        else:
+            return self.asnew(self.values <= other, cls=BoolArr)
+    def __eq__(self, other):
+        if isinstance(other, Arr) and self._use_raw:
+            return self.asnew(raw = self.raw == other.raw, cls=BoolArr)
+        else:
+            return self.asnew(self.values == other, cls=BoolArr)
+    def __ne__(self, other):
+        if isinstance(other, Arr) and self._use_raw:
+            return self.asnew(raw = self.raw != other.raw, cls=BoolArr)
+        else:
+            return self.asnew(self.values != other, cls=BoolArr)
 
     def __and__(self, other): raise BooleanOperationError(self)
     def __or__(self, other):  raise BooleanOperationError(self)
@@ -333,18 +368,24 @@ class Arr(BaseArr):
         self.initialized = True
         return
 
-    def asnew(self, arr=None, cls=None, name=None):
+    def asnew(self, arr=None, cls=None, name=None, raw=None):
         """ Duplicate and copy (rather than link) data, optionally resetting the array """
         if cls is None:
             cls = self.__class__
         if arr is None:
-            arr = self.values
+            if raw is not None:
+                arr = raw
+            else:
+                arr = self.values
         new = object.__new__(cls) # Create a new Arr instance
         new.__dict__ = self.__dict__.copy() # Copy pointers
         new.dtype = arr.dtype # Set to correct dtype
         new.name = name # In most cases, the asnew Arr has different values to the original Arr so the original name no longer makes sense
-        new.raw = np.empty(new.raw.shape, dtype=new.dtype) # Copy values, breaking reference
-        new.raw[new.auids] = arr
+        if raw is not None:
+            new.raw = raw
+        else:
+            new.raw = np.empty(new.raw.shape, dtype=new.dtype) # Copy values, breaking reference
+            new.raw[new.auids] = arr
         return new
 
     def true(self):
@@ -405,10 +446,26 @@ class BoolArr(Arr):
         super().__init__(name=name, dtype=ss_bool, nan=nan, **kwargs)
         return
 
-    def __and__(self, other): return self.asnew(self.values & other)
-    def __or__(self, other):  return self.asnew(self.values | other)
-    def __xor__(self, other): return self.asnew(self.values ^ other)
-    def __invert__(self):     return self.asnew(~self.values)
+    def __and__(self, other):
+        if isinstance(other, Arr) and self._use_raw:
+            return self.asnew(raw = self.raw & other.raw)
+        else:
+            return self.asnew(self.values & other)
+    def __or__(self, other):
+        if isinstance(other, Arr) and self._use_raw:
+            return self.asnew(raw = self.raw | other.raw)
+        else:
+            return self.asnew(self.values | other)
+    def __xor__(self, other):
+        if isinstance(other, Arr) and self._use_raw:
+            return self.asnew(raw = self.raw ^ other.raw)
+        else:
+            return self.asnew(self.values ^ other)
+    def __invert__(self):
+        if self._use_raw:
+            return self.asnew(raw=~self.raw)
+        else:
+            return self.asnew(~self.values)
 
     # BoolArr cannot store NaNs so report all entries as being not-NaN
     @property
