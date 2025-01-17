@@ -369,18 +369,41 @@ class Arr(BaseArr):
         return
 
     def asnew(self, arr=None, cls=None, name=None, raw=None):
-        """ Duplicate and copy (rather than link) data, optionally resetting the array """
+        """
+        Duplicate and copy (rather than link) data, optionally resetting the array
+
+        The values in the new array are drawn from one of three options
+            - If a `raw` array is specified, it will be used for the new array directly (not copied)
+            - Otherwise, if `arr` is specified, it will be used for the values in the new array (for active agents only)
+            - Otherwise, a copy of the `raw` array for the Arr instance will be used
+
+        Passing in a `raw` array directly is a performance optimization when the calling code has
+        already generated a suitable array that does not need to be copied again.
+
+        Args:
+            arr: The array to use for values, with length matching the number of active UIDs
+            cls: The class to use for the new array
+            name: The name to use for the new array
+            raw: The raw array to use for the new array
+
+
+        """
         if cls is None:
             cls = self.__class__
-        if arr is None:
-            if raw is not None:
-                arr = raw
-            else:
-                arr = self.values
+
+        if raw is None and arr is None:
+            raw = self.raw.copy()
+
+        if raw is not None:
+            dtype = raw.dtype
+        else:
+            dtype = arr.dtype
+
         new = object.__new__(cls) # Create a new Arr instance
         new.__dict__ = self.__dict__.copy() # Copy pointers
-        new.dtype = arr.dtype # Set to correct dtype
+        new.dtype = dtype # Set to correct dtype
         new.name = name # In most cases, the asnew Arr has different values to the original Arr so the original name no longer makes sense
+
         if raw is not None:
             new.raw = raw
         else:
@@ -389,6 +412,7 @@ class Arr(BaseArr):
         return new
 
     def true(self):
+
         """ Efficiently convert truthy values to UIDs """
         return self.auids[self.values.astype(bool)]
 
