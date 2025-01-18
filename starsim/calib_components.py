@@ -598,7 +598,6 @@ class Normal(CalibComponent):
         t = data.iloc[0]['t']
         expected = self.expected.loc[[t]]
         e_x = expected['x'].values.flatten()[0]
-        kk = np.linspace(0, 1, 1000)
         nll = 0
         for idx, row in data.iterrows():
             a_x = row['x']
@@ -609,7 +608,9 @@ class Normal(CalibComponent):
                 ti = self.expected.index.get_loc(t)
                 sigma2 = sigma2[ti]
 
-            q = sps.norm(loc=a_x, scale=np.sqrt(sigma2))
+            sigma = np.sqrt(sigma2)
+            kk = np.linspace(a_x - 1.96*sigma, a_x + 1.96*sigma, 1000)
+            q = sps.norm(loc=a_x, scale=sigma)
 
             yy = q.pdf(kk)
             plt.step(kk, yy, label=f"{row['rand_seed']}")
