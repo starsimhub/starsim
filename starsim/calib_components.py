@@ -427,13 +427,13 @@ class DirichletMultinomial(CalibComponent):
         var = data.iloc[0]['var']
         cal = data.iloc[0]['calibrated']
 
-        expected = self.expected.loc[t]
+        expected = self.expected.loc[[t]]
         actual = kwargs.get('full_actual', self.actual)
         actual = actual[(actual['t'] == t) & (actual['calibrated'] == cal)]
 
         x_vars = [xkey for xkey in expected.columns if xkey.startswith('x')]
 
-        e_x = expected[var].values[0]
+        e_x = expected[var].values.flatten()[0]
         e_n = expected[x_vars].sum(axis=1)
 
         kk = np.arange(0, int(2*e_x))
@@ -498,8 +498,8 @@ class GammaPoisson(CalibComponent):
 
     def plot_facet(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
-        e_n, e_x = expected['n'].values[0], expected['x'].values[0]
+        expected = self.expected.loc[[t]]
+        e_n, e_x = expected['n'].values.flatten()[0], expected['x'].values.flatten()[0]
         kk = np.arange(0, int(2*e_x))
         nll = 0
         for idx, row in data.iterrows():
@@ -518,8 +518,8 @@ class GammaPoisson(CalibComponent):
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
-        e_n, e_x = expected['n'].values[0], expected['x'].values[0]
+        expected = self.expected.loc[[t]]
+        e_n, e_x = expected['n'].values.flatten()[0], expected['x'].values.flatten()[0]
 
         n_boot = kwargs.get('n_boot', 1000)
         seeds = data['rand_seed'].unique()
@@ -596,13 +596,13 @@ class Normal(CalibComponent):
 
     def plot_facet(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
-        e_x = expected['x']
+        expected = self.expected.loc[[t]]
+        e_x = expected['x'].values.flatten()[0]
         kk = np.linspace(0, 1, 1000)
         nll = 0
         for idx, row in data.iterrows():
             a_x = row['x']
-            sigma2 = self.sigma2 or self.compute_var(e_x, a_x)
+            sigma2 = self.sigma2 if self.sigma2 is not None else self.compute_var(e_x, a_x)
             if isinstance(sigma2, (list, np.ndarray)):
                 assert len(sigma2) == len(self.expected), 'Length of sigma2 must match the number of timepoints'
                 # User provided a vector of variances
@@ -621,8 +621,8 @@ class Normal(CalibComponent):
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
-        e_x = expected['x']
+        expected = self.expected.loc[[t]] # Gracefully handle Series and DataFrame, if 't1' in index
+        e_x = expected['x'].values.flatten()[0] # Due to possible presence of 't1' in the index
 
         n_boot = kwargs.get('n_boot', 1000)
         seeds = data['rand_seed'].unique()
@@ -633,7 +633,7 @@ class Normal(CalibComponent):
             row = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
 
             a_x = row['x']
-            sigma2 = self.sigma2 or self.compute_var(e_x, a_x)
+            sigma2 = self.sigma2 if self.sigma2 is not None else self.compute_var(e_x, a_x)
             if isinstance(sigma2, (list, np.ndarray)):
                 assert len(sigma2) == len(self.expected), 'Length of sigma2 must match the number of timepoints'
                 # User provided a vector of variances
