@@ -102,30 +102,30 @@ default_start = sc.objdict(
 #     return dur
 
 
-def round_tvec(tvec):
-    """ Round time vectors to a certain level of precision, to avoid floating point errors """
-    decimals = int(-np.log10(ss.options.time_eps))
-    tvec = np.round(np.array(tvec), decimals=decimals)
-    return tvec
-
-
-def years_to_dates(yearvec):
-    """ Convert a numeric year vector to a date vector """
-    datevec = np.array([date(sc.datetoyear(y, reverse=True)) for y in yearvec])
-    return datevec
-
-
-def dates_to_years(datevec):
-    """ Convert a date vector to a numeric year vector"""
-    yearvec = round_tvec([sc.datetoyear(d.date()) for d in datevec])
-    return yearvec
-
-
-def dates_to_days(datevec, start_date):
-    """ Convert a date vector into relative days since start date """
-    start_date = date(start_date)
-    dayvec = np.array([(d - start_date).days for d in datevec])
-    return dayvec
+# def round_tvec(tvec):
+#     """ Round time vectors to a certain level of precision, to avoid floating point errors """
+#     decimals = int(-np.log10(ss.options.time_eps))
+#     tvec = np.round(np.array(tvec), decimals=decimals)
+#     return tvec
+#
+#
+# def years_to_dates(yearvec):
+#     """ Convert a numeric year vector to a date vector """
+#     datevec = np.array([date(sc.datetoyear(y, reverse=True)) for y in yearvec])
+#     return datevec
+#
+#
+# def dates_to_years(datevec):
+#     """ Convert a date vector to a numeric year vector"""
+#     yearvec = round_tvec([sc.datetoyear(d.date()) for d in datevec])
+#     return yearvec
+#
+#
+# def dates_to_days(datevec, start_date):
+#     """ Convert a date vector into relative days since start date """
+#     start_date = date(start_date)
+#     dayvec = np.array([(d - start_date).days for d in datevec])
+#     return dayvec
 
 
 #%% Time classes - fundamental quantities
@@ -158,6 +158,8 @@ class Date(pd.Timestamp):
             arg = args[0]
             if arg is None:
                 return pd.Timestamp(None)
+            elif isinstance(arg, pd.Timestamp):
+                out = cls._reset_class(sc.dcp(arg))
             elif sc.isnumber(arg):
                 single_year_arg = True
             elif isinstance(arg, pd.Timedelta):
@@ -226,11 +228,14 @@ class Date(pd.Timestamp):
             ss.date.from_year(2020) # Returns <2020-01-01>
             ss.date.from_year(2024.75) # Returns <2024-10-01>
         """
+
         if isinstance(year, int):
             return cls(year=year, month=1, day=1)
         else:
-            dateobj = sc.datetoyear(year, reverse=True)
-            return cls(dateobj)
+            year_start = pd.Timestamp(year=int(year),month=1,day=1).timestamp()
+            year_end = pd.Timestamp(year=int(year),month=12,day=31).timestamp()
+            timestamp = year_start + year%1*(year_end-year_start)
+            return cls(pd.Timestamp(timestamp, unit='s'))
 
     def to_year(self):
         """
@@ -241,7 +246,9 @@ class Date(pd.Timestamp):
             ss.date('2020-01-01').to_year() # Returns 2020.0
             ss.date('2024-10-01').to_year() # Returns 2024.7486
         """
-        return sc.datetoyear(self.date())
+        year_start = pd.Timestamp(year=self.year,month=1,day=1).timestamp()
+        year_end = pd.Timestamp(year=self.year,month=12,day=31).timestamp()
+        return self.year + (self.timestamp()-year_start)/(year_end-year_start)
 
     def __float__(self):
         return self.to_year()
@@ -345,6 +352,8 @@ class Dur():
         raise NotImplementedError
 
 
+
+
     def __radd__(self, other): return self.__add__(other)
     def __rmul__(self, other): return self.__mul__(other)
 
@@ -384,7 +393,15 @@ class Dur():
         except:
             return self.years != other
 
+    def __truediv__(self, other):
+        # Implement division - must handle other being Dur or float instances
+        raise NotImplementedError
 
+    def __rtruediv__(self, other):
+        # If a Dur is divided by a Dur then we will call __truediv__
+        # If a float is divided by a Dur, then we should return a rate
+        # We also need divide the duration by the numerator
+        return Rate(self/other)
 
 class YearDur(Dur):
     # Year based duration e.g., if requiring 52 weeks per year
@@ -433,7 +450,9 @@ class YearDur(Dur):
             return self.__class__(max(self.period - other, 0))
 
     def __mul__(self, other: float):
-        if isinstance(other, Dur):
+        if isinstance(other, Rate):
+            return NotImplemented # Delegate to Rate.__rmul__
+        elif isinstance(other, Dur):
             raise Exception('Cannot multiply a duration by a duration')
         elif isinstance(other, Date):
             raise Exception('Cannot multiply a duration by a date')
@@ -441,7 +460,7 @@ class YearDur(Dur):
 
     def __truediv__(self, other):
         if isinstance(other, Dur):
-            return self.__class__(self.years/other.years)
+            return self.years/other.years
         else:
             return self.__class__(self.period / other)
 
@@ -599,7 +618,9 @@ class DateDur(Dur):
         return self.period.to_numpy()
 
     def __mul__(self, other: float):
-        if isinstance(other, Dur):
+        if isinstance(other, Rate):
+            return NotImplemented # Delegate to Rate.__rmul__
+        elif isinstance(other, Dur):
             raise Exception('Cannot multiply a duration by a duration')
         return self.__class__(self._scale(self.period, other))
 
@@ -628,6 +649,42 @@ class DateDur(Dur):
         else:
             raise TypeError('Can only add dates, Dur objects, or pd.DateOffset objects')
 
+class Rate():
+    def __init__(self, dur:Dur):
+        self._dur = dur
+
+    def __repr__(self):
+        return f'<{self.__class__.__name__}: per{str(self._dur).split(":")[1]}'
+
+    def __mul__(self, other):
+        if isinstance(other, Dur):
+            return other.years/self._dur.years
+        else:
+            return Rate(self._dur/other)
+
+    def __rmul__(self, other): return self.__mul__(other)
+
+    # TODO: Division and other operators
+
+class RateProb(Rate):
+    # Probability over time
+    # When scaling by a Dur, the value is adjusted accordingly
+    def __init__(self, p, dur):
+        # e.g., probability per unit time
+        super().__init__(dur)
+        self.p = p
+
+    def __mul__(self, other):
+        if isinstance(other, Dur):
+            # TODO - implement this - it should return the probability (not probability rate)
+            # over the requested time period (i.e., the value of 'other')
+            raise NotImplementedError
+        else:
+            return self.__class__(self.p*other, self._dur)
+
+
+
+
 #%% Time - simulation vectors
 
 class Time(sc.prettyobj):
@@ -654,10 +711,7 @@ class Time(sc.prettyobj):
     - ``ti`` (int): the current timestep
     - ``npts`` (int): the number of timesteps
     - ``tvec`` (array): time starting at 0, in self units (e.g. ``[0, 0.1, 0.2, ... 10.0]`` if start=0, stop=10, dt=0.1)
-    - ``absvec`` (array): time relative to sim start, in units of sim units (e.g. ``[366, 373, 380, ...]`` if sim-start=2001, start=2002, sim-unit='day', unit='week')
     - ``yearvec`` (array): time represented as floating-point years (e.g. ``[2000, 2000.1, 2000.2, ... 2010.0]`` if start=2000, stop=2010, dt=0.1)
-    - ``datevec`` (array): time represented as an array of ``ss.date`` objects (e.g. ``[<2000.01.01>, <2000.02.07>, ... <2010.01.01>]`` if start=2000, stop=2010, dt=0.1)
-    - ``timevec`` (array): the "native" time vector, which always matches one of ``tvec``, ``yearvec``, or ``datevec``
 
     **Examples**::
 
@@ -891,39 +945,39 @@ class Time(sc.prettyobj):
         #     self.abstvec = None # Intentionally set to None, cannot be used in the sim loop until populated
         self.initialized = True
         return
-
-    def make_abstvec(self, sim):
-        """ Convert the current time vector into sim units """
-        # Validation
-        if self.is_unitless != sim.t.is_unitless:
-            errormsg = f'Cannot mix units with unitless time: sim.unit={sim.t.unit} {self.name}.unit={self.unit}'
-            raise ValueError(errormsg)
-
-        # Both are unitless or numeric
-        both_unitless = self.is_unitless and sim.t.is_unitless
-        both_numeric = self.is_numeric and sim.t.is_numeric
-        if both_unitless or both_numeric:
-            abstvec = self.tvec.copy() # Start by copying the current time vector
-            ratio = time_ratio(unit1=self.unit, dt1=1.0, unit2=sim.t.unit, dt2=1.0) # tvec has sim units, but not dt
-            if ratio != 1.0:
-                abstvec *= ratio # TODO: CHECK
-            start_diff = self.start - sim.t.start
-            if start_diff != 0.0:
-                abstvec += start_diff
-
-        # The sim uses years; use yearvec
-        elif sim.t.unit == 'year':
-            abstvec = self.yearvec.copy()
-            abstvec -= sim.t.yearvec[0] # Start relative to sim start
-
-        # Otherwise (days, weeks, months), use datevec and convert to days
-        else:
-            dayvec = dates_to_days(self.datevec, start_date=sim.t.datevec[0])
-            ratio = time_ratio(unit1='day', dt1=1.0, unit2=sim.t.unit, dt2=1.0)
-            abstvec = dayvec*ratio # Convert into sim time units
-
-        self.abstvec = round_tvec(abstvec) # Avoid floating point inconsistencies
-        return
+    #
+    # def make_abstvec(self, sim):
+    #     """ Convert the current time vector into sim units """
+    #     # Validation
+    #     if self.is_unitless != sim.t.is_unitless:
+    #         errormsg = f'Cannot mix units with unitless time: sim.unit={sim.t.unit} {self.name}.unit={self.unit}'
+    #         raise ValueError(errormsg)
+    #
+    #     # Both are unitless or numeric
+    #     both_unitless = self.is_unitless and sim.t.is_unitless
+    #     both_numeric = self.is_numeric and sim.t.is_numeric
+    #     if both_unitless or both_numeric:
+    #         abstvec = self.tvec.copy() # Start by copying the current time vector
+    #         ratio = time_ratio(unit1=self.unit, dt1=1.0, unit2=sim.t.unit, dt2=1.0) # tvec has sim units, but not dt
+    #         if ratio != 1.0:
+    #             abstvec *= ratio # TODO: CHECK
+    #         start_diff = self.start - sim.t.start
+    #         if start_diff != 0.0:
+    #             abstvec += start_diff
+    #
+    #     # The sim uses years; use yearvec
+    #     elif sim.t.unit == 'year':
+    #         abstvec = self.yearvec.copy()
+    #         abstvec -= sim.t.yearvec[0] # Start relative to sim start
+    #
+    #     # Otherwise (days, weeks, months), use datevec and convert to days
+    #     else:
+    #         dayvec = dates_to_days(self.datevec, start_date=sim.t.datevec[0])
+    #         ratio = time_ratio(unit1='day', dt1=1.0, unit2=sim.t.unit, dt2=1.0)
+    #         abstvec = dayvec*ratio # Convert into sim time units
+    #
+    #     self.abstvec = round_tvec(abstvec) # Avoid floating point inconsistencies
+    #     return
 
     def now(self, key=None):
         """
@@ -942,11 +996,7 @@ class Time(sc.prettyobj):
             t.now('str') # Returns '2021-06-25'
         """
         if key in [None, 'none', 'time', 'str']:
-            vec = self.timevec
-        elif key == 'tvec':
             vec = self.tvec
-        elif key == 'date':
-            vec = self.datevec
         elif key == 'year':
             vec = self.yearvec
         else:
@@ -957,18 +1007,6 @@ class Time(sc.prettyobj):
         if key == 'str':
             now = f'{now:0.1f}' if isinstance(now, float) else str(now)
         return now
-
-
-
-
-# # When we add a Dur to a Date, we get a Date, but the calculation proceeds as either a fractional year or a full year
-# # depending on the dur
-#
-#
-#     @property
-#     def days(self):
-
-
 
 
 
@@ -987,6 +1025,8 @@ def weeks(x: float) -> Dur:
 
 def days(x: float) -> Dur:
     return Dur(days=x)
+
+## TIME AWARE PARAMETERS
 
 #
 # __all__ += ['TimePar', 'dur', 'days', 'years', 'rate', 'perday', 'peryear',
@@ -1027,7 +1067,6 @@ class TimePar(ss.BaseArr):
         """
 
         self.v = v
-        self.unit = unit
         self.values = None
         self.initialized = False
         # self.validate_units()
@@ -1049,12 +1088,12 @@ class TimePar(ss.BaseArr):
 
     def init(self, parent=None, parent_unit=None, parent_dt=None, update_values=True, die=True):
         """ Link to the sim and/or module units """
-        if parent is None:
-            parent = sc.dictobj(unit=parent_unit, dt=parent_dt)
-        else:
-            if parent_dt is not None:
-                errormsg = f'Cannot override parent {parent} by setting parent_dt; set in parent object instead'
-                raise ValueError(errormsg)
+        # if parent is None:
+        #     parent = sc.dictobj(unit=parent_unit, dt=parent_dt)
+        # else:
+        #     if parent_dt is not None:
+        #         errormsg = f'Cannot override parent {parent} by setting parent_dt; set in parent object instead'
+        #         raise ValueError(errormsg)
 
         # Set defaults if not yet set
         self.unit = sc.ifelse(self.unit, self.parent_unit) # If unit isn't defined but parent is, set to parent
@@ -1206,7 +1245,6 @@ class TimePar(ss.BaseArr):
     # Other methods
     def __neg__(self): return self.asnew().set(v=-self.v)
 
-#
 # class dur(TimePar):
 #     """ Any number that acts like a duration """
 #     def update_values(self):
@@ -1224,21 +1262,26 @@ class TimePar(ss.BaseArr):
 #     return dur(v=v, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
 
 
-class rate(TimePar):
-    """ Any number that acts like a rate; can be greater than 1 """
-    def update_values(self):
-        self.values = self.v/self.factor
-        return self.values
+# class rate(TimePar):
+#     """ Any number that acts like a rate; can be greater than 1 """
+#     def update_values(self):
+#         self.values = self.v/self.factor
+#         return self.values
 
 
 def perday(v, parent_unit=None, parent_dt=None):
     """ Shortcut to ss.rate(value, units='day') """
-    return rate(v=v, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
+    return Rate(Dur(days=1/v))
 
 
 def peryear(v, parent_unit=None, parent_dt=None):
     """ Shortcut to ss.rate(value, units='year') """
-    return rate(v=v, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
+    return Rate(Dur(years=1/v))
+
+
+
+
+
 
 
 class time_prob(TimePar):
@@ -1352,6 +1395,8 @@ class beta(time_prob):
 
 if __name__ == '__main__':
 
+    Date(2020.1)
+
     print(Dur(weeks=1)+Dur(1/52))
     print(Dur(1/52)+Dur(weeks=1))
     print(Dur(weeks=1)/Dur(1/52))
@@ -1387,4 +1432,10 @@ if __name__ == '__main__':
     t = Time(Date(2020), Date(2030.5), Dur(0.1))
 
 
+    print(1/YearDur(1))
+    print(2/YearDur(1))
+    print(4/YearDur(1))
+    print(4/DateDur(1))
+    print(0.5/DateDur(1))
 
+    print(perday(5)*Dur(days=1))
