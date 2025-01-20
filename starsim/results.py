@@ -183,7 +183,7 @@ class Result(ss.BaseArr):
             raise ValueError(f'Unrecognized summarize_by method: {summarize_by}')
 
         # Map Starsim units to the ones Pandas understands
-        unit_mapper = dict(week='1w', month='1m', year='1y')
+        unit_mapper = dict(week='1w', month='1m', year='1YE')
         if new_unit in unit_mapper:
             new_unit = unit_mapper[new_unit]
 
