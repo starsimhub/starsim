@@ -179,10 +179,10 @@ class CalibComponent(sc.prettyobj):
         # Bootstrapped aggregation
         boot_size = len(seeds)
         nlls = np.zeros(self.n_boot)
+        timecols = [c for c in self.actual.columns if isinstance(self.actual[c].iloc[0], dt.datetime)] # Not robust to data types
         for bi in range(self.n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
             actual = self.actual.loc[use_seeds]
-            timecols = [c for c in actual.columns if isinstance(actual[c].iloc[0], dt.datetime)] # Not very robust
             a_boot = actual.groupby(timecols).aggregate(func=self.combine_reps, **self.combine_kwargs)
             a_boot['rand_seed'] = bi # Fake the seed
             a_boot = a_boot.reset_index().set_index('rand_seed') # Make it look like self.actual
