@@ -161,6 +161,7 @@ class CalibComponent(sc.prettyobj):
                 actuals.append(actual)
 
             if len(actuals) == 0: # No sims met the include criteria
+                self.actual = None
                 return np.inf
         else:
             assert self.include_fn is None, 'The include_fn argument is only valid for MultiSim objects'
@@ -199,8 +200,9 @@ class CalibComponent(sc.prettyobj):
         return f'Calibration component with name {self.name}'
 
     def plot(self, actual=None, bootstrap=False, **kwargs):
+        actual = self.actual if actual is None else actual
         if actual is None:
-            actual = self.actual
+            return None # Nothing to do
 
         if 'calibrated' not in actual.columns:
             actual['calibrated'] = 'Calibration'
