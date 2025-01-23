@@ -577,6 +577,10 @@ class Normal(CalibComponent):
             e_x = rep['x_e'].values
             a_x = rep['x_a'].values
 
+            # TEMP TODO calculate rate if 'n' supplied
+            if 'n' in rep:
+                a_x = rep['x_a'].values / rep['n'].values
+
             if compute_var:
                 sigma2 = self.compute_var(expected['x'], a_x)
 
@@ -603,6 +607,11 @@ class Normal(CalibComponent):
         nll = 0
         for idx, row in data.iterrows():
             a_x = row['x']
+
+            # TEMP TODO calculate rate if 'n' supplied
+            if 'n' in row:
+                a_x = row['x'].values / row['n'].values
+
             sigma2 = self.sigma2 if self.sigma2 is not None else self.compute_var(e_x, a_x)
             if isinstance(sigma2, (list, np.ndarray)):
                 assert len(sigma2) == len(self.expected), 'Length of sigma2 must match the number of timepoints'
@@ -636,6 +645,11 @@ class Normal(CalibComponent):
             row = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
 
             a_x = row['x']
+
+            # TEMP TODO calculate rate if 'n' supplied
+            if 'n' in row:
+                a_x = row['x'].values / row['n'].values
+
             sigma2 = self.sigma2 if self.sigma2 is not None else self.compute_var(e_x, a_x)
             if isinstance(sigma2, (list, np.ndarray)):
                 assert len(sigma2) == len(self.expected), 'Length of sigma2 must match the number of timepoints'
@@ -644,7 +658,7 @@ class Normal(CalibComponent):
                 sigma2 = sigma2[ti]
 
             q = sps.norm(loc=a_x, scale=np.sqrt(sigma2))
-            means[bi] = q.mean()
+            means[bi] = q.mean() # Will just be a_x, TODO: streamline
 
         ax = sns.kdeplot(means)
         sns.rugplot(means, ax=ax)
