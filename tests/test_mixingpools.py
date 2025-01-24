@@ -58,7 +58,7 @@ def test_single_ncd():
     mp_pars = {
         'src': ss.AgeGroup(0, 15),
         'dst': ss.AgeGroup(15, None),
-        'beta': ss.beta(0.15),
+        'beta': ss.beta(1),
         'contacts': ss.poisson(lam=5),
         'diseases': 'ncd'
     }
@@ -78,7 +78,7 @@ def test_single_missing_disease():
     mp_pars = {
         'src': ss.AgeGroup(0, 15),
         'dst': ss.AgeGroup(15, None),
-        'beta': ss.beta(0.15),
+        'beta': ss.beta(1),
         'contacts': ss.poisson(lam=5),
         'diseases': 'hiv'
     }
@@ -100,7 +100,7 @@ def test_single_age(do_plot=do_plot):
     mp_pars = {
         'src': ss.AgeGroup(0, 15),
         'dst': ss.AgeGroup(15, None),
-        'beta': ss.beta(0.15),
+        'beta': ss.beta(1),
         'contacts': ss.poisson(lam=5),
     }
     mp = ss.MixingPool(mp_pars)

@@ -9,6 +9,7 @@ from operator import itemgetter
 import pandas as pd
 
 ss_int_ = ss.dtypes.int
+ss_float_ = ss.dtypes.float
 
 __all__ = ['Disease', 'Infection', 'InfectionLog']
 
@@ -302,7 +303,10 @@ class Infection(Disease):
         for i, (nkey,route) in enumerate(self.sim.networks.items()):
             nk = ss.standardize_netkey(nkey)
             if isinstance(route, (ss.MixingPool, ss.MixingPools)):
-                new_cases.append(route.get_transmission(self, betamap[nk]))
+                target_uids = route.get_transmission(self, betamap[nk])
+                new_cases.append(target_uids)
+                sources.append(np.full(len(target_uids), dtype=ss_float_, fill_value=np.nan))
+                networks.append(np.full(len(target_uids), dtype=ss_int_, fill_value=i))
             elif isinstance(route, ss.Network) and len(route): # Skip networks with no edges
                 edges = route.edges
                 p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
