@@ -1253,8 +1253,6 @@ class MixingPool(Route):
         self.src_uids = self.get_uids(self.pars.src)
         self.dst_uids = self.get_uids(self.pars.dst)
         beta = self.pars.beta
-        if isinstance(beta, ss.beta):
-            beta = beta.values # Don't use as a time probability
 
         if beta == 0:
             return 0
