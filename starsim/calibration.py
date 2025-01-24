@@ -28,6 +28,7 @@ class Calibration(sc.prettyobj):
         build_fn  (callable) : function that takes a sim object and calib_pars dictionary and returns a modified sim
         build_kw      (dict) : a dictionary of options that are passed to build_fn to aid in modifying the base simulation. The API is self.build_fn(sim, calib_pars=calib_pars, **self.build_kw), where sim is a copy of the base simulation to be modified with calib_pars
         components    (list) : CalibComponents independently assess pseudo-likelihood as part of evaluating the quality of input parameters
+        prune_fn  (callable) : Function that takes a dictionary of parameters and returns True if the trial should be pruned
         eval_fn   (callable) : Function mapping a sim to a float (e.g. negative log likelihood) to be maximized. If None, the default will use CalibComponents.
         eval_kw       (dict) : Additional keyword arguments to pass to the eval_fn
         label        (str)   : a label for this calibration object
@@ -45,7 +46,7 @@ class Calibration(sc.prettyobj):
         A Calibration object
     """
     def __init__(self, sim, calib_pars, n_workers=None, total_trials=None, reseed=True,
-                 build_fn=None, build_kw=None, eval_fn=None, eval_kw=None, components=None,
+                 build_fn=None, build_kw=None, eval_fn=None, eval_kw=None, components=None, prune_fn=None,
                  label=None, study_name=None, db_name=None, keep_db=None, continue_db=None, storage=None,
                  sampler=None, die=False, debug=False, verbose=True):
 
@@ -63,6 +64,7 @@ class Calibration(sc.prettyobj):
         self.eval_fn        = eval_fn or self._eval_fit
         self.eval_kw        = eval_kw or dict()
         self.components     = sc.tolist(components)
+        self.prune_fn       = prune_fn
 
         n_trials = int(np.ceil(total_trials/n_workers))
         kw = dict(n_trials=n_trials, n_workers=int(n_workers), debug=debug, study_name=study_name,
@@ -166,6 +168,10 @@ class Calibration(sc.prettyobj):
 
         if self.reseed:
             pars['rand_seed'] = trial.suggest_int('rand_seed', 0, 1_000_000) # Choose a random rand_seed
+
+        # Prune if the prune_fn returns True
+        if self.prune_fn is not None and self.prune_fn(pars):
+            raise op.exceptions.TrialPruned()
 
         sim = self.run_sim(pars)
 
