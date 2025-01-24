@@ -123,7 +123,7 @@ def test_single_sex(do_plot=do_plot):
     mp_pars = {
         'src': lambda sim: sim.people.female, # female to male (only) transmission
         'dst': lambda sim: sim.people.male,
-        'beta': ss.beta(0.2),
+        'beta': ss.beta(1),
         'contacts': ss.poisson(lam=4),
     }
     mp = ss.MixingPool(mp_pars)
@@ -166,7 +166,7 @@ def test_multi(do_plot=do_plot):
 
     mps_pars = dict(
         contacts = np.array([[1.4, 0.5], [1.2, 0.7]]),
-        beta = ss.beta(0.2),
+        beta = 1,
         src = groups,
         dst = groups,
     )
@@ -187,14 +187,14 @@ if __name__ == '__main__':
     sc.options(interactive=do_plot)
     T = sc.timer()
 
-    sim0 = test_single_defaults(do_plot)
-    sim1 = test_single_uids(do_plot)
-    sim2 = test_single_ncd()
-    sim3 = test_single_missing_disease()
-    sim4 = test_single_age(do_plot)
-    sim5 = test_single_sex(do_plot)
+    # sim0 = test_single_defaults(do_plot)
+    # sim1 = test_single_uids(do_plot)
+    # sim2 = test_single_ncd()
+    # sim3 = test_single_missing_disease()
+    # sim4 = test_single_age(do_plot)
+    # sim5 = test_single_sex(do_plot)
 
-    sim6 = test_multi_defaults(do_plot)
+    # sim6 = test_multi_defaults(do_plot)
     sim7 = test_multi(do_plot)
 
     T.toc()

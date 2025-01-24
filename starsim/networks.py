@@ -1133,10 +1133,10 @@ class MixingPools(Route):
             mp.init_post()
         return
 
-    def get_transmission(self, *args, **kwargs):
+    def compute_transmission(self, *args, **kwargs):
         new_cases = []
         for mp in self.pools:
-            new_cases.extend(mp.get_transmission(*args, **kwargs))
+            new_cases.extend(mp.compute_transmission(*args, **kwargs))
         return new_cases
 
     def remove_uids(self, uids):
@@ -1252,13 +1252,14 @@ class MixingPool(Route):
                 self.pars[key] = inds.remove(uids)
         return
 
-    def get_transmission(self, disease, disease_beta):
+    def compute_transmission(self, rel_sus, rel_trans, disease_beta):
         """
         Calculate transmission
 
-        This is called from Infection.infect() together with network transmission
+        This is called from Infection.infect() together with network transmission.
 
-        :param disease: ss.Infection instance
+        :param rel_sus: Relative susceptibility
+        :param rel_trans: Relative infectiousness
         :param disease_beta: The beta value for the disease. This is typically calculated as a
                              pair of values as networks are bidirectional, however, only the first value
                              is used because mixing pools are unidirectional.
@@ -1282,8 +1283,8 @@ class MixingPool(Route):
             return []
 
         # Calculate transmission
-        trans = np.mean(disease.infectious[self.src_uids] * disease.rel_trans[self.src_uids])
-        acq = self.eff_contacts[self.dst_uids] * disease.susceptible[self.dst_uids] * disease.rel_sus[self.dst_uids]
+        trans = np.mean(rel_trans[self.src_uids])
+        acq = self.eff_contacts[self.dst_uids] * rel_sus[self.dst_uids]
         p = beta*disease_beta[0]*trans*acq
         self.p_acquire.set(p=p)
         return self.p_acquire.filter(self.dst_uids)
