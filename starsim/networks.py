@@ -1133,16 +1133,19 @@ class MixingPools(Route):
             mp.init_post()
         return
 
-    def step(self):
-        """ Step each mixing pool """
+    def get_transmission(self, *args, **kwargs):
+        new_cases = []
         for mp in self.pools:
-            mp.step()
-        return
+            new_cases.extend(mp.get_transmission(*args, **kwargs))
+        return new_cases
 
     def remove_uids(self, uids):
         """ Remove UIDs from each mixing pool """
         for mp in self.pools:
             mp.remove_uids(uids)
+        return
+
+    def step(self):
         return
 
 
@@ -1249,28 +1252,41 @@ class MixingPool(Route):
                 self.pars[key] = inds.remove(uids)
         return
 
-    def step(self):
-        self.src_uids = self.get_uids(self.pars.src)
-        self.dst_uids = self.get_uids(self.pars.dst)
+    def get_transmission(self, disease, disease_beta):
+        """
+        Calculate transmission
+
+        This is called from Infection.infect() together with network transmission
+
+        :param disease: ss.Infection instance
+        :param disease_beta: The beta value for the disease. This is typically calculated as a
+                             pair of values as networks are bidirectional, however, only the first value
+                             is used because mixing pools are unidirectional.
+        :return: UIDs of agents who acquired the disease at this step
+        """
+
+        if disease_beta[0] == 0:
+            return []
+
+        # Determine the mixing pool beta value
         beta = self.pars.beta
         if isinstance(beta, ss.beta):
-            beta = beta.values # Don't use as a time probability
-
+            beta = beta.values  # Don't use as a time probability
         if beta == 0:
-            return 0
+            return []
 
+        # Get source and target UIDs
+        self.src_uids = self.get_uids(self.pars.src)
+        self.dst_uids = self.get_uids(self.pars.dst)
         if len(self.src_uids) == 0 or len(self.dst_uids) == 0:
-            return 0
+            return []
 
-        n_new_cases = 0
-        for disease in self.diseases:
-            trans = np.mean(disease.infectious[self.src_uids] * disease.rel_trans[self.src_uids])
-            acq = self.eff_contacts[self.dst_uids] * disease.susceptible[self.dst_uids] * disease.rel_sus[self.dst_uids]
-            p = beta*trans*acq
+        # Calculate transmission
+        trans = np.mean(disease.infectious[self.src_uids] * disease.rel_trans[self.src_uids])
+        acq = self.eff_contacts[self.dst_uids] * disease.susceptible[self.dst_uids] * disease.rel_sus[self.dst_uids]
+        p = beta*disease_beta[0]*trans*acq
+        self.p_acquire.set(p=p)
+        return self.p_acquire.filter(self.dst_uids)
 
-            self.p_acquire.set(p=p)
-            new_cases = self.p_acquire.filter(self.dst_uids)
-            n_new_cases += len(new_cases)
-            disease.set_prognoses(new_cases)
-
-        return n_new_cases
+    def step(self):
+        return
