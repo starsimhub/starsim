@@ -187,14 +187,14 @@ if __name__ == '__main__':
     sc.options(interactive=do_plot)
     T = sc.timer()
 
-    # sim0 = test_single_defaults(do_plot)
-    # sim1 = test_single_uids(do_plot)
-    # sim2 = test_single_ncd()
-    # sim3 = test_single_missing_disease()
-    # sim4 = test_single_age(do_plot)
-    # sim5 = test_single_sex(do_plot)
+    sim0 = test_single_defaults(do_plot)
+    sim1 = test_single_uids(do_plot)
+    sim2 = test_single_ncd()
+    sim3 = test_single_missing_disease()
+    sim4 = test_single_age(do_plot)
+    sim5 = test_single_sex(do_plot)
 
-    # sim6 = test_multi_defaults(do_plot)
+    sim6 = test_multi_defaults(do_plot)
     sim7 = test_multi(do_plot)
 
     T.toc()
