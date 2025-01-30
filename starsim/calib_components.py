@@ -18,13 +18,39 @@ def linear_interp(expected, actual):
     Args:
         expected (pd.DataFrame): The expected data from field observation, must have 't' in the index and columns corresponding to specific needs of the selected component.
         actual (pd.DataFrame): The actual data from the simulation, must have 't' in the index and columns corresponding to specific needs of the selected component.
-    """
-    t = expected.index
-    conformed = pd.DataFrame(index=expected.index)
-    for k in actual:
-        conformed[k] = np.interp(x=t, xp=actual.index, fp=actual[k])
 
+    Returns:
+        conformed (pd.DataFrame): dataframe containing the actual data interpolated to match a common timeframe with the data in `expected`.
+        The interpolation ensures that the two datasets (expected and actual) can be compared directly (one-to-one) or used together in further analysis, because they are now aligned to the same time grid.
+    """
+    conformed = pd.DataFrame(index=expected.index)
+    common_time_grid = expected.index
+    interp_cols = ["x", "n"]  # The columns of type float this function cares about
+    for col in interp_cols:
+        conformed[col] = np.interp(x=common_time_grid, xp=actual.index, fp=actual[col])
+    conformed = _handle_categorical_columns(actual, conformed, interp_cols)
     return conformed
+
+
+def _handle_categorical_columns(actual, conformed, interp_cols):
+    """
+    A convinience function to map categorical columns that may exist in the `actual`
+    dataframe, from the index in the actual dataframe, to the index of the
+    actual `conformed` dataframe.
+    """
+    other_cols = list(set(actual.columns) - set(interp_cols))
+    # Handle other columsn, inlcuding those with categorical data
+    actual_index_array = actual.index.to_numpy()
+    conformed_index_array = conformed.index.to_numpy()
+    if len(other_cols):
+        for col in other_cols:
+            abs_diff_matrix = np.abs(conformed_index_array[:, None] - actual_index_array)
+            min_diff_indices = np.argmin(abs_diff_matrix, axis=1)
+            temp = actual.loc[actual_index_array[min_diff_indices], [col]].reset_index(drop=True)
+            temp.index = conformed.index
+            conformed[col] = temp[col]
+    return conformed
+
 
 def step_containing(expected, actual):
     """
@@ -61,7 +87,8 @@ def linear_accum(expected, actual):
 
     fp = actual.cumsum()
     ret = {}
-    for c in fp.columns:
+    interp_cols = ["x", "n"]
+    for c in interp_cols:
         vals = fp[c].values.flatten()
         v0 = np.interp(x=t0, xp=sim_t, fp=vals) # Cum value at t0
         v1 = np.interp(x=t1, xp=sim_t, fp=vals) # Cum value at t1
@@ -70,6 +97,7 @@ def linear_accum(expected, actual):
         ret[c] = v1 - v0
 
     df = pd.DataFrame(ret, index=expected.index)
+    df = _handle_categorical_columns(actual, df, interp_cols)
     return df
 
 
