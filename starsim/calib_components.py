@@ -610,7 +610,7 @@ class Normal(CalibComponent):
 
             # TEMP TODO calculate rate if 'n' supplied
             if 'n' in row:
-                a_x = row[['x']].values[0] / row[['n']].values[0]
+                a_x = row['x'] / row['n'] # row[['x']].values[0] / row[['n']].values[0]
 
             sigma2 = self.sigma2 if self.sigma2 is not None else self.compute_var(e_x, a_x)
             if isinstance(sigma2, (list, np.ndarray)):
@@ -648,7 +648,7 @@ class Normal(CalibComponent):
 
             # TEMP TODO calculate rate if 'n' supplied
             if 'n' in row:
-                a_x = row['x'].values / row['n'].values
+                a_x = row['x'] / row['n'] #row['x'].values / row['n'].values
 
             sigma2 = self.sigma2 if self.sigma2 is not None else self.compute_var(e_x, a_x)
             if isinstance(sigma2, (list, np.ndarray)):
