@@ -332,10 +332,10 @@ class Calibration(sc.prettyobj):
         fix_after = isinstance(self.after_msim, ss.Sim)
         if fix_after or fix_after:
             if fix_before:
-                self.before_msim = ss.MultiSim(self.before_msim, initialize=True, debug=True, parallel=False)
+                self.before_msim = ss.MultiSim(self.before_msim, initialize=True, debug=True, parallel=False, n_runs=1)
 
             if fix_after:
-                self.after_msim = ss.MultiSim(self.after_msim, initialize=True, debug=True, parallel=False)
+                self.after_msim = ss.MultiSim(self.after_msim, initialize=True, debug=True, parallel=False, n_runs=1)
 
         msim = ss.MultiSim(self.before_msim.sims + self.after_msim.sims)
         msim.run()
