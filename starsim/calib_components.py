@@ -379,7 +379,7 @@ class Binomial(CalibComponent):
             else:
                 actual = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
 
-            for row in actual.iterrows():
+            for idx, row in actual.iterrows():
                 p = self.get_p(row)
                 q = sps.binom(n=e_n, p=p)
                 means[bi] = q.mean()
@@ -554,7 +554,7 @@ class GammaPoisson(CalibComponent):
             else:
                 actual = data.set_index('rand_seed').loc[use_seeds].groupby(['t', 't1']).aggregate(func=self.combine_reps, **self.combine_kwargs)
 
-            for row in actual.iterrows():
+            for idx, row in actual.iterrows():
                 a_n, a_x = row['n'], row['x']
                 beta = (a_n+1)
                 T = e_n
