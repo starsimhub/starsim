@@ -202,6 +202,9 @@ class CalibComponent(sc.prettyobj):
             nlls[bi] = np.mean(nll) # Mean across reps
         self.nll = np.mean(nlls) # Mean across bootstraps
 
+        if np.isnan(self.nll):
+            return np.inf # Convert nan to inf
+
         return self.weight * self.nll
 
     def __call__(self, sim, **kwargs):
