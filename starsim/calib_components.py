@@ -190,7 +190,12 @@ class CalibComponent(sc.prettyobj):
 
         if self.n_boot is None or self.n_boot == 1 or len(seeds) == 1:
             self.nll = self._combine_reps_nll(self.expected, self.actual, **kwargs)
-            return self.weight * np.mean(self.nll)
+            if self.weight == 0: # Resolve possible 0 * inf
+                return 0
+            wnll = self.weight * np.mean(self.nll)
+            if np.isnan(wnll):
+                return np.inf # Convert nan to inf
+            return wnll
 
         # Bootstrapped aggregation
         boot_size = len(seeds)
@@ -202,10 +207,13 @@ class CalibComponent(sc.prettyobj):
             nlls[bi] = np.mean(nll) # Mean across reps
         self.nll = np.mean(nlls) # Mean across bootstraps
 
-        if np.isnan(self.nll):
-            return np.inf # Convert nan to inf
+        if self.weight == 0:
+            return 0 # Resolve possible 0 * inf
 
-        return self.weight * self.nll
+        wnll = self.weight * self.nll
+        if np.isnan(wnll):
+            return np.inf # Convert nan to inf
+        return wnll
 
     def __call__(self, sim, **kwargs):
         return self.eval(sim, **kwargs)
