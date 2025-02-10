@@ -346,14 +346,12 @@ class Binomial(CalibComponent):
             if 'p' in rep:
                 # p specified, no collision
                 e_n, e_x = rep['n'], rep['x']
-                if e_n == 0:
-                    return np.inf
                 p = self.get_p(rep)
             else:
                 assert 'n_e' in rep and 'x_e' in rep, 'Expected columns n_e and x_e not found'
                 # Collision in merge, get _e and _a values
                 e_n, e_x = rep['n_e'], rep['x_e']
-                if e_n == 0:
+                if rep['n_a'] == 0:
                     return np.inf
                 p = self.get_p(rep, 'x_a', 'n_a')
 
