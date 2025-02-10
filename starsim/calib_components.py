@@ -317,7 +317,7 @@ class Binomial(CalibComponent):
         if 'p' in df:
             p = df['p'].values
         else:
-            p = (df[x_col]+1) / (df[n_col]+2)
+            p = df[x_col] / df[n_col] # Switched to MLE x/n from previous "Bayesian" (Laplace +1, Jeffreys) before: (df[x_col]+1) / (df[n_col]+2)
         return p
 
     def compute_nll(self, expected, actual, **kwargs):
