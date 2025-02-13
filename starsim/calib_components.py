@@ -178,7 +178,9 @@ class CalibComponent(sc.prettyobj):
                 self.actual = None
                 return np.inf
         else:
-            assert self.include_fn is None, 'The include_fn argument is only valid for MultiSim objects'
+            # Warn if the user has an include_fn for a single sim
+            if self.include_fn is not None and not self.include_fn(sim):
+                sc.printv(f'Warning: include_fn was specified for a single simulation, but will be ignored', level=1)
             actual = self.extract_fn(sim) # Extract
             if self.conform is not None:
                 actual = self.conform(self.expected, actual) # Conform
