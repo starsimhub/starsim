@@ -138,8 +138,8 @@ class Tx(Product):
 
 class Vx(Product):
     """ Vaccine product """
-    def __init__(self, diseases=None, pars=None, *args, **kwargs):
-        super().__init__(pars, *args, **kwargs)
+    def __init__(self, diseases=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.diseases = sc.tolist(diseases)
         return
 
