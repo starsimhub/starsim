@@ -233,15 +233,12 @@ class Calibration(sc.prettyobj):
                 self.best_pars = None
         return study
 
-    def calibrate(self, calib_pars=None, load=False, tidyup=True, **kwargs):
+    def calibrate(self, calib_pars=None, **kwargs):
         """
         Perform calibration.
 
         Args:
             calib_pars (dict): if supplied, overwrite stored calib_pars
-            load (bool): whether to load existing trials from the database (if rerunning the same calibration)
-            tidyup (bool): whether to delete temporary files from trial runs
-            verbose (bool): whether to print output from each trial
             kwargs (dict): if supplied, overwrite stored run_args (n_trials, n_workers, etc.)
         """
         # Load and validate calibration parameters
@@ -257,28 +254,7 @@ class Calibration(sc.prettyobj):
         self.best_pars = sc.objdict(study.best_params)
         self.elapsed = sc.toc(t0, output=True)
 
-        self.sim_results = []
-        if load:
-            if self.verbose: print('Loading saved results...')
-            for trial in study.trials:
-                n = trial.number
-                try:
-                    filename = self.tmp_filename % trial.number
-                    results = sc.load(filename)
-                    self.sim_results.append(results)
-                    if tidyup:
-                        try:
-                            os.remove(filename)
-                            if self.verbose: print(f'    Removed temporary file {filename}')
-                        except Exception as E:
-                            errormsg = f'Could not remove {filename}: {str(E)}'
-                            if self.verbose: print(errormsg)
-                    if self.verbose: print(f'  Loaded trial {n}')
-                except Exception as E:
-                    errormsg = f'Warning, could not load trial {n}: {str(E)}'
-                    if self.verbose: print(errormsg)
-
-        # Compare the results
+        # Parse the study into a data frame, self.df while also storing the best parameters
         self.parse_study(study)
 
         if self.verbose: print('Best pars:', self.best_pars)
