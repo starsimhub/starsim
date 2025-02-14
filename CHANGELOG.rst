@@ -7,14 +7,13 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
-
 Version 2.3.0 (2025-02-14)
 ---------------------------
 - The calibration class has been completely redesigned. Calibration now relies on "components", which capture mismatch with a particular data type (e.g., new infections). The new approach also adds additional statistical rigor for calculating mismatches.
 - ``ss.MixingPool`` has been updated to be more modular, and behave more like ``ss.Network``; in particular, ``compute_transmission()`` rather than ``step()`` is called to determine new infections.
 - ``ss.Result`` now has a ``summarize_by`` argument, which determines how a result should be summarized as a scalar (e.g., mean for a prevalence, sum for a count, last entry for a cumulative count).
+- Fixed a bug with time parameters incorrectly pulling the parent unit from the Sim, rather than the parent module. 
 - *GitHub info*: PR `831 <https://github.com/starsimhub/starsim/pull/831>`_
-
 
 
 Version 2.2.0 (2024-11-18)
