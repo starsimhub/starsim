@@ -28,12 +28,14 @@ class Calibration(sc.prettyobj):
         build_fn  (callable) : function that takes a sim object and calib_pars dictionary and returns a modified sim
         build_kw      (dict) : a dictionary of options that are passed to build_fn to aid in modifying the base simulation. The API is self.build_fn(sim, calib_pars=calib_pars, **self.build_kw), where sim is a copy of the base simulation to be modified with calib_pars
         components    (list) : CalibComponents independently assess pseudo-likelihood as part of evaluating the quality of input parameters
+        prune_fn  (callable) : Function that takes a dictionary of parameters and returns True if the trial should be pruned
         eval_fn   (callable) : Function mapping a sim to a float (e.g. negative log likelihood) to be maximized. If None, the default will use CalibComponents.
         eval_kw       (dict) : Additional keyword arguments to pass to the eval_fn
         label        (str)   : a label for this calibration object
         study_name   (str)   : name of the optuna study
         db_name      (str)   : the name of the database file (default: 'starsim_calibration.db')
-        keep_db      (bool)  : whether to keep the database after calibration (default: false)
+        continue_db  (bool)  : whether to continue if the database already exists, removes the database if false (default: false, any existing database will be deleted)
+        keep_db      (bool)  : whether to keep the database after calibration (default: false, the database will be deleted)
         storage      (str)   : the location of the database (default: sqlite)
         sampler (BaseSampler): the sampler used by optuna, like optuna.samplers.TPESampler
         die          (bool)  : whether to stop if an exception is encountered (default: false)
@@ -44,8 +46,8 @@ class Calibration(sc.prettyobj):
         A Calibration object
     """
     def __init__(self, sim, calib_pars, n_workers=None, total_trials=None, reseed=True,
-                 build_fn=None, build_kw=None, eval_fn=None, eval_kw=None, components=None,
-                 label=None, study_name=None, db_name=None, keep_db=None, storage=None,
+                 build_fn=None, build_kw=None, eval_fn=None, eval_kw=None, components=None, prune_fn=None,
+                 label=None, study_name=None, db_name=None, keep_db=None, continue_db=None, storage=None,
                  sampler=None, die=False, debug=False, verbose=True):
 
         # Handle run arguments
@@ -53,6 +55,7 @@ class Calibration(sc.prettyobj):
         if n_workers    is None: n_workers      = 1 if debug else sc.cpu_count()
         if study_name   is None: study_name     = 'starsim_calibration'
         if db_name      is None: db_name        = f'{study_name}.db'
+        if continue_db  is None: continue_db    = False
         if keep_db      is None: keep_db        = False
         if storage      is None: storage        = f'sqlite:///{db_name}'
         
@@ -61,10 +64,11 @@ class Calibration(sc.prettyobj):
         self.eval_fn        = eval_fn or self._eval_fit
         self.eval_kw        = eval_kw or dict()
         self.components     = sc.tolist(components)
+        self.prune_fn       = prune_fn
 
         n_trials = int(np.ceil(total_trials/n_workers))
         kw = dict(n_trials=n_trials, n_workers=int(n_workers), debug=debug, study_name=study_name,
-                  db_name=db_name, keep_db=keep_db, storage=storage, sampler=sampler)
+                  db_name=db_name, continue_db=continue_db, keep_db=keep_db, storage=storage, sampler=sampler)
         self.run_args = sc.objdict(kw)
 
         # Handle other inputs
@@ -80,8 +84,6 @@ class Calibration(sc.prettyobj):
 
         self.study = None
 
-        # Temporarily store a filename for storing intermediate results
-        self.tmp_filename = 'tmp_calibration_%06i.obj'
         return
 
     def run_sim(self, calib_pars=None, label=None):
@@ -165,6 +167,10 @@ class Calibration(sc.prettyobj):
         if self.reseed:
             pars['rand_seed'] = trial.suggest_int('rand_seed', 0, 1_000_000) # Choose a random rand_seed
 
+        # Prune if the prune_fn returns True
+        if self.prune_fn is not None and self.prune_fn(pars):
+            raise op.exceptions.TrialPruned()
+
         sim = self.run_sim(pars)
 
         # Compute fit
@@ -209,8 +215,8 @@ class Calibration(sc.prettyobj):
         return
 
     def make_study(self):
-        """ Make a study, deleting one if it already exists """
-        if not self.run_args.keep_db:
+        """ Make a study, deleting if it already exists and user does not want to continue_db """
+        if not self.run_args.continue_db:
             self.remove_db()
         if self.verbose: print(self.run_args.storage)
         try:
@@ -218,18 +224,19 @@ class Calibration(sc.prettyobj):
         except op.exceptions.DuplicatedStudyError:
             ss.warn(f'Study named {self.run_args.study_name} already exists in storage {self.run_args.storage}, loading...')
             study = op.create_study(storage=self.run_args.storage, study_name=self.run_args.study_name, direction='minimize', load_if_exists=True)
-            self.best_pars = sc.objdict(study.best_params)
+            try:
+                self.best_pars = sc.objdict(study.best_params)
+            except Exception as E:
+                print(f'Could not get best parameters: {str(E)}')
+                self.best_pars = None
         return study
 
-    def calibrate(self, calib_pars=None, load=False, tidyup=True, **kwargs):
+    def calibrate(self, calib_pars=None, **kwargs):
         """
         Perform calibration.
 
         Args:
             calib_pars (dict): if supplied, overwrite stored calib_pars
-            load (bool): whether to load existing trials from the database (if rerunning the same calibration)
-            tidyup (bool): whether to delete temporary files from trial runs
-            verbose (bool): whether to print output from each trial
             kwargs (dict): if supplied, overwrite stored run_args (n_trials, n_workers, etc.)
         """
         # Load and validate calibration parameters
@@ -245,28 +252,7 @@ class Calibration(sc.prettyobj):
         self.best_pars = sc.objdict(study.best_params)
         self.elapsed = sc.toc(t0, output=True)
 
-        self.sim_results = []
-        if load:
-            if self.verbose: print('Loading saved results...')
-            for trial in study.trials:
-                n = trial.number
-                try:
-                    filename = self.tmp_filename % trial.number
-                    results = sc.load(filename)
-                    self.sim_results.append(results)
-                    if tidyup:
-                        try:
-                            os.remove(filename)
-                            if self.verbose: print(f'    Removed temporary file {filename}')
-                        except Exception as E:
-                            errormsg = f'Could not remove {filename}: {str(E)}'
-                            if self.verbose: print(errormsg)
-                    if self.verbose: print(f'  Loaded trial {n}')
-                except Exception as E:
-                    errormsg = f'Warning, could not load trial {n}: {str(E)}'
-                    if self.verbose: print(errormsg)
-
-        # Compare the results
+        # Parse the study into a data frame, self.df while also storing the best parameters
         self.parse_study(study)
 
         if self.verbose: print('Best pars:', self.best_pars)
@@ -277,6 +263,21 @@ class Calibration(sc.prettyobj):
             self.remove_db()
 
         return self
+
+    def save_csv(self, filename, top_k=None):
+        """ Save the results to a CSV file """
+        if self.study is None:
+            raise ValueError('Please run calibrate() before saving results')
+
+        df = self.study.trials_dataframe() \
+            .sort_values(by='value') \
+            .set_index('number')
+
+        if top_k is not None:
+            df = df.head(top_k)
+
+        df.to_csv(filename)
+        return df
 
     def check_fit(self, do_plot=True):
         """ Run before and after simulations to validate the fit """
@@ -296,7 +297,7 @@ class Calibration(sc.prettyobj):
 
         after_pars = sc.dcp(self.calib_pars)
         for parname, spec in after_pars.items():
-            spec['value'] = self.best_pars[parname]
+            spec['value'] = self.best_pars[parname] # Use best parameters from calibration
 
         self.before_msim = self.build_fn(self.sim.copy(), calib_pars=before_pars, **self.build_kw)
         self.after_msim = self.build_fn(self.sim.copy(), calib_pars=after_pars, **self.build_kw)
@@ -305,10 +306,10 @@ class Calibration(sc.prettyobj):
         fix_after = isinstance(self.after_msim, ss.Sim)
         if fix_after or fix_after:
             if fix_before:
-                self.before_msim = ss.MultiSim(self.before_msim, initialize=True, debug=True, parallel=False)
+                self.before_msim = ss.MultiSim(self.before_msim, initialize=True, debug=True, parallel=False, n_runs=1)
 
             if fix_after:
-                self.after_msim = ss.MultiSim(self.after_msim, initialize=True, debug=True, parallel=False)
+                self.after_msim = ss.MultiSim(self.after_msim, initialize=True, debug=True, parallel=False, n_runs=1)
 
         msim = ss.MultiSim(self.before_msim.sims + self.after_msim.sims)
         msim.run()
@@ -394,7 +395,7 @@ class Calibration(sc.prettyobj):
 
         pars = sc.dcp(self.calib_pars)
         for parname, spec in pars.items():
-            spec['value'] = self.best_pars[parname]
+            spec['value'] = self.best_pars[parname] # Use best parameters from calibration
         msim = self.build_fn(self.sim.copy(), calib_pars=pars, **self.build_kw)
 
         msim.run()
