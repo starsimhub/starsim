@@ -1074,7 +1074,7 @@ class MixingPools(Route):
             diseases = None,
             src = None,
             dst = None,
-            beta = ss.beta(0.1),
+            beta = 0.2,
             contacts = None,
         )
         self.update_pars(pars, **kwargs)
@@ -1189,7 +1189,7 @@ class MixingPool(Route):
             diseases = None,
             src = None,
             dst = None, # Same as src
-            beta = ss.beta(0.2),
+            beta = 0.2,
             contacts = ss.poisson(1.0),
         )
         self.update_pars(pars, **kwargs)
@@ -1258,20 +1258,24 @@ class MixingPool(Route):
 
         This is called from Infection.infect() together with network transmission.
 
-        :param rel_sus: Relative susceptibility
-        :param rel_trans: Relative infectiousness
-        :param disease_beta: The beta value for the disease. This is typically calculated as a
-                             pair of values as networks are bidirectional, however, only the first value
-                             is used because mixing pools are unidirectional.
-        :return: UIDs of agents who acquired the disease at this step
+        Args:
+            rel_sus (float): Relative susceptibility
+            rel_trans (float): Relative infectiousness
+            disease_beta (float): The beta value for the disease. This is typically calculated as a
+                pair of values as networks are bidirectional, however, only the first value
+                is used because mixing pools are unidirectional.
+        Returns:
+            UIDs of agents who acquired the disease at this step
         """
-
         if disease_beta[0] == 0:
             return []
 
         # Determine the mixing pool beta value
         beta = self.pars.beta
-        if beta == 0:
+        if isinstance(beta, ss.beta):
+            ss.warn(f'In mixing pools, beta should typically be a float, not {beta}; ignoring time value')
+            beta = beta.values
+        if sc.isnumber(beta) and beta == 0:
             return []
 
         # Get source and target UIDs
