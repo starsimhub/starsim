@@ -182,6 +182,11 @@ class Loop:
 
     def run(self, until=None, verbose=None):
         """ Actually run the integration loop; usually called by sim.run() """
+
+        # Convert e.g. '2020-01-01' to an actual date
+        if isinstance(until, str):
+            until = ss.date(until)
+
         # Loop over every function in the integration loop, e.g. disease.step()
         self.store_time()
         for f,label in zip(self.plan.func[self.index:], self.plan.func_label[self.index:]):
@@ -194,7 +199,7 @@ class Loop:
             # Tidy up
             self.index += 1 # Increment the count
             self.store_time()
-            if until and self.sim.now > until: # Terminate if asked to
+            if until is not None and self.sim.now > until: # Terminate if asked to
                 break
         return
 

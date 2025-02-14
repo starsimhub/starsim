@@ -65,9 +65,9 @@ class Births(Demographics):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('new',        dtype=int,   scale=True,  label='New births'),
-            ss.Result('cumulative', dtype=int,   scale=True,  label='Cumulative births'),
-            ss.Result('cbr',        dtype=float, scale=False, label='Crude birth rate'),
+            ss.Result('new',        dtype=int,   scale=True,  summarize_by='sum',  label='New births'),
+            ss.Result('cumulative', dtype=int,   scale=True,  summarize_by='last', label='Cumulative births'),
+            ss.Result('cbr',        dtype=float, scale=False, summarize_by='mean', label='Crude birth rate'),
         )
         return
 
@@ -223,7 +223,7 @@ class Deaths(Demographics):
 
         # Scale from rate to probability. Consider an exponential here.
         if isinstance(death_rate, ss.TimePar):
-            factor = self.t.dt # TODO: figure out why this isn't 1.0
+            factor = 1.0
         else:
             factor = ss.time_ratio(unit1=self.t.unit, dt1=self.t.dt, unit2='year', dt2=1.0)
         death_prob = death_rate * self.pars.rate_units * self.pars.rel_death * factor
@@ -234,9 +234,9 @@ class Deaths(Demographics):
     def init_results(self):
         super().init_results()
         self.define_results(
-            ss.Result('new',        dtype=int,   scale=True,  label='Deaths', auto_plot=False), # Use sim deaths instead
-            ss.Result('cumulative', dtype=int,   scale=True,  label='Cumulative deaths', auto_plot=False),
-            ss.Result('cmr',        dtype=float, scale=False, label='Crude mortality rate'),
+            ss.Result('new',        dtype=int,   scale=True,  summarize_by='sum',  label='Deaths', auto_plot=False), # Use sim deaths instead
+            ss.Result('cumulative', dtype=int,   scale=True,  summarize_by='last', label='Cumulative deaths', auto_plot=False),
+            ss.Result('cmr',        dtype=float, scale=False, summarize_by='mean', label='Crude mortality rate'),
         )
         return
 
@@ -395,9 +395,9 @@ class Pregnancy(Demographics):
         """
         super().init_results()
         self.define_results(
-            ss.Result('pregnancies', dtype=int,   scale=True,  label='New pregnancies'),
-            ss.Result('births',      dtype=int,   scale=True,  label='New births'),
-            ss.Result('cbr',         dtype=float, scale=False, label='Crude birth rate'),
+            ss.Result('pregnancies', dtype=int,   scale=True,  summarize_by='sum',  label='New pregnancies'),
+            ss.Result('births',      dtype=int,   scale=True,  summarize_by='sum',  label='New births'),
+            ss.Result('cbr',         dtype=float, scale=False, summarize_by='mean', label='Crude birth rate'),
         )
         return
 

@@ -2,6 +2,7 @@
 Result structures.
 """
 import numpy as np
+import pandas as pd
 import sciris as sc
 import starsim as ss
 import matplotlib.pyplot as plt
@@ -24,13 +25,14 @@ class Result(ss.BaseArr):
         timevec (array): an array of time points
         low (array): values for the lower bound
         high (array): values for the upper bound
+        summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
 
     In most cases, ``ss.Result`` behaves exactly like ``np.array()``, except with
     the additional fields listed above. To see everything contained in a result,
     you can use result.disp().
     """
     def __init__(self, name=None, label=None, dtype=float, shape=None, scale=True, auto_plot=True,
-                 module=None, values=None, timevec=None, low=None, high=None):
+                 module=None, values=None, timevec=None, low=None, high=None, summarize_by=None, **kwargs):
         # Copy inputs
         self.name = name
         self.label = label
@@ -43,7 +45,9 @@ class Result(ss.BaseArr):
         self.dtype = dtype
         self.shape = shape
         self.values = values
+        self.summarize_by = summarize_by
         self.init_values()
+
         return
 
     def __repr__(self):
@@ -137,24 +141,161 @@ class Result(ss.BaseArr):
             full = f'{modlabel}: {reslabel}'
         return full
 
-    def to_df(self, sep='_', rename=False):
+    def summary_method(self, die=False):
+        # If no summarization method is provided, try to figure it out from the name
+        if 'new_' in self.name:  # Not using startswith because msim results are prefixed with the module name
+            summarize_by = 'sum'
+        elif self.name.startswith('n_') or '_n_' in self.name:  # Second option is for msim results
+            summarize_by = 'mean'
+        elif 'cum_' in self.name:
+            summarize_by = 'last'
+        else:
+            if die:
+                raise ValueError(f'Cannot figure out how to summarize {self.name}')
+            else:
+                summarize_by = 'mean'
+        return summarize_by
+
+    def resample(self, new_unit='year', summarize_by=None, col_names='vlh', die=False, output_form='series', use_years=False, sep='_'):
+        """
+        Resample the result, e.g. from days to years. Leverages the pandas resample method.
+        Accepts all the Starsim units, plus the Pandas ones documented here:
+            https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
+        Args:
+            new_unit (str): the new unit to resample to, e.g. 'year', 'month', 'week', 'day', '1W', '2M', etc.
+            summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
+            col_names (str): whether to rename the columns with the name of the result
+            die (bool): whether to raise an error if the summarization method cannot be determined
+            output_form (str): 'series', 'dataframe', or 'result'
+            use_years (bool): whether to use years as the unit of time
+        """
+        # Manage timevec
+        if self.timevec is None:
+            raise ValueError('Cannot resample: timevec is not set')
+
+        # Handle summarization method
+        if summarize_by is None:
+            if self.summarize_by is not None:
+                summarize_by = self.summarize_by
+            else:
+                summarize_by = self.summary_method(die=die)
+        if summarize_by not in ['sum', 'mean', 'last']:
+            raise ValueError(f'Unrecognized summarize_by method: {summarize_by}')
+
+        # Map Starsim units to the ones Pandas understands
+        unit_mapper = dict(week='1w', month='1m', year='1YE')
+        if new_unit in unit_mapper:
+            new_unit = unit_mapper[new_unit]
+
+        # Convert to a Pandas dataframe then summarize. Note that we use a dataframe
+        # rather than a series so that we can have multiple columns (low/high/value)
+        df = self.to_df(col_names=col_names, set_date_index=True, sep=sep)
+        if summarize_by == 'sum':
+            df = df.resample(new_unit).sum()
+        elif summarize_by == 'mean':
+            df = df.resample(new_unit).mean()
+        elif summarize_by == 'last':
+            df = df.resample(new_unit).last()
+
+        # Handle years
+        if use_years: df.index = df.index.year
+
+        # Figure out return format
+        if output_form == 'series':
+            out = pd.Series(df.value.values, index=df.timevec)
+        elif output_form == 'dataframe':
+            out = df
+        elif output_form == 'result':
+            out = self.from_df(df)
+
+        return out
+
+    def from_df(self, df):
+        """ Make a copy of the result with new values from a dataframe """
+        new_res = sc.dcp(self)
+        new_res.timevec = df.index
+        new_res.values = df.value.values
+        if 'low' in df.columns:
+            new_res.low = df.low.values
+        if 'high' in df.columns:
+            new_res.high = df.high.values
+        return new_res
+
+    def to_series(self, set_name=False, resample=None, sep='_', **kwargs):
+        """
+        Convert to a series with timevec as the index and value as the data
+        Args:
+            set_name (bool): whether to set the name of the series to the name of the result
+            resample (str): if provided, resample the data to this frequency
+            kwargs: passed to the resample method
+        """
+        # Return a resampled version if requested
+        if resample is not None:
+            return self.resample(new_unit=resample, set_name=set_name, sep=sep, **kwargs)
+        name = self.name if set_name else None
+        timevec = self.convert_timevec()
+        s = pd.Series(self.values, index=timevec, name=name)
+        return s
+
+    def convert_timevec(self):
+        # Make sure we're using a timevec that's in the right format i.e. dates
+        if self.timevec is not None:
+            if not self.has_dates:
+                timevec = [ss.date(t) for t in self.timevec]
+            else:
+                timevec = self.timevec
+        return timevec
+
+    def to_df(self, sep='_', col_names='vlh', resample=None, set_date_index=False, **kwargs):
         """
         Convert to a dataframe with timevec, value, low, and high columns
 
         Args:
-            rename (bool): if True, rename the columns with the name of the result (else value, low, high)
+            sep (str): separator for the column names
+            col_names (str or None): if None, uses the name of the result. Default is 'vlh' which uses value, low, high
+            set_date_index (bool): if True, use the timevec as the index
+            resample (str): if provided, resample the data to this frequency
+            kwargs: passed to the resample method
         """
         data = dict()
-        if self.timevec is not None:
-            data['timevec'] = self.timevec
-        valcol = self.name if rename else 'value'
+
+        # Return a resampled version if requested
+        if resample is not None:
+            return self.resample(new_unit=resample, output_form='dataframe', col_names=col_names, **kwargs)
+
+        # Checks
+        if self.timevec is None and set_date_index:
+            raise ValueError('Cannot convert to dataframe with date index: timevec is not set')
+
+        # Deal with timevec
+        timevec = self.convert_timevec()
+        if not set_date_index:
+            data['timevec'] = timevec
+
+        # Determine how to label columns
+        if col_names is None:
+            valcol = self.name
+            prefix = self.name+sep
+        elif col_names == 'vlh':
+            valcol = 'value'
+            prefix = ''
+        else:
+            valcol = col_names
+            prefix = col_names+sep
+
         data[valcol] = self.values
         for key in ['low', 'high']:
             val = self[key]
-            valcol = f'{self.name}{sep}{key}' if rename else key
+            valcol = f'{prefix}{key}'
             if val is not None:
                 data[valcol] = val
-        df = sc.dataframe(data)
+
+        # Convert to dataframe, optionally with a date index
+        if set_date_index:
+            df = sc.dataframe(data, index=timevec)
+        else:
+            df = sc.dataframe(data)
+
         return df
 
     def plot(self, fig=None, ax=None, fig_kw=None, plot_kw=None, fill_kw=None, **kwargs):
@@ -255,9 +396,19 @@ class Results(ss.ndict):
         return
 
     @property
+    def is_msim(self):
+        """ Check if this is a MultiSim """
+        return self._module == 'MultiSim'
+
+    @property
     def all_results(self):
         """ Iterator over all results, skipping any nested values """
         return iter(res for res in self.values() if isinstance(res, Result))
+
+    @property
+    def all_results_dict(self):
+        """ Dictionary of all results, skipping any nested values """
+        return {rname: res for rname, res in self.items() if isinstance(res, Result)}
 
     @property
     def equal_len(self):
@@ -265,34 +416,51 @@ class Results(ss.ndict):
         lengths = [len(res) for res in self.flatten().values()]
         return len(set(lengths)) == 1
 
-    def flatten(self, sep='_', only_results=True):
+    def flatten(self, sep='_', only_results=True, **kwargs):
         """ Turn from a nested dictionary into a flat dictionary, keeping only results by default """
         out = sc.flattendict(self, sep=sep)
+        if 'resample' in kwargs and kwargs['resample'] is not None:
+            resample = kwargs.pop('resample')
+            for k,v in out.items():
+                if isinstance(v, Result):
+                    out[k] = v.resample(new_unit=resample, output_form='result', **kwargs)
         if only_results:
             out = sc.objdict({k:v for k,v in out.items() if isinstance(v, Result)})
         return out
 
-    def to_df(self, sep='_', descend=False):
-        """ Merge all results dataframes into one """
+    def to_df(self, sep='_', descend=False, **kwargs):
+        """
+        Merge all results dataframes into one
+        Args:
+            sep (str): separator for the column names
+            descend (bool): whether to descend into nested results
+            kwargs: passed to the to_df method, can include instructions for summarizing results by time
+        """
         if not descend:
-            dfs = [res.to_df(sep=sep, rename=True) for res in self.all_results]
+            dfs = []
+            for rname, res in self.all_results_dict.items():
+                col_names = rname if self.is_msim else None
+                res_df = res.to_df(sep=sep, col_names=col_names, **kwargs)
+                dfs.append(res_df)
             if len(dfs):
-                df = dfs[0]
-                for df2 in dfs[1:]:
-                    df = df.merge(df2)
+                df = pd.concat(dfs, axis=1)
             else:
                 df = None
         else:
-            if self.equal_len:
-                flat = self.flatten(sep=sep, only_results=True)
-                flat = dict(timevec=self.timevec) | flat # Prepend the timevec
+            if self.equal_len or 'resample' in kwargs:  # If we're resampling, all results will end up the same length
+                flat = self.flatten(sep=sep, only_results=True, **kwargs)
+                if 'resample' in kwargs and kwargs['resample'] is not None:
+                    timevec = flat[0].timevec
+                else:
+                    timevec = self.timevec
+                flat = dict(timevec=timevec) | flat  # Prepend the timevec
                 df = sc.dataframe.from_dict(flat)
             else:
-                df = sc.objdict() # For non-equal lengths, actually return an objdict rather than a dataframe
+                df = sc.objdict()  # For non-equal lengths, actually return an objdict rather than a dataframe
                 df.sim = self.to_df(sep=sep, descend=False)
                 for k,v in self.items():
                     if isinstance(v, Results):
-                        thisdf = v.to_df(sep=sep, descend=False) # Only allow one level of nesting
+                        thisdf = v.to_df(sep=sep, descend=False)  # Only allow one level of nesting
                         if thisdf is not None:
                             df[k] = thisdf
         return df

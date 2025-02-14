@@ -1271,8 +1271,6 @@ class MixingPool(Route):
 
         # Determine the mixing pool beta value
         beta = self.pars.beta
-        if isinstance(beta, ss.beta):
-            beta = beta.values  # Don't use as a time probability
         if beta == 0:
             return []
 

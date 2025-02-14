@@ -39,8 +39,9 @@ dependencies = [
     "sciris>=3.2.0",
     "numba",
     "scipy",
-    "matplotlib",
     "networkx",
+    "matplotlib",
+    "seaborn",
     "optuna"
 ]
 
