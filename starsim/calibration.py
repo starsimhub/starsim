@@ -84,8 +84,6 @@ class Calibration(sc.prettyobj):
 
         self.study = None
 
-        # Temporarily store a filename for storing intermediate results
-        self.tmp_filename = 'tmp_calibration_%06i.obj'
         return
 
     def run_sim(self, calib_pars=None, label=None):
