@@ -84,8 +84,6 @@ class Calibration(sc.prettyobj):
 
         self.study = None
 
-        # Temporarily store a filename for storing intermediate results
-        self.tmp_filename = 'tmp_calibration_%06i.obj'
         return
 
     def run_sim(self, calib_pars=None, label=None):
@@ -233,15 +231,12 @@ class Calibration(sc.prettyobj):
                 self.best_pars = None
         return study
 
-    def calibrate(self, calib_pars=None, load=False, tidyup=True, **kwargs):
+    def calibrate(self, calib_pars=None, **kwargs):
         """
         Perform calibration.
 
         Args:
             calib_pars (dict): if supplied, overwrite stored calib_pars
-            load (bool): whether to load existing trials from the database (if rerunning the same calibration)
-            tidyup (bool): whether to delete temporary files from trial runs
-            verbose (bool): whether to print output from each trial
             kwargs (dict): if supplied, overwrite stored run_args (n_trials, n_workers, etc.)
         """
         # Load and validate calibration parameters
@@ -257,28 +252,7 @@ class Calibration(sc.prettyobj):
         self.best_pars = sc.objdict(study.best_params)
         self.elapsed = sc.toc(t0, output=True)
 
-        self.sim_results = []
-        if load:
-            if self.verbose: print('Loading saved results...')
-            for trial in study.trials:
-                n = trial.number
-                try:
-                    filename = self.tmp_filename % trial.number
-                    results = sc.load(filename)
-                    self.sim_results.append(results)
-                    if tidyup:
-                        try:
-                            os.remove(filename)
-                            if self.verbose: print(f'    Removed temporary file {filename}')
-                        except Exception as E:
-                            errormsg = f'Could not remove {filename}: {str(E)}'
-                            if self.verbose: print(errormsg)
-                    if self.verbose: print(f'  Loaded trial {n}')
-                except Exception as E:
-                    errormsg = f'Warning, could not load trial {n}: {str(E)}'
-                    if self.verbose: print(errormsg)
-
-        # Compare the results
+        # Parse the study into a data frame, self.df while also storing the best parameters
         self.parse_study(study)
 
         if self.verbose: print('Best pars:', self.best_pars)
@@ -323,7 +297,7 @@ class Calibration(sc.prettyobj):
 
         after_pars = sc.dcp(self.calib_pars)
         for parname, spec in after_pars.items():
-            spec['value'] = self.best_pars[parname]
+            spec['value'] = self.best_pars[parname] # Use best parameters from calibration
 
         self.before_msim = self.build_fn(self.sim.copy(), calib_pars=before_pars, **self.build_kw)
         self.after_msim = self.build_fn(self.sim.copy(), calib_pars=after_pars, **self.build_kw)
@@ -332,10 +306,10 @@ class Calibration(sc.prettyobj):
         fix_after = isinstance(self.after_msim, ss.Sim)
         if fix_after or fix_after:
             if fix_before:
-                self.before_msim = ss.MultiSim(self.before_msim, initialize=True, debug=True, parallel=False)
+                self.before_msim = ss.MultiSim(self.before_msim, initialize=True, debug=True, parallel=False, n_runs=1)
 
             if fix_after:
-                self.after_msim = ss.MultiSim(self.after_msim, initialize=True, debug=True, parallel=False)
+                self.after_msim = ss.MultiSim(self.after_msim, initialize=True, debug=True, parallel=False, n_runs=1)
 
         msim = ss.MultiSim(self.before_msim.sims + self.after_msim.sims)
         msim.run()
@@ -421,7 +395,7 @@ class Calibration(sc.prettyobj):
 
         pars = sc.dcp(self.calib_pars)
         for parname, spec in pars.items():
-            spec['value'] = self.best_pars[parname]
+            spec['value'] = self.best_pars[parname] # Use best parameters from calibration
         msim = self.build_fn(self.sim.copy(), calib_pars=pars, **self.build_kw)
 
         msim.run()

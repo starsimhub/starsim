@@ -111,10 +111,10 @@ class CalibComponent(sc.prettyobj):
         weight (float): The weight applied to the log likelihood of this component. The total log likelihood is the sum of the log likelihoods of all components, each multiplied by its weight.
         include_fn (callable): A function accepting a single simulation and returning a boolean to determine if the simulation should be included in the current component. If None, all simulations are included.
         n_boot (int): Experimental! Bootstrap sum sim results over seeds before comparing against expected results. Not appropriate for all component types.
-        combine_reps (str): How to combine multiple repetitions of the same pars. Options are 'mean' and 'sum'. Default is 'mean'. Used if n_boot>1 and for plotting with bootstrap=True.
+        combine_reps (str): How to combine multiple repetitions of the same pars. Options are None, 'mean', 'sum', or other such operation. Default is None, which evaluates replicates independently instead of first combining before likelihood evaluation.
         kwargs: Additional arguments to pass to the likelihood function
     """
-    def __init__(self, name, expected, extract_fn, conform, weight=1, include_fn=None, n_boot=None, combine_reps='mean'):
+    def __init__(self, name, expected, extract_fn, conform, weight=1, include_fn=None, n_boot=None, combine_reps=None):
         self.name = name
         self.expected = expected
         self.extract_fn = extract_fn
@@ -123,11 +123,13 @@ class CalibComponent(sc.prettyobj):
         self.n_boot = n_boot
 
         self.combine_reps = combine_reps
+        self.combine_kwargs = dict()
         if isinstance(self.combine_reps, str) and hasattr(pd.core.groupby.DataFrameGroupBy, self.combine_reps):
             # Most of these methods take numeric_only, which can help with stability
             self.combine_kwargs = dict(numeric_only=True)
 
         self.avail_conforms = {
+            'none': None, # passthrough
             'incident':  linear_accum,  # or self.linear_accum if left as staticmethod  
             'prevalent': linear_interp,
             'step_containing': step_containing,
@@ -140,13 +142,24 @@ class CalibComponent(sc.prettyobj):
         if not isinstance(conform, str) and not callable(conform):  
             raise Exception(f"The conform argument must be a string or a callable function, not {type(conform)}.")  
         elif isinstance(conform, str):  
-            conform_ = self.avail_conforms.get(conform)  
-            if conform_ is None:  
+            conform_ = self.avail_conforms.get(conform.lower(), 'NOT FOUND')
+            if conform_ == 'NOT FOUND':
                 avail = self.avail_conforms.keys()  
                 raise ValueError(f"The conform argument must be one of {avail}, not {conform}.")  
         else:  
             conform_ = conform  
-        return conform_  
+        return conform_
+
+    def _combine_reps_nll(self, expected, actual, **kwargs):
+        if self.combine_reps is None:
+            nll = self.compute_nll(expected, actual, **kwargs) # Negative log likelihood
+        else:
+            timecols = [c for c in self.actual.columns if isinstance(self.actual[c].iloc[0], dt.datetime)] # Not robust to data types
+            actual_combined = actual.groupby(timecols).aggregate(func=self.combine_reps, **self.combine_kwargs)
+            actual_combined['rand_seed'] = 0 # Fake the seed
+            actual_combined = actual_combined.reset_index().set_index('rand_seed') # Make it look like self.actual
+            nll = self.compute_nll(expected, actual_combined, **kwargs)
+        return nll
 
     def eval(self, sim, **kwargs):
         """ Compute and return the negative log likelihood """
@@ -156,7 +169,8 @@ class CalibComponent(sc.prettyobj):
                 if self.include_fn is not None and not self.include_fn(s):
                     continue # Skip this simulation
                 actual = self.extract_fn(s)
-                actual = self.conform(self.expected, actual) # Conform
+                if self.conform is not None:
+                    actual = self.conform(self.expected, actual) # Conform
                 actual['rand_seed'] = s.pars.rand_seed
                 actuals.append(actual)
 
@@ -164,9 +178,12 @@ class CalibComponent(sc.prettyobj):
                 self.actual = None
                 return np.inf
         else:
-            assert self.include_fn is None, 'The include_fn argument is only valid for MultiSim objects'
+            # Warn if the user has an include_fn for a single sim
+            if self.include_fn is not None and not self.include_fn(sim):
+                sc.printv(f'Warning: include_fn was specified for a single simulation, but will be ignored', level=1)
             actual = self.extract_fn(sim) # Extract
-            actual = self.conform(self.expected, actual) # Conform
+            if self.conform is not None:
+                actual = self.conform(self.expected, actual) # Conform
             actual['rand_seed'] = sim.pars.rand_seed
             actuals = [actual]
 
@@ -174,24 +191,31 @@ class CalibComponent(sc.prettyobj):
         seeds = self.actual.index.unique()
 
         if self.n_boot is None or self.n_boot == 1 or len(seeds) == 1:
-            self.nll = self.compute_nll(self.expected, self.actual, **kwargs) # Negative log likelihood
-            return self.weight * np.sum(self.nll)
+            self.nll = self._combine_reps_nll(self.expected, self.actual, **kwargs)
+            if self.weight == 0: # Resolve possible 0 * inf
+                return 0
+            wnll = self.weight * np.mean(self.nll)
+            if np.isnan(wnll):
+                return np.inf # Convert nan to inf
+            return wnll
 
         # Bootstrapped aggregation
         boot_size = len(seeds)
         nlls = np.zeros(self.n_boot)
-        timecols = [c for c in self.actual.columns if isinstance(self.actual[c].iloc[0], dt.datetime)] # Not robust to data types
         for bi in range(self.n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
             actual = self.actual.loc[use_seeds]
-            a_boot = actual.groupby(timecols).aggregate(func=self.combine_reps, **self.combine_kwargs)
-            a_boot['rand_seed'] = bi # Fake the seed
-            a_boot = a_boot.reset_index().set_index('rand_seed') # Make it look like self.actual
-            nll = self.compute_nll(self.expected, a_boot, **kwargs)
-            nlls[bi] = np.sum(nll)
-        self.nll = np.mean(nlls) # Mean of bootstrapped nlls
+            nll = self._combine_reps_nll(self.expected, actual, **kwargs)
+            nlls[bi] = np.mean(nll) # Mean across reps
+        self.nll = np.mean(nlls) # Mean across bootstraps
 
-        return self.weight * self.nll
+        if self.weight == 0:
+            return 0 # Resolve possible 0 * inf
+
+        wnll = self.weight * self.nll
+        if np.isnan(wnll):
+            return np.inf # Convert nan to inf
+        return wnll
 
     def __call__(self, sim, **kwargs):
         return self.eval(sim, **kwargs)
@@ -218,7 +242,7 @@ class CalibComponent(sc.prettyobj):
             if row_val == g.row_names[0] and isinstance(col_val, dt.datetime):
                 ax.set_title(col_val.strftime('%Y-%m-%d'))
 
-        g.fig.subplots_adjust(top=0.9)
+        g.fig.subplots_adjust(top=0.8)
         g.fig.suptitle(self.name)
         return g.fig
 
@@ -246,9 +270,9 @@ class BetaBinomial(CalibComponent):
         logLs = []
 
         combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
-        for seed, rep in combined.groupby('rand_seed'):
-            e_n, e_x = rep['n_e'].values, rep['x_e'].values
-            a_n, a_x = rep['n_a'].values, rep['x_a'].values
+        for idx, rep in combined.iterrows():
+            e_n, e_x = rep['n_e'], rep['x_e']
+            a_n, a_x = rep['n_a'], rep['x_a']
 
             logL = sps.betabinom.logpmf(k=e_x, n=e_n, a=a_x+1, b=a_n-a_x+1)
             logLs.append(logL)
@@ -283,12 +307,16 @@ class BetaBinomial(CalibComponent):
         means = np.zeros(n_boot)
         for bi in np.arange(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
-            row = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
+            if self.combine_reps is None:
+                actual = data.set_index('rand_seed').loc[use_seeds]
+            else:
+                actual = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
 
-            alpha = row['x'] + 1
-            beta = row['n'] - row['x'] + 1
-            q = sps.betabinom(n=e_n, a=alpha, b=beta)
-            means[bi] = q.mean()
+            for row in actual.iterrows():
+                alpha = row['x'] + 1
+                beta = row['n'] - row['x'] + 1
+                q = sps.betabinom(n=e_n, a=alpha, b=beta)
+                means[bi] = q.mean()
 
         ax = sns.kdeplot(means)
         sns.rugplot(means, ax=ax)
@@ -302,7 +330,7 @@ class Binomial(CalibComponent):
         if 'p' in df:
             p = df['p'].values
         else:
-            p = (df[x_col]+1) / (df[n_col]+2)
+            p = df[x_col] / df[n_col] # Switched to MLE x/n from previous "Bayesian" (Laplace +1, Jeffreys) before: (df[x_col]+1) / (df[n_col]+2)
         return p
 
     def compute_nll(self, expected, actual, **kwargs):
@@ -316,15 +344,17 @@ class Binomial(CalibComponent):
         logLs = []
 
         combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
-        for seed, rep in combined.groupby('rand_seed'):
+        for idx, rep in combined.iterrows():
             if 'p' in rep:
                 # p specified, no collision
-                e_n, e_x = rep['n'].values, rep['x'].values 
+                e_n, e_x = rep['n'], rep['x']
                 p = self.get_p(rep)
             else:
                 assert 'n_e' in rep and 'x_e' in rep, 'Expected columns n_e and x_e not found'
                 # Collision in merge, get _e and _a values
-                e_n, e_x = rep['n_e'].values, rep['x_e'].values 
+                e_n, e_x = rep['n_e'], rep['x_e']
+                if rep['n_a'] == 0:
+                    return np.inf
                 p = self.get_p(rep, 'x_a', 'n_a')
 
             logL = sps.binom.logpmf(k=e_x, n=e_n, p=p)
@@ -359,11 +389,15 @@ class Binomial(CalibComponent):
         means = np.zeros(n_boot)
         for bi in np.arange(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
-            row = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
+            if self.combine_reps is None:
+                actual = data.set_index('rand_seed').loc[use_seeds]
+            else:
+                actual = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
 
-            p = self.get_p(row)
-            q = sps.binom(n=e_n, p=p)
-            means[bi] = q.mean()
+            for idx, row in actual.iterrows():
+                p = self.get_p(row)
+                q = sps.binom(n=e_n, p=p)
+                means[bi] = q.mean()
 
         ax = sns.kdeplot(means)
         sns.rugplot(means, ax=ax)
@@ -390,10 +424,10 @@ class DirichletMultinomial(CalibComponent):
         logLs = []
         x_vars = [xkey for xkey in expected.columns if xkey.startswith('x')]
         for t, rep_t in actual.groupby('t'):
-            for seed, rep in rep_t.groupby('rand_seed'):
-                e_x = expected.loc[t, x_vars].values[0]
+            for idx, rep in rep_t.iterrows():
+                e_x = expected.loc[t, x_vars].values.flatten()
                 n = e_x.sum()
-                a_x = rep[x_vars].values[0]
+                a_x = rep[x_vars].astype('float')
                 logL = sps.dirichlet_multinomial.logpmf(x=e_x, n=n, alpha=a_x+1)
                 logLs.append(logL)
 
@@ -486,13 +520,13 @@ class GammaPoisson(CalibComponent):
         logLs = []
 
         combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t', 't1'], suffixes=('_e', '_a'))
-        for seed, rep in combined.groupby('rand_seed'):
-            e_n, e_x = rep['n_e'].values, rep['x_e'].values
-            a_n, a_x = rep['n_a'].values, rep['x_a'].values
+        for idx, rep in combined.iterrows():
+            e_n, e_x = rep['n_e'], rep['x_e']
+            a_n, a_x = rep['n_a'], rep['x_a']
             T = e_n
             beta = 1 + a_n
             logL = sps.nbinom.logpmf(k=e_x, n=1+a_x, p=beta/(beta+T))
-            np.nan_to_num(logL, nan=-np.inf, copy=False)
+            logL = np.nan_to_num(logL, nan=-np.inf)
             logLs.append(logL)
 
         nlls = -np.array(logLs)
@@ -529,13 +563,18 @@ class GammaPoisson(CalibComponent):
         means = np.zeros(n_boot)
         for bi in np.arange(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
-            row = data.set_index('rand_seed').loc[use_seeds].groupby(['t', 't1']).aggregate(func=self.combine_reps, **self.combine_kwargs)
 
-            a_n, a_x = row['n'], row['x']
-            beta = (a_n+1)
-            T = e_n
-            q = sps.nbinom(n=1+a_x, p=beta/(beta+T))
-            means[bi] = q.mean()
+            if self.combine_reps is None:
+                actual = data.set_index('rand_seed').loc[use_seeds]
+            else:
+                actual = data.set_index('rand_seed').loc[use_seeds].groupby(['t', 't1']).aggregate(func=self.combine_reps, **self.combine_kwargs)
+
+            for idx, row in actual.iterrows():
+                a_n, a_x = row['n'], row['x']
+                beta = (a_n+1)
+                T = e_n
+                q = sps.nbinom(n=1+a_x, p=beta/(beta+T))
+                means[bi] = q.mean()
 
         ax = sns.kdeplot(means)
         sns.rugplot(means, ax=ax)
@@ -573,13 +612,13 @@ class Normal(CalibComponent):
         compute_var = sigma2 is None
 
         combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
-        for seed, rep in combined.groupby('rand_seed'):
-            e_x = rep['x_e'].values
-            a_x = rep['x_a'].values
+        for idx, rep in combined.iterrows():
+            e_x = rep['x_e']
+            a_x = rep['x_a']
 
             # TEMP TODO calculate rate if 'n' supplied
             if 'n' in rep:
-                a_x = rep['x_a'].values / rep['n'].values
+                a_x = rep['x_a'] / rep['n']
 
             if compute_var:
                 sigma2 = self.compute_var(expected['x'], a_x)
@@ -642,23 +681,21 @@ class Normal(CalibComponent):
         means = np.zeros(n_boot)
         for bi in np.arange(n_boot):
             use_seeds = np.random.choice(seeds, boot_size, replace=True)
-            row = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
 
-            a_x = row['x']
+            if self.combine_reps is None:
+                actual = data.set_index('rand_seed').loc[use_seeds]
+            else:
+                actual = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
 
-            # TEMP TODO calculate rate if 'n' supplied
-            if 'n' in row:
-                a_x = row['x'] / row['n'] #row['x'].values / row['n'].values
+            for idx, row in actual.iterrows():
+                a_x = row['x']
 
-            sigma2 = self.sigma2 if self.sigma2 is not None else self.compute_var(e_x, a_x)
-            if isinstance(sigma2, (list, np.ndarray)):
-                assert len(sigma2) == len(self.expected), 'Length of sigma2 must match the number of timepoints'
-                # User provided a vector of variances
-                ti = self.expected.index.get_loc(t)
-                sigma2 = sigma2[ti]
+                # TEMP TODO calculate rate if 'n' supplied
+                if 'n' in row:
+                    a_x = row['x'] / row['n'] #row['x'].values / row['n'].values
 
-            q = sps.norm(loc=a_x, scale=np.sqrt(sigma2))
-            means[bi] = q.mean() # Will just be a_x, TODO: streamline
+                # No need to form the sps.norm involving sigma2 because the mean will be a_x
+                means[bi] = a_x
 
         ax = sns.kdeplot(means)
         sns.rugplot(means, ax=ax)

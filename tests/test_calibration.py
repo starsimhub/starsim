@@ -13,7 +13,7 @@ import pytest
 debug = False # If true, will run in serial
 total_trials = [100, 10][debug]
 n_agents = 2_000
-do_plot = 1
+do_plot = True
 
 
 #%% Helper functions
@@ -72,7 +72,6 @@ def build_sim(sim, calib_pars, **kwargs):
 
 #%% Define the tests
 
-@pytest.mark.skip(reason="Not working, skip until fixed")
 def test_onepar_normal(do_plot=True):
     sc.heading('Testing a single parameter (beta) with a normally distributed likelihood')
 
@@ -93,7 +92,8 @@ def test_onepar_normal(do_plot=True):
         }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
         
         extract_fn = lambda sim: pd.DataFrame({
-            'x': sim.results.sir.prevalence,
+            'x': sim.results.sir.n_infected, # Instead of prevalence, let's compute it from infected and n_alive
+            'n': sim.results.n_alive,
         }, index=pd.Index(sim.results.timevec, name='t')),
 
         # User can specify sigma2, e.g.:
@@ -106,6 +106,7 @@ def test_onepar_normal(do_plot=True):
         calib_pars = calib_pars,
         sim = sim,
         build_fn = build_sim,
+        build_kw = dict(n_reps=5), # Reps per point
         reseed = False,
         components = [prevalence],
         total_trials = total_trials,
@@ -118,16 +119,20 @@ def test_onepar_normal(do_plot=True):
     sc.printcyan('\nPeforming calibration...')
     calib.calibrate()
 
-    # Call plotting to look for exceptions
-    calib.plot_final()
-    calib.plot_optuna(['plot_param_importances', 'plot_optimization_history'])
-
     # Check
-    assert calib.check_fit(), 'Calibration did not improve the fit'
+    assert calib.check_fit(do_plot=False), 'Calibration did not improve the fit'
+
+    # Call plotting to look for exceptions
+    if do_plot:
+        calib.plot_final()
+        calib.plot(bootstrap=False)
+        calib.plot(bootstrap=True)
+        calib.plot_optuna(['plot_param_importances', 'plot_optimization_history'])
+
     return sim, calib
 
 
-@pytest.mark.skip(reason="Too slow, need to fix")
+
 def test_onepar_custom(do_plot=True):
     sc.heading('Testing a single parameter (beta) with a custom likelihood')
 
@@ -175,7 +180,6 @@ def test_onepar_custom(do_plot=True):
     assert calib.check_fit(), 'Calibration did not improve the fit'
     return sim, calib
 
-@pytest.mark.skip(reason="Not working, skip until fixed")
 def test_twopar_betabin_gammapois(do_plot=True):
     sc.heading('Testing a two parameters (beta and initial prevalence) with a two likelihoods (BetaBinomial and GammaPoisson)')
 
@@ -251,7 +255,6 @@ def test_twopar_betabin_gammapois(do_plot=True):
     return sim, calib
 
 
-@pytest.mark.skip(reason="Not working, skip until fixed")
 def test_threepar_dirichletmultinomial_10reps(do_plot=True):
     sc.heading('Testing a three parameters (beta, initial prevalence, and number of contacts) with a DirichletMultinomial likelihood')
 
@@ -356,6 +359,4 @@ if __name__ == '__main__':
         T = sc.timer()
         sim, calib = f(do_plot=do_plot)
         T.toc()
-        calib.plot_final()
-        calib.plot_optuna(['plot_param_importances', 'plot_optimization_history'])
     plt.show()
