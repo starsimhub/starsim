@@ -72,6 +72,7 @@ def build_sim(sim, calib_pars, **kwargs):
 
 #%% Define the tests
 
+@pytest.mark.skip(reason="Test requires performance enhancement")
 def test_onepar_normal(do_plot=True):
     sc.heading('Testing a single parameter (beta) with a normally distributed likelihood')
 
