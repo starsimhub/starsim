@@ -445,7 +445,7 @@ class Sim(ss.Base):
                         state.people = shrunk
                         state.raw = shrunk
 
-                # Check that the module successfully shrunk
+            # Check that the module successfully shrunk
             if size_limit:
                 for mod in sim.modules:
                     size = sc.checkmem(mod, descend=0).bytesize[0]/1e6
