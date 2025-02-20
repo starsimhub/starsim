@@ -400,7 +400,7 @@ class Sim(ss.Base):
 
         Args:
             inplace (bool): whether to perform the shrinking in place (default), or return a shrunken copy instead
-            size_limit (float): print a warning if any module is larger than this size limit (set to None to disable)
+            size_limit (float): print a warning if any module is larger than this size limit, in units of KB per timestep (set to None to disable)
 
         Returns:
             shrunken (Sim): a Sim object with the listed attributes removed
@@ -415,6 +415,7 @@ class Sim(ss.Base):
         shrunk = ss.utils.shrink()
         sim.people = shrunk
         with sc.tryexcept():
+            sim.loop.sim = shrunk
             sim.loop.funcs = shrunk
             sim.loop.plan = shrunk
 
@@ -428,11 +429,14 @@ class Sim(ss.Base):
                     network.participant = shrunk
 
             # Shrink the distributions
+            sim.dists.sim = shrunk
+            sim.dists.obj = shrunk
             for dist in sim.dists.dists.values():
                 with sc.tryexcept():
                     dist.slots = shrunk
                     dist._slots = shrunk
                     dist.module = shrunk
+                    dist.sim = shrunk
                     dist._n = shrunk
                     dist._uids = shrunk
                     dist.history = shrunk
@@ -440,6 +444,7 @@ class Sim(ss.Base):
             # Finally, shrink the modules
             for mod in sim.modules:
                 mod.sim = shrunk
+                mod.dists = shrunk
                 for state in mod.states:
                     with sc.tryexcept():
                         state.people = shrunk
@@ -447,10 +452,11 @@ class Sim(ss.Base):
 
             # Check that the module successfully shrunk
             if size_limit:
+                max_size = size_limit*len(sim)/1e3 # Maximum size in MB
                 for mod in sim.modules:
                     size = sc.checkmem(mod, descend=0).bytesize[0]/1e6
-                    if size > size_limit:
-                        warnmsg = f'Module {mod.name} did not successfully shrink: {size:0.1f} MB > {size_limit:0.1f} MB'
+                    if size > max_size:
+                        warnmsg = f'Module {mod.name} did not successfully shrink: {size:0.1f} MB > {max_size:0.1f} MB'
                         ss.warn(warnmsg)
 
         # Finally, set a flag that the sim has been shrunken
