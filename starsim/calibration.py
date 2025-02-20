@@ -264,8 +264,8 @@ class Calibration(sc.prettyobj):
 
         return self
 
-    def save_csv(self, filename, top_k=None):
-        """ Save the results to a CSV file """
+    def to_df(self, top_k=None):
+        """ Return the top K results as a dataframe, sorted by value """
         if self.study is None:
             raise ValueError('Please run calibrate() before saving results')
 
@@ -276,6 +276,11 @@ class Calibration(sc.prettyobj):
         if top_k is not None:
             df = df.head(top_k)
 
+        return df
+
+    def save_csv(self, filename, top_k=None):
+        """ Save the results to a CSV file """
+        df = self.to_df(top_k)
         df.to_csv(filename)
         return df
 
