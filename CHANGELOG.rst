@@ -10,7 +10,7 @@ All notable changes to the codebase are documented in this file. Changes that ma
 Version 2.3.1 (2025-02-20)
 ---------------------------
 - Updated ``sim.shrink()`` to remove additional objects, resulting in a smaller sim size.
-- *GitHub info*: PR `831 <https://github.com/starsimhub/starsim/pull/831>`_
+- *GitHub info*: PR `864 <https://github.com/starsimhub/starsim/pull/864>`_
 
 
 Version 2.3.0 (2025-02-14)
