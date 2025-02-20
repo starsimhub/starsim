@@ -7,6 +7,12 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
+Version 2.3.1 (2025-02-20)
+---------------------------
+- Updated ``sim.shrink()`` to remove additional objects, resulting in a smaller sim size.
+- *GitHub info*: PR `831 <https://github.com/starsimhub/starsim/pull/831>`_
+
+
 Version 2.3.0 (2025-02-14)
 ---------------------------
 - The calibration class has been completely redesigned. Calibration now relies on "components", which capture mismatch with a particular data type (e.g., new infections). The new approach also adds additional statistical rigor for calculating mismatches.
