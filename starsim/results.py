@@ -43,7 +43,7 @@ class Result(ss.BaseArr):
         self.low = low
         self.high = high
         self.dtype = dtype
-        self.shape = shape
+        self._shape = shape
         self.values = values
         self.summarize_by = summarize_by
         self.init_values()
@@ -98,7 +98,7 @@ class Result(ss.BaseArr):
         if not self.initialized or force:
             values = sc.ifelse(values, self.values)
             dtype = sc.ifelse(dtype, self.dtype)
-            shape = sc.ifelse(shape, self.shape)
+            shape = sc.ifelse(shape, self._shape)
             if values is not None: # Create if values already supplied
                 self.values = np.array(values, dtype=dtype)
                 dtype = self.values.dtype
@@ -108,7 +108,7 @@ class Result(ss.BaseArr):
             else:
                 self.values = None
             self.dtype = dtype
-            self.shape = shape
+            self._shape = shape
         return self.values
 
     def update(self, *args, **kwargs):
@@ -161,7 +161,7 @@ class Result(ss.BaseArr):
         Resample the result, e.g. from days to years. Leverages the pandas resample method.
         Accepts all the Starsim units, plus the Pandas ones documented here:
         https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
-        
+
         Args:
             new_unit (str): the new unit to resample to, e.g. 'year', 'month', 'week', 'day', '1W', '2M', etc.
             summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
