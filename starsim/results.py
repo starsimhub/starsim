@@ -419,9 +419,11 @@ class Results(ss.ndict):
         lengths = [len(res) for res in self.flatten().values()]
         return len(set(lengths)) == 1
 
-    def flatten(self, sep='_', only_results=True, **kwargs):
+    def flatten(self, sep='_', only_results=True, keep_case=False, **kwargs):
         """ Turn from a nested dictionary into a flat dictionary, keeping only results by default """
         out = sc.flattendict(self, sep=sep)
+        if not keep_case:
+            out = sc.objdict({k.lower():v for k,v in out.items()})
         if 'resample' in kwargs and kwargs['resample'] is not None:
             resample = kwargs.pop('resample')
             for k,v in out.items():
