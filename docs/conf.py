@@ -12,7 +12,7 @@ on_rtd = os.environ.get('READTHEDOCS') == 'True'
 # -- Project information -----------------------------------------------------
 
 project = 'Starsim'
-copyright = f'2023 - {sc.now().year}, Bill & Melinda Gates Foundation. All rights reserved. These docs were built for Starsim v{ss.__version__}'
+copyright = f'2023 - {sc.now().year}, Gates Foundation. All rights reserved. These docs were built for Starsim v{ss.__version__}'
 author = 'Starsim Collective'
 
 # The short X.Y version

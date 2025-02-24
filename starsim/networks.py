@@ -1157,7 +1157,7 @@ class MixingPool(Route):
         diseases (str): the diseases that transmit via this mixing pool
         src (inds): source agents; can be AgeGroup(), ss.uids(), or lambda(sim); None indicates all alive agents
         dst (inds): destination agents; as above
-        beta (float): overall transmission
+        beta (float): overall transmission (note: use a float, not a TimePar; the time component is usually handled by the disease beta)
         contacts (Dist): the number of effective contacts of the destination agents
 
     **Example**::
@@ -1168,7 +1168,7 @@ class MixingPool(Route):
         mp_pars = dict(
             src = lambda sim: sim.people.male, # only males are infectious
             dst = None, # all agents are susceptible
-            beta = ss.beta(0.2),
+            beta = 0.2,
             contacts = ss.poisson(lam=4),
         )
 
