@@ -21,12 +21,12 @@ class Calibration(sc.prettyobj):
 
     Args:
         sim          (Sim)   : the base simulation to calibrate
-        calib_pars   (dict)  : a dictionary of the parameters to calibrate of the format dict(key1=dict(low=1, high=2, guess=1.5, **kwargs), key2=...), where kwargs can include "suggest_type" to choose the suggest method of the trial (e.g. suggest_float) and args passed to the trial suggest function like "log" and "step"
+        calib_pars   (dict)  : a dictionary of the parameters to calibrate of the format ``dict(key1=dict(low=1, high=2, guess=1.5, **kwargs), key2=...)``, where kwargs can include "suggest_type" to choose the suggest method of the trial (e.g. suggest_float) and args passed to the trial suggest function like "log" and "step"
         n_workers    (int)   : the number of parallel workers (if None, will use all available CPUs)
         total_trials (int)   : the total number of trials to run, each worker will run approximately n_trials = total_trial / n_workers
         reseed       (bool)  : whether to generate new random seeds for each trial
         build_fn  (callable) : function that takes a sim object and calib_pars dictionary and returns a modified sim
-        build_kw      (dict) : a dictionary of options that are passed to build_fn to aid in modifying the base simulation. The API is self.build_fn(sim, calib_pars=calib_pars, **self.build_kw), where sim is a copy of the base simulation to be modified with calib_pars
+        build_kw      (dict) : a dictionary of options that are passed to build_fn to aid in modifying the base simulation. The API is ``self.build_fn(sim, calib_pars=calib_pars, **self.build_kw)``, where sim is a copy of the base simulation to be modified with calib_pars
         components    (list) : CalibComponents independently assess pseudo-likelihood as part of evaluating the quality of input parameters
         prune_fn  (callable) : Function that takes a dictionary of parameters and returns True if the trial should be pruned
         eval_fn   (callable) : Function mapping a sim to a float (e.g. negative log likelihood) to be maximized. If None, the default will use CalibComponents.

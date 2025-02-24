@@ -160,7 +160,8 @@ class Result(ss.BaseArr):
         """
         Resample the result, e.g. from days to years. Leverages the pandas resample method.
         Accepts all the Starsim units, plus the Pandas ones documented here:
-            https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
+        https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
+        
         Args:
             new_unit (str): the new unit to resample to, e.g. 'year', 'month', 'week', 'day', '1W', '2M', etc.
             summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
