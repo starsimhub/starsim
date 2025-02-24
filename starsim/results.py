@@ -113,6 +113,8 @@ class Result(ss.BaseArr):
 
     def update(self, *args, **kwargs):
         """ Update parameters, and initialize values if needed """
+        if 'shape' in kwargs: # Handle shape, which is renamed _shape as an attribute
+            kwargs['_shape'] = kwargs.pop('shape')
         super().update(*args, **kwargs)
         self.init_values()
         return
