@@ -22,116 +22,6 @@ import starsim as ss
 #     year  = 365.25, # For consistency with months
 # )
 
-# Define defaults
-default_dur = 50
-default_unit = 'year'
-default_start_year = 2000
-default_start_date = '2000-01-01'
-default_start = sc.objdict(
-    {k:default_start_date for k in ['day', 'week', 'month']} |
-    {k:default_start_year for k in ['year', 'unitless']}
-)
-
-
-# def time_ratio(unit1='day', dt1=1.0, unit2='day', dt2=1.0, as_int=False):
-#     """
-#     Calculate the relationship between two sets of time factors
-#
-#     Args:
-#         unit1 (str): units for the numerator
-#         dt1 (float): timestep for the numerator
-#         unit2 (str): units for the denominator
-#         dt2 (float): timestep for the denominator
-#         as_int (bool): round and convert to an integer
-#
-#     **Example**::
-#         ss.time_ratio(unit1='week', dt1=2, unit2='day', dt2=1, as_int=True) # Returns 14
-#     """
-#     if dt1 == dt2:
-#         dt_ratio = 1.0
-#     else:
-#         if dt1 is None or dt2 is None:
-#             errormsg = f'Cannot convert between dt when one is None ({dt1}, {dt2})'
-#             raise ValueError(errormsg)
-#         dt_ratio = dt1/dt2
-#
-#     if unit1 == unit2:
-#         unit_ratio = 1.0
-#     else:
-#         if is_unitless(unit1) or is_unitless(unit2):
-#             errormsg = f'Cannot convert between units if only one is unitless (unit1={unit1}, unit2={unit2})'
-#             raise ValueError(errormsg)
-#         if unit1 is None or unit2 is None:
-#             errormsg = f'Cannot convert between units when only one has been initialized (unit1={unit1}, unit2={unit2})'
-#             raise ValueError(errormsg)
-#         u1 = time_units[unit1]
-#         u2 = time_units[unit2]
-#         unit_ratio = u1/u2
-#
-#     factor = dt_ratio * unit_ratio
-#     if as_int:
-#         factor = int(round(factor))
-#     return factor
-#
-#
-# def date_add(start, dur, unit):
-#     """ Add two dates (or integers) together """
-#     if sc.isnumber(start):
-#         stop = start + dur
-#     else:
-#         if unit in time_units:
-#             ndays = int(round(time_units[unit]*dur))
-#             stop = sc.datedelta(start, days=ndays)
-#         else:
-#             errormsg = f'Unknown unit {unit}, choices are: {sc.strjoin(time_units.keys())}'
-#             raise ValueError(errormsg)
-#     return stop
-#
-#
-# def date_diff(start, stop, unit):
-#     """ Find the difference between two dates (or integers) """
-#     if sc.isnumber(start) and sc.isnumber(stop):
-#         dur = stop - start
-#     else:
-#         if unit == 'year':
-#             dur = sc.datetoyear(stop) - sc.datetoyear(start) # TODO: allow non-integer amounts
-#         else:
-#             dur = (ss.date(stop) - ss.date(start)).days
-#             if unit != 'day':
-#                 dur *= time_ratio(unit1='day', unit2=unit)
-#     return dur
-
-
-# def round_tvec(tvec):
-#     """ Round time vectors to a certain level of precision, to avoid floating point errors """
-#     decimals = int(-np.log10(ss.options.time_eps))
-#     tvec = np.round(np.array(tvec), decimals=decimals)
-#     return tvec
-#
-#
-# def years_to_dates(yearvec):
-#     """ Convert a numeric year vector to a date vector """
-#     datevec = np.array([date(sc.datetoyear(y, reverse=True)) for y in yearvec])
-#     return datevec
-#
-#
-# def dates_to_years(datevec):
-#     """ Convert a date vector to a numeric year vector"""
-#     yearvec = round_tvec([sc.datetoyear(d.date()) for d in datevec])
-#     return yearvec
-#
-#
-# def dates_to_days(datevec, start_date):
-#     """ Convert a date vector into relative days since start date """
-#     start_date = date(start_date)
-#     dayvec = np.array([(d - start_date).days for d in datevec])
-#     return dayvec
-
-
-#%% Time classes - fundamental quantities
-
-# __all__ += ['date', 'Time']
-
 # Base classes for points in time and durations that behave sensibly
 
 class Date(pd.Timestamp):
@@ -159,11 +49,9 @@ class Date(pd.Timestamp):
             if arg is None:
                 return pd.Timestamp(None)
             elif isinstance(arg, pd.Timestamp):
-                out = cls._reset_class(sc.dcp(arg))
+                return cls._reset_class(sc.dcp(arg))
             elif sc.isnumber(arg):
                 single_year_arg = True
-            elif isinstance(arg, pd.Timedelta):
-                return pd.Timedelta(arg)
         year_kwarg = len(args) == 0 and len(kwargs) == 1 and 'year' in kwargs
         if single_year_arg:
             return cls.from_year(args[0])
@@ -273,9 +161,10 @@ class Date(pd.Timestamp):
             return Date(self.to_year() + other.period)
         elif isinstance(other, pd.DateOffset):
             return Date(self.to_pandas() + other)
+        elif isinstance(other, pd.Timestamp):
+            raise TypeError('Cannot add a date to another date')
         else:
             raise TypeError('Unsupported type')
-
 
     def __sub__(self, other):
 
@@ -288,6 +177,9 @@ class Date(pd.Timestamp):
             return Date(self.to_year() - other.period)
         elif isinstance(other, pd.DateOffset):
             return Date(self.to_pandas() - other)
+        elif isinstance(other, Date):
+            # TODO: Could replace this with a DateDur but need to set the components carefully
+            return YearDur(self.years-other.years)
         else:
             raise TypeError('Unsupported type')
     #
@@ -318,9 +210,7 @@ class Dur():
         # Return
         if cls is Dur:
             if args:
-                if isinstance(args[0], pd.DateOffset):
-                    return super().__new__(DateDur)
-                elif isinstance(args[0], DateDur):
+                if isinstance(args[0], (pd.DateOffset, DateDur)):
                     return super().__new__(DateDur)
                 elif isinstance(args[0], YearDur):
                     return super().__new__(YearDur)
@@ -394,13 +284,12 @@ class Dur():
             return self.years != other
 
     def __truediv__(self, other):
-        # Implement division - must handle other being Dur or float instances
-        raise NotImplementedError
+        raise NotImplementedError('Dur subclasses are required to implement this method')
 
     def __rtruediv__(self, other):
         # If a Dur is divided by a Dur then we will call __truediv__
         # If a float is divided by a Dur, then we should return a rate
-        # We also need divide the duration by the numerator
+        # We also need divide the duration by the numerator when calculating the rate
         return Rate(self/other)
 
 class YearDur(Dur):
@@ -470,7 +359,6 @@ class YearDur(Dur):
 class DateDur(Dur):
     # Date based duration e.g., if requiring a week to be 7 calendar days later
 
-    # Define approximate conversions from date-based durations to time-based durations
     def __init__(self, *args, **kwargs):
         """
         Create a date-based duration
@@ -654,7 +542,10 @@ class Rate():
         self._dur = dur
 
     def __repr__(self):
-        return f'<{self.__class__.__name__}: per{str(self._dur).split(":")[1]}'
+        if isinstance(self._dur, YearDur):
+            return f'<{self.__class__.__name__}: {self * YearDur(1)} per year>'
+        else:
+            return f'<{self.__class__.__name__}: per{str(self._dur).split(":")[1]} (approx. {self * YearDur(1)} per year)'
 
     def __mul__(self, other):
         if isinstance(other, Dur):
@@ -676,9 +567,22 @@ class RateProb(Rate):
 
     def __mul__(self, other):
         if isinstance(other, Dur):
-            # TODO - implement this - it should return the probability (not probability rate)
-            # over the requested time period (i.e., the value of 'other')
-            raise NotImplementedError
+
+
+
+            if self.p == 0:
+                self.values = 0
+            elif self.p == 1:
+                self.values = 1
+            elif 0 <= self.p <= 1:
+                rate = -np.log(1 - v)
+                self.values = 1 - np.exp(-rate/self.factor)
+            else:
+                errormsg = f'Invalid value {self.v} for {self}: must be 0-1. If using in a calculation, use .values instead.'
+                raise ValueError(errormsg)
+
+
+
         else:
             return self.__class__(self.p*other, self._dur)
 
@@ -1032,218 +936,218 @@ def days(x: float) -> Dur:
 # __all__ += ['TimePar', 'dur', 'days', 'years', 'rate', 'perday', 'peryear',
 #             'time_prob', 'beta', 'rate_prob']
 
-class TimePar(ss.BaseArr):
-    """
-    Base class for time-aware parameters, durations and rates
-
-    Stores either pd.Timestamp/ss.Date objects or
-
-    NB, because the factor needs to be recalculated, do not set values directly.
-    """
-    def __new__(cls, v=None, *args, **kwargs):
-        """ Allow TimePars to wrap distributions and return the distributions """
-
-        # Special distribution handling
-        if isinstance(v, ss.Dist):
-            if len(args):
-                errormsg = f'When wrapping a distribution with a TimePar, args not allowed ({args}); use kwargs'
-                raise ValueError(errormsg)
-            dist = v
-            dist.pars[0] = cls(dist.pars[0], **kwargs) # Convert the first parameter to a TimePar (the same scale is applied to all parameters)
-            return dist
-
-        # Otherwise, do the usual initialization
-        else:
-            return super().__new__(cls)
-
-    def __init__(self, v):
-        """
-
-        :param v: Input quantity. A pd.Timestamp, pd.DateOffset,
-        :param unit:
-        :param parent_unit:
-        :param parent_dt:
-        :param self_dt:
-        """
-
-        self.v = v
-        self.values = None
-        self.initialized = False
-        # self.validate_units()
-        return
-
-    # def validate_units(self):
-    #     """ Check that the units entered are valid """
-    #     try:
-    #         self.unit = unit_mapping[self.unit]
-    #     except KeyError:
-    #         errormsg = f'Invalid unit "{self.unit}"; must be one of: {sc.strjoin(time_units.keys())}'
-    #         raise ValueError(errormsg)
-    #     try:
-    #         self.parent_unit = unit_mapping[self.parent_unit]
-    #     except KeyError:
-    #         errormsg = f'Invalid parent unit "{self.parent_unit}"; must be one of: {sc.strjoin(time_units.keys())}'
-    #         raise ValueError(errormsg)
-    #     return
-
-    def init(self, parent=None, parent_unit=None, parent_dt=None, update_values=True, die=True):
-        """ Link to the sim and/or module units """
-        # if parent is None:
-        #     parent = sc.dictobj(unit=parent_unit, dt=parent_dt)
-        # else:
-        #     if parent_dt is not None:
-        #         errormsg = f'Cannot override parent {parent} by setting parent_dt; set in parent object instead'
-        #         raise ValueError(errormsg)
-
-        # Set defaults if not yet set
-        self.unit = sc.ifelse(self.unit, self.parent_unit) # If unit isn't defined but parent is, set to parent
-
-        # Calculate the actual conversion factor to be used in the calculations
-        self.update_cached(update_values=update_values, die=die)
-        self.initialized = True
-        self.validate_units()
-        return self
-
-    def __repr__(self):
-        name = self.__class__.__name__
-
-        if self.initialized:
-            if self.factor == 1.0:
-                xstr = ''
-            else:
-                xstr = f', values={self.values}'
-        else:
-            xstr = ', initialized=False'
-
-        if (self.parent_unit is not None) and (self.unit != self.parent_unit):
-            parentstr = f', parent={self.parent_unit}'
-        else:
-            parentstr = ''
-
-        default_dt = sc.ifelse(self.self_dt, 1.0) == 1.0
-        if not default_dt:
-            dtstr = f', self_dt={self.self_dt}'
-        else:
-            dtstr = ''
-
-        # Rather than ss.dur(3, unit='day'), dispaly as ss.days(3)
-        prefixstr = 'ss.'
-        key = (name, self.unit)
-        mapping = {
-            ('dur',  'day'):  'days',
-            ('dur',  'year'): 'years',
-            ('rate', 'day'):  'perday',
-            ('rate', 'year'): 'peryear',
-        }
-
-        if key in mapping and default_dt:
-            prefixstr += mapping[key]
-            unitstr = ''
-        else:
-            prefixstr += name
-            unitstr = f', unit={self.unit}'
-
-        suffixstr = unitstr + parentstr + dtstr + xstr
-
-        return f'{prefixstr}({self.v}{suffixstr})'
-
-    @property
-    def isarray(self):
-        """ Check if the value is an array """
-        return isinstance(self.v, np.ndarray)
-
-    def set(self, v=None, unit=None, parent_unit=None, parent_dt=None, self_dt=None, force=False):
-        """ Set the specified parameter values (ignoring None values) and update stored values """
-        if v           is not None: self.v           = v
-        if unit        is not None: self.unit        = unit
-        if parent_unit is not None: self.parent_unit = parent_unit
-        if parent_dt   is not None: self.parent_dt   = parent_dt
-        if self_dt     is not None: self.self_dt     = self_dt
-        if self.initialized or force: # Don't try to set these unless it's been initialized
-            self.update_cached()
-        self.validate_units()
-        return self
-
-    def update_cached(self, update_values=True, die=True):
-        """ Update the cached factor and values """
-        try:
-            self.update_factor()
-            if update_values:
-                self.update_values()
-        except TypeError as E: # For a known error, skip silently if die=False
-            if die:
-                errormsg = f'Update failed for {self}. Argument v={self.v} should be a number or array; if a function, use update_values=False. Error: {E}'
-                raise TypeError(errormsg) from E
-        except Exception as E: # For other errors, raise a warning
-            if die:
-                raise E
-            else:
-                tb = sc.traceback(E)
-                warnmsg = f'Uncaught error encountered while updating {self}, but die=False. Traceback:\n{tb}'
-                ss.warn(warnmsg)
-
-        return self
-
-    def update_factor(self):
-        """ Set factor used to multiply the value to get the output """
-        self.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=self.parent_unit, dt2=self.parent_dt)
-        return
-
-    def update_values(self):
-        """ Convert from self.v to self.values based on self.factor -- must be implemented by derived classes """
-        raise NotImplementedError
-
-    def to(self, unit=None, dt=None):
-        """ Create a new timepar based on the current one but with a different unit and/or dt """
-        new = self.asnew()
-        unit = sc.ifelse(unit, self.parent_unit, self.unit)
-        parent_dt = sc.ifelse(dt, 1.0)
-        new.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=unit, dt2=parent_dt) # Calculate the new factor
-        new.update_values() # Update values
-        new.v = new.values # Reset the base value
-        new.factor = 1.0 # Reset everything else to be 1
-        new.unit = unit
-        new.self_dt = parent_dt
-        new.parent_unit = unit
-        new.parent_dt = parent_dt
-        return new
-
-    def to_parent(self):
-        """ Create a new timepar with the same units as the parent """
-        unit = self.parent_unit
-        dt = self.parent_dt
-        return self.to(unit=unit, dt=dt)
-
-    def to_json(self):
-        """ Export to JSON """
-        attrs = ['v', 'unit', 'parent_unit', 'parent_dt', 'self_dt', 'factor']
-        out = {'classname': self.__class__.__name__}
-        out.update({attr:getattr(self, attr) for attr in attrs})
-        out['values'] = sc.jsonify(self.values)
-        return out
-
-    # Act like a float -- TODO, add type checking
-    def __add__(self, other): return self.values + other
-    def __sub__(self, other): return self.values - other
-    def __mul__(self, other): return self.asnew().set(v=self.v * other)
-    def __pow__(self, other): return self.values ** other
-    def __truediv__(self, other): return self.asnew().set(v=self.v / other)
-
-    # ...from either side
-    def __radd__(self, other): return other + self.values
-    def __rsub__(self, other): return other - self.values
-    def __rmul__(self, other): return self.asnew().set(v= other * self.v)
-    def __rpow__(self, other): return other ** self.values
-    def __rtruediv__(self, other): return other / self.values # TODO: should be a rate?
-
-    # Handle modify-in-place methods
-    def __iadd__(self, other): return self.set(v=self.v + other)
-    def __isub__(self, other): return self.set(v=self.v - other)
-    def __imul__(self, other): return self.set(v=self.v * other)
-    def __itruediv__(self, other): return self.set(v=self.v / other)
-
-    # Other methods
-    def __neg__(self): return self.asnew().set(v=-self.v)
+# class TimePar(ss.BaseArr):
+#     """
+#     Base class for time-aware parameters, durations and rates
+#
+#     Stores either pd.Timestamp/ss.Date objects or
+#
+#     NB, because the factor needs to be recalculated, do not set values directly.
+#     """
+#     def __new__(cls, v=None, *args, **kwargs):
+#         """ Allow TimePars to wrap distributions and return the distributions """
+#
+#         # Special distribution handling
+#         if isinstance(v, ss.Dist):
+#             if len(args):
+#                 errormsg = f'When wrapping a distribution with a TimePar, args not allowed ({args}); use kwargs'
+#                 raise ValueError(errormsg)
+#             dist = v
+#             dist.pars[0] = cls(dist.pars[0], **kwargs) # Convert the first parameter to a TimePar (the same scale is applied to all parameters)
+#             return dist
+#
+#         # Otherwise, do the usual initialization
+#         else:
+#             return super().__new__(cls)
+#
+#     def __init__(self, v):
+#         """
+#
+#         :param v: Input quantity. A pd.Timestamp, pd.DateOffset,
+#         :param unit:
+#         :param parent_unit:
+#         :param parent_dt:
+#         :param self_dt:
+#         """
+#
+#         self.v = v
+#         self.values = None
+#         self.initialized = False
+#         # self.validate_units()
+#         return
+#
+#     # def validate_units(self):
+#     #     """ Check that the units entered are valid """
+#     #     try:
+#     #         self.unit = unit_mapping[self.unit]
+#     #     except KeyError:
+#     #         errormsg = f'Invalid unit "{self.unit}"; must be one of: {sc.strjoin(time_units.keys())}'
+#     #         raise ValueError(errormsg)
+#     #     try:
+#     #         self.parent_unit = unit_mapping[self.parent_unit]
+#     #     except KeyError:
+#     #         errormsg = f'Invalid parent unit "{self.parent_unit}"; must be one of: {sc.strjoin(time_units.keys())}'
+#     #         raise ValueError(errormsg)
+#     #     return
+#
+#     def init(self, parent=None, parent_unit=None, parent_dt=None, update_values=True, die=True):
+#         """ Link to the sim and/or module units """
+#         # if parent is None:
+#         #     parent = sc.dictobj(unit=parent_unit, dt=parent_dt)
+#         # else:
+#         #     if parent_dt is not None:
+#         #         errormsg = f'Cannot override parent {parent} by setting parent_dt; set in parent object instead'
+#         #         raise ValueError(errormsg)
+#
+#         # Set defaults if not yet set
+#         self.unit = sc.ifelse(self.unit, self.parent_unit) # If unit isn't defined but parent is, set to parent
+#
+#         # Calculate the actual conversion factor to be used in the calculations
+#         self.update_cached(update_values=update_values, die=die)
+#         self.initialized = True
+#         self.validate_units()
+#         return self
+#
+#     def __repr__(self):
+#         name = self.__class__.__name__
+#
+#         if self.initialized:
+#             if self.factor == 1.0:
+#                 xstr = ''
+#             else:
+#                 xstr = f', values={self.values}'
+#         else:
+#             xstr = ', initialized=False'
+#
+#         if (self.parent_unit is not None) and (self.unit != self.parent_unit):
+#             parentstr = f', parent={self.parent_unit}'
+#         else:
+#             parentstr = ''
+#
+#         default_dt = sc.ifelse(self.self_dt, 1.0) == 1.0
+#         if not default_dt:
+#             dtstr = f', self_dt={self.self_dt}'
+#         else:
+#             dtstr = ''
+#
+#         # Rather than ss.dur(3, unit='day'), dispaly as ss.days(3)
+#         prefixstr = 'ss.'
+#         key = (name, self.unit)
+#         mapping = {
+#             ('dur',  'day'):  'days',
+#             ('dur',  'year'): 'years',
+#             ('rate', 'day'):  'perday',
+#             ('rate', 'year'): 'peryear',
+#         }
+#
+#         if key in mapping and default_dt:
+#             prefixstr += mapping[key]
+#             unitstr = ''
+#         else:
+#             prefixstr += name
+#             unitstr = f', unit={self.unit}'
+#
+#         suffixstr = unitstr + parentstr + dtstr + xstr
+#
+#         return f'{prefixstr}({self.v}{suffixstr})'
+#
+#     @property
+#     def isarray(self):
+#         """ Check if the value is an array """
+#         return isinstance(self.v, np.ndarray)
+#
+#     def set(self, v=None, unit=None, parent_unit=None, parent_dt=None, self_dt=None, force=False):
+#         """ Set the specified parameter values (ignoring None values) and update stored values """
+#         if v           is not None: self.v           = v
+#         if unit        is not None: self.unit        = unit
+#         if parent_unit is not None: self.parent_unit = parent_unit
+#         if parent_dt   is not None: self.parent_dt   = parent_dt
+#         if self_dt     is not None: self.self_dt     = self_dt
+#         if self.initialized or force: # Don't try to set these unless it's been initialized
+#             self.update_cached()
+#         self.validate_units()
+#         return self
+#
+#     def update_cached(self, update_values=True, die=True):
+#         """ Update the cached factor and values """
+#         try:
+#             self.update_factor()
+#             if update_values:
+#                 self.update_values()
+#         except TypeError as E: # For a known error, skip silently if die=False
+#             if die:
+#                 errormsg = f'Update failed for {self}. Argument v={self.v} should be a number or array; if a function, use update_values=False. Error: {E}'
+#                 raise TypeError(errormsg) from E
+#         except Exception as E: # For other errors, raise a warning
+#             if die:
+#                 raise E
+#             else:
+#                 tb = sc.traceback(E)
+#                 warnmsg = f'Uncaught error encountered while updating {self}, but die=False. Traceback:\n{tb}'
+#                 ss.warn(warnmsg)
+#
+#         return self
+#
+#     def update_factor(self):
+#         """ Set factor used to multiply the value to get the output """
+#         self.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=self.parent_unit, dt2=self.parent_dt)
+#         return
+#
+#     def update_values(self):
+#         """ Convert from self.v to self.values based on self.factor -- must be implemented by derived classes """
+#         raise NotImplementedError
+#
+#     def to(self, unit=None, dt=None):
+#         """ Create a new timepar based on the current one but with a different unit and/or dt """
+#         new = self.asnew()
+#         unit = sc.ifelse(unit, self.parent_unit, self.unit)
+#         parent_dt = sc.ifelse(dt, 1.0)
+#         new.factor = time_ratio(unit1=self.unit, dt1=self.self_dt, unit2=unit, dt2=parent_dt) # Calculate the new factor
+#         new.update_values() # Update values
+#         new.v = new.values # Reset the base value
+#         new.factor = 1.0 # Reset everything else to be 1
+#         new.unit = unit
+#         new.self_dt = parent_dt
+#         new.parent_unit = unit
+#         new.parent_dt = parent_dt
+#         return new
+#
+#     def to_parent(self):
+#         """ Create a new timepar with the same units as the parent """
+#         unit = self.parent_unit
+#         dt = self.parent_dt
+#         return self.to(unit=unit, dt=dt)
+#
+#     def to_json(self):
+#         """ Export to JSON """
+#         attrs = ['v', 'unit', 'parent_unit', 'parent_dt', 'self_dt', 'factor']
+#         out = {'classname': self.__class__.__name__}
+#         out.update({attr:getattr(self, attr) for attr in attrs})
+#         out['values'] = sc.jsonify(self.values)
+#         return out
+#
+#     # Act like a float -- TODO, add type checking
+#     def __add__(self, other): return self.values + other
+#     def __sub__(self, other): return self.values - other
+#     def __mul__(self, other): return self.asnew().set(v=self.v * other)
+#     def __pow__(self, other): return self.values ** other
+#     def __truediv__(self, other): return self.asnew().set(v=self.v / other)
+#
+#     # ...from either side
+#     def __radd__(self, other): return other + self.values
+#     def __rsub__(self, other): return other - self.values
+#     def __rmul__(self, other): return self.asnew().set(v= other * self.v)
+#     def __rpow__(self, other): return other ** self.values
+#     def __rtruediv__(self, other): return other / self.values # TODO: should be a rate?
+#
+#     # Handle modify-in-place methods
+#     def __iadd__(self, other): return self.set(v=self.v + other)
+#     def __isub__(self, other): return self.set(v=self.v - other)
+#     def __imul__(self, other): return self.set(v=self.v * other)
+#     def __itruediv__(self, other): return self.set(v=self.v / other)
+#
+#     # Other methods
+#     def __neg__(self): return self.asnew().set(v=-self.v)
 
 # class dur(TimePar):
 #     """ Any number that acts like a duration """
@@ -1269,133 +1173,103 @@ class TimePar(ss.BaseArr):
 #         return self.values
 
 
-def perday(v, parent_unit=None, parent_dt=None):
-    """ Shortcut to ss.rate(value, units='day') """
+def perday(v):
+    """
+    Shortcut to specify rate per calendar day
+
+    :param v:
+    :return:
+    """
     return Rate(Dur(days=1/v))
 
 
-def peryear(v, parent_unit=None, parent_dt=None):
-    """ Shortcut to ss.rate(value, units='year') """
-    return Rate(Dur(years=1/v))
-
-
-
-
-
-
-
-class time_prob(TimePar):
+def peryear(v):
     """
-    A probability over time (a.k.a. a cumulative hazard rate); must be >=0 and <=1.
+    Shortcut to specify rate per numeric year
 
-    Note: ``ss.time_prob()`` converts one cumulative hazard rate to another with a
-    different time unit. ``ss.rate_prob()`` converts an exponential rate to a cumulative
-    hazard rate.
+    :param v:
+    :return:
     """
-    def update_values(self):
-        v = self.v
-        if self.isarray:
-            self.values = v.copy()
-            inds = np.logical_and(0.0 < v, v < 1.0)
-            if inds.sum():
-                rates = -np.log(1 - v[inds])
-                self.values[inds] = 1 - np.exp(-rates/self.factor)
-            invalid = np.logical_or(v < 0.0, 1.0 < v)
-            if invalid.sum():
-                errormsg = f'Invalid value {self.v} for {self}: must be 0-1. If using in a calculation, use .values instead.'
-                raise ValueError(errormsg)
-        else:
-            if v == 0:
-                self.values = 0
-            elif v == 1:
-                self.values = 1
-            elif 0 <= v <= 1:
-                rate = -np.log(1 - v)
-                self.values = 1 - np.exp(-rate/self.factor)
-            else:
-                errormsg = f'Invalid value {self.v} for {self}: must be 0-1. If using in a calculation, use .values instead.'
-                raise ValueError(errormsg)
-        return self.values
+    return Rate(YearDur(years=1/v))
 
-
-class rate_prob(TimePar):
-    """
-    An instantaneous rate converted to a probability; must be >=0.
-
-    Note: ``ss.time_prob()`` converts one cumulative hazard rate to another with a
-    different time unit. ``ss.rate_prob()`` converts an exponential rate to a cumulative
-    hazard rate.
-    """
-    def update_values(self):
-        v = self.v
-        if self.isarray:
-            self.values = v.copy()
-            inds = v > 0.0
-            if inds.sum():
-                self.values[inds] = 1 - np.exp(-v[inds]/self.factor)
-            invalid = v < 0.0
-            if invalid.sum():
-                errormsg = f'Invalid value {self.v} for {self}: must be >=0. If using in a calculation, use .values instead.'
-                raise ValueError(errormsg)
-        else:
-            if v == 0:
-                self.values = 0
-            elif v > 0:
-                self.values = 1 - np.exp(-v/self.factor)
-            else:
-                errormsg = f'Invalid value {self.value} for {self}: must be >=0. If using in a calculation, use .values instead.'
-                raise ValueError(errormsg)
-        return self.values
-
-
-class beta(time_prob):
-    """ A container for beta (i.e. the disease transmission rate) """
-    pass
-
-
-#%% Unit handling
-
-# # Map different units onto the time units -- placed at the end to include the functions
-# unit_mapping_reverse = {
-#     None: [None],
-#     'unitless': ['unitless', 'none'],
-#     'day': ['d', 'day', 'days', 'perday', days, perday],
-#     'year': ['y', 'yr', 'year', 'years', 'peryear', years, peryear],
-#     'week': ['w', 'wk', 'week', 'weeks'],
-#     'month': ['m', 'mo', 'month', 'months'],
-# }
-# unit_mapping = {v:k for k,vlist in unit_mapping_reverse.items() for v in vlist}
+#
+# class time_prob(Rate):
+#     """
+#     A probability over time (a.k.a. a cumulative hazard rate); must be >=0 and <=1.
+#
+#     Note: ``ss.time_prob()`` converts one cumulative hazard rate to another with a
+#     different time unit. ``ss.rate_prob()`` converts an exponential rate to a cumulative
+#     hazard rate.
+#     """
+#
+#     def update_values(self):
+#         v = self.v
+#         if self.isarray:
+#             self.values = v.copy()
+#             inds = np.logical_and(0.0 < v, v < 1.0)
+#             if inds.sum():
+#                 rates = -np.log(1 - v[inds])
+#                 self.values[inds] = 1 - np.exp(-rates/self.factor)
+#             invalid = np.logical_or(v < 0.0, 1.0 < v)
+#             if invalid.sum():
+#
+#                 errormsg = f'Invalid value {self.v} for {self}: must be 0-1. If using in a calculation, use .values instead.'
+#                 raise ValueError(errormsg)
+#         else:
+#             if v == 0:
+#                 self.values = 0
+#             elif v == 1:
+#                 self.values = 1
+#             elif 0 <= v <= 1:
+#                 rate = -np.log(1 - v)
+#                 self.values = 1 - np.exp(-rate/self.factor)
+#             else:
+#                 errormsg = f'Invalid value {self.v} for {self}: must be 0-1. If using in a calculation, use .values instead.'
+#                 raise ValueError(errormsg)
+#         return self.values
 #
 #
-# def validate_unit(unit):
-#     """ Check that the unit is valid, and convert to a standard type """
-#     try:
-#         unit = unit_mapping[unit]
-#     except KeyError as E:
-#         errormsg = f'Invalid unit "{unit}". Valid units are:\n{sc.pp(unit_mapping_reverse, output=True)}'
-#         raise sc.KeyNotFoundError(errormsg) from E
-#     return unit
+# class rate_prob(TimePar):
+#     """
+#     An instantaneous rate converted to a probability; must be >=0.
+#
+#     Note: ``ss.time_prob()`` converts one cumulative hazard rate to another with a
+#     different time unit. ``ss.rate_prob()`` converts an exponential rate to a cumulative
+#     hazard rate.
+#     """
+#     def update_values(self):
+#         v = self.v
+#         if self.isarray:
+#             self.values = v.copy()
+#             inds = v > 0.0
+#             if inds.sum():
+#                 self.values[inds] = 1 - np.exp(-v[inds]/self.factor)
+#             invalid = v < 0.0
+#             if invalid.sum():
+#                 errormsg = f'Invalid value {self.v} for {self}: must be >=0. If using in a calculation, use .values instead.'
+#                 raise ValueError(errormsg)
+#         else:
+#             if v == 0:
+#                 self.values = 0
+#             elif v > 0:
+#                 self.values = 1 - np.exp(-v/self.factor)
+#             else:
+#                 errormsg = f'Invalid value {self.value} for {self}: must be >=0. If using in a calculation, use .values instead.'
+#                 raise ValueError(errormsg)
+#         return self.values
 #
 #
-# def is_unitless(unit):
-#     """ Check if explicitly unitless (excludes None; use not has_units() for that) """
-#     return unit in unit_mapping_reverse['unitless']
-#
-#
-# def has_units(unit):
-#     """ Check that the unit is valid and is not unitless or None """
-#     unit = validate_unit(unit)
-#     if unit is None:
-#         return False
-#     elif is_unitless(unit):
-#         return False
-#     else:
-#         return True
+# class beta(time_prob):
+#     """ A container for beta (i.e. the disease transmission rate) """
+#     pass
 
 
 if __name__ == '__main__':
 
     Date(2020.1)
+
+    ss.Date(2050) - ss.Date(2020)
+
 
     print(Dur(weeks=1)+Dur(1/52))
     print(Dur(1/52)+Dur(weeks=1))
