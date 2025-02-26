@@ -7,10 +7,14 @@ What's new
 All notable changes to the codebase are documented in this file. Changes that may result in differences in model output, or are required in order to run an old parameter set with the current version, are flagged with the term "Regression information".
 
 
-Version 2.3.1 (2025-02-20)
+Version 2.3.1 (2025-02-25)
 ---------------------------
-- Updated ``sim.shrink()`` to remove additional objects, resulting in a smaller sim size.
-- *GitHub info*: PR `864 <https://github.com/starsimhub/starsim/pull/864>`_
+- Updated ``ss.Sim.shrink()`` to remove additional objects, resulting in a smaller sim size.
+- ``ss.Calibration.save_csv()`` has been replaced by ``ss.Calibration.to_df()`` (to save to a CSV, use ``ss.Calibration.to_df().to_csv()``.
+- ``ss.Result.shape`` has been renamed ``ss.Result._shape``, so ``ss.Result.shape`` now correctly returns the actual size of the array.
+- Results by default convert all result keys to lowercase; use ``keep_case=True`` to turn off this behavior.
+- Fixed a bug with an ``ss.date`` object converting to a ``pd.Timestamp`` upon copy.
+- *GitHub info*: PR `865 <https://github.com/starsimhub/starsim/pull/865>`_
 
 
 Version 2.3.0 (2025-02-14)

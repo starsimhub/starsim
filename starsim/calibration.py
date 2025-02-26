@@ -269,19 +269,12 @@ class Calibration(sc.prettyobj):
         if self.study is None:
             raise ValueError('Please run calibrate() before saving results')
 
-        df = self.study.trials_dataframe() \
-            .sort_values(by='value') \
-            .set_index('number')
+        df = sc.dataframe(self.study.trials_dataframe())
+        df = df.sort_values(by='value').set_index('number')
 
         if top_k is not None:
             df = df.head(top_k)
 
-        return df
-
-    def save_csv(self, filename, top_k=None):
-        """ Save the results to a CSV file """
-        df = self.to_df(top_k)
-        df.to_csv(filename)
         return df
 
     def check_fit(self, do_plot=True):
