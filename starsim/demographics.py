@@ -86,12 +86,7 @@ class Births(Demographics):
         else:
             this_birth_rate = p.birth_rate
 
-        if isinstance(this_birth_rate, ss.TimePar):
-            factor = 1.0
-        else:
-            factor = ss.time_ratio(unit1=self.t.unit, dt1=self.t.dt, unit2='year', dt2=1.0)
-
-        scaled_birth_prob = this_birth_rate * p.rate_units * p.rel_birth * factor
+        scaled_birth_prob = this_birth_rate / self.t.dt * p.rate_units * p.rel_birth
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
         n_new = np.random.binomial(n=sim.people.alive.count(), p=scaled_birth_prob) # Not CRN safe, see issue #404
         return n_new
@@ -192,7 +187,7 @@ class Deaths(Demographics):
     def make_death_prob_fn(self, sim, uids):
         """ Take in the module, sim, and uids, and return the probability of death for each UID on this timestep """
         drd = self.death_rate_data
-        if sc.isnumber(drd) or isinstance(drd, ss.TimePar):
+        if sc.isnumber(drd) or isinstance(drd, ss.Rate):
             death_rate = drd
 
         # Process data
@@ -222,11 +217,7 @@ class Deaths(Demographics):
                 death_rate[:] = s.values[binned_ages]
 
         # Scale from rate to probability. Consider an exponential here.
-        if isinstance(death_rate, ss.TimePar):
-            factor = self.t.dt # TODO: figure out why this isn't 1.0
-        else:
-            factor = ss.time_ratio(unit1=self.t.unit, dt1=self.t.dt, unit2='year', dt2=1.0)
-        death_prob = death_rate * self.pars.rate_units * self.pars.rel_death * factor
+        death_prob = death_rate / self.t.dt * self.pars.rate_units * self.pars.rel_death
         death_prob = np.clip(death_prob, a_min=0, a_max=1)
 
         return death_prob

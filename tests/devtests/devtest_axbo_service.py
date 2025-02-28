@@ -34,7 +34,7 @@ ax_client = AxClient(enforce_sequential_optimization=False)
 
 def make_sim(calib_pars):
     sir = ss.SIR(
-        beta = ss.beta( calib_pars.get('beta', 0.9) ),
+        beta = ss.RateProb( calib_pars.get('beta', 0.9) ),
         dur_inf = ss.lognorm_ex(mean=ss.dur( calib_pars.get('dur_inf', 6))),
         init_prev = ss.bernoulli(0.01),
     )

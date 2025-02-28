@@ -216,20 +216,20 @@ class Module(Base):
         """ Initialize all time parameters by ensuring all parameters are initialized; part of init_post() """
         # Update time and initialize
         self.t.init(sim=self.sim) # Sets the absolute sim time vector
-
-        # Find all time parameters in the module
-        timepars = sc.search(self.pars, type=ss.TimePar) # Should it be self or self.pars?
-
-        # Initialize them with the parent module
-        for timepar in timepars.values():
-            if force or not timepar.initialized:
-                timepar.init(parent=self.t, die=False) # In some cases, the values can't be initialized; that's OK here
+        #
+        # # Find all time parameters in the module
+        # timepars = sc.search(self.pars, type=ss.TimePar) # Should it be self or self.pars?
+        #
+        # # Initialize them with the parent module
+        # for timepar in timepars.values():
+        #     if force or not timepar.initialized:
+        #         timepar.init(parent=self.t, die=False) # In some cases, the values can't be initialized; that's OK here
         return
 
     def match_time_inds(self, inds=None):
          """ Find the nearest matching sim time indices for the current module """
-         self_tvec = self.t.abstvec
-         sim_tvec = self.sim.t.abstvec
+         self_tvec = self.t.yearvec
+         sim_tvec = self.sim.t.yearvec
          if len(self_tvec) == len(sim_tvec): # Shortcut to avoid doing matching
              return Ellipsis if inds is None else inds
          else:

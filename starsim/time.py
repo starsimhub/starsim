@@ -555,33 +555,53 @@ class Rate():
 
     def __rmul__(self, other): return self.__mul__(other)
 
-    # TODO: Division and other operators
+    def __truediv__(self, other):
+        # This is for <rate>/<other>
+        if isinstance(other, Rate):
+            # 2 per year divided by 4 per year would be 0.5 as in it's half the rate
+            # The corresponding periods would be 0.5 and 0.25, so we want to return other._dur/self._dur
+            return other._dur/self._dur
+        if isinstance(other, Dur):
+            return self._dur.years/other.years
+        else:
+            return Rate(self._dur*other)
+
+    def __rtruediv__(self, other):
+        # If a float is divided by a rate, we should get back the duration
+        return other * self._dur
+
 
 class RateProb(Rate):
-    # Probability over time
-    # When scaling by a Dur, the value is adjusted accordingly
-    def __init__(self, p, dur):
-        # e.g., probability per unit time
+    """
+    Class to represent probability rates
+
+    These values are probabilities per unit time. The probability for a given
+    period of time can be calculated by multiplying by a duration. The cumulative
+    hazard rate conversion will be used when calculating the probability. For multiplicative
+    scaling, use a ``Rate`` instead.
+
+    >>> p = ss.RateProb(0.1, ss.Dur(years=1))
+    >>> p*ss.Dur(years=2)
+    """
+    def __init__(self, p, dur=None):
+        if dur is None:
+            dur = YearDur(1)
         super().__init__(dur)
         self.p = p
 
     def __mul__(self, other):
         if isinstance(other, Dur):
-
-
-
             if self.p == 0:
-                self.values = 0
+                return 0
             elif self.p == 1:
-                self.values = 1
+                return 1
             elif 0 <= self.p <= 1:
-                rate = -np.log(1 - v)
-                self.values = 1 - np.exp(-rate/self.factor)
+                rate = -np.log(1 - self.p)
+                factor = self._dur/other
+                return 1 - np.exp(-rate/factor)
             else:
                 errormsg = f'Invalid value {self.v} for {self}: must be 0-1. If using in a calculation, use .values instead.'
                 raise ValueError(errormsg)
-
-
 
         else:
             return self.__class__(self.p*other, self._dur)
@@ -664,6 +684,11 @@ class Time(sc.prettyobj):
             return f'<Time t={self.tvec[self.ti]}, ti={self.ti}, {self.start}-{self.stop} dt={self.dt}>'
         else:
             return f'<Time (uninitialized)>'
+
+    @property
+    def timevec(self):
+        # Backwards-compatibility function for now - TODO: consider deprecating?
+        return self.tvec
 
     @property
     def npts(self):
@@ -1266,6 +1291,10 @@ def peryear(v):
 
 if __name__ == '__main__':
 
+    from starsim.time import *   # Import the classes from Starsim so that Dur is an ss.Dur rather than just a bare Dur etc.
+
+
+
     Date(2020.1)
 
     ss.Date(2050) - ss.Date(2020)
@@ -1304,7 +1333,7 @@ if __name__ == '__main__':
     t = Time(Date('2020-01-01'), Date('2030-06-01'), Dur(days=1))
 
     t = Time(Date(2020), Date(2030.5), Dur(0.1))
-
+    t.tvec + YearDur(1)
 
     print(1/YearDur(1))
     print(2/YearDur(1))
@@ -1313,3 +1342,47 @@ if __name__ == '__main__':
     print(0.5/DateDur(1))
 
     print(perday(5)*Dur(days=1))
+
+
+    # time_prob
+    p = RateProb(0.1, Dur(years=1))
+    p*Dur(years=2)
+    p * Dur(0.5)
+    p * Dur(months=1)
+
+    p = RateProb(0.1, Dur(1))
+    p*Dur(years=2)
+    p * Dur(0.5)
+    p * Dur(months=1)
+
+    2/Rate(YearDur(4))
+    1/(2*Rate(YearDur(4)))
+    Rate(YearDur(2))/Rate(YearDur(1))
+
+
+    # Dists
+    module = sc.objdict(t=sc.objdict(dt=Dur(days=1)))
+    d = ss.normal(Dur(days=6), Dur(days=1), module=module, strict=False)
+    d.init()
+    d.rvs(5)
+
+    module = sc.objdict(t=sc.objdict(dt=Dur(weeks=1)))
+    d = ss.normal(Dur(days=6), Dur(days=1), module=module, strict=False)
+    d.init()
+    d.rvs(5)
+
+    # Another example
+    # 5/DateDur(weeks=1)
+    # Out[3]: <Rate: per days=1,hours=9,minutes=36> (approx. 259.99999999999994 per year)
+    # 259/365
+    # Out[4]: 0.7095890410958904
+    # 5/7*365
+    # Out[5]: 260.7142857142857
+    # r = 5/DateDur(weeks=1)
+    # r*DateDur(days=1)
+    # Out[7]: 0.7142857142857142
+    # r*DateDur(days=5)
+    # Out[8]: 3.5714285714285707
+    # r*DateDur(days=7)
+    # Out[9]: 4.999999999999999
+    # r*DateDur(weeks=1)

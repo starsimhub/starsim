@@ -15,7 +15,7 @@ class HIV(ss.Infection):
         super().__init__()
         self.define_pars(
             unit = 'year',
-            beta = ss.beta(1.0), # Placeholder value
+            beta = ss.RateProb(1.0), # Placeholder value
             cd4_min = 100,
             cd4_max = 500,
             cd4_rate = 5,

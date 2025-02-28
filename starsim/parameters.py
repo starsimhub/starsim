@@ -74,6 +74,8 @@ class Pars(sc.objdict):
                     self[key] = new
                 elif isinstance(old, dict):
                     self[key] = new # Take dictionaries directly, without warning the user
+                elif isinstance(old, (ss.Dur, ss.Rate)):
+                    self[key] = new
                 else: # Everything else; not used currently but could be
                     warnmsg = f'No known mechanism for handling {type(old)} → {type(new)}; using default'
                     ss.warn(warnmsg)
@@ -250,11 +252,10 @@ class SimPars(Pars):
         self.pop_scale = None # How much to scale the population
 
         # Simulation parameters
-        self.unit      = ''    # The time unit to use; options are 'year' (default), 'day', 'week', 'month', or 'none'
         self.start     = None  # Start of the simulation (default 2020)
         self.stop      = None  # End of the simulation
         self.dur       = None  # Duration of time to run, if stop isn't specified (default 50 steps of self.unit)
-        self.dt        = 1.0   # Timestep (in units of self.unit)
+        self.dt        = default_dt  # Timestep
         self.rand_seed = 1     # Random seed; if None, don't reset
 
         # Demographic parameters

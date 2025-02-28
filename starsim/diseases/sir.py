@@ -21,7 +21,7 @@ class SIR(ss.Infection):
     def __init__(self, pars=None, **kwargs):
         super().__init__()
         self.define_pars(
-            beta = ss.beta(0.1),
+            beta = ss.RateProb(0.1),
             init_prev = ss.bernoulli(p=0.01),
             dur_inf = ss.lognorm_ex(mean=ss.Dur(days=6)),
             p_death = ss.bernoulli(p=0.01),
@@ -109,7 +109,7 @@ class SIS(ss.Infection):
     def __init__(self, pars=None, *args, **kwargs):
         super().__init__()
         self.define_pars(
-            beta = ss.beta(0.05),
+            beta = ss.RateProb(0.05),
             init_prev = ss.bernoulli(p=0.01),
             dur_inf = ss.lognorm_ex(mean=ss.dur(10)),
             waning = ss.rate(0.05),

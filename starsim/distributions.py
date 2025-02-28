@@ -493,18 +493,15 @@ class Dist:
         self._pars = sc.cp(self.pars) # The actual keywords; shallow copy, modified below for special cases
         if call:
             self.call_pars() # Convert from function to values if needed
+        self.convert_timepars()
         spars = self.sync_pars() # Synchronize parameters between the NumPy and SciPy distributions
         return spars
 
-    def preprocess_timepar(self, key, timepar):
+    def convert_timepars(self):
         """ Method to handle how timepars are processed; not for the user. By default, scales the output of the distribution. """
-        if self._timepar is None: # Store this here for later use
-            self._timepar = sc.dcp(timepar) # Make a copy to avoid modifying the original
-        elif timepar.factor != self._timepar.factor:
-            errormsg = f'Cannot have time parameters in the same distribution with inconsistent unit/dt values: {self._pars}'
-            raise ValueError(errormsg)
-        self._pars[key] = timepar.v # Use the raw value, since it could be anything (including a function)
-        return timepar.v # Also use this for the rest of the loop
+        for key, v in self._pars.items():
+            if isinstance(v, ss.Dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Dur):
+                self._pars[key] = v/self.module.t.dt
 
     def convert_callable(self, key, val, size, uids):
         """ Method to handle how callable parameters are processed; not for the user """
@@ -516,8 +513,6 @@ class Dist:
 
     def call_par(self, key, val, size, uids):
         """ Check if this parameter needs to be called to be turned into an array; not for the user """
-        if isinstance(val, ss.TimePar): # If it's a time parameter, transform it to a float now
-            val = self.preprocess_timepar(key, val)
         if callable(val) and not isinstance(val, type): # If the parameter is callable, then call it (types can appear as callable)
             val = self.convert_callable(key, val, size, uids)
         return val
@@ -931,11 +926,8 @@ class randint(Dist):
 
     def preprocess_timepar(self, key, timepar):
         """ Not valid due to a rounding error """
-        if self.allow_time:
-            return super().preprocess_timepar(key, timepar)
-        else:
-            errormsg = f'Cannot use timepars with a randint distribution ({self}) since the values may be rounded incorrectly. Use uniform() instead and convert to int yourself, or set allow_time=True if you really want to do this.'
-            raise NotImplementedError(errormsg)
+        errormsg = f'Cannot use timepars with a randint distribution ({self}) since the values may be rounded incorrectly. Use uniform() instead and convert to int yourself, or set allow_time=True if you really want to do this.'
+        raise NotImplementedError(errormsg)
 
 
 class rand_raw(Dist):
@@ -1045,29 +1037,30 @@ class bernoulli(Dist):
         """ Alias to filter(uids, both=True) """
         return self.filter(uids=uids, both=True)
 
-    def call_par(self, key, val, size, uids):
-        """ Reverse the usual order of processing so callable is processed first, and then the timepar conversion """
-        is_timepar = isinstance(val, ss.TimePar)
-
-        if is_timepar: # If it's a time parameter, pull out the value
-            timepar = sc.dcp(val) # Rename to make more sense within the context of this method
-            val = timepar.v # Pull out the base value; we'll deal with the transformation later
-            self._timepar = timepar # This is used, then destroyed, by postprocess_timepar() below
-            if isinstance(timepar, ss.dur): # Validation
-                errormsg = f'Bernoulli distributions can only be used with ss.time_prob() or ss.rate(), not {timepar}'
-                raise TypeError(errormsg)
-
-        # As normal: if the parameter is callable, then call it (types can appear as callable)
-        if callable(val) and not isinstance(val, type):
-            val = self.convert_callable(key, val, size, uids)
-
-        # Process as a timepar
-        if is_timepar:
-            val = self.postprocess_timepar(val) # Note: this is processing the parameter rather than the rvs as usual
-
-        # Store in the parameters and return
-        self._pars[key] = val
-        return val
+    # This order (callable then timepar conversion) is now used by default?
+    # def call_par(self, key, val, size, uids):
+    #     """ Reverse the usual order of processing so callable is processed first, and then the timepar conversion """
+    #     is_timepar = isinstance(val, ss.TimePar)
+    #
+    #     if is_timepar: # If it's a time parameter, pull out the value
+    #         timepar = sc.dcp(val) # Rename to make more sense within the context of this method
+    #         val = timepar.v # Pull out the base value; we'll deal with the transformation later
+    #         self._timepar = timepar # This is used, then destroyed, by postprocess_timepar() below
+    #         if isinstance(timepar, ss.dur): # Validation
+    #             errormsg = f'Bernoulli distributions can only be used with ss.time_prob() or ss.rate(), not {timepar}'
+    #             raise TypeError(errormsg)
+    #
+    #     # As normal: if the parameter is callable, then call it (types can appear as callable)
+    #     if callable(val) and not isinstance(val, type):
+    #         val = self.convert_callable(key, val, size, uids)
+    #
+    #     # Process as a timepar
+    #     if is_timepar:
+    #         val = self.postprocess_timepar(val) # Note: this is processing the parameter rather than the rvs as usual
+    #
+    #     # Store in the parameters and return
+    #     self._pars[key] = val
+    #     return val
 
 
 class choice(Dist):

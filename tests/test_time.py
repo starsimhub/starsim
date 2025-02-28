@@ -83,7 +83,7 @@ def test_units(do_plot=False):
     sc.heading('Test behavior of year vs day units')
 
     sis = ss.SIS(
-        beta = ss.beta(0.05, 'day'),
+        beta = ss.RateProb(0.05, 'day'),
         init_prev = ss.bernoulli(p=0.1),
         dur_inf = ss.lognorm_ex(mean=ss.dur(10, 'day')),
         waning = ss.rate(0.05, 'day'),
@@ -122,7 +122,7 @@ def test_multi_timestep(do_plot=False):
     sc.heading('Test behavior of different modules having different timesteps')
 
     pars = dict(
-        diseases = ss.SIS(unit='day', dt=1.0, init_prev=0.1, beta=ss.beta(0.01)),
+        diseases = ss.SIS(unit='day', dt=1.0, init_prev=0.1, beta=ss.RateProb(0.01)),
         demographics = ss.Births(unit='year', dt=0.25),
         networks = ss.RandomNet(unit='week'),
         n_agents = small,
@@ -147,7 +147,7 @@ def test_multi_timestep(do_plot=False):
 def test_mixed_timesteps():
     sc.heading('Test behavior of different combinations of timesteps')
 
-    siskw = dict(dur_inf=ss.dur(50, 'day'), beta=ss.beta(0.01, 'day'), waning=ss.rate(0.005, 'day'))
+    siskw = dict(dur_inf=ss.dur(50, 'day'), beta=ss.RateProb(0.01, 'day'), waning=ss.rate(0.005, 'day'))
     kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
 
     print('Year-year')

@@ -361,7 +361,7 @@ class DynamicNetwork(Network):
 
     def end_pairs(self):
         people = self.sim.people
-        self.edges.dur = self.edges.dur - self.t.dt # TODO: think about whether this is right # Update: it is, if duration is *NOT* a ss.dur! Otherwise it should be -1, in timestep units
+        self.edges.dur = self.edges.dur - 1 # Assume that the edge duration is in units of self.t.dt
 
         # Non-alive agents are removed
         active = (self.edges.dur > 0) & people.alive[self.edges.p1] & people.alive[self.edges.p2]
@@ -558,8 +558,10 @@ class RandomNet(DynamicNetwork):
 
         if isinstance(self.pars.dur, ss.Dist):
             dur = self.pars.dur.rvs(p1)
+        elif self.pars.dur == 0:
+            dur = np.zeros(len(p1))
         else:
-            dur = np.ones(len(p1))*self.pars.dur # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
+            dur = np.ones(len(p1))*self.pars.dur/self.t.dt # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
 
         self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return
@@ -620,7 +622,7 @@ class ErdosRenyiNet(DynamicNetwork):
         if isinstance(self.pars.dur, ss.Dist):
             dur = self.pars.dur.rvs(p1)
         else:
-            dur = np.ones(len(p1))*self.pars.dur
+            dur = np.ones(len(p1))*self.pars.dur/self.t.dt
 
         self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return
@@ -1074,7 +1076,7 @@ class MixingPools(Route):
             diseases = None,
             src = None,
             dst = None,
-            beta = ss.beta(0.1),
+            beta = ss.RateProb(0.1),
             contacts = None,
         )
         self.update_pars(pars, **kwargs)
@@ -1165,7 +1167,7 @@ class MixingPool(Route):
         mp_pars = dict(
             src = lambda sim: sim.people.male, # only males are infectious
             dst = None, # all agents are susceptible
-            beta = ss.beta(0.2),
+            beta = ss.RateProb(0.2),
             contacts = ss.poisson(lam=4),
         )
 
@@ -1186,7 +1188,7 @@ class MixingPool(Route):
             diseases = None,
             src = None,
             dst = None, # Same as src
-            beta = ss.beta(0.2),
+            beta = ss.RateProb(0.2),
             contacts = ss.poisson(1.0),
         )
         self.update_pars(pars, **kwargs)

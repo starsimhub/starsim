@@ -17,7 +17,7 @@ n_agents = 2e3
 
 def make_sim():
     sir = ss.SIR(
-        beta = ss.beta(0.075),
+        beta = 0.075,
         init_prev = ss.bernoulli(0.02),
     )
     random = ss.RandomNet(n_contacts=ss.poisson(4))
@@ -49,7 +49,7 @@ def build_sim(sim, calib_pars, **kwargs):
             continue
 
         if k == 'beta':
-            sir.pars.beta = ss.beta(v)
+            sir.pars.beta = v
         elif k == 'init_prev':
             sir.pars.init_prev = ss.bernoulli(v)
         elif k == 'n_contacts':
