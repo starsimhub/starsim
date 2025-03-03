@@ -221,6 +221,17 @@ class Dur():
                 return super().__new__(DateDur)
         return super().__new__(cls)
 
+    # NB. Durations are considered to be equal if their year-equivalent duration is equal
+    # That would mean that Dur(years=1)==Dur(1) returns True - probably less confusing than having it return False?
+    def __hash__(self):
+        return hash(self.years)
+
+    def __eq__(self):
+        return self.years == other.years
+
+    def __float__(self):
+        return float(self.years)
+
     @property
     def years(self):
         # Return approximate conversion into years
@@ -316,7 +327,7 @@ class YearDur(Dur):
 
     @property
     def years(self):
-        return self.period
+        return self.period # Needs to return float so matplotlib can plot it correctly
 
     @property
     def is_variable(self):
@@ -465,6 +476,8 @@ class DateDur(Dur):
         have been handled by overflow using the ratios in `cls.ratios`. For example, 2.5 weeks
         would first become 2 weeks and 0.5*7 = 3.5 days, and then become 3 days + 0.5*24 = 12 hours.
 
+        Negative values are supported - -1.5 weeks for example will become (-1w, -3d, -12h)
+
         :return: A pd.DateOffset
         """
         if isinstance(vals, np.ndarray):
@@ -479,7 +492,13 @@ class DateDur(Dur):
             raise TypeError()
 
         for i in range(len(cls.ratios)-1):
-            d[i], remainder = divmod(d[i], 1)
+            if d[i] < 0:
+                d[i], remainder = divmod(d[i], 1)
+                if remainder:
+                    d[i]+=1
+                    remainder -=1
+            else:
+                d[i], remainder = divmod(d[i], 1)
             d[i] = int(d[i])
             d[i+1] += remainder * cls.ratios[i+1]
         d[-1] = int(d[-1])
@@ -499,11 +518,12 @@ class DateDur(Dur):
         :param scale: A float scaling factor (must be positive)
         :return: A pd.DateOffset instance scaled by the requested amount
         """
-        assert scale >= 0
         return self._round_duration(self._as_array(dateoffset) * scale)
 
     def to_numpy(self):
-        return self.period.to_numpy()
+        # TODO: This is a quick fix to get plotting to work, but this should do something more sensible
+        return self.years
+        # return self.period.to_numpy()
 
     def __mul__(self, other: float):
         if isinstance(other, Rate):
@@ -521,7 +541,7 @@ class DateDur(Dur):
         if self.years == 0:
             return '<DateDur: 0>'
         else:
-            return '<DateDur: ' +  ','.join([f'{k}={v}' for k, v in zip(self.ratios, self._as_array(self.period)) if v>0]) + '>'
+            return '<DateDur: ' +  ','.join([f'{k}={v}' for k, v in zip(self.ratios, self._as_array(self.period)) if v!=0]) + '>'
 
     def __add__(self, other):
         if isinstance(other, Date):
@@ -536,6 +556,9 @@ class DateDur(Dur):
             return self.__class__(**kwargs)
         else:
             raise TypeError('Can only add dates, Dur objects, or pd.DateOffset objects')
+
+    def __sub__(self, other):
+        return self.__add__(-1*other)
 
 class Rate():
     def __init__(self, dur:Dur):
@@ -1293,7 +1316,7 @@ if __name__ == '__main__':
 
     from starsim.time import *   # Import the classes from Starsim so that Dur is an ss.Dur rather than just a bare Dur etc.
 
-
+    DateDur(weeks=1) - DateDur(days=1)
 
     Date(2020.1)
 
