@@ -300,6 +300,7 @@ class Dur():
     def __rtruediv__(self, other):
         # If a Dur is divided by a Dur then we will call __truediv__
         # If a float is divided by a Dur, then we should return a rate
+        # If a rate is divided by a Dur, then we will call Rate.__truediv__
         # We also need divide the duration by the numerator when calculating the rate
         return Rate(self/other)
 
@@ -584,8 +585,8 @@ class Rate():
             # 2 per year divided by 4 per year would be 0.5 as in it's half the rate
             # The corresponding periods would be 0.5 and 0.25, so we want to return other._dur/self._dur
             return other._dur/self._dur
-        if isinstance(other, Dur):
-            return self._dur.years/other.years
+        elif isinstance(other, Dur):
+            raise Exception('Cannot divide a rate by a duration')
         else:
             return Rate(self._dur*other)
 

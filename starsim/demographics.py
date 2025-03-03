@@ -86,7 +86,7 @@ class Births(Demographics):
         else:
             this_birth_rate = p.birth_rate
 
-        scaled_birth_prob = this_birth_rate / self.t.dt * p.rate_units * p.rel_birth
+        scaled_birth_prob = this_birth_rate * self.t.dt * p.rate_units * p.rel_birth
         scaled_birth_prob = np.clip(scaled_birth_prob, a_min=0, a_max=1)
         n_new = np.random.binomial(n=sim.people.alive.count(), p=scaled_birth_prob) # Not CRN safe, see issue #404
         return n_new
@@ -217,7 +217,7 @@ class Deaths(Demographics):
                 death_rate[:] = s.values[binned_ages]
 
         # Scale from rate to probability. Consider an exponential here.
-        death_prob = death_rate / self.t.dt * self.pars.rate_units * self.pars.rel_death
+        death_prob = death_rate * self.t.dt * self.pars.rate_units * self.pars.rel_death
         death_prob = np.clip(death_prob, a_min=0, a_max=1)
 
         return death_prob
