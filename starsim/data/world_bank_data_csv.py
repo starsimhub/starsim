@@ -97,6 +97,28 @@ def save_to_file(df, country_code):
     df.to_csv(file_path, index=False)
     print(f"Data saved to: {file_path}")
 
+def get_birth_rate(country_code):
+    """
+    Fetches the birth rate for a given country code.
+    
+    :param country_code: ISO 3166-1 alpha-3 country code (e.g., "USA" for the United States).
+    :return: Birth rate value or None if not found.
+    """
+    df = fetch_world_bank_data(country_code)
+    pprint(f"Birth rate: {df['Crude Birth Rate (per 1,000 people)'].values[0]} of {country_code}")
+    return df["Crude Birth Rate (per 1,000 people)"].values[0]
+
+def get_death_rate(country_code):
+    """
+    Fetches the death rate for a given country code.
+    
+    :param country_code: ISO 3166-1 alpha-3 country code (e.g., "USA" for the United States).
+    :return: Death rate value or None if not found.
+    """
+    df = fetch_world_bank_data(country_code)
+    pprint(f"Death rate: {df['Crude Death Rate (per 1,000 people)'].values[0]} of {country_code}")
+    return df["Crude Death Rate (per 1,000 people)"].values[0]
+
 # Entry point
 if __name__ == "__main__":
     # country = input("Enter a country code (ISO 3166-1 alpha-3, e.g., USA, IND, BRA): ").upper()
