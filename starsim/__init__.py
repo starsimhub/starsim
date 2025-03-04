@@ -32,6 +32,7 @@ from .run              import *
 from .calibration      import *
 from .calib_components import *
 from .samples          import *
+from .data             import *
 
 # Assign the root folder
 import sciris as sc

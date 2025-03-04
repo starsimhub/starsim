@@ -23,11 +23,15 @@ class Demographics(ss.Module):
 
 class Births(Demographics):
     """ Create births based on rates, rather than based on pregnancy """
-    def __init__(self, pars=None, metadata=None, **kwargs):
+    def __init__(self, pars=None, country_code=None, metadata=None, **kwargs):
         super().__init__()
+        br = 20
+        if country_code is not None:
+            br = ss.get_birth_rate(country_code)
+
         self.define_pars(
             unit = 'year',
-            birth_rate = ss.peryear(20),
+            birth_rate = ss.peryear(br),
             rel_birth = 1,
             rate_units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
         )

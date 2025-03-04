@@ -225,6 +225,7 @@ class SimPars(Pars):
         rand_seed (int): The overall random seed for the simulation (used to set module-specific random seeds)
         birth_rate (float): If provided, include births with this rate (per 1000 people per year)
         death_rate (float): If provided, include deaths with this rate (per 1000 people per year)
+        country_code (str): 3 letters country iso code location to use for the simulation (default 'USA')
         use_aging (bool): Specify whether agents age (by default, agents age if and only if births and/or deaths are included)
         people (People): If provided, use a pre-existing People object rather than creating one (in which case n_agents will be ignored)
         networks (str/list/Module): The network module(s); can be a string, single module (i.e. Network), or list
@@ -245,6 +246,7 @@ class SimPars(Pars):
         self.n_agents  = 10e3 # Number of agents
         self.total_pop = None # If defined, used for calculating the scale factor
         self.pop_scale = None # How much to scale the population
+        self.country_code = None # The country code to use for the simulation (default 'USA')
 
         # Simulation parameters
         self.unit      = ''    # The time unit to use; options are 'year' (default), 'day', 'week', 'month', or 'none'
