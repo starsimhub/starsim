@@ -288,10 +288,6 @@ class Infection(Disease):
         target_uids = trg[transmitted]
         source_uids = src[transmitted]
 
-        p_transmit[p_transmit > 0]
-        target_uids
-        source_uids
-
         return target_uids, source_uids
 
     def infect(self):
