@@ -23,7 +23,7 @@ class SIR(ss.Infection):
         self.define_pars(
             beta = ss.RateProb(0.1),
             init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=ss.Dur(days=6)),
+            dur_inf = ss.lognorm_ex(mean=ss.Dur(years=6)),
             p_death = ss.bernoulli(p=0.01),
         )
         self.update_pars(pars, **kwargs)
