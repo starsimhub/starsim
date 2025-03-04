@@ -111,8 +111,8 @@ class SIS(ss.Infection):
         self.define_pars(
             beta = ss.RateProb(0.05),
             init_prev = ss.bernoulli(p=0.01),
-            dur_inf = ss.lognorm_ex(mean=ss.dur(10)),
-            waning = ss.rate(0.05),
+            dur_inf = ss.lognorm_ex(mean=ss.Dur(years=10)),
+            waning = ss.peryear(0.05),
             imm_boost = 1.0,
         )
         self.update_pars(pars=pars, *args, **kwargs)
@@ -133,7 +133,7 @@ class SIS(ss.Infection):
 
     def update_immunity(self):
         has_imm = (self.immunity > 0).uids
-        self.immunity[has_imm] = (self.immunity[has_imm])*(1 - self.pars.waning)
+        self.immunity[has_imm] = (self.immunity[has_imm])*(1 - self.pars.waning*self.t.dt)
         self.rel_sus[has_imm] = np.maximum(0, 1 - self.immunity[has_imm])
         return
 
