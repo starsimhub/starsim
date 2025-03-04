@@ -311,13 +311,10 @@ class Pregnancy(Demographics):
         frd = self.fertility_rate_data
         fertility_rate = np.zeros(len(sim.people.uid.raw), dtype=ss_float_)
 
-        time_factor = ss.time_ratio(unit1=self.t.unit, dt1=self.t.dt, unit2='year', dt2=1.0)
-        if sc.isnumber(frd):
-            fertility_rate[uids] = self.fertility_rate_data
-            if isinstance(frd, ss.TimePar):
-                time_factor = 1 # Time conversion performed automatically by TimePar
+        if isinstance(frd, ss.Rate):
+            fertility_rate[uids] = self.fertility_rate_data * self.t.dt # Rate per timestep
         else:
-            year_ind = sc.findnearest(frd.index, self.t.now('year')-self.pars.dur_pregnancy.to('year')) # TODO: make time-unit-aware
+            year_ind = sc.findnearest(frd.index, self.t.now('year')-self.pars.dur_pregnancy.years) # TODO: make time-unit-aware
             nearest_year = frd.index[year_ind]
 
             # Assign agents to age bins
@@ -340,11 +337,11 @@ class Pregnancy(Demographics):
                 new_denom = age_counts - infecund_age_counts  # New denominator for rates
                 np.divide(num_to_make, new_denom, where=new_denom>0, out=new_rate)
 
-            fertility_rate[uids] = new_rate[age_bin_all]
+            fertility_rate[uids] = new_rate[age_bin_all] * self.t.dt
 
         # Scale from rate to probability
         invalid_age = (age < self.pars.min_age) | (age > self.pars.max_age)
-        fertility_prob = fertility_rate * (self.pars.rate_units * self.pars.rel_fertility) * time_factor
+        fertility_prob = fertility_rate * (self.pars.rate_units * self.pars.rel_fertility)
         fertility_prob[(~self.fecund).uids] = 0 # Currently infecund women cannot become pregnant
         fertility_prob[uids[invalid_age]] = 0 # Women too young or old cannot become pregnant
         fertility_prob = np.clip(fertility_prob[uids], a_min=0, a_max=1)
@@ -490,7 +487,7 @@ class Pregnancy(Demographics):
 
             # Grow the arrays and set properties for the unborn agents
             new_uids = people.grow(len(new_slots), new_slots)
-            people.age[new_uids] = -self.pars.dur_pregnancy.to('year')
+            people.age[new_uids] = -self.pars.dur_pregnancy.years
             people.slot[new_uids] = new_slots  # Before sampling female_dist
             people.female[new_uids] = self.pars.sex_ratio.rvs(conceive_uids)
             people.parent[new_uids] = conceive_uids
@@ -499,7 +496,7 @@ class Pregnancy(Demographics):
             # Add connections to any prenatal transmission layers
             for lkey, layer in self.sim.networks.items():
                 if layer.prenatal:
-                    durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy)
+                    durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy/self.t.dt)
                     start = np.full(n_unborn, fill_value=self.ti)
                     layer.add_pairs(conceive_uids, new_uids, dur=durs, start=start)
 
@@ -523,15 +520,15 @@ class Pregnancy(Demographics):
         self.ti_pregnant[uids] = ti
 
         # Outcomes for pregnancies
-        dur_preg = np.ones(len(uids))*self.pars.dur_pregnancy
+        dur_preg = self.pars.dur_pregnancy
         dur_postpartum = self.pars.dur_postpartum.rvs(uids)
         dead = self.pars.p_maternal_death.rvs(uids)
-        self.ti_delivery[uids] = ti + dur_preg # Currently assumes maternal deaths still result in a live baby
+        self.ti_delivery[uids] = ti + dur_preg/self.t.dt # Currently assumes maternal deaths still result in a live baby
         self.ti_postpartum[uids] = self.ti_delivery[uids] + dur_postpartum
         self.dur_postpartum[uids] = dur_postpartum
 
         if np.any(dead): # NB: 100x faster than np.sum(), 10x faster than np.count_nonzero()
-            self.ti_dead[uids[dead]] = ti + dur_preg[dead]
+            self.ti_dead[uids[dead]] = ti + dur_preg
         return
 
     def finish_step(self):
