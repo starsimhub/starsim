@@ -1,8 +1,30 @@
 ---
-title: Tutorials
+title: "Tutorials"
+format:
+  html:
+    toc: true
+    toc-depth: 3
+jupyter: python3
 ---
 
-{{< include tutorials/README.rst >}}
+# Starsim Tutorials
+
+These tutorials will guide you through the main features of Starsim. Each tutorial is interactive and includes executable code examples.
+
+:::{.callout-note}
+You can download these tutorials as Jupyter notebooks to run them locally. Look for the download button at the top of each tutorial.
+:::
+
+::: {.callout-tip}
+## Running tutorials locally
+
+To run these tutorials locally:
+
+1. Clone the Starsim repository
+2. Install Starsim and its dependencies
+3. Navigate to the `docs/tutorials` directory
+4. Launch Jupyter: `jupyter notebook`
+:::
 
 ## User tutorials
 

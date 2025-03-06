@@ -2,6 +2,15 @@ project:
   type: website
   output-dir: _build/html
   title: "Starsim"
+  execute-dir: project
+
+execute:
+  enabled: true
+  freeze: auto
+  cache: true
+  error: false
+  echo: true
+  warning: true
 
 website:
   title: "Starsim"
