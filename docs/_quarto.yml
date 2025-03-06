@@ -27,28 +27,36 @@ website:
         text: Home
       - href: tutorials.qmd
         text: Tutorials
-      - href: api/index.qmd
-        text: API reference
       - href: whatsnew.qmd
         text: What's new
       - href: conduct.qmd
         text: Code of Conduct
       - href: contributing.qmd
         text: Contributing
+      - href: api/index.qmd
+        text: API reference
   sidebar:
     style: docked
     contents:
       - section: "Tutorials"
         contents:
-          - tutorials.qmd
-      - section: "API Reference"
+          - tutorials/tut_intro.ipynb
+          - tutorials/tut_buildsim.ipynb
+          - tutorials/tut_demographics.ipynb
+          - tutorials/tut_diseases.ipynb
+          - tutorials/tut_transmission.ipynb
+          - tutorials/tut_interventions.ipynb
+          - tutorials/tut_calibration.ipynb
+      - section: "Developer tutorials"
         contents:
-          - api/index.qmd
-      - section: "More"
-        contents:
-          - whatsnew.qmd
-          - conduct.qmd
-          - contributing.qmd
+          - tutorials/dev_tut_diseases.ipynb
+          - tutorials/dev_tut_pars.ipynb
+          - tutorials/dev_tut_analyzers.ipynb
+          - tutorials/dev_tut_nonstandard.ipynb
+      - whatsnew.qmd
+      - conduct.qmd
+      - contributing.qmd
+      - api/index.qmd
 
 format:
   html:
