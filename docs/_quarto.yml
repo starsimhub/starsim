@@ -2,15 +2,19 @@ project:
   type: website
   output-dir: _build/html
   title: "Starsim"
-  execute-dir: project
+  execute-dir: file
 
+jupyter: python3
 execute:
   enabled: true
-  freeze: auto
-  cache: true
+  daemon: true  # Use Jupyter daemon mode
+  cache: true   # Cache execution results
+  freeze: true  # Freeze computational outputs
+  output-dir: _freeze  # Store outputs separately
   error: false
   echo: true
   warning: true
+  kernel: python3
 
 website:
   title: "Starsim"
