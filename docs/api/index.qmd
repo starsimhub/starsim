@@ -1,0 +1,5 @@
+---
+title: API reference
+---
+
+This page lists Starsim's full API, including all functions and classes.
