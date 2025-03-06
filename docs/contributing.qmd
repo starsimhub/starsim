@@ -1,5 +1,1 @@
----
-title: Contributing
----
-
-{{< include contributing.md >}}
+{{< include ../contributing.md >}}

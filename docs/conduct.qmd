@@ -1,1 +1,1 @@
-{{< include conduct.rst >}}
+{{< include ../conduct.md >}}

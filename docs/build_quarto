@@ -21,7 +21,7 @@ quarto render --execute-daemon
 
 # Tidy up
 echo "Tidying tutorials..."
-cd tutorials; ./clean_outputs
+cd tutorials; ./clean_outputs; cd ..
 
 duration=$(( SECONDS - start ))
 echo "Docs built after $duration seconds."
