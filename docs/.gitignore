@@ -1,8 +1,13 @@
 results
 
-/.quarto/
+.quarto/
+_freeze/
+tutorials/.jupyter_cache/
+tutorials_files/
+objects.json
 
 # Ignore auto-generated API .qmd files
 /api/*.qmd
 # But keep the index.qmd file
 !/api/index.qmd
+/.quarto/
