@@ -1,26 +1,29 @@
-#!/bin/bash
+#!/usr/bin/env python
 #
 # Build documentation with Quarto; usage is simply:
 # ./build_docs
 
-# Exit on error
-set -e
+import os
+import sciris as sc
 
-start=$SECONDS
+def run(cmd):
+    return sc.runcommand(cmd, wait=False)
 
-echo "Building docs with Quarto..."
+T = sc.timer()
+
+sc.heading("Building docs with Quarto...")
 
 # Generate API documentation using quartodoc
-quartodoc build
+sc.heading('Building API documentation...')
+run('quartodoc build')
 
 # Build the Quarto documentation
-quarto render --execute-daemon
+sc.heading('Rendering docs...')
+run('quarto render --execute-daemon')
 
 # Tidy up
-echo "Tidying tutorials..."
-cd tutorials; ./clean_outputs; cd ..
+sc.heading("Tidying tutorials...")
+run('cd tutorials; ./clean_outputs; cd ..')
 
-duration=$(( SECONDS - start ))
-echo "Docs built after $duration seconds."
-echo "Index:"
-echo "`pwd`/_build/html/index.html"
+T.toc('Docs built')
+print(f"\nIndex:\n{os.getcwd()}/_build/html/index.html")
