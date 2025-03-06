@@ -17,6 +17,15 @@ sc.heading("Building docs with Quarto...")
 sc.heading('Building API documentation...')
 run('quartodoc build')
 
+# Build notebooks
+sc.heading('Checking notebooks...')
+def run_notebook(path):
+    temp_path = path + '.tmp'
+    run(f'quarto render {path}')
+
+notebook_files = sc.runcommand('find -name "*.ipynb"')
+
+
 # Build the Quarto documentation
 sc.heading('Rendering docs...')
 run('quarto render --execute-daemon')
