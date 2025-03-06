@@ -38,11 +38,16 @@ website:
 
 format:
   html:
-    theme: cosmo
+    theme: 
+      light: flatly
+      dark: darkly
     css: _static/theme_overrides.css
     toc: true
     toc-depth: 3
     page-layout: full
+    code-copy: true
+    code-tools: true
+    highlight-style: github
 
 quartodoc:
   package: starsim

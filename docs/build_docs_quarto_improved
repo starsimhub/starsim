@@ -1,0 +1,31 @@
+#!/bin/bash
+#
+# To run in debug mode, type
+#  ./build_docs_quarto_improved debug
+#
+# To preview the documentation, type
+#  ./build_docs_quarto_improved preview
+
+set -e  # Pass errors upwards
+
+echo 'Building docs with Quarto...'
+start=$SECONDS
+
+# Clean up previous build
+make -f Makefile.quarto clean
+
+# Add the starsim module to the Python path
+export PYTHONPATH=$PYTHONPATH:$(cd .. && pwd)
+
+# Build the documentation
+if [[ "$*" == *"preview"* ]]; then
+    make -f Makefile.quarto preview
+else
+    make -f Makefile.quarto html
+fi
+
+# Tidy up
+duration=$(( SECONDS - start ))
+echo "Docs built after $duration seconds."
+echo "Index:"
+echo "`pwd`/_build/html/index.html"

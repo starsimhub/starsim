@@ -18,10 +18,10 @@ clean:
 
 .PHONY: html
 html:
-	quartodoc build
+	PYTHONPATH=$(PYTHONPATH):$(shell cd .. && pwd) quartodoc build
 	quarto render
 
 .PHONY: preview
 preview:
-	quartodoc build
+	PYTHONPATH=$(PYTHONPATH):$(shell cd .. && pwd) quartodoc build
 	quarto preview

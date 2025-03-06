@@ -10,6 +10,8 @@ parse:
   docstring_style: google
   docstring_options:
     ignore_init_summary: true
+  paths:
+    - ../starsim
   modules:
     - starsim.arrays
     - starsim.calibration
