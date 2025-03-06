@@ -1,12 +1,3 @@
----
-title: "Tutorials"
-format:
-  html:
-    toc: true
-    toc-depth: 3
-jupyter: python3
----
-
 # Starsim Tutorials
 
 These tutorials will guide you through the main features of Starsim. Each tutorial is interactive and includes executable code examples.
