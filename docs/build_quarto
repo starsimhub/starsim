@@ -1,10 +1,10 @@
 #!/bin/bash
 #
 # To run in debug mode, type
-#  ./build_docs_quarto_improved debug
+#  ./build_quarto debug
 #
 # To preview the documentation, type
-#  ./build_docs_quarto_improved preview
+#  ./build_quarto preview
 
 set -e  # Pass errors upwards
 

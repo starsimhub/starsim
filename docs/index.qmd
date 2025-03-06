@@ -2,7 +2,7 @@
 title: Starsim
 ---
 
-{{< include ../README.rst >}}
+{{< include ../README.md >}}
 
 ## Learn more
 
