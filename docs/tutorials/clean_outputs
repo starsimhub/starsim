@@ -5,3 +5,7 @@ echo `ls -1 ./my-*.* ./example*.* 2> /dev/null`
 echo '...in 2 seconds'
 sleep 2
 rm -vf ./my-*.* ./example*.* 
+
+echo 'Clearing Jupyter outputs'
+jupyter nbconvert --clear-output *.ipynb
+./normalize_notebooks
