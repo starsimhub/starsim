@@ -127,6 +127,10 @@ class Module(Base):
         """ Allow modules to be called like functions """
         return self.step(*args, **kwargs)
 
+    def __getitem__(self, key):
+        """ Allow modules to act like dictionaries """
+        return getattr(self, key)
+
     def _reconcile(self, key, value=None, default=None):
         """ Reconcile module attributes, parameters, and input arguments """
         parval = self.pars.get(key)
