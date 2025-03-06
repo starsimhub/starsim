@@ -1,0 +1,73 @@
+project:
+  type: website
+  output-dir: _build/html
+  title: "Starsim"
+
+website:
+  title: "Starsim"
+  favicon: images/favicon.ico
+  navbar:
+    logo: images/idm-logo-transparent.png
+    left:
+      - href: index.qmd
+        text: Home
+      - href: tutorials.qmd
+        text: Tutorials
+      - href: api/index.qmd
+        text: API reference
+      - href: whatsnew.qmd
+        text: What's new
+      - href: conduct.qmd
+        text: Code of Conduct
+      - href: contributing.qmd
+        text: Contributing
+  sidebar:
+    style: docked
+    contents:
+      - section: "Tutorials"
+        contents:
+          - tutorials.qmd
+      - section: "API Reference"
+        contents:
+          - api/index.qmd
+      - section: "More"
+        contents:
+          - whatsnew.qmd
+          - conduct.qmd
+          - contributing.qmd
+
+format:
+  html:
+    theme: cosmo
+    css: _static/theme_overrides.css
+    toc: true
+    toc-depth: 3
+    page-layout: full
+
+quartodoc:
+  package: starsim
+  title: API reference
+  dir: api
+  sections:
+    - title: API reference
+      desc: Full details on all classes and functions.
+      contents:
+        - arrays
+        - calibration
+        - demographics
+        - disease
+        - distributions
+        - interventions
+        - loop
+        - modules
+        - networks
+        - parameters
+        - people
+        - products
+        - results
+        - run
+        - samples
+        - settings
+        - sim
+        - time
+        - utils
