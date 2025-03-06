@@ -53,6 +53,39 @@ website:
           - tutorials/dev_tut_pars.ipynb
           - tutorials/dev_tut_analyzers.ipynb
           - tutorials/dev_tut_nonstandard.ipynb
+      - section: "User guide"
+        - section: "Introduction"
+        - contents:
+          - user_guide/intro/spokes.ipynb
+          - user_guide/intro/starsim.ipynb
+        - section: "Basic concepts"
+        - contents:
+          - user_guide/basics/people.ipynb
+          - user_guide/basics/model.ipynb
+          - user_guide/basics/sim.ipynb
+        - section: "Modules"
+        - contents:
+          - user_guide/modules/interventions.ipynb
+          - user_guide/modules/analyzers.ipynb
+          - user_guide/modules/demographics.ipynb
+          - user_guide/modules/networks.ipynb
+          - user_guide/modules/diseases.ipynb
+          - user_guide/modules/connectors.ipynb
+        - section: "Workflows"
+        - contents:
+          - user_guide/workflows/run.ipynb
+          - user_guide/workflows/samples.ipynb
+          - user_guide/workflows/cloud.ipynb
+          - user_guide/workflows/calibration.ipynb
+        - section: "Advanced topics"
+        - contents:
+          - user_guide/advanced/random.ipynb
+          - user_guide/advanced/parameters.ipynb
+          - user_guide/advanced/indexing.ipynb
+          - user_guide/advanced/nonstandard.ipynb
+          - user_guide/advanced/distributions.ipynb
+          - user_guide/advanced/profiling.ipynb
+          - user_guide/advanced/time.ipynb
       - href: whatsnew.qmd
         text: What's new
       - href: conduct.qmd
