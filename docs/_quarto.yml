@@ -53,10 +53,14 @@ website:
           - tutorials/dev_tut_pars.ipynb
           - tutorials/dev_tut_analyzers.ipynb
           - tutorials/dev_tut_nonstandard.ipynb
-      - whatsnew.qmd
-      - conduct.qmd
-      - contributing.qmd
-      - api/index.qmd
+      - href: whatsnew.qmd
+        text: What's new
+      - href: conduct.qmd
+        text: Code of Conduct
+      - href: contributing.qmd
+        text: Contributing
+      - href: api/index.qmd
+        text: API reference
 
 format:
   html:
