@@ -1,50 +1,25 @@
 #!/bin/bash
 #
-# To run in debug mode (serial), type
-#  ./build_docs debug
-#
-# To not rebuild notebooks, type
-#  ./build_docs never
-#
-# Otherwise, Jupyter notebooks will be rebuilt in parallel.
-#
-# To not clean up after tutorial builds, run ./build_docs noclean
+# Build documentation with Quarto; usage is simply:
+# ./build_docs
 
-set -e  # Pass errors upwards
+# Exit on error
+set -e
 
-echo 'Building docs...'
 start=$SECONDS
-make clean # Delete previous build
 
+echo "Building docs with Quarto..."
 
-# Handle notebook build options
-if [[ "$*" == *"never"* ]]; then
-    export NBSPHINX_EXECUTE=never
-elif [[ "$*" == *"auto"* ]]; then
-    export NBSPHINX_EXECUTE=auto
-else
-    export NBSPHINX_EXECUTE=always
-fi
+# Generate API documentation using quartodoc
+quartodoc build
 
-
-# Handle notebook build options
-if [[ "$*" == *"debug"* ]]; then
-    export BUILD_DEBUG=1
-else
-    export BUILD_DEBUG=
-fi
-
-# Actually make
-make html 
-
-# Clean up tutorials
-if [[ "$*" != *"noclean"* ]]; then
-    cd tutorials
-    ./clean_outputs
-    cd ..
-fi
+# Build the Quarto documentation
+quarto render --execute-daemon
 
 # Tidy up
+echo "Tidying tutorials..."
+cd tutorials; ./clean_outputs; cd ..
+
 duration=$(( SECONDS - start ))
 echo "Docs built after $duration seconds."
 echo "Index:"

@@ -10,11 +10,13 @@ This folder includes source code for building the docs. Users are unlikely to ne
 
 To build the docs, follow these steps:
 
-1.  Make sure dependencies are installed::
+1. Install Quarto: https://quarto.org/docs/get-started/
+
+2.  Make sure the Python dependencies are installed:
     ```
     pip install -r requirements.txt
     ```
 
-2.  Make the documents with `./build_quarto`.
+3.  Build the documents with `./build_docs` (requires Starsim to be installed as well).
 
-3.  The built documents will be in `./_build/html`.
+4.  The built documents will be in `./_build`.
