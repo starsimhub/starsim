@@ -3,7 +3,6 @@ results
 .quarto/
 _freeze/
 tutorials/.jupyter_cache/
-tutorials_files/
 objects.json
 
 # Ignore auto-generated API .qmd files

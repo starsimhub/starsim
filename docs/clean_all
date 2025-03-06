@@ -1,0 +1,20 @@
+#!/bin/bash
+# Delete all temporary and build files
+
+# Exit on error
+set -e
+
+start=$SECONDS
+
+# Tidy up
+echo "Tidying tutorials..."
+cd tutorials; ./clean_outputs; cd ..
+
+echo "Removing build files..."
+rm -rv .quarto
+rm -rv _freeze
+rm -rv tutorials/.jupyter_cache/
+rm -v objects.json
+
+duration=$(( SECONDS - start ))
+echo "Cleaned after $duration seconds."
