@@ -9,38 +9,15 @@
 # Exit on error
 set -e
 
-echo 'Building docs with Quarto...'
 start=$SECONDS
 
-# # Create and activate virtual environment if it doesn't exist
-# if [ ! -d "venv" ]; then
-#     python -m venv venv
-# fi
-# source venv/bin/activate
-
-# # Install requirements
-# pip install -r requirements.txt
-
-# # Install the package in editable mode
-# pip install -e ..
-
-# # Install IPython kernel for Jupyter
-# python -m ipykernel install --user --name starsim --display-name "Python (Starsim)"
-
-# # Set up Python path for imports
-# python setup_python_path.py
+echo "Building docs with Quarto..."
 
 # Generate API documentation using quartodoc
 quartodoc build
 
-# # Clean the Jupyter kernel cache to ensure fresh execution
-# jupyter cache clean
-
 # Build the Quarto documentation
-quarto render
-
-# Deactivate virtual environment
-deactivate
+quarto render --execute-daemon
 
 # Tidy up
 duration=$(( SECONDS - start ))

@@ -15,6 +15,7 @@ execute:
   echo: true
   warning: true
   kernel: python3
+  thread-count: 4  # Number of threads for parallel execution
 
 website:
   title: "Starsim"
