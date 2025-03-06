@@ -1,3 +1,8 @@
 results
 
 /.quarto/
+
+# Ignore auto-generated API .qmd files
+/api/*.qmd
+# But keep the index.qmd file
+!/api/index.qmd

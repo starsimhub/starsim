@@ -1,8 +1,0 @@
-# settings { #starsim.settings }
-
-`settings`
-
-Define options for Starsim.
-All options should be set using set() or directly, e.g.::
-
-    ss.options(verbose=False)
