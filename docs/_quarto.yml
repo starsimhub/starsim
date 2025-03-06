@@ -46,39 +46,33 @@ website:
           - tutorials/tut_diseases.ipynb
           - tutorials/tut_transmission.ipynb
           - tutorials/tut_interventions.ipynb
-          - tutorials/tut_calibration.ipynb
-      - section: "Developer tutorials"
-        contents:
-          - tutorials/dev_tut_diseases.ipynb
-          - tutorials/dev_tut_pars.ipynb
-          - tutorials/dev_tut_analyzers.ipynb
-          - tutorials/dev_tut_nonstandard.ipynb
       - section: "User guide"
+        contents:
         - section: "Introduction"
-        - contents:
+          contents:
           - user_guide/intro/spokes.ipynb
           - user_guide/intro/starsim.ipynb
         - section: "Basic concepts"
-        - contents:
+          contents:
           - user_guide/basics/people.ipynb
           - user_guide/basics/model.ipynb
           - user_guide/basics/sim.ipynb
         - section: "Modules"
-        - contents:
+          contents:
           - user_guide/modules/interventions.ipynb
-          - user_guide/modules/analyzers.ipynb
+          #- user_guide/modules/analyzers.ipynb
           - user_guide/modules/demographics.ipynb
           - user_guide/modules/networks.ipynb
           - user_guide/modules/diseases.ipynb
           - user_guide/modules/connectors.ipynb
         - section: "Workflows"
-        - contents:
+          contents:
           - user_guide/workflows/run.ipynb
-          - user_guide/workflows/samples.ipynb
+          #- user_guide/workflows/samples.ipynb
           - user_guide/workflows/cloud.ipynb
           - user_guide/workflows/calibration.ipynb
         - section: "Advanced topics"
-        - contents:
+          contents:
           - user_guide/advanced/random.ipynb
           - user_guide/advanced/parameters.ipynb
           - user_guide/advanced/indexing.ipynb
