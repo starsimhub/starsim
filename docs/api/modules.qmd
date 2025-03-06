@@ -1,0 +1,322 @@
+# modules { #starsim.modules }
+
+`modules`
+
+General module class -- base class for diseases, interventions, etc. Also
+defines Analyzers and Connectors.
+
+## Classes
+
+| Name | Description |
+| --- | --- |
+| [Analyzer](#starsim.modules.Analyzer) | Base class for Analyzers. Analyzers are used to provide more detailed information |
+| [Base](#starsim.modules.Base) | The parent class for Sim and Module objects |
+| [Connector](#starsim.modules.Connector) | Base class for Connectors, which mediate interactions between disease (or other) modules |
+| [Module](#starsim.modules.Module) | The main base class for all Starsim modules: diseases, networks, interventions, etc. |
+
+### Analyzer { #starsim.modules.Analyzer }
+
+```python
+modules.Analyzer(self, name=None, label=None, **kwargs)
+```
+
+Base class for Analyzers. Analyzers are used to provide more detailed information
+about a simulation than is available by default -- for example, pulling states
+out of sim.people on a particular timestep before they get updated on the next step.
+
+The key method of the analyzer is ``step()``, which is called with the sim
+on each timestep.
+
+To retrieve a particular analyzer from a sim, use sim.get_analyzer().
+
+### Base { #starsim.modules.Base }
+
+```python
+modules.Base()
+```
+
+The parent class for Sim and Module objects
+
+#### Attributes
+
+| Name | Description |
+| --- | --- |
+| [now](#starsim.modules.Base.now) | Shortcut to self.t.now() |
+| [ti](#starsim.modules.Base.ti) | Get the current module timestep |
+| [timevec](#starsim.modules.Base.timevec) | Shortcut to self.t.timevec |
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [copy](#starsim.modules.Base.copy) | Perform a deep copy of the module/sim |
+| [disp](#starsim.modules.Base.disp) | Display the full object |
+
+##### copy { #starsim.modules.Base.copy }
+
+```python
+modules.Base.copy(die=True)
+```
+
+Perform a deep copy of the module/sim
+
+Args:
+    die (bool): whether to raise an exception if copy fails (else, try a shallow copy)
+
+##### disp { #starsim.modules.Base.disp }
+
+```python
+modules.Base.disp(output=False, **kwargs)
+```
+
+Display the full object
+
+### Connector { #starsim.modules.Connector }
+
+```python
+modules.Connector(self, name=None, label=None, **kwargs)
+```
+
+Base class for Connectors, which mediate interactions between disease (or other) modules
+
+Because connectors can do anything, they have no specified structure: it is
+up to the user to define how they behave.
+
+### Module { #starsim.modules.Module }
+
+```python
+modules.Module(self, name=None, label=None, **kwargs)
+```
+
+The main base class for all Starsim modules: diseases, networks, interventions, etc.
+
+Args:
+    name (str): a short, key-like name for the module (e.g. "randomnet")
+    label (str): the full, human-readable name for the module (e.g. "Random network")
+    kwargs (dict): passed to ss.Time() (e.g. start, stop, unit, dt)
+
+#### Attributes
+
+| Name | Description |
+| --- | --- |
+| [states](#starsim.modules.Module.states) | Return a flat list of all states |
+| [statesdict](#starsim.modules.Module.statesdict) | Return a flat dictionary (objdict) of all states |
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [create](#starsim.modules.Module.create) | Create a module instance by name |
+| [define_pars](#starsim.modules.Module.define_pars) | Create or merge Pars objects |
+| [define_results](#starsim.modules.Module.define_results) | Add results to the module |
+| [define_states](#starsim.modules.Module.define_states) | Define states of the module with the same attribute name as the state |
+| [finalize](#starsim.modules.Module.finalize) | Perform any final operations, such as removing unneeded data |
+| [finalize_results](#starsim.modules.Module.finalize_results) | Finalize results |
+| [finish_step](#starsim.modules.Module.finish_step) | Define what should happen at the end of the step; at minimum, increment ti |
+| [from_func](#starsim.modules.Module.from_func) | Create an module from a function |
+| [init_post](#starsim.modules.Module.init_post) | Initialize the values of the states; the last step of initialization |
+| [init_pre](#starsim.modules.Module.init_pre) | Perform initialization steps |
+| [init_results](#starsim.modules.Module.init_results) | Initialize any results required; part of init_pre() |
+| [init_time](#starsim.modules.Module.init_time) | Initialize all time parameters by ensuring all parameters are initialized; part of init_post() |
+| [match_time_inds](#starsim.modules.Module.match_time_inds) | Find the nearest matching sim time indices for the current module |
+| [plot](#starsim.modules.Module.plot) | Plot all results in the module |
+| [set_metadata](#starsim.modules.Module.set_metadata) | Set metadata for the module |
+| [start_step](#starsim.modules.Module.start_step) | Tasks to perform at the beginning of the step |
+| [step](#starsim.modules.Module.step) | Define how the module updates over time -- the key part of Starsim!! |
+| [to_json](#starsim.modules.Module.to_json) | Export to a JSON-compatible format |
+| [update_pars](#starsim.modules.Module.update_pars) | Pull out recognized parameters, returning the rest |
+| [update_results](#starsim.modules.Module.update_results) | Perform any results updates on each timestep |
+
+##### create { #starsim.modules.Module.create }
+
+```python
+modules.Module.create(name, *args, **kwargs)
+```
+
+Create a module instance by name
+
+Args:
+    name (str): A string with the name of the module class in lower case, e.g. 'sir'
+
+##### define_pars { #starsim.modules.Module.define_pars }
+
+```python
+modules.Module.define_pars(inherit=True, **kwargs)
+```
+
+Create or merge Pars objects
+
+##### define_results { #starsim.modules.Module.define_results }
+
+```python
+modules.Module.define_results(*args, check=True)
+```
+
+Add results to the module
+
+##### define_states { #starsim.modules.Module.define_states }
+
+```python
+modules.Module.define_states(*args, check=True)
+```
+
+Define states of the module with the same attribute name as the state
+
+Args:
+    args (states): list of states to add
+    check (bool): whether to check that the object being added is a state
+
+##### finalize { #starsim.modules.Module.finalize }
+
+```python
+modules.Module.finalize()
+```
+
+Perform any final operations, such as removing unneeded data
+
+##### finalize_results { #starsim.modules.Module.finalize_results }
+
+```python
+modules.Module.finalize_results()
+```
+
+Finalize results
+
+##### finish_step { #starsim.modules.Module.finish_step }
+
+```python
+modules.Module.finish_step()
+```
+
+Define what should happen at the end of the step; at minimum, increment ti
+
+##### from_func { #starsim.modules.Module.from_func }
+
+```python
+modules.Module.from_func(func)
+```
+
+Create an module from a function
+
+##### init_post { #starsim.modules.Module.init_post }
+
+```python
+modules.Module.init_post()
+```
+
+Initialize the values of the states; the last step of initialization
+
+##### init_pre { #starsim.modules.Module.init_pre }
+
+```python
+modules.Module.init_pre(sim, force=False)
+```
+
+Perform initialization steps
+
+This method is called once, as part of initializing a Sim. Note: after
+initialization, initialized=False until init_vals() is called (which is after
+distributions are initialized).
+
+##### init_results { #starsim.modules.Module.init_results }
+
+```python
+modules.Module.init_results()
+```
+
+Initialize any results required; part of init_pre()
+
+##### init_time { #starsim.modules.Module.init_time }
+
+```python
+modules.Module.init_time(force=False)
+```
+
+Initialize all time parameters by ensuring all parameters are initialized; part of init_post()
+
+##### match_time_inds { #starsim.modules.Module.match_time_inds }
+
+```python
+modules.Module.match_time_inds(inds=None)
+```
+
+Find the nearest matching sim time indices for the current module
+
+##### plot { #starsim.modules.Module.plot }
+
+```python
+modules.Module.plot()
+```
+
+Plot all results in the module
+
+##### set_metadata { #starsim.modules.Module.set_metadata }
+
+```python
+modules.Module.set_metadata(name=None, label=None)
+```
+
+Set metadata for the module
+
+##### start_step { #starsim.modules.Module.start_step }
+
+```python
+modules.Module.start_step()
+```
+
+Tasks to perform at the beginning of the step
+
+##### step { #starsim.modules.Module.step }
+
+```python
+modules.Module.step()
+```
+
+Define how the module updates over time -- the key part of Starsim!!
+
+##### to_json { #starsim.modules.Module.to_json }
+
+```python
+modules.Module.to_json()
+```
+
+Export to a JSON-compatible format
+
+##### update_pars { #starsim.modules.Module.update_pars }
+
+```python
+modules.Module.update_pars(pars=None, **kwargs)
+```
+
+Pull out recognized parameters, returning the rest
+
+##### update_results { #starsim.modules.Module.update_results }
+
+```python
+modules.Module.update_results()
+```
+
+Perform any results updates on each timestep
+
+## Functions
+
+| Name | Description |
+| --- | --- |
+| [find_modules](#starsim.modules.find_modules) | Find all subclasses of Module present in Starsim, divided by type |
+| [module_map](#starsim.modules.module_map) | Define the mapping between module names and types |
+
+### find_modules { #starsim.modules.find_modules }
+
+```python
+modules.find_modules(key=None, flat=False)
+```
+
+Find all subclasses of Module present in Starsim, divided by type
+
+### module_map { #starsim.modules.module_map }
+
+```python
+modules.module_map(key=None)
+```
+
+Define the mapping between module names and types

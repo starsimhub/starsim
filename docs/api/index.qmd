@@ -1,0 +1,27 @@
+# API reference {.doc .doc-index}
+
+## API reference
+
+Full details on all classes and functions.
+
+| | |
+| --- | --- |
+| [arrays](arrays.qmd#starsim.arrays) | Define array-handling classes, including agent states |
+| [calibration](calibration.qmd#starsim.calibration) | Define the calibration class |
+| [demographics](demographics.qmd#starsim.demographics) | Define pregnancy, deaths, migration, etc. |
+| [disease](disease.qmd#starsim.disease) | Base classes for diseases |
+| [distributions](distributions.qmd#starsim.distributions) | Define random-number-safe distributions. |
+| [interventions](interventions.qmd#starsim.interventions) | Define interventions |
+| [loop](loop.qmd#starsim.loop) | Parent class for the integration loop. |
+| [modules](modules.qmd#starsim.modules) | General module class -- base class for diseases, interventions, etc. Also |
+| [networks](networks.qmd#starsim.networks) | Networks that connect people within a population |
+| [parameters](parameters.qmd#starsim.parameters) | Set parameters |
+| [people](people.qmd#starsim.people) | Defines the People class and functions associated with making people |
+| [products](products.qmd#starsim.products) | Define products |
+| [results](results.qmd#starsim.results) | Result structures. |
+| [run](run.qmd#starsim.run) | Utilities for running in parallel |
+| [samples](samples.qmd#starsim.samples) | Create a class for storing a large number of simulations. |
+| [settings](settings.qmd#starsim.settings) | Define options for Starsim. |
+| [sim](sim.qmd#starsim.sim) | Define core Sim classes |
+| [time](time.qmd#starsim.time) | Functions and classes for handling time |
+| [utils](utils.qmd#starsim.utils) | Numerical utilities |

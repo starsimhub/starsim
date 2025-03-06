@@ -1,0 +1,107 @@
+# products { #starsim.products }
+
+`products`
+
+Define products
+
+## Classes
+
+| Name | Description |
+| --- | --- |
+| [Dx](#starsim.products.Dx) | Generic class for diagnostics |
+| [Product](#starsim.products.Product) | Generic product implementation |
+| [Tx](#starsim.products.Tx) | Treatment products change fundamental properties about People, including their prognoses and infectiousness. |
+| [Vx](#starsim.products.Vx) | Vaccine product |
+
+### Dx { #starsim.products.Dx }
+
+```python
+products.Dx(self, df, hierarchy=None, *args, **kwargs)
+```
+
+Generic class for diagnostics
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [administer](#starsim.products.Dx.administer) | Administer a testing product. |
+
+##### administer { #starsim.products.Dx.administer }
+
+```python
+products.Dx.administer(uids, return_format='dict')
+```
+
+Administer a testing product.
+
+Returns:
+
+     if return_format=='array': an array of length len(inds) with integer entries that map each person to one of the result_states
+     if return_format=='dict': a dictionary keyed by result_states with values containing the indices of people classified into this state
+
+### Product { #starsim.products.Product }
+
+```python
+products.Product(self, name=None, label=None, **kwargs)
+```
+
+Generic product implementation
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [administer](#starsim.products.Product.administer) | Adminster a Product - implemented by derived classes |
+
+##### administer { #starsim.products.Product.administer }
+
+```python
+products.Product.administer(people, inds)
+```
+
+Adminster a Product - implemented by derived classes
+
+### Tx { #starsim.products.Tx }
+
+```python
+products.Tx(self, df, *args, **kwargs)
+```
+
+Treatment products change fundamental properties about People, including their prognoses and infectiousness.
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [administer](#starsim.products.Tx.administer) | Loop over treatment states to determine those who are successfully treated and clear infection |
+
+##### administer { #starsim.products.Tx.administer }
+
+```python
+products.Tx.administer(uids, return_format='dict')
+```
+
+Loop over treatment states to determine those who are successfully treated and clear infection
+
+### Vx { #starsim.products.Vx }
+
+```python
+products.Vx(self, diseases=None, *args, **kwargs)
+```
+
+Vaccine product
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [administer](#starsim.products.Vx.administer) | Apply the vaccine to the requested uids. |
+
+##### administer { #starsim.products.Vx.administer }
+
+```python
+products.Vx.administer(people, uids)
+```
+
+Apply the vaccine to the requested uids.

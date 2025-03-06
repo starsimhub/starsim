@@ -1,0 +1,235 @@
+# utils { #starsim.utils }
+
+`utils`
+
+Numerical utilities
+
+## Classes
+
+| Name | Description |
+| --- | --- |
+| [ndict](#starsim.utils.ndict) | A dictionary-like class that provides additional functionalities for handling named items. |
+
+### ndict { #starsim.utils.ndict }
+
+```python
+utils.ndict(
+    self,
+    *args,
+    nameattr='name',
+    type=None,
+    strict=True,
+    overwrite=False,
+    **kwargs,
+)
+```
+
+A dictionary-like class that provides additional functionalities for handling named items.
+
+Args:
+    name (str): The attribute of the item to use as the dict key (i.e., all items should have this attribute defined)
+    type (type): The expected type of items.
+    strict (bool): If True, only items with the specified attribute will be accepted.
+    overwrite (bool): whether to allow adding a key when one has already been added
+
+**Examples**::
+
+    networks = ss.ndict(ss.MFNet(), ss.MaternalNet())
+    networks = ss.ndict([ss.MFNet(), ss.MaternalNet()])
+    networks = ss.ndict({'mf':ss.MFNet(), 'maternal':ss.MaternalNet()})
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [copy](#starsim.utils.ndict.copy) | Shallow copy |
+| [extend](#starsim.utils.ndict.extend) | Add new items to the ndict, by item, list, or dict |
+| [merge](#starsim.utils.ndict.merge) | Merge another dictionary with this one |
+
+##### copy { #starsim.utils.ndict.copy }
+
+```python
+utils.ndict.copy()
+```
+
+Shallow copy
+
+##### extend { #starsim.utils.ndict.extend }
+
+```python
+utils.ndict.extend(*args, **kwargs)
+```
+
+Add new items to the ndict, by item, list, or dict
+
+##### merge { #starsim.utils.ndict.merge }
+
+```python
+utils.ndict.merge(other)
+```
+
+Merge another dictionary with this one
+
+## Functions
+
+| Name | Description |
+| --- | --- |
+| [check_requires](#starsim.utils.check_requires) | Check that the module's requirements (of other modules) are met |
+| [find_contacts](#starsim.utils.find_contacts) | Variation on Network.find_contacts() that avoids sorting. |
+| [load](#starsim.utils.load) | Alias to Sciris sc.loadany() |
+| [return_fig](#starsim.utils.return_fig) | Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead |
+| [save](#starsim.utils.save) | Alias to Sciris sc.save() |
+| [set_seed](#starsim.utils.set_seed) | Reset the random seed -- complicated because of Numba, which requires special |
+| [standardize_data](#starsim.utils.standardize_data) | Standardize formats of input data |
+| [standardize_netkey](#starsim.utils.standardize_netkey) | Networks can be upper or lowercase, and have a suffix 'net' or not; this function standardizes them |
+| [validate_sim_data](#starsim.utils.validate_sim_data) | Validate data intended to be compared to the sim outputs, e.g. for calibration |
+| [warn](#starsim.utils.warn) | Helper function to handle warnings -- shortcut to warnings.warn |
+
+### check_requires { #starsim.utils.check_requires }
+
+```python
+utils.check_requires(sim, requires, *args)
+```
+
+Check that the module's requirements (of other modules) are met
+
+### find_contacts { #starsim.utils.find_contacts }
+
+```python
+utils.find_contacts(p1, p2, inds)
+```
+
+Variation on Network.find_contacts() that avoids sorting.
+
+A set is returned here rather than a sorted array so that custom tracing interventions can efficiently
+add extra people. For a version with sorting by default, see Network.find_contacts(). Indices must be
+an int64 array since this is what's returned by true() etc. functions by default.
+
+### load { #starsim.utils.load }
+
+```python
+utils.load(filename, **kwargs)
+```
+
+Alias to Sciris sc.loadany()
+
+Since Starsim uses Sciris for saving objects, they can be loaded back using
+this function. This can also be used to load other objects of known type
+(e.g. JSON), although this usage is discouraged.
+
+Args:
+    filename (str/path): the name of the file to load
+    kwargs (dict): passed to sc.loadany()
+
+Returns:
+    The loaded object
+
+### return_fig { #starsim.utils.return_fig }
+
+```python
+utils.return_fig(fig, **kwargs)
+```
+
+Do postprocessing on the figure: by default, don't return if in Jupyter, but show instead
+
+### save { #starsim.utils.save }
+
+```python
+utils.save(filename, obj, **kwargs)
+```
+
+Alias to Sciris sc.save()
+
+While some Starsim objects have their own save methods, this function can be
+used to save any arbitrary object. It can then be loaded with ss.load().
+
+Args:
+    filename (str/path): the name of the file to save
+    obj (any): the object to save
+    kwargs (dict): passed to sc.save()
+
+### set_seed { #starsim.utils.set_seed }
+
+```python
+utils.set_seed(seed=None)
+```
+
+Reset the random seed -- complicated because of Numba, which requires special
+syntax to reset the seed. This function also resets Python's built-in random
+number generated.
+
+Args:
+    seed (int): the random seed
+
+### standardize_data { #starsim.utils.standardize_data }
+
+```python
+utils.standardize_data(
+    data=None,
+    metadata=None,
+    min_year=1800,
+    out_of_range=0,
+    default_age=0,
+    default_year=2024,
+)
+```
+
+Standardize formats of input data
+
+Input data can arrive in many different forms. This function accepts a variety of data
+structures, and converts them into a Pandas Series containing one variable, based on
+specified metadata, or an ``ss.Dist`` if the data is already an ``ss.Dist`` object.
+
+The metadata is a dictionary that defines columns of the dataframe or keys
+of the dictionary to use as indices in the output Series. It should contain:
+
+- ``metadata['data_cols']['value']`` specifying the name of the column/key to draw values from
+- ``metadata['data_cols']['year']`` optionally specifying the column containing year values; otherwise the default year will be used
+- ``metadata['data_cols']['age']`` optionally specifying the column containing age values; otherwise the default age will be used
+- ``metadata['data_cols'][<arbitrary>]`` optionally specifying any other columns to use as indices. These will form part of the multi-index for the standardized Series output.
+
+If a ``sex`` column is part of the index, the metadata can also optionally specify a string mapping to convert
+the sex labels in the input data into the 'm'/'f' labels used by Starsim. In that case, the metadata can contain
+an additional key like ``metadata['sex_keys'] = {'Female':'f','Male':'m'}`` which in this case would map the strings
+'Female' and 'Male' in the original data into 'm'/'f' for Starsim.
+
+Args:
+    data (pandas.DataFrame, pandas.Series, dict, int, float): An associative array  or a number, with the input data to be standardized.
+    metadata (dict): Dictionary specifiying index columns, the value column, and optionally mapping for sex labels
+    min_year (float): Optionally specify a minimum year allowed in the data. Default is 1800.
+    out_of_range (float): Value to use for negative ages - typically 0 is a reasonable choice but other values (e.g., np.inf or np.nan) may be useful depending on the calculation. This will automatically be added to the dataframe with an age of ``-np.inf``
+
+Returns:
+
+    - A `pd.Series` for all supported formats of `data` *except* an ``ss.Dist``. This series will contain index columns for 'year'
+      and 'age' (in that order) and then subsequent index columns for any other variables specified in the metadata, in the order
+      they appeared in the metadata (except for year and age appearing first).
+    - An ``ss.Dist`` instance - if the ``data`` input is an ``ss.Dist``, that same object will be returned by this function
+
+### standardize_netkey { #starsim.utils.standardize_netkey }
+
+```python
+utils.standardize_netkey(key)
+```
+
+Networks can be upper or lowercase, and have a suffix 'net' or not; this function standardizes them
+
+### validate_sim_data { #starsim.utils.validate_sim_data }
+
+```python
+utils.validate_sim_data(data=None, die=None)
+```
+
+Validate data intended to be compared to the sim outputs, e.g. for calibration
+
+Args:
+    data (df/dict): a dataframe (or dict) of data, with a column "time" plus data columns of the form "module.result", e.g. "hiv.new_infections"
+    die (bool): whether to raise an exception if the data cannot be converted (default: die if data is not None but cannot be converted)
+
+### warn { #starsim.utils.warn }
+
+```python
+utils.warn(msg, category=None, verbose=None, die=None)
+```
+
+Helper function to handle warnings -- shortcut to warnings.warn

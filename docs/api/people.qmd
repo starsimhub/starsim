@@ -1,0 +1,237 @@
+# people { #starsim.people }
+
+`people`
+
+Defines the People class and functions associated with making people
+
+## Classes
+
+| Name | Description |
+| --- | --- |
+| [People](#starsim.people.People) | A class to perform all the operations on the people |
+| [Person](#starsim.people.Person) | A simple class to hold all attributes of a person |
+
+### People { #starsim.people.People }
+
+```python
+people.People(self, n_agents, age_data=None, extra_states=None)
+```
+
+A class to perform all the operations on the people
+This class is usually created automatically by the sim. The only required input
+argument is the population size, but typically the full parameters dictionary
+will get passed instead since it will be needed before the People object is
+initialized.
+
+Note that this class handles the mechanics of updating the actual people,
+as well as the additional housekeeping methods (saving, loading, exporting, etc.).
+
+Args:
+    pars (dict): the sim parameters, e.g. sim.pars -- alternatively, if a number, interpreted as n_agents
+    age_data (dataframe): a dataframe of years and population sizes, if available
+    extra_states (list): non-default states to initialize
+
+**Examples**::
+    ppl = ss.People(2000)
+
+#### Attributes
+
+| Name | Description |
+| --- | --- |
+| [dead](#starsim.people.People.dead) | Dead boolean |
+| [male](#starsim.people.People.male) | Male boolean |
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [add_module](#starsim.people.People.add_module) | Add a Module to the People instance |
+| [get_age_dist](#starsim.people.People.get_age_dist) | Return an age distribution based on provided data |
+| [grow](#starsim.people.People.grow) | Increase the number of agents |
+| [init_vals](#starsim.people.People.init_vals) | Populate states with initial values, the final step of initialization |
+| [link_sim](#starsim.people.People.link_sim) | Initialization |
+| [person](#starsim.people.People.person) | Get all the properties for a single person |
+| [plot_ages](#starsim.people.People.plot_ages) | Plot the age distribution |
+| [remove_dead](#starsim.people.People.remove_dead) | Remove dead agents |
+| [request_death](#starsim.people.People.request_death) | External-facing function to request an agent die at the current timestep |
+| [scale_flows](#starsim.people.People.scale_flows) | Return the scaled versions of the flows -- replacement for len(inds) |
+| [step_die](#starsim.people.People.step_die) | Carry out any deaths that took place this timestep |
+| [update_post](#starsim.people.People.update_post) | Final updates at the very end of the timestep |
+
+##### add_module { #starsim.people.People.add_module }
+
+```python
+people.People.add_module(module, force=False)
+```
+
+Add a Module to the People instance
+
+This method is used to add a module to the People. It will register any module states with this
+people instance for dynamic resizing, and expose the states contained in the module to the user
+via `People.states.<module_name>.<state_name>`
+
+The entries created below make it possible to do `sim.people.hiv.susceptible` or
+`sim.people.states['hiv.susceptible']` and have both of them work
+
+##### get_age_dist { #starsim.people.People.get_age_dist }
+
+```python
+people.People.get_age_dist(age_data)
+```
+
+Return an age distribution based on provided data
+
+The data should be provided in the form of either an Nx2 array, a pandas series
+with age as the index and counts/probability as the value, or a pandas DataFrame
+with "age" and "value" as columns. Each of these should look like e.g.:
+
+    age      value
+    0      220.548
+    1      206.188
+    2      195.792
+    3      187.442
+
+The ages will be interpreted as lower bin edges. An upper bin edge will
+automatically be added based on the final age plus the difference of the
+last two bins. To explicitly control the width of the upper age bin, add
+an extra entry to the ``age_data`` with a value of 0 and an age value
+corresponding to the desired upper age bound.
+
+Args:
+    age_data: An array/series/dataframe with an index corresponding to age values, and a value corresponding to histogram counts
+                 or relative proportions. A distribution will be estimated based on the histogram. The histogram will be
+                 assumed to correspond to probability densitiy if the sum of the histogram values is equal to 1, otherwise
+                 it will be assumed to correspond to counts.
+
+Note: age_data can also be provided as a string
+
+Returns:
+    An ``ss.Dist`` instance that returns an age for newly created agents
+
+##### grow { #starsim.people.People.grow }
+
+```python
+people.People.grow(n=None, new_slots=None)
+```
+
+Increase the number of agents
+
+Args:
+    n: Integer number of agents to add
+    new_slots: Optionally specify the slots to assign for the new agents. Otherwise, it will default to the new UIDs
+
+##### init_vals { #starsim.people.People.init_vals }
+
+```python
+people.People.init_vals()
+```
+
+Populate states with initial values, the final step of initialization
+
+##### link_sim { #starsim.people.People.link_sim }
+
+```python
+people.People.link_sim(sim)
+```
+
+Initialization
+
+##### person { #starsim.people.People.person }
+
+```python
+people.People.person(ind)
+```
+
+Get all the properties for a single person
+
+##### plot_ages { #starsim.people.People.plot_ages }
+
+```python
+people.People.plot_ages()
+```
+
+Plot the age distribution
+
+##### remove_dead { #starsim.people.People.remove_dead }
+
+```python
+people.People.remove_dead()
+```
+
+Remove dead agents
+
+##### request_death { #starsim.people.People.request_death }
+
+```python
+people.People.request_death(uids)
+```
+
+External-facing function to request an agent die at the current timestep
+
+In general, users should not directly interact with `People.ti_dead` to minimize
+interactions between modules (e.g., if a module requesting a future death, overwrites
+death due to a different module taking place at the current timestep).
+
+Modules that have a future time of death (e.g., due to disease duration) should keep
+track of that internally. When the module is ready to cause the agent to die, it should
+call this method, and can update its own results for the cause of death. This way, if
+multiple modules request death on the same day, they can each record a death due to their
+own cause.
+
+The actual deaths are resolved after modules have all run, but before analyzers. That way,
+regardless of whether removing dead agents is enabled or not, analyzers will be able to
+see and record outcomes for agents that died this timestep.
+
+**WARNING** - this function allows multiple modules to each independently carry out and
+record state changes associated with death. It is therefore important that they can
+guarantee that after requesting death, the death is guaranteed to occur.
+
+:param uids: Agent IDs to request deaths for
+:return: UIDs of agents that have been scheduled to die on this timestep
+
+##### scale_flows { #starsim.people.People.scale_flows }
+
+```python
+people.People.scale_flows(inds)
+```
+
+Return the scaled versions of the flows -- replacement for len(inds)
+followed by scale factor multiplication
+
+##### step_die { #starsim.people.People.step_die }
+
+```python
+people.People.step_die()
+```
+
+Carry out any deaths that took place this timestep
+
+##### update_post { #starsim.people.People.update_post }
+
+```python
+people.People.update_post()
+```
+
+Final updates at the very end of the timestep
+
+### Person { #starsim.people.Person }
+
+```python
+people.Person()
+```
+
+A simple class to hold all attributes of a person
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [to_df](#starsim.people.Person.to_df) | Convert to a dataframe |
+
+##### to_df { #starsim.people.Person.to_df }
+
+```python
+people.Person.to_df()
+```
+
+Convert to a dataframe

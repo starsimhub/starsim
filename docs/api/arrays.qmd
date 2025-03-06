@@ -1,0 +1,403 @@
+# arrays { #starsim.arrays }
+
+`arrays`
+
+Define array-handling classes, including agent states
+
+## Classes
+
+| Name | Description |
+| --- | --- |
+| [Arr](#starsim.arrays.Arr) | Store a state of the agents (e.g. age, infection status, etc.) as an array. |
+| [BaseArr](#starsim.arrays.BaseArr) | An object that acts exactly like a NumPy array, except stores the values in self.values. |
+| [BoolArr](#starsim.arrays.BoolArr) | Subclass of Arr with defaults for booleans |
+| [FloatArr](#starsim.arrays.FloatArr) | Subclass of Arr with defaults for floats and ints. |
+| [IndexArr](#starsim.arrays.IndexArr) | A special class of Arr used for UIDs and RNG IDs; not to be used as an integer array (for that, use FloatArr) |
+| [State](#starsim.arrays.State) | A boolean array being used as a state. |
+| [uids](#starsim.arrays.uids) | Class to specify that integers should be interpreted as UIDs. |
+
+### Arr { #starsim.arrays.Arr }
+
+```python
+arrays.Arr(
+    self,
+    name=None,
+    dtype=None,
+    default=None,
+    nan=None,
+    label=None,
+    skip_init=False,
+    people=None,
+)
+```
+
+Store a state of the agents (e.g. age, infection status, etc.) as an array.
+
+In practice, ``Arr`` objects can be used interchangeably with NumPy arrays.
+They have two main data interfaces: ``Arr.raw`` contains the "raw", underlying
+NumPy array of the data. ``Arr.values`` contains the "active" values, which
+usually corresponds to agents who are alive.
+
+By default, operations are performed on active agents only (specified by ``Arr.auids``,
+which is a pointer to ``sim.people.auids``). For example, ``sim.people.age.mean()``
+will only use the ages of active agents. Thus, ``sim.people.age.mean()``
+is equal to ``sim.people.age.values.mean()``, not ``sim.people.age.raw.mean()``.
+
+If indexing by an int or slice, ``Arr.values`` is used. If indexing by an
+``ss.uids`` object, ``Arr.raw`` is used. ``Arr`` objects can't be directly
+indexed by a list or array of ints, as this would be ambiguous about whether
+``values`` or ``raw`` is intended. For example, if there are 1000 people in a
+simulation and 100 of them have died, ``sim.people.age[999]`` will return
+an ``IndexError`` (since ``sim.people.age[899]`` is the last active agent),
+whereas ``sim.people.age[ss.uids(999)]`` is valid.
+
+Args:
+    name (str): The name for the state (also used as the dictionary key, so should not have spaces etc.)
+    dtype (class): The dtype to use for this instance (if None, infer from value)
+    default (any): Specify default value for new agents. This can be
+    - A scalar with the same dtype (or castable to the same dtype) as the State
+    - A callable, with a single argument for the number of values to produce
+    - A ``ss.Dist`` instance
+    nan (any): the value to use to represent NaN (not a number); also used as the default value if not supplied
+    label (str): The human-readable name for the state
+    skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
+    people (ss.People): Optionally specify an initialized People object, used to construct temporary Arr instances
+
+#### Attributes
+
+| Name | Description |
+| --- | --- |
+| [auids](#starsim.arrays.Arr.auids) | Link to the indices of active agents -- sim.people.auids |
+| [values](#starsim.arrays.Arr.values) | Return the values of the active agents |
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [asnew](#starsim.arrays.Arr.asnew) | Duplicate and copy (rather than link) data, optionally resetting the array |
+| [false](#starsim.arrays.Arr.false) | Reverse of true(); return UIDs of falsy values |
+| [grow](#starsim.arrays.Arr.grow) | Add new agents to an Arr |
+| [init_vals](#starsim.arrays.Arr.init_vals) | Actually populate the initial values and mark as initialized; only to be used on initialization |
+| [link_people](#starsim.arrays.Arr.link_people) | Link a People object to this state, for access auids |
+| [set](#starsim.arrays.Arr.set) | Set the values for the specified UIDs |
+| [set_nan](#starsim.arrays.Arr.set_nan) | Shortcut function to set values to NaN |
+| [to_json](#starsim.arrays.Arr.to_json) | Export to JSON |
+| [true](#starsim.arrays.Arr.true) | Efficiently convert truthy values to UIDs |
+
+##### asnew { #starsim.arrays.Arr.asnew }
+
+```python
+arrays.Arr.asnew(arr=None, cls=None, name=None)
+```
+
+Duplicate and copy (rather than link) data, optionally resetting the array
+
+##### false { #starsim.arrays.Arr.false }
+
+```python
+arrays.Arr.false()
+```
+
+Reverse of true(); return UIDs of falsy values
+
+##### grow { #starsim.arrays.Arr.grow }
+
+```python
+arrays.Arr.grow(new_uids=None, new_vals=None)
+```
+
+Add new agents to an Arr
+
+This method is normally only called via `People.grow()`.
+
+Args:
+    new_uids: Numpy array of UIDs for the new agents being added
+    new_vals: If provided, assign these state values to the new UIDs
+
+##### init_vals { #starsim.arrays.Arr.init_vals }
+
+```python
+arrays.Arr.init_vals()
+```
+
+Actually populate the initial values and mark as initialized; only to be used on initialization
+
+##### link_people { #starsim.arrays.Arr.link_people }
+
+```python
+arrays.Arr.link_people(people)
+```
+
+Link a People object to this state, for access auids
+
+##### set { #starsim.arrays.Arr.set }
+
+```python
+arrays.Arr.set(uids, new_vals=None)
+```
+
+Set the values for the specified UIDs
+
+##### set_nan { #starsim.arrays.Arr.set_nan }
+
+```python
+arrays.Arr.set_nan(uids)
+```
+
+Shortcut function to set values to NaN
+
+##### to_json { #starsim.arrays.Arr.to_json }
+
+```python
+arrays.Arr.to_json()
+```
+
+Export to JSON
+
+##### true { #starsim.arrays.Arr.true }
+
+```python
+arrays.Arr.true()
+```
+
+Efficiently convert truthy values to UIDs
+
+### BaseArr { #starsim.arrays.BaseArr }
+
+```python
+arrays.BaseArr(self, values, *args, **kwargs)
+```
+
+An object that acts exactly like a NumPy array, except stores the values in self.values.
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [asnew](#starsim.arrays.BaseArr.asnew) | Duplicate and copy (rather than link) data |
+| [convert](#starsim.arrays.BaseArr.convert) | Check if an object is an array, and convert if so |
+| [disp](#starsim.arrays.BaseArr.disp) | Full display of object |
+| [to_json](#starsim.arrays.BaseArr.to_json) | Return a dictionary representation of the Arr |
+| [update](#starsim.arrays.BaseArr.update) | Update the attributes, skipping None values and raising an error if extra keys are added |
+
+##### asnew { #starsim.arrays.BaseArr.asnew }
+
+```python
+arrays.BaseArr.asnew(values=None, cls=None, **kwargs)
+```
+
+Duplicate and copy (rather than link) data
+
+##### convert { #starsim.arrays.BaseArr.convert }
+
+```python
+arrays.BaseArr.convert(obj)
+```
+
+Check if an object is an array, and convert if so
+
+##### disp { #starsim.arrays.BaseArr.disp }
+
+```python
+arrays.BaseArr.disp()
+```
+
+Full display of object
+
+##### to_json { #starsim.arrays.BaseArr.to_json }
+
+```python
+arrays.BaseArr.to_json()
+```
+
+Return a dictionary representation of the Arr
+
+##### update { #starsim.arrays.BaseArr.update }
+
+```python
+arrays.BaseArr.update(skip_none=True, overwrite=True, force=False, **kwargs)
+```
+
+Update the attributes, skipping None values and raising an error if extra keys are added
+
+### BoolArr { #starsim.arrays.BoolArr }
+
+```python
+arrays.BoolArr(self, name=None, nan=False, **kwargs)
+```
+
+Subclass of Arr with defaults for booleans
+
+#### Attributes
+
+| Name | Description |
+| --- | --- |
+| [uids](#starsim.arrays.BoolArr.uids) | Alias to Arr.true |
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [split](#starsim.arrays.BoolArr.split) | Return UIDs of values that are true and false as separate arrays |
+
+##### split { #starsim.arrays.BoolArr.split }
+
+```python
+arrays.BoolArr.split()
+```
+
+Return UIDs of values that are true and false as separate arrays
+
+### FloatArr { #starsim.arrays.FloatArr }
+
+```python
+arrays.FloatArr(self, name=None, nan=np.nan, **kwargs)
+```
+
+Subclass of Arr with defaults for floats and ints.
+
+Note: Starsim does not support integer arrays by default since they introduce
+ambiguity in dealing with NaNs, and float arrays are suitable for most purposes.
+If you really want an integer array, you can use the default Arr class instead.
+
+#### Attributes
+
+| Name | Description |
+| --- | --- |
+| [isnan](#starsim.arrays.FloatArr.isnan) | Return BoolArr for NaN values |
+| [notnan](#starsim.arrays.FloatArr.notnan) | Return BoolArr for non-NaN values |
+| [notnanvals](#starsim.arrays.FloatArr.notnanvals) | Return values that are not-NaN |
+
+### IndexArr { #starsim.arrays.IndexArr }
+
+```python
+arrays.IndexArr(self, name=None, label=None)
+```
+
+A special class of Arr used for UIDs and RNG IDs; not to be used as an integer array (for that, use FloatArr)
+
+#### Attributes
+
+| Name | Description |
+| --- | --- |
+| [uids](#starsim.arrays.IndexArr.uids) | Alias to self.values, to allow Arr.uids like BoolArr |
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [grow](#starsim.arrays.IndexArr.grow) | Change the size of the array |
+
+##### grow { #starsim.arrays.IndexArr.grow }
+
+```python
+arrays.IndexArr.grow(new_uids=None, new_vals=None)
+```
+
+Change the size of the array
+
+### State { #starsim.arrays.State }
+
+```python
+arrays.State(self, name=None, nan=False, **kwargs)
+```
+
+A boolean array being used as a state.
+
+Although functionally identical to BoolArr, a State is handled differently in
+terms of automation: specifically, results are automatically generated from a
+State (but not a BoolArr).
+
+States are typically used to keep track of externally-facing variables (e.g.
+disease.susceptible), while BoolArrs can be used to keep track of internal
+ones (e.g. disease.has_immunity).
+
+### uids { #starsim.arrays.uids }
+
+```python
+arrays.uids()
+```
+
+Class to specify that integers should be interpreted as UIDs.
+
+For all practical purposes, behaves like a NumPy integer array. However,
+has additional methods ``uids.concat()`` (instance method), ``ss.uids.cat()``
+(class method), ``uids.remove()``, and ``uids.intersect()`` to simplify common
+UID operations.
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [cat](#starsim.arrays.uids.cat) | Equivalent to np.concatenate(), but return correct type |
+| [concat](#starsim.arrays.uids.concat) | Equivalent to np.concatenate(), but return correct type |
+| [intersect](#starsim.arrays.uids.intersect) | Keep only UIDs that are also present in the other array |
+| [remove](#starsim.arrays.uids.remove) | Remove provided UIDs from current array |
+| [to_numpy](#starsim.arrays.uids.to_numpy) | Return a view as a standard NumPy array |
+| [union](#starsim.arrays.uids.union) | Return all UIDs present in both arrays |
+| [unique](#starsim.arrays.uids.unique) | Return unique UIDs; equivalent to np.unique() |
+| [xor](#starsim.arrays.uids.xor) | Return UIDs present in only one of the arrays |
+
+##### cat { #starsim.arrays.uids.cat }
+
+```python
+arrays.uids.cat(*args, **kw)
+```
+
+Equivalent to np.concatenate(), but return correct type
+
+##### concat { #starsim.arrays.uids.concat }
+
+```python
+arrays.uids.concat(other, **kw)
+```
+
+Equivalent to np.concatenate(), but return correct type
+
+##### intersect { #starsim.arrays.uids.intersect }
+
+```python
+arrays.uids.intersect(other, **kw)
+```
+
+Keep only UIDs that are also present in the other array
+
+##### remove { #starsim.arrays.uids.remove }
+
+```python
+arrays.uids.remove(other, **kw)
+```
+
+Remove provided UIDs from current array
+
+##### to_numpy { #starsim.arrays.uids.to_numpy }
+
+```python
+arrays.uids.to_numpy()
+```
+
+Return a view as a standard NumPy array
+
+##### union { #starsim.arrays.uids.union }
+
+```python
+arrays.uids.union(other, **kw)
+```
+
+Return all UIDs present in both arrays
+
+##### unique { #starsim.arrays.uids.unique }
+
+```python
+arrays.uids.unique(return_index=False)
+```
+
+Return unique UIDs; equivalent to np.unique()
+
+##### xor { #starsim.arrays.uids.xor }
+
+```python
+arrays.uids.xor(other, **kw)
+```
+
+Return UIDs present in only one of the arrays

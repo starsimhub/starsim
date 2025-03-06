@@ -1,0 +1,232 @@
+# results { #starsim.results }
+
+`results`
+
+Result structures.
+
+## Classes
+
+| Name | Description |
+| --- | --- |
+| [Result](#starsim.results.Result) | Array-like container for holding sim results. |
+| [Results](#starsim.results.Results) | Container for storing results |
+
+### Result { #starsim.results.Result }
+
+```python
+results.Result(
+    self,
+    name=None,
+    label=None,
+    dtype=float,
+    shape=None,
+    scale=True,
+    auto_plot=True,
+    module=None,
+    values=None,
+    timevec=None,
+    low=None,
+    high=None,
+    summarize_by=None,
+    **kwargs,
+)
+```
+
+Array-like container for holding sim results.
+
+Args:
+    module (str): the name of the parent module, e.g. 'hiv'
+    name (str): the name of this result, e.g. 'new_infections'
+    shape (int/tuple): the shape of the result array (usually module.npts)
+    scale (bool): whether or not the result scales by population size (e.g. a count does, a prevalence does not)
+    auto_plot (bool): whether to include automatically in sim.plot() results
+    label (str): a human-readable label for the result
+    values (array): prepopulate the Result with these values
+    timevec (array): an array of time points
+    low (array): values for the lower bound
+    high (array): values for the upper bound
+    summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
+
+In most cases, ``ss.Result`` behaves exactly like ``np.array()``, except with
+the additional fields listed above. To see everything contained in a result,
+you can use result.disp().
+
+#### Attributes
+
+| Name | Description |
+| --- | --- |
+| [full_label](#starsim.results.Result.full_label) | Return the full label of the result: <Module>: <label>, e.g. "HIV: New infections" |
+| [has_dates](#starsim.results.Result.has_dates) | Check whether the time vector uses dates (rather than numbers) |
+| [key](#starsim.results.Result.key) | Return the unique key of the result: <module>.<name>, e.g. "hiv.new_infections" |
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [from_df](#starsim.results.Result.from_df) | Make a copy of the result with new values from a dataframe |
+| [init_values](#starsim.results.Result.init_values) | Handle values |
+| [plot](#starsim.results.Result.plot) | Plot a single result; kwargs are interpreted as plot_kw |
+| [resample](#starsim.results.Result.resample) | Resample the result, e.g. from days to years. Leverages the pandas resample method. |
+| [to_df](#starsim.results.Result.to_df) | Convert to a dataframe with timevec, value, low, and high columns |
+| [to_series](#starsim.results.Result.to_series) | Convert to a series with timevec as the index and value as the data |
+| [update](#starsim.results.Result.update) | Update parameters, and initialize values if needed |
+
+##### from_df { #starsim.results.Result.from_df }
+
+```python
+results.Result.from_df(df)
+```
+
+Make a copy of the result with new values from a dataframe
+
+##### init_values { #starsim.results.Result.init_values }
+
+```python
+results.Result.init_values(values=None, dtype=None, shape=None, force=False)
+```
+
+Handle values
+
+##### plot { #starsim.results.Result.plot }
+
+```python
+results.Result.plot(
+    fig=None,
+    ax=None,
+    fig_kw=None,
+    plot_kw=None,
+    fill_kw=None,
+    **kwargs,
+)
+```
+
+Plot a single result; kwargs are interpreted as plot_kw
+
+##### resample { #starsim.results.Result.resample }
+
+```python
+results.Result.resample(
+    new_unit='year',
+    summarize_by=None,
+    col_names='vlh',
+    die=False,
+    output_form='series',
+    use_years=False,
+    sep='_',
+)
+```
+
+Resample the result, e.g. from days to years. Leverages the pandas resample method.
+Accepts all the Starsim units, plus the Pandas ones documented here:
+https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#offset-aliases
+
+Args:
+    new_unit (str): the new unit to resample to, e.g. 'year', 'month', 'week', 'day', '1W', '2M', etc.
+    summarize_by (str): how to summarize the data, e.g. 'sum' or 'mean'
+    col_names (str): whether to rename the columns with the name of the result
+    die (bool): whether to raise an error if the summarization method cannot be determined
+    output_form (str): 'series', 'dataframe', or 'result'
+    use_years (bool): whether to use years as the unit of time
+
+##### to_df { #starsim.results.Result.to_df }
+
+```python
+results.Result.to_df(
+    sep='_',
+    col_names='vlh',
+    resample=None,
+    set_date_index=False,
+    **kwargs,
+)
+```
+
+Convert to a dataframe with timevec, value, low, and high columns
+
+Args:
+    sep (str): separator for the column names
+    col_names (str or None): if None, uses the name of the result. Default is 'vlh' which uses value, low, high
+    set_date_index (bool): if True, use the timevec as the index
+    resample (str): if provided, resample the data to this frequency
+    kwargs: passed to the resample method
+
+##### to_series { #starsim.results.Result.to_series }
+
+```python
+results.Result.to_series(set_name=False, resample=None, sep='_', **kwargs)
+```
+
+Convert to a series with timevec as the index and value as the data
+Args:
+    set_name (bool): whether to set the name of the series to the name of the result
+    resample (str): if provided, resample the data to this frequency
+    kwargs: passed to the resample method
+
+##### update { #starsim.results.Result.update }
+
+```python
+results.Result.update(*args, **kwargs)
+```
+
+Update parameters, and initialize values if needed
+
+### Results { #starsim.results.Results }
+
+```python
+results.Results(self, module, *args, strict=True, **kwargs)
+```
+
+Container for storing results
+
+#### Attributes
+
+| Name | Description |
+| --- | --- |
+| [all_results](#starsim.results.Results.all_results) | Iterator over all results, skipping any nested values |
+| [all_results_dict](#starsim.results.Results.all_results_dict) | Dictionary of all results, skipping any nested values |
+| [equal_len](#starsim.results.Results.equal_len) | Check if all results are equal length |
+| [is_msim](#starsim.results.Results.is_msim) | Check if this is a MultiSim |
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [append](#starsim.results.Results.append) | This is activated by adding as well, e.g. results += result |
+| [flatten](#starsim.results.Results.flatten) | Turn from a nested dictionary into a flat dictionary, keeping only results by default |
+| [plot](#starsim.results.Results.plot) | Plot all the results |
+| [to_df](#starsim.results.Results.to_df) | Merge all results dataframes into one |
+
+##### append { #starsim.results.Results.append }
+
+```python
+results.Results.append(arg, key=None)
+```
+
+This is activated by adding as well, e.g. results += result
+
+##### flatten { #starsim.results.Results.flatten }
+
+```python
+results.Results.flatten(sep='_', only_results=True, keep_case=False, **kwargs)
+```
+
+Turn from a nested dictionary into a flat dictionary, keeping only results by default
+
+##### plot { #starsim.results.Results.plot }
+
+```python
+results.Results.plot(style='fancy', fig_kw=None, plot_kw=None)
+```
+
+Plot all the results
+
+##### to_df { #starsim.results.Results.to_df }
+
+```python
+results.Results.to_df(sep='_', descend=False, **kwargs)
+```
+
+Merge all results dataframes into one
+Args:
+    sep (str): separator for the column names
+    descend (bool): whether to descend into nested results
+    kwargs: passed to the to_df method, can include instructions for summarizing results by time

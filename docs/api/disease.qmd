@@ -1,0 +1,289 @@
+# disease { #starsim.disease }
+
+`disease`
+
+Base classes for diseases
+
+## Classes
+
+| Name | Description |
+| --- | --- |
+| [Disease](#starsim.disease.Disease) | Base module class for diseases |
+| [Infection](#starsim.disease.Infection) | Base class for infectious diseases used in Starsim |
+| [InfectionLog](#starsim.disease.InfectionLog) | Record infections |
+
+### Disease { #starsim.disease.Disease }
+
+```python
+disease.Disease(self, pars=None, *args, **kwargs)
+```
+
+Base module class for diseases
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [init_pre](#starsim.disease.Disease.init_pre) | Link the disease to the sim, create objects, and initialize results; see Module.init_pre() for details |
+| [init_results](#starsim.disease.Disease.init_results) | Initialize results |
+| [set_prognoses](#starsim.disease.Disease.set_prognoses) | Set prognoses upon infection/acquisition |
+| [step](#starsim.disease.Disease.step) | Handle the main disease updates, e.g. add new cases |
+| [step_die](#starsim.disease.Disease.step_die) | Carry out state changes upon death |
+| [step_state](#starsim.disease.Disease.step_state) | Carry out updates at the start of the timestep (prior to transmission); |
+| [update_results](#starsim.disease.Disease.update_results) | Update results |
+
+##### init_pre { #starsim.disease.Disease.init_pre }
+
+```python
+disease.Disease.init_pre(sim)
+```
+
+Link the disease to the sim, create objects, and initialize results; see Module.init_pre() for details
+
+##### init_results { #starsim.disease.Disease.init_results }
+
+```python
+disease.Disease.init_results()
+```
+
+Initialize results
+
+By default, diseases all report on counts for any explicitly defined "States", e.g. if
+a disease contains a boolean state 'susceptible' it will automatically contain a
+Result for 'n_susceptible'.
+
+##### set_prognoses { #starsim.disease.Disease.set_prognoses }
+
+```python
+disease.Disease.set_prognoses(uids, sources=None)
+```
+
+Set prognoses upon infection/acquisition
+
+This function assigns state values upon infection or acquisition of
+the disease. It would normally be called somewhere towards the end of
+`Disease.make_new_cases()`. Infections will optionally be added to
+the log as part of this operation if logging is enabled (in the
+`Disease` parameters)
+
+The `sources` are relevant for infectious diseases, but would be left
+as `None` for NCDs.
+
+Args:
+    sim (Sim): the STarsim simulation object
+    uids (array): UIDs for agents to assign disease progoses to
+    from_uids (array): Optionally specify the infecting agent
+
+##### step { #starsim.disease.Disease.step }
+
+```python
+disease.Disease.step()
+```
+
+Handle the main disease updates, e.g. add new cases
+
+This method is agnostic as to the mechanism by which new cases occur. This
+could be through transmission (parametrized in different ways, which may or
+may not use the contact networks) or it may be based on risk factors/seeding,
+as may be the case for non-communicable diseases.
+
+It is expected that this method will internally call Disease.set_prognoses()
+at some point.
+
+##### step_die { #starsim.disease.Disease.step_die }
+
+```python
+disease.Disease.step_die(uids)
+```
+
+Carry out state changes upon death
+
+This function is triggered after deaths are resolved, and before analyzers are run.
+See the SIR example model for a typical use case - deaths are requested as an autonomous
+update, to take effect after transmission on the same timestep. State changes that occur
+upon death (e.g., clearing an `infected` flag) are executed in this function. That also
+allows an intervention to avert a death scheduled on the same timestep, without having
+to undo any state changes that have already been applied (because they only run via this
+function if the death actually occurs).
+
+Unlike other methods during the integration loop, this method is not called directly
+by the sim; instead, it is called by people.step_die(), which reconciles the UIDs of
+the agents who will die.
+
+Depending on the module and the results it produces, it may or may not be necessary
+to implement this.
+
+##### step_state { #starsim.disease.Disease.step_state }
+
+```python
+disease.Disease.step_state()
+```
+
+Carry out updates at the start of the timestep (prior to transmission);
+these are typically state changes
+
+##### update_results { #starsim.disease.Disease.update_results }
+
+```python
+disease.Disease.update_results()
+```
+
+Update results
+
+This function is executed after transmission in all modules has been resolved.
+This allows result updates at this point to capture outcomes dependent on multiple
+modules, where relevant.
+
+### Infection { #starsim.disease.Infection }
+
+```python
+disease.Infection(self, pars=None, *args, **kwargs)
+```
+
+Base class for infectious diseases used in Starsim
+
+This class contains specializations for infectious transmission (i.e., implements network-based
+transmission with directional beta values) and defines attributes that connectors
+operate on to capture co-infection
+
+#### Attributes
+
+| Name | Description |
+| --- | --- |
+| [infectious](#starsim.disease.Infection.infectious) | Generally defined as an alias for infected, although these may differ in some diseases. |
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [compute_transmission](#starsim.disease.Infection.compute_transmission) | Compute the probability of a->b transmission |
+| [infect](#starsim.disease.Infection.infect) | Determine who gets infected on this timestep via transmission on the network |
+| [init_post](#starsim.disease.Infection.init_post) | Set initial values for states. This could involve passing in a full set of initial conditions, |
+| [init_results](#starsim.disease.Infection.init_results) | Initialize results |
+| [step](#starsim.disease.Infection.step) | Perform key infection updates, including infection and setting prognoses |
+| [validate_beta](#starsim.disease.Infection.validate_beta) | Validate beta and return as a map to match the networks |
+
+##### compute_transmission { #starsim.disease.Infection.compute_transmission }
+
+```python
+disease.Infection.compute_transmission(
+    src,
+    trg,
+    rel_trans,
+    rel_sus,
+    beta_per_dt,
+    randvals,
+)
+```
+
+Compute the probability of a->b transmission
+
+##### infect { #starsim.disease.Infection.infect }
+
+```python
+disease.Infection.infect()
+```
+
+Determine who gets infected on this timestep via transmission on the network
+
+##### init_post { #starsim.disease.Infection.init_post }
+
+```python
+disease.Infection.init_post()
+```
+
+Set initial values for states. This could involve passing in a full set of initial conditions,
+or using init_prev, or other. Note that this is different to initialization of the Arr objects
+i.e., creating their dynamic array, linking them to a People instance. That should have already
+taken place by the time this method is called.
+
+##### init_results { #starsim.disease.Infection.init_results }
+
+```python
+disease.Infection.init_results()
+```
+
+Initialize results
+
+##### step { #starsim.disease.Infection.step }
+
+```python
+disease.Infection.step()
+```
+
+Perform key infection updates, including infection and setting prognoses
+
+##### validate_beta { #starsim.disease.Infection.validate_beta }
+
+```python
+disease.Infection.validate_beta(run_checks=False)
+```
+
+Validate beta and return as a map to match the networks
+
+### InfectionLog { #starsim.disease.InfectionLog }
+
+```python
+disease.InfectionLog()
+```
+
+Record infections
+
+The infection log records transmission events and optionally other data
+associated with each transmission. Basic functionality is to track
+transmission with
+
+>>> Disease.log.append(source, target, t)
+
+Seed infections can be recorded with a source of `None`, although all infections
+should have a target and a time. Other data can be captured in the log, either at
+the time of creation, or later on. For example
+
+>>> Disease.log.append(source, target, t, network='msm')
+
+could be used by a module to track the network in which transmission took place.
+Modules can optionally add per-infection outcomes later as well, for example
+
+>>> Disease.log.add_data(source, t_dead=2024.25)
+
+This would be equivalent to having specified the data at the original time the log
+entry was created - however, it is more useful for tracking events that may or may
+not occur after the infection and could be modified by interventions (e.g., tracking
+diagnosis, treatment, notification etc.)
+
+A table of outcomes can be returned using `InfectionLog.line_list()`
+
+#### Methods
+
+| Name | Description |
+| --- | --- |
+| [add_data](#starsim.disease.InfectionLog.add_data) | Record extra infection data |
+| [line_list](#starsim.disease.InfectionLog.line_list) | Return a tabular representation of the log |
+
+##### add_data { #starsim.disease.InfectionLog.add_data }
+
+```python
+disease.InfectionLog.add_data(uids, **kwargs)
+```
+
+Record extra infection data
+
+This method can be used to add data to an existing transmission event.
+The most recent transmission event will be used
+
+Args:
+    uid: The UID of the target node (the agent that was infected)
+    kwargs: Remaining arguments are stored as edge data
+
+##### line_list { #starsim.disease.InfectionLog.line_list }
+
+```python
+disease.InfectionLog.line_list()
+```
+
+Return a tabular representation of the log
+
+This function returns a dataframe containing columns for all quantities
+recorded in the log. Note that the log will contain `NaN` for quantities
+that are defined for some edges and not others (and which are missing for
+a particular entry)
