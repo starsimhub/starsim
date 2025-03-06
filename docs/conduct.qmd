@@ -2,4 +2,4 @@
 title: Code of Conduct
 ---
 
-{{< include conduct.rst >}}
+{{< include conduct.md >}}

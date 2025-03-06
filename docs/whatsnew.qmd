@@ -2,4 +2,4 @@
 title: What's new
 ---
 
-{{< include whatsnew.rst >}}
+{{< include whatsnew.md >}}
