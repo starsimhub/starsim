@@ -27,6 +27,8 @@ website:
         text: Home
       - href: tutorials.qmd
         text: Tutorials
+      - href: user_guide.qmd
+        text: User guide
       - href: whatsnew.qmd
         text: What's new
       - href: conduct.qmd
@@ -37,6 +39,7 @@ website:
         text: API reference
   sidebar:
     style: docked
+    collapse-level: 3
     contents:
       - section: "Tutorials"
         contents:
@@ -50,36 +53,36 @@ website:
         contents:
         - section: "Introduction"
           contents:
-          - user_guide/intro/spokes.ipynb
           - user_guide/intro/starsim.ipynb
+          - user_guide/intro/spokes.ipynb
         - section: "Basic concepts"
           contents:
-          - user_guide/basics/people.ipynb
           - user_guide/basics/model.ipynb
           - user_guide/basics/sim.ipynb
+          - user_guide/basics/people.ipynb
         - section: "Modules"
           contents:
-          - user_guide/modules/interventions.ipynb
-          #- user_guide/modules/analyzers.ipynb
-          - user_guide/modules/demographics.ipynb
-          - user_guide/modules/networks.ipynb
           - user_guide/modules/diseases.ipynb
+          - user_guide/modules/networks.ipynb
+          - user_guide/modules/demographics.ipynb
+          - user_guide/modules/interventions.ipynb
+          - user_guide/modules/analyzers.ipynb
           - user_guide/modules/connectors.ipynb
         - section: "Workflows"
           contents:
           - user_guide/workflows/run.ipynb
-          #- user_guide/workflows/samples.ipynb
-          - user_guide/workflows/cloud.ipynb
           - user_guide/workflows/calibration.ipynb
+          - user_guide/workflows/samples.ipynb
+          - user_guide/workflows/cloud.ipynb
         - section: "Advanced topics"
           contents:
-          - user_guide/advanced/random.ipynb
-          - user_guide/advanced/parameters.ipynb
-          - user_guide/advanced/indexing.ipynb
-          - user_guide/advanced/nonstandard.ipynb
-          - user_guide/advanced/distributions.ipynb
-          - user_guide/advanced/profiling.ipynb
           - user_guide/advanced/time.ipynb
+          - user_guide/advanced/indexing.ipynb
+          - user_guide/advanced/parameters.ipynb
+          - user_guide/advanced/distributions.ipynb
+          - user_guide/advanced/random.ipynb
+          - user_guide/advanced/profiling.ipynb
+          - user_guide/advanced/nonstandard.ipynb
       - href: whatsnew.qmd
         text: What's new
       - href: conduct.qmd

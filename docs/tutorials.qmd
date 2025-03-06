@@ -1,4 +1,4 @@
-# Starsim Tutorials
+# Tutorials
 
 These tutorials will guide you through the main features of Starsim. Each tutorial is interactive and includes executable code examples.
 
@@ -17,7 +17,7 @@ To run these tutorials locally:
 4. Launch Jupyter: `jupyter notebook`
 :::
 
-## User tutorials
+## Tutorials
 
 - [Introduction to Starsim](tutorials/tut_intro.ipynb)
 - [Building a simulation](tutorials/tut_buildsim.ipynb)
@@ -25,11 +25,3 @@ To run these tutorials locally:
 - [Diseases](tutorials/tut_diseases.ipynb)
 - [Transmission](tutorials/tut_transmission.ipynb)
 - [Interventions](tutorials/tut_interventions.ipynb)
-- [Calibration](tutorials/tut_calibration.ipynb)
-
-## Developer tutorials
-
-- [Diseases (developer)](tutorials/dev_tut_diseases.ipynb)
-- [Parameters (developer)](tutorials/dev_tut_pars.ipynb)
-- [Analyzers (developer)](tutorials/dev_tut_analyzers.ipynb)
-- [Non-standard features (developer)](tutorials/dev_tut_nonstandard.ipynb)
