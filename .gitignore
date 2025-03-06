@@ -5,6 +5,7 @@ tests/figs/*
 tests/devtests/figs/*
 figs/*
 modules.rst
+archive/
 
 # Other files
 .idea
