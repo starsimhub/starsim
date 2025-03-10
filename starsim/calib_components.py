@@ -173,19 +173,17 @@ class CalibComponent(sc.prettyobj):
                     actual = self.conform(self.expected, actual) # Conform
                 actual['rand_seed'] = s.pars.rand_seed
                 actuals.append(actual)
-
-            if len(actuals) == 0: # No sims met the include criteria
-                self.actual = None
-                return np.inf
         else:
-            # Warn if the user has an include_fn for a single sim
-            if self.include_fn is not None and not self.include_fn(sim):
-                sc.printv(f'Warning: include_fn was specified for a single simulation, but will be ignored', level=1)
-            actual = self.extract_fn(sim) # Extract
-            if self.conform is not None:
-                actual = self.conform(self.expected, actual) # Conform
-            actual['rand_seed'] = sim.pars.rand_seed
-            actuals = [actual]
+            if self.include_fn is None or self.include_fn(sim):
+                actual = self.extract_fn(sim) # Extract
+                if self.conform is not None:
+                    actual = self.conform(self.expected, actual) # Conform
+                actual['rand_seed'] = sim.pars.rand_seed
+                actuals = [actual]
+
+        if len(actuals) == 0: # No sims met the include criteria
+            self.actual = None
+            return np.inf
 
         self.actual = pd.concat(actuals).reset_index().set_index('rand_seed')
         seeds = self.actual.index.unique()
