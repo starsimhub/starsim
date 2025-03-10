@@ -574,6 +574,8 @@ class Rate():
     def __mul__(self, other):
         if isinstance(other, Dur):
             return other.years/self._dur.years
+        elif other == 0:
+            return 0 # Or should this be a rate?
         else:
             return Rate(self._dur/other)
 

@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 
 test_run = True
 n_agents = [10_000, 2_000][test_run]
-do_plot = False
+do_plot = True
 sc.options(interactive=do_plot) # Assume not running interactively
 
 
@@ -28,7 +28,7 @@ def test_sir():
     sir = ss.SIR(sir_pars)
 
     # Change pars after creating the SIR instance
-    sir.pars.beta = {'random': ss.rate(0.1)}
+    sir.pars.beta = {'random': ss.peryear(0.1)}
 
     # You can also change the parameters of the default lognormal distribution directly
     sir.pars.dur_inf.set(loc=5)
@@ -125,7 +125,7 @@ def test_ncd():
 
     ppl = ss.People(n_agents)
     ncd = ss.NCD(pars={'log':True})
-    sim = ss.Sim(people=ppl, diseases=ncd, copy_inputs=False) # Since using ncd directly below
+    sim = ss.Sim(people=ppl, diseases=ncd, copy_inputs=False, dt=ss.years(0.5)) # Since using ncd directly below
     sim.run()
 
     assert len(ncd.log.out_edges) == ncd.log.number_of_edges()
@@ -160,6 +160,7 @@ def test_gavi():
         )
         sim = ss.Sim(pars)
         sim.run()
+        sim.plot()
         sims += sim
     return sims
 
@@ -183,21 +184,22 @@ def test_multidisease():
 def test_mtct():
     sc.heading('Test mother-to-child transmission routes')
     ppl = ss.People(n_agents)
-    sis = ss.SIS(beta={'random':[0.005, 0.001], 'prenatal':[0.1, 0], 'postnatal':[0.1, 0]})
+    sis = ss.SIS(beta={'random':[ss.RateProb(0.005, ss.Dur(months=1)), ss.RateProb(0.001, ss.Dur(months=1))], 'prenatal':[ss.RateProb(0.1, ss.Dur(months=1)), 0], 'postnatal':[ss.RateProb(0.1, ss.Dur(months=1)), 0]})
     networks = [ss.RandomNet(), ss.PrenatalNet(), ss.PostnatalNet()]
-    demographics = ss.Pregnancy(fertility_rate=20)
-    sim = ss.Sim(dt=1/12, people=ppl, diseases=sis, networks=networks, demographics=demographics)
+    demographics = ss.Pregnancy(fertility_rate=ss.peryear(20))
+    sim = ss.Sim(dt=ss.Dur(1/12), people=ppl, diseases=sis, networks=networks, demographics=demographics)
     sim.run()
+    sim.plot()
     return sim
 
 
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
-    sir   = test_sir()
-    s1,s2 = test_sir_epi()
-    sis   = test_sis()
-    ncd   = test_ncd()
+    # sir   = test_sir()
+    # s1,s2 = test_sir_epi()
+    # sis   = test_sis()
+    # ncd   = test_ncd()
     gavi  = test_gavi()
-    multi = test_multidisease()
-    mtct  = test_mtct()
+    # multi = test_multidisease()
+    # mtct  = test_mtct()
