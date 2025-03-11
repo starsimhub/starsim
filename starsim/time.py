@@ -138,7 +138,7 @@ class Date(pd.Timestamp):
             return cls(year=year, month=1, day=1)
         else:
             year_start = pd.Timestamp(year=int(year),month=1,day=1).timestamp()
-            year_end = pd.Timestamp(year=int(year),month=12,day=31).timestamp()
+            year_end = pd.Timestamp(year=int(year)+1,month=1,day=1).timestamp()
             timestamp = year_start + year%1*(year_end-year_start)
             return cls(pd.Timestamp(timestamp, unit='s'))
 
