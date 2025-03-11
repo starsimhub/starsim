@@ -802,74 +802,38 @@ class Time(sc.prettyobj):
             if self.is_absolute != sim.t.is_absolute:
                 raise Exception('Cannot mix absolute/relative times across modules')
 
-        # TODO: Reimplement validation logic
+        # Support bare numbers but raise a warning - interpreted as years (users should use dates/durs explicitly)
+        if sc.isnumber(self.start):
+            ss.warn(f'Start ({self.start}) has been specified as a number - assuming it is a year')
+            self.start = Date(self.start)
+
+        if sc.isnumber(self.stop):
+            ss.warn(f'Stop ({self.stop}) has been specified as a number - assuming it is a year')
+            self.stop = Date(self.stop)
+
+        if sc.isnumber(self.dt):
+            ss.warn(f'dt ({self.dt}) has been specified as a number - assuming it is a year')
+            self.dt = YearDur(self.dt)
+
         if isinstance(self.stop, Dur) and self.start is None:
+            # The start can be omitted if the stop is a Dur, as it will assume the start is zero
             self.start = self.stop.__class__()
 
-
-        # # Handle start and stop
-        # if start is None:
-        #     start = 0
-
-
-        # self.start = self.start if self.is_numeric else date(self.start)
-        # self.stop  = self.stop  if self.is_numeric else date(self.stop)
-
-        # Convert start and stop to dates
-        # date_start = self.start
-        # date_stop = self.stop
-        # date_unit = 'year' if not has_units(self.unit) else self.unit # Use year by default
-        # offset = 0
-        # if self.is_numeric and date_start == 0:
-        #     date_start = ss.date(ss.time.default_start[date_unit])
-        #     date_stop = date_start + ss.dur(date_stop, unit=date_unit)
-        #     offset = date_start.year
-
-
-
-        # # If unitless, just use that
-        # if self.is_unitless:
-        #     timevec = round_tvec(sc.inclusiverange(self.start, self.stop, self.dt))
-        #     yearvec = round_tvec(timevec)
-        #     datevec = timevec
-
-        # If the unit is years, handle that
-        # elif date_unit == 'year': # For years, the yearvec is the most robust representation
-        #     start_year = sc.datetoyear(date_start.date())
-        #     stop_year = sc.datetoyear(date_stop.date())
-        #     yearvec = round_tvec(sc.inclusiverange(start_year, stop_year, self.dt))
-        #     datevec = years_to_dates(yearvec)
-        #     timevec = datevec
-
-        # Otherwise, use dates as the ground truth
-        # else:
-        #     if int(self.dt) == self.dt: # The step is integer-like, use exactly
-        #         key = date_unit + 's' # e.g. day -> days
-        #         datelist = sc.daterange(date_start, date_stop, interval={key:int(self.dt)})
-        #     else: # Convert to the sim unit instead
-        #         day_delta = time_ratio(unit1=date_unit, dt1=self.dt, unit2='day', dt2=1.0, as_int=True)
-        #         if day_delta >= 1:
-        #             datelist = sc.daterange(date_start, date_stop, interval={'days':day_delta})
-        #         else:
-        #             errormsg = f'Timestep {dt} is too small; must be at least 1 day'
-        #             raise ValueError(errormsg)
-        #     datevec = np.array([ss.date(d) for d in datelist])
-        #     yearvec = dates_to_years(datevec)
-        #     timevec = datevec
-
-        # Store things
-        # self.dt_year = dt_year
-        # self.npts = len(timevec) # The number of points in the sim
-
+        # We need to populate both the tvec (using dates) and the yearvec (using years). However, we
+        # need to decide which of these quantities to prioritise considering that the calendar dates
+        # don't convert consistently into fractional years due to varying month/year lengths. We will
+        # prioritise one or the other depending on what type of quantity the user has specified for dt
         if isinstance(self.dt, YearDur):
-            # Preference setting fractional years
+            # If dt has been specified as a YearDur then preference setting fractional years. So first
+            # calculate the fractional years, and then convert them to the equivalent dates
             self.yearvec = np.arange(self.start.years, self.stop.years, self.dt.years)
             if isinstance(self.stop, Dur):
                 self.tvec = np.array([self.stop.__class__(x) for x in self.yearvec])
             else:
                 self.tvec = np.array([Date(x) for x in self.yearvec])
         else:
-            # Preference setting dates
+            # If dt has been specified as a DateDur then preference setting dates. So first
+            # calculate the dates, and then convert them to the equivalent fractional years
             tvec = []
             t = self.start
             while t <= self.stop:
