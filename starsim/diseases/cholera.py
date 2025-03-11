@@ -14,7 +14,7 @@ class Cholera(ss.Infection):
     """
     Cholera
     """
-    def __init__(self, pars=None, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         """ Initialize with parameters """
         super().__init__()
         self.define_pars(
@@ -38,7 +38,7 @@ class Cholera(ss.Infection):
             decay_rate = ss.perday(0.033), # Rate at which bacteria in the environment dies (per day), from Chao et al. and Mukandavire et al. citing https://pubmed.ncbi.nlm.nih.gov/8882180/
             p_env_transmit = ss.bernoulli(p=0), # Probability of environmental transmission - filled out later
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
 
         # Boolean states
         self.define_states(

@@ -13,7 +13,7 @@ __all__ = ['Ebola']
 
 class Ebola(SIR):
 
-    def __init__(self, pars=None, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         """ Initialize with parameters """
         super().__init__()
         self.define_pars(
@@ -34,7 +34,7 @@ class Ebola(SIR):
             p_death         = ss.bernoulli(p=0.55), # Add source
             p_safe_bury     = ss.bernoulli(p=0.25), # Probability of a safe burial - should be linked to diagnoses
         )
-        self.update_pars(pars=pars, **kwargs)
+        self.update_pars(**kwargs)
 
         # Boolean states
         self.define_states(

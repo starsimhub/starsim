@@ -16,12 +16,12 @@ __all__ = ['Disease', 'Infection', 'InfectionLog']
 class Disease(ss.Module):
     """ Base module class for diseases """
 
-    def __init__(self, pars=None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__()
         self.define_pars(
             log = False,
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         self.results = ss.Results(self.name)
         return
 
@@ -152,8 +152,8 @@ class Infection(Disease):
     operate on to capture co-infection
     """
 
-    def __init__(self, pars=None, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, **kwargs):
+        super().__init__()
         self.define_states(
             ss.State('susceptible', default=True, label='Susceptible'),
             ss.State('infected', label='Infectious'),
@@ -165,7 +165,7 @@ class Infection(Disease):
         self.define_pars(
             init_prev = None, # Replace None with a ss.bernoulli to seed infections
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
 
         # Define random number generator for determining transmission
         self.trans_rng = ss.multi_random('source', 'target')

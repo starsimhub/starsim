@@ -12,7 +12,7 @@ __all__ = ['Syphilis']
 
 class Syphilis(ss.Infection):
 
-    def __init__(self, pars=None, **kwargs):
+    def __init__(self, **kwargs):
         # Parameters
         super().__init__()
         self.define_pars(
@@ -52,7 +52,7 @@ class Syphilis(ss.Infection):
             ),
             birth_outcome_keys = ['miscarriage', 'nnd', 'stillborn', 'congenital'],
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
 
         self.define_states(
             # Adult syphilis states

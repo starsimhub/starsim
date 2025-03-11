@@ -430,7 +430,7 @@ class StaticNet(Network):
         super().__init__()
         self.graph = graph
         self.define_pars(seed=True, p=None, n_contacts=10)
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         self.dist = ss.Dist(name='StaticNet')
         return
 
@@ -487,14 +487,14 @@ class StaticNet(Network):
 class RandomNet(DynamicNetwork):
     """ Random connectivity between agents """
 
-    def __init__(self, pars=None, key_dict=None, **kwargs):
+    def __init__(self, key_dict=None, **kwargs):
         """ Initialize """
         super().__init__(key_dict=key_dict)
         self.define_pars(
             n_contacts = ss.constant(10),
             dur = 0, # Note; network edge durations are required to have the same unit as the network
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         self.dist = ss.Dist(distname='RandomNet') # Default RNG
         return
 
@@ -583,14 +583,14 @@ class ErdosRenyiNet(DynamicNetwork):
     accumulate over time.
     """
 
-    def __init__(self, pars=None, key_dict=None, **kwargs):
+    def __init__(self, key_dict=None, **kwargs):
         """ Initialize """
         super().__init__(key_dict=key_dict)
         self.define_pars(
             p = 0.1, # Probability of each edge
             dur = 0, # Duration of zero ensures that new random edges are formed on each time step
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         self.randint = ss.randint(low=np.iinfo('int64').min, high=np.iinfo('int64').max, dtype=np.int64) # Used to draw a random number for each agent as part of creating edges
         return
 
@@ -640,14 +640,14 @@ class DiskNet(Network):
     Edges are formed between two agents if they are within r distance of each other.
     """
 
-    def __init__(self, pars=None, key_dict=None, **kwargs):
+    def __init__(self, key_dict=None, **kwargs):
         """ Initialize """
         super().__init__(key_dict=key_dict)
         self.define_pars(
             r = 0.1, # Radius
             v = 0.05, # Velocity
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         self.define_states(
             ss.FloatArr('x', default=ss.random(), label='X position'),
             ss.FloatArr('y', default=ss.random(), label='Y position'),
@@ -751,7 +751,7 @@ class MFNet(SexualNetwork):
     This network is built by **randomly pairing** males and female with variable
     relationship durations.
     """
-    def __init__(self, pars=None, key_dict=None, **kwargs):
+    def __init__(self, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
         self.define_pars(
             duration = ss.lognorm_ex(mean=15),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
@@ -760,7 +760,7 @@ class MFNet(SexualNetwork):
             acts = ss.poisson(lam=ss.peryear(80)), # TODO: make this work with ss.rate, which it currently does not due to network initialization limitations
             rel_part_rates = 1.0,
         )
-        self.update_pars(pars=pars, **kwargs)
+        self.update_pars(**kwargs)
 
         # Finish initialization
         self.dist = ss.choice(name='MFNet', replace=False) # Set the array later
@@ -842,7 +842,7 @@ class MSMNet(SexualNetwork):
     A network that randomly pairs males
     """
 
-    def __init__(self, pars=None, key_dict=None, **kwargs):
+    def __init__(self, key_dict=None, **kwargs):
         super().__init__(key_dict=key_dict)
         self.define_pars(
             duration = ss.lognorm_ex(mean=2, std=1),
@@ -850,7 +850,7 @@ class MSMNet(SexualNetwork):
             acts = ss.lognorm_ex(mean=80, std=20),
             participation = ss.bernoulli(p=0.1),
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         return
 
     def init_post(self):
@@ -904,7 +904,7 @@ class EmbeddingNet(MFNet):
     Heterosexual age-assortative network based on a one-dimensional embedding. Could be made more generic.
     """
 
-    def __init__(self, pars=None, **kwargs):
+    def __init__(self, **kwargs):
         """
         Create a sexual network from a 1D embedding based on age
 
@@ -917,7 +917,7 @@ class EmbeddingNet(MFNet):
             embedding_func = ss.normal(name='EmbeddingNet', loc=self.embedding_loc, scale=2),
             male_shift = 5,
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         return
 
     @staticmethod
@@ -1070,7 +1070,7 @@ class MixingPools(Route):
         sim = ss.Sim(diseases='sis', networks=mps).run()
         sim.plot()
     """
-    def __init__(self, pars=None, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
             diseases = None,
@@ -1079,7 +1079,7 @@ class MixingPools(Route):
             beta = ss.RateProb(0.1),
             contacts = None,
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         self.validate_pars()
         self.pools = []
         return
@@ -1182,7 +1182,7 @@ class MixingPool(Route):
         sim.run()
         sim.plot()
     """
-    def __init__(self, pars=None, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
             diseases = None,
@@ -1191,7 +1191,7 @@ class MixingPool(Route):
             beta = ss.RateProb(0.2),
             contacts = ss.poisson(1.0),
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
 
         self.define_states(
             ss.FloatArr('eff_contacts', default=self.pars.contacts, label='Effective number of contacts')

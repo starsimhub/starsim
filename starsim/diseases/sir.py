@@ -18,7 +18,7 @@ class SIR(ss.Infection):
     infected/infectious, and recovered. It also includes deaths, and basic
     results.
     """
-    def __init__(self, pars=None, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
             beta = ss.RateProb(0.1),
@@ -26,7 +26,7 @@ class SIR(ss.Infection):
             dur_inf = ss.lognorm_ex(mean=ss.Dur(years=6)),
             p_death = ss.bernoulli(p=0.01),
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
 
         self.define_states(
             ss.State('susceptible', default=True, label='Susceptible'),
@@ -106,7 +106,7 @@ class SIS(ss.Infection):
     infected/infectious, and back to susceptible based on waning immunity. There
     is no death in this case.
     """
-    def __init__(self, pars=None, *args, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
             beta = ss.RateProb(0.05),
@@ -115,7 +115,7 @@ class SIS(ss.Infection):
             waning = ss.peryear(0.05),
             imm_boost = 1.0,
         )
-        self.update_pars(pars=pars, *args, **kwargs)
+        self.update_pars(**kwargs)
 
         self.define_states(
             ss.FloatArr('ti_recovered'),
@@ -201,13 +201,13 @@ class sir_vaccine(ss.Vx):
         efficacy (float): efficacy of the vaccine (0<=efficacy<=1)
         leaky (bool): see above
     """
-    def __init__(self, pars=None, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__()
         self.define_pars(
             efficacy = 0.9,
             leaky = True
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         return
 
     def administer(self, people, uids):

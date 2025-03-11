@@ -156,9 +156,8 @@ class Module(Base):
             self.pars = ss.Pars(**kwargs)
         return self.pars
 
-    def update_pars(self, pars, **kwargs):
+    def update_pars(self, **pars):
         """ Pull out recognized parameters, returning the rest """
-        pars = sc.mergedicts(pars, kwargs)
 
         # Update matching module parameters
         matches = {}

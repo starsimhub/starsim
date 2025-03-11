@@ -23,7 +23,7 @@ class Demographics(ss.Module):
 
 class Births(Demographics):
     """ Create births based on rates, rather than based on pregnancy """
-    def __init__(self, pars=None, metadata=None, **kwargs):
+    def __init__(self, metadata=None, **kwargs):
         super().__init__()
         self.define_pars(
             unit = 'year',
@@ -31,7 +31,7 @@ class Births(Demographics):
             rel_birth = 1,
             rate_units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
 
         # Process metadata. Defaults here are the labels used by UN data
         self.metadata = sc.mergedicts(
@@ -122,7 +122,7 @@ class Births(Demographics):
 
 
 class Deaths(Demographics):
-    def __init__(self, pars=None, metadata=None, **kwargs):
+    def __init__(self, metadata=None, **kwargs):
         """
         Configure disease-independent "background" deaths.
 
@@ -157,7 +157,7 @@ class Deaths(Demographics):
             death_rate = ss.peryear(20),  # Default = a fixed rate of 2%/year, overwritten if data provided
             rate_units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
 
         # Process metadata. Defaults here are the labels used by UN data
         self.metadata = sc.mergedicts(
@@ -255,7 +255,7 @@ class Deaths(Demographics):
 
 class Pregnancy(Demographics):
     """ Create births via pregnancies """
-    def __init__(self, pars=None, metadata=None, **kwargs):
+    def __init__(self, metadata=None, **kwargs):
         super().__init__()
         self.define_pars(
             unit = 'year',
@@ -273,7 +273,7 @@ class Pregnancy(Demographics):
             slot_scale = 5, # Random slots will be assigned to newborn agents between min=n_agents and max=slot_scale*n_agents
             min_slots  = 100, # Minimum number of slots, useful if the population size is very small
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
 
         self.pars.p_fertility = ss.bernoulli(p=0) # Placeholder, see make_fertility_prob_fn
 

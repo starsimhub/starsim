@@ -17,14 +17,14 @@ class NCD(ss.Disease):
     (e.g., hypertension, diabetes), a state for having the condition, and associated
     mortality.
     """
-    def __init__(self, pars=None, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
             initial_risk = ss.bernoulli(p=0.3), # Initial prevalence of risk factors
             dur_risk = ss.expon(scale=ss.Dur(years=10)),
             prognosis = ss.weibull(c=ss.years(2), scale=5), # Time in years between first becoming affected and death
         )
-        self.update_pars(pars=pars, **kwargs)
+        self.update_pars(**kwargs)
 
         self.define_states(
             ss.State('at_risk', label='At risk'),
