@@ -103,7 +103,7 @@ class Date(pd.Timestamp):
         string = y + _ + m + _ + d
 
         if self._time_repr != '00:00:00':
-            string += ' ' + self._time_repr
+            string += ' ' + self._time_repr[:8]
 
         if bracket:
             string = '<' + string + '>'
@@ -152,7 +152,7 @@ class Date(pd.Timestamp):
             ss.date('2024-10-01').to_year() # Returns 2024.7486
         """
         year_start = pd.Timestamp(year=self.year,month=1,day=1).timestamp()
-        year_end = pd.Timestamp(year=self.year,month=12,day=31).timestamp()
+        year_end = pd.Timestamp(year=self.year+1,month=1,day=1).timestamp()
         return self.year + (self.timestamp()-year_start)/(year_end-year_start)
 
     def __float__(self):
