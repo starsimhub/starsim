@@ -498,10 +498,20 @@ class Dist:
         return spars
 
     def convert_timepars(self):
-        """ Method to handle how timepars are processed; not for the user. By default, scales the output of the distribution. """
+        """
+        Convert time parameters (durations and rates) to scalars
+
+        This function converts time parameters into bare numbers that will be returned by rvs() depending
+        on the timestep of the parent module for this `Dist`. The conversion for these types is
+
+        - Durations are divided by `dt` (so the result will be a number of timesteps)
+        - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
+        """
         for key, v in self._pars.items():
             if isinstance(v, ss.Dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Dur):
                 self._pars[key] = v/self.module.t.dt
+            if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
+                self._pars[key] = v * self.module.t.dt
 
     def convert_callable(self, key, val, size, uids):
         """ Method to handle how callable parameters are processed; not for the user """

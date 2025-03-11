@@ -397,7 +397,7 @@ class SexualNetwork(DynamicNetwork):
 
     def net_beta(self, disease_beta=None, inds=None, disease=None):
         if inds is None: inds = Ellipsis
-        return self.edges.beta[inds] * (1 - (1 - disease_beta) ** (self.edges.acts[inds] * self.t.dt))
+        return self.edges.beta[inds] * (1 - (1 - disease_beta) ** (self.edges.acts[inds]))
 
 
 # %% Specific instances of networks
@@ -757,7 +757,7 @@ class MFNet(SexualNetwork):
             duration = ss.lognorm_ex(mean=15),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
             debut = ss.normal(loc=16),  # Age of debut can vary by using callable parameter values
-            acts = ss.poisson(lam=80), # TODO: make this work with ss.rate, which it currently does not due to network initialization limitations
+            acts = ss.poisson(lam=ss.peryear(80)), # TODO: make this work with ss.rate, which it currently does not due to network initialization limitations
             rel_part_rates = 1.0,
         )
         self.update_pars(pars=pars, **kwargs)
