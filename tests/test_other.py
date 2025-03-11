@@ -179,10 +179,10 @@ def test_results():
 
     # Export resampled summary of results to dataframe
     dfy1 = rs1.to_df(resample='year')
-    dfy2 = rs2.to_df(resample='5y')
-    assert dfs.new_infections[:12].sum() == dfy1.new_infections[0]
-    assert rs2.n_susceptible[:2].mean() == dfy2.n_susceptible[0]  # Entries 0 and 1 represent 2000
-    assert rs2.n_susceptible[2:12].mean() == dfy2.n_susceptible[1]  # Entries 2-12 correspond to 2001-2005
+    dfy2 = rs2.to_df(resample='5YE')
+    assert dfs.new_infections.iloc[:12].sum() == dfy1.new_infections.iloc[0]
+    assert rs2.n_susceptible[:2].mean() == dfy2.n_susceptible.iloc[0]  # Entries 0 and 1 represent 2000
+    assert rs2.n_susceptible[2:12].mean() == dfy2.n_susceptible.iloc[1]  # Entries 2-12 correspond to 2001-2005
 
     # Export whole sim to unified annualized dataframe
     sim_df = sim.to_df(resample='year', use_years=True)
