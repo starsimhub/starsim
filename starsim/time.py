@@ -843,7 +843,7 @@ class Time(sc.prettyobj):
         if isinstance(self.dt, YearDur):
             # If dt has been specified as a YearDur then preference setting fractional years. So first
             # calculate the fractional years, and then convert them to the equivalent dates
-            self.yearvec = np.arange(self.start.years, self.stop.years, self.dt.years)
+            self.yearvec = np.round(self.start.years + np.arange(0, self.stop.years-self.start.years, self.dt.years),12) # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
             if isinstance(self.stop, Dur):
                 self.tvec = np.array([self.stop.__class__(x) for x in self.yearvec])
             else:
