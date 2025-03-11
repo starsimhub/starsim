@@ -76,9 +76,9 @@ def test_ppl_construction(do_plot=False):
     mf_pars = {
         'debut': ss.normal(loc=init_debut, scale=2),  # Age of debut can vary by using callable parameter values
     }
-    sim_pars = {'networks': [ss.MFNet(mf_pars)], 'n_agents': small}
+    sim_pars = {'networks': [ss.MFNet(**mf_pars)], 'n_agents': small}
     gon_pars = {'beta': {'mf': [0.08, 0.04]}}
-    gon = ss.Gonorrhea(pars=gon_pars)
+    gon = ss.Gonorrhea(**gon_pars)
 
     sim = ss.Sim(pars=sim_pars, diseases=[gon])
     sim.init()
@@ -218,11 +218,11 @@ if __name__ == '__main__':
     # Run tests
     # ppl = test_people()
     # sim1 = test_microsim(do_plot)
-    # sim2 = test_ppl_construction(do_plot)
+    sim2 = test_ppl_construction(do_plot)
     # sims = test_arrs()
     # sims2 = test_deepcopy()
     # sims3 = test_deepcopy_until()
-    sim4 = test_results()
+    # sim4 = test_results()
     # sim5 = test_check_requires()
 
     sc.toc(T)

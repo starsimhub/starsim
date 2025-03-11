@@ -751,8 +751,8 @@ class MFNet(SexualNetwork):
     This network is built by **randomly pairing** males and female with variable
     relationship durations.
     """
-    def __init__(self, key_dict=None, **kwargs):
-        super().__init__(key_dict=key_dict)
+    def __init__(self, **kwargs):
+        super().__init__()
         self.define_pars(
             duration = ss.lognorm_ex(mean=15),  # Can vary by age, year, and individual pair. Set scale=exp(mu) and s=sigma where mu,sigma are of the underlying normal distribution.
             participation = ss.bernoulli(p=0.9),  # Probability of participating in this network - can vary by individual properties (age, sex, ...) using callable parameter values
