@@ -168,12 +168,12 @@ class Module(Base):
 
         # Update module attributes
         metadata = {key:pars.get(key, self.pars.get(key)) for key in module_args}
-        # timepars = {key:pars.get(key, self.pars.get(key)) for key in ss.time.time_args}
+        timepars = {key:pars.get(key, self.pars.get(key)) for key in ss.Time.time_args}
         self.set_metadata(**metadata)
-        # self.t.update(**timepars)
+        self.t.update(**timepars)
 
         # Should be no remaining pars
-        remaining = set(pars.keys()) - set(module_args)
+        remaining = set(pars.keys()) - set(module_args) - set(ss.Time.time_args)
         if len(remaining):
             errormsg = f'{len(pars)} unrecognized arguments for {self.name}: {sc.strjoin(remaining)}'
             raise ValueError(errormsg)
