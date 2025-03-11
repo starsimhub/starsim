@@ -30,10 +30,10 @@ def test_classes():
     sc.heading('Test behavior of dur() and rate()')
 
     # Test duration dt
-    d1 = ss.dur(2)
-    d2 = ss.dur(3)
-    d3 = ss.dur(2, parent_dt=0.1)
-    d4 = ss.dur(3, parent_dt=0.2)
+    d1 = ss.Dur(2)
+    d2 = ss.Dur(3)
+    d3 = ss.Dur(2, parent_dt=0.1)
+    d4 = ss.Dur(3, parent_dt=0.2)
     for d in [d1,d2,d3,d4]: d.init()
 
     assert d1 + d2 == 2+3
@@ -83,10 +83,10 @@ def test_units(do_plot=False):
     sc.heading('Test behavior of year vs day units')
 
     sis = ss.SIS(
-        beta = ss.RateProb(0.05, 'day'),
+        beta = ss.RateProb(0.05, ss.days(1)),
         init_prev = ss.bernoulli(p=0.1),
-        dur_inf = ss.lognorm_ex(mean=ss.dur(10, 'day')),
-        waning = ss.rate(0.05, 'day'),
+        dur_inf = ss.lognorm_ex(mean=ss.Dur(days=10)),
+        waning = ss.rate(0.05, ss.days(1)),
         imm_boost = 1.0,
     )
 
@@ -147,7 +147,7 @@ def test_multi_timestep(do_plot=False):
 def test_mixed_timesteps():
     sc.heading('Test behavior of different combinations of timesteps')
 
-    siskw = dict(dur_inf=ss.dur(50, 'day'), beta=ss.RateProb(0.01, 'day'), waning=ss.rate(0.005, 'day'))
+    siskw = dict(dur_inf=ss.Dur(days=50), beta=ss.RateProb(0.01, ss.days(1)), waning=ss.rate(0.005, ss.days(1)))
     kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
 
     print('Year-year')

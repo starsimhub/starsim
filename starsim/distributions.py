@@ -275,7 +275,11 @@ class Dist:
                     kwargs[parkeys[i]] = arg
         if kwargs:
             self.pars.update(kwargs)
-            self.process_pars(call=False)
+            if self.initialized:
+                # If initialized, re-process the pars to update self._pars
+                # If not initialized, the module may not be available to do this conversion - but in any case,
+                # initialization will cause the pars to be processed again. So skip this step here
+                self.process_pars(call=False)
         return
 
     @property

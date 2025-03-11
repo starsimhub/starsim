@@ -62,7 +62,7 @@ def test_single_ncd():
         'contacts': ss.poisson(lam=5),
         'diseases': 'ncd'
     }
-    mp = ss.MixingPool(mp_pars)
+    mp = ss.MixingPool(**mp_pars)
 
     ncd = ss.NCD()
     sim = ss.Sim(diseases=ncd, networks=mp, label=test_name)
@@ -82,7 +82,7 @@ def test_single_missing_disease():
         'contacts': ss.poisson(lam=5),
         'diseases': 'hiv'
     }
-    mp = ss.MixingPool(mp_pars)
+    mp = ss.MixingPool(**mp_pars)
 
     sir = ss.SIR()
     sim = ss.Sim(diseases=sir, networks=mp, label=test_name)
@@ -103,7 +103,7 @@ def test_single_age(do_plot=do_plot):
         'beta': ss.Rate(1),
         'contacts': ss.poisson(lam=5),
     }
-    mp = ss.MixingPool(mp_pars)
+    mp = ss.MixingPool(**mp_pars)
 
     sir = ss.SIR()
     sim = ss.Sim(diseases=sir, networks=mp, label=test_name)
@@ -126,7 +126,7 @@ def test_single_sex(do_plot=do_plot):
         'beta': ss.Rate(1),
         'contacts': ss.poisson(lam=4),
     }
-    mp = ss.MixingPool(mp_pars)
+    mp = ss.MixingPool(**mp_pars)
 
     sir = ss.SIR(init_prev=ss.bernoulli(p=lambda self, sim, uids: 0.05*sim.people.female)) # Seed 5% of the female population
     sim = ss.Sim(diseases=sir, networks=mp, label=test_name)
@@ -170,7 +170,7 @@ def test_multi(do_plot=do_plot):
         src = groups,
         dst = groups,
     )
-    mps = ss.MixingPools(mps_pars)
+    mps = ss.MixingPools(**mps_pars)
 
     sir = ss.SIR()
     sim = ss.Sim(diseases=sir, networks=mps, label=test_name)

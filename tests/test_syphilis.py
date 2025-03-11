@@ -20,10 +20,8 @@ def make_syph_sim(dt=1, n_agents=500):
     syph.pars.init_prev = ss.bernoulli(p=0.1)
 
     # Make demographic modules
-    fertility_rates = {'fertility_rate': pd.read_csv(datadir/'nigeria_asfr.csv')}
-    pregnancy = ss.Pregnancy(pars=fertility_rates)
-    death_rates = {'death_rate': pd.read_csv(datadir/'nigeria_deaths.csv'), 'rate_units': 1}
-    death = ss.Deaths(death_rates)
+    pregnancy = ss.Pregnancy(fertility_rate=pd.read_csv(datadir/'nigeria_asfr.csv'))
+    death = ss.Deaths(death_rate=pd.read_csv(datadir/'nigeria_deaths.csv'), rate_units=1)
 
     # Make people and networks
     ss.set_seed(1)

@@ -20,12 +20,12 @@ def test_sir():
     network_pars = {
         'n_contacts': ss.poisson(4), # Contacts Poisson distributed with a mean of 4
     }
-    networks = ss.RandomNet(pars=network_pars)
+    networks = ss.RandomNet(**network_pars)
 
     sir_pars = {
         'dur_inf': ss.normal(loc=10),  # Override the default distribution
     }
-    sir = ss.SIR(sir_pars)
+    sir = ss.SIR(**sir_pars)
 
     # Change pars after creating the SIR instance
     sir.pars.beta = {'random': ss.peryear(0.1)}
@@ -174,7 +174,7 @@ def test_multidisease():
 
     sir1.pars.beta = {'randomnet': 0.1}
     sir2.pars.beta = {'randomnet': 0.2}
-    networks = ss.RandomNet(pars=dict(n_contacts=ss.poisson(4)))
+    networks = ss.RandomNet(n_contacts=ss.poisson(4))
 
     sim = ss.Sim(people=ppl, diseases=[sir1, sir2], networks=networks)
     sim.run()

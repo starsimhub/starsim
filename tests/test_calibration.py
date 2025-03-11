@@ -29,8 +29,7 @@ def make_sim():
         n_agents = n_agents,
         start = sc.date('2020-01-01'),
         stop = sc.date('2020-02-12'),
-        dt = 1,
-        unit = 'day',
+        dt = ss.days(1),
         diseases = sir,
         networks = random,
         verbose = 0,
@@ -166,7 +165,7 @@ def test_onepar_custom(do_plot=True):
         build_kw = dict(n_reps=2), # Two reps per point
         reseed = True,
         eval_fn = eval, # Will call my_function(msim, eval_kwargs)
-        eval_kw = dict(expected=(ss.date('2020-01-12'), 0.13)), # Will call eval(sim, **eval_kw)
+        eval_kw = dict(expected=(ss.Date('2020-01-12'), 0.13)), # Will call eval(sim, **eval_kw)
         total_trials = total_trials,
         n_workers = None, # None indicates to use all available CPUs
         die = True,

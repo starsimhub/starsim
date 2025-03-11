@@ -149,23 +149,13 @@ class Pars(sc.objdict):
             else:
                 self[key] = new
 
-        # It's a single number, e.g. dur_inf = 6; set parameters
-        elif isinstance(new, Number):
+        # It's a single number, e.g. dur_inf = 6; set parameters, or a time parameter
+        elif isinstance(new, (Number, ss.Dur, ss.Rate)):
             old.set(new)
 
         # It's a list of numbers, e.g. dur_inf = [6, 2]; set parameters
         elif isinstance(new, list):
             old.set(*new)
-
-        # It's a timepar, set it like a number, e.g. dur_inf = ss.dur(6)
-        elif isinstance(new, ss.TimePar):
-            oldpar = old.pars[0]
-            if isinstance(oldpar, ss.TimePar): # If changing from one timepar to another, validate
-                dur_mismatch = isinstance(oldpar, ss.dur) != isinstance(new, ss.dur)
-                if dur_mismatch:
-                    errormsg = f'Cannot change a duration to a non-duration vice versa: old={type(oldpar)}, new={type(new)}'
-                    raise TypeError(errormsg)
-            old.set(new)
 
         # It's a dict, figure out what to do
         elif isinstance(new, dict):

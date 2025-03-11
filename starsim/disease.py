@@ -304,7 +304,9 @@ class Infection(Disease):
         for i, (nkey,route) in enumerate(self.sim.networks.items()):
             nk = ss.standardize_netkey(nkey)
             if isinstance(route, (ss.MixingPool, ss.MixingPools)):
-                target_uids = route.compute_transmission(rel_sus, rel_trans, betamap[nk])
+                # Mixing pools are unidirectional, only use the first beta value
+                disease_beta = betamap[nk][0]*self.t.dt if isinstance(betamap[nk][0], ss.Rate) else betamap[nk][0]
+                target_uids = route.compute_transmission(rel_sus, rel_trans, disease_beta)
                 new_cases.append(target_uids)
                 sources.append(np.full(len(target_uids), dtype=ss_float_, fill_value=np.nan))
                 networks.append(np.full(len(target_uids), dtype=ss_int_, fill_value=i))

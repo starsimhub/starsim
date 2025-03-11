@@ -588,7 +588,7 @@ class ErdosRenyiNet(DynamicNetwork):
         super().__init__(key_dict=key_dict)
         self.define_pars(
             p = 0.1, # Probability of each edge
-            dur = 0, # Duration of zero ensures that new random edges are formed on each time step
+            dur = ss.Dur(0), # Duration of zero ensures that new random edges are formed on each time step
         )
         self.update_pars(**kwargs)
         self.randint = ss.randint(low=np.iinfo('int64').min, high=np.iinfo('int64').max, dtype=np.int64) # Used to draw a random number for each agent as part of creating edges
@@ -1263,20 +1263,18 @@ class MixingPool(Route):
         Args:
             rel_sus (float): Relative susceptibility
             rel_trans (float): Relative infectiousness
-            disease_beta (float): The beta value for the disease. This is typically calculated as a
-                pair of values as networks are bidirectional, however, only the first value
-                is used because mixing pools are unidirectional.
+            disease_beta (float): The beta value for the disease
         Returns:
             UIDs of agents who acquired the disease at this step
         """
-        if disease_beta[0] == 0:
+        if disease_beta == 0:
             return []
 
         # Determine the mixing pool beta value
         beta = self.pars.beta
-        if isinstance(beta, ss.beta):
-            ss.warn(f'In mixing pools, beta should typically be a float, not {beta}; ignoring time value')
-            beta = beta.values
+        if isinstance(beta, ss.Rate):
+            ss.warn(f'In mixing pools, beta should typically be a float')
+            beta = beta * self.t.dt
         if sc.isnumber(beta) and beta == 0:
             return []
 
@@ -1289,7 +1287,7 @@ class MixingPool(Route):
         # Calculate transmission
         trans = np.mean(rel_trans[self.src_uids])
         acq = self.eff_contacts[self.dst_uids] * rel_sus[self.dst_uids]
-        p = beta*disease_beta[0]*trans*acq
+        p = beta*disease_beta*trans*acq
         self.p_acquire.set(p=p)
         return self.p_acquire.filter(self.dst_uids)
 

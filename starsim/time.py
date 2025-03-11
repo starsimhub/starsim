@@ -181,8 +181,10 @@ class Date(pd.Timestamp):
             return Date(self.to_pandas() + other)
         elif isinstance(other, pd.Timestamp):
             raise TypeError('Cannot add a date to another date')
+        elif sc.isnumber(other):
+            raise TypeError(f'Attempted to add a number ({other}) to a Date, which is not supported. Only durations can be added to dates e.g., "ss.years({other})" or "ss.days({other})"')
         else:
-            raise TypeError('Unsupported type')
+            raise TypeError(f'Attempted to add an instance of {other.__class__.__name__} to a Date, which is not supported. Only durations can be added to dates.')
 
     def __sub__(self, other):
 
@@ -320,7 +322,10 @@ class Dur():
         # If a float is divided by a Dur, then we should return a rate
         # If a rate is divided by a Dur, then we will call Rate.__truediv__
         # We also need divide the duration by the numerator when calculating the rate
-        return Rate(self/other)
+        if sc.isnumber(other) and other == 0:
+            return Rate(Dur(np.inf))
+        else:
+            return Rate(self/other)
 
 class YearDur(Dur):
     # Year based duration e.g., if requiring 52 weeks per year
@@ -583,22 +588,25 @@ class Rate():
     # A rate stores the period rather than the rate per unit time to avoid having to store two numbers
     # i.e., a RateProb unavoidably has to store the probability and the associated time period, but
     # a Rate can just store the period and the rate can be calculated by dividing by the period.
-    def __init__(self, dur:Dur):
-        self._dur = dur
+    def __init__(self, period:Dur):
+        if isinstance(period, Dur):
+            self._period = period
+        else:
+            self._period = Dur(period)
 
     def __repr__(self):
-        if isinstance(self._dur, YearDur):
+        if isinstance(self._period, YearDur):
             return f'<{self.__class__.__name__}: {self * YearDur(1)} per year>'
         else:
-            return f'<{self.__class__.__name__}: per{str(self._dur).split(":")[1]} (approx. {self * YearDur(1)} per year)'
+            return f'<{self.__class__.__name__}: per{str(self._period).split(":")[1]} (approx. {self * YearDur(1)} per year)'
 
     def __mul__(self, other):
         if isinstance(other, Dur):
-            return other.years/self._dur.years
-        elif ss.isnumber(other) and other == 0:
+            return other.years/self._period.years
+        elif sc.isnumber(other) and other == 0:
             return 0 # Or should this be a rate?
         else:
-            return Rate(self._dur/other)
+            return Rate(self._period/other)
 
     def __rmul__(self, other): return self.__mul__(other)
 
@@ -606,16 +614,16 @@ class Rate():
         # This is for <rate>/<other>
         if isinstance(other, Rate):
             # 2 per year divided by 4 per year would be 0.5 as in it's half the rate
-            # The corresponding periods would be 0.5 and 0.25, so we want to return other._dur/self._dur
-            return other._dur/self._dur
+            # The corresponding periods would be 0.5 and 0.25, so we want to return other._period/self._period
+            return other._period/self._period
         elif isinstance(other, Dur):
             raise Exception('Cannot divide a rate by a duration')
         else:
-            return Rate(self._dur*other)
+            return Rate(self._period*other)
 
     def __rtruediv__(self, other):
         # If a float is divided by a rate, we should get back the duration
-        return other * self._dur
+        return other * self._period
 
 
 class RateProb(Rate):
@@ -630,10 +638,11 @@ class RateProb(Rate):
     >>> p = ss.RateProb(0.1, ss.Dur(years=1))
     >>> p*ss.Dur(years=2)
     """
-    def __init__(self, p, dur=None):
-        if dur is None:
-            dur = YearDur(1)
-        super().__init__(dur)
+    def __init__(self, p, period=None):
+        if period is None:
+            period = YearDur(1)
+        super().__init__(period)
+        assert sc.isnumber(p), 'Probability must be a scalar number'
         self.p = p
 
     def __mul__(self, other):
@@ -644,14 +653,14 @@ class RateProb(Rate):
                 return 1
             elif 0 <= self.p <= 1:
                 rate = -np.log(1 - self.p)
-                factor = self._dur/other
+                factor = self._period/other
                 return 1 - np.exp(-rate/factor)
             else:
                 errormsg = f'Invalid value {self.v} for {self}: must be 0-1. If using in a calculation, use .values instead.'
                 raise ValueError(errormsg)
 
         else:
-            return self.__class__(self.p*other, self._dur)
+            return self.__class__(self.p*other, self._period)
 
 
 

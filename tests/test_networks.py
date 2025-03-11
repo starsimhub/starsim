@@ -126,7 +126,7 @@ def test_disk():
 
     # Visualize the path of agents
     nw1 = ss.DiskNet()
-    s1 = ss.Sim(n_agents=5, dur=50, networks=nw1, copy_inputs=False).init() # This initializes the network
+    s1 = ss.Sim(n_agents=5, dur=ss.years(50), networks=nw1, copy_inputs=False).init() # This initializes the network
 
     if sc.options.interactive:
         # Visualize motion:
@@ -185,7 +185,7 @@ def test_null():
     sc.heading('Testing NullNet...')
     people = ss.People(n_agents=small)
     network = ss.NullNet()
-    sir = ss.SIR(pars=dict(dur_inf=10, beta=0.1))
+    sir = ss.SIR(dur_inf=10, beta=0.1)
     sim = ss.Sim(diseases=sir, people=people, networks=network)
     sim.run()
     return sim
@@ -218,12 +218,12 @@ if __name__ == '__main__':
     T = sc.timer()
 
     # Run tests
-    man  = test_manual()
-    rand = test_random()
-    stat = test_static()
+    # man  = test_manual()
+    # rand = test_random()
+    # stat = test_static()
     erdo = test_erdosrenyi()
-    disk = test_disk()
-    null = test_null()
-    oth  = test_other()
+    # disk = test_disk()
+    # null = test_null()
+    # oth  = test_other()
 
     T.toc()
