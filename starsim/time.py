@@ -64,15 +64,16 @@ class Date(pd.Timestamp):
         out = cls._reset_class(out)
         return out
 
-    def __copy__(self):
-        """ Required due to pd.Timestamp implementation; pd.Timestamp is immutable, so create new object """
-        out = self.__class__(self)
-        return out
-
-    def __deepcopy__(self, *args, **kwargs):
-        """ Required due to pd.Timestamp implementation; pd.Timestamp is immutable, so create new object """
-        out = self.__class__(self)
-        return out
+    # TODO: Commenting these out pending identifying failing test/use case. On this branch, these methods cause an error
+    # def __copy__(self):
+    #     """ Required due to pd.Timestamp implementation; pd.Timestamp is immutable, so create new object """
+    #     out = self.__class__(self)
+    #     return out
+    #
+    # def __deepcopy__(self, *args, **kwargs):
+    #     """ Required due to pd.Timestamp implementation; pd.Timestamp is immutable, so create new object """
+    #     out = self.__class__(self)
+    #     return out
 
     @classmethod
     def _reset_class(cls, obj):
