@@ -261,7 +261,7 @@ class Pregnancy(Demographics):
             unit = 'year',
             dur_pregnancy = ss.years(0.75), # Duration for pre-natal transmission
             dur_postpartum = ss.lognorm_ex(mean=ss.years(0.5), std=ss.years(0.5)), # Duration for post-natal transmission (e.g. via breastfeeding)
-            fertility_rate = 0, # Can be a number of Pandas DataFrame
+            fertility_rate = ss.peryear(0), # Can be a number of Pandas DataFrame
             rel_fertility = 1,
             p_maternal_death = ss.bernoulli(0),
             p_neonatal_death = ss.bernoulli(0),
@@ -309,6 +309,10 @@ class Pregnancy(Demographics):
         age = sim.people.age[uids]
 
         frd = self.fertility_rate_data
+
+        if sc.isnumber(frd):
+            raise TypeError('Fertility rate should be specified as a rate (or with time-varying data)')
+
         fertility_rate = np.zeros(len(sim.people.uid.raw), dtype=ss_float_)
 
         if isinstance(frd, ss.Rate):

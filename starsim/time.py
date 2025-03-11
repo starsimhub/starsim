@@ -562,6 +562,9 @@ class DateDur(Dur):
         return self.__add__(-1*other)
 
 class Rate():
+    # A rate stores the period rather than the rate per unit time to avoid having to store two numbers
+    # i.e., a RateProb unavoidably has to store the probability and the associated time period, but
+    # a Rate can just store the period and the rate can be calculated by dividing by the period.
     def __init__(self, dur:Dur):
         self._dur = dur
 
@@ -574,7 +577,7 @@ class Rate():
     def __mul__(self, other):
         if isinstance(other, Dur):
             return other.years/self._dur.years
-        elif other == 0:
+        elif ss.isnumber(other) and other == 0:
             return 0 # Or should this be a rate?
         else:
             return Rate(self._dur/other)
@@ -1141,7 +1144,10 @@ def perday(v):
     :param v:
     :return:
     """
-    return Rate(Dur(days=1/v))
+    if v == 0:
+        return Rate(Dur(np.inf))
+    else:
+        return Rate(Dur(days=1/v))
 
 
 def peryear(v):
@@ -1151,7 +1157,10 @@ def peryear(v):
     :param v:
     :return:
     """
-    return Rate(YearDur(years=1/v))
+    if v == 0:
+        return Rate(Dur(np.inf))
+    else:
+        return Rate(YearDur(years=1/v))
 
 #
 # class time_prob(Rate):

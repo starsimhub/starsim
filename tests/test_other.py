@@ -7,7 +7,7 @@ import starsim as ss
 import matplotlib.pyplot as plt
 import pytest
 
-sc.options(interactive=False) # Assume not running interactively
+# sc.options(interactive=False) # Assume not running interactively
 
 small = 100
 medium = 1000
@@ -97,8 +97,8 @@ def test_arrs():
 
     # Create a sim with only births
     pars = dict(n_agents=medium, diseases='sis', networks='random')
-    p1 = sc.mergedicts(pars, birth_rate=10)
-    p2 = sc.mergedicts(pars, death_rate=10)
+    p1 = sc.mergedicts(pars, birth_rate=ss.peryear(10))
+    p2 = sc.mergedicts(pars, death_rate=ss.peryear(10))
     s1 = ss.Sim(pars=p1).run()
     s2 = ss.Sim(pars=p2).run()
 
@@ -140,7 +140,7 @@ def test_deepcopy_until():
     s1 = ss.Sim(diseases='sir', networks='embedding', n_agents=small)
     s1.init()
 
-    s1.run(until=5)
+    s1.run(until=ss.Date(2005))
 
     s2 = sc.dcp(s1)
 
