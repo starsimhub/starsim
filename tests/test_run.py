@@ -60,6 +60,10 @@ def test_multisim():
     msim.mean()
     msim.plot()
 
+    # Export results
+    res_df = msim.results.to_df(resample='2y')
+    assert res_df.sir_n_susceptible_low.loc['2030-12-31'] == msim.results.sir_n_susceptible.low[29:31].mean()
+
     # Reduce and plot median
     msim.median()
     msim.plot()

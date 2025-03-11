@@ -515,7 +515,7 @@ class Dist:
 
     def convert_callable(self, key, val, size, uids):
         """ Method to handle how callable parameters are processed; not for the user """
-        size_par = uids if uids is not None else size
+        size_par = sc.ifelse(uids, size, ss.uids()) # Allow none size
         out = val(self.module, self.sim, size_par)
         val = np.asarray(out) # Necessary since FloatArrs don't allow slicing # TODO: check if this is correct
         self._pars[key] = val

@@ -5,7 +5,7 @@ Starsim is an agent-based modeling framework for simulating the spread of diseas
 
 Examples of diseases that have already been implemented in Starsim include sexually transmitted infections (HIV, HPV, and syphilis, including co-transmission), respiratory infections (tuberculosis and RSV), plus other diseases (Ebola and cholera) and underlying determinants of health (such as malnutrition).
 
-Note: Starsim is a general-purpose, multi-disease framework that builds on our previous suite of disease-specific models, which included `Covasim <https://covasim.org>`_, `HPVsim <https://hpvsim.org>`_, and `FPsim <https://fpsim.org>`_. In cases where a distinction needs to be made, Starsim is also known as the "Starsim framework", while this collection of other models is known as the "Starsim suite".
+Note: Starsim is a general-purpose, multi-disease framework that builds on our previous suite of disease-specific models, which included `Covasim <https://covasim.org>`_, `HPVsim <https://hpvsim.org>`_, and `FPsim <https://fpsim.org>`_. In cases where a distinction needs to be made, Starsim is also known as "the Starsim framework" or "Starsim Core", while this collection of other models is known as the "Starsim suite".
 
 For more information about Starsim, please see the `documentation <https://docs.starsim.org>`__. Information about Starsim for R is available at `r.starsim.org <https://r.starsim.org>`__.
 
@@ -15,7 +15,7 @@ Requirements
 
 Python 3.9-3.12 or R.
 
-We recommend, but do not require, installing Starsim in a virtual environment, such as `Anaconda <https://www.anaconda.com/products>`__.
+We recommend, but do not require, installing Starsim in a virtual environment, such as `Miniconda <https://docs.anaconda.com/miniconda/>`__.
 
 
 Installation
@@ -86,6 +86,7 @@ The submodules of the Starsim folder are as follows:
 
 • ``arrays.py``: Classes to handle store and update states for people in networks in the simulation including living, mother, child, susceptible, infected, inoculated, recovered, etc.
 • ``calibration.py``: Class to handle automated calibration of the model to data.
+• ``calib_components.py``: Classes to handle additional operations related to calibration (e.g., the likelihood function).
 •	``demographics.py``: Classes to transform initial condition input parameters for use in building and utilizing networks.
 •	``disease.py``: Classes to manage infection rate of spread, prevalence, waning effects, and other parameters for specific diseases.
 •	``distributions.py``: Classes that handle statistical distributions used throughout Starsim to produce random numbers.

@@ -1,6 +1,7 @@
 """
 Functions and classes for handling time
 """
+import copy
 import sciris as sc
 import numpy as np
 import pandas as pd
@@ -42,7 +43,7 @@ class Date(pd.Timestamp):
     """
 
     def __new__(cls, *args, **kwargs):
-        # Check if a year was supplied, and preprocess it
+        """ Check if a year was supplied, and preprocess it; complex due to pd.Timestamp implementation """
         single_year_arg = False
         if len(args) == 1:
             arg = args[0]
@@ -61,6 +62,16 @@ class Date(pd.Timestamp):
         # Otherwise, proceed as normal
         out = super(Date, cls).__new__(cls, *args, **kwargs)
         out = cls._reset_class(out)
+        return out
+
+    def __copy__(self):
+        """ Required due to pd.Timestamp implementation; pd.Timestamp is immutable, so create new object """
+        out = self.__class__(self)
+        return out
+
+    def __deepcopy__(self, *args, **kwargs):
+        """ Required due to pd.Timestamp implementation; pd.Timestamp is immutable, so create new object """
+        out = self.__class__(self)
         return out
 
     @classmethod
@@ -101,6 +112,12 @@ class Date(pd.Timestamp):
     def __str__(self):
         """ Like repr, but just the date, e.g. 2024.04.04 """
         return self.__repr__(bracket=False)
+
+    def replace(self, *args, **kwargs):
+        """ Returns a new ss.date(); pd.Timestamp is immutable """
+        out = super().replace(*args, **kwargs)
+        out = self.__class__._reset_class(out)
+        return out
 
     def disp(self, **kwargs):
         """ Show the full object """
@@ -871,7 +888,8 @@ class Time(sc.prettyobj):
             errormsg = f'Invalid key "{key}": must be None, abs, date, or year'
             raise ValueError(errormsg)
 
-        now = vec[min(self.ti, len(vec)-1)]
+        ti = np.clip(self.ti, 0, len(vec)-1)
+        now = vec[ti]
         if key == 'str':
             now = f'{now:0.1f}' if isinstance(now, float) else str(now)
         return now
