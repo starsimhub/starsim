@@ -19,7 +19,7 @@ class Cholera(ss.Infection):
         super().__init__()
         self.define_pars(
             # Initial conditions and beta
-            beta = ss.RateProb(1.0), # Placeholder value
+            beta = ss.RateProb(1.0, ss.days(1)), # Placeholder value
             init_prev = ss.bernoulli(0.005),
 
             # Natural history parameters, all specified in days
@@ -154,20 +154,24 @@ class Cholera(ss.Infection):
 
         return
 
-    def make_new_cases(self):
+    def infect(self):
         """ Add indirect transmission """
         # Make new cases via direct transmission
-        super().make_new_cases()
+        new_cases, sources, networks = super().infect()
 
         # Make new cases via indirect transmission
         pars = self.pars
         res = self.results
-        p_transmit = res.env_conc[self.ti] * pars.beta_env
+        p_transmit = res.env_conc[self.ti] * pars.beta_env * self.t.dt
         pars.p_env_transmit.set(p=p_transmit)
-        new_cases = pars.p_env_transmit.filter(self.sim.people.uid[self.susceptible]) # TODO: make syntax nicer
-        if new_cases.any():
-            self.set_prognoses(new_cases, source_uids=None)
-        return
+        new_cases_env = pars.p_env_transmit.filter(self.sim.people.uid[self.susceptible]) # TODO: make syntax nicer
+
+        if len(new_cases_env):
+            new_cases = new_cases + new_cases_env
+            sources = np.concatenate([sources, np.full_like(new_cases_env, fill_value=np.nan)])
+            networks = np.concatenate([networks, np.full_like(new_cases_env, fill_value=np.nan)])
+
+        return new_cases, sources, networks
 
     def step_die(self, uids):
         """ Reset infected/recovered flags for dead agents """
