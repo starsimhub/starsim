@@ -836,6 +836,10 @@ class Time(sc.prettyobj):
             # The start can be omitted if the stop is a Dur, as it will assume the start is zero
             self.start = self.stop.__class__()
 
+        if self.start > self.stop:
+            msg = f'Start date ({self.start}) must be before stop date ({self.stop})'
+            raise ValueError(msg)
+
         # We need to populate both the tvec (using dates) and the yearvec (using years). However, we
         # need to decide which of these quantities to prioritise considering that the calendar dates
         # don't convert consistently into fractional years due to varying month/year lengths. We will
