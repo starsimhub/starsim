@@ -222,7 +222,7 @@ if __name__ == '__main__':
     sims2 = test_deepcopy()
     sims3 = test_deepcopy_until()
     sim4 = test_results()
-    sim5 = test_check_reqiures()
+    sim5 = test_check_requires()
 
     sc.toc(T)
     plt.show()
