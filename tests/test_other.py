@@ -7,7 +7,7 @@ import starsim as ss
 import matplotlib.pyplot as plt
 import pytest
 
-# sc.options(interactive=False) # Assume not running interactively
+sc.options(interactive=False) # Assume not running interactively
 
 small = 100
 medium = 1000
@@ -158,8 +158,8 @@ def test_results():
     sc.heading('Testing results export and plotting')
 
     # Make a sim with 2 SIS models with varying units and dt
-    d1 = ss.SIS(unit='month', name='sis1')
-    d2 = ss.SIS(dt=0.5, unit='year', name='sis2')
+    d1 = ss.SIS(dt=ss.Dur(1/12), name='sis1')
+    d2 = ss.SIS(dt=ss.Dur(0.5), name='sis2')
     sim = ss.Sim(diseases=[d1, d2], networks='random')
 
     # Run sim and pull out disease results
@@ -192,6 +192,7 @@ def test_results():
     # Plot
     res.plot()
     sim.results.sis1.plot()
+    sim.results.sis2.plot()
 
     return sim
 
@@ -215,14 +216,14 @@ if __name__ == '__main__':
     T = sc.tic()
 
     # Run tests
-    ppl = test_people()
-    sim1 = test_microsim(do_plot)
-    sim2 = test_ppl_construction(do_plot)
-    sims = test_arrs()
-    sims2 = test_deepcopy()
-    sims3 = test_deepcopy_until()
+    # ppl = test_people()
+    # sim1 = test_microsim(do_plot)
+    # sim2 = test_ppl_construction(do_plot)
+    # sims = test_arrs()
+    # sims2 = test_deepcopy()
+    # sims3 = test_deepcopy_until()
     sim4 = test_results()
-    sim5 = test_check_requires()
+    # sim5 = test_check_requires()
 
     sc.toc(T)
     plt.show()
