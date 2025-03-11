@@ -686,17 +686,14 @@ class Time(sc.prettyobj):
         # Prepare for later initialization
 
     # - ``tvec`` (array): time starting at 0, in self units (e.g. ``[0, 0.1, 0.2, ... 10.0]`` if start=0, stop=10, dt=0.1)
-    # - ``absvec`` (array): time relative to sim start, in units of sim units (e.g. ``[366, 373, 380, ...]`` if sim-start=2001, start=2002, sim-unit='day', unit='week')
     # - ``yearvec`` (array): time represented as floating-point years (e.g. ``[2000, 2000.1, 2000.2, ... 2010.0]`` if start=2000, stop=2010, dt=0.1)
     # - ``datevec`` (array): time represented as an array of ``ss.date`` objects (e.g. ``[<2000.01.01>, <2000.02.07>, ... <2010.01.01>]`` if start=2000, stop=2010, dt=0.1)
     # - ``timevec`` (array): the "native" time vector, which always matches one of ``tvec``, ``yearvec``, or ``datevec``
 
         self.tvec    = None # The time vector for this instance in Date or Dur format
-        self.absvec  = None # Time vector relative to sim_start OR dur=0
         self.datevec = None # Time vector as calendar dates or DateDur
         self.yearvec = None # Time vector as floating point years or YearDur
 
-        # self.abstvec = None
         self.initialized = False
 
         # Finalize
@@ -843,60 +840,9 @@ class Time(sc.prettyobj):
             self.tvec = np.array(tvec)
             self.yearvec = np.array([x.years for x in tvec])
 
-
-        # if self.is_absolute:
-        #     self.datevec = self.tvec
-        # else:
-        #     self.datevec = None
-
-        #
-        #
-        #
-        # self.tvec = round_tvec(np.arange(self.npts)*self.dt) # Absolute time array
-        # self.timevec = timevec
-        # self.datevec = datevec
-        # self.yearvec = yearvec
-        # if sim == True: # It's the sim itself, the tvec is the absolute time vector
-        #     self.abstvec = self.tvec
-        # elif sim is not None:
-        #     self.make_abstvec(sim)
-        # else:
-        #     self.abstvec = None # Intentionally set to None, cannot be used in the sim loop until populated
         self.initialized = True
         return
-    #
-    # def make_abstvec(self, sim):
-    #     """ Convert the current time vector into sim units """
-    #     # Validation
-    #     if self.is_unitless != sim.t.is_unitless:
-    #         errormsg = f'Cannot mix units with unitless time: sim.unit={sim.t.unit} {self.name}.unit={self.unit}'
-    #         raise ValueError(errormsg)
-    #
-    #     # Both are unitless or numeric
-    #     both_unitless = self.is_unitless and sim.t.is_unitless
-    #     both_numeric = self.is_numeric and sim.t.is_numeric
-    #     if both_unitless or both_numeric:
-    #         abstvec = self.tvec.copy() # Start by copying the current time vector
-    #         ratio = time_ratio(unit1=self.unit, dt1=1.0, unit2=sim.t.unit, dt2=1.0) # tvec has sim units, but not dt
-    #         if ratio != 1.0:
-    #             abstvec *= ratio # TODO: CHECK
-    #         start_diff = self.start - sim.t.start
-    #         if start_diff != 0.0:
-    #             abstvec += start_diff
-    #
-    #     # The sim uses years; use yearvec
-    #     elif sim.t.unit == 'year':
-    #         abstvec = self.yearvec.copy()
-    #         abstvec -= sim.t.yearvec[0] # Start relative to sim start
-    #
-    #     # Otherwise (days, weeks, months), use datevec and convert to days
-    #     else:
-    #         dayvec = dates_to_days(self.datevec, start_date=sim.t.datevec[0])
-    #         ratio = time_ratio(unit1='day', dt1=1.0, unit2=sim.t.unit, dt2=1.0)
-    #         abstvec = dayvec*ratio # Convert into sim time units
-    #
-    #     self.abstvec = round_tvec(abstvec) # Avoid floating point inconsistencies
-    #     return
+
 
     def now(self, key=None):
         """
@@ -1282,6 +1228,13 @@ def peryear(v):
 if __name__ == '__main__':
 
     from starsim.time import *   # Import the classes from Starsim so that Dur is an ss.Dur rather than just a bare Dur etc.
+    import starsim as ss
+    ss.peryear(10)
+    module = sc.objdict(t=sc.objdict(dt=Dur(weeks=1)))
+    d = ss.poisson(ss.peryear(10), module=module, strict=False)
+    d.init()
+    d.rvs(5)
+
 
     DateDur(weeks=1) - DateDur(days=1)
 
