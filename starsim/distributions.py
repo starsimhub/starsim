@@ -776,11 +776,6 @@ class lognorm_im(Dist):
         self.update_dist_pars(spars)
         return spars
 
-    def preprocess_timepar(self, key, val):
-        """ Not valid since incorrect time units """
-        errormsg = f'Cannot use timepars with a lognorm_im distribution ({self}) since its units are not time. Use lognorm_ex instead.'
-        raise NotImplementedError(errormsg)
-
 
 class lognorm_ex(Dist):
     """
@@ -861,17 +856,6 @@ class poisson(Dist): # TODO: does not currently scale correctly with dt
         self.update_dist_pars(spars)
         return spars
 
-    def preprocess_timepar(self, key, timepar):
-        """ Try to update the timepar before calculating array parameters, but raise an exception if this isn't possible """
-        try:
-            timepar.update_cached()
-        except Exception as E:
-            errormsg = f'Could not process timepar {timepar} for {self}. Note that Poisson distributions are not compatible with both callable parameters and timepars, since this would change the shape in an unknowable way.'
-            raise ValueError(errormsg) from E
-
-        self._pars[key] = timepar.values # Use the raw value, since it could be anything (including a function)
-        return timepar.values # Also use this for the rest of the loop
-
 
 class nbinom(Dist):
     """
@@ -923,12 +907,6 @@ class randint(Dist):
         rvs = rands * (p.high + 1 - p.low) + p.low
         rvs = rvs.astype(self.dtype)
         return rvs
-
-    def preprocess_timepar(self, key, timepar):
-        """ Not valid due to a rounding error """
-        errormsg = f'Cannot use timepars with a randint distribution ({self}) since the values may be rounded incorrectly. Use uniform() instead and convert to int yourself, or set allow_time=True if you really want to do this.'
-        raise NotImplementedError(errormsg)
-
 
 class rand_raw(Dist):
     """
@@ -1096,11 +1074,6 @@ class choice(Dist):
         inds = np.searchsorted(pcum, rands)
         rvs = pars.a[inds]
         return rvs
-
-    def preprocess_timepar(self, key, timepar):
-        """ Not valid since does not scale with time """
-        errormsg = f'Cannot use timepars with a choice distribution ({self}) since its units are not time. Convert output to time units instead.'
-        raise NotImplementedError(errormsg)
 
 
 class histogram(Dist):
