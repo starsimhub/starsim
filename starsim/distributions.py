@@ -778,6 +778,13 @@ class lognorm_im(Dist):
         super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
         return
 
+    def convert_timepars(self):
+        for key, v in self._pars.items():
+            if isinstance(v, ss.Dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Dur):
+                raise NotImplementedError('lognormal_im parameters must be nondimensional')
+            if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
+                raise NotImplementedError('lognormal_im parameters must be nondimensional')
+
     def sync_pars(self, call=True):
         """ Translate between NumPy and SciPy parameters """
         if call:
@@ -915,6 +922,13 @@ class randint(Dist):
         else: # integers instead of randint because interfacing a numpy.random.Generator
             super().__init__(distname='integers', low=low, high=high, dtype=dtype, **kwargs)
         return
+
+    def convert_timepars(self):
+        for key, v in self._pars.items():
+            if isinstance(v, ss.Dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Dur):
+                raise NotImplementedError('lognormal_im parameters must be nondimensional')
+            if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
+                raise NotImplementedError('lognormal_im parameters must be nondimensional')
 
     def ppf(self, rands):
         p = self._pars
@@ -1078,6 +1092,13 @@ class choice(Dist):
         super().__init__(distname='choice', a=a, p=p, **kwargs)
         self.dynamic_pars = False # Set to false since array arguments don't imply dynamic pars here
         return
+
+    def convert_timepars(self):
+        for key, v in self._pars.items():
+            if isinstance(v, ss.Dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Dur):
+                raise NotImplementedError('lognormal_im parameters must be nondimensional')
+            if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
+                raise NotImplementedError('lognormal_im parameters must be nondimensional')
 
     def ppf(self, rands):
         """ Shouldn't actually be needed since dynamic pars not supported """

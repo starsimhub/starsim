@@ -389,7 +389,7 @@ class YearDur(Dur):
 
     def __truediv__(self, other):
         if isinstance(other, Dur):
-            return np.round(self.years/other.years,12)
+            return self.years/other.years
         else:
             return self.__class__(self.period / other)
 
@@ -568,8 +568,29 @@ class DateDur(Dur):
         return self.__class__(self._scale(self.period, other))
 
     def __truediv__(self, other):
-        if isinstance(other, Dur):
-            return np.round(self.years/other.years,12)
+        if isinstance(other, DateDur):
+            # We need to convert both dates into a common timebase to do the division
+            # We *can* just do self.years/other.years, however this can cause numerical precision losses
+            # yet at the same time is not necessary, because the common timebase depends on the durations.
+            # For example, DateDur(weeks=1)/DateDur(days=1) should return 7, but we get 6.9999999 if we convert
+            # both for years. Instead though, we can just convert days into weeks instead of days into years, and
+            # then divide 1 week by (1/7) days.
+            self_array = self._as_array(self.period)
+            other_array = other._as_array(other.period)
+            unit = np.argmax((self_array != 0) | (other_array != 0))
+            denominator = 1
+            a = 0
+            b = 0
+            for i, v in enumerate(self.ratios.values()):
+                if i < unit:
+                    continue
+                if i > unit:
+                    denominator *= v
+                a += self_array[i] / denominator
+                b += other_array[i] / denominator
+            return a/b
+        elif isinstance(other, Dur):
+            return self.years/other.years
         return self.__class__(self._scale(self.period, 1/other))
 
     def __repr__(self):
@@ -632,8 +653,6 @@ class Rate():
 
     def __mul__(self, other):
         if isinstance(other, Dur):
-
-
             return self.value*other/self.period
         elif sc.isnumber(other) and other == 0:
             return 0 # Or should this be a rate?
@@ -646,6 +665,15 @@ class Rate():
         else:
             raise TypeError('Can only add rates of identical types (e.g., Rate+Rate, TimeProb+TimeProb)')
 
+    def __sub__(self, other):
+        if self.__class__ == other.__class__:
+            return self.__class__(self.value-other*self.period, self.period)
+        else:
+            raise TypeError('Can only add subtract of identical types (e.g., Rate+Rate, TimeProb+TimeProb)')
+
+    def __eq__(self, other):
+        return self.value == other.value/other.period*self.period
+
     def __rmul__(self, other): return self.__mul__(other)
 
     def __truediv__(self, other):
@@ -656,7 +684,7 @@ class Rate():
         elif isinstance(other, Dur):
             raise Exception('Cannot divide a rate by a duration')
         else:
-            return Rate(self.period*other)
+            return Rate(self.value/other, self.period)
 
     def __rtruediv__(self, other):
         # If a float is divided by a rate
@@ -746,13 +774,13 @@ class Time(sc.prettyobj):
 
     - ``ti`` (int): the current timestep
     - ``npts`` (int): the number of timesteps
-    - ``tvec`` (array): time starting at 0, in self units (e.g. ``[0, 0.1, 0.2, ... 10.0]`` if start=0, stop=10, dt=0.1)
-    - ``yearvec`` (array): time represented as floating-point years (e.g. ``[2000, 2000.1, 2000.2, ... 2010.0]`` if start=2000, stop=2010, dt=0.1)
+    - ``tvec`` (array): time either as absolute `ss.Date` instances, or relative `ss.Dur` instances
+    - ``yearvec`` (array): time represented as floating-point years
 
     **Examples**::
 
-        t1 = ss.Time(start=2000, stop=2020, dt=1.0, unit='year') # Years, numeric units
-        t2 = ss.Time(start='2021-01-01', stop='2021-04-04', dt=2.0, unit='day') # Days, date units
+        t1 = ss.Time(start=2000, stop=2020, dt=1.0)
+        t2 = ss.Time(start='2021-01-01', stop='2021-04-04', dt=ss.days(2))
     """
 
     # Allowable time arguments
@@ -770,15 +798,8 @@ class Time(sc.prettyobj):
 
 
         # Prepare for later initialization
-
-    # - ``tvec`` (array): time starting at 0, in self units (e.g. ``[0, 0.1, 0.2, ... 10.0]`` if start=0, stop=10, dt=0.1)
-    # - ``yearvec`` (array): time represented as floating-point years (e.g. ``[2000, 2000.1, 2000.2, ... 2010.0]`` if start=2000, stop=2010, dt=0.1)
-    # - ``datevec`` (array): time represented as an array of ``ss.date`` objects (e.g. ``[<2000.01.01>, <2000.02.07>, ... <2010.01.01>]`` if start=2000, stop=2010, dt=0.1)
-    # - ``timevec`` (array): the "native" time vector, which always matches one of ``tvec``, ``yearvec``, or ``datevec``
-
         self.tvec    = None # The time vector for this instance in Date or Dur format
-        self.datevec = None # Time vector as calendar dates or DateDur
-        self.yearvec = None # Time vector as floating point years or YearDur
+        self.yearvec = None # Time vector as floating point years
 
         self.initialized = False
 
@@ -796,6 +817,11 @@ class Time(sc.prettyobj):
 
     @property
     def timevec(self):
+        # Backwards-compatibility function for now - TODO: consider deprecating?
+        return self.tvec
+
+    @property
+    def datevec(self):
         # Backwards-compatibility function for now - TODO: consider deprecating?
         return self.tvec
 
@@ -885,22 +911,21 @@ class Time(sc.prettyobj):
             if self.is_absolute != sim.t.is_absolute:
                 raise Exception('Cannot mix absolute/relative times across modules')
 
-        # Support bare numbers but raise a warning - interpreted as years (users should use dates/durs explicitly)
-        if sc.isnumber(self.start):
-            ss.warn(f'Start ({self.start}) has been specified as a number - assuming it is a year')
-            self.start = Date(self.start)
-
-        if sc.isnumber(self.stop):
-            ss.warn(f'Stop ({self.stop}) has been specified as a number - assuming it is a year')
+        if sc.isnumber(self.stop) or sc.isstring(self.stop):
             self.stop = Date(self.stop)
 
         if sc.isnumber(self.dt):
-            ss.warn(f'dt ({self.dt}) has been specified as a number - assuming it is a year')
             self.dt = YearDur(self.dt)
 
         if isinstance(self.stop, Dur) and self.start is None:
             # The start can be omitted if the stop is a Dur, as it will assume the start is zero
             self.start = self.stop.__class__()
+
+        if sc.isnumber(self.start) or sc.isstring(self.start):
+            if isinstance(self.stop, Dur):
+                self.start = ss.Dur(self.start)
+            else:
+                self.start = Date(self.start)
 
         if self.start > self.stop:
             msg = f'Start date ({self.start}) must be before stop date ({self.stop})'
@@ -913,7 +938,7 @@ class Time(sc.prettyobj):
         if isinstance(self.dt, YearDur):
             # If dt has been specified as a YearDur then preference setting fractional years. So first
             # calculate the fractional years, and then convert them to the equivalent dates
-            self.yearvec = np.round(self.start.years + np.arange(0, self.stop.years-self.start.years, self.dt.years),12) # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
+            self.yearvec = np.round(self.start.years + np.arange(0, self.stop.years-self.start.years+self.dt.years, self.dt.years),12) # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
             if isinstance(self.stop, Dur):
                 self.tvec = np.array([self.stop.__class__(x) for x in self.yearvec])
             else:
@@ -968,7 +993,7 @@ class Time(sc.prettyobj):
 #%% Convenience functions
 
 def years(x: float) -> Dur:
-    return Dur(years=x)
+    return Dur(x)
 
 def months(x: float) -> Dur:
     return Dur(months=x)
@@ -1003,6 +1028,8 @@ if __name__ == '__main__':
 
     from starsim.time import *   # Import the classes from Starsim so that Dur is an ss.Dur rather than just a bare Dur etc.
     import starsim as ss
+
+    t = Time(start=2001, stop=2003, dt=ss.years(0.1))
 
     Dur(weeks=1)/Dur(days=1)
 

@@ -277,19 +277,20 @@ def test_timepar_dists():
     sc.heading('Test interaction of distributions and timepars')
 
     # Set parameters
-    n = int(10e3)
-    u1 = 'day'
-    u2 = 'year'
-    dt_dur = 0.1
-    dt_rate = 20.0
-    ratio_dur  = ss.time_ratio(u1, 1.0, u2, dt_dur)
-    ratio_rate = ss.time_ratio(u2, 1.0, u1, dt_rate)
+    n = int(10e4)
+
+    # Mock module
+    module_year = sc.objdict(t=sc.objdict(dt=ss.Dur(years=1)))
+    module_month = sc.objdict(t=sc.objdict(dt=ss.Dur(months=1)))
+    module_week = sc.objdict(t=sc.objdict(dt=ss.Dur(1/52)))
 
     # Create time parameters
     v = sc.objdict()
     v.base = 30.0
-    v.dur = ss.dur(v.base, unit=u1, parent_unit=u2, parent_dt=dt_dur).init()
-    v.rate = ss.rate(v.base, unit=u2, parent_unit=u1, parent_dt=dt_rate).init() # Swap units
+    v.dur = ss.Dur(30)
+    v.rate = ss.Rate(30)
+
+    rtol = 0.1  # Be somewhat generous with the uncertainty
 
     # Check distributions that scale linearly with time, with the parameter we'll set
     print('Testing linear distributions ...')
@@ -306,55 +307,63 @@ def test_timepar_dists():
     for name,par in linear_dists.items():
         dist_class = getattr(ss, name)
 
-        # Create the dists, the first parameter of which should have time units
-        dists = sc.objdict()
-        for key,val in v.items():
-            pardict = {par:val} # Convert to a tiny dictionary to insert the correct name
-            dists[key] = dist_class(**pardict, name=key, strict=False).init()
+        for module in [module_year, module_month, module_week]:
 
-        # Create th erandom variates
-        rvs = sc.objdict()
-        for k,dist in dists.items():
-            rvs[k] = dist.rvs(n)
+            # Create the dists, the first parameter of which should have time units
+            dists = sc.objdict()
+            for key,val in v.items():
+                pardict = {par:val} # Convert to a tiny dictionary to insert the correct name
+                dists[key] = dist_class(**pardict, name=key, module=module, strict=False).init()
 
-        # Check that the distributions match
-        rtol = 0.1 # Be somewhat generous with the uncertainty
-        expected = rvs.base.mean()
-        expected_dur = expected*ratio_dur
-        expected_rate = expected/ratio_rate
-        actual_dur = rvs.dur.mean()
-        actual_rate = rvs.rate.mean()
-        assert np.isclose(expected_dur, actual_dur, rtol=rtol), f'Duration not close for {name}: {expected_dur:n} ≠ {actual_dur:n}'
-        assert np.isclose(expected_rate, actual_rate, rtol=rtol), f'Rate not close for {name}: {expected_rate:n} ≠ {actual_rate:n}'
-        sc.printgreen(f'✓ {name} passed: {expected_dur:n} ≈ {actual_dur:n}')
+            # Create the random variates
+            rvs = sc.objdict()
+            for k,dist in dists.items():
+                rvs[k] = dist.rvs(n)
+
+            # Check that the distributions match
+            ratio = ss.years(1)/module.t.dt
+            expected = rvs.base.mean()
+            expected_dur = expected*ratio
+            expected_rate = expected/ratio
+            actual_dur = rvs.dur.mean()
+            actual_rate = rvs.rate.mean()
+            assert np.isclose(expected_dur, actual_dur, rtol=rtol), f'Duration not close for {name}: {expected_dur:n} ≠ {actual_dur:n}'
+            assert np.isclose(expected_rate, actual_rate, rtol=rtol), f'Rate not close for {name}: {expected_rate:n} ≠ {actual_rate:n}'
+            sc.printgreen(f'✓ {name} passed: {expected_dur:n} ≈ {actual_dur:n} with dt={module.t.dt}')
 
     # Check that unitless distributions fail
     print('Testing unitless distributions ...')
-    par = ss.dur(10)
+    par = ss.Dur(10)
     unitless_dists = ['lognorm_im', 'randint', 'choice']
     for name in unitless_dists:
         dist_class = getattr(ss, name)
         with pytest.raises(NotImplementedError):
-            dist = dist_class(par, name='notimplemented', strict=False).init()
+            dist = dist_class(par, name='notimplemented', module=module_year, strict=False).init()
             dist.rvs(n)
         sc.printgreen(f'✓ {name} passed: raised appropriate error')
 
     # Check special distributions
     print('Testing Poisson distribution ...')
-    lam1 = ss.rate(dpy, 'year', parent_unit='year').init()
-    lam2 = ss.rate(1,   'day',  parent_unit='year').init()
-    poi1 = ss.poisson(lam=lam1, strict=False).init()
-    poi2 = ss.poisson(lam=lam2, strict=False).init()
-    mean1 = poi1.rvs(n).mean()
-    mean2 = poi2.rvs(n).mean()
-    assert np.isclose(mean1, mean2, rtol=rtol), f'Poisson values do not match for {lam1} and {lam2}: {mean1:n} ≠ {mean2:n}'
-    sc.printgreen(f'✓ poisson passed: {mean1:n} ≈ {mean2:n}')
+    lam1 = ss.peryear(1)
+    lam2 = ss.perday(1)
+    for module in [module_year, module_month, module_week]:
+        poi1 = ss.poisson(lam=lam1, module=module, strict=False).init()
+        poi2 = ss.poisson(lam=lam2, module=module, strict=False).init()
+        mean1 = poi1.rvs(n).mean()
+        mean2 = poi2.rvs(n).mean()
+        expected1 = lam1*module.t.dt
+        expected2 = lam2*module.t.dt
+        assert np.isclose(mean1, expected1, rtol=rtol), f'Poisson values do not match for {lam1}: {mean1:n} ≠ {expected1:n}'
+        assert np.isclose(mean2, expected2, rtol=rtol), f'Poisson values do not match for {lam2}: {mean2:n} ≠ {expected2:n}'
+        sc.printgreen(f'✓ Poisson passed: {lam1} {expected1:n} ≈ {mean1:n} with dt={module.t.dt}')
+        sc.printgreen(f'✓ Poisson passed: {lam2} {expected2:n} ≈ {mean2:n} with dt={module.t.dt}')
+
 
     print('Testing Bernoulli distribution ...')
-    p1 = 0.1
-    p2 = ss.time_prob(0.01, parent_dt=10).init()
-    ber1 = ss.bernoulli(p=p1, strict=False).init()
-    ber2 = ss.bernoulli(p=p2, strict=False).init()
+    p1 = 0.01
+    p2 = ss.TimeProb(0.1, ss.years(10))
+    ber1 = ss.bernoulli(p=p1, module=module_year, strict=False).init()
+    ber2 = ss.bernoulli(p=p2, module=module_year, strict=False).init()
     mean1 = ber1.rvs(n).mean()
     mean2 = ber2.rvs(n).mean()
     assert np.isclose(mean1, mean2, rtol=rtol), f'Bernoulli values do not match for {lam1} and {lam2}: {mean1:n} ≠ {mean2:n}'
@@ -442,15 +451,15 @@ if __name__ == '__main__':
 
     T = sc.timer()
 
-    o1 = test_dist()
-    o2 = test_custom_dists(do_plot=do_plot)
-    o3 = test_dists(do_plot=do_plot)
-    o4 = test_scipy()
-    o5 = test_exceptions()
-    o6 = test_reset()
-    o7 = test_callable()
-    o8 = test_array()
-    o9 = test_repeat_slot()
+    # o1 = test_dist()
+    # o2 = test_custom_dists(do_plot=do_plot)
+    # o3 = test_dists(do_plot=do_plot)
+    # o4 = test_scipy()
+    # o5 = test_exceptions()
+    # o6 = test_reset()
+    # o7 = test_callable()
+    # o8 = test_array()
+    # o9 = test_repeat_slot()
     o10 = test_timepar_dists()
     o10 = test_timepar_callable()
 

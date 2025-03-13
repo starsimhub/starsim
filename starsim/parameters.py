@@ -337,6 +337,12 @@ class SimPars(Pars):
         if self.start is None:
             self.start = default_start
 
+        if sc.isstring(self.start):
+            self.start = ss.Date(self.start)
+
+        if sc.isstring(self.stop):
+            self.stop = ss.Date(self.stop)
+
         # Handle stop and dur
         if self.stop is not None:
             if self.dur is None:
