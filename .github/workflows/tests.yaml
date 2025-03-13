@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           architecture: x64
-      - name: Install STIsim
+      - name: Install Starsim
         run: pip install -e .
       - name: Install tests
         working-directory: ./tests
