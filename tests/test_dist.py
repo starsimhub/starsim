@@ -375,71 +375,70 @@ def test_timepar_dists():
 def test_timepar_callable():
     sc.heading('Test that timepars work with (some) callable functions')
 
+    # In this case, the callable returns a time par, which then gets further converted
     print('Testing callable parameters with regular-scaling distributions')
-    sim = make_fake_sim(n=10)
-    uids = np.array([1, 3, 7, 9])
 
-    def age_year(module, sim, uids):
-        """ Extract age as a year """
-        out = sim.people.age[uids].copy()
-        return out
+    n = 10_000
+    rtol = 0.05
 
-    def age_day(module, sim, uids):
-        """ Extract age as a day """
-        out = sim.people.age[uids].copy()
-        out *= dpy # Convert to days manually
-        return out
+    module_year = sc.objdict(t=sc.objdict(dt=ss.Dur(years=1)))
+    module_month = sc.objdict(t=sc.objdict(dt=ss.Dur(months=1)))
+    module_week = sc.objdict(t=sc.objdict(dt=ss.Dur(1/52)))
 
-    scale = 1e-3 # Set to a very small but nonzero scale
-    loc  = ss.dur(age_year, unit='year', parent_unit='day').init(update_values=False)
-    mean = ss.dur(age_day,  unit='day',  parent_unit='day').init(update_values=False)
-    d3 = ss.normal(name='callable', loc=loc, scale=scale).init(sim=sim)
-    d4 = ss.lognorm_ex(name='callable', mean=mean, std=scale).init(sim=sim)
-    draws3 = d3.rvs(uids)
-    draws4 = d4.rvs(uids)
-    age_in_days = sim.people.age[uids]*dpy
-    draw_diff = np.abs(draws3 - draws4).mean()
-    age_diff = np.abs(age_in_days - draws3).mean()
-    print(f'Input ages were:\n{sim.people.age[uids]}')
-    print(f'Output samples were:\n{sc.sigfiground(draws3)}\n{sc.sigfiground(draws4)}')
-    assert draw_diff < 1, 'Day and year outputs should match to the nearest day'
-    assert age_diff < 1, 'Distribution outputs should match ages to the nearest day'
+    def call_scalar(module, sim, uids):
+        return ss.Dur(1)
+
+    for module in [module_year, module_month, module_week]:
+        d = ss.normal(call_scalar, ss.Dur(days=1), module=module, strict=False)
+        d.init()
+        assert np.isclose(d.rvs(n).mean(), ss.Dur(1)/module.t.dt, rtol=rtol)
+
+
 
     print('Testing callable parameters with Bernoulli distributions')
-    n = 100_000
-    sim = make_fake_sim(n=n)
-    uids = np.random.choice(n, size=n//2, replace=False)
+    sim = make_fake_sim(n=1000)
+    uids = np.random.choice(sim.n, size=sim.n//2, replace=False)
     age = sim.people.age[uids]
     mean = age.mean()
     young = sc.findinds(age<=mean)
     old = sc.findinds(age>mean)
-    p_young = 0.001
-    p_old = 0.010
+    p_young = ss.Rate(0.1)
+    p_old = ss.Rate(0.2)
 
     def age_prob(module, sim, uids):
-        out = np.zeros_like(age)
+        out = np.zeros_like(uids, dtype=object)
         out[young] = p_young
         out[old]   = p_old
         return out
 
-    parent_dt = 10
     p1 = age_prob
-    p2 = ss.time_prob(age_prob, parent_dt=parent_dt).init(update_values=False)
-    ber1 = ss.bernoulli(name='base', p=p1).init(sim=sim)
-    ber2 = ss.bernoulli(name='time', p=p2).init(sim=sim)
-    brvs1 = ber1.rvs(uids)
-    brvs2 = ber2.rvs(uids)
+    ber1 = ss.bernoulli(age_prob, module=module_year, strict=False).init(sim=sim)
+    ber1.rvs(uids)
 
-    rtol = 0.5 # We're dealing with order-of-magnitude differences but small numbers, so be generous to avoid random failures
-    sum1 = brvs1.sum()*parent_dt
-    sum2 = brvs2.sum()
-    assert np.isclose(sum1, sum2, rtol=rtol), f'Callable Bernoulli sums did not match: {sum1}  ≠  {sum2}'
-    sc.printgreen(f'✓ Callable Bernoulli sums matched: {sum1:n} ≈ {sum2:n}')
-    for key,expected,inds in zip(['young', 'old'], [p_young, p_old], [young, old]):
-        m1 = brvs1[inds].mean()
-        m2 = brvs2[inds].mean()/parent_dt
-        assert np.allclose([expected, m1], [expected, m2], rtol=rtol), f'Callable Bernoulli proportions did not match: {expected:n}  ≠  {m1:n}  ≠  {m2:n}'
-        sc.printgreen(f'✓ Callable Bernoulli proportions matched: {expected:n}  ≈  {m1:n}  ≈  {m2:n}')
+    # Higher-performance option - perform the time conversion on the parameter here
+    def age_prob(module, sim, uids):
+        out = np.zeros_like(uids, dtype=object)
+        out[young] = p_young*module.t.dt
+        out[old]   = p_old*module.t.dt
+        return out
+
+    sim = make_fake_sim(n=100_000)
+    uids = np.random.choice(sim.n, size=sim.n//2, replace=False)
+    age = sim.people.age[uids]
+    mean = age.mean()
+    young = sc.findinds(age<=mean)
+    old = sc.findinds(age>mean)
+
+    p1 = age_prob
+    ber1 = ss.bernoulli(age_prob, module=module_year, strict=False).init(sim=sim)
+    a = ber1.rvs(uids).mean()
+
+    p1 = age_prob
+    ber1 = ss.bernoulli(age_prob, module=module_month, strict=False).init(sim=sim)
+    b = ber1.rvs(uids).mean()
+
+    rtol = 0.2  # We're dealing with order-of-magnitude differences but small numbers, so be generous to avoid random failures
+    assert np.isclose(a, b*12, rtol=rtol), f'Callable Bernoulli sums did not match: {sum1}  ≠  {sum2}'
 
     return
 
@@ -460,7 +459,7 @@ if __name__ == '__main__':
     # o7 = test_callable()
     # o8 = test_array()
     # o9 = test_repeat_slot()
-    o10 = test_timepar_dists()
+    # o10 = test_timepar_dists()
     o10 = test_timepar_callable()
 
     T.toc()

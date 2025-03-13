@@ -333,15 +333,20 @@ class SimPars(Pars):
     def validate_time(self):
         """ Ensure at least one of dur and stop is defined, but not both """
 
+        # TODO: Some of this default/validation logic is handled in ss.Time(), ideally probably all checks
+        # and validation should be carried out there (so unclear how much validation is necessary here)
+
         # Handle start
         if self.start is None:
             self.start = default_start
 
+        if sc.isstring(self.stop) or sc.isnumber(self.stop):
+            self.stop = ss.Date(self.stop)
+
         if sc.isstring(self.start):
             self.start = ss.Date(self.start)
-
-        if sc.isstring(self.stop):
-            self.stop = ss.Date(self.stop)
+        elif sc.isnumber(self.start) and self.stop is not None:
+            self.start = self.stop.__class__(self.start)
 
         # Handle stop and dur
         if self.stop is not None:

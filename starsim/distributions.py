@@ -512,9 +512,9 @@ class Dist:
         - Rates are multiplied by `dt` (so the result will be a number of events, or else the equivalent multiplicate value for the timestep)
         """
         for key, v in self._pars.items():
-            if isinstance(v, ss.Dur) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Dur):
+            if isinstance(v, ss.Dur) or isinstance(v, np.ndarray) and v.size and isinstance(v.flat[0], ss.Dur):
                 self._pars[key] = v/self.module.t.dt
-            if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.shape and isinstance(v[0], ss.Rate):
+            if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.size and isinstance(v.flat[0], ss.Rate):
                 self._pars[key] = v * self.module.t.dt
 
     def convert_callable(self, key, val, size, uids):

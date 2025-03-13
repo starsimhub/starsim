@@ -89,7 +89,7 @@ def test_onepar_normal(do_plot=True):
 
         expected = pd.DataFrame({
             'x': [0.13, 0.16, 0.06],    # Prevalence of infection
-        }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
+        }, index=pd.Index([ss.Date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
 
         extract_fn = lambda sim: pd.DataFrame({
             'x': sim.results.sir.n_infected, # Instead of prevalence, let's compute it from infected and n_alive

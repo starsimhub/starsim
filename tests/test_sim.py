@@ -126,12 +126,12 @@ def test_complex_api():
             dict(type='random', name='random2', n_contacts=4)
         ],
         diseases = [
-            dict(type='sir',  dur_inf=dict(type='expon', scale=6.0)),
-            dict(type='sis', beta=0.07, init_prev=0.1),
+            dict(type='sir',  dur_inf=dict(type='expon', scale=ss.Dur(6.0))),
+            dict(type='sis', beta=ss.TimeProb(0.07), init_prev=0.1),
         ],
         demographics = [
-            ss.Births(birth_rate=20),
-            dict(type='deaths', death_rate=20)
+            ss.Births(birth_rate=ss.peryear(20)),
+            dict(type='deaths', death_rate=ss.peryear(20))
         ],
         interventions = jump_age,
     )
@@ -143,12 +143,12 @@ def test_complex_api():
     net2 = ss.RandomNet(name='random2', n_contacts=4)
     networks = ss.ndict(net1, net2)
 
-    dis1 = ss.SIR(dur_inf=ss.expon(scale=6.0))
-    dis2 = ss.SIS(beta=0.07, init_prev=ss.bernoulli(0.1))
+    dis1 = ss.SIR(dur_inf=ss.expon(scale=ss.Dur(6.0)))
+    dis2 = ss.SIS(beta=ss.TimeProb(0.07), init_prev=ss.bernoulli(0.1))
     diseases = ss.ndict(dis1, dis2)
 
-    dem1 = ss.Births(birth_rate=20)
-    dem2 = ss.Deaths(death_rate=20)
+    dem1 = ss.Births(birth_rate=ss.peryear(20))
+    dem2 = ss.Deaths(death_rate=ss.peryear(20))
     demographics = ss.ndict(dem1, dem2)
 
     int1 = ss.Intervention.from_func(jump_age)
@@ -230,8 +230,8 @@ def test_components(do_plot=do_plot):
     """ Create, run, and plot a sim by assembling components """
     sc.heading('Testing components...')
     people = ss.People(n_agents=n_agents)
-    network = ss.RandomNet(pars=dict(n_contacts=4))
-    sir = ss.SIR(pars=dict(dur_inf=10, beta=0.1))
+    network = ss.RandomNet(n_contacts=4)
+    sir = ss.SIR(dur_inf=10, beta=0.1)
     sim = ss.Sim(diseases=sir, people=people, networks=network)
     sim.run()
     if do_plot:
@@ -276,8 +276,8 @@ if __name__ == '__main__':
     # sim1 = test_default(do_plot=do_plot)
     # sim2 = test_simple(do_plot=do_plot)
     # sim3 = test_api()
-    # sim4 = test_complex_api()
-    sim5b, sim5i = test_simple_vax(do_plot=do_plot)
+    sim4 = test_complex_api()
+    # sim5b, sim5i = test_simple_vax(do_plot=do_plot)
     # sim6 = test_shared_product(do_plot=do_plot)
     # sim7 = test_components(do_plot=do_plot)
     # sim8 = test_save()

@@ -12,7 +12,7 @@ sc.options(interactive=False) # Assume not running interactively
 
 class hiv_syph(ss.Connector):
     """ Simple connector whereby rel_sus to NG doubles if CD4 count is <200"""
-    def __init__(self, pars=None, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
             label = 'HIV-Syphilis',
@@ -23,7 +23,7 @@ class hiv_syph(ss.Connector):
             rel_sus_hiv_syph    = 2.7, # People with syphilis are 2.7x more likely to acquire HIV
             rel_trans_hiv_syph  = 2.7, # People with syphilis are 2.7x more likely to transmit HIV
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
         return
 
     def step(self):
@@ -55,7 +55,7 @@ class Penicillin(ss.Intervention):
     def __init__(self, year=2020, prob=0.8):
         super().__init__() # Initialize the intervention
         self.prob = prob # Store the probability of treatment
-        self.year = year
+        self.year = ss.Date(year)
         return
 
     def step(self):

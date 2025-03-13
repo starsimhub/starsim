@@ -271,7 +271,7 @@ class Loop:
         plt.scatter(x, y, c=colors[mod_int], **scatter_kw)
         plt.yticks(yticks, ylabels)
         plt.title(f'Integration plan ({len(df)} events)')
-        plt.xlabel(f'Time since simulation start (in {self.sim.pars.unit}s)')
+        plt.xlabel(f'Time since simulation start')
         plt.grid(True)
         sc.figlayout()
         sc.boxoff()
