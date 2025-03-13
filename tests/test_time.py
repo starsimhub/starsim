@@ -13,15 +13,15 @@ sc.options(interactive=False)
 
 # %% Define the tests
 def test_ratio():
-    sc.heading('Test behavior of time_ratio()')
+    sc.heading('Test time ratio calculation')
 
-    assert ss.time_ratio() == 1.0
-    assert ss.time_ratio(dt1=1.0, dt2=0.1) == 10.0
-    assert ss.time_ratio(dt1=0.5, dt2=5) == 0.1
-    assert ss.time_ratio(dt1=0.5, dt2=5) == 0.1
+    assert ss.Dur(1)/ss.Dur(1) == 1
+    assert ss.Dur(1)/ss.Dur(0.1) == 10
+    assert ss.Dur(0.5)/ss.Dur(5) == 0.1
 
-    assert ss.time_ratio(unit1='year', unit2='day') == 365.25
-    assert ss.time_ratio(unit1='day', unit2='year') == 1/365.25
+    assert ss.Dur(years=1)/ss.Dur(days=1) == 365.25
+    assert ss.Dur(years=1) / ss.Dur(weeks=1) * 7 == 365.25
+    assert ss.Dur(years=1) / ss.Dur(months=1) == 12
 
     return
 
@@ -32,9 +32,8 @@ def test_classes():
     # Test duration dt
     d1 = ss.Dur(2)
     d2 = ss.Dur(3)
-    d3 = ss.Dur(2, parent_dt=0.1)
-    d4 = ss.Dur(3, parent_dt=0.2)
-    for d in [d1,d2,d3,d4]: d.init()
+    d3 = ss.Dur(2/0.1)
+    d4 = ss.Dur(3/0.2)
 
     assert d1 + d2 == 2+3
     assert d3 + d4 == 2/0.1 + 3/0.2
@@ -42,13 +41,12 @@ def test_classes():
     assert d3 / 2 == 2/0.1/2
 
     # Test rate dt
-    r1 = ss.rate(2)
-    r2 = ss.rate(3)
-    r3 = ss.rate(2, parent_dt=0.1)
-    r4 = ss.rate(3, parent_dt=0.2)
-    for r in [r1,r2,r3,r4]: r.init()
+    r1 = ss.Rate(2)
+    r2 = ss.Rate(3)
+    r3 = ss.Rate(2/0.1)
+    r4 = ss.Rate(3/0.2)
 
-    assert r1 + r2 == 2 + 3
+    assert r1 + r2 == ss.Rate(1/(1/2 + 1/3))
     assert r3 + r4 == 2*0.1 + 3*0.2
     assert r3 * 2 == 2*0.1*2
     assert r3 / 2 == 2*0.1/2
@@ -83,7 +81,7 @@ def test_units(do_plot=False):
     sc.heading('Test behavior of year vs day units')
 
     sis = ss.SIS(
-        beta = ss.RateProb(0.05, ss.days(1)),
+        beta = ss.TimeProb(0.05, ss.days(1)),
         init_prev = ss.bernoulli(p=0.1),
         dur_inf = ss.lognorm_ex(mean=ss.Dur(days=10)),
         waning = ss.rate(0.05, ss.days(1)),
@@ -122,7 +120,7 @@ def test_multi_timestep(do_plot=False):
     sc.heading('Test behavior of different modules having different timesteps')
 
     pars = dict(
-        diseases = ss.SIS(unit='day', dt=1.0, init_prev=0.1, beta=ss.RateProb(0.01)),
+        diseases = ss.SIS(unit='day', dt=1.0, init_prev=0.1, beta=ss.TimeProb(0.01)),
         demographics = ss.Births(unit='year', dt=0.25),
         networks = ss.RandomNet(unit='week'),
         n_agents = small,
@@ -147,7 +145,7 @@ def test_multi_timestep(do_plot=False):
 def test_mixed_timesteps():
     sc.heading('Test behavior of different combinations of timesteps')
 
-    siskw = dict(dur_inf=ss.Dur(days=50), beta=ss.RateProb(0.01, ss.days(1)), waning=ss.rate(0.005, ss.days(1)))
+    siskw = dict(dur_inf=ss.Dur(days=50), beta=ss.TimeProb(0.01, ss.days(1)), waning=ss.rate(0.005, ss.days(1)))
     kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
 
     print('Year-year')
@@ -238,11 +236,11 @@ if __name__ == '__main__':
 
     T = sc.timer()
 
-    o1 = test_ratio()
+    # o1 = test_ratio()
     o2 = test_classes()
-    o3 = test_units(do_plot)
-    o4 = test_multi_timestep(do_plot)
-    o5 = test_mixed_timesteps()
-    o6 = test_time_class()
+    # o3 = test_units(do_plot)
+    # o4 = test_multi_timestep(do_plot)
+    # o5 = test_mixed_timesteps()
+    # o6 = test_time_class()
 
     T.toc()

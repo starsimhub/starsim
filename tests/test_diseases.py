@@ -124,7 +124,7 @@ def test_ncd():
     sc.heading('Testing NCDs')
 
     ppl = ss.People(n_agents)
-    ncd = ss.NCD(pars={'log':True})
+    ncd = ss.NCD(log=True)
     sim = ss.Sim(people=ppl, diseases=ncd, copy_inputs=False, dt=ss.years(0.5)) # Since using ncd directly below
     sim.run()
 
@@ -184,7 +184,7 @@ def test_multidisease():
 def test_mtct():
     sc.heading('Test mother-to-child transmission routes')
     ppl = ss.People(n_agents)
-    sis = ss.SIS(beta={'random':[ss.RateProb(0.005, ss.Dur(months=1)), ss.RateProb(0.001, ss.Dur(months=1))], 'prenatal':[ss.RateProb(0.1, ss.Dur(months=1)), 0], 'postnatal':[ss.RateProb(0.1, ss.Dur(months=1)), 0]})
+    sis = ss.SIS(beta={'random':[ss.TimeProb(0.005, ss.Dur(months=1)), ss.TimeProb(0.001, ss.Dur(months=1))], 'prenatal':[ss.TimeProb(0.1, ss.Dur(months=1)), 0], 'postnatal':[ss.TimeProb(0.1, ss.Dur(months=1)), 0]})
     networks = [ss.RandomNet(), ss.PrenatalNet(), ss.PostnatalNet()]
     demographics = ss.Pregnancy(fertility_rate=ss.peryear(20))
     sim = ss.Sim(dt=ss.Dur(1/12), people=ppl, diseases=sis, networks=networks, demographics=demographics)
@@ -196,10 +196,10 @@ def test_mtct():
 if __name__ == '__main__':
     do_plot = True
     sc.options(interactive=do_plot)
-    # sir   = test_sir()
-    # s1,s2 = test_sir_epi()
-    # sis   = test_sis()
-    # ncd   = test_ncd()
+    sir   = test_sir()
+    s1,s2 = test_sir_epi()
+    sis   = test_sis()
+    ncd   = test_ncd()
     gavi  = test_gavi()
     # multi = test_multidisease()
     # mtct  = test_mtct()

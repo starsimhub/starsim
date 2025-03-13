@@ -19,7 +19,7 @@ class Ebola(SIR):
         self.define_pars(
             # Initial conditions and beta
             init_prev       = ss.bernoulli(p=0.005),
-            beta            = ss.RateProb(1.0, ss.days(1)), # Placeholder value
+            beta            = ss.TimeProb(1.0, ss.days(1)), # Placeholder value
             sev_factor      = 2.2,
             unburied_factor = 2.1,
 

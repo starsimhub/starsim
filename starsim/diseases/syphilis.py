@@ -265,14 +265,15 @@ class Syphilis(ss.Infection):
                 assigned_outcomes = birth_outcomes.rvs(len(state_uids))
                 time_to_birth = -sim.people.age.raw # TODO: make nicer
 
+                ti_birth = sim.ti-sim.people.age*(ss.years(1)/self.t.dt) # By using ss.years(1) we avoid constructing an array of Dur objects for each age individually
+
                 # Schedule events
-                ratio = ss.time_ratio(unit1='year', dt1=1.0, unit2=self.t.unit, dt2=self.t.dt) # TODO: think about simplifying
                 for oi, outcome in enumerate(self.pars.birth_outcome_keys):
                     o_uids = state_uids[assigned_outcomes == oi]
                     if len(o_uids) > 0:
                         ti_outcome = f'ti_{outcome}'
                         vals = getattr(self, ti_outcome)
-                        vals[o_uids] = sim.ti + rr(time_to_birth[o_uids] * ratio)
+                        vals[o_uids] = sim.ti + rr(ti_birth[o_uids])
                         setattr(self, ti_outcome, vals)
 
         return

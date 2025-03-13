@@ -645,7 +645,7 @@ class DiskNet(Network):
         super().__init__(key_dict=key_dict)
         self.define_pars(
             r = 0.1, # Radius
-            v = 0.05, # Velocity
+            v = ss.Rate(0.05), # Velocity
         )
         self.update_pars(**kwargs)
         self.define_states(

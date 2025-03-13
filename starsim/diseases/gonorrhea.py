@@ -14,7 +14,7 @@ class Gonorrhea(ss.Infection):
         # Parameters
         super().__init__()
         self.define_pars(
-            beta = ss.RateProb(1.0), # Placeholder value
+            beta = ss.TimeProb(1.0), # Placeholder value
             dur_inf_in_days = ss.lognorm_ex(mean=ss.days(10), std=ss.days(0.6)),  # median of 10 days (IQR 7–15 days) https://sti.bmj.com/content/96/8/556
             p_symp    = ss.bernoulli(p=0.5),  # Share of infections that are symptomatic. Placeholder value
             p_clear   = ss.bernoulli(p=0.2),  # Share of infections that spontaneously clear: https://sti.bmj.com/content/96/8/556
