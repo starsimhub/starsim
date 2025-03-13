@@ -125,7 +125,7 @@ def test_ncd():
 
     ppl = ss.People(n_agents)
     ncd = ss.NCD(log=True)
-    sim = ss.Sim(people=ppl, diseases=ncd, copy_inputs=False, dt=ss.years(0.5)) # Since using ncd directly below
+    sim = ss.Sim(people=ppl, diseases=ncd, copy_inputs=False, dt=ss.years(1)) # Since using ncd directly below
     sim.run()
 
     assert len(ncd.log.out_edges) == ncd.log.number_of_edges()
@@ -201,5 +201,5 @@ if __name__ == '__main__':
     sis   = test_sis()
     ncd   = test_ncd()
     gavi  = test_gavi()
-    # multi = test_multidisease()
-    # mtct  = test_mtct()
+    multi = test_multidisease()
+    mtct  = test_mtct()
