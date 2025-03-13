@@ -352,6 +352,7 @@ class SimPars(Pars):
         if self.stop is not None:
             if self.dur is None:
                 self.dur = self.stop - self.start
+
             else:
                 errormsg = f'You can supply either stop ({self.stop}) or dur ({self.dur}) but not both, since one is calculated from the other'
                 raise ValueError(errormsg)
