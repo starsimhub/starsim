@@ -35,11 +35,11 @@ class Date(pd.Timestamp):
 
     **Examples**::
 
-        ss.date(2020) # Returns <2020-01-01>
-        ss.date(year=2020) # Returns <2020-01-01>
-        ss.date(year=2024.75) # Returns <2024-10-01>
-        ss.date('2024-04-04') # Returns <2024-04-04>
-        ss.date(year=2024, month=4, day=4) # Returns <2024-04-04>
+        ss.Date(2020) # Returns <2020-01-01>
+        ss.Date(year=2020) # Returns <2020-01-01>
+        ss.Date(year=2024.75) # Returns <2024-10-01>
+        ss.Date('2024-04-04') # Returns <2024-04-04>
+        ss.Date(year=2024, month=4, day=4) # Returns <2024-04-04>
     """
 
     def __new__(cls, *args, **kwargs):
@@ -77,7 +77,7 @@ class Date(pd.Timestamp):
 
     @classmethod
     def _reset_class(cls, obj):
-        """ Manually reset the class from pd.Timestamp to ss.date """
+        """ Manually reset the class from pd.Timestamp to ss.Date """
         obj.__class__ = Date
         return obj
 
@@ -115,7 +115,7 @@ class Date(pd.Timestamp):
         return self.__repr__(bracket=False)
 
     def replace(self, *args, **kwargs):
-        """ Returns a new ss.date(); pd.Timestamp is immutable """
+        """ Returns a new ss.Date(); pd.Timestamp is immutable """
         out = super().replace(*args, **kwargs)
         out = self.__class__._reset_class(out)
         return out
@@ -131,8 +131,8 @@ class Date(pd.Timestamp):
 
         **Examples**::
 
-            ss.date.from_year(2020) # Returns <2020-01-01>
-            ss.date.from_year(2024.75) # Returns <2024-10-01>
+            ss.Date.from_year(2020) # Returns <2020-01-01>
+            ss.Date.from_year(2024.75) # Returns <2024-10-01>
         """
 
         if isinstance(year, int):
@@ -149,8 +149,8 @@ class Date(pd.Timestamp):
 
         **Examples**::
 
-            ss.date('2020-01-01').to_year() # Returns 2020.0
-            ss.date('2024-10-01').to_year() # Returns 2024.7486
+            ss.Date('2020-01-01').to_year() # Returns 2020.0
+            ss.Date('2024-10-01').to_year() # Returns 2024.7486
         """
         year_start = pd.Timestamp(year=self.year,month=1,day=1).timestamp()
         year_end = pd.Timestamp(year=self.year+1,month=1,day=1).timestamp()

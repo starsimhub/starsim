@@ -348,6 +348,9 @@ class SimPars(Pars):
         elif sc.isnumber(self.start) and self.stop is not None:
             self.start = self.stop.__class__(self.start)
 
+        if sc.isnumber(self.dur):
+            self.dur = ss.Dur(self.dur)
+
         # Handle stop and dur
         if self.stop is not None:
             if self.dur is None:
