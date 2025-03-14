@@ -238,11 +238,11 @@ if __name__ == '__main__':
 
     T = sc.timer()
 
-    o1 = test_ratio()
-    o2 = test_classes()
-    o3 = test_units(do_plot)
-    o4 = test_multi_timestep(do_plot)
-    o5 = test_mixed_timesteps()
+    # o1 = test_ratio()
+    # o2 = test_classes()
+    # o3 = test_units(do_plot)
+    # o4 = test_multi_timestep(do_plot)
+    # o5 = test_mixed_timesteps()
     o6 = test_time_class()
 
     T.toc()

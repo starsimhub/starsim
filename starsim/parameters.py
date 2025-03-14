@@ -4,6 +4,8 @@ Set parameters
 from numbers import Number
 import numpy as np
 import pandas as pd
+from docutils.io import InputError
+
 import sciris as sc
 import starsim as ss
 import datetime as dt
@@ -13,10 +15,6 @@ __all__ = ['Pars', 'SimPars', 'make_pars']
 # Define classes to not descend into further -- based on sciris.sc_nested
 atomic_classes = (str, Number, list, np.ndarray, pd.Series, pd.DataFrame, type(None), dt.date)
 
-# Define some default parameter values here
-default_dur = ss.Dur(50)
-default_start = ss.Date(2000)
-default_dt = ss.Dur(1)
 
 class Pars(sc.objdict):
     """
@@ -246,7 +244,7 @@ class SimPars(Pars):
         self.start     = None  # Start of the simulation (default 2020)
         self.stop      = None  # End of the simulation
         self.dur       = None  # Duration of time to run, if stop isn't specified (default 50 steps of self.unit)
-        self.dt        = default_dt  # Timestep
+        self.dt        = None  # Timestep
         self.rand_seed = 1     # Random seed; if None, don't reset
 
         # Demographic parameters
@@ -286,7 +284,6 @@ class SimPars(Pars):
         self.validate_verbose()
         self.validate_agents()
         self.validate_total_pop()
-        self.validate_time()
         return
 
     def validate_verbose(self):
@@ -328,44 +325,6 @@ class SimPars(Pars):
         self.total_pop = total_pop
         if self.pop_scale is None:
             self.pop_scale = total_pop / self.n_agents
-        return
-
-    def validate_time(self):
-        """ Ensure at least one of dur and stop is defined, but not both """
-
-        # TODO: Some of this default/validation logic is handled in ss.Time(), ideally probably all checks
-        # and validation should be carried out there (so unclear how much validation is necessary here)
-
-        # Handle start
-        if self.start is None:
-            self.start = default_start
-
-        if sc.isstring(self.stop) or sc.isnumber(self.stop):
-            self.stop = ss.Date(self.stop)
-
-        if sc.isstring(self.start):
-            self.start = ss.Date(self.start)
-        elif sc.isnumber(self.start) and self.stop is not None:
-            self.start = self.stop.__class__(self.start)
-
-        if sc.isnumber(self.dur):
-            self.dur = ss.Dur(self.dur)
-
-        # Handle stop and dur
-        if self.stop is not None:
-            if self.dur is None:
-                self.dur = self.stop - self.start
-
-            else:
-                errormsg = f'You can supply either stop ({self.stop}) or dur ({self.dur}) but not both, since one is calculated from the other'
-                raise ValueError(errormsg)
-            if self.dur <= 0:
-                errormsg = f"Duration must be >0, but you supplied start={str(self.start)} and stop={str(self.stop)}, which gives dur={self.dur}"
-                raise ValueError(errormsg)
-        else:
-            if self.dur is None:
-                self.dur = default_dur
-            self.stop = self.start + self.dur
         return
 
     def validate_modules(self):

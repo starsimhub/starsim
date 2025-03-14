@@ -94,8 +94,8 @@ class RoutineDelivery(Intervention):
 
         # If start_year and end_year are not provided, figure them out from the provided years or the sim
         if self.years is None:
-            if self.start_year is None: self.start_year = sim.pars.start
-            if self.end_year is None:   self.end_year = sim.pars.stop
+            if self.start_year is None: self.start_year = sim.t.start
+            if self.end_year is None:   self.end_year = sim.t.stop
         else:
             self.years = sc.promotetoarray(self.years)
             self.start_year = self.years[0]
@@ -112,7 +112,7 @@ class RoutineDelivery(Intervention):
             raise ValueError(errormsg)
 
         # Adjustment to get the right end point
-        dt = sim.pars.dt.years if isinstance(sim.pars.dt, ss.Dur) else sim.pars.dt # TODO: need to eventually replace with own timestep, but not initialized yet since super().init_pre() hasn't been called
+        dt = sim.t.dt.years if isinstance(sim.t.dt, ss.Dur) else sim.t.dt # TODO: need to eventually replace with own timestep, but not initialized yet since super().init_pre() hasn't been called
         adj_factor = int(1/dt) - 1 if dt < 1 else 1
 
         # Determine the timepoints at which the intervention will be applied

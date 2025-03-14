@@ -9,21 +9,9 @@ import datetime as dt
 import dateutil as du
 import starsim as ss
 
+__all__ = ['Date', 'Dur', 'YearDur', 'DateDur', 'Rate', 'TimeProb', 'RateProb', 'Time', 'years', 'months', 'weeks', 'days', 'perday', 'perweek', 'permonth', 'peryear']
 
-#%% Helper functions
-
-# Classes and objects that are externally visible
-# __all__ = ['time_units', 'time_ratio', 'date_add', 'date_diff']
-
-# Define available time units
-# time_units = sc.objdict(
-#     day   = 1.0,
-#     week  = 7.0,
-#     month = 30.4375, # 365.25/12
-#     year  = 365.25, # For consistency with months
-# )
-
-# Base classes for points in time and durations that behave sensibly
+#%% Base classes
 
 class Date(pd.Timestamp):
     """
@@ -690,7 +678,6 @@ class Rate():
         # If a float is divided by a rate
         return other * (self.period/self.value)
 
-
 class TimeProb(Rate):
     """
     A probability over time (a.k.a. a cumulative hazard rate); must be >=0 and <=1.
@@ -749,7 +736,7 @@ class RateProb(Rate):
     def __truediv__(self, other): raise NotImplementedError()
     def __rtruediv__(self, other): raise NotImplementedError()
 
-#%% Time - simulation vectors
+#%% Simulation time vectors
 
 class Time(sc.prettyobj):
     """
@@ -785,28 +772,25 @@ class Time(sc.prettyobj):
 
     # Allowable time arguments
     time_args = ['start', 'stop', 'dt']
+    default_dur = Dur(50)
+    default_start = Date(2000)
+    default_dt = Dur(1)
 
-    def __init__(self, start=None, stop=None, dt=None, unit=None, pars=None, parent=None,
-                 name=None, init=True, sim=None):
-
+    def __init__(self, start=None, stop=None, dt=None, dur=None, name=None, init=True, sim=None):
 
         self.name = name
         self.start = start
         self.stop = stop
         self.dt = dt
+        self.dur = dur
         self.ti = 0 # The time index, e.g. 0, 1, 2
-
-
-        # Prepare for later initialization
         self.tvec    = None # The time vector for this instance in Date or Dur format
         self.yearvec = None # Time vector as floating point years
-
         self.initialized = False
 
-        # Finalize
-        self.update(pars=pars, parent=parent)
-        if init and self.ready:
+        if init:
             self.init(sim=sim)
+
         return
 
     def __repr__(self):
@@ -899,37 +883,98 @@ class Time(sc.prettyobj):
 
     def init(self, sim=None):
         """ Initialize all vectors """
-        # Initial validation
-        # self.unit = validate_unit(self.unit)
 
-        # Copy missing values from sim
         if isinstance(sim, ss.Sim):
-            self.dt = sc.ifelse(self.dt, sim.t.dt)
-            self.start = sc.ifelse(self.start, sim.t.start)
-            self.stop = sc.ifelse(self.stop, sim.t.stop)
+            self.dt = sc.ifelse(self.dt, sim.t.dt, sim.pars.dt)
+            self.start = sc.ifelse(self.start, sim.t.start, sim.pars.start)
+            self.stop = sc.ifelse(self.stop, sim.t.stop, sim.pars.stop)
 
-            if self.is_absolute != sim.t.is_absolute:
-                raise Exception('Cannot mix absolute/relative times across modules')
+        if sc.isnumber(self.dur):
+            self.dur = Dur(self.dur)
 
-        if sc.isnumber(self.stop) or sc.isstring(self.stop):
-            self.stop = Date(self.stop)
+        match (self.start, self.stop, self.dur):
+            case (None, None, None):
+                start = self.default_start
+                dur = self.default_dur
+                stop = start+dur
+
+            case (start, None, None):
+                start = Date(start)
+                dur = self.default_dur
+                stop = start+dur
+
+            case (None, stop, None):
+                if sc.isnumber(stop) and stop < 1900:
+                    stop = Dur(stop)
+                    start = Dur(0)
+                else:
+                    stop = Date(stop)
+                    start = self.default_start
+                dur = stop-start
+
+            case (None, None, dur):
+                start = self.default_start
+                stop = start+dur
+
+            case (start, stop, None):
+
+                if sc.isnumber(stop) and stop < 1900:
+                    stop = Dur(stop)
+                else:
+                    stop = Date(stop)
+
+                if sc.isnumber(start) and isinstance(stop, Dur):
+                    start = Dur(start)
+                else:
+                    start = Date(start)
+
+                dor = stop-start
+
+            case (start, None, dur):
+                start = Date(start)
+                stop = start+dur
+
+            case (None, stop, dur):
+                if sc.isnumber(stop) and stop < 1900:
+                    stop = Dur(stop)
+                else:
+                    stop = Date(stop)
+
+            case (start, stop, dur):
+                if sc.isstring(start):
+                    start = Date(start)
+                if sc.isstring(stop):
+                    stop = Date(stop)
+
+                if sc.isnumber(start) and sc.isnumber(stop):
+                    if stop < 1900:
+                        start = Dur(start)
+                        stop = Dur(stop)
+                    else:
+                        start = Date(start)
+                        stop = Date(stop)
+                elif sc.isnumber(start):
+                    start = stop.__class__(start)
+                elif sc.isnumber(stop):
+                    stop = start.__class__(stop)
+                assert dur == stop-start, 'Start, stop, and dur are inconsistent'
+
+        assert isinstance(start, (Date, Dur)), 'Start must be a Date or Dur'
+        assert isinstance(stop, (Date, Dur)), 'Stop must be a Date or Dur'
+        assert type(start) is type(stop), 'Start and stop must be the same type'
+        assert start <= stop, 'Start must be before stop'
+
+        self.start = start
+        self.stop = stop
+
+        if self.dt is None:
+            self.dt = self.default_dt
 
         if sc.isnumber(self.dt):
-            self.dt = YearDur(self.dt)
+            self.dt = Dur(self.dt)
 
-        if isinstance(self.stop, Dur) and self.start is None:
-            # The start can be omitted if the stop is a Dur, as it will assume the start is zero
-            self.start = self.stop.__class__()
-
-        if sc.isnumber(self.start) or sc.isstring(self.start):
-            if isinstance(self.stop, Dur):
-                self.start = ss.Dur(self.start)
-            else:
-                self.start = Date(self.start)
-
-        if self.start > self.stop:
-            msg = f'Start date ({self.start}) must be before stop date ({self.stop})'
-            raise ValueError(msg)
+        if self.is_absolute != sim.t.is_absolute:
+            raise Exception('Cannot mix absolute/relative times across modules')
 
         # We need to populate both the tvec (using dates) and the yearvec (using years). However, we
         # need to decide which of these quantities to prioritise considering that the calendar dates
@@ -938,7 +983,7 @@ class Time(sc.prettyobj):
         if isinstance(self.dt, YearDur):
             # If dt has been specified as a YearDur then preference setting fractional years. So first
             # calculate the fractional years, and then convert them to the equivalent dates
-            self.yearvec = np.round(self.start.years + np.arange(0, self.stop.years-self.start.years+self.dt.years, self.dt.years),12) # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
+            self.yearvec = np.round(self.start.years + np.arange(0, self.stop.years - self.start.years + self.dt.years, self.dt.years), 12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
             if isinstance(self.stop, Dur):
                 self.tvec = np.array([self.stop.__class__(x) for x in self.yearvec])
             else:
@@ -1021,8 +1066,7 @@ def peryear(v):
     return Rate(v, YearDur(1))
 
 
-
-
+#%% Demos/tests
 
 if __name__ == '__main__':
 
