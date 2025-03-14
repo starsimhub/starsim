@@ -26,7 +26,6 @@ class Births(Demographics):
     def __init__(self, metadata=None, **kwargs):
         super().__init__()
         self.define_pars(
-            unit = 'year',
             birth_rate = ss.peryear(20),
             rel_birth = 1,
             rate_units = 1e-3,  # assumes birth rates are per 1000. If using percentages, switch this to 1
@@ -60,6 +59,9 @@ class Births(Demographics):
         birth_rate = ss.standardize_data(data=self.pars.birth_rate, metadata=self.metadata)
         if isinstance(birth_rate, (pd.Series, pd.DataFrame)):
             return birth_rate.xs(0,level='age')
+        if sc.isnumber(birth_rate):
+            # If the user has provided a bare number, assume it is per year
+            return ss.peryear(birth_rate)
         return birth_rate
 
     def init_results(self):
@@ -181,6 +183,9 @@ class Deaths(Demographics):
         if isinstance(death_rate, (pd.Series, pd.DataFrame)):
             death_rate = death_rate.unstack(level='age')
             assert not death_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
+        if sc.isnumber(death_rate):
+            # If the user has provided a bare number, assume it is per year
+            return ss.peryear(death_rate)
         return death_rate
 
     @staticmethod # Needs to be static since called externally, although it sure looks like a class method!
@@ -363,6 +368,8 @@ class Pregnancy(Demographics):
             max_age = fertility_rate.columns.max()
             fertility_rate[max_age + 1] = 0
             assert not fertility_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
+        if sc.isnumber(fertility_rate):
+            return ss.peryear(fertility_rate)
         return fertility_rate
 
     def init_pre(self, sim):

@@ -21,7 +21,7 @@ mf_pars = {'part_rates': 0.85}
 msm_pars = {'part_rates': 0.1}
 ppl.networks = ss.Networks(
     ss.MSMNet(pars=msm_pars), ss.MFNet(pars=mf_pars), ss.MaternalNet(),
-    connectors=ss.MF_MSM(pars={'prop_bi': 0.4})
+    connectors=ss.MF_MSM(prop_bi=0.4)
 )
 
 hiv = ss.HIV()

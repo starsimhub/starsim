@@ -185,7 +185,9 @@ def test_time_class():
     def sim(start, stop, dt):
         """ Generate a fake sim """
         sim = sc.prettyobj()
-        sim.t = ss.Time(start=start, stop=stop, dt=dt, sim=True)
+        sim.t = ss.Time(start=start, stop=stop, dt=dt)
+        sim.pars = ss.SimPars()
+        sim.t.init(None)
         return sim
 
     print('Testing dates vs. numeric')

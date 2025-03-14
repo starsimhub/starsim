@@ -14,7 +14,7 @@ do_plot = True
 def test_fixed_death_rate():
     """ Simple fixed death rate for all agents """
     ppl = ss.People(1000)
-    bdm1 = ss.Deaths(pars={'death_rate': 0.015})
+    bdm1 = ss.Deaths(death_rate=0.015)
     sim1 = ss.Sim(people=ppl, demographics=bdm1, label='Constant death rate')
     sim1.run()
     return sim1
@@ -32,7 +32,7 @@ def test_series_death_rate():
         'data_cols': {'year': 'Time', 'sex': 'Sex', 'age': 'AgeGrpStart', 'value': 'mx'},
         'sex_keys': {'Female':'f', 'Male':'m'},
     }))
-    bdm2 = ss.Deaths(pars={'death_rate': death_rate})
+    bdm2 = ss.Deaths(death_rate=death_rate)
     sim2 = ss.Sim(people=ppl, demographics=bdm2, label='Using age-specific data from a pandas series')
     sim2.run()
     return sim2
@@ -42,7 +42,7 @@ def test_file_death_rate():
     """ Realistic death rates in dataframe format, read from a csv file """
     realistic_death = pd.read_csv(ss.root / 'tests/test_data/nigeria_deaths.csv')
     ppl = ss.People(1000)
-    bdm3 = ss.Deaths(pars={'death_rate': realistic_death})
+    bdm3 = ss.Deaths(death_rate=realistic_death)
     sim3 = ss.Sim(people=ppl, demographics=bdm3, label='Realistic death rates read from a CSV file')
     sim3.run()
     return sim3
@@ -52,7 +52,7 @@ def test_file_birth_data():
     """ Test births using CSV data """
     ppl = ss.People(1000)
     realistic_birth = pd.read_csv(ss.root / 'tests/test_data/nigeria_births.csv')
-    births = ss.Births(pars={'birth_rate': realistic_birth})
+    births = ss.Births(birth_rate=realistic_birth)
     sim1 = ss.Sim(people=ppl, demographics=births, label='UN birth rates read from a CSV file')
     sim1.run()
     return sim1
@@ -61,7 +61,7 @@ def test_file_birth_data():
 def test_crude_birth_data():
     """ Test births using a crude rate """
     ppl = ss.People(1000)
-    births = ss.Births(pars={'birth_rate': 36, 'units': 1 / 1000})
+    births = ss.Births(birth_rate=36, units=1/1000)
     sim2 = ss.Sim(people=ppl, demographics=births, label='Overall crude birth rate')
     sim2.run()
     return sim2
@@ -70,7 +70,7 @@ def test_crude_birth_data():
 def test_fertility_data():
     """ Testing fertility data can be added in multiple formats """
     fertility_rates = pd.read_csv(ss.root / 'tests/test_data/nigeria_asfr.csv')
-    pregnancy = ss.Pregnancy(pars={'fertility_rate': fertility_rates})
+    pregnancy = ss.Pregnancy(fertility_rate=fertility_rates)
     ppl = ss.People(1000)
     sim = ss.Sim(people=ppl, demographics=pregnancy, label='UN fertility rates read from a CSV file')
     sim.run()

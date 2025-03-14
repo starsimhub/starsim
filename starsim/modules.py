@@ -110,7 +110,7 @@ class Module(Base):
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
-        self.t = ss.Time(**kwargs, name=self.name, init=False)
+        self.t = ss.Time(**kwargs, name=self.name)
 
         # Properties to be added by init_pre()
         self.sim = None

@@ -776,7 +776,7 @@ class Time(sc.prettyobj):
     default_start = Date(2000)
     default_dt = Dur(1)
 
-    def __init__(self, start=None, stop=None, dt=None, dur=None, name=None, init=True, sim=None):
+    def __init__(self, start=None, stop=None, dt=None, dur=None, name=None):
 
         self.name = name
         self.start = start
@@ -786,10 +786,7 @@ class Time(sc.prettyobj):
         self.ti = 0 # The time index, e.g. 0, 1, 2
         self.tvec    = None # The time vector for this instance in Date or Dur format
         self.yearvec = None # Time vector as floating point years
-        self.initialized = False
-
-        if init:
-            self.init(sim=sim)
+        self.initialized = False # Call self.init(sim) to initialise the object
 
         return
 
@@ -884,10 +881,11 @@ class Time(sc.prettyobj):
     def init(self, sim=None):
         """ Initialize all vectors """
 
-        if isinstance(sim, ss.Sim):
+        if sim is not None:
             self.dt = sc.ifelse(self.dt, sim.t.dt, sim.pars.dt)
             self.start = sc.ifelse(self.start, sim.t.start, sim.pars.start)
             self.stop = sc.ifelse(self.stop, sim.t.stop, sim.pars.stop)
+            self.dur = sc.ifelse(self.dur, sim.t.dur, sim.pars.dur)
 
         if sc.isnumber(self.dur):
             self.dur = Dur(self.dur)
@@ -916,20 +914,6 @@ class Time(sc.prettyobj):
                 start = self.default_start
                 stop = start+dur
 
-            case (start, stop, None):
-
-                if sc.isnumber(stop) and stop < 1900:
-                    stop = Dur(stop)
-                else:
-                    stop = Date(stop)
-
-                if sc.isnumber(start) and isinstance(stop, Dur):
-                    start = Dur(start)
-                else:
-                    start = Date(start)
-
-                dor = stop-start
-
             case (start, None, dur):
                 start = Date(start)
                 stop = start+dur
@@ -941,6 +925,8 @@ class Time(sc.prettyobj):
                     stop = Date(stop)
 
             case (start, stop, dur):
+                # Note that this block will run if dur is None and if it is not None, which is fine because
+                # we are ignoring dur in this case (if the user specifies start and stop, they'll be used)
                 if sc.isstring(start):
                     start = Date(start)
                 if sc.isstring(stop):
@@ -957,7 +943,9 @@ class Time(sc.prettyobj):
                     start = stop.__class__(start)
                 elif sc.isnumber(stop):
                     stop = start.__class__(stop)
-                assert dur == stop-start, 'Start, stop, and dur are inconsistent'
+                dur = stop-start
+            case _:
+                raise Exception('Failed to match start, stop, and dur') # This should not occur
 
         assert isinstance(start, (Date, Dur)), 'Start must be a Date or Dur'
         assert isinstance(stop, (Date, Dur)), 'Stop must be a Date or Dur'
@@ -966,6 +954,7 @@ class Time(sc.prettyobj):
 
         self.start = start
         self.stop = stop
+        self.dur = dur
 
         if self.dt is None:
             self.dt = self.default_dt
@@ -973,8 +962,9 @@ class Time(sc.prettyobj):
         if sc.isnumber(self.dt):
             self.dt = Dur(self.dt)
 
-        if self.is_absolute != sim.t.is_absolute:
-            raise Exception('Cannot mix absolute/relative times across modules')
+        if sim is not None:
+            if self.is_absolute != sim.t.is_absolute:
+                raise Exception('Cannot mix absolute/relative times across modules')
 
         # We need to populate both the tvec (using dates) and the yearvec (using years). However, we
         # need to decide which of these quantities to prioritise considering that the calendar dates
