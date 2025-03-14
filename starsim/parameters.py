@@ -4,8 +4,6 @@ Set parameters
 from numbers import Number
 import numpy as np
 import pandas as pd
-from docutils.io import InputError
-
 import sciris as sc
 import starsim as ss
 import datetime as dt
@@ -102,39 +100,6 @@ class Pars(sc.objdict):
             errormsg = f'Cannot update a module with {type(new)}: must be a dict to set new parameters'
             raise TypeError(errormsg)
         return
-
-    # def _update_timepar(self, key, old, new):
-    #     """ Update a time parameter (duration or rate) """
-    #
-    #     # It's a TimePar, e.g. dur_inf = ss.dur(6); use directly
-    #     if isinstance(new, ss.TimePar):
-    #         self[key] = new
-    #
-    #     # It's a dataframe, allow the update -- used for demographics
-    #     elif isinstance(new, (pd.Series, pd.DataFrame)):
-    #         self[key] = new # TODO: add validation or convert to timepar
-    #
-    #     # It's a single number, e.g. dur_inf = 6; set parameters
-    #     elif isinstance(new, Number):
-    #         old.set(new)
-    #
-    #     # It's a list of numbers, e.g. dur_inf = [6, 2]; set parameters
-    #     elif isinstance(new, list):
-    #         old.set(*new)
-    #
-    #     # It's a dict, figure out what to do
-    #     elif isinstance(new, dict):
-    #         if isinstance(old, ss.beta):
-    #             self[key] = new # TODO: use an actual set here
-    #         else:
-    #             old.set(**new)
-    #
-    #     # Give up
-    #     else:
-    #         errormsg = f'Updating timepar from {type(old)} to {type(new)} is not supported'
-    #         raise TypeError(errormsg)
-    #
-    #     return
 
     def _update_dist(self, key, old, new):
         """ Update a Dist object in the parameters, e.g. sim.pars.diseases.sir.dur_inf """
