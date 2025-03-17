@@ -263,8 +263,11 @@ class Dur():
 
 
 
-    def __radd__(self, other): return self.__add__(other)
-    def __rmul__(self, other): return self.__mul__(other)
+    def __radd__(self, other):
+        return self.__add__(other)
+
+    def __rmul__(self, other):
+        return self.__mul__(other)
 
     def __lt__(self, other):
         try:
@@ -367,7 +370,9 @@ class YearDur(Dur):
             return self.__class__(max(self.period - other, 0))
 
     def __mul__(self, other: float):
-        if isinstance(other, Rate):
+        if isinstance(other, np.ndarray):
+            return other*self # This means np.arange(2)*ss.years(1) and ss.years(1)*np.arange(2) both give [ss.years(1), ss.years(2)] as the output
+        elif isinstance(other, Rate):
             return NotImplemented # Delegate to Rate.__rmul__
         elif isinstance(other, Dur):
             raise Exception('Cannot multiply a duration by a duration')
@@ -549,7 +554,9 @@ class DateDur(Dur):
         # return self.period.to_numpy()
 
     def __mul__(self, other: float):
-        if isinstance(other, Rate):
+        if isinstance(other, np.ndarray):
+            return other*self
+        elif isinstance(other, Rate):
             return NotImplemented # Delegate to Rate.__rmul__
         elif isinstance(other, Dur):
             raise Exception('Cannot multiply a duration by a duration')
@@ -640,7 +647,9 @@ class Rate():
         return f'<{self.__class__.__name__}: {self.value} per {self.period.str()}>' # Use str to get the friendly representation
 
     def __mul__(self, other):
-        if isinstance(other, Dur):
+        if isinstance(other, np.ndarray):
+            return other*self
+        elif isinstance(other, Dur):
             return self.value*other/self.period
         elif sc.isnumber(other) and other == 0:
             return 0 # Or should this be a rate?
@@ -696,7 +705,9 @@ class TimeProb(Rate):
         return super().__init__(value, period)
 
     def __mul__(self, other):
-        if isinstance(other, Dur):
+        if isinstance(other, np.ndarray):
+            return other*self # This means np.arange(2)*ss.years(1) and ss.years(1)*np.arange(2) both give [ss.years(1), ss.years(2)] as the output
+        elif isinstance(other, Dur):
             if self.value == 0:
                 return 0
             elif self.value == 1:
@@ -724,7 +735,9 @@ class RateProb(Rate):
         return super().__init__(value, period)
 
     def __mul__(self, other):
-        if isinstance(other, Dur):
+        if isinstance(other, np.ndarray):
+            return other*self
+        elif isinstance(other, Dur):
             if self.value == 0:
                 return 0
             else:
@@ -784,11 +797,25 @@ class Time(sc.prettyobj):
         self.dt = dt
         self.dur = dur
         self.ti = 0 # The time index, e.g. 0, 1, 2
-        self.tvec    = None # The time vector for this instance in Date or Dur format
-        self.yearvec = None # Time vector as floating point years
+        self._tvec    = None # The time vector for this instance in Date or Dur format
+        self._yearvec = None # Time vector as floating point years
         self.initialized = False # Call self.init(sim) to initialise the object
 
         return
+
+    @property
+    def tvec(self):
+        if self._tvec is None:
+            raise Exception('Time object has not yet been not initialized - call `init()` before using the object')
+        else:
+            return self._tvec
+
+    @property
+    def yearvec(self):
+        if self._yearvec is None:
+            raise Exception('Time object has not yet been not initialized - call `init()` before using the object')
+        else:
+            return self._yearvec
 
     def __repr__(self):
         if self.initialized:
@@ -973,11 +1000,11 @@ class Time(sc.prettyobj):
         if isinstance(self.dt, YearDur):
             # If dt has been specified as a YearDur then preference setting fractional years. So first
             # calculate the fractional years, and then convert them to the equivalent dates
-            self.yearvec = np.round(self.start.years + np.arange(0, self.stop.years - self.start.years + self.dt.years, self.dt.years), 12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
+            self._yearvec = np.round(self.start.years + np.arange(0, self.stop.years - self.start.years + self.dt.years, self.dt.years), 12)  # Subtracting off self.start.years in np.arange increases floating point precision for that part of the operation, reducing the impact of rounding
             if isinstance(self.stop, Dur):
-                self.tvec = np.array([self.stop.__class__(x) for x in self.yearvec])
+                self._tvec = np.array([self.stop.__class__(x) for x in self._yearvec])
             else:
-                self.tvec = np.array([Date(x) for x in self.yearvec])
+                self._tvec = np.array([Date(x) for x in self._yearvec])
         else:
             # If dt has been specified as a DateDur then preference setting dates. So first
             # calculate the dates, and then convert them to the equivalent fractional years
@@ -987,11 +1014,11 @@ class Time(sc.prettyobj):
                 tvec.append(t)
                 t += self.dt
 
-            self.tvec = np.array(tvec)
-            self.yearvec = np.array([x.years for x in tvec])
+            self._tvec = np.array(tvec)
+            self._yearvec = np.array([x.years for x in tvec])
 
         self.initialized = True
-        return
+        return self
 
 
     def now(self, key=None):
@@ -1063,6 +1090,10 @@ if __name__ == '__main__':
     from starsim.time import *   # Import the classes from Starsim so that Dur is an ss.Dur rather than just a bare Dur etc.
     import starsim as ss
 
+    YearDur(1)*np.arange(5)
+    np.arange(5)*YearDur(1)
+
+
     t = Time(start=2001, stop=2003, dt=ss.years(0.1))
 
     Dur(weeks=1)/Dur(days=1)
@@ -1110,13 +1141,13 @@ if __name__ == '__main__':
     t = Time(Dur(days=0), Dur(years=1), Dur(months=1)) # Not allowed
 
 
-    t = Time(Dur(0), Dur(1), Dur(1/12))
+    t = Time(Dur(0), Dur(1), Dur(1/12)).init()
     t.tvec+Date(2020)
 
     # Date('2020-01-01')+50*Dur(days=1)
     t = Time(Date('2020-01-01'), Date('2030-06-01'), Dur(days=1))
 
-    t = Time(Date(2020), Date(2030.5), Dur(0.1))
+    t = Time(Date(2020), Date(2030.5), Dur(0.1)).init()
     t.tvec + YearDur(1)
 
     print(1/YearDur(1))
