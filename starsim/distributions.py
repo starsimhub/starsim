@@ -1052,7 +1052,7 @@ class bernoulli(Dist):
     #         timepar = sc.dcp(val) # Rename to make more sense within the context of this method
     #         val = timepar.v # Pull out the base value; we'll deal with the transformation later
     #         self._timepar = timepar # This is used, then destroyed, by postprocess_timepar() below
-    #         if isinstance(timepar, ss.dur): # Validation
+    #         if isinstance(timepar, ss.Dur): # Validation
     #             errormsg = f'Bernoulli distributions can only be used with ss.time_prob() or ss.rate(), not {timepar}'
     #             raise TypeError(errormsg)
     #

@@ -54,7 +54,7 @@ def build_sim(sim, calib_pars, **kwargs):
         if k == 'beta':
             sim.diseases.sir.pars['beta'] = ss.TimeProb(v)
         elif k == 'dur_inf':
-            sim.diseases.sir.pars['dur_inf'] = ss.lognorm_ex(mean=ss.Dur(v)), #ss.dur(v)
+            sim.diseases.sir.pars['dur_inf'] = ss.lognorm_ex(mean=ss.Dur(v)),
         elif k == 'n_contacts':
             sim.networks.randomnet.pars.n_contacts = v # Typically a Poisson distribution, but this should set the distribution parameter value appropriately
         else:

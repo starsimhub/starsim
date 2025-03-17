@@ -52,17 +52,6 @@ class Date(pd.Timestamp):
         out = cls._reset_class(out)
         return out
 
-    # TODO: Commenting these out pending identifying failing test/use case. On this branch, these methods cause an error
-    # def __copy__(self):
-    #     """ Required due to pd.Timestamp implementation; pd.Timestamp is immutable, so create new object """
-    #     out = self.__class__(self)
-    #     return out
-    #
-    # def __deepcopy__(self, *args, **kwargs):
-    #     """ Required due to pd.Timestamp implementation; pd.Timestamp is immutable, so create new object """
-    #     out = self.__class__(self)
-    #     return out
-
     @classmethod
     def _reset_class(cls, obj):
         """ Manually reset the class from pd.Timestamp to ss.Date """
@@ -195,6 +184,42 @@ class Date(pd.Timestamp):
     # def __iadd__(self, other): return self.__add__(other) # I think pd.Timestamp is immutable so these shouldn't be implemented?
     def __rsub__(self, other): return self.__sub__(other) # TODO: check if this should be reversed
     # def __isub__(self, other): return self.__sub__(other)
+
+    def __lt__(self, other):
+        if sc.isnumber(other):
+            return self.to_year() < other
+        else:
+            return super().__lt__(other)
+
+    def __gt__(self, other):
+        if sc.isnumber(other):
+            return self.to_year() > other
+        else:
+            return super().__gt__(other)
+
+    def __le__(self, other):
+        if sc.isnumber(other):
+            return self.to_year() <= other
+        else:
+            return super().__le__(other)
+
+    def __ge__(self, other):
+        if sc.isnumber(other):
+            return self.to_year() >= other
+        else:
+            return super().__ge__(other)
+
+    def __eq__(self, other):
+        if sc.isnumber(other):
+            return self.to_year() == other
+        else:
+            return super().__eq__(other)
+
+    def __ne__(self, other):
+        if sc.isnumber(other):
+            return self.to_year() != other
+        else:
+            return super().__ne__(other)
 
 class Dur():
     # Base class for durations/periods
