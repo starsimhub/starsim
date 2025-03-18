@@ -236,6 +236,45 @@ class Date(pd.Timestamp):
         # As equality with float years is implemented, this allows interoperability with dicts that use float year keys
         return hash(self.to_year())
 
+    # Convenience methods based on application usage
+
+    @classmethod
+    def from_array(cls, array):
+        """
+        Convert an array of float years into an array of Date instances
+
+        :param array:
+        :return:
+        """
+        return np.vectorize(cls)(array)
+
+    @classmethod
+    def arange(cls, low, high, step=1):
+        """
+        Construct an array of Date instances
+
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        if isinstance(step, ss.DateDur):
+            if not isinstance(low, (Date, Dur)):
+                low = cls(low)
+            if not isinstance(high, (Date, Dur)):
+                high = cls(high)
+
+            tvec = []
+            t = low
+            while t <= high:
+                tvec.append(t)
+                t += step
+            return np.array(tvec)
+        else:
+            low = low.years if isinstance(low, Date) else low
+            high = high.years if isinstance(high, Date) else high
+            return cls.from_array(np.arange(low, high, step))
+
+
 class Dur():
     # Base class for durations/periods
     # Subclasses for date-durations and fixed-durations
@@ -1056,14 +1095,8 @@ class Time(sc.prettyobj):
         else:
             # If dt has been specified as a DateDur then preference setting dates. So first
             # calculate the dates, and then convert them to the equivalent fractional years
-            tvec = []
-            t = self.start
-            while t <= self.stop:
-                tvec.append(t)
-                t += self.dt
-
-            self._tvec = np.array(tvec)
-            self._yearvec = np.array([x.years for x in tvec])
+            self._tvec = ss.Date.arange(self.start, self.stop, self.dt)
+            self._yearvec = np.array([x.years for x in self._tvec])
 
         self.initialized = True
         return self
@@ -1138,6 +1171,8 @@ if __name__ == '__main__':
     from starsim.time import *   # Import the classes from Starsim so that Dur is an ss.Dur rather than just a bare Dur etc.
     import starsim as ss
 
+    Date(1500)
+    Date(1500.1)
     YearDur(1)*np.arange(5)
     np.arange(5)*YearDur(1)
 
