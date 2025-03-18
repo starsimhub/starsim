@@ -174,7 +174,6 @@ class Date(pd.Timestamp):
         elif isinstance(other, pd.DateOffset):
             return Date(self.to_pandas() - other)
         elif isinstance(other, Date):
-            # TODO: Could replace this with a DateDur but need to set the components carefully
             return YearDur(self.years-other.years)
         else:
             raise TypeError('Unsupported type')
@@ -339,9 +338,6 @@ class Dur():
         """
         raise NotImplementedError
 
-
-
-
     def __radd__(self, other):
         return self.__add__(other)
 
@@ -473,6 +469,10 @@ class YearDur(Dur):
             return 'year'
         else:
             return f'{self.period} years'
+
+    def __abs__(self):
+        return self.__class__(abs(self.period))
+
 
 class DateDur(Dur):
     # Date based duration e.g., if requiring a week to be 7 calendar days later
@@ -711,6 +711,14 @@ class DateDur(Dur):
 
     def __sub__(self, other):
         return self.__add__(-1*other)
+
+    def __abs__(self):
+        # Cannot implement this because it's ambiguous how to resolve cases like
+        # DateDur(months=-1,days=1) - this is a sensible DateDur interpreted as 'go back 1 month, then go forward 1 day'
+        # but just taking the absolute value of all of the components wouldn't work because this would be on average 1 month + 1 day
+        # whereas it should be 1 month - 1 day. This could probably be resolved? But is an edge case, unlikely to be needed
+        # (whereas abs(YearDur) arises when comparing dates, which automatically return YearDur)
+        raise NotImplementedError
 
 class Rate():
     """
