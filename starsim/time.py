@@ -233,6 +233,10 @@ class Date(pd.Timestamp):
         else:
             return super().__ne__(other)
 
+    def __hash__(self):
+        # As equality with float years is implemented, this allows interoperability with dicts that use float year keys
+        return hash(self.to_year())
+
 class Dur():
     # Base class for durations/periods
     # Subclasses for date-durations and fixed-durations
