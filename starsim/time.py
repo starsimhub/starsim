@@ -617,7 +617,15 @@ class DateDur(Dur):
         if self.years == 0:
             return '<DateDur: 0>'
         else:
-            return '<DateDur: ' +  ','.join([f'{k}={v}' for k, v in zip(self.ratios, self._as_array(self.period)) if v!=0]) + '>'
+            labels = self.ratios.keys()
+            vals = self._as_array(self.period).astype(float)
+
+            time_portion = vals[4:]
+            time_portion[-4] += time_portion[-1]*1e-9 + time_portion[-2]*1e-6 + time_portion[-3]*1e-3 # Collapse it down to seconds
+            time_portion[-4] = int(vals[-4]*100)/100
+            time_str = ':'.join(f'{np.round(v,1):02g}' for v in time_portion[:3])
+
+            return '<DateDur: ' +  ','.join([f'{k}={int(v)}' for k, v in zip(labels[:4], vals[:4]) if v!=0]) + (f', +{time_str}' if time_str != '00:00:00' else '') + '>'
 
     def str(self):
         # Friendly representation e.g., 'day', '1 year, 2 months, 1 day'
