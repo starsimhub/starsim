@@ -188,36 +188,48 @@ class Date(pd.Timestamp):
     def __lt__(self, other):
         if sc.isnumber(other):
             return self.to_year() < other
+        elif isinstance(other, np.ndarray):
+            return np.vectorize(self.__lt__)(other)
         else:
             return super().__lt__(other)
 
     def __gt__(self, other):
         if sc.isnumber(other):
             return self.to_year() > other
+        elif isinstance(other, np.ndarray):
+            return np.vectorize(self.__gt__)(other)
         else:
             return super().__gt__(other)
 
     def __le__(self, other):
         if sc.isnumber(other):
             return self.to_year() <= other
+        elif isinstance(other, np.ndarray):
+            return np.vectorize(self.__le__)(other)
         else:
             return super().__le__(other)
 
     def __ge__(self, other):
         if sc.isnumber(other):
             return self.to_year() >= other
+        elif isinstance(other, np.ndarray):
+            return np.vectorize(self.__ge__)(other)
         else:
             return super().__ge__(other)
 
     def __eq__(self, other):
         if sc.isnumber(other):
             return self.to_year() == other
+        elif isinstance(other, np.ndarray):
+            return np.vectorize(self.__eq__)(other)
         else:
             return super().__eq__(other)
 
     def __ne__(self, other):
         if sc.isnumber(other):
             return self.to_year() != other
+        elif isinstance(other, np.ndarray):
+            return np.vectorize(self.__ne__)(other)
         else:
             return super().__ne__(other)
 
