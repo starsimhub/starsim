@@ -514,8 +514,16 @@ class Dist:
         for key, v in self._pars.items():
             if isinstance(v, ss.Dur) or isinstance(v, np.ndarray) and v.size and isinstance(v.flat[0], ss.Dur):
                 self._pars[key] = v/self.module.t.dt
-            if isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.size and isinstance(v.flat[0], ss.Rate):
-                self._pars[key] = v * self.module.t.dt
+                try:
+                    self._pars[key] = self._pars[key].astype(float)
+                except:
+                    pass
+            elif isinstance(v, ss.Rate) or isinstance(v, np.ndarray) and v.size and isinstance(v.flat[0], ss.Rate):
+                self._pars[key] = v*self.module.t.dt
+                try:
+                    self._pars[key] = self._pars[key].astype(float)
+                except:
+                    pass
 
     def convert_callable(self, key, val, size, uids):
         """ Method to handle how callable parameters are processed; not for the user """
