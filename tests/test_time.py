@@ -5,6 +5,7 @@ Test different time units and timesteps
 import numpy as np
 import sciris as sc
 import starsim as ss
+from starsim.time import *
 
 small = 100
 medium = 1000
@@ -232,6 +233,102 @@ def test_time_class():
 
     return [s1, t1, s2, t2]
 
+def test_callable_dists():
+    def loc(module, sim, uids):
+        return np.array([ss.Dur(x) for x in range(uids)])
+    module = sc.objdict(t=sc.objdict(dt=ss.Dur(days=1)))
+    d = ss.normal(loc, ss.Dur(days=1), module=module, strict=False)
+    d.init()
+    d.rvs(10)
+
+def test_pickling():
+    import pickle
+    x = ss.Date('2020-01-01')
+    s = pickle.dumps(x)
+    pickle.loads(s)
+
+def test_syntax():
+    # Verify that a range of supported operations run without raising an error
+
+    assert float(Date(1500))==1500
+    assert float(Date(1500.1))==1500.1
+
+    assert np.all((YearDur(1)*np.arange(5)) == (np.arange(5)*YearDur(1)))
+
+    t = Time(start=2001, stop=2003, dt=ss.years(0.1)) # Mixing floats and durs
+
+    assert Dur(weeks=1)/Dur(days=1) == 7
+
+    assert np.isclose(float(DateDur(weeks=1) - DateDur(days=1)),6/365.25)
+
+    assert Date(2050) - Date(2020) == YearDur(30)
+
+    assert (perweek(1)+perday(1)) == perweek(8)
+
+    assert Date('2020-01-01') + Dur(weeks=52)   == Date('2020-12-30') # Should give us 30th December 2020
+    assert Date('2020-01-01') + 52*Dur(weeks=1)  == Date('2020-12-30')# Should give us 30th December 2020
+    assert Date('2020-01-01') + 52*Dur(1/52) == Date('2021-01-01') # Should give us 1st Jan 2021
+    assert Date('2020-01-01') + Dur(years=1) == Date('2021-01-01') # Should give us 1st Jan 2021
+
+    # These should all work - confirm the sizes
+    assert len(Time(Date('2020-01-01'), Date('2020-06-01'), Dur(days=1)).init()) == 153
+    assert len(Time(Date('2020-01-01'), Date('2020-06-01'), Dur(months=1)).init()) == 6
+    assert len(Time(Dur(days=0), Dur(days=30), Dur(days=1)).init()) == 31
+    assert len(Time(Dur(days=0), Dur(months=1), Dur(days=30)).init()) == 2
+    assert len(Time(Dur(days=0), Dur(years=1), Dur(weeks=1)).init()) == 53
+    assert len(Time(Dur(days=0), Dur(years=1), Dur(months=1)) .init()) == 13
+    assert len(Time(Dur(0), Dur(1), Dur(1/12)).init()) == 13
+    assert len(Time(Date('2020-01-01'), Date('2030-06-01'), Dur(days=1)).init()) == 3805
+    assert len(Time(Date(2020), Date(2030.5), Dur(0.1)).init()) == 106
+
+    # Operations on date vectors
+    Date.arange(2020,2030)+YearDur(1) # add YearDur to date array
+    Date.arange(2020,2030)+DateDur(years=1) # add DateDur to date array
+
+    # Construction of various duration ranges and addition with durations and dates
+    Dur.arange(Dur(0),Dur(10),Dur(1)) + YearDur(1)
+    Dur.arange(Dur(0),Dur(10),Dur(years=1)) + YearDur(1)
+    Dur.arange(Dur(0),Dur(years=10),Dur(years=1)) + YearDur(1)
+    Dur.arange(Dur(years=0),Dur(years=10),Dur(years=1)) + YearDur(1)
+    Dur.arange(Dur(0),Dur(10),Dur(1)) + DateDur(years=1)
+    Dur.arange(Dur(0),Dur(10),Dur(years=1)) + DateDur(years=1)
+    Dur.arange(Dur(0),Dur(years=10),Dur(years=1)) + DateDur(years=1)
+    Dur.arange(Dur(years=0),Dur(years=10),Dur(years=1)) + DateDur(years=1)
+    Dur.arange(Dur(0),Dur(10),Dur(1)) + Date(2000)
+    Dur.arange(Dur(0),Dur(10),Dur(years=1)) + Date(2000)
+    Dur.arange(Dur(0),Dur(years=10),Dur(years=1)) + Date(2000)
+    Dur.arange(Dur(years=0),Dur(years=10),Dur(years=1)) + Date(2000)
+
+    # Rates
+    assert (1/YearDur(1)) == ss.peryear(1)
+    assert (2/YearDur(1)) == ss.peryear(2)
+    assert (4/YearDur(1)) == ss.peryear(4)
+    assert (4/DateDur(1)) == ss.peryear(4)
+    assert (perday(5)*Dur(days=1)) == 5
+    assert 2/Rate(0.25) == Dur(8)
+    assert 1/(2*Rate(0.25)) == Dur(2)
+    assert Rate(0.5)/Rate(1) == 0.5
+
+    # Probabilities
+    p = TimeProb(0.1, Dur(years=1))
+    p*Dur(years=2)
+    p * Dur(0.5)
+    p * Dur(months=1)
+
+    p = TimeProb(0.1, Dur(1))
+    p*Dur(years=2)
+    p * Dur(0.5)
+    p * Dur(months=1)
+
+    p = RateProb(0.1, Dur(years=1))
+    p*Dur(years=2)
+    p * Dur(0.5)
+    p * Dur(months=1)
+
+    p = RateProb(0.1, Dur(1))
+    p*Dur(years=2)
+    p * Dur(0.5)
+    p * Dur(months=1)
 
 # %% Run as a script
 if __name__ == '__main__':
@@ -240,11 +337,11 @@ if __name__ == '__main__':
 
     T = sc.timer()
 
-    # o1 = test_ratio()
-    # o2 = test_classes()
-    # o3 = test_units(do_plot)
-    # o4 = test_multi_timestep(do_plot)
-    # o5 = test_mixed_timesteps()
+    o1 = test_ratio()
+    o2 = test_classes()
+    o3 = test_units(do_plot)
+    o4 = test_multi_timestep(do_plot)
+    o5 = test_mixed_timesteps()
     o6 = test_time_class()
-
+    test_callable_dists()
     T.toc()

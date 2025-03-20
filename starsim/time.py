@@ -242,24 +242,34 @@ class Date(pd.Timestamp):
         """
         Convert an array of float years into an array of Date instances
 
-        :param array:
-        :return:
+        :param array: An array of float years
+        :return: An array of Date instances
         """
         return np.vectorize(cls)(array)
 
     @classmethod
     def arange(cls, low, high, step=1):
         """
-        Construct an array of Date instances
+        Construct an array of dates
 
-        :param args:
-        :param kwargs:
-        :return:
+        Functions similarly to np.arange, but returns Date objects
+
+        Example usage:
+
+        >>> Date.arange(2020, 2025)
+            array([<2020.01.01>, <2021.01.01>, <2022.01.01>, <2023.01.01>,
+                   <2024.01.01>], dtype=object)
+
+        :param low: Lower bound - can be a date or a numerical year
+        :param high: Upper bound - can be a date or a numerical year
+        :param step: Assumes 1 calendar year steps by default
+        :return: An array of Date instances
         """
+
         if isinstance(step, ss.DateDur):
-            if not isinstance(low, (Date, Dur)):
+            if not isinstance(low, Date):
                 low = cls(low)
-            if not isinstance(high, (Date, Dur)):
+            if not isinstance(high, Date):
                 high = cls(high)
 
             tvec = []
@@ -397,6 +407,32 @@ class Dur():
         # This method should return a readable representation of the duration e.g., 'day', '2 days', 'year'
         # Not using __str__ because we still want print(Dur) to show the repr
         raise NotImplementedError('Dur subclasses are required to implement this method')
+
+    @classmethod
+    def arange(cls, low, high, step):
+        """
+        Construct an array of Dur instances
+
+        For this function, the low, high, and step must ALL be specified, and they must
+        all be Dur instances. Mixing Dur types (YearDur and DateDur) is permitted.
+
+        :param low: Starting point e.g., ss.Dur(0)
+        :param high:
+        :param step:
+        :return:
+        """
+
+        assert isinstance(low, Dur), 'Low input must be an ss.Dur'
+        assert isinstance(high, Dur), 'High input must be an ss.Dur'
+        assert isinstance(step, Dur), 'Step input must be an ss.Dur'
+
+        tvec = []
+        t = low
+        while t <= high:
+            tvec.append(t)
+            t += step
+        return np.array(tvec)
+
 
 class YearDur(Dur):
     # Year based duration e.g., if requiring 52 weeks per year
@@ -837,7 +873,7 @@ class RateProb(Rate):
                 return 0
             else:
                 factor = self.period/other
-                return 1 - np.exp(-rate/factor)
+                return 1 - np.exp(-self.value/factor)
         else:
             return self.__class__(self.value*other, self.period)
 
@@ -1102,8 +1138,11 @@ class Time(sc.prettyobj):
                 self._tvec = np.array([Date(x) for x in self._yearvec])
         else:
             # If dt has been specified as a DateDur then preference setting dates. So first
-            # calculate the dates, and then convert them to the equivalent fractional years
-            self._tvec = ss.Date.arange(self.start, self.stop, self.dt)
+            # calculate the dates/durations, and then convert them to the equivalent fractional years
+            if isinstance(self.stop, Dur):
+                self._tvec = ss.Dur.arange(self.start, self.stop, self.dt)
+            else:
+                self._tvec = ss.Date.arange(self.start, self.stop, self.dt)
             self._yearvec = np.array([x.years for x in self._tvec])
 
         self.initialized = True
@@ -1178,6 +1217,16 @@ if __name__ == '__main__':
 
     from starsim.time import *   # Import the classes from Starsim so that Dur is an ss.Dur rather than just a bare Dur etc.
     import starsim as ss
+
+
+    def loc(module, sim, uids):
+        return np.array([Dur(x) for x in range(uids)])
+
+
+    module = sc.objdict(t=sc.objdict(dt=Dur(days=1)))
+    d = ss.normal(loc, Dur(days=1), module=module, strict=False)
+    d.init()
+    d.rvs(10)
 
     Date(1500)
     Date(1500.1)
