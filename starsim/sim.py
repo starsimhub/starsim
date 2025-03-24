@@ -78,7 +78,10 @@ class Sim(ss.Base):
         try:
             labelstr = f'{self.label}; ' if self.label else ''
             n = int(self.pars.n_agents)
-            timestr = f'{self.pars.start}—{self.pars.stop}'
+            if self.initialized:
+                timestr = f'{self.t.start}—{self.t.stop}'
+            else:
+                timestr = f'{self.pars.start}—{self.pars.stop}'
 
             moddict = {}
             for modkey in ss.module_map().keys():
