@@ -494,6 +494,8 @@ class YearDur(Dur):
     def __truediv__(self, other):
         if isinstance(other, Dur):
             return self.years/other.years
+        elif isinstance(other, Rate):
+            raise Exception('Cannot divide a duration by a rate')
         else:
             return self.__class__(self.period / other)
 
@@ -704,6 +706,8 @@ class DateDur(Dur):
             return a/b
         elif isinstance(other, Dur):
             return self.years/other.years
+        elif isinstance(other, Rate):
+            raise Exception('Cannot divide a duration by a rate')
         return self.__class__(self._scale(self.period, 1/other))
 
     def __repr__(self):
@@ -793,14 +797,26 @@ class Rate():
     def __add__(self, other):
         if self.__class__ == other.__class__:
             return self.__class__(self.value+other*self.period, self.period)
+        elif not isinstance(other, Rate):
+            if sc.isnumber(other) or isinstance(other, np.ndarray):
+                raise TypeError('Only rates can be added to rates. This error most commonly occurs if the rate needs to be multiplied by `self.t.dt` to get a number of events per timestep.')
+            else:
+                raise TypeError('Only rates can be added to rates')
         else:
             raise TypeError('Can only add rates of identical types (e.g., Rate+Rate, TimeProb+TimeProb)')
+
+    def __radd__(self, other): return self.__add__(other)
 
     def __sub__(self, other):
         if self.__class__ == other.__class__:
             return self.__class__(self.value-other*self.period, self.period)
+        elif not isinstance(other, Rate):
+            if sc.isnumber(other) or isinstance(other, np.ndarray):
+                raise TypeError('Only rates can be added to rates. This error most commonly occurs if the rate needs to be multiplied by `self.t.dt` to get a number of events per timestep.')
+            else:
+                raise TypeError('Only rates can be added to rates')
         else:
-            raise TypeError('Can only add subtract of identical types (e.g., Rate+Rate, TimeProb+TimeProb)')
+            raise TypeError('Can only subtract rates of identical types (e.g., Rate+Rate, TimeProb+TimeProb)')
 
     def __eq__(self, other):
         return self.value == other.value/other.period*self.period
