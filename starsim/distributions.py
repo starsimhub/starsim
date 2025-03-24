@@ -213,7 +213,7 @@ class Dist:
 
         # Auto-generated
         self.rvs_func = None # The default function to call in make_rvs() to generate the random numbers
-        self.dynamic_pars = None # Whether or not the distribution has array or callable parameters
+        self._use_ppf = None # If True, use the PPF to generate random values. Otherwise, use make_rvs()
         self._pars = None # Validated and transformed (if necessary) parameters
         self._n = None # Internal variable to keep track of "n" argument (usually size)
         self._size = None # Internal variable to keep track of actual number of random variates asked for
@@ -544,16 +544,16 @@ class Dist:
 
         # Initialize
         size, uids = self._size, self._uids
-        if self.dynamic_pars != False: # Allow "False" to prevent ever using dynamic pars (used in ss.choice())
-            self.dynamic_pars = None
+        if self._use_ppf != False: # Allow "False" to prevent ever using dynamic pars (used in ss.choice())
+            self._use_ppf = None
 
         # Check each parameter
         for key,val in self._pars.items():
             val = self.call_par(key, val, size, uids)
 
             # If it's iterable and UIDs are provided, then we need to use array-parameter logic
-            if self.dynamic_pars is None and np.iterable(val) and uids is not None:
-                self.dynamic_pars = True
+            if self._use_ppf is None and np.iterable(val) and uids is not None:
+                self._use_ppf = True
         return
 
     def sync_pars(self):
@@ -631,7 +631,7 @@ class Dist:
         self.process_pars()
 
         # Actually get the random numbers
-        if self.dynamic_pars:
+        if self._use_ppf:
             rands = self.rand(size)[slots] # Get random values
             rvs = self.ppf(rands) # Convert to actual values via the PPF
         else:
@@ -1098,7 +1098,7 @@ class choice(Dist):
     """
     def __init__(self, a=2, p=None, **kwargs):
         super().__init__(distname='choice', a=a, p=p, **kwargs)
-        self.dynamic_pars = False # Set to false since array arguments don't imply dynamic pars here
+        self._use_ppf = False # Set to false since array arguments don't imply dynamic pars here
         return
 
     def convert_timepars(self):
@@ -1176,7 +1176,7 @@ class histogram(Dist):
             values = values / vsum
         dist = sps.rv_histogram((values, bins), density=density) # Create the SciPy distribution
         super().__init__(dist=dist, distname='histogram', **kwargs)
-        self.dynamic_pars = False # Set to false since array arguments don't imply dynamic pars here
+        self._use_ppf = False # Set to false since array arguments correspond to bins, not UIDs
         return
 
 
