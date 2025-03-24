@@ -574,7 +574,7 @@ class DateDur(Dur):
         :return: Dictionary with keys from `DateDur.ratios` and values from the input
         """
         if isinstance(x, pd.DateOffset):
-            x = self._as_array(x)
+            x = cls._as_array(x)
         return {k: v for k, v in zip(cls.ratios.keys(), x)}
 
     @property
