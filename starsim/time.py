@@ -668,6 +668,9 @@ class DateDur(Dur):
         return self.years
         # return self.period.to_numpy()
 
+    def __pow__(self, other):
+        raise Exception('Cannot multiply a duration by a duration')
+
     def __mul__(self, other: float):
         if isinstance(other, np.ndarray):
             return other*self
@@ -743,7 +746,7 @@ class DateDur(Dur):
             kwargs['years'] += other.years
             return self.__class__(**kwargs)
         else:
-            raise TypeError('Can only add dates, Dur objects, or pd.DateOffset objects')
+            raise TypeError('For a DateDur instance, it is only possible to add or subtract dates, Dur objects, or pd.DateOffset objects')
 
     def __sub__(self, other):
         return self.__add__(-1*other)
