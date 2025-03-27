@@ -282,9 +282,9 @@ class Syphilis(ss.Infection):
 
 __all__ += ['syph_screening', 'syph_treatment']
 
-datafiles = sc.objdict()
-for key in ['dx', 'tx', 'vx']:
-    datafiles[key] = sc.thispath() / f'../data/products/syph_{key}.csv' # CK: may want to make this more robust if we keep using it
+# datafiles = sc.objdict()
+# for key in ['dx', 'tx', 'vx']:
+#     datafiles[key] = sc.thispath() / f'../data/products/syph_{key}.csv' # CK: may want to make this more robust if we keep using it
 
 
 def load_syph_dx():
