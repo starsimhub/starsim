@@ -19,10 +19,19 @@ def linear_interp(expected, actual):
         expected (pd.DataFrame): The expected data from field observation, must have 't' in the index and columns corresponding to specific needs of the selected component.
         actual (pd.DataFrame): The actual data from the simulation, must have 't' in the index and columns corresponding to specific needs of the selected component.
     """
-    t = expected.index
+
+    expected_t = expected.index.get_level_values('t').unique()
+    actual_t = actual.index.get_level_values('t').unique()
     conformed = pd.DataFrame(index=expected.index)
-    for k in actual:
-        conformed[k] = np.interp(x=t, xp=actual.index, fp=actual[k])
+
+    if isinstance(expected.index, pd.MultiIndex):
+        non_t_levels = [level for level in expected.index.names if level != 't']
+        for k in actual:
+            for level, df in actual[k].groupby(non_t_levels):
+                conformed.loc[(expected.index.get_level_values('t'), level), k] = np.interp(x=expected_t, xp=actual_t, fp=df)
+    else:
+        for k in actual:
+            conformed.loc[expected_t, k] = np.interp(x=expected_t, xp=actual_t, fp=expected[k])
 
     return conformed
 
@@ -36,11 +45,11 @@ def step_containing(expected, actual):
         expected (pd.DataFrame): The expected data from field observation, must have 't' in the index and columns corresponding to specific needs of the selected component.
         actual (pd.DataFrame): The actual data from the simulation, must have 't' in the index and columns corresponding to specific needs of the selected component.
     """
-    t = expected.index
-    inds = np.searchsorted(actual.index, t, side='left')
-    conformed = pd.DataFrame(index=expected.index)
-    for k in actual:
-        conformed[k] = actual[k].values[inds] # .values because indices differ
+    expected_t = expected.index.get_level_values('t').unique()
+    actual_t = actual.index.get_level_values('t').unique()
+
+    t_containing = actual_t[np.searchsorted(actual_t, expected_t, side='left')]
+    conformed = actual.loc[t_containing]
 
     return conformed
 
@@ -55,19 +64,41 @@ def linear_accum(expected, actual):
         expected (pd.DataFrame): The expected data from field observation, must have 't' and 't1' in the index and columns corresponding to specific needs of the selected component.
         actual (pd.DataFrame): The actual data from the simulation, must have 't' and 't1' in the index and columns corresponding to specific needs of the selected component.
     """
+
+    if isinstance(expected.index, pd.MultiIndex):
+        # TODO: TEST
+        conformed = pd.DataFrame(index=expected.index)
+
+        non_t_levels = [level for level in expected.index.names if level != 't' and level != 't1']
+        t0 = expected.index.get_level_values('t').unique()
+        t1 = expected.index.get_level_values('t1').unique()
+        sim_t = actual.index.get_level_values('t').unique()
+
+        actual_cumsum = actual.cumsum()
+        ret = {}
+        for col in actual_cumsum.columns:
+            for level, df in actual_cumsum[col].groupby(non_t_levels):
+                v0 = np.interp(x=t0, xp=sim_t, fp=df) # Cum value at t0
+                v1 = np.interp(x=t1, xp=sim_t, fp=df) # Cum value at t1
+
+                # Difference between end of step t1 and end of step t
+                conformed.loc[(t0, t1, level), col] = v1 - v0
+        return conformed
+    
+    # Regular index case
     t0 = expected.index.get_level_values('t')
     t1 = expected.index.get_level_values('t1')
-    sim_t = actual.index
+    sim_t = actual.index.get_level_values('t')
 
-    fp = actual.cumsum()
+    actual_cumsum = actual.cumsum()
     ret = {}
-    for c in fp.columns:
-        vals = fp[c].values.flatten()
+    for col in actual_cumsum.columns:
+        vals = actual_cumsum[c].values.flatten()
         v0 = np.interp(x=t0, xp=sim_t, fp=vals) # Cum value at t0
         v1 = np.interp(x=t1, xp=sim_t, fp=vals) # Cum value at t1
 
         # Difference between end of step t1 and end of step t
-        ret[c] = v1 - v0
+        ret[col] = v1 - v0
 
     df = pd.DataFrame(ret, index=expected.index)
     return df
@@ -611,7 +642,7 @@ class Normal(CalibComponent):
         sigma2 = self.sigma2
         compute_var = sigma2 is None
 
-        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
+        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=expected.index.names, suffixes=('_e', '_a'))
         for idx, rep in combined.iterrows():
             e_x = rep['x_e']
             a_x = rep['x_a']
