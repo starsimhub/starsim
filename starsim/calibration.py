@@ -411,8 +411,6 @@ class Calibration(sc.prettyobj):
         """ Plot Optuna's visualizations """
         figs = []
 
-        methods = sc.tolist(methods)
-
         if methods is None:
             methods = [
                 'plot_contour',
@@ -428,6 +426,8 @@ class Calibration(sc.prettyobj):
                 'plot_terminator_improvement',
                 'plot_timeline',
             ]
+
+        methods = sc.tolist(methods)
 
         for method in methods:
             try:
