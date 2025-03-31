@@ -66,7 +66,6 @@ def linear_accum(expected, actual):
     """
 
     if isinstance(expected.index, pd.MultiIndex):
-        # TODO: TEST
         conformed = pd.DataFrame(index=expected.index)
 
         non_t_levels = [level for level in expected.index.names if level != 't' and level != 't1']
@@ -74,12 +73,12 @@ def linear_accum(expected, actual):
         t1 = expected.index.get_level_values('t1').unique()
         sim_t = actual.index.get_level_values('t').unique()
 
-        actual_cumsum = actual.cumsum()
         ret = {}
-        for col in actual_cumsum.columns:
-            for level, df in actual_cumsum[col].groupby(non_t_levels):
-                v0 = np.interp(x=t0, xp=sim_t, fp=df) # Cum value at t0
-                v1 = np.interp(x=t1, xp=sim_t, fp=df) # Cum value at t1
+        for col in actual.columns:
+            for level, df in actual[col].groupby(non_t_levels):
+                fp = df.cumsum()
+                v0 = np.interp(x=t0, xp=sim_t, fp=fp) # Cum value at t0
+                v1 = np.interp(x=t1, xp=sim_t, fp=fp) # Cum value at t1
 
                 # Difference between end of step t1 and end of step t
                 conformed.loc[(t0, t1, level), col] = v1 - v0
