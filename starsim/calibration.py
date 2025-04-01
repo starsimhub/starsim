@@ -224,12 +224,15 @@ class Calibration(sc.prettyobj):
         sim = self.run_sim(pars)
 
         # Export results
-        df_res = sim.to_df(resample="year", use_years=True)
+        sim_results = []
+        for component in self.components:
+            res = component.extract_fn(sim)
+            sim_results.append(res)
 
         # Store results in temporary files
         if self.save_results:
             filename = self.tmp_filename % trial.number
-            sc.save(filename, df_res)
+            sc.save(filename, sim_results)
 
         # Compute fit
         fit = self.eval_fn(sim, **self.eval_kw)
