@@ -1,6 +1,7 @@
 """
 Define the calibration class
 """
+
 import os
 import numpy as np
 import optuna as op
@@ -11,7 +12,7 @@ import starsim as ss
 import matplotlib.pyplot as plt
 
 
-__all__ = ['Calibration']
+__all__ = ["Calibration"]
 
 
 class Calibration(sc.prettyobj):
@@ -45,62 +46,107 @@ class Calibration(sc.prettyobj):
     Returns:
         A Calibration object
     """
-    def __init__(self, sim, calib_pars, n_workers=None, total_trials=None, reseed=True,
-                 build_fn=None, build_kw=None, eval_fn=None, eval_kw=None, components=None, prune_fn=None,
-                 label=None, study_name=None, db_name=None, keep_db=None, continue_db=None, storage=None,
-                 sampler=None, die=False, debug=False, verbose=True):
+
+    def __init__(
+        self,
+        sim,
+        calib_pars,
+        n_workers=None,
+        total_trials=None,
+        reseed=True,
+        build_fn=None,
+        build_kw=None,
+        eval_fn=None,
+        eval_kw=None,
+        components=None,
+        prune_fn=None,
+        label=None,
+        study_name=None,
+        db_name=None,
+        keep_db=None,
+        continue_db=None,
+        storage=None,
+        sampler=None,
+        die=False,
+        debug=False,
+        verbose=True,
+        save_results=False,
+    ):
 
         # Handle run arguments
-        if total_trials is None: total_trials   = 100
-        if n_workers    is None: n_workers      = 1 if debug else sc.cpu_count()
-        if study_name   is None: study_name     = 'starsim_calibration'
-        if db_name      is None: db_name        = f'{study_name}.db'
-        if continue_db  is None: continue_db    = False
-        if keep_db      is None: keep_db        = False
-        if storage      is None: storage        = f'sqlite:///{db_name}'
-        
-        self.build_fn       = build_fn
-        self.build_kw       = build_kw or dict()
-        self.eval_fn        = eval_fn or self._eval_fit
-        self.eval_kw        = eval_kw or dict()
-        self.components     = sc.tolist(components)
-        self.prune_fn       = prune_fn
+        if total_trials is None:
+            total_trials = 100
+        if n_workers is None:
+            n_workers = 1 if debug else sc.cpu_count()
+        if study_name is None:
+            study_name = "starsim_calibration"
+        if db_name is None:
+            db_name = f"{study_name}.db"
+        if continue_db is None:
+            continue_db = False
+        if keep_db is None:
+            keep_db = False
+        if storage is None:
+            storage = f"sqlite:///{db_name}"
 
-        n_trials = int(np.ceil(total_trials/n_workers))
-        kw = dict(n_trials=n_trials, n_workers=int(n_workers), debug=debug, study_name=study_name,
-                  db_name=db_name, continue_db=continue_db, keep_db=keep_db, storage=storage, sampler=sampler)
+        self.build_fn = build_fn
+        self.build_kw = build_kw or dict()
+        self.eval_fn = eval_fn or self._eval_fit
+        self.eval_kw = eval_kw or dict()
+        self.components = sc.tolist(components)
+        self.prune_fn = prune_fn
+
+        n_trials = int(np.ceil(total_trials / n_workers))
+        kw = dict(
+            n_trials=n_trials,
+            n_workers=int(n_workers),
+            debug=debug,
+            study_name=study_name,
+            db_name=db_name,
+            continue_db=continue_db,
+            keep_db=keep_db,
+            storage=storage,
+            sampler=sampler,
+        )
         self.run_args = sc.objdict(kw)
 
         # Handle other inputs
-        self.label      = label
-        self.sim        = sim
+        self.label = label
+        self.sim = sim
         self.calib_pars = calib_pars
-        self.reseed     = reseed
-        self.die        = die
-        self.verbose    = verbose
+        self.reseed = reseed
+        self.die = die
+        self.verbose = verbose
+        self.save_results = save_results
         self.calibrated = False
         self.before_msim = None
-        self.after_msim  = None
+        self.after_msim = None
+
+        # Temporarily store a filename
+        self.tmp_filename = "tmp_calibration_%05i.obj"
 
         self.study = None
 
         return
 
     def run_sim(self, calib_pars=None, label=None):
-        """ Create and run a simulation """
+        """Create and run a simulation"""
         sim = sc.dcp(self.sim)
-        if label: sim.label = label
+        if label:
+            sim.label = label
 
         sim = self.build_fn(sim, calib_pars=calib_pars, **self.build_kw)
 
         try:
-            sim.run() # Run the simulation (or MultiSim)
+            sim.run()  # Run the simulation (or MultiSim)
             return sim
         except Exception as E:
             if self.die:
                 raise E
             else:
-                print(f'Encountered error running sim!\nParameters:\n{calib_pars}\nTraceback:\n{sc.traceback()}')
+                print(
+                    f"Encountered error running sim!\nParameters:\n{calib_pars}\nTraceback:\n{sc.traceback()}"
+                )
                 output = None
                 return output
 
@@ -111,46 +157,48 @@ class Calibration(sc.prettyobj):
         """
         pars = sc.dcp(pardict)
         for parname, spec in pars.items():
-            if 'value' in spec:
+            if "value" in spec:
                 # Already have a value, likely running initial or final values as part of checking the fit
                 continue
 
-            if 'suggest_type' in spec:
-                suggest_type = spec.pop('suggest_type')
+            if "suggest_type" in spec:
+                suggest_type = spec.pop("suggest_type")
                 sampler_fn = getattr(trial, suggest_type)
             else:
                 sampler_fn = trial.suggest_float
 
-            path = spec.pop('path', None) # remove path for the sampler
-            guess = spec.pop('guess', None) # remove guess for the sampler
-            spec['value'] = sampler_fn(name=parname, **spec) # suggest values!
-            spec['path'] = path
-            spec['guess'] = guess
+            path = spec.pop("path", None)  # remove path for the sampler
+            guess = spec.pop("guess", None)  # remove guess for the sampler
+            spec["value"] = sampler_fn(name=parname, **spec)  # suggest values!
+            spec["path"] = path
+            spec["guess"] = guess
 
         return pars
 
     def _eval_fit(self, sim, **kwargs):
-        """ Evaluate the fit by evaluating the negative log likelihood, used only for components"""
-        nll = 0 # Negative log likelihood
+        """Evaluate the fit by evaluating the negative log likelihood, used only for components"""
+        nll = 0  # Negative log likelihood
         for component in self.components:
             nll += component(sim, **kwargs)
         return nll
 
     def plot(self, **kwargs):
-        """"
+        """ "
         Plot the calibration results. For a component-based likelihood, it only
         makes sense to directly call plot after calling eval_fn.
         """
-        assert self.before_msim is not None and self.after_msim is not None, 'Please run check_fit() before plotting'
+        assert (
+            self.before_msim is not None and self.after_msim is not None
+        ), "Please run check_fit() before plotting"
         figs = []
         for component in self.components:
             component.eval(self.before_msim)
             before_actual = component.actual
-            before_actual['calibrated'] = 'Before Calibration'
+            before_actual["calibrated"] = "Before Calibration"
 
             component.eval(self.after_msim)
             after_actual = component.actual
-            after_actual['calibrated'] = 'After Calibration'
+            after_actual["calibrated"] = "After Calibration"
 
             actual = pd.concat([before_actual, after_actual])
             fig = component.plot(actual, **kwargs)
@@ -158,14 +206,16 @@ class Calibration(sc.prettyobj):
         return figs
 
     def run_trial(self, trial):
-        """ Define the objective for Optuna """
+        """Define the objective for Optuna"""
         if self.calib_pars is not None:
             pars = self._sample_from_trial(self.calib_pars, trial)
         else:
             pars = None
 
         if self.reseed:
-            pars['rand_seed'] = trial.suggest_int('rand_seed', 0, 1_000_000) # Choose a random rand_seed
+            pars["rand_seed"] = trial.suggest_int(
+                "rand_seed", 0, 1_000_000
+            )  # Choose a random rand_seed
 
         # Prune if the prune_fn returns True
         if self.prune_fn is not None and self.prune_fn(pars):
@@ -173,65 +223,103 @@ class Calibration(sc.prettyobj):
 
         sim = self.run_sim(pars)
 
+        # Export results
+        df_res = sim.to_df(resample="year", use_years=True)
+        sim_results = sc.objdict()
+        sim_results["time"] = df_res["timevec"].values
+        for skey in self.sim_result_list:
+            sim_results[skey] = df_res[skey].values
+
+        # Store results in temporary files
+        if self.save_results:
+            filename = self.tmp_filename % trial.number
+            sc.save(filename, sim_results)
+
         # Compute fit
         fit = self.eval_fn(sim, **self.eval_kw)
         return fit
 
     def worker(self):
-        """ Run a single worker """
+        """Run a single worker"""
 
         if self.verbose:
             op.logging.set_verbosity(op.logging.DEBUG)
         else:
             op.logging.set_verbosity(op.logging.ERROR)
-        study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
-        output = study.optimize(self.run_trial, n_trials=self.run_args.n_trials, callbacks=None)
+        study = op.load_study(
+            storage=self.run_args.storage,
+            study_name=self.run_args.study_name,
+            sampler=self.run_args.sampler,
+        )
+        output = study.optimize(
+            self.run_trial, n_trials=self.run_args.n_trials, callbacks=None
+        )
         return output
 
     def run_workers(self):
-        """ Run multiple workers in parallel """
-        if self.run_args.n_workers > 1 and not self.run_args.debug: # Normal use case: run in parallel
+        """Run multiple workers in parallel"""
+        if (
+            self.run_args.n_workers > 1 and not self.run_args.debug
+        ):  # Normal use case: run in parallel
             output = sc.parallelize(self.worker, iterarg=self.run_args.n_workers)
-        else: # Special case: just run one
+        else:  # Special case: just run one
             output = [self.worker()]
         return output
 
     def remove_db(self):
-        """ Remove the database file if keep_db is false and the path exists """
+        """Remove the database file if keep_db is false and the path exists"""
         try:
-            if 'sqlite' in self.run_args.storage:
+            if "sqlite" in self.run_args.storage:
                 # Delete the file from disk
                 if os.path.exists(self.run_args.db_name):
                     os.remove(self.run_args.db_name)
-                if self.verbose: print(f'Removed existing calibration file {self.run_args.db_name}')
+                if self.verbose:
+                    print(f"Removed existing calibration file {self.run_args.db_name}")
             else:
                 # Delete the study from the database e.g., mysql
-                op.delete_study(study_name=self.run_args.study_name, storage=self.run_args.storage)
-                if self.verbose: print(f'Deleted study {self.run_args.study_name} in {self.run_args.storage}')
+                op.delete_study(
+                    study_name=self.run_args.study_name, storage=self.run_args.storage
+                )
+                if self.verbose:
+                    print(
+                        f"Deleted study {self.run_args.study_name} in {self.run_args.storage}"
+                    )
         except Exception as E:
             if self.verbose:
-                print('Could not delete study, skipping...')
+                print("Could not delete study, skipping...")
                 print(str(E))
         return
 
     def make_study(self):
-        """ Make a study, deleting if it already exists and user does not want to continue_db """
+        """Make a study, deleting if it already exists and user does not want to continue_db"""
         if not self.run_args.continue_db:
             self.remove_db()
-        if self.verbose: print(self.run_args.storage)
+        if self.verbose:
+            print(self.run_args.storage)
         try:
-            study = op.create_study(storage=self.run_args.storage, study_name=self.run_args.study_name, direction='minimize')
+            study = op.create_study(
+                storage=self.run_args.storage,
+                study_name=self.run_args.study_name,
+                direction="minimize",
+            )
         except op.exceptions.DuplicatedStudyError:
-            ss.warn(f'Study named {self.run_args.study_name} already exists in storage {self.run_args.storage}, loading...')
-            study = op.create_study(storage=self.run_args.storage, study_name=self.run_args.study_name, direction='minimize', load_if_exists=True)
+            ss.warn(
+                f"Study named {self.run_args.study_name} already exists in storage {self.run_args.storage}, loading..."
+            )
+            study = op.create_study(
+                storage=self.run_args.storage,
+                study_name=self.run_args.study_name,
+                direction="minimize",
+                load_if_exists=True,
+            )
             try:
                 self.best_pars = sc.objdict(study.best_params)
             except Exception as E:
-                print(f'Could not get best parameters: {str(E)}')
+                print(f"Could not get best parameters: {str(E)}")
                 self.best_pars = None
         return study
 
-    def calibrate(self, calib_pars=None, **kwargs):
+    def calibrate(self, calib_pars=None, load=False, **kwargs):
         """
         Perform calibration.
 
@@ -242,20 +330,51 @@ class Calibration(sc.prettyobj):
         # Load and validate calibration parameters
         if calib_pars is not None:
             self.calib_pars = calib_pars
-        self.run_args.update(kwargs) # Update optuna settings
+        self.run_args.update(kwargs)  # Update optuna settings
 
         # Run the optimization
         t0 = sc.tic()
         self.study = self.make_study()
         self.run_workers()
-        study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
+        study = op.load_study(
+            storage=self.run_args.storage,
+            study_name=self.run_args.study_name,
+            sampler=self.run_args.sampler,
+        )
         self.best_pars = sc.objdict(study.best_params)
         self.elapsed = sc.toc(t0, output=True)
+
+        self.sim_results = []
+        if load:
+            if self.verbose:
+                print("Loading saved results...")
+            for trial in study.trials:
+                n = trial.number
+                try:
+                    filename = self.tmp_filename % trial.number
+                    results = sc.load(filename)
+                    self.sim_results.append(results)
+                    if tidyup:
+                        try:
+                            os.remove(filename)
+                            if self.verbose:
+                                print(f"    Removed temporary file {filename}")
+                        except Exception as E:
+                            errormsg = f"Could not remove {filename}: {str(E)}"
+                            if self.verbose:
+                                print(errormsg)
+                    if self.verbose:
+                        print(f"  Loaded trial {n}")
+                except Exception as E:
+                    errormsg = f"Warning, could not load trial {n}: {str(E)}"
+                    if self.verbose:
+                        print(errormsg)
 
         # Parse the study into a data frame, self.df while also storing the best parameters
         self.parse_study(study)
 
-        if self.verbose: print('Best pars:', self.best_pars)
+        if self.verbose:
+            print("Best pars:", self.best_pars)
 
         # Tidy up
         self.calibrated = True
@@ -265,12 +384,12 @@ class Calibration(sc.prettyobj):
         return self
 
     def to_df(self, top_k=None):
-        """ Return the top K results as a dataframe, sorted by value """
+        """Return the top K results as a dataframe, sorted by value"""
         if self.study is None:
-            raise ValueError('Please run calibrate() before saving results')
+            raise ValueError("Please run calibrate() before saving results")
 
         df = sc.dataframe(self.study.trials_dataframe())
-        df = df.sort_values(by='value').set_index('number')
+        df = df.sort_values(by="value").set_index("number")
 
         if top_k is not None:
             df = df.head(top_k)
@@ -278,36 +397,61 @@ class Calibration(sc.prettyobj):
         return df
 
     def check_fit(self, do_plot=True):
-        """ Run before and after simulations to validate the fit """
-        if self.verbose: sc.printcyan('\nChecking fit...')
+        """Run before and after simulations to validate the fit"""
+        if self.verbose:
+            sc.printcyan("\nChecking fit...")
 
         before_pars = sc.dcp(self.calib_pars)
         for spec in before_pars.values():
-            spec['value'] = spec['guess'] # Use guess values
+            spec["value"] = spec["guess"]  # Use guess values
 
         # Load in case calibration was interrupted
         if self.best_pars is None:
             try:
-                study = op.load_study(storage=self.run_args.storage, study_name=self.run_args.study_name, sampler=self.run_args.sampler)
+                study = op.load_study(
+                    storage=self.run_args.storage,
+                    study_name=self.run_args.study_name,
+                    sampler=self.run_args.sampler,
+                )
                 self.best_pars = sc.objdict(study.best_params)
             except:
-                raise ValueError('Seems like calibration did not finish successfully and also unable to obtain best parameters from the {self.run_args.storage}:{self.run_args.study_name} as the study was likely automatically deleted, see keep_db.')
+                raise ValueError(
+                    "Seems like calibration did not finish successfully and also unable to obtain best parameters from the {self.run_args.storage}:{self.run_args.study_name} as the study was likely automatically deleted, see keep_db."
+                )
 
         after_pars = sc.dcp(self.calib_pars)
         for parname, spec in after_pars.items():
-            spec['value'] = self.best_pars[parname] # Use best parameters from calibration
+            spec["value"] = self.best_pars[
+                parname
+            ]  # Use best parameters from calibration
 
-        self.before_msim = self.build_fn(self.sim.copy(), calib_pars=before_pars, **self.build_kw)
-        self.after_msim = self.build_fn(self.sim.copy(), calib_pars=after_pars, **self.build_kw)
+        self.before_msim = self.build_fn(
+            self.sim.copy(), calib_pars=before_pars, **self.build_kw
+        )
+        self.after_msim = self.build_fn(
+            self.sim.copy(), calib_pars=after_pars, **self.build_kw
+        )
 
         fix_before = isinstance(self.before_msim, ss.Sim)
         fix_after = isinstance(self.after_msim, ss.Sim)
         if fix_after or fix_after:
             if fix_before:
-                self.before_msim = ss.MultiSim(self.before_msim, initialize=True, debug=True, parallel=False, n_runs=1)
+                self.before_msim = ss.MultiSim(
+                    self.before_msim,
+                    initialize=True,
+                    debug=True,
+                    parallel=False,
+                    n_runs=1,
+                )
 
             if fix_after:
-                self.after_msim = ss.MultiSim(self.after_msim, initialize=True, debug=True, parallel=False, n_runs=1)
+                self.after_msim = ss.MultiSim(
+                    self.after_msim,
+                    initialize=True,
+                    debug=True,
+                    parallel=False,
+                    n_runs=1,
+                )
 
         msim = ss.MultiSim(self.before_msim.sims + self.after_msim.sims)
         msim.run()
@@ -318,61 +462,77 @@ class Calibration(sc.prettyobj):
         if do_plot:
             figs = self.plot()
 
-        print(f'Fit with original pars: {self.before_fits}')
-        print(f'Fit with best-fit pars: {self.after_fits}')
-        
-        before = self.before_fits.mean() if isinstance(self.before_fits, np.ndarray) else self.before_fits
-        after = self.after_fits.mean() if isinstance(self.after_fits, np.ndarray) else self.after_fits
+        print(f"Fit with original pars: {self.before_fits}")
+        print(f"Fit with best-fit pars: {self.after_fits}")
+
+        before = (
+            self.before_fits.mean()
+            if isinstance(self.before_fits, np.ndarray)
+            else self.before_fits
+        )
+        after = (
+            self.after_fits.mean()
+            if isinstance(self.after_fits, np.ndarray)
+            else self.after_fits
+        )
 
         if after <= before:
-            print(f'✓ Calibration improved fit {before} --> {after}')
+            print(f"✓ Calibration improved fit {before} --> {after}")
             return True
-        
-        print(f'✗ Calibration did not improve fit as the objective got worse ({before} --> {after}), but this sometimes happens stochastically and is not necessarily an error')
+
+        print(
+            f"✗ Calibration did not improve fit as the objective got worse ({before} --> {after}), but this sometimes happens stochastically and is not necessarily an error"
+        )
         return False
 
     def parse_study(self, study):
-        """Parse the study into a data frame -- called automatically """
+        """Parse the study into a data frame -- called automatically"""
         best = study.best_params
         self.best_pars = best
 
-        if self.verbose: print('Making results structure...')
+        if self.verbose:
+            print("Making results structure...")
         results = []
         n_trials = len(study.trials)
         failed_trials = []
         for trial in study.trials:
-            data = {'index':trial.number, 'mismatch': trial.value}
-            for key,val in trial.params.items():
+            data = {"index": trial.number, "mismatch": trial.value}
+            for key, val in trial.params.items():
                 data[key] = val
-            if data['mismatch'] is None:
-                failed_trials.append(data['index'])
+            if data["mismatch"] is None:
+                failed_trials.append(data["index"])
             else:
                 results.append(data)
-        if self.verbose: print(f'Processed {n_trials} trials; {len(failed_trials)} failed')
+        if self.verbose:
+            print(f"Processed {n_trials} trials; {len(failed_trials)} failed")
 
-        keys = ['index', 'mismatch'] + list(best.keys())
+        keys = ["index", "mismatch"] + list(best.keys())
         data = sc.objdict().make(keys=keys, vals=[])
-        for i,r in enumerate(results):
+        for i, r in enumerate(results):
             for key in keys:
                 if key not in r:
-                    warnmsg = f'Key {key} is missing from trial {i}, replacing with default'
+                    warnmsg = (
+                        f"Key {key} is missing from trial {i}, replacing with default"
+                    )
                     print(warnmsg)
                     r[key] = best[key]
                 data[key].append(r[key])
         self.study_data = data
         self.df = sc.dataframe.from_dict(data)
-        self.df = self.df.sort_values(by=['mismatch']) # Sort
+        self.df = self.df.sort_values(by=["mismatch"])  # Sort
         return
 
     def to_json(self, filename=None, indent=2, **kwargs):
-        """ Convert the results to JSON """
-        order = np.argsort(self.df['mismatch'])
+        """Convert the results to JSON"""
+        order = np.argsort(self.df["mismatch"])
         json = []
         for o in order:
-            row = self.df.iloc[o,:].to_dict()
-            rowdict = dict(index=row.pop('index'), mismatch=row.pop('mismatch'), pars={})
-            for key,val in row.items():
-                rowdict['pars'][key] = val
+            row = self.df.iloc[o, :].to_dict()
+            rowdict = dict(
+                index=row.pop("index"), mismatch=row.pop("mismatch"), pars={}
+            )
+            for key, val in row.items():
+                rowdict["pars"][key] = val
             json.append(rowdict)
         self.json = json
         if filename:
@@ -388,43 +548,45 @@ class Calibration(sc.prettyobj):
             kwargs (dict): passed to MultiSim.plot()
         """
 
-        jup = ss.options.jupyter if 'jupyter' in ss.options else sc.isjupyter()
+        jup = ss.options.jupyter if "jupyter" in ss.options else sc.isjupyter()
         ss.options.jupyter = False
 
         pars = sc.dcp(self.calib_pars)
         for parname, spec in pars.items():
-            spec['value'] = self.best_pars[parname] # Use best parameters from calibration
+            spec["value"] = self.best_pars[
+                parname
+            ]  # Use best parameters from calibration
         msim = self.build_fn(self.sim.copy(), calib_pars=pars, **self.build_kw)
 
         msim.run()
         fits = self.eval_fn(msim, **self.eval_kw)
 
-        if isinstance(msim, ss.MultiSim): # It could be a single simulation
+        if isinstance(msim, ss.MultiSim):  # It could be a single simulation
             msim.reduce()
         fig = msim.plot()
-        fig.suptitle('After calibration')
+        fig.suptitle("After calibration")
 
         ss.options.jupyter = jup
         return fig
 
     def plot_optuna(self, methods=None):
-        """ Plot Optuna's visualizations """
+        """Plot Optuna's visualizations"""
         figs = []
 
         if methods is None:
             methods = [
-                'plot_contour',
-                'plot_edf',
-                'plot_hypervolume_history',
-                'plot_intermediate_values',
-                'plot_optimization_history',
-                'plot_parallel_coordinate',
-                'plot_param_importances',
-                'plot_pareto_front',
-                'plot_rank',
-                'plot_slice',
-                'plot_terminator_improvement',
-                'plot_timeline',
+                "plot_contour",
+                "plot_edf",
+                "plot_hypervolume_history",
+                "plot_intermediate_values",
+                "plot_optimization_history",
+                "plot_parallel_coordinate",
+                "plot_param_importances",
+                "plot_pareto_front",
+                "plot_rank",
+                "plot_slice",
+                "plot_terminator_improvement",
+                "plot_timeline",
             ]
 
         methods = sc.tolist(methods)
@@ -434,5 +596,5 @@ class Calibration(sc.prettyobj):
                 fig = getattr(vis, method)(self.study)
                 figs.append(fig)
             except Exception as E:
-                print(f'Could not run {method}: {str(E)}')
+                print(f"Could not run {method}: {str(E)}")
         return figs
