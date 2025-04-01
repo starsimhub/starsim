@@ -225,15 +225,11 @@ class Calibration(sc.prettyobj):
 
         # Export results
         df_res = sim.to_df(resample="year", use_years=True)
-        sim_results = sc.objdict()
-        sim_results["time"] = df_res["timevec"].values
-        for skey in self.sim_result_list:
-            sim_results[skey] = df_res[skey].values
 
         # Store results in temporary files
         if self.save_results:
             filename = self.tmp_filename % trial.number
-            sc.save(filename, sim_results)
+            sc.save(filename, df_res)
 
         # Compute fit
         fit = self.eval_fn(sim, **self.eval_kw)
