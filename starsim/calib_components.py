@@ -184,8 +184,10 @@ class CalibComponent(sc.prettyobj):
         if self.combine_reps is None:
             nll = self.compute_nll(expected, actual, **kwargs) # Negative log likelihood
         else:
-            timecols = [c for c in self.actual.columns if isinstance(self.actual[c].iloc[0], dt.datetime)] # Not robust to data types
-            actual_combined = actual.groupby(timecols).aggregate(func=self.combine_reps, **self.combine_kwargs)
+            #timecols = [c for c in self.actual.columns if isinstance(self.actual[c].iloc[0], dt.datetime)] # Not robust to data types
+            #actual_combined = actual.groupby(timecols).aggregate(func=self.combine_reps, **self.combine_kwargs)
+            # TODO: TEST!!!
+            actual_combined = actual.groupby(expected.index.names).aggregate(func=self.combine_reps, **self.combine_kwargs)
             actual_combined['rand_seed'] = 0 # Fake the seed
             actual_combined = actual_combined.reset_index().set_index('rand_seed') # Make it look like self.actual
             nll = self.compute_nll(expected, actual_combined, **kwargs)
@@ -299,7 +301,7 @@ class BetaBinomial(CalibComponent):
 
         logLs = []
 
-        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
+        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=expected.index.names, suffixes=('_e', '_a'))
         for idx, rep in combined.iterrows():
             e_n, e_x = rep['n_e'], rep['x_e']
             a_n, a_x = rep['n_a'], rep['x_a']
@@ -373,7 +375,7 @@ class Binomial(CalibComponent):
 
         logLs = []
 
-        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
+        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=expected.index.names, suffixes=('_e', '_a'))
         for idx, rep in combined.iterrows():
             if 'p' in rep:
                 # p specified, no collision
@@ -549,7 +551,7 @@ class GammaPoisson(CalibComponent):
         """
         logLs = []
 
-        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t', 't1'], suffixes=('_e', '_a'))
+        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=expected.index.names, suffixes=('_e', '_a'))
         for idx, rep in combined.iterrows():
             e_n, e_x = rep['n_e'], rep['x_e']
             a_n, a_x = rep['n_a'], rep['x_a']
