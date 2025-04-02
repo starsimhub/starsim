@@ -31,7 +31,7 @@ def linear_interp(expected, actual):
                 conformed.loc[(expected.index.get_level_values('t'), level), k] = np.interp(x=expected_t, xp=actual_t, fp=df)
     else:
         for k in actual:
-            conformed.loc[expected_t, k] = np.interp(x=expected_t, xp=actual_t, fp=expected[k])
+            conformed.loc[expected_t, k] = np.interp(x=expected_t, xp=actual_t, fp=actual[k])
 
     return conformed
 
