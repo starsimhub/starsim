@@ -24,10 +24,11 @@ def linear_interp(expected, actual):
     actual_t = actual.index.get_level_values('t').unique()
     conformed = pd.DataFrame(index=expected.index)
 
-    if isinstance(expected.index, pd.MultiIndex):
-        non_t_levels = [level for level in expected.index.names if level != 't']
+    non_t_levels = [level for level in expected.index.names if level != 't']
+    if len(non_t_levels):
         for k in actual:
             for level, df in actual[k].groupby(non_t_levels):
+                # Note: Assuming 't' precedes non_t_levels in the index of expected
                 conformed.loc[(expected.index.get_level_values('t'), level), k] = np.interp(x=expected_t, xp=actual_t, fp=df)
     else:
         for k in actual:
@@ -65,10 +66,10 @@ def linear_accum(expected, actual):
         actual (pd.DataFrame): The actual data from the simulation, must have 't' and 't1' in the index and columns corresponding to specific needs of the selected component.
     """
 
-    if isinstance(expected.index, pd.MultiIndex):
+    non_t_levels = [level for level in expected.index.names if level != 't' and level != 't1']
+    if len(non_t_levels):
         conformed = pd.DataFrame(index=expected.index)
 
-        non_t_levels = [level for level in expected.index.names if level != 't' and level != 't1']
         t0 = expected.index.get_level_values('t').unique()
         t1 = expected.index.get_level_values('t1').unique()
         sim_t = actual.index.get_level_values('t').unique()
@@ -92,7 +93,7 @@ def linear_accum(expected, actual):
     actual_cumsum = actual.cumsum()
     ret = {}
     for col in actual_cumsum.columns:
-        vals = actual_cumsum[c].values.flatten()
+        vals = actual_cumsum[col].values.flatten()
         v0 = np.interp(x=t0, xp=sim_t, fp=vals) # Cum value at t0
         v1 = np.interp(x=t1, xp=sim_t, fp=vals) # Cum value at t1
 
@@ -263,20 +264,34 @@ class CalibComponent(sc.prettyobj):
         if 'calibrated' not in actual.columns:
             actual['calibrated'] = 'Calibration'
 
-        g = sns.FacetGrid(data=actual.reset_index(), col='t', row='calibrated', sharex='col', sharey=False, margin_titles=True, height=3, aspect=1.5)
+        def do_plot(data, expected, levels=None):
+            g = sns.FacetGrid(data=data.reset_index(), col='t', row='calibrated', sharex='col',
+                sharey=False, margin_titles=True, height=3, aspect=1.5)
 
-        if bootstrap:
-            g.map_dataframe(self.plot_facet_bootstrap)
-        else:
-            g.map_dataframe(self.plot_facet)
-        g.set_titles(row_template='{row_name}')
-        for (row_val, col_val), ax in g.axes_dict.items():
-            if row_val == g.row_names[0] and isinstance(col_val, dt.datetime):
-                ax.set_title(col_val.strftime('%Y-%m-%d'))
+            if bootstrap:
+                g.map_dataframe(self.plot_facet_bootstrap, expected=expected)
+            else:
+                g.map_dataframe(self.plot_facet, expected=expected)
+            g.set_titles(row_template='{row_name}')
+            for (row_val, col_val), ax in g.axes_dict.items():
+                if row_val == g.row_names[0] and isinstance(col_val, dt.datetime):
+                    ax.set_title(col_val.strftime('%Y-%m-%d'))
 
-        g.fig.subplots_adjust(top=0.8)
-        g.fig.suptitle(self.name)
-        return g.fig
+            g.fig.subplots_adjust(top=0.8)
+            supt = f'{self.name} - {levels}' if levels is not None else self.name
+            g.fig.suptitle(supt)
+            return g.fig
+
+        non_t_levels = [level for level in self.expected.index.names if level != 't' and level != 't1']
+        figs = []
+        if len(non_t_levels): # Separate fig for each level
+            for levels, df in actual.groupby(non_t_levels):
+                expected = self.expected.reset_index().set_index(non_t_levels).loc[levels].reset_index().set_index(self.expected.index.names)
+                figs.append( do_plot(df, expected, levels) )
+        else: # No other levels, just one figure
+            figs.append( do_plot(actual, self.expected) )
+
+        return figs
 
 class BetaBinomial(CalibComponent):
     def compute_nll(self, expected, actual, **kwargs):
@@ -314,7 +329,8 @@ class BetaBinomial(CalibComponent):
 
     def plot_facet(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         e_n, e_x = expected['n'], expected['x']
         kk = np.arange(0, int(2*e_x))
         for idx, row in data.iterrows():
@@ -325,12 +341,13 @@ class BetaBinomial(CalibComponent):
             plt.step(kk, yy, label=f"{row['rand_seed']}")
             yy = q.pmf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
-        plt.axvline(e_x, color='k', linestyle='--')
+        plt.axvline(float(e_x), color='k', linestyle='--')
         return
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         e_n, e_x = expected['n'], expected['x']
 
         n_boot = kwargs.get('n_boot', 1000)
@@ -352,7 +369,7 @@ class BetaBinomial(CalibComponent):
 
         ax = sns.kdeplot(means)
         sns.rugplot(means, ax=ax)
-        ax.axvline(e_x, color='k', linestyle='--')
+        ax.axvline(float(e_x), color='k', linestyle='--')
         return
 
 class Binomial(CalibComponent):
@@ -397,7 +414,8 @@ class Binomial(CalibComponent):
 
     def plot_facet(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         e_n, e_x = expected['n'], expected['x']
         kk = np.arange(0, int(2*e_x))
         for idx, row in data.iterrows():
@@ -407,12 +425,13 @@ class Binomial(CalibComponent):
             plt.step(kk, yy, label=f"{row['rand_seed']}")
             yy = q.pmf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
-        plt.axvline(e_x, color='k', linestyle='--')
+        plt.axvline(float(e_x), color='k', linestyle='--')
         return
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         e_n, e_x = expected['n'], expected['x']
 
         n_boot = kwargs.get('n_boot', 1000)
@@ -433,7 +452,7 @@ class Binomial(CalibComponent):
 
         ax = sns.kdeplot(means)
         sns.rugplot(means, ax=ax)
-        ax.axvline(e_x, color='k', linestyle='--')
+        ax.axvline(float(e_x), color='k', linestyle='--')
         return
 
 class DirichletMultinomial(CalibComponent):
@@ -495,7 +514,8 @@ class DirichletMultinomial(CalibComponent):
         var = data.iloc[0]['var']
         cal = data.iloc[0]['calibrated']
 
-        expected = self.expected.loc[[t]]
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         actual = kwargs.get('full_actual', self.actual)
         actual = actual[(actual['t'] == t) & (actual['calibrated'] == cal)]
 
@@ -517,7 +537,7 @@ class DirichletMultinomial(CalibComponent):
             yy = q.pmf(e_x)
             darker = [0.8*c for c in color]
             plt.plot(e_x, yy, 'x', ms=10, color=darker)
-        plt.axvline(e_x, color='k', linestyle='--')
+        plt.axvline(float(e_x), color='k', linestyle='--')
         return
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
@@ -566,7 +586,8 @@ class GammaPoisson(CalibComponent):
 
     def plot_facet(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[[t]]
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         e_n, e_x = expected['n'].values.flatten()[0], expected['x'].values.flatten()[0]
         kk = np.arange(0, int(2*e_x))
         nll = 0
@@ -581,12 +602,13 @@ class GammaPoisson(CalibComponent):
             yy = q.pmf(e_x)
             nll += -q.logpmf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
-        plt.axvline(e_x, color='k', linestyle='--')
+        plt.axvline(float(e_x), color='k', linestyle='--')
         return
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[[t]]
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         e_n, e_x = expected['n'].values.flatten()[0], expected['x'].values.flatten()[0]
 
         n_boot = kwargs.get('n_boot', 1000)
@@ -610,7 +632,7 @@ class GammaPoisson(CalibComponent):
 
         ax = sns.kdeplot(means)
         sns.rugplot(means, ax=ax)
-        plt.axvline(e_x, color='k', linestyle='--')
+        plt.axvline(float(e_x), color='k', linestyle='--')
         return
 
 
@@ -673,7 +695,8 @@ class Normal(CalibComponent):
 
     def plot_facet(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[[t]]
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         e_x = expected['x'].values.flatten()[0]
         nll = 0
         for idx, row in data.iterrows():
@@ -699,12 +722,13 @@ class Normal(CalibComponent):
             yy = q.pdf(e_x)
             nll += -q.logpdf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
-        plt.axvline(e_x, color='k', linestyle='--')
+        plt.axvline(float(e_x), color='k', linestyle='--')
         return
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[[t]] # Gracefully handle Series and DataFrame, if 't1' in index
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         e_x = expected['x'].values.flatten()[0] # Due to possible presence of 't1' in the index
 
         n_boot = kwargs.get('n_boot', 1000)
@@ -731,5 +755,5 @@ class Normal(CalibComponent):
 
         ax = sns.kdeplot(means)
         sns.rugplot(means, ax=ax)
-        plt.axvline(e_x, color='k', linestyle='--')
+        plt.axvline(float(e_x), color='k', linestyle='--')
         return
