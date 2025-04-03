@@ -344,7 +344,7 @@ class BetaBinomial(CalibComponent):
             else:
                 actual = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
 
-            for row in actual.iterrows():
+            for idx, row in actual.iterrows():
                 alpha = row['x'] + 1
                 beta = row['n'] - row['x'] + 1
                 q = sps.betabinom(n=e_n, a=alpha, b=beta)
@@ -632,7 +632,7 @@ class Normal(CalibComponent):
 
         Args:
             expected (pd.DataFrame): dataframe with column "x", the quantity or metric of interest, from the reference dataset.
-            predicted (pd.DataFrame): dataframe with column "x", the quantity or metric of interest, from simulated dataset.
+            predicted (pd.DataFrame): dataframe with column "x", the quantity or metric of interest, from simulated dataset. If "n" is also provided, the value mean will be x/n instead of just x.
             kwargs (dict): contains any eval_kwargs that were specified when instantiating the Calibration
 
         Returns:
