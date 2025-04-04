@@ -29,7 +29,7 @@ def linear_interp(expected, actual):
         for k in actual:
             for level, df in actual[k].groupby(non_t_levels):
                 # Note: Assuming 't' precedes non_t_levels in the index of expected
-                conformed.loc[(expected.index.get_level_values('t'), level), k] = np.interp(x=expected_t, xp=actual_t, fp=df)
+                conformed.loc[(expected.index.get_level_values('t')) + level, k] = np.interp(x=expected_t, xp=actual_t, fp=df)
     else:
         for k in actual:
             conformed.loc[expected_t, k] = np.interp(x=expected_t, xp=actual_t, fp=actual[k])
@@ -82,7 +82,7 @@ def linear_accum(expected, actual):
                 v1 = np.interp(x=t1, xp=sim_t, fp=fp) # Cum value at t1
 
                 # Difference between end of step t1 and end of step t
-                conformed.loc[(t0, t1, level), col] = v1 - v0
+                conformed.loc[(t0, t1) + level, col] = v1 - v0
         return conformed
     
     # Regular index case
@@ -286,7 +286,7 @@ class CalibComponent(sc.prettyobj):
         figs = []
         if len(non_t_levels): # Separate fig for each level
             for levels, df in actual.groupby(non_t_levels):
-                expected = self.expected.reset_index().set_index(non_t_levels).loc[levels].reset_index().set_index(self.expected.index.names)
+                expected = self.expected.reset_index().set_index(non_t_levels).loc[[levels]].reset_index().set_index(self.expected.index.names)
                 figs.append( do_plot(df, expected, levels) )
         else: # No other levels, just one figure
             figs.append( do_plot(actual, self.expected) )

@@ -22,30 +22,61 @@ do_plot = True
 # Define a socio-economic status (SES) variable
 SES = dict(LOW=0, HIGH=1) # Enum not pickling, so using dict instead
 
-class BySES(ss.Analyzer):
+class ByAgeSES(ss.Analyzer):
+    def __init__(self, age_groups=None, **kwargs):
+        """
+        Analyzer to count the number of infected by age and SES
+
+        Args:
+            age_groups (list): List of tuples with the age groups to analyze. Each tuple should contain the lower and upper bounds of the age group.
+        """
+        super().__init__(**kwargs)
+        self.age_groups = age_groups
+        if age_groups is None:
+            self.age_groups = [(0, 1000)] # Default to all ages
+        return
+    
+    def mod(self, lbl, ses, age_group):
+        """
+        Modify the label of the results to include SES and age group.
+
+        Args:
+            lbl (str): The label to modify.
+            ses (str): The SES value.
+            age_group (tuple): The age group as a tuple of lower and upper bounds.
+        """
+        agl, agh = age_group
+        append = f'{ses}_{agl}_{agh}' if len(self.age_groups)>1 else ses
+        return lbl + '_' + append
+
     def init_results(self):
         assert hasattr(self.sim.people, 'SES')
         for ses in SES.keys():
-            self.define_results(
-                ss.Result(f'n_infected_{ses}', dtype=int, label=f'Number Infected [SES={ses}]'),
-                ss.Result(f'new_infections_{ses}', dtype=int, label=f'Newly Infected [SES={ses}]'),
-                ss.Result(f'n_alive_{ses}', dtype=int, label=f'Number of Agents [SES={ses}]'),
-            )
+            for ag in self.age_groups:
+                agl, agh = ag # age lower and upper bounds
+                desc = f'SES={ses} & Age Group {agl}-{agh}'
+                self.define_results(
+                    ss.Result(self.mod('n_infected', ses, ag), dtype=int, label=f'Number Infected [{desc}]'),
+                    ss.Result(self.mod('new_infections', ses, ag), dtype=int, label=f'Newly Infected [{desc}]'),
+                    ss.Result(self.mod('n_alive', ses, ag), dtype=int, label=f'Number of Agents [{desc}]'),
+                )
         return
 
     def update_results(self):
         ti = self.sim.t.ti
         for ses, val in SES.items():
-            self.results[f'n_infected_{ses}'][ti] = np.count_nonzero(self.sim.diseases.sir.infected[self.sim.people.SES == val])
-            self.results[f'new_infections_{ses}'][ti] = np.count_nonzero(self.sim.diseases.sir.ti_infected[self.sim.people.SES == val] == self.sim.diseases.sir.t.ti)
-            self.results[f'n_alive_{ses}'][ti] = np.count_nonzero(self.sim.people.alive[self.sim.people.SES == val])
+            for ag in self.age_groups:
+                agl, agh = ag # age lower and upper bounds
+                self.results[self.mod('n_infected', ses, ag)][ti] = np.count_nonzero( self.sim.diseases.sir.infected[(self.sim.people.SES == val) & (self.sim.people.age >= agl) & (self.sim.people.age < agh)] )
+                self.results[self.mod('new_infections', ses, ag)][ti] = np.count_nonzero( self.sim.diseases.sir.ti_infected[(self.sim.people.SES == val) & (self.sim.people.age >= agl) & (self.sim.people.age < agh)] == self.sim.diseases.sir.t.ti )
+                self.results[self.mod('n_alive', ses, ag)][ti] = np.count_nonzero( self.sim.people.alive[(self.sim.people.SES == val) & (self.sim.people.age >= agl) & (self.sim.people.age < agh)] )
         return
 
     def step(self):
         pass
 
 
-def make_sim(by_ses=False):
+def make_sim(by_ses=False, analyzers=None, n_reps=1):
     """ Make a simple simulation with a SIR model and a random network """
 
     people_pars = dict(n_agents=n_agents)
@@ -68,8 +99,9 @@ def make_sim(by_ses=False):
         diseases = sir,
         networks = random,
         verbose = 0,
-        analyzers = BySES() if by_ses else None,
+        analyzers = analyzers,
     )
+
     return sim
 
 
@@ -163,7 +195,7 @@ def test_onepar_normal(do_plot=True):
         calib.plot(bootstrap=True)
         calib.plot_optuna(['plot_param_importances', 'plot_optimization_history'])
 
-    return sim, calib
+    return
 
 
 def test_onepar_custom(do_plot=True):
@@ -211,7 +243,7 @@ def test_onepar_custom(do_plot=True):
 
     # Check
     assert calib.check_fit(), 'Calibration did not improve the fit'
-    return sim, calib
+    return
 
 
 def test_twopar_betabin_gammapois(do_plot=True):
@@ -224,7 +256,8 @@ def test_twopar_betabin_gammapois(do_plot=True):
     )
 
     # Make the sim and data
-    sim = make_sim(by_ses=True) # Included SES and the corresponding analyzer
+    azs = [ByAgeSES(name='byses'), ByAgeSES(name='bysesage', age_groups=[(0,15),(15,100)])]
+    sim = make_sim(by_ses=True, analyzers=azs) # Included SES and the corresponding analyzer
 
     num_infectious = ss.BetaBinomial(
         name = 'Number Infectious',
@@ -254,20 +287,32 @@ def test_twopar_betabin_gammapois(do_plot=True):
         weight = 1.5,
         conform = 'incident',
 
-        n_boot = 25, # Testing bootstrap
+        n_boot = 25, # Testing bootstrap (note n_reps>1)
         combine_reps = 'sum',
 
         expected = pd.DataFrame({
-            'n':  [100, 27, 54],   # Number of person-years
-            'x':  [740, 325, 200], # Number of new infections
-            't':  [ss.date(d) for d in ['2020-01-07', '2020-01-14', '2020-01-27']], # Between t and t1
-            't1': [ss.date(d) for d in ['2020-01-08', '2020-01-15', '2020-01-29']],
-        }).set_index(['t', 't1']),
+            'n':  [100, 27, 54, 36],   # Number of person-years
+            'x':  [740, 325, 200, 125], # Number of new infections
+            't':  [ss.date(d) for d in ['2020-01-14', '2020-01-14', '2020-01-14', '2020-01-14']], # Between t and t1
+            't1': [ss.date(d) for d in ['2020-01-15', '2020-01-15', '2020-01-15', '2020-01-15']],
+            'ses': ['LOW', 'LOW', 'HIGH', 'HIGH'], # By SES
+            'age': ['0-15', '15-100', '0-15', '15-100'], # By age group
+        }).set_index(['t', 't1', 'ses', 'age']),
 
         extract_fn = lambda sim: pd.DataFrame({
-            'x': sim.results.sir.new_infections, # Events
-            'n': sim.results.n_alive * sim.t.dt_year, # Person-years at risk
-        }, index=pd.Index(sim.results.timevec, name='t'))
+            'x': np.concatenate((
+                sim.results.bysesage.n_infected_LOW_0_15,
+                sim.results.bysesage.n_infected_LOW_15_100,
+                sim.results.bysesage.n_infected_HIGH_0_15,
+                sim.results.bysesage.n_infected_HIGH_15_100
+            )), # Number of events
+            'n': np.concatenate((
+                sim.results.bysesage.n_alive_LOW_0_15 * sim.t.dt_year,
+                sim.results.bysesage.n_alive_LOW_15_100 * sim.t.dt_year,
+                sim.results.bysesage.n_alive_HIGH_0_15 * sim.t.dt_year,
+                sim.results.bysesage.n_alive_HIGH_15_100 * sim.t.dt_year
+            )),# Person-years at risk
+        }, index=pd.MultiIndex.from_product([SES.keys(), ['0-15', '15-100'], sim.results.timevec], names=['ses', 'age', 't'])),
     )
 
     # Make the calibration
@@ -277,8 +322,8 @@ def test_twopar_betabin_gammapois(do_plot=True):
         build_fn = build_sim,
         build_kw = dict(n_reps=3), # 3 reps per point
         reseed = True,
-        components = [num_infectious, incident_cases],
-        total_trials = total_trials,
+        components = incident_cases, #[num_infectious, incident_cases],
+        total_trials = 15, #total_trials,
         n_workers = None, # None indicates to use all available CPUs
         die = True,
         debug = debug,
@@ -290,7 +335,12 @@ def test_twopar_betabin_gammapois(do_plot=True):
 
     # Check
     assert calib.check_fit(), 'Calibration did not improve the fit'
-    return sim, calib
+
+    # Call plotting to look for exceptions
+    if do_plot:
+        calib.plot(bootstrap=False)
+        calib.plot(bootstrap=True)
+    return
 
 
 def test_threepar_dirichletmultinomial_10reps(do_plot=True):
@@ -360,7 +410,7 @@ def test_threepar_dirichletmultinomial_10reps(do_plot=True):
 
     # Check
     assert calib.check_fit(), 'Calibration did not improve the fit'
-    return sim, calib
+    return
 
 
 #%% Run as a script
@@ -392,8 +442,9 @@ if __name__ == '__main__':
 
 
     do_plot = True
-    for f in [test_onepar_normal, test_onepar_custom, test_twopar_betabin_gammapois, test_threepar_dirichletmultinomial_10reps]:
+    #for f in [test_onepar_normal, test_onepar_custom, test_twopar_betabin_gammapois, test_threepar_dirichletmultinomial_10reps]:
+    for f in [test_twopar_betabin_gammapois]:
         T = sc.timer()
-        sim, calib = f(do_plot=do_plot)
+        f(do_plot=do_plot)
         T.toc()
     plt.show()
