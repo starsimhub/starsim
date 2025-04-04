@@ -185,9 +185,6 @@ class CalibComponent(sc.prettyobj):
         if self.combine_reps is None:
             nll = self.compute_nll(expected, actual, **kwargs) # Negative log likelihood
         else:
-            #timecols = [c for c in self.actual.columns if isinstance(self.actual[c].iloc[0], dt.datetime)] # Not robust to data types
-            #actual_combined = actual.groupby(timecols).aggregate(func=self.combine_reps, **self.combine_kwargs)
-            # TODO: TEST!!!
             actual_combined = actual.groupby(expected.index.names).aggregate(func=self.combine_reps, **self.combine_kwargs)
             actual_combined['rand_seed'] = 0 # Fake the seed
             actual_combined = actual_combined.reset_index().set_index('rand_seed') # Make it look like self.actual
@@ -488,6 +485,8 @@ class DirichletMultinomial(CalibComponent):
     def plot(self, actual=None, **kwargs):
         if actual is None:
             actual = self.actual
+
+        bootstrap = kwargs.pop('bootstrap', False) # Not used, but also don't want to pass to FacetGrid
 
         if 'calibrated' not in actual.columns:
             actual['calibrated'] = 'Calibration'

@@ -242,7 +242,13 @@ def test_onepar_custom(do_plot=True):
     calib.calibrate()
 
     # Check
-    assert calib.check_fit(), 'Calibration did not improve the fit'
+    assert calib.check_fit(do_plot=False), 'Calibration did not improve the fit'
+
+    # Call plotting to look for exceptions
+    if do_plot:
+        calib.plot(bootstrap=False)
+        calib.plot(bootstrap=True)
+
     return
 
 
@@ -323,7 +329,7 @@ def test_twopar_betabin_gammapois(do_plot=True):
         build_kw = dict(n_reps=3), # 3 reps per point
         reseed = True,
         components = incident_cases, #[num_infectious, incident_cases],
-        total_trials = 15, #total_trials,
+        total_trials = total_trials,
         n_workers = None, # None indicates to use all available CPUs
         die = True,
         debug = debug,
@@ -334,12 +340,13 @@ def test_twopar_betabin_gammapois(do_plot=True):
     calib.calibrate()
 
     # Check
-    assert calib.check_fit(), 'Calibration did not improve the fit'
+    assert calib.check_fit(do_plot=False), 'Calibration did not improve the fit'
 
     # Call plotting to look for exceptions
     if do_plot:
         calib.plot(bootstrap=False)
         calib.plot(bootstrap=True)
+
     return
 
 
@@ -409,7 +416,12 @@ def test_threepar_dirichletmultinomial_10reps(do_plot=True):
     calib.calibrate()
 
     # Check
-    assert calib.check_fit(), 'Calibration did not improve the fit'
+    assert calib.check_fit(do_plot=False), 'Calibration did not improve the fit'
+
+    # Call plotting to look for exceptions
+    if do_plot:
+        calib.plot(bootstrap=False) # The DirichletMultinomial likelihood ignores the bootstrap option
+
     return
 
 
@@ -442,8 +454,7 @@ if __name__ == '__main__':
 
 
     do_plot = True
-    #for f in [test_onepar_normal, test_onepar_custom, test_twopar_betabin_gammapois, test_threepar_dirichletmultinomial_10reps]:
-    for f in [test_twopar_betabin_gammapois]:
+    for f in [test_onepar_normal, test_onepar_custom, test_twopar_betabin_gammapois, test_threepar_dirichletmultinomial_10reps]:
         T = sc.timer()
         f(do_plot=do_plot)
         T.toc()
