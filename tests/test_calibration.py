@@ -328,7 +328,7 @@ def test_twopar_betabin_gammapois(do_plot=True):
         build_fn = build_sim,
         build_kw = dict(n_reps=3), # 3 reps per point
         reseed = True,
-        components = incident_cases, #[num_infectious, incident_cases],
+        components = [num_infectious, incident_cases],
         total_trials = total_trials,
         n_workers = None, # None indicates to use all available CPUs
         die = True,

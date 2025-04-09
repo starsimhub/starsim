@@ -29,7 +29,7 @@ def linear_interp(expected, actual):
         for k in actual:
             for level, df in actual[k].groupby(non_t_levels):
                 # Note: Assuming 't' precedes non_t_levels in the index of expected
-                conformed.loc[(expected.index.get_level_values('t')) + level, k] = np.interp(x=expected_t, xp=actual_t, fp=df)
+                conformed.loc[(expected.index.get_level_values('t'),) + level, k] = np.interp(x=expected_t, xp=actual_t, fp=df)
     else:
         for k in actual:
             conformed.loc[expected_t, k] = np.interp(x=expected_t, xp=actual_t, fp=actual[k])
@@ -283,6 +283,7 @@ class CalibComponent(sc.prettyobj):
         figs = []
         if len(non_t_levels): # Separate fig for each level
             for levels, df in actual.groupby(non_t_levels):
+                levels = levels[0] if len(levels) == 1 else levels # Flatten
                 expected = self.expected.reset_index().set_index(non_t_levels).loc[[levels]].reset_index().set_index(self.expected.index.names)
                 figs.append( do_plot(df, expected, levels) )
         else: # No other levels, just one figure
