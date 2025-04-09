@@ -3,6 +3,7 @@ Test calibration
 """
 
 #%% Imports and settings
+
 import starsim as ss
 import numpy as np
 import pandas as pd
@@ -11,14 +12,78 @@ from functools import partial
 import pytest
 
 debug = False # If true, will run in serial
-total_trials = [20, 10][debug]
+total_trials = [10, 2][debug]
 n_agents = 1_000
 do_plot = True
 
 
 #%% Helper functions
 
-def make_sim():
+# Define a socio-economic status (SES) variable
+SES = dict(LOW=0, HIGH=1) # Enum not pickling, so using dict instead
+
+class ByAgeSES(ss.Analyzer):
+    def __init__(self, age_groups=None, **kwargs):
+        """
+        Analyzer to count the number of infected by age and SES
+
+        Args:
+            age_groups (list): List of tuples with the age groups to analyze. Each tuple should contain the lower and upper bounds of the age group.
+        """
+        super().__init__(**kwargs)
+        self.age_groups = age_groups
+        if age_groups is None:
+            self.age_groups = [(0, 1000)] # Default to all ages
+        return
+    
+    def mod(self, lbl, ses, age_group):
+        """
+        Modify the label of the results to include SES and age group.
+
+        Args:
+            lbl (str): The label to modify.
+            ses (str): The SES value.
+            age_group (tuple): The age group as a tuple of lower and upper bounds.
+        """
+        agl, agh = age_group
+        append = f'{ses}_{agl}_{agh}' if len(self.age_groups)>1 else ses
+        return lbl + '_' + append
+
+    def init_results(self):
+        assert hasattr(self.sim.people, 'SES')
+        for ses in SES.keys():
+            for ag in self.age_groups:
+                agl, agh = ag # age lower and upper bounds
+                desc = f'SES={ses} & Age Group {agl}-{agh}'
+                self.define_results(
+                    ss.Result(self.mod('n_infected', ses, ag), dtype=int, label=f'Number Infected [{desc}]'),
+                    ss.Result(self.mod('new_infections', ses, ag), dtype=int, label=f'Newly Infected [{desc}]'),
+                    ss.Result(self.mod('n_alive', ses, ag), dtype=int, label=f'Number of Agents [{desc}]'),
+                )
+        return
+
+    def update_results(self):
+        ti = self.sim.t.ti
+        for ses, val in SES.items():
+            for ag in self.age_groups:
+                agl, agh = ag # age lower and upper bounds
+                self.results[self.mod('n_infected', ses, ag)][ti] = np.count_nonzero( self.sim.diseases.sir.infected[(self.sim.people.SES == val) & (self.sim.people.age >= agl) & (self.sim.people.age < agh)] )
+                self.results[self.mod('new_infections', ses, ag)][ti] = np.count_nonzero( self.sim.diseases.sir.ti_infected[(self.sim.people.SES == val) & (self.sim.people.age >= agl) & (self.sim.people.age < agh)] == self.sim.diseases.sir.t.ti )
+                self.results[self.mod('n_alive', ses, ag)][ti] = np.count_nonzero( self.sim.people.alive[(self.sim.people.SES == val) & (self.sim.people.age >= agl) & (self.sim.people.age < agh)] )
+        return
+
+    def step(self):
+        pass
+
+
+def make_sim(by_ses=False, analyzers=None, n_reps=1):
+    """ Make a simple simulation with a SIR model and a random network """
+
+    people_pars = dict(n_agents=n_agents)
+    if by_ses:
+        people_pars['extra_states'] = ss.State('SES', default=ss.choice([SES['LOW'], SES['HIGH']], p=[0.7, 0.3]))
+    pop = ss.People(**people_pars)
+
     sir = ss.SIR(
         beta = ss.beta(0.075),
         init_prev = ss.bernoulli(0.02),
@@ -26,7 +91,7 @@ def make_sim():
     random = ss.RandomNet(n_contacts=ss.poisson(4))
 
     sim = ss.Sim(
-        n_agents = n_agents,
+        people = pop,
         start = sc.date('2020-01-01'),
         stop = sc.date('2020-02-12'),
         dt = 1,
@@ -34,6 +99,7 @@ def make_sim():
         diseases = sir,
         networks = random,
         verbose = 0,
+        analyzers = analyzers,
     )
 
     return sim
@@ -72,7 +138,6 @@ def build_sim(sim, calib_pars, **kwargs):
 
 #%% Define the tests
 
-@pytest.mark.skip(reason="Test requires performance enhancement")
 def test_onepar_normal(do_plot=True):
     sc.heading('Testing a single parameter (beta) with a normally distributed likelihood')
 
@@ -97,9 +162,9 @@ def test_onepar_normal(do_plot=True):
             'n': sim.results.n_alive,
         }, index=pd.Index(sim.results.timevec, name='t')),
 
-        # User can specify sigma2, e.g.:
+        # User can specify sigma2 to avoid automatically choosing the value that maximizes likelihood
         #sigma2 = 0.05, # (num_replicates/sigma2_model + 1/sigma2_data)^-1
-        #sigma2 = np.array([0.05, 0.25, 0.01])
+        sigma2 = np.array([0.05, 0.25, 0.01])
     )
 
     # Make the calibration
@@ -107,7 +172,7 @@ def test_onepar_normal(do_plot=True):
         calib_pars = calib_pars,
         sim = sim,
         build_fn = build_sim,
-        build_kw = dict(n_reps=5), # Reps per point
+        build_kw = dict(n_reps=3), # Reps per point
         reseed = False,
         components = [prevalence],
         total_trials = total_trials,
@@ -130,8 +195,7 @@ def test_onepar_normal(do_plot=True):
         calib.plot(bootstrap=True)
         calib.plot_optuna(['plot_param_importances', 'plot_optimization_history'])
 
-    return sim, calib
-
+    return
 
 
 def test_onepar_custom(do_plot=True):
@@ -163,7 +227,7 @@ def test_onepar_custom(do_plot=True):
         calib_pars = calib_pars,
         sim = sim,
         build_fn = build_sim,
-        build_kw = dict(n_reps=2), # Two reps per point
+        #build_kw = dict(n_reps=3), # Use default if n_reps = 1
         reseed = True,
         eval_fn = eval, # Will call my_function(msim, eval_kwargs)
         eval_kw = dict(expected=(ss.date('2020-01-12'), 0.13)), # Will call eval(sim, **eval_kw)
@@ -178,10 +242,16 @@ def test_onepar_custom(do_plot=True):
     calib.calibrate()
 
     # Check
-    assert calib.check_fit(), 'Calibration did not improve the fit'
-    return sim, calib
+    assert calib.check_fit(do_plot=False), 'Calibration did not improve the fit'
 
-@pytest.mark.skip(reason="Feature requires further debugging")
+    # Call plotting to look for exceptions
+    if do_plot:
+        calib.plot(bootstrap=False)
+        calib.plot(bootstrap=True)
+
+    return
+
+
 def test_twopar_betabin_gammapois(do_plot=True):
     sc.heading('Testing a two parameters (beta and initial prevalence) with a two likelihoods (BetaBinomial and GammaPoisson)')
 
@@ -192,25 +262,30 @@ def test_twopar_betabin_gammapois(do_plot=True):
     )
 
     # Make the sim and data
-    sim = make_sim()
+    azs = [ByAgeSES(name='byses'), ByAgeSES(name='bysesage', age_groups=[(0,15),(15,100)])]
+    sim = make_sim(by_ses=True, analyzers=azs) # Included SES and the corresponding analyzer
 
     num_infectious = ss.BetaBinomial(
         name = 'Number Infectious',
         weight = 0.75,
         conform = 'prevalent',
 
-        n_boot = 1000, # Testing bootstrap
+        n_boot = 25, # Testing bootstrap
         combine_reps = 'mean',
 
         expected = pd.DataFrame({
-            'n': [200, 197, 195], # Number of individuals sampled
-            'x': [30, 35, 10],    # Number of individuals found to be infectious
-        }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
+            'n': [140, 137, 60, 59], # Number of individuals sampled
+            'x': [21, 23, 9, 11],    # Number of individuals found to be infectious
+            't': [ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-01-12', '2020-01-25']], # On these dates
+            'ses': ['LOW', 'LOW', 'HIGH', 'HIGH'], # By SES
+        }).set_index(['t', 'ses']),
 
         extract_fn = lambda sim: pd.DataFrame({
-            'n': sim.results.n_alive,
-            'x': sim.results.sir.n_infected,
-        }, index=pd.Index(sim.results.timevec, name='t')),
+            #'n': sim.results.n_alive,
+            #'x': sim.results.sir.n_infected,
+            'x': np.concatenate((sim.results.byses.n_infected_LOW, sim.results.byses.n_infected_HIGH)),
+            'n': np.concatenate((sim.results.byses.n_alive_LOW, sim.results.byses.n_alive_HIGH)),
+        }, index=pd.MultiIndex.from_product([SES.keys(), sim.results.timevec], names=['ses', 't'])),
     )
 
     incident_cases = ss.GammaPoisson(
@@ -218,20 +293,32 @@ def test_twopar_betabin_gammapois(do_plot=True):
         weight = 1.5,
         conform = 'incident',
 
-        n_boot = 1000, # Testing bootstrap
+        n_boot = 25, # Testing bootstrap (note n_reps>1)
         combine_reps = 'sum',
 
         expected = pd.DataFrame({
-            'n':  [100, 27, 54],   # Number of person-years
-            'x':  [740, 325, 200], # Number of new infections
-            't':  [ss.date(d) for d in ['2020-01-07', '2020-01-14', '2020-01-27']], # Between t and t1
-            't1': [ss.date(d) for d in ['2020-01-08', '2020-01-15', '2020-01-29']],
-        }).set_index(['t', 't1']),
+            'n':  [100, 27, 54, 36],   # Number of person-years
+            'x':  [740, 325, 200, 125], # Number of new infections
+            't':  [ss.date(d) for d in ['2020-01-14', '2020-01-14', '2020-01-14', '2020-01-14']], # Between t and t1
+            't1': [ss.date(d) for d in ['2020-01-15', '2020-01-15', '2020-01-15', '2020-01-15']],
+            'ses': ['LOW', 'LOW', 'HIGH', 'HIGH'], # By SES
+            'age': ['0-15', '15-100', '0-15', '15-100'], # By age group
+        }).set_index(['t', 't1', 'ses', 'age']),
 
         extract_fn = lambda sim: pd.DataFrame({
-            'x': sim.results.sir.new_infections, # Events
-            'n': sim.results.n_alive * sim.t.dt_year, # Person-years at risk
-        }, index=pd.Index(sim.results.timevec, name='t'))
+            'x': np.concatenate((
+                sim.results.bysesage.n_infected_LOW_0_15,
+                sim.results.bysesage.n_infected_LOW_15_100,
+                sim.results.bysesage.n_infected_HIGH_0_15,
+                sim.results.bysesage.n_infected_HIGH_15_100
+            )), # Number of events
+            'n': np.concatenate((
+                sim.results.bysesage.n_alive_LOW_0_15 * sim.t.dt_year,
+                sim.results.bysesage.n_alive_LOW_15_100 * sim.t.dt_year,
+                sim.results.bysesage.n_alive_HIGH_0_15 * sim.t.dt_year,
+                sim.results.bysesage.n_alive_HIGH_15_100 * sim.t.dt_year
+            )),# Person-years at risk
+        }, index=pd.MultiIndex.from_product([SES.keys(), ['0-15', '15-100'], sim.results.timevec], names=['ses', 'age', 't'])),
     )
 
     # Make the calibration
@@ -253,10 +340,16 @@ def test_twopar_betabin_gammapois(do_plot=True):
     calib.calibrate()
 
     # Check
-    assert calib.check_fit(), 'Calibration did not improve the fit'
-    return sim, calib
+    assert calib.check_fit(do_plot=False), 'Calibration did not improve the fit'
 
-@pytest.mark.skip(reason="Feature requires further debugging")
+    # Call plotting to look for exceptions
+    if do_plot:
+        calib.plot(bootstrap=False)
+        calib.plot(bootstrap=True)
+
+    return
+
+
 def test_threepar_dirichletmultinomial_10reps(do_plot=True):
     sc.heading('Testing a three parameters (beta, initial prevalence, and number of contacts) with a DirichletMultinomial likelihood')
 
@@ -308,11 +401,10 @@ def test_threepar_dirichletmultinomial_10reps(do_plot=True):
     calib = ss.Calibration(
         calib_pars = calib_pars,
         sim = sim,
-        build_fn = partial(build_sim, n_reps=10),
+        build_fn = build_sim,
+        build_kw = dict(n_reps=10), # Pass n_reps=10 to build_sim
         reseed = False,
         components = [cases_by_dow],
-        #eval_fn = my_function, # Will call my_function(msim, eval_kwargs)
-        #eval_kwargs = dict(expected=TRIAL_DATA),
         total_trials = total_trials,
         n_workers = None, # None indicates to use all available CPUs
         die = True,
@@ -324,8 +416,13 @@ def test_threepar_dirichletmultinomial_10reps(do_plot=True):
     calib.calibrate()
 
     # Check
-    assert calib.check_fit(), 'Calibration did not improve the fit'
-    return sim, calib
+    assert calib.check_fit(do_plot=False), 'Calibration did not improve the fit'
+
+    # Call plotting to look for exceptions
+    if do_plot:
+        calib.plot(bootstrap=False) # The DirichletMultinomial likelihood ignores the bootstrap option
+
+    return
 
 
 #%% Run as a script
@@ -359,6 +456,6 @@ if __name__ == '__main__':
     do_plot = True
     for f in [test_onepar_normal, test_onepar_custom, test_twopar_betabin_gammapois, test_threepar_dirichletmultinomial_10reps]:
         T = sc.timer()
-        sim, calib = f(do_plot=do_plot)
+        f(do_plot=do_plot)
         T.toc()
     plt.show()

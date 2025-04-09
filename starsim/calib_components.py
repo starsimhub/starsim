@@ -19,10 +19,20 @@ def linear_interp(expected, actual):
         expected (pd.DataFrame): The expected data from field observation, must have 't' in the index and columns corresponding to specific needs of the selected component.
         actual (pd.DataFrame): The actual data from the simulation, must have 't' in the index and columns corresponding to specific needs of the selected component.
     """
-    t = expected.index
+
+    expected_t = expected.index.get_level_values('t').unique()
+    actual_t = actual.index.get_level_values('t').unique()
     conformed = pd.DataFrame(index=expected.index)
-    for k in actual:
-        conformed[k] = np.interp(x=t, xp=actual.index, fp=actual[k])
+
+    non_t_levels = [level for level in expected.index.names if level != 't']
+    if len(non_t_levels):
+        for k in actual:
+            for level, df in actual[k].groupby(non_t_levels):
+                # Note: Assuming 't' precedes non_t_levels in the index of expected
+                conformed.loc[(expected.index.get_level_values('t'),) + level, k] = np.interp(x=expected_t, xp=actual_t, fp=df)
+    else:
+        for k in actual:
+            conformed.loc[expected_t, k] = np.interp(x=expected_t, xp=actual_t, fp=actual[k])
 
     return conformed
 
@@ -36,11 +46,11 @@ def step_containing(expected, actual):
         expected (pd.DataFrame): The expected data from field observation, must have 't' in the index and columns corresponding to specific needs of the selected component.
         actual (pd.DataFrame): The actual data from the simulation, must have 't' in the index and columns corresponding to specific needs of the selected component.
     """
-    t = expected.index
-    inds = np.searchsorted(actual.index, t, side='left')
-    conformed = pd.DataFrame(index=expected.index)
-    for k in actual:
-        conformed[k] = actual[k].values[inds] # .values because indices differ
+    expected_t = expected.index.get_level_values('t').unique()
+    actual_t = actual.index.get_level_values('t').unique()
+
+    t_containing = actual_t[np.searchsorted(actual_t, expected_t, side='left')]
+    conformed = actual.loc[t_containing]
 
     return conformed
 
@@ -55,19 +65,40 @@ def linear_accum(expected, actual):
         expected (pd.DataFrame): The expected data from field observation, must have 't' and 't1' in the index and columns corresponding to specific needs of the selected component.
         actual (pd.DataFrame): The actual data from the simulation, must have 't' and 't1' in the index and columns corresponding to specific needs of the selected component.
     """
+
+    non_t_levels = [level for level in expected.index.names if level != 't' and level != 't1']
+    if len(non_t_levels):
+        conformed = pd.DataFrame(index=expected.index)
+
+        t0 = expected.index.get_level_values('t').unique()
+        t1 = expected.index.get_level_values('t1').unique()
+        sim_t = actual.index.get_level_values('t').unique()
+
+        ret = {}
+        for col in actual.columns:
+            for level, df in actual[col].groupby(non_t_levels):
+                fp = df.cumsum()
+                v0 = np.interp(x=t0, xp=sim_t, fp=fp) # Cum value at t0
+                v1 = np.interp(x=t1, xp=sim_t, fp=fp) # Cum value at t1
+
+                # Difference between end of step t1 and end of step t
+                conformed.loc[(t0, t1) + level, col] = v1 - v0
+        return conformed
+    
+    # Regular index case
     t0 = expected.index.get_level_values('t')
     t1 = expected.index.get_level_values('t1')
-    sim_t = actual.index
+    sim_t = actual.index.get_level_values('t')
 
-    fp = actual.cumsum()
+    actual_cumsum = actual.cumsum()
     ret = {}
-    for c in fp.columns:
-        vals = fp[c].values.flatten()
+    for col in actual_cumsum.columns:
+        vals = actual_cumsum[col].values.flatten()
         v0 = np.interp(x=t0, xp=sim_t, fp=vals) # Cum value at t0
         v1 = np.interp(x=t1, xp=sim_t, fp=vals) # Cum value at t1
 
         # Difference between end of step t1 and end of step t
-        ret[c] = v1 - v0
+        ret[col] = v1 - v0
 
     df = pd.DataFrame(ret, index=expected.index)
     return df
@@ -154,8 +185,7 @@ class CalibComponent(sc.prettyobj):
         if self.combine_reps is None:
             nll = self.compute_nll(expected, actual, **kwargs) # Negative log likelihood
         else:
-            timecols = [c for c in self.actual.columns if isinstance(self.actual[c].iloc[0], dt.datetime)] # Not robust to data types
-            actual_combined = actual.groupby(timecols).aggregate(func=self.combine_reps, **self.combine_kwargs)
+            actual_combined = actual.groupby(expected.index.names).aggregate(func=self.combine_reps, **self.combine_kwargs)
             actual_combined['rand_seed'] = 0 # Fake the seed
             actual_combined = actual_combined.reset_index().set_index('rand_seed') # Make it look like self.actual
             nll = self.compute_nll(expected, actual_combined, **kwargs)
@@ -231,20 +261,35 @@ class CalibComponent(sc.prettyobj):
         if 'calibrated' not in actual.columns:
             actual['calibrated'] = 'Calibration'
 
-        g = sns.FacetGrid(data=actual.reset_index(), col='t', row='calibrated', sharex='col', sharey=False, margin_titles=True, height=3, aspect=1.5)
+        def do_plot(data, expected, levels=None):
+            g = sns.FacetGrid(data=data.reset_index(), col='t', row='calibrated', sharex='col',
+                sharey=False, margin_titles=True, height=3, aspect=1.5)
 
-        if bootstrap:
-            g.map_dataframe(self.plot_facet_bootstrap)
-        else:
-            g.map_dataframe(self.plot_facet)
-        g.set_titles(row_template='{row_name}')
-        for (row_val, col_val), ax in g.axes_dict.items():
-            if row_val == g.row_names[0] and isinstance(col_val, dt.datetime):
-                ax.set_title(col_val.strftime('%Y-%m-%d'))
+            if bootstrap:
+                g.map_dataframe(self.plot_facet_bootstrap, expected=expected)
+            else:
+                g.map_dataframe(self.plot_facet, expected=expected)
+            g.set_titles(row_template='{row_name}')
+            for (row_val, col_val), ax in g.axes_dict.items():
+                if row_val == g.row_names[0] and isinstance(col_val, dt.datetime):
+                    ax.set_title(col_val.strftime('%Y-%m-%d'))
 
-        g.fig.subplots_adjust(top=0.8)
-        g.fig.suptitle(self.name)
-        return g.fig
+            g.fig.subplots_adjust(top=0.8)
+            supt = f'{self.name} - {levels}' if levels is not None else self.name
+            g.fig.suptitle(supt)
+            return g.fig
+
+        non_t_levels = [level for level in self.expected.index.names if level != 't' and level != 't1']
+        figs = []
+        if len(non_t_levels): # Separate fig for each level
+            for levels, df in actual.groupby(non_t_levels):
+                levels = levels[0] if len(levels) == 1 else levels # Flatten
+                expected = self.expected.reset_index().set_index(non_t_levels).loc[[levels]].reset_index().set_index(self.expected.index.names)
+                figs.append( do_plot(df, expected, levels) )
+        else: # No other levels, just one figure
+            figs.append( do_plot(actual, self.expected) )
+
+        return figs
 
 class BetaBinomial(CalibComponent):
     def compute_nll(self, expected, actual, **kwargs):
@@ -269,7 +314,7 @@ class BetaBinomial(CalibComponent):
 
         logLs = []
 
-        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
+        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=expected.index.names, suffixes=('_e', '_a'))
         for idx, rep in combined.iterrows():
             e_n, e_x = rep['n_e'], rep['x_e']
             a_n, a_x = rep['n_a'], rep['x_a']
@@ -282,7 +327,8 @@ class BetaBinomial(CalibComponent):
 
     def plot_facet(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         e_n, e_x = expected['n'], expected['x']
         kk = np.arange(0, int(2*e_x))
         for idx, row in data.iterrows():
@@ -293,12 +339,13 @@ class BetaBinomial(CalibComponent):
             plt.step(kk, yy, label=f"{row['rand_seed']}")
             yy = q.pmf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
-        plt.axvline(e_x, color='k', linestyle='--')
+        plt.axvline(float(e_x), color='k', linestyle='--')
         return
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         e_n, e_x = expected['n'], expected['x']
 
         n_boot = kwargs.get('n_boot', 1000)
@@ -312,7 +359,7 @@ class BetaBinomial(CalibComponent):
             else:
                 actual = data.set_index('rand_seed').loc[use_seeds].groupby('t').aggregate(func=self.combine_reps, **self.combine_kwargs)
 
-            for row in actual.iterrows():
+            for idx, row in actual.iterrows():
                 alpha = row['x'] + 1
                 beta = row['n'] - row['x'] + 1
                 q = sps.betabinom(n=e_n, a=alpha, b=beta)
@@ -320,7 +367,7 @@ class BetaBinomial(CalibComponent):
 
         ax = sns.kdeplot(means)
         sns.rugplot(means, ax=ax)
-        ax.axvline(e_x, color='k', linestyle='--')
+        ax.axvline(float(e_x), color='k', linestyle='--')
         return
 
 class Binomial(CalibComponent):
@@ -343,7 +390,7 @@ class Binomial(CalibComponent):
 
         logLs = []
 
-        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
+        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=expected.index.names, suffixes=('_e', '_a'))
         for idx, rep in combined.iterrows():
             if 'p' in rep:
                 # p specified, no collision
@@ -365,7 +412,8 @@ class Binomial(CalibComponent):
 
     def plot_facet(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         e_n, e_x = expected['n'], expected['x']
         kk = np.arange(0, int(2*e_x))
         for idx, row in data.iterrows():
@@ -375,12 +423,13 @@ class Binomial(CalibComponent):
             plt.step(kk, yy, label=f"{row['rand_seed']}")
             yy = q.pmf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
-        plt.axvline(e_x, color='k', linestyle='--')
+        plt.axvline(float(e_x), color='k', linestyle='--')
         return
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[t]
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         e_n, e_x = expected['n'], expected['x']
 
         n_boot = kwargs.get('n_boot', 1000)
@@ -401,7 +450,7 @@ class Binomial(CalibComponent):
 
         ax = sns.kdeplot(means)
         sns.rugplot(means, ax=ax)
-        ax.axvline(e_x, color='k', linestyle='--')
+        ax.axvline(float(e_x), color='k', linestyle='--')
         return
 
 class DirichletMultinomial(CalibComponent):
@@ -438,6 +487,8 @@ class DirichletMultinomial(CalibComponent):
         if actual is None:
             actual = self.actual
 
+        bootstrap = kwargs.pop('bootstrap', False) # Not used, but also don't want to pass to FacetGrid
+
         if 'calibrated' not in actual.columns:
             actual['calibrated'] = 'Calibration'
 
@@ -463,7 +514,8 @@ class DirichletMultinomial(CalibComponent):
         var = data.iloc[0]['var']
         cal = data.iloc[0]['calibrated']
 
-        expected = self.expected.loc[[t]]
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         actual = kwargs.get('full_actual', self.actual)
         actual = actual[(actual['t'] == t) & (actual['calibrated'] == cal)]
 
@@ -485,7 +537,7 @@ class DirichletMultinomial(CalibComponent):
             yy = q.pmf(e_x)
             darker = [0.8*c for c in color]
             plt.plot(e_x, yy, 'x', ms=10, color=darker)
-        plt.axvline(e_x, color='k', linestyle='--')
+        plt.axvline(float(e_x), color='k', linestyle='--')
         return
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
@@ -519,7 +571,7 @@ class GammaPoisson(CalibComponent):
         """
         logLs = []
 
-        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t', 't1'], suffixes=('_e', '_a'))
+        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=expected.index.names, suffixes=('_e', '_a'))
         for idx, rep in combined.iterrows():
             e_n, e_x = rep['n_e'], rep['x_e']
             a_n, a_x = rep['n_a'], rep['x_a']
@@ -534,7 +586,8 @@ class GammaPoisson(CalibComponent):
 
     def plot_facet(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[[t]]
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         e_n, e_x = expected['n'].values.flatten()[0], expected['x'].values.flatten()[0]
         kk = np.arange(0, int(2*e_x))
         nll = 0
@@ -549,12 +602,13 @@ class GammaPoisson(CalibComponent):
             yy = q.pmf(e_x)
             nll += -q.logpmf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
-        plt.axvline(e_x, color='k', linestyle='--')
+        plt.axvline(float(e_x), color='k', linestyle='--')
         return
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[[t]]
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         e_n, e_x = expected['n'].values.flatten()[0], expected['x'].values.flatten()[0]
 
         n_boot = kwargs.get('n_boot', 1000)
@@ -578,7 +632,7 @@ class GammaPoisson(CalibComponent):
 
         ax = sns.kdeplot(means)
         sns.rugplot(means, ax=ax)
-        plt.axvline(e_x, color='k', linestyle='--')
+        plt.axvline(float(e_x), color='k', linestyle='--')
         return
 
 
@@ -600,7 +654,7 @@ class Normal(CalibComponent):
 
         Args:
             expected (pd.DataFrame): dataframe with column "x", the quantity or metric of interest, from the reference dataset.
-            predicted (pd.DataFrame): dataframe with column "x", the quantity or metric of interest, from simulated dataset.
+            predicted (pd.DataFrame): dataframe with column "x", the quantity or metric of interest, from simulated dataset. If "n" is also provided, the value mean will be x/n instead of just x.
             kwargs (dict): contains any eval_kwargs that were specified when instantiating the Calibration
 
         Returns:
@@ -611,7 +665,7 @@ class Normal(CalibComponent):
         sigma2 = self.sigma2
         compute_var = sigma2 is None
 
-        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=['t'], suffixes=('_e', '_a'))
+        combined = pd.merge(expected.reset_index(), actual.reset_index(), on=expected.index.names, suffixes=('_e', '_a'))
         for idx, rep in combined.iterrows():
             e_x = rep['x_e']
             a_x = rep['x_a']
@@ -641,7 +695,8 @@ class Normal(CalibComponent):
 
     def plot_facet(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[[t]]
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         e_x = expected['x'].values.flatten()[0]
         nll = 0
         for idx, row in data.iterrows():
@@ -667,12 +722,13 @@ class Normal(CalibComponent):
             yy = q.pdf(e_x)
             nll += -q.logpdf(e_x)
             plt.plot(e_x, yy, 'x', ms=10, color='k')
-        plt.axvline(e_x, color='k', linestyle='--')
+        plt.axvline(float(e_x), color='k', linestyle='--')
         return
 
     def plot_facet_bootstrap(self, data, color, **kwargs):
         t = data.iloc[0]['t']
-        expected = self.expected.loc[[t]] # Gracefully handle Series and DataFrame, if 't1' in index
+        exp = kwargs.get('expected', self.expected)
+        expected = exp.loc[[t]]
         e_x = expected['x'].values.flatten()[0] # Due to possible presence of 't1' in the index
 
         n_boot = kwargs.get('n_boot', 1000)
@@ -699,5 +755,5 @@ class Normal(CalibComponent):
 
         ax = sns.kdeplot(means)
         sns.rugplot(means, ax=ax)
-        plt.axvline(e_x, color='k', linestyle='--')
+        plt.axvline(float(e_x), color='k', linestyle='--')
         return
