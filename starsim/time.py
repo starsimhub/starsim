@@ -1079,7 +1079,9 @@ class Time(sc.prettyobj):
                 stop = start+dur
 
             case (None, stop, None):
-                if sc.isnumber(stop) and stop < 1900:
+                if isinstance(stop, Dur):
+                    start = stop.__class__(0)
+                elif sc.isnumber(stop) and stop < 1900:
                     stop = Dur(stop)
                     start = Dur(0)
                 else:
