@@ -1,3 +1,9 @@
-quartodoc # For the API docs
+mkdocs-material # for docs
+mkdocs-include-markdown-plugin # for including files outside /docs
+mkdocstrings-python # For API reference
+# mkdocs-autoapi # automatically generate module md files
+# mkdocs-api-autonav # automatically generate module md files
+# mkdocs-gen-files # automatically generate module md files
+# mkdocs-literate-nav # API ref navigation
 jupyter # For the tutorials
 jupyter-cache # To avoid rebuilding the tutorials

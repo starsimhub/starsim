@@ -1,0 +1,3 @@
+quartodoc # For the API docs
+jupyter # For the tutorials
+jupyter-cache # To avoid rebuilding the tutorials

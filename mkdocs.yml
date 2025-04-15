@@ -1,0 +1,96 @@
+site_name: Starsim
+site_url: https://docs.idmod.org/projects/starsim/en/latest
+theme:
+  name: material
+  font:
+    text: Noto Sans
+    code: Courier
+  logo: assets/IDM_white.png
+  favicon: assets/favicon.ico
+  features:
+    - navigation.footer
+
+  palette:
+    # Dark Mode
+    - scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Dark mode
+      primary: blue
+      accent: deep orange
+
+    # Light Mode
+    - scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Light mode
+      primary: blue
+      accent: deep orange
+      #TODO add IDM theme colors using stylesheets/extra.css
+# images/idm-logo-transparent.png
+
+nav:
+  - Home: index.md
+  - Tutorials: tutorials.md
+  - API reference: api/index.md
+  - What's new: whatsnew.md
+# icons and emojis 
+markdown_extensions:
+  - attr_list
+  - md_in_html #enables grids
+  - admonition
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+# code formatting
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+      default_lang: 'python'
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.details
+
+# content tabs
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+
+plugins:
+  - search
+  - include-markdown: # include other files, such as READMEs
+ #- gen-files:
+  #    scripts:
+   #     - scripts/gen_ref_pages.py # automatically create md files for each module
+  - mkdocstrings: # generate API reference
+      enable_inventory: true
+      default_handler: python
+      handlers: 
+        python:
+          options:
+            docstring_style: google
+  #      paths: [.]
+  #- mkdocs-autoapi:
+   #   autoapi_dir: docs/autoapi
+    #  autoapi_add_nav_entry: Reference
+
+  #- literate-nav:
+  #    nav_file: SUMMARY.md
+  - mkdocs-jupyter:
+      execute: true
+      allow_errors: false
+
+
+
+# TODO investigate why icons aren't working, do they need installed?
+extra:
+  # social:
+  #   - icon: simple/youtube
+  #     link: http://www.youtube.com/@institutefordiseasemodelin1987
+  #   - icon: simple/linkedin
+  #     link: https://linkedin.com/company/institute-disease-modeling
+  copyright: Copyright &copy; 2025 Gates Foundation
