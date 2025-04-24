@@ -302,7 +302,7 @@ def standardize_data(data=None, metadata=None, min_year=1800, out_of_range=0, de
     if 'sex' in index:
         if 'sex_keys' in metadata:
             index['sex'] = [metadata['sex_keys'][x] for x in index['sex']]
-        assert set(index['sex']) == {'f','m'}, 'If standardized data contains a "sex" column, it should use "m" and "f" to specify the sex.'
+        assert set(index['sex']) <= {'f','m'}, 'If standardized data contains a "sex" column, it should use "m" and/or "f" to specify the sex.'
 
     # Create the series
     output = pd.Series(data=values, index=pd.MultiIndex.from_arrays(index.values(), names=index.keys()))
