@@ -238,7 +238,7 @@ class BaseScreening(BaseTest):
             self.results['n_screened'][sim.ti] = len(accept_uids)
             # self.results['n_dx'][sim.ti] = len(self.outcomes['positive'])
 
-        print(self.eligibility)
+        print(f'eligibility = {self.eligibility}')
         return accept_uids
 
 
