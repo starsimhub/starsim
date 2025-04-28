@@ -955,7 +955,11 @@ class RateProb(Rate):
         else:
             return self.__class__(self.value*other, self.period)
 
-    def __truediv__(self, other): raise NotImplementedError()
+    def __truediv__(self, other):
+        if isinstance(other, Dur):
+            raise NotImplementedError()
+        return super().__truediv__(other)  # Fixed the call to super().__truediv__
+
     def __rtruediv__(self, other): raise NotImplementedError()
 
 #%% Simulation time vectors

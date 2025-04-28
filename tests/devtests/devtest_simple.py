@@ -8,15 +8,14 @@ import matplotlib.pyplot as plt
 
 
 ppl = ss.People(9000)
-ppl.networks = ss.ndict(ss.MFNet(), ss.MaternalNet())
+nets = ss.ndict(ss.MFNet(), ss.MaternalNet())
 
 hiv = ss.HIV()
 hiv.pars['beta'] = {'mf': [0.08, 0.04], 'maternal': [0.2, 0]}
 
 ng = ss.Gonorrhea()
 
-sim = ss.Sim(people=ppl, demographics=[ss.Pregnancy()], diseases=[hiv, ng])
-sim.initialize()
+sim = ss.Sim(people=ppl, demographics=[ss.Pregnancy()], diseases=[hiv, ng], networks=nets)
 sim.run()
 
 # Plotting

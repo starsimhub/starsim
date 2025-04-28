@@ -23,7 +23,7 @@ class HIV(ss.Infection):
             art_efficacy = 0.96,
             init_prev = ss.bernoulli(p=0.05),
             death_dist = ss.bernoulli(p=self.death_prob_func), # Uses p_death by default, modulated by CD4
-            p_death = ss.peryear(0.05), # NB: this is death per unit time, not death per infection
+            p_death = ss.RateProb(0.05), # NB: this is death per unit time, not death per infection
         )
         self.update_pars(**kwargs)
 
@@ -39,9 +39,10 @@ class HIV(ss.Infection):
     @staticmethod
     def death_prob_func(module, sim, uids):
         p = module.pars
-        out = (p.p_death*module.t.dt) / (p.cd4_min - p.cd4_max)**2 *  (module.cd4[uids] - p.cd4_max)**2
-        out = np.array(out)
-        return out
+        death_rateprob = (p.p_death * (module.cd4[uids] - p.cd4_max)**2 / (p.cd4_min - p.cd4_max)**2)
+        p = death_rateprob * module.t.dt # multiply by dt after adjusting the rateprob to get a probability
+        p = np.array(p)
+        return p
 
     def step_state(self):
         """ Update CD4 """
