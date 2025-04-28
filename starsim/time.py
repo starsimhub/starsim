@@ -890,8 +890,10 @@ class TimeProb(Rate):
             elif self.value == 1:
                 return 1
             else:
-                rate = -np.log(1 - self.value)
                 factor = self.period/other
+                if factor == 1:
+                    return self.value # Avoid expensive calculation and precision issues
+                rate = -np.log(1 - self.value)
                 return 1 - np.exp(-rate/factor)
         else:
             return self.__class__(self.value*other, self.period)

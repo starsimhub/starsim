@@ -16,11 +16,11 @@ sc.options(interactive=False)
 def test_ratio():
     sc.heading('Test time ratio calculation')
 
-    assert ss.Dur(1)/ss.Dur(1) == 1
-    assert ss.Dur(1)/ss.Dur(0.1) == 10
-    assert ss.Dur(0.5)/ss.Dur(5) == 0.1
+    assert ss.Dur(1) / ss.Dur(1) == 1
+    assert ss.Dur(1) / ss.Dur(0.1) == 10
+    assert ss.Dur(0.5) / ss.Dur(5) == 0.1
 
-    assert ss.Dur(years=1)/ss.Dur(days=1) == 365.25
+    assert ss.Dur(years=1) / ss.Dur(days=1) == 365.25
     assert ss.Dur(years=1) / ss.Dur(weeks=1) * 7 == 365.25
     assert ss.Dur(years=1) / ss.Dur(months=1) == 12
 
@@ -61,18 +61,19 @@ def test_classes():
     # Test rate units
     rval = 0.7
     r5 = ss.Rate(rval, ss.Dur(weeks=1))
-    assert np.isclose(r5*ss.days(1), rval/7) # A limitation of this approach, not exact!
+    assert np.isclose(r5*ss.days(1), rval/7) # These should be close, but not match exactly
     assert np.isclose(r5*ss.Dur(weeks=0.1), rval/10)
+    assert r5*ss.days(1) == rval * ss.days(1) / ss.weeks(1) # These should match exactly
+    assert r5*ss.Dur(weeks=0.1) == rval * ss.weeks(0.1) / ss.weeks(1)
 
-    # Test time_prob
+    # Test TimeProb
     tpval = 0.1
     tp0 = ss.TimeProb(tpval)
-
-    assert np.isclose(tp0*ss.Dur(1), tpval)
-    assert np.isclose(tp0*ss.Dur(0.5), tpval/2, rtol=0.1)
+    assert tp0*ss.Dur(1) == tpval, 'Multiplication by the base denominator should not change the value'
+    assert np.isclose(tp0*ss.Dur(0.5), tpval/2, rtol=0.1) # These should be close, but not match exactly
     assert np.isclose(tp0*ss.Dur(2), tpval*2, rtol=0.1)
-    assert tp0*ss.Dur(0.5) > tpval/2
-    assert tp0*ss.Dur(2) < tpval*2
+    assert tp0*ss.Dur(0.5) == 1 - np.exp(np.log(1-0.1) * ss.Dur(0.5)/ss.Dur(1)) # These should be close, but not match exactly
+    assert tp0*ss.Dur(2) == 1 - np.exp(np.log(1-0.1) * ss.Dur(2)/ss.Dur(1)) # These should be close, but not match exactly
 
     return d3, d4, r3, r4, tp0
 
