@@ -63,8 +63,6 @@ class Pars(sc.objdict):
                     self._update_ndict(key, old, new)
                 elif isinstance(old, ss.Module):  # Update modules
                     self._update_module(key, old, new)
-                # elif isinstance(old, ss.TimePar):
-                #     self._update_timepar(key, old, new)
                 elif isinstance(old, ss.Dist): # Update a distribution
                     self._update_dist(key, old, new)
                 elif callable(old): # It's a function: update directly

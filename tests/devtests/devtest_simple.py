@@ -24,13 +24,13 @@ for ax, module in zip(axv[:2], ['HIV', 'Gonorrhea']):
     results = sim.results[module.lower()]
     for ch in results.keys():
         if ch[:2] == 'n_':
-            ax.plot(sim.yearvec, results[ch], label=ch)
+            ax.plot(sim.timevec, results[ch], label=ch)
     ax.legend()
     ax.set_title(module)
 
 results = sim.results.pregnancy
 for ch in results.keys():
-    axv[2].plot(sim.yearvec, sim.results.pregnancy[ch], label=ch)
+    axv[2].plot(sim.timevec, sim.results.pregnancy[ch], label=ch)
 axv[2].set_title('Pregnancy')
 axv[2].legend()
 fig.supylabel('Count')

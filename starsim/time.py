@@ -789,8 +789,6 @@ class Rate():
             return other*self
         elif isinstance(other, Dur):
             return self.value*other/self.period
-        elif sc.isnumber(other) and other == 0:
-            return 0 # Or should this be a rate?
         else:
             return Rate(self.value*other, self.period)
 
