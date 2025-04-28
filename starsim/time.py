@@ -839,15 +839,42 @@ class Rate():
 
 class TimeProb(Rate):
     """
-    A probability over time (a.k.a. a cumulative hazard rate); must be >=0 and <=1.
+    ``TimeProb`` represents the probability of an event occurring during a
+    specified period of time.
 
-    These values are probabilities per unit time. The probability for a given
-    period of time can be calculated by multiplying by a duration. The cumulative
-    hazard rate conversion will be used when calculating the probability. For multiplicative
-    scaling, use a ``Rate`` instead.
+    The class is designed to allow conversion of a probability from one 
+    duration to another through multiplication. However, the behavior of this
+    conversion depends on the data type of the the object being multiplied.
 
-    >>> p = ss.TimeProb(0.1, ss.Dur(years=1))
-    >>> p*ss.Dur(years=2)
+    When multiplied by a duration (type ss.Dur), the underlying constant rate is
+    calculated as
+        ``rate = -np.log(1 - self.value)``.
+    Then, the probability over the new duration is
+        ``p = 1 - np.exp(-rate/factor)``,
+    where ``factor`` is the ratio of the new duration to the original duration.
+
+    For example,
+    >>> p = ss.TimeProb(0.8, ss.years(1))
+    indicates a 80% chance of an event occurring in one year.
+
+    >>> p*ss.years(1)
+    When multiplied by the original denominator, 1 year in this case, the
+    probability remains unchanged, 80%.
+
+    >>> p * ss.years(2)
+    Multiplying ``p`` by ``ss.years(2)`` does not simply double the
+    probability to 160% (which is not possible), but rather returns a new
+    probability of 96% representing the chance of the event occurring at least
+    once over the new duration of two years.
+
+    However, the behavior is different when a ``TimeProb`` object is multiplied
+    by a scalar or array. In this case, the probability is simply scaled. This scaling
+    may result in a value greater than 1, which is not valid. For example,
+    >>> p * 2
+    raises an AssertionError because the resulting probability (160%) exceeds 100%.
+
+    Use ``RateProb`` instead if ``TimeProb`` if you would prefer to directly
+    specify the instantaneous rate.
     """
 
     def __init__(self, value, period=None):
@@ -874,11 +901,41 @@ class TimeProb(Rate):
 
 class RateProb(Rate):
     """
-    An instantaneous rate converted to a probability; must be >=0.
+    A ``RateProb`` represents an instantaneous rate of an event occurring. Rates
+    must be non-negative, but need not be less than 1.
 
-    Note: ``ss.TimeProb()`` converts one cumulative hazard rate to another with a
-    different time unit. ``ss.RateProb()`` converts an exponential rate to a cumulative
-    hazard rate.
+    Through multiplication, rate can be modified or converted to a probability,
+    depending on the data type of the object being multiplied.
+
+    When a ``RateProb`` is multiplied by a scalar or array, the rate is simply
+    scaled. Such multiplication occurs frequently in epidemiological models,
+    where the base rate is multiplied by "rate ratio" or "relative rate" to
+    represent agents experiencing higher (multiplier > 1) or lower (multiplier <
+    1) event rates.
+
+    Alternatively, when a ``RateProb`` is multiplied by a duration (type
+    ss.Dur), a probability is calculated. The conversion from rate to
+    probability on multiplication by a duration is
+        ``1 - np.exp(-rate/factor)``,
+    where ``factor`` is the ratio of the multiplied duration to the original
+    period (denominator).
+
+    For example, consider
+    >>> p = ss.RateProb(0.8, ss.years(1))
+    When multiplied by a duration of 1 year, the calculated probability is
+        ``1 - np.exp(-0.8)``, which is approximately 55%.
+    >>> p*ss.years(1)
+
+    When multiplied by a scalar, the rate is simply scaled.
+    >>> p*2
+
+    The difference between ``TimeProb`` and ``RateProb`` is subtle, but important. ``RateProb`` works directly
+    with the instantaneous rate of an event occurring. In contrast, ``TimeProb`` starts with a probability and a duration,
+    and the underlying rate is calculated. On multiplication by a duration,
+    * RateProb: rate -> probability 
+    * TimeProb: probability -> rate -> probability
+
+    The behavior of both classes is depending on the data type of the object being multiplied.
     """
     def __init__(self, value, period=None):
         assert value >= 0, 'Value must be >= 0'
