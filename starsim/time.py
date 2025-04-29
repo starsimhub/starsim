@@ -398,8 +398,10 @@ class Dur():
         # If a float is divided by a Dur, then we should return a rate
         # If a rate is divided by a Dur, then we will call Rate.__truediv__
         # We also need divide the duration by the numerator when calculating the rate
-        if sc.isnumber(other) and other == 0:
-            return Rate(Dur(np.inf))
+        if self.period == 0:
+            raise ZeroDivisionError('Cannot divide by a duration of zero') # TODO: consider Rate(Dur(np.inf))
+        elif sc.isnumber(other) and other == 0:
+            return Rate(0)
         else:
             return Rate(other, self)
 

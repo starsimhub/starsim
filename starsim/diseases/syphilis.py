@@ -17,15 +17,15 @@ class Syphilis(ss.Infection):
         super().__init__()
         self.define_pars(
             # Initial conditions
-            beta = 1.0, # Placeholder
+            beta = ss.TimeProb(1), # Placeholder
             init_prev = ss.bernoulli(p=0.03),
 
             # Adult syphilis natural history, all specified in years
-            dur_exposed = ss.lognorm_ex(mean=1 / 12, std=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_primary = ss.lognorm_ex(mean=1.5 / 12, std=1 / 36),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_secondary = ss.normal(loc=3.6 / 12, scale=1.5 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_temp = ss.lognorm_ex(mean=1, std=6 / 12),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
-            dur_latent_long = ss.lognorm_ex(mean=20, std=8),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_exposed = ss.lognorm_ex(mean=ss.months(1), std=ss.months(1/3)),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_primary = ss.lognorm_ex(mean=ss.months(1.5), std=ss.months(1/3)),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_secondary = ss.lognorm_ex(mean=ss.months(3.6), std=ss.months(1.5)),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_temp = ss.lognorm_ex(mean=ss.years(1), std=ss.months(6)),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
+            dur_latent_long = ss.lognorm_ex(mean=ss.years(20), std=ss.years(8)),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_latent_temp = ss.bernoulli(p=0.25),  # https://pubmed.ncbi.nlm.nih.gov/9101629/
             p_tertiary = ss.bernoulli(p=0.35),  # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4917057/
 
