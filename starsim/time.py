@@ -1253,10 +1253,16 @@ class Time(sc.prettyobj):
             errormsg = f'Invalid key "{key}": must be None, abs, date, or year'
             raise ValueError(errormsg)
 
-        ti = np.clip(self.ti, 0, len(vec)-1)
-        now = vec[ti]
+        if 0 <= self.ti < len(vec):
+            now = vec[self.ti]
+        else:
+            now = self.tvec[0] + self.dt*self.ti
+            if key == 'year':
+                now = float(now)
+
         if key == 'str':
-            now = f'{now:0.1f}' if isinstance(now, float) else str(now)
+            now = str(now)
+
         return now
 
 
