@@ -4,19 +4,6 @@ project:
   title: "Starsim"
   execute-dir: file
 
-jupyter: python3
-execute:
-  enabled: false
-  daemon: true  # Use Jupyter daemon mode
-  cache: true   # Cache execution results
-  freeze: true  # Freeze computational outputs
-  output-dir: _freeze  # Store outputs separately
-  error: false
-  echo: true
-  warning: true
-  kernel: python3
-  thread-count: 4  # Number of threads for parallel execution
-
 website:
   title: "Starsim"
   favicon: images/favicon.ico
@@ -43,46 +30,46 @@ website:
     contents:
       - section: "Tutorials"
         contents:
-          - tutorials/tut_intro.ipynb
-          - tutorials/tut_buildsim.ipynb
-          - tutorials/tut_demographics.ipynb
-          - tutorials/tut_diseases.ipynb
-          - tutorials/tut_transmission.ipynb
-          - tutorials/tut_interventions.ipynb
+          - tut_intro.ipynb
+          - tut_buildsim.ipynb
+          - tut_demographics.ipynb
+          - tut_diseases.ipynb
+          - tut_transmission.ipynb
+          - tut_interventions.ipynb
       - section: "User guide"
         contents:
         - section: "Introduction"
           contents:
-          - user_guide/intro/starsim.ipynb
-          - user_guide/intro/spokes.ipynb
+          - guide_starsim.ipynb
+          - guide_spokes.ipynb
         - section: "Basic concepts"
           contents:
-          - user_guide/basics/model.ipynb
-          - user_guide/basics/sim.ipynb
-          - user_guide/basics/people.ipynb
+          - guide_model.ipynb
+          - guide_sim.ipynb
+          - guide_people.ipynb
         - section: "Modules"
           contents:
-          - user_guide/modules/diseases.ipynb
-          - user_guide/modules/networks.ipynb
-          - user_guide/modules/demographics.ipynb
-          - user_guide/modules/interventions.ipynb
-          - user_guide/modules/analyzers.ipynb
-          - user_guide/modules/connectors.ipynb
+          - guide_diseases.ipynb
+          - guide_networks.ipynb
+          - guide_demographics.ipynb
+          - guide_interventions.ipynb
+          - guide_analyzers.ipynb
+          - guide_connectors.ipynb
         - section: "Workflows"
           contents:
-          - user_guide/workflows/run.ipynb
-          - user_guide/workflows/calibration.ipynb
-          - user_guide/workflows/samples.ipynb
-          - user_guide/workflows/cloud.ipynb
+          - guide_run.ipynb
+          - guide_calibration.ipynb
+          - guide_samples.ipynb
+          - guide_cloud.ipynb
         - section: "Advanced topics"
           contents:
-          - user_guide/advanced/time.ipynb
-          - user_guide/advanced/indexing.ipynb
-          - user_guide/advanced/parameters.ipynb
-          - user_guide/advanced/distributions.ipynb
-          - user_guide/advanced/random.ipynb
-          - user_guide/advanced/profiling.ipynb
-          - user_guide/advanced/nonstandard.ipynb
+          - guide_time.ipynb
+          - guide_indexing.ipynb
+          - guide_parameters.ipynb
+          - guide_distributions.ipynb
+          - guide_random.ipynb
+          - guide_profiling.ipynb
+          - guide_nonstandard.ipynb
       - href: whatsnew.qmd
         text: What's new
       - href: conduct.qmd
