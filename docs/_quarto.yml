@@ -6,7 +6,7 @@ project:
 
 jupyter: python3
 execute:
-  enabled: true
+  enabled: false
   daemon: true  # Use Jupyter daemon mode
   cache: true   # Cache execution results
   freeze: true  # Freeze computational outputs
@@ -39,7 +39,7 @@ website:
         text: API reference
   sidebar:
     style: docked
-    collapse-level: 3
+    collapse-level: 2
     contents:
       - section: "Tutorials"
         contents:
