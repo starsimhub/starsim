@@ -268,6 +268,16 @@ class routine_screening(BaseScreening, RoutineDelivery):
         screen1 = ss.routine_screening(product=my_prod, prob=0.02) # Screen 2% of the eligible population every year
         screen2 = ss.routine_screening(product=my_prod, prob=0.02, start_year=2020) # Screen 2% every year starting in 2020
         screen3 = ss.routine_screening(product=my_prod, prob=np.linspace(0.005,0.025,5), years=np.arange(2020,2025)) # Scale up screening over 5 years starting in 2020
+
+    # Campaign example
+    years = [2020, 2025]  #
+    prob = [0.5, 0.9]
+    screening = ss.campaign_screening(years=years)  # only delivers in the specified years
+
+    # Routine screening
+    years = [2020, 2025]
+    prob = [0.02, 0.10]
+    routine = ss.routine_screening(years=years)  # interpolates, delivers every year
     """
     pass
 
