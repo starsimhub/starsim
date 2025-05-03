@@ -47,46 +47,46 @@ website:
     contents:
       - section: "Tutorials"
         contents:
-          - tut_intro.ipynb
-          - tut_buildsim.ipynb
-          - tut_demographics.ipynb
-          - tut_diseases.ipynb
-          - tut_transmission.ipynb
-          - tut_interventions.ipynb
+          - tutorials/intro.ipynb
+          - tutorials/buildsim.ipynb
+          - tutorials/demographics.ipynb
+          - tutorials/diseases.ipynb
+          - tutorials/transmission.ipynb
+          - tutorials/interventions.ipynb
       - section: "User guide"
         contents:
         - section: "Introduction"
           contents:
-          - guide_starsim.ipynb
-          - guide_spokes.ipynb
+          - user_guide/intro_starsim.ipynb
+          - user_guide/intro_spokes.ipynb
         - section: "Basic concepts"
           contents:
-          - guide_model.ipynb
-          - guide_sim.ipynb
-          - guide_people.ipynb
+          - user_guide/basics_model.ipynb
+          - user_guide/basics_sim.ipynb
+          - user_guide/basics_people.ipynb
         - section: "Modules"
           contents:
-          - guide_diseases.ipynb
-          - guide_networks.ipynb
-          - guide_demographics.ipynb
-          - guide_interventions.ipynb
-          - guide_analyzers.ipynb
-          - guide_connectors.ipynb
+          - user_guide/modules_diseases.ipynb
+          - user_guide/modules_networks.ipynb
+          - user_guide/modules_demographics.ipynb
+          - user_guide/modules_interventions.ipynb
+          - user_guide/modules_analyzers.ipynb
+          - user_guide/modules_connectors.ipynb
         - section: "Workflows"
           contents:
-          - guide_run.ipynb
-          - guide_calibration.ipynb
-          - guide_samples.ipynb
-          - guide_cloud.ipynb
+          - user_guide/workflows_run.ipynb
+          - user_guide/workflows_calibration.ipynb
+          - user_guide/workflows_samples.ipynb
+          - user_guide/workflows_cloud.ipynb
         - section: "Advanced topics"
           contents:
-          - guide_time.ipynb
-          - guide_indexing.ipynb
-          - guide_parameters.ipynb
-          - guide_distributions.ipynb
-          - guide_random.ipynb
-          - guide_profiling.ipynb
-          - guide_nonstandard.ipynb
+          - user_guide/advanced_time.ipynb
+          - user_guide/advanced_indexing.ipynb
+          - user_guide/advanced_parameters.ipynb
+          - user_guide/advanced_distributions.ipynb
+          - user_guide/advanced_random.ipynb
+          - user_guide/advanced_profiling.ipynb
+          - user_guide/advanced_nonstandard.ipynb
       - href: whatsnew.qmd
         text: What's new
       - href: conduct.qmd
