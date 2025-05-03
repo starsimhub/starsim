@@ -2,9 +2,5 @@
 """
 Remove auto-generated files
 """
-
-import sciris as sc
 import utils as ut
-
-with sc.timer():
-    ut.clean_outputs()
+ut.clean_outputs()

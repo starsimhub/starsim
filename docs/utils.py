@@ -7,8 +7,13 @@ import nbconvert
 import nbformat
 import jupyter_cache as jc
 
-default_folders = ['tutorials', 'user_guide']
-output_patterns = ['**/my-*.*', '**/example*.*']
+default_folders = ['tutorials', 'user_guide'] # Folders with Jupyter notebooks
+temp_patterns = ['**/my-*.*', '**/example*.*'] # Temporary files to be removed
+
+timeout = 600 # Maximum time for notebook execution
+yay = '✓'
+boo = '😢'
+
 
 def get_filenames(folders=None, pattern='**/*.ipynb'):
     """ Get all *.ipynb files in the folder """
@@ -21,6 +26,7 @@ def get_filenames(folders=None, pattern='**/*.ipynb'):
     for folder in folders:
         filenames += sc.getfilelist(folder=folder, pattern=pattern, recursive=True)
     return filenames
+
 
 def normalize(filename, validate=True, strip=True):
     """ Remove all outputs and non-essential metadata from a notebook """
@@ -46,16 +52,20 @@ def normalize(filename, validate=True, strip=True):
         nbformat.write(nb_norm, file)
     return
 
+
+@sc.timer('Normalized notebooks')
 def normalize_notebooks(folders=None):
     """ Normalize all notebooks """
     filenames = get_filenames(folders=folders)
     sc.parallelize(normalize, filenames)
     return
 
+
+@sc.timer('Cleaned outputs')
 def clean_outputs(folders=None, sleep=3, patterns=None):
     """ Clears outputs from notebooks """
     if patterns is None:
-        patterns = output_patterns
+        patterns = temp_patterns
     filenames = []
     for pattern in patterns:
         filenames += get_filenames(folders=folders, pattern=pattern)
@@ -68,10 +78,54 @@ def clean_outputs(folders=None, sleep=3, patterns=None):
         print('No files found to clean')
     return
 
-def init_cache(folders=None):
-    """ Initialize the Jupyter cache """
-    filenames = get_filenames(folders=folders)
 
 def init_cache(folders=None):
     """ Initialize the Jupyter cache """
     filenames = get_filenames(folders=folders)
+
+
+def init_cache(folders=None):
+    """ Initialize the Jupyter cache """
+    filenames = get_filenames(folders=folders)
+
+
+def execute_notebook(path):
+    """ Executes a single Jupyter notebook and returns success/failure """
+    try:
+        with open(path) as f:
+            with sc.timer(verbose=False) as T:
+                name = path.name
+                print(f'Executing {name}...')
+                nb = nbformat.read(f, as_version=4)
+                ep = nbp.ExecutePreprocessor(timeout=timeout)
+                ep.preprocess(nb, {'metadata': {'path': os.path.dirname(path)}})
+        out = f'{yay} {name} executed successfully after {T.total:0.1f} s.'
+        print(out)
+        return out
+    except nbp.CellExecutionError as e:
+        return f'{boo} Execution failed for {path}: {str(e)}'
+    except Exception as e:
+        return f'{boo} Error processing {path}: {str(e)}'
+
+
+@sc.timer('Executed notebooks')
+def execute_notebooks(folders=None):
+    """ Executes the notebooks in parallel and prints the results """
+    notebooks = get_filenames(folders=folders)
+    results = sc.parallelize(execute_notebook, notebooks)
+    string = sc.newlinejoin(results)
+    
+    sc.heading('Results')
+    print(string)
+    
+    sc.heading('Summary')
+    n_yay = string.count(yay)
+    n_boo = string.count(boo)
+    summary = f'{n_yay} succeeded, {n_boo} failed'
+    if n_boo:
+        for i in range(len(notebooks)):
+            if boo in results[i]:
+                summary += f'\nFailed: {notebooks[i]}'
+    print(summary + '\n')
+    
+    return results
