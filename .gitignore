@@ -6,6 +6,7 @@ tests/devtests/figs/*
 figs/*
 modules.rst
 archive/
+.jupyter_cache/
 
 # Other files
 .idea
