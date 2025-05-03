@@ -9,6 +9,7 @@ import jupyter_cache as jc
 
 default_folders = ['tutorials', 'user_guide'] # Folders with Jupyter notebooks
 temp_patterns = ['**/my-*.*', '**/example*.*'] # Temporary files to be removed
+temp_folders = ['user_guide/results'] # Temporary folders to be removed
 
 timeout = 600 # Maximum time for notebook execution
 yay = '✓'
@@ -66,14 +67,14 @@ def clean_outputs(folders=None, sleep=3, patterns=None):
     """ Clears outputs from notebooks """
     if patterns is None:
         patterns = temp_patterns
-    filenames = []
+    filenames = sc.dcp(temp_folders)
     for pattern in patterns:
         filenames += get_filenames(folders=folders, pattern=pattern)
     if len(filenames):
         print(f'Deleting: {sc.newlinejoin(filenames)}\nin {sleep} seconds')
         sc.timedsleep(sleep)
         for filename in filenames:
-            sc.rmpath(filename, verbose=True)
+            sc.rmpath(filename, verbose=True, die=False)
     else:
         print('No files found to clean')
     return
