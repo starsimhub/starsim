@@ -8,12 +8,13 @@ start=$SECONDS
 
 # Tidy up
 echo "Tidying tutorials..."
-cd tutorials; ./clean_outputs; cd ..
+./clean_outputs
 
 echo "Removing build files..."
 rm -rv .quarto
 rm -rv _freeze
 rm -rv tutorials/.jupyter_cache/
+rm -rv .jupyter_cache
 rm -v objects.json
 
 duration=$(( SECONDS - start ))
