@@ -24,7 +24,7 @@ To run these tutorials locally:
 
 ## Basics
 
-- [Understanding the model](user_guide_basics/model.ipynb)
+- [Understanding the model](user_guide/basics_model.ipynb)
 - [The Sim object](user_guide/basics_sim.ipynb)
 
 ## Modules
