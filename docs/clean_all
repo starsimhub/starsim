@@ -11,11 +11,13 @@ echo "Tidying tutorials..."
 ./clean_outputs
 
 echo "Removing build files..."
-rm -rv .quarto
-rm -rv _freeze
-rm -rv tutorials/.jupyter_cache/
-rm -rv .jupyter_cache
-rm -v objects.json
+rm -rvf .quarto
+rm -rvf _build
+rm -rvf _freeze
+rm -rvf .jupyter_cache
+rm -rvf tutorials/.jupyter_cache/
+rm -rvf user_guide/.jupyter_cache/
+rm -vf objects.json
 
 duration=$(( SECONDS - start ))
 echo "Cleaned after $duration seconds."
