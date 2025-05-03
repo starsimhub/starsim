@@ -3,19 +3,23 @@ project:
   output-dir: _build/html
   title: "Starsim"
   execute-dir: file
+  render:
+    - "*.md"
+    - "*.qmd"
+    - "*.ipynb"
+    # - "!tutorials/"
+    # - "!user_guide/"
 
 jupyter: python3
 execute:
   enabled: true
   daemon: true  # Use Jupyter daemon mode
   cache: true   # Cache execution results
-  freeze: true  # Freeze computational outputs
-  output-dir: _freeze  # Store outputs separately
   error: false
   echo: true
   warning: true
   kernel: python3
-  thread-count: 4  # Number of threads for parallel execution
+  executor: local-parallel
 
 website:
   title: "Starsim"
@@ -39,50 +43,50 @@ website:
         text: API reference
   sidebar:
     style: docked
-    collapse-level: 3
+    collapse-level: 2
     contents:
       - section: "Tutorials"
         contents:
-          - tutorials/tut_intro.ipynb
-          - tutorials/tut_buildsim.ipynb
-          - tutorials/tut_demographics.ipynb
-          - tutorials/tut_diseases.ipynb
-          - tutorials/tut_transmission.ipynb
-          - tutorials/tut_interventions.ipynb
+          - tutorials/intro.ipynb
+          - tutorials/buildsim.ipynb
+          - tutorials/demographics.ipynb
+          - tutorials/diseases.ipynb
+          - tutorials/transmission.ipynb
+          - tutorials/interventions.ipynb
       - section: "User guide"
         contents:
         - section: "Introduction"
           contents:
-          - user_guide/intro/starsim.ipynb
-          - user_guide/intro/spokes.ipynb
+          - user_guide/intro_starsim.ipynb
+          - user_guide/intro_spokes.ipynb
         - section: "Basic concepts"
           contents:
-          - user_guide/basics/model.ipynb
-          - user_guide/basics/sim.ipynb
-          - user_guide/basics/people.ipynb
+          - user_guide/basics_model.ipynb
+          - user_guide/basics_sim.ipynb
+          - user_guide/basics_people.ipynb
         - section: "Modules"
           contents:
-          - user_guide/modules/diseases.ipynb
-          - user_guide/modules/networks.ipynb
-          - user_guide/modules/demographics.ipynb
-          - user_guide/modules/interventions.ipynb
-          - user_guide/modules/analyzers.ipynb
-          - user_guide/modules/connectors.ipynb
+          - user_guide/modules_diseases.ipynb
+          - user_guide/modules_networks.ipynb
+          - user_guide/modules_demographics.ipynb
+          - user_guide/modules_interventions.ipynb
+          - user_guide/modules_analyzers.ipynb
+          - user_guide/modules_connectors.ipynb
         - section: "Workflows"
           contents:
-          - user_guide/workflows/run.ipynb
-          - user_guide/workflows/calibration.ipynb
-          - user_guide/workflows/samples.ipynb
-          - user_guide/workflows/cloud.ipynb
+          - user_guide/workflows_run.ipynb
+          - user_guide/workflows_calibration.ipynb
+          - user_guide/workflows_samples.ipynb
+          - user_guide/workflows_cloud.ipynb
         - section: "Advanced topics"
           contents:
-          - user_guide/advanced/time.ipynb
-          - user_guide/advanced/indexing.ipynb
-          - user_guide/advanced/parameters.ipynb
-          - user_guide/advanced/distributions.ipynb
-          - user_guide/advanced/random.ipynb
-          - user_guide/advanced/profiling.ipynb
-          - user_guide/advanced/nonstandard.ipynb
+          - user_guide/advanced_time.ipynb
+          - user_guide/advanced_indexing.ipynb
+          - user_guide/advanced_parameters.ipynb
+          - user_guide/advanced_distributions.ipynb
+          - user_guide/advanced_random.ipynb
+          - user_guide/advanced_profiling.ipynb
+          - user_guide/advanced_nonstandard.ipynb
       - href: whatsnew.qmd
         text: What's new
       - href: conduct.qmd
@@ -109,6 +113,7 @@ quartodoc:
   package: starsim
   title: API reference
   dir: api
+  parser: google
   sections:
     - title: API reference
       desc: Full details on all classes and functions.

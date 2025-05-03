@@ -2,12 +2,24 @@
 #
 # Build documentation with Quarto; usage is simply:
 # ./build_docs
+#
+# To not rebuild notebooks, run
+# ./build_docs 0
 
 import os
+import sys
 import sciris as sc
 
+debug = False
+if len(sys.argv)>1:
+    rebuild = int(sys.argv[1])
+else:
+    rebuild = 1
+
 def run(cmd):
-    return sc.runcommand(cmd, wait=False)
+    print(cmd)
+    if not debug:
+        return sc.runcommand(cmd, wait=False)
 
 T = sc.timer()
 
@@ -17,13 +29,17 @@ sc.heading("Building docs with Quarto...")
 sc.heading('Building API documentation...')
 run('quartodoc build')
 
+if rebuild:
+    sc.heading('Rebuilding Jupyter notebooks')
+    run('./build_notebooks')
+
 # Build the Quarto documentation
 sc.heading('Rendering docs...')
-run('quarto render --execute-daemon')
+run('quarto render')
 
 # Tidy up
-sc.heading("Tidying tutorials...")
-run('cd tutorials; ./clean_outputs; cd ..')
+sc.heading("Tidying outputs...")
+run('./clean_outputs')
 
 T.toc('Docs built')
 print(f"\nIndex:\n{os.getcwd()}/_build/html/index.html")
