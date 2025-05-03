@@ -11,10 +11,10 @@ import sys
 import sciris as sc
 
 debug = False
-if len(sys.argv)>1:
-    rebuild = int(sys.argv[1])
-else:
-    rebuild = 1
+# if len(sys.argv)>1:
+#     rebuild = int(sys.argv[1])
+# else:
+#     rebuild = False
 
 def run(cmd):
     print(cmd)
@@ -29,9 +29,9 @@ sc.heading("Building docs with Quarto...")
 sc.heading('Building API documentation...')
 run('quartodoc build')
 
-if rebuild:
-    sc.heading('Rebuilding Jupyter notebooks')
-    run('./build_notebooks')
+# if rebuild:
+#     sc.heading('Rebuilding Jupyter notebooks')
+#     run('./build_notebooks')
 
 # Build the Quarto documentation
 sc.heading('Rendering docs...')
@@ -40,6 +40,9 @@ run('quarto render')
 # Tidy up
 sc.heading("Tidying outputs...")
 run('./clean_outputs')
+
+sc.heading("Normalizing notebooks...")
+run('./normalize_notebooks')
 
 T.toc('Docs built')
 print(f"\nIndex:\n{os.getcwd()}/_build/html/index.html")

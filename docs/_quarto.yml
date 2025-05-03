@@ -15,6 +15,7 @@ execute:
   enabled: true
   daemon: true  # Use Jupyter daemon mode
   cache: true   # Cache execution results
+  freeze: false # Use caching rather than freezing to store results
   error: false
   echo: true
   warning: true
