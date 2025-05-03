@@ -1,0 +1,10 @@
+#!/usr/bin/env python
+"""
+Normalize Jupyter notebooks
+"""
+
+import sciris as sc
+import utils as ut
+
+with sc.timer():
+    ut.normalize_notebooks()

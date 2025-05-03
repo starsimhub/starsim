@@ -6,8 +6,12 @@
 import os
 import sciris as sc
 
+debug = False
+
 def run(cmd):
-    return sc.runcommand(cmd, wait=False)
+    print(cmd)
+    if not debug:
+        return sc.runcommand(cmd, wait=False)
 
 T = sc.timer()
 
@@ -23,7 +27,10 @@ def run_notebook(path):
     temp_path = path + '.tmp'
     run(f'quarto render {path}')
 
-notebook_files = sc.runcommand('find -name "*.ipynb"')
+excludes = ['jupyter_cache', 'ipynb_checkpoints', '_build']
+notebook_files = sc.runcommand('find -name "*.ipynb"').splitlines()
+notebook_files = [f for f in notebook_files if not any(ex in f for ex in excludes)]
+sc.pp(notebook_files)
 
 
 # Build the Quarto documentation

@@ -3,6 +3,23 @@ project:
   output-dir: _build/html
   title: "Starsim"
   execute-dir: file
+  render:
+    - "*.md"
+    - "*.qmd"
+    - "*.ipynb"
+    # - "!tutorials/"
+    # - "!user_guide/"
+
+jupyter: python3
+execute:
+  enabled: false
+  daemon: true  # Use Jupyter daemon mode
+  cache: true   # Cache execution results
+  error: false
+  echo: true
+  warning: true
+  kernel: python3
+  executor: local-parallel
 
 website:
   title: "Starsim"
@@ -96,6 +113,7 @@ quartodoc:
   package: starsim
   title: API reference
   dir: api
+  parser: google
   sections:
     - title: API reference
       desc: Full details on all classes and functions.
