@@ -19,9 +19,9 @@ To run these tutorials locally:
 
 ## Tutorials
 
-- [Introduction to Starsim](tutorials/tut_intro.ipynb)
-- [Building a simulation](tutorials/tut_buildsim.ipynb)
-- [Demographics](tutorials/tut_demographics.ipynb)
-- [Diseases](tutorials/tut_diseases.ipynb)
-- [Transmission](tutorials/tut_transmission.ipynb)
-- [Interventions](tutorials/tut_interventions.ipynb)
+- [Introduction to Starsim](tutorials/intro.ipynb)
+- [Building a simulation](tutorials/buildsim.ipynb)
+- [Demographics](tutorials/demographics.ipynb)
+- [Diseases](tutorials/diseases.ipynb)
+- [Transmission](tutorials/transmission.ipynb)
+- [Interventions](tutorials/interventions.ipynb)
