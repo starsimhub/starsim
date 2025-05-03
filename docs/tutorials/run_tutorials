@@ -24,11 +24,15 @@ def execute(path):
     """ Executes a single Jupyter notebook and returns success/failure """
     try:
         with open(path) as f:
-            print(f'Executing {path}...')
-            nb = nbformat.read(f, as_version=4)
-            ep = nbp.ExecutePreprocessor(timeout=timeout)
-            ep.preprocess(nb, {'metadata': {'path': os.path.dirname(path)}})
-        return f'{yay} {path} executed successfully.'
+            with sc.timer(verbose=False) as T:
+                name = path.name
+                print(f'Executing {name}...')
+                nb = nbformat.read(f, as_version=4)
+                ep = nbp.ExecutePreprocessor(timeout=timeout)
+                ep.preprocess(nb, {'metadata': {'path': os.path.dirname(path)}})
+        out = f'{yay} {name} executed successfully after {T.total:0.1f} s.'
+        print(out)
+        return out
     except nbp.CellExecutionError as e:
         return f'{boo} Execution failed for {path}: {str(e)}'
     except Exception as e:
@@ -52,7 +56,7 @@ def main():
         for i in range(len(notebooks)):
             if boo in results[i]:
                 summary += f'\nFailed: {notebooks[i]}'
-    print(summary)
+    print(summary + '\n')
     
     return results
 
