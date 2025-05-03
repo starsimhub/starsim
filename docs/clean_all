@@ -12,6 +12,7 @@ echo "Tidying tutorials..."
 
 echo "Removing build files..."
 rm -rvf .quarto
+rm -rvf api
 rm -rvf _build
 rm -rvf _freeze
 rm -rvf .jupyter_cache
