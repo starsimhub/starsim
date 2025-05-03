@@ -7,6 +7,7 @@ import nbconvert
 import nbformat
 
 default_folders = ['tutorials', 'user_guide']
+output_patterns = ['**/my-*.*', '**/example*.*']
 
 def get_filenames(folders=None, pattern='**/*.ipynb'):
     """ Get all *.ipynb files in the folder """
@@ -45,12 +46,15 @@ def normalize(filename, validate=True, strip=True):
     return
 
 def normalize_notebooks(folders=None):
+    """ Normalize all notebooks """
     filenames = get_filenames(folders=folders)
     sc.parallelize(normalize, filenames)
     return
 
-def clean_outputs(folders=None, sleep=3):
-    patterns = ['**/my-*.*', '**/example*.*']
+def clean_outputs(folders=None, sleep=3, patterns=None):
+    """ Clears outputs from notebooks """
+    if patterns is None:
+        patterns = output_patterns
     filenames = []
     for pattern in patterns:
         filenames += get_filenames(folders=folders, pattern=pattern)
@@ -62,3 +66,11 @@ def clean_outputs(folders=None, sleep=3):
     else:
         print('No files found to clean')
     return
+
+def init_cache(folders=None):
+    """ Initialize the Jupyter cache """
+    filenames = get_filenames(folders=folders)
+
+def init_cache(folders=None):
+    """ Initialize the Jupyter cache """
+    filenames = get_filenames(folders=folders)
