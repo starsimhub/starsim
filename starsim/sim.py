@@ -169,7 +169,7 @@ class Sim(ss.Base):
 
         Args:
             verbose (int):  detail to print
-            kwargs  (dict): passed to ss.make_people()
+            kwargs  (dict): passed to ss.People()
         """
         # Handle inputs
         people = self.pars.pop('people')

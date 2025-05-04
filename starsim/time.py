@@ -1,7 +1,6 @@
 """
 Functions and classes for handling time
 """
-import copy
 import sciris as sc
 import numpy as np
 import pandas as pd
@@ -363,6 +362,19 @@ class Time(sc.prettyobj):
     def is_unitless(self):
         return is_unitless(self.unit)
 
+    def equiv(self, other):
+        """ Determine if two Time objects have identical parameters """
+        if not isinstance(other, Time):
+            errormsg = f'Can only compare two ss.Time objects, not {type(other)}'
+            raise TypeError(errormsg)
+        attrs = ['start', 'stop', 'dt', 'unit'] # The attributes that determine if two Time objects are equivalent
+        try:
+            for attr in attrs:
+                assert getattr(self, attr) == getattr(other, attr)
+            return True
+        except:
+            return False # If either not equal, or different objects
+
     def __setstate__(self, state):
         """ Custom setstate to unpickle ss.date() instances correctly """
         self.__dict__.update(state)
@@ -421,6 +433,7 @@ class Time(sc.prettyobj):
 
         # Copy missing values from sim
         if isinstance(sim, ss.Sim):
+            sim_available = True
             self.unit = sc.ifelse(self.unit, sim.t.unit)
             if self.unit == sim.t.unit: # Units match, use directly
                 sim_dt = sim.t.dt
@@ -433,6 +446,8 @@ class Time(sc.prettyobj):
             self.dt = sc.ifelse(self.dt, sim_dt)
             self.start = sc.ifelse(self.start, sim_start)
             self.stop = sc.ifelse(self.stop, sim_stop)
+        else:
+            sim_available = False
 
         # Handle start and stop
         self.start = self.start if self.is_numeric else date(self.start)
@@ -449,8 +464,14 @@ class Time(sc.prettyobj):
             date_stop = date_start + ss.dur(date_stop, unit=date_unit)
             offset = date_start.year
 
+        # If everything matches the sim, just copy that
+        if sim_available and self.equiv(sim.t):
+            timevec = sim.t.timevec.copy()
+            yearvec = sim.t.yearvec.copy()
+            datevec = sim.t.datevec.copy()
+
         # If numeric, treat that as the ground truth
-        if self.is_numeric:
+        elif self.is_numeric:
             ratio = time_ratio(unit1=date_unit, unit2='year')
             timevec = round_tvec(sc.inclusiverange(self.start, self.stop, self.dt))
             yearvec = round_tvec((timevec-timevec[0])*ratio + offset + timevec[0]) # TODO: simplify
@@ -504,35 +525,41 @@ class Time(sc.prettyobj):
 
     def make_abstvec(self, sim):
         """ Convert the current time vector into sim units """
-        # Validation
-        if self.is_unitless != sim.t.is_unitless:
-            errormsg = f'Cannot mix units with unitless time: sim.unit={sim.t.unit} {self.name}.unit={self.unit}'
-            raise ValueError(errormsg)
+        # They match: no conversion necessary
+        if self.equiv(sim.t):
+            self.abstvec = sim.t.abstvec
 
-        # Both are unitless or numeric
-        both_unitless = self.is_unitless and sim.t.is_unitless
-        both_numeric = self.is_numeric and sim.t.is_numeric
-        if both_unitless or both_numeric:
-            abstvec = self.tvec.copy() # Start by copying the current time vector
-            ratio = time_ratio(unit1=self.unit, dt1=1.0, unit2=sim.t.unit, dt2=1.0) # tvec has sim units, but not dt
-            if ratio != 1.0:
-                abstvec *= ratio # TODO: CHECK
-            start_diff = self.start - sim.t.start
-            if start_diff != 0.0:
-                abstvec += start_diff
-
-        # The sim uses years; use yearvec
-        elif sim.t.unit == 'year':
-            abstvec = self.yearvec.copy()
-            abstvec -= sim.t.yearvec[0] # Start relative to sim start
-
-        # Otherwise (days, weeks, months), use datevec and convert to days
+        # They don't match
         else:
-            dayvec = dates_to_days(self.datevec, start_date=sim.t.datevec[0])
-            ratio = time_ratio(unit1='day', dt1=1.0, unit2=sim.t.unit, dt2=1.0)
-            abstvec = dayvec*ratio # Convert into sim time units
+            # Validation
+            if self.is_unitless != sim.t.is_unitless:
+                errormsg = f'Cannot mix units with unitless time: sim.unit={sim.t.unit} {self.name}.unit={self.unit}'
+                raise ValueError(errormsg)
 
-        self.abstvec = round_tvec(abstvec) # Avoid floating point inconsistencies
+            # Both are unitless or numeric
+            both_unitless = self.is_unitless and sim.t.is_unitless
+            both_numeric = self.is_numeric and sim.t.is_numeric
+            if both_unitless or both_numeric:
+                abstvec = self.tvec.copy() # Start by copying the current time vector
+                ratio = time_ratio(unit1=self.unit, dt1=1.0, unit2=sim.t.unit, dt2=1.0) # tvec has sim units, but not dt
+                if ratio != 1.0:
+                    abstvec *= ratio # TODO: CHECK
+                start_diff = self.start - sim.t.start
+                if start_diff != 0.0:
+                    abstvec += start_diff
+
+            # The sim uses years; use yearvec
+            elif sim.t.unit == 'year':
+                abstvec = self.yearvec.copy()
+                abstvec -= sim.t.yearvec[0] # Start relative to sim start
+
+            # Otherwise (days, weeks, months), use datevec and convert to days
+            else:
+                dayvec = dates_to_days(self.datevec, start_date=sim.t.datevec[0])
+                ratio = time_ratio(unit1='day', dt1=1.0, unit2=sim.t.unit, dt2=1.0)
+                abstvec = dayvec*ratio # Convert into sim time units
+
+            self.abstvec = round_tvec(abstvec) # Avoid floating point inconsistencies
         return
 
     def now(self, key=None):
@@ -799,12 +826,12 @@ class dur(TimePar):
 
 
 def days(v, parent_unit=None, parent_dt=None):
-    """ Shortcut to ss.dur(value, units='day') """
+    """ Shortcut to [ss.dur(value, units='day')](`starsim.time.dur`) """
     return dur(v=v, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
 
 
 def years(v, parent_unit=None, parent_dt=None):
-    """ Shortcut to ss.dur(value, units='year') """
+    """ Shortcut to [ss.dur(value, units='year')](`starsim.time.dur`) """
     return dur(v=v, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
 
 
