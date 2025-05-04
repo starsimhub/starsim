@@ -1,0 +1,4 @@
+#!/bin/bash
+# Preview site with live reloading
+
+quarto preview

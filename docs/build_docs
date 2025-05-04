@@ -3,7 +3,7 @@
 # Build documentation with Quarto; usage is simply:
 # ./build_docs
 #
-# To rebuild notebooks, run
+# To execute notebooks, run
 # ./build_docs 1
 
 import os
@@ -11,10 +11,10 @@ import sys
 import sciris as sc
 
 debug = False
-# if len(sys.argv)>1:
-#     rebuild = int(sys.argv[1])
-# else:
-#     rebuild = False
+if len(sys.argv)>1:
+    execute = int(sys.argv[1])
+else:
+    execute = False
 
 def run(cmd):
     sc.printgreen(f'> {cmd}\n')
@@ -30,9 +30,9 @@ sc.heading('Building API documentation...')
 run('python -m quartodoc build')
 run('python -m quartodoc interlinks')
 
-# if rebuild:
-#     sc.heading('Rebuilding Jupyter notebooks')
-#     run('./build_notebooks')
+if execute:
+    sc.heading('Executing Jupyter notebooks')
+    run('./execute_notebooks')
 
 # Build the Quarto documentation
 sc.heading('Rendering docs...')
