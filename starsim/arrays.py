@@ -220,6 +220,8 @@ class Arr(BaseArr):
             return uids()
         elif isinstance(key, np.ndarray) and ss.options.reticulate: # TODO: fix ss.uids
             return key.astype(int)
+        elif isinstance(key, np.ndarray) and key.dtype == bool:
+            return self.auids[key]
         else:
             errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.'
             raise Exception(errormsg)
