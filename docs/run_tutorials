@@ -1,1 +1,6 @@
-tutorials/run_tutorials
+#!/usr/bin/env python
+"""
+Run tutorials
+"""
+import utils as ut
+ut.execute_notebooks(folders='tutorials')

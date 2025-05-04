@@ -1,0 +1,23 @@
+{{< include ../README.md >}}
+
+## Learn more
+
+::: {.grid}
+::: {.g-col-4}
+[**Tutorials**](tutorials.qmd)
+
+An interactive tour of Starsim's key features.
+:::
+
+::: {.g-col-4}
+[**API reference**](api/index.qmd)
+
+Full details on all classes and functions.
+:::
+
+::: {.g-col-4}
+[**What's new**](whatsnew.qmd)
+
+See what's in the latest Starsim releases.
+:::
+:::

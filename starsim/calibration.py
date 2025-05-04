@@ -41,9 +41,6 @@ class Calibration(sc.prettyobj):
         die          (bool)  : whether to stop if an exception is encountered (default: false)
         debug        (bool)  : if True, do not run in parallel
         verbose      (bool)  : whether to print details of the calibration
-
-    Returns:
-        A Calibration object
     """
     def __init__(self, sim, calib_pars, n_workers=None, total_trials=None, reseed=True,
                  build_fn=None, build_kw=None, eval_fn=None, eval_kw=None, components=None, prune_fn=None,

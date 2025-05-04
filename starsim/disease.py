@@ -118,9 +118,8 @@ class Disease(ss.Module):
         as `None` for NCDs.
 
         Args:
-            sim (Sim): the STarsim simulation object
-            uids (array): UIDs for agents to assign disease progoses to
-            from_uids (array): Optionally specify the infecting agent
+            uids (array): UIDs for agents to assign disease prongoses to
+            sources (array): Optionally specify the infecting agent
         """
         # Track infections
         if self.pars.log:
@@ -402,8 +401,8 @@ class InfectionLog(nx.MultiDiGraph):
         The most recent transmission event will be used
 
         Args:
-            uid: The UID of the target node (the agent that was infected)
-            kwargs: Remaining arguments are stored as edge data
+            uids (array): The UIDs of the target nodes (the agents that were infected)
+            kwargs (dict): Remaining arguments are stored as edge data
         """
         for uid in sc.toarray(uids):
             source, target, key = max(self.in_edges(uid, keys=True), key=itemgetter(2, 0))  # itemgetter twice as fast as lambda apparently
