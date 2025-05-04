@@ -1,14 +1,11 @@
-What's new
-==========
+# What's new
 
 All notable changes to the codebase are documented in this file. Changes
 that may result in differences in model output, or are required in order
 to run an old parameter set with the current version, are flagged with
 the term "Regression information".
 
-Version 2.3.1 (2025-02-25)
---------------------------
-
+## Version 2.3.1 (2025-02-25)
 -   Updated `ss.Sim.shrink()` to remove additional objects, resulting in
     a smaller sim size.
 -   `ss.Calibration.save_csv()` has been replaced by
@@ -24,9 +21,7 @@ Version 2.3.1 (2025-02-25)
 -   *GitHub info*: PR
     [865](https://github.com/starsimhub/starsim/pull/865)
 
-Version 2.3.0 (2025-02-14)
---------------------------
-
+## Version 2.3.0 (2025-02-14)
 -   The calibration class has been completely redesigned. Calibration
     now relies on "components", which capture mismatch with a particular
     data type (e.g., new infections). The new approach also adds
@@ -42,9 +37,7 @@ Version 2.3.0 (2025-02-14)
 -   *GitHub info*: PR
     [831](https://github.com/starsimhub/starsim/pull/831)
 
-Version 2.2.0 (2024-11-18)
---------------------------
-
+## Version 2.2.0 (2024-11-18)
 -   Starsim is now available for R! See <https://r.starsim.org> for
     details.
 -   The `Calibration` class has been completely rewritten. See the
@@ -57,9 +50,7 @@ Version 2.2.0 (2024-11-18)
 -   *GitHub info*: PR
     [778](https://github.com/starsimhub/starsim/pull/778)
 
-Version 2.1.1 (2024-11-08)
---------------------------
-
+## Version 2.1.1 (2024-11-08)
 -   Adds improved Jupyter support for plotting (to prevent plots from
     appearing twice); you can disable this by setting
     `ss.options.set(jupyter=False)`.
@@ -75,8 +66,7 @@ Version 2.1.1 (2024-11-08)
 -   *GitHub info*: PR
     [745](https://github.com/starsimhub/starsim/pull/745)
 
-Version 2.1.0 (2024-11-07)
---------------------------
+## Version 2.1.0 (2024-11-07)
 
 ### Summary
 
@@ -130,8 +120,7 @@ Version 2.1.0 (2024-11-07)
 -   *GitHub info*: PR
     [724](https://github.com/starsimhub/starsim/pull/724)
 
-Version 2.0.0 (2024-10-01)
---------------------------
+## Version 2.0.0 (2024-10-01)
 
 ### Summary
 
@@ -334,26 +323,20 @@ renaming `update()` and `apply()` methods to `step()`;).
 -   *GitHub info*: PR
     [626](https://github.com/starsimhub/starsim/pull/626)
 
-Version 1.0.3 (2024-09-26)
---------------------------
-
+## Version 1.0.3 (2024-09-26)
 -   Fixes a bug in which some intervention parameters (e.g. eligibility)
     do not get set properly.
 -   *GitHub info*: PR
     [639](https://github.com/starsimhub/starsim/pull/639)
 
-Version 1.0.2 (2024-09-25)
---------------------------
-
+## Version 1.0.2 (2024-09-25)
 -   Fixes a bug in which random numbers drawn from auto-jumped
     distributions would overlap with random numbers drawn from
     subsequent timesteps.
 -   *GitHub info*: PR
     [639](https://github.com/starsimhub/starsim/pull/639)
 
-Version 1.0.1 (2024-07-22)
---------------------------
-
+## Version 1.0.1 (2024-07-22)
 -   Adds a new distribution, `ss.rand_raw()`, that samples raw integers
     from the random number bit generator, for use with calculating
     transmission. This version is roughly 20-30% faster than the
@@ -363,9 +346,7 @@ Version 1.0.1 (2024-07-22)
 -   *GitHub info*: PR
     [593](https://github.com/starsimhub/starsim/pull/593)
 
-Version 1.0.0 (2024-07-10)
---------------------------
-
+## Version 1.0.0 (2024-07-10)
 -   Official release of Starsim!
 -   Adds a `Calibration` class, based on [Optuna](https://optuna.org),
     to facilitate the calibration of Starsim models.
@@ -382,9 +363,7 @@ Version 1.0.0 (2024-07-10)
 -   *GitHub info*: PR
     [581](https://github.com/starsimhub/starsim/pull/581)
 
-Version 0.5.10 (2024-07-03)
----------------------------
-
+## Version 0.5.10 (2024-07-03)
 -   Adds two new common-random-number-safe networks. The first is an
     Erdős-Rényi network that is similar to `RandomNet` but parameterized
     differently. The second is a 2D spatial network with connectivity
@@ -393,9 +372,7 @@ Version 0.5.10 (2024-07-03)
 -   *GitHub info*: PR
     [575](https://github.com/starsimhub/starsim/pull/575)
 
-Version 0.5.9 (2024-06-30)
---------------------------
-
+## Version 0.5.9 (2024-06-30)
 -   Added a `ss.histogram()` distribution, which allows generating new
     random values from an empirical histogram.
 -   When binned age data is provided to specify the initial ages for new
@@ -408,9 +385,7 @@ Version 0.5.9 (2024-06-30)
 -   *GitHub info*: PR
     [572](https://github.com/starsimhub/starsim/pull/572)
 
-Version 0.5.8 (2024-06-30)
---------------------------
-
+## Version 0.5.8 (2024-06-30)
 -   Revert to making infection logging disabled by default. However, the
     infection log will now always be created so disease subclasses can
     override logging behaviour where required (e.g., to capture
@@ -423,18 +398,14 @@ Version 0.5.8 (2024-06-30)
 -   *GitHub info*: PR
     [573](https://github.com/starsimhub/starsim/pull/573)
 
-Version 0.5.7 (2024-06-27)
---------------------------
-
+## Version 0.5.7 (2024-06-27)
 -   Implemented a new `ss.combine_rands()` function based on a
     bitwise-XOR, since the previous modulo-based approach could
     introduce correlations between pairs of agents.
 -   *GitHub info*: PR
     [546](https://github.com/starsimhub/starsim/pull/546)
 
-Version 0.5.6 (2024-06-22)
---------------------------
-
+## Version 0.5.6 (2024-06-22)
 -   `ss.Infection.make_new_cases()` now returns the index of the network
     associated with each transmission event
 -   If a `People` object is provided to the `Arr` constructor, the
@@ -455,9 +426,7 @@ Version 0.5.6 (2024-06-22)
 -   *GitHub info*: PR
     [565](https://github.com/starsimhub/starsim/pull/555)
 
-Version 0.5.5 (2024-06-19)
---------------------------
-
+## Version 0.5.5 (2024-06-19)
 -   Added labels to `Result` and state (`Arr`) objects.
 -   Added Numba decorator to `find_contacts` to significantly increase
     performance.
@@ -465,9 +434,7 @@ Version 0.5.5 (2024-06-19)
 -   *GitHub info*: PR
     [562](https://github.com/starsimhub/starsim/pull/555)
 
-Version 0.5.4 (2024-06-18)
---------------------------
-
+## Version 0.5.4 (2024-06-18)
 -   Adjusted `RandomNet` to avoid connections to unborn agents and use
     random rounding for half edges
 -   Adds `get_analyzers` and `get_analyzer`
@@ -478,9 +445,7 @@ Version 0.5.4 (2024-06-18)
 -   *GitHub info*: PR
     [555](https://github.com/starsimhub/starsim/pull/555)
 
-Version 0.5.3 (2024-06-10)
---------------------------
-
+## Version 0.5.3 (2024-06-10)
 -   `ss.uids` class implements set operators to facilitate combining or
     otherwise operating on collections of UIDs
 -   `FloatArr.isnan` and `FloatArr.notnan` return `BoolArr` instances
@@ -495,9 +460,7 @@ Version 0.5.3 (2024-06-10)
 -   *GitHub info*: PR
     [544](https://github.com/starsimhub/starsim/pull/544)
 
-Version 0.5.2 (2024-06-04)
---------------------------
-
+## Version 0.5.2 (2024-06-04)
 -   Renames `network.contacts` to `network.edges`.
 -   For modules (including diseases, networks, etc.), renames
     `initialize()` to `init_pre()` and `init_vals()` to `init_post()`.
@@ -518,15 +481,12 @@ Version 0.5.2 (2024-06-04)
 -   *GitHub info*: PR
     [527](https://github.com/starsimhub/starsim/pull/527)
 
-Version 0.5.1 (2024-05-15)
---------------------------
-
+## Version 0.5.1 (2024-05-15)
 -   Separates maternal transmission into prenatal and postnatal modules.
 -   *GitHub info*: PR
     [509](https://github.com/starsimhub/starsim/pull/509)
 
-Version 0.5.0 (2024-05-14)
---------------------------
+## Version 0.5.0 (2024-05-14)
 
 ### Summary
 
@@ -670,9 +630,7 @@ is now:
 -   *GitHub info*: PR
     [488](https://github.com/starsimhub/starsim/pull/488)
 
-Version 0.4.0 (2024-04-24)
---------------------------
-
+## Version 0.4.0 (2024-04-24)
 -   Replace `UIDArray`, `ArrayView`, and `State` with `Arr`, which has
     different subclasses for different data types (e.g. `FloatArr`,
     `BoolArr`, and `IndexArr`). States are usually represented by
@@ -707,9 +665,7 @@ Version 0.4.0 (2024-04-24)
 -   *GitHub info*: PR
     [456](https://github.com/starsimhub/starsim/pull/456)
 
-Version 0.3.4 (2024-04-18)
---------------------------
-
+## Version 0.3.4 (2024-04-18)
 -   Default duration of edges in `ss.RandomNet` changed from 1 to 0;
     this does not matter if `dt=1`, but does matter with smaller `dt`
     values.
@@ -722,25 +678,19 @@ Version 0.3.4 (2024-04-18)
 -   *GitHub info*: PR
     [473](https://github.com/starsimhub/starsim/pull/473)
 
-Version 0.3.3 (2024-04-16)
---------------------------
-
+## Version 0.3.3 (2024-04-16)
 -   Changed Ebola model transmission logic.
 -   Fixed bug with module names not being preserved with multiple
     initialization.
 -   *GitHub info*: PR
     [463](https://github.com/starsimhub/starsim/pull/463)
 
-Version 0.3.2 (2024-04-08)
---------------------------
-
+## Version 0.3.2 (2024-04-08)
 -   Change to syphilis model to permit latent transmission.
 -   *GitHub info*: PR
     [450](https://github.com/starsimhub/starsim/pull/450)
 
-Version 0.3.1 (2024-03-31)
---------------------------
-
+## Version 0.3.1 (2024-03-31)
 -   Added SIS model.
 -   Fixes distribution initialization.
 -   Allows interventions and analyzers to be functions.
@@ -750,8 +700,7 @@ Version 0.3.1 (2024-03-31)
 -   *GitHub info*: PR
     [428](https://github.com/amath-idm/stisim/pull/428)
 
-Version 0.3.0 (2024-03-30)
---------------------------
+## Version 0.3.0 (2024-03-30)
 
 ### New RNGs & distributions
 
@@ -790,9 +739,7 @@ Version 0.3.0 (2024-03-30)
 -   *GitHub info*: PR
     [392](https://github.com/amath-idm/stisim/pull/392)
 
-Version 0.2.10 (2024-03-18)
----------------------------
-
+## Version 0.2.10 (2024-03-18)
 -   SIR duration of infection now accounts for dt
 -   Reworked sir\_vaccine to modify rel\_sus instead of moving agents
     from susceptible to recovered.
@@ -800,9 +747,7 @@ Version 0.2.10 (2024-03-18)
 -   *GitHub info*: PR
     [389](https://github.com/amath-idm/stisim/pull/389)
 
-Version 0.2.9 (2024-03-18)
---------------------------
-
+## Version 0.2.9 (2024-03-18)
 -   Renames and extends the multirng option in settings, now called
     'rng', which set how random numbers are handled in Starsim with
     three options:
@@ -817,46 +762,34 @@ Version 0.2.9 (2024-03-18)
 -   *GitHub info*: PR
     [349](https://github.com/amath-idm/stisim/pull/349)
 
-Version 0.2.8 (2024-03-13)
---------------------------
-
+## Version 0.2.8 (2024-03-13)
 -   Add `ss.demo()` to quickly create a default simulation.
 -   *GitHub info*: PR
     [380](https://github.com/amath-idm/stisim/pull/380)
 
-Version 0.2.7 (2024-03-09)
---------------------------
-
+## Version 0.2.7 (2024-03-09)
 -   Update `StaticNet` with defaults and correct argument passing
 -   *GitHub info*: PR
     [339](https://github.com/amath-idm/stisim/pull/339)
 
-Version 0.2.6 (2024-02-29)
---------------------------
-
+## Version 0.2.6 (2024-02-29)
 -   Make random number streams independent for SIR
 -   *GitHub info*: PR
     [307](https://github.com/amath-idm/stisim/pull/307)
 
-Version 0.2.5 (2024-02-29)
---------------------------
-
+## Version 0.2.5 (2024-02-29)
 -   Improve logic for making new cases with multi-RNG
 -   *GitHub info*: PR
     [337](https://github.com/amath-idm/stisim/pull/337)
 
-Version 0.2.4 (2024-02-27)
---------------------------
-
+## Version 0.2.4 (2024-02-27)
 -   Improve `sim.summarize()`
 -   Improve `sim.plot()`
 -   Improve SIR model defaults
 -   *GitHub info*: PR
     [320](https://github.com/amath-idm/stisim/pull/320)
 
-Version 0.2.3 (2024-02-26)
---------------------------
-
+## Version 0.2.3 (2024-02-26)
 -   Removes `STI` class
 -   Changes default death rate from units of per person to per thousand
     people
@@ -868,23 +801,17 @@ Version 0.2.3 (2024-02-26)
     [308](https://github.com/amath-idm/stisim/pull/308),
     [317](https://github.com/amath-idm/stisim/pull/317)
 
-Version 0.2.2 (2024-02-26)
---------------------------
-
+## Version 0.2.2 (2024-02-26)
 -   Add the `Samples` class
 -   *GitHub info*: PR
     [311](https://github.com/amath-idm/stisim/pull/311)
 
-Version 0.2.1 (2024-02-22)
---------------------------
-
+## Version 0.2.1 (2024-02-22)
 -   Only remove dead agents on certain timesteps
 -   *GitHub info*: PR
     [294](https://github.com/amath-idm/stisim/pull/294)
 
-Version 0.2.0 (2024-02-15)
---------------------------
-
+## Version 0.2.0 (2024-02-15)
 -   Code reorganization, including making `networks.py` and `disease.py`
     to the top level
 -   Networks moved from `People` to `Sim`
@@ -898,70 +825,52 @@ Version 0.2.0 (2024-02-15)
 -   *GitHub info*: PR
     [235](https://github.com/amath-idm/stisim/pull/235)
 
-Version 0.1.8 (2024-01-30)
---------------------------
-
+## Version 0.1.8 (2024-01-30)
 -   Transmission based on number of contacts
 -   *GitHub info*: PR
     [220](https://github.com/amath-idm/stisim/pull/220)
 
-Version 0.1.7 (2024-01-27)
---------------------------
-
+## Version 0.1.7 (2024-01-27)
 -   Performance enhancement for disease transmission, leading to a 10%
     decrease in runtime.
 -   *GitHub info*: PR
     [217](https://github.com/amath-idm/stisim/pull/217)
 
-Version 0.1.6 (2024-01-23)
---------------------------
-
+## Version 0.1.6 (2024-01-23)
 -   Adds template interventions and products for diagnostics and
     treatment
 -   Adds syphilis screening & treatment interventions
 -   *GitHub info*: PR
     [210](https://github.com/amath-idm/stisim/pull/210)
 
-Version 0.1.5 (2024-01-23)
---------------------------
-
+## Version 0.1.5 (2024-01-23)
 -   Renamed `stisim` to `starsim`.
 -   *GitHub info*: PR
     [200](https://github.com/amath-idm/stisim/pull/200)
 
-Version 0.1.4 (2024-01-23)
---------------------------
-
+## Version 0.1.4 (2024-01-23)
 -   Adds a syphilis module
 -   *GitHub info*: PR
     [206](https://github.com/amath-idm/stisim/pull/206)
 
-Version 0.1.3 (2024-01-22)
---------------------------
-
+## Version 0.1.3 (2024-01-22)
 -   Read in age distributions for people initializations
 -   *GitHub info*: PR
     [205](https://github.com/amath-idm/stisim/pull/205)
 
-Version 0.1.2 (2024-01-19)
---------------------------
-
+## Version 0.1.2 (2024-01-19)
 -   Functionality for converting birth & fertility data to a callable
     parameter within SciPy distributions
 -   *GitHub info*: PR
     [203](https://github.com/amath-idm/stisim/pull/203)
 
-Version 0.1.1 (2024-01-12)
---------------------------
-
+## Version 0.1.1 (2024-01-12)
 -   Improving performance of MultiRNG
 -   Now factoring the timestep, `dt`, into transmission calculations
 -   *GitHub info*: PRs
     [204](https://github.com/amath-idm/stisim/pull/204)
 
-Version 0.1.0 (2023-12-10)
---------------------------
-
+## Version 0.1.0 (2023-12-10)
 -   Allows SciPy distributions to be used as parameters
 -   Optionally use multiple random number streams and other tricks to
     maintain coherence between simulations
@@ -971,41 +880,29 @@ Version 0.1.0 (2023-12-10)
     [170](https://github.com/amath-idm/stisim/pull/170) and
     [202](https://github.com/amath-idm/stisim/pull/202)
 
-Version 0.0.8 (2023-10-04)
---------------------------
-
+## Version 0.0.8 (2023-10-04)
 -   Enable removing people from simulations following death
 -   *GitHub info*: PR
     [121](https://github.com/amath-idm/stisim/pull/121)
 
-Version 0.0.7 (2023-09-08)
---------------------------
-
+## Version 0.0.7 (2023-09-08)
 -   Refactor distributions to use new Distribution class
 -   *GitHub info*: PR
     [112](https://github.com/amath-idm/stisim/pull/112)
 
-Version 0.0.6 (2023-08-30)
---------------------------
-
+## Version 0.0.6 (2023-08-30)
 -   Changes agent IDs from index-based to UID-based
 -   Allows states to store their own data and live within modules
 -   *GitHub info*: PR [88](https://github.com/amath-idm/stisim/pull/88)
 
-Version 0.0.5 (2023-08-29)
---------------------------
-
+## Version 0.0.5 (2023-08-29)
 -   Refactor file structure
 -   *GitHub info*: PRs [77](https://github.com/amath-idm/stisim/pull/77)
     and [86](https://github.com/amath-idm/stisim/pull/86)
 
-Version 0.0.2 (2023-06-29)
---------------------------
-
+## Version 0.0.2 (2023-06-29)
 -   Adds in basic Starsim functionality
 -   *GitHub info*: PR [17](https://github.com/amath-idm/stisim/pull/17)
 
-Version 0.0.1 (2023-06-22)
---------------------------
-
+## Version 0.0.1 (2023-06-22)
 -   Initial version.
