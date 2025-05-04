@@ -20,8 +20,7 @@ website:
     type: overlay
 
   page-footer:
-    center:
-      - text: "Copyright © 2025 Gates Foundation"
+    center: "© 2023–2025, Gates Foundation. All rights reserved. [Privacy and Cookies Notice](https://www.gatesfoundation.org/Privacy-and-Cookies-Notice) | [Terms of Use](https://www.gatesfoundation.org/Terms-of-Use)"
     right:
       - icon: github
         href: https://github.com/starsimhub/starsim
@@ -29,10 +28,11 @@ website:
       - icon: envelope-at-fill
         href: mailto:info@starsim.org
       - icon: globe
-        href: https://www.gatesfoundation.org/
+        href: https://starsim.org/
 
   navbar:
     logo: /assets/starsim-logo.png
+    title: false
     collapse-below: lg
 
     tools:

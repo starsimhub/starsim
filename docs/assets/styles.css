@@ -11,6 +11,13 @@ body, p {
     min-height: 40px !important;
 }
 
-.navbar-title {
-    display: none;
+.navbar-nav {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+#quarto-document-content {
+  margin-top: 0;
+  padding-top: 0 !important;
 }

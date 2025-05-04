@@ -2,6 +2,45 @@
 
 These tutorials will guide you through the main features of Starsim. Each tutorial is interactive and includes executable code examples.
 
+::: {.grid}
+::: {.g-col-4}
+[**T1 - Introduction to Starsim**](tutorials/intro.ipynb)
+
+A quick introduction to the Starsim framework.
+:::
+
+::: {.g-col-4}
+[**T2 - Building a simulation**](tutorials/buildsim.ipynb)
+
+How to build your first simulation.
+:::
+
+::: {.g-col-4}
+[**T3 - Demographics**](tutorials/demographics.ipynb)
+
+Implementing demographics: births, deaths, and population structure.
+:::
+
+::: {.g-col-4}
+[**T4 - Diseases**](tutorials/diseases.ipynb)
+
+How to implement disease dynamics.
+:::
+
+::: {.g-col-4}
+[**T5 - Transmission and networks**](tutorials/transmission.ipynb)
+
+How diseases spread between agents: networks and mixing pools.
+:::
+
+::: {.g-col-4}
+[**T6 - Interventions**](tutorials/interventions.ipynb)
+
+It's not all doom and gloom: implementing interventions to save lives.
+:::
+:::
+
+
 :::{.callout-note}
 You can download these tutorials as Jupyter notebooks to run them locally. Look for the download button at the top of each tutorial.
 :::
@@ -16,12 +55,3 @@ To run these tutorials locally:
 3. Navigate to the `docs/tutorials` directory
 4. Launch Jupyter: `jupyter notebook`
 :::
-
-## Tutorials
-
-- [Introduction to Starsim](tutorials/intro.ipynb)
-- [Building a simulation](tutorials/buildsim.ipynb)
-- [Demographics](tutorials/demographics.ipynb)
-- [Diseases](tutorials/diseases.ipynb)
-- [Transmission](tutorials/transmission.ipynb)
-- [Interventions](tutorials/interventions.ipynb)
