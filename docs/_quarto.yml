@@ -1,6 +1,6 @@
 project:
   type: website
-  output-dir: _build/html
+  output-dir: _build
   title: "Starsim"
   execute-dir: file
   render:
@@ -8,22 +8,43 @@ project:
     - "*.qmd"
     - "*.ipynb"
 
-jupyter: python3
-execute:
-  enabled: false # TODO: switch this programmatically
-  daemon: true  # Use Jupyter daemon mode
-  cache: true   # Cache execution results
-  freeze: false # Use caching rather than freezing to store results
-  error: false
-  echo: true
-  warning: true
-  kernel: python3
-
 website:
   title: "Starsim"
+  image: /assets/starsim-logo.png
   favicon: /assets/favicon.ico
+
+  repo-url: https://github.com/starsimhub/starsim
+  repo-actions: [issue]
+  page-navigation: true
+  search:
+    type: overlay
+
+  page-footer:
+    center:
+      - text: "Copyright © 2025 Gates Foundation"
+    right:
+      - icon: github
+        href: https://github.com/starsimhub/starsim
+        aria-label: GitHub
+      - icon: envelope-at-fill
+        href: mailto:info@starsim.org
+      - icon: globe
+        href: https://www.gatesfoundation.org/
+
   navbar:
     logo: /assets/starsim-logo.png
+    collapse-below: lg
+
+    tools:
+      - icon: github
+        href: https://github.com/starsimhub/starsim
+      - icon: envelope-at-fill
+        href: mailto:info@starsim.org
+      - icon: slack
+        href: https://starsim-idm.slack.com
+      - icon: globe
+        href: https://starsim.org
+
     left:
       - href: index.qmd
         text: Home
@@ -39,8 +60,9 @@ website:
         text: Contributing
       - href: api/index.qmd
         text: API reference
+
   sidebar:
-    style: docked
+    # style: docked
     collapse-level: 2
     contents:
       - section: "Tutorials"
@@ -102,14 +124,12 @@ format:
     css: ./assets/styles.css
     toc: true
     toc-depth: 3
-    # page-layout: full
-    # code-copy: false
-    # code-tools: true
     highlight-style: github
 
 quartodoc:
   package: starsim
   title: API reference
+  style: pkgdown
   dir: api
   parser: google
   sections:
@@ -135,3 +155,14 @@ quartodoc:
         - sim
         - time
         - utils
+
+jupyter: python3
+execute:
+  enabled: false # TODO: switch this programmatically
+  daemon: true  # Use Jupyter daemon mode
+  cache: true   # Cache execution results
+  freeze: false # Use caching rather than freezing to store results
+  error: false
+  echo: true
+  warning: true
+  kernel: python3
