@@ -1,4 +1,5 @@
 #!/bin/bash
-# Publish site to GitHub Pages
+# Build & publish site to GitHub Pages
 
+./build_docs
 quarto publish gh-pages
