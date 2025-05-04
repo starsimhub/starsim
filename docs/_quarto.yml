@@ -7,8 +7,6 @@ project:
     - "*.md"
     - "*.qmd"
     - "*.ipynb"
-    # - "!tutorials/"
-    # - "!user_guide/"
 
 jupyter: python3
 execute:
@@ -20,7 +18,6 @@ execute:
   echo: true
   warning: true
   kernel: python3
-  executor: local-parallel
 
 website:
   title: "Starsim"
@@ -100,9 +97,9 @@ website:
 format:
   html:
     theme: 
-      light: flatly
+      light: litera
       dark: darkly
-    css: _static/theme_overrides.css
+    css: styles.css
     toc: true
     toc-depth: 3
     page-layout: full

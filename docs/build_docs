@@ -17,7 +17,7 @@ debug = False
 #     rebuild = False
 
 def run(cmd):
-    print(cmd)
+    sc.printgreen(f'> {cmd}')
     if not debug:
         return sc.runcommand(cmd, wait=False)
 
