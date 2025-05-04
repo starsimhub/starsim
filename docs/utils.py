@@ -9,7 +9,7 @@ import jupyter_cache as jc
 
 default_folders = ['tutorials', 'user_guide'] # Folders with Jupyter notebooks
 temp_patterns = ['**/my-*.*', '**/example*.*'] # Temporary files to be removed
-temp_items = ['user_guide/results', 'objects.json'] # Temporary files/folders to be removed
+temp_items = ['user_guide/results'] # Temporary files/folders to be removed
 
 timeout = 600 # Maximum time for notebook execution
 yay = '✓'

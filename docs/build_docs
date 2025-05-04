@@ -3,8 +3,8 @@
 # Build documentation with Quarto; usage is simply:
 # ./build_docs
 #
-# To not rebuild notebooks, run
-# ./build_docs 0
+# To rebuild notebooks, run
+# ./build_docs 1
 
 import os
 import sys
@@ -17,7 +17,7 @@ debug = False
 #     rebuild = False
 
 def run(cmd):
-    sc.printgreen(f'> {cmd}')
+    sc.printgreen(f'> {cmd}\n')
     if not debug:
         return sc.runcommand(cmd, wait=False)
 
@@ -27,7 +27,8 @@ sc.heading("Building docs with Quarto...")
 
 # Generate API documentation using quartodoc
 sc.heading('Building API documentation...')
-run('quartodoc build')
+run('python -m quartodoc build')
+run('python -m quartodoc interlinks')
 
 # if rebuild:
 #     sc.heading('Rebuilding Jupyter notebooks')
@@ -45,4 +46,4 @@ sc.heading("Normalizing notebooks...")
 run('./normalize_notebooks')
 
 T.toc('Docs built')
-print(f"\nIndex:\n{os.getcwd()}/_build/html/index.html")
+print(f"\nIndex:\n{os.getcwd()}/_build/index.html")

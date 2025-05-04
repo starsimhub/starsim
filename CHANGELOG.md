@@ -16,7 +16,7 @@ the term "Regression information".
     array.
 -   Results by default convert all result keys to lowercase; use
     `keep_case=True` to turn off this behavior.
--   Fixed a bug with an `ss.date` object converting to a `pd.Timestamp`
+-   Fixed a bug with an [`ss.date`](`starsim.time.date`) object converting to a `pd.Timestamp`
     upon copy.
 -   *GitHub info*: PR
     [865](https://github.com/starsimhub/starsim/pull/865)

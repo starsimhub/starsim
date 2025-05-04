@@ -126,12 +126,29 @@ format:
     toc-depth: 3
     highlight-style: github
 
+filters:
+  - interlinks
+
+interlinks:
+  sources:
+    python:
+      url: https://docs.python.org/3/
+    numpy:
+      url: https://numpy.org/doc/stable/
+    pandas:
+      url: https://pandas.pydata.org/pandas-docs/stable/
+    scipy:
+      url: https://docs.scipy.org/doc/scipy/
+    matplotlib:
+      url: https://matplotlib.org/stable/
+
 quartodoc:
   package: starsim
   title: API reference
   style: pkgdown
   dir: api
   parser: google
+  render_interlinks: true
   sections:
     - title: API reference
       desc: Full details on all classes and functions.

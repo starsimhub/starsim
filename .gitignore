@@ -9,6 +9,7 @@ archive/
 .jupyter_cache/
 .virtual_documents/
 docs/api/
+objects.json
 
 # Other files
 .idea
