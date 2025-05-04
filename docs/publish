@@ -1,0 +1,4 @@
+#!/bin/bash
+# Publish site to GitHub Pages
+
+quarto publish gh-pages
