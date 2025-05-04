@@ -20,9 +20,17 @@ We recommend, but do not require, installing Starsim in a virtual environment, s
 
 ### Python
 
-Starsim is most easily installed via PyPI: `pip install starsim`.
+Starsim is most easily installed via PyPI:
+```sh
+pip install starsim
+```
 
-Starsim can also be installed locally. To do this, clone first this repository, then run `pip install -e .` (don't forget the dot at the end!).
+Starsim can also be installed locally. To do this, clone first this repository, then run:
+```sh
+pip install -e .
+```
+
+(Don't forget the dot at the end!)
 
 ### R
 

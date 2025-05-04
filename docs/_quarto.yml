@@ -48,12 +48,12 @@ website:
     left:
       - href: index.qmd
         text: Home
+      - href: whatsnew.qmd
+        text: What's new
       - href: tutorials.qmd
         text: Tutorials
       - href: user_guide.qmd
         text: User guide
-      - href: whatsnew.qmd
-        text: What's new
       - href: conduct.qmd
         text: Code of Conduct
       - href: contributing.qmd
@@ -62,9 +62,12 @@ website:
         text: API reference
 
   sidebar:
-    # style: docked
     collapse-level: 2
     contents:
+      - href: index.qmd
+        text: Home
+      - href: whatsnew.qmd
+        text: What's new
       - section: "Tutorials"
         contents:
           - tutorials/intro.ipynb
@@ -107,8 +110,6 @@ website:
           - user_guide/advanced_random.ipynb
           - user_guide/advanced_profiling.ipynb
           - user_guide/advanced_nonstandard.ipynb
-      - href: whatsnew.qmd
-        text: What's new
       - href: conduct.qmd
         text: Code of Conduct
       - href: contributing.qmd
@@ -176,7 +177,7 @@ quartodoc:
 
 jupyter: python3
 execute:
-  enabled: false # TODO: switch this programmatically
+  enabled: false # NB, this is controlled via build_docs
   daemon: true  # Use Jupyter daemon mode
   cache: true   # Cache execution results
   freeze: false # Use caching rather than freezing to store results
