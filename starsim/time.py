@@ -398,8 +398,10 @@ class Dur():
         # If a float is divided by a Dur, then we should return a rate
         # If a rate is divided by a Dur, then we will call Rate.__truediv__
         # We also need divide the duration by the numerator when calculating the rate
-        if sc.isnumber(other) and other == 0:
-            return Rate(Dur(np.inf))
+        if self.period == 0:
+            raise ZeroDivisionError('Cannot divide by a duration of zero') # TODO: consider Rate(Dur(np.inf))
+        elif sc.isnumber(other) and other == 0:
+            return Rate(0)
         else:
             return Rate(other, self)
 
@@ -789,8 +791,6 @@ class Rate():
             return other*self
         elif isinstance(other, Dur):
             return self.value*other/self.period
-        elif sc.isnumber(other) and other == 0:
-            return 0 # Or should this be a rate?
         else:
             return Rate(self.value*other, self.period)
 
@@ -839,15 +839,42 @@ class Rate():
 
 class TimeProb(Rate):
     """
-    A probability over time (a.k.a. a cumulative hazard rate); must be >=0 and <=1.
+    ``TimeProb`` represents the probability of an event occurring during a
+    specified period of time.
 
-    These values are probabilities per unit time. The probability for a given
-    period of time can be calculated by multiplying by a duration. The cumulative
-    hazard rate conversion will be used when calculating the probability. For multiplicative
-    scaling, use a ``Rate`` instead.
+    The class is designed to allow conversion of a probability from one 
+    duration to another through multiplication. However, the behavior of this
+    conversion depends on the data type of the the object being multiplied.
 
-    >>> p = ss.TimeProb(0.1, ss.Dur(years=1))
-    >>> p*ss.Dur(years=2)
+    When multiplied by a duration (type ss.Dur), the underlying constant rate is
+    calculated as
+        ``rate = -np.log(1 - self.value)``.
+    Then, the probability over the new duration is
+        ``p = 1 - np.exp(-rate/factor)``,
+    where ``factor`` is the ratio of the new duration to the original duration.
+
+    For example,
+    >>> p = ss.TimeProb(0.8, ss.years(1))
+    indicates a 80% chance of an event occurring in one year.
+
+    >>> p*ss.years(1)
+    When multiplied by the original denominator, 1 year in this case, the
+    probability remains unchanged, 80%.
+
+    >>> p * ss.years(2)
+    Multiplying ``p`` by ``ss.years(2)`` does not simply double the
+    probability to 160% (which is not possible), but rather returns a new
+    probability of 96% representing the chance of the event occurring at least
+    once over the new duration of two years.
+
+    However, the behavior is different when a ``TimeProb`` object is multiplied
+    by a scalar or array. In this case, the probability is simply scaled. This scaling
+    may result in a value greater than 1, which is not valid. For example,
+    >>> p * 2
+    raises an AssertionError because the resulting probability (160%) exceeds 100%.
+
+    Use ``RateProb`` instead if ``TimeProb`` if you would prefer to directly
+    specify the instantaneous rate.
     """
 
     def __init__(self, value, period=None):
@@ -863,8 +890,10 @@ class TimeProb(Rate):
             elif self.value == 1:
                 return 1
             else:
-                rate = -np.log(1 - self.value)
                 factor = self.period/other
+                if factor == 1:
+                    return self.value # Avoid expensive calculation and precision issues
+                rate = -np.log(1 - self.value)
                 return 1 - np.exp(-rate/factor)
         else:
             return self.__class__(self.value*other, self.period)
@@ -874,11 +903,41 @@ class TimeProb(Rate):
 
 class RateProb(Rate):
     """
-    An instantaneous rate converted to a probability; must be >=0.
+    A ``RateProb`` represents an instantaneous rate of an event occurring. Rates
+    must be non-negative, but need not be less than 1.
 
-    Note: ``ss.TimeProb()`` converts one cumulative hazard rate to another with a
-    different time unit. ``ss.RateProb()`` converts an exponential rate to a cumulative
-    hazard rate.
+    Through multiplication, rate can be modified or converted to a probability,
+    depending on the data type of the object being multiplied.
+
+    When a ``RateProb`` is multiplied by a scalar or array, the rate is simply
+    scaled. Such multiplication occurs frequently in epidemiological models,
+    where the base rate is multiplied by "rate ratio" or "relative rate" to
+    represent agents experiencing higher (multiplier > 1) or lower (multiplier <
+    1) event rates.
+
+    Alternatively, when a ``RateProb`` is multiplied by a duration (type
+    ss.Dur), a probability is calculated. The conversion from rate to
+    probability on multiplication by a duration is
+        ``1 - np.exp(-rate/factor)``,
+    where ``factor`` is the ratio of the multiplied duration to the original
+    period (denominator).
+
+    For example, consider
+    >>> p = ss.RateProb(0.8, ss.years(1))
+    When multiplied by a duration of 1 year, the calculated probability is
+        ``1 - np.exp(-0.8)``, which is approximately 55%.
+    >>> p*ss.years(1)
+
+    When multiplied by a scalar, the rate is simply scaled.
+    >>> p*2
+
+    The difference between ``TimeProb`` and ``RateProb`` is subtle, but important. ``RateProb`` works directly
+    with the instantaneous rate of an event occurring. In contrast, ``TimeProb`` starts with a probability and a duration,
+    and the underlying rate is calculated. On multiplication by a duration,
+    * RateProb: rate -> probability 
+    * TimeProb: probability -> rate -> probability
+
+    The behavior of both classes is depending on the data type of the object being multiplied.
     """
     def __init__(self, value, period=None):
         assert value >= 0, 'Value must be >= 0'
@@ -896,7 +955,11 @@ class RateProb(Rate):
         else:
             return self.__class__(self.value*other, self.period)
 
-    def __truediv__(self, other): raise NotImplementedError()
+    def __truediv__(self, other):
+        if isinstance(other, Dur):
+            raise NotImplementedError()
+        return super().__truediv__(other)  # Fixed the call to super().__truediv__
+
     def __rtruediv__(self, other): raise NotImplementedError()
 
 #%% Simulation time vectors
@@ -1194,10 +1257,16 @@ class Time(sc.prettyobj):
             errormsg = f'Invalid key "{key}": must be None, abs, date, or year'
             raise ValueError(errormsg)
 
-        ti = np.clip(self.ti, 0, len(vec)-1)
-        now = vec[ti]
+        if 0 <= self.ti < len(vec):
+            now = vec[self.ti]
+        else:
+            now = self.tvec[0] + self.dt*self.ti
+            if key == 'year':
+                now = float(now)
+
         if key == 'str':
-            now = f'{now:0.1f}' if isinstance(now, float) else str(now)
+            now = str(now)
+
         return now
 
 

@@ -21,7 +21,7 @@ class NCD(ss.Disease):
         super().__init__()
         self.define_pars(
             initial_risk = ss.bernoulli(p=0.3), # Initial prevalence of risk factors
-            dur_risk = ss.expon(scale=ss.Dur(years=10)),
+            dur_risk = ss.expon(scale=ss.years(10)),
             prognosis = ss.weibull(c=ss.years(2), scale=5), # Time in years between first becoming affected and death
         )
         self.update_pars(**kwargs)
@@ -64,8 +64,8 @@ class NCD(ss.Disease):
         ti = self.ti
         new_cases = (self.ti_affected == ti).uids
         self.affected[new_cases] = True
-        prog_years = self.pars.prognosis.rvs(new_cases)
-        self.ti_dead[new_cases] = ti + sc.randround(prog_years) # TODO: update to allow non-year units
+        dur_prog = self.pars.prognosis.rvs(new_cases)
+        self.ti_dead[new_cases] = ti + sc.randround(dur_prog)
         super().set_prognoses(new_cases)
         return new_cases
 
