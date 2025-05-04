@@ -5,7 +5,6 @@ Utilities for processing docs (notebooks mostly)
 import sciris as sc
 import nbconvert
 import nbformat
-import jupyter_cache as jc
 
 default_folders = ['tutorials', 'user_guide'] # Folders with Jupyter notebooks
 temp_patterns = ['**/my-*.*', '**/example*.*'] # Temporary files to be removed

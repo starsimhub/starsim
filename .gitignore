@@ -13,6 +13,7 @@ docs/_extensions/
 docs/_inv/
 docs/api/
 objects.json
+objects.txt
 
 # Other files
 .idea

@@ -130,6 +130,7 @@ filters:
   - interlinks
 
 interlinks:
+  fast: true
   sources:
     python:
       url: https://docs.python.org/3/

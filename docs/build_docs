@@ -22,6 +22,7 @@ def run(cmd):
 
 debug = False
 execute = None
+folders = ['tutorials', 'user_guide']
 valid = ['jupyter', 'quarto', 'none']
 if len(sys.argv)>1:
     execute = sys.argv[1]
@@ -34,7 +35,7 @@ else:
     execute = 'jupyter'
     argstr = ''
 
-if execute == 'jupyter' and not os.path.exists('./tutorials/.jupyter_cache'):
+if execute == 'jupyter' and not all([os.path.exists(f'./{folder}/.jupyter_cache') for folder in folders]):
     print('Falling back to quarto docs build since Jupyter cache not yet initialized')
     execute = 'quarto'
 
