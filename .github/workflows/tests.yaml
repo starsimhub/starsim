@@ -3,13 +3,13 @@ on: [pull_request]
 
 jobs:
   install_and_test:
-    timeout-minutes: 8
+    timeout-minutes: 5
     strategy:
       fail-fast: false
       max-parallel: 8
       matrix:
         os: ['ubuntu-latest']
-        python-version: ['3.10', '3.12']
+        python-version: ['3.10', '3.13']
     runs-on: ${{ matrix.os }}
     name: Install and test
     steps:
