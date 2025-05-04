@@ -284,7 +284,7 @@ class Loop:
         Args:
             bytime (bool): if True, order events by total time rather than actual order
             fig_kw (dict): passed to ``plt.figure()``
-            plot_kw (dict): passed to ``plt.bar()``
+            bar_kw (dict): passed to ``plt.bar()``
         """
         # Assemble data
         if self.cpu_df is None:

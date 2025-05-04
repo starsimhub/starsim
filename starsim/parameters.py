@@ -254,7 +254,7 @@ class SimPars(Pars):
         if self.verbose == 'brief':
             self.verbose = -1
         if not sc.isnumber(self.verbose):  # pragma: no cover
-            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self.par.verbose)} "{self.par.verbose}"'
+            errormsg = f'Verbose argument should be either "brief", -1, or a float, not {type(self.verbose)} "{self.verbose}"'
             raise ValueError(errormsg)
         return
 

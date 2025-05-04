@@ -6,6 +6,7 @@ import pandas as pd
 import sciris as sc
 import starsim as ss
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 __all__ = ['People', 'Person']
 
@@ -371,6 +372,39 @@ class People(sc.prettyobj):
         for key in self.states.keys():
             person[key] = self.states[key][ind]
         return person
+
+    def plot_ages(self):
+        """ Plot the age distribution """
+        fig = plt.figure()
+        ax = fig.add_subplot(1, 1, 1)
+        
+        # Create age bins
+        bins = np.arange(0, 100, 1)
+        
+        # Split into male and female ages
+        age_m = self.age[~self.female]
+        age_f = self.age[self.female]
+        
+        # Plot male ages on left (negative values) & female on right
+        kw = dict(bins=bins, orientation='horizontal', alpha=0.7)
+        mc, _, _ = ax.hist(age_m, label='Male', **kw)
+        fc, _, _ = ax.hist(age_f, label='Female', **kw)
+        
+        # Make male counts negative
+        for patch in ax.patches[:len(bins)-1]:
+            patch.set_x(-patch.get_x())
+            patch.set_width(-patch.get_width())
+            
+        # Add labels and title
+        ax.set_xlabel('Count')
+        ax.set_ylabel('Age')
+        ax.set_title('Age distribution by sex')
+        ax.legend()
+        
+        # Center the plot on 0
+        max_count = sc.cat(mc, fc).max()
+        ax.set_xlim(-max_count*1.1, max_count*1.1)
+        return fig
 
 
 class Person(sc.objdict):

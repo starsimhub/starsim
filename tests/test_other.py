@@ -110,6 +110,7 @@ def test_arrs():
     assert not np.all(s2.people.alive.raw), 'Some agents should not be alive when indexed like this'
     assert np.array_equal(~s1.people.female, s1.people.male), 'Definition of men does not match'
     assert isinstance(s1.people.age < 5, ss.BoolArr), 'Performing logical operations should return a BoolArr'
+    assert np.array_equal(s1.people.age[s1.people.age < 5],s1.people.age[s1.people.age.values < 5])
 
     o.s1 = s1
     o.s2 = s2

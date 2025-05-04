@@ -1171,6 +1171,9 @@ class histogram(Dist):
         if len(bins) == len(values): # Append a final bin, if necessary
             delta = bins[-1] - bins[-2]
             bins = np.append(bins, bins[-1]+delta)
+
+        # Validate inputs
+        values = values.astype(float)
         vsum = values.sum()
         if vsum != 1.0:
             values = values / vsum

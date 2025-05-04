@@ -1,7 +1,6 @@
 """
 Functions and classes for handling time
 """
-import copy
 import sciris as sc
 import numpy as np
 import pandas as pd
@@ -1232,7 +1231,6 @@ class Time(sc.prettyobj):
         self.initialized = True
         return self
 
-
     def now(self, key=None):
         """
         Get the current simulation time
@@ -1307,7 +1305,6 @@ if __name__ == '__main__':
 
     from starsim.time import *   # Import the classes from Starsim so that Dur is an ss.Dur rather than just a bare Dur etc.
     import starsim as ss
-
 
     def loc(module, sim, uids):
         return np.array([Dur(x) for x in range(uids)])
