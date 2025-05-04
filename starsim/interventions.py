@@ -423,7 +423,6 @@ class BaseVaccination(Intervention):
     Args:
          product        (str/Product)   : the vaccine to use
          prob           (float/arr)     : annual probability of eligible population getting vaccinated
-         eligibility    (inds/callable) : indices OR callable that returns inds
          label          (str)           : the name of vaccination strategy
          kwargs         (dict)          : passed to Intervention()
     """
