@@ -4,10 +4,13 @@ files/
 tests/figs/*
 tests/devtests/figs/*
 figs/*
-modules.rst
 archive/
+
+# Quarto-generated files
 .jupyter_cache/
 .virtual_documents/
+docs/_extensions/
+docs/_inv/
 docs/api/
 objects.json
 
