@@ -9,6 +9,7 @@ from operator import itemgetter
 import pandas as pd
 
 ss_int_ = ss.dtypes.int
+ss_float_ = ss.dtypes.float
 
 __all__ = ['Disease', 'Infection', 'InfectionLog']
 
@@ -117,9 +118,8 @@ class Disease(ss.Module):
         as `None` for NCDs.
 
         Args:
-            sim (Sim): the STarsim simulation object
-            uids (array): UIDs for agents to assign disease progoses to
-            from_uids (array): Optionally specify the infecting agent
+            uids (array): UIDs for agents to assign disease prongoses to
+            sources (array): Optionally specify the infecting agent
         """
         # Track infections
         if self.pars.log:
@@ -156,7 +156,7 @@ class Infection(Disease):
         super().__init__(*args, **kwargs)
         self.define_states(
             ss.State('susceptible', default=True, label='Susceptible'),
-            ss.State('infected', label='Infectious'),
+            ss.State('infected', label='Infected'),
             ss.FloatArr('rel_sus', default=1.0, label='Relative susceptibility'),
             ss.FloatArr('rel_trans', default=1.0, label='Relative transmission'),
             ss.FloatArr('ti_infected', label='Time of infection' ),
@@ -299,10 +299,15 @@ class Infection(Disease):
         rel_trans = self.rel_trans.asnew(self.infectious * self.rel_trans)
         rel_sus   = self.rel_sus.asnew(self.susceptible * self.rel_sus)
 
-        for i, (nkey,net) in enumerate(self.sim.networks.items()):
+        for i, (nkey,route) in enumerate(self.sim.networks.items()):
             nk = ss.standardize_netkey(nkey)
-            if isinstance(net, ss.Network) and len(net): # Skip networks with no edges
-                edges = net.edges
+            if isinstance(route, (ss.MixingPool, ss.MixingPools)):
+                target_uids = route.compute_transmission(rel_sus, rel_trans, betamap[nk])
+                new_cases.append(target_uids)
+                sources.append(np.full(len(target_uids), dtype=ss_float_, fill_value=np.nan))
+                networks.append(np.full(len(target_uids), dtype=ss_int_, fill_value=i))
+            elif isinstance(route, ss.Network) and len(route): # Skip networks with no edges
+                edges = route.edges
                 p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
                 p2p1b1 = [edges.p2, edges.p1, betamap[nk][1]] # Person 2, person 1, beta 1
                 for src, trg, beta in [p1p2b0, p2p1b1]:
@@ -346,7 +351,7 @@ class Infection(Disease):
         res = self.results
         ti = self.ti
         res.prevalence[ti] = res.n_infected[ti] / np.count_nonzero(self.sim.people.alive)
-        res.new_infections[ti] = np.count_nonzero(self.ti_infected == ti)
+        res.new_infections[ti] = np.count_nonzero(np.round(self.ti_infected) == ti)
         res.cum_infections[ti] = np.sum(res['new_infections'][:ti+1]) # TODO: can compute at end
         return
 
@@ -396,8 +401,8 @@ class InfectionLog(nx.MultiDiGraph):
         The most recent transmission event will be used
 
         Args:
-            uid: The UID of the target node (the agent that was infected)
-            kwargs: Remaining arguments are stored as edge data
+            uids (array): The UIDs of the target nodes (the agents that were infected)
+            kwargs (dict): Remaining arguments are stored as edge data
         """
         for uid in sc.toarray(uids):
             source, target, key = max(self.in_edges(uid, keys=True), key=itemgetter(2, 0))  # itemgetter twice as fast as lambda apparently

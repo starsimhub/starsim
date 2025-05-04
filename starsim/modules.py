@@ -127,6 +127,10 @@ class Module(Base):
         """ Allow modules to be called like functions """
         return self.step(*args, **kwargs)
 
+    def __getitem__(self, key):
+        """ Allow modules to act like dictionaries """
+        return getattr(self, key)
+
     def _reconcile(self, key, value=None, default=None):
         """ Reconcile module attributes, parameters, and input arguments """
         parval = self.pars.get(key)
@@ -156,7 +160,7 @@ class Module(Base):
             self.pars = ss.Pars(**kwargs)
         return self.pars
 
-    def update_pars(self, pars, **kwargs):
+    def update_pars(self, pars=None, **kwargs):
         """ Pull out recognized parameters, returning the rest """
         pars = sc.mergedicts(pars, kwargs)
 
@@ -218,7 +222,7 @@ class Module(Base):
         self.t.init(sim=self.sim) # Sets the absolute sim time vector
 
         # Find all time parameters in the module
-        timepars = sc.search(self.pars, type=ss.TimePar) # Should it be self or self.pars?
+        timepars = sc.search(self.pars, type=ss.TimePar, skip=dict(keys='sim')) # Should it be self or self.pars?
 
         # Initialize them with the parent module
         for timepar in timepars.values():
