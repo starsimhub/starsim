@@ -125,8 +125,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
           <div class="collapse navbar-collapse" id="navbarCollapse">
             <ul class="navbar-nav navbar-nav-scroll me-auto">
   <li class="nav-item">
-    <a class="nav-link" href="../index.html"> 
+    <a class="nav-link active" href="../index.html" aria-current="page"> 
 <span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../whatsnew.html"> 
+<span class="menu-text">What’s new</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="../tutorials.html"> 
@@ -135,10 +139,6 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <li class="nav-item">
     <a class="nav-link" href="../user_guide.html"> 
 <span class="menu-text">User guide</span></a>
-  </li>  
-  <li class="nav-item">
-    <a class="nav-link active" href="../whatsnew.html" aria-current="page"> 
-<span class="menu-text">What’s new</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="../conduct.html"> 
@@ -180,6 +180,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
     <div class="sidebar-menu-container"> 
     <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Home</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../whatsnew.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">What’s new</span></a>
+  </div>
+</li>
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
@@ -427,12 +439,6 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../whatsnew.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">What’s new</span></a>
-  </div>
-</li>
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
   <a href="../conduct.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Code of Conduct</span></a>
   </div>
@@ -568,7 +574,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <tr class="odd">
 <td>default</td>
 <td><a href="https://docs.python.org/3/library/functions.html#any">any</a></td>
-<td>Specify default value for new agents. This can be</td>
+<td>Specify default value for new agents. This can be: • A scalar with the same dtype (or castable to the same dtype) as the State; • A callable, with a single argument for the number of values to produce; • A <a href="../api/distributions.html#starsim.distributions.Dist"><code>ss.Dist</code></a> instance.</td>
 <td><code>None</code></td>
 </tr>
 <tr class="even">
@@ -685,12 +691,6 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="parameters-1" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h6>
 <table class="caption-top table">
-<colgroup>
-<col style="width: 11%">
-<col style="width: 9%">
-<col style="width: 65%">
-<col style="width: 12%">
-</colgroup>
 <thead>
 <tr class="header">
 <th>Name</th>
@@ -702,13 +702,13 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <tbody>
 <tr class="odd">
 <td>new_uids</td>
-<td></td>
+<td><a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
 <td>Numpy array of UIDs for the new agents being added</td>
 <td><code>None</code></td>
 </tr>
 <tr class="even">
 <td>new_vals</td>
-<td></td>
+<td><a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
 <td>If provided, assign these state values to the new UIDs</td>
 <td><code>None</code></td>
 </tr>

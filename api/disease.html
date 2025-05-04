@@ -125,8 +125,12 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
           <div class="collapse navbar-collapse" id="navbarCollapse">
             <ul class="navbar-nav navbar-nav-scroll me-auto">
   <li class="nav-item">
-    <a class="nav-link" href="../index.html"> 
+    <a class="nav-link active" href="../index.html" aria-current="page"> 
 <span class="menu-text">Home</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="../whatsnew.html"> 
+<span class="menu-text">What’s new</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="../tutorials.html"> 
@@ -135,10 +139,6 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <li class="nav-item">
     <a class="nav-link" href="../user_guide.html"> 
 <span class="menu-text">User guide</span></a>
-  </li>  
-  <li class="nav-item">
-    <a class="nav-link active" href="../whatsnew.html" aria-current="page"> 
-<span class="menu-text">What’s new</span></a>
   </li>  
   <li class="nav-item">
     <a class="nav-link" href="../conduct.html"> 
@@ -180,6 +180,18 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <nav id="quarto-sidebar" class="sidebar collapse collapse-horizontal quarto-sidebar-collapse-item sidebar-navigation floating overflow-auto">
     <div class="sidebar-menu-container"> 
     <ul class="list-unstyled mt-1">
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../index.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">Home</span></a>
+  </div>
+</li>
+        <li class="sidebar-item">
+  <div class="sidebar-item-container"> 
+  <a href="../whatsnew.html" class="sidebar-item-text sidebar-link">
+ <span class="menu-text">What’s new</span></a>
+  </div>
+</li>
         <li class="sidebar-item sidebar-item-section">
       <div class="sidebar-item-container"> 
             <a class="sidebar-item-text sidebar-link text-start" data-bs-toggle="collapse" data-bs-target="#quarto-sidebar-section-1" role="navigation" aria-expanded="true">
@@ -427,12 +439,6 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   </li>
         <li class="sidebar-item">
   <div class="sidebar-item-container"> 
-  <a href="../whatsnew.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">What’s new</span></a>
-  </div>
-</li>
-        <li class="sidebar-item">
-  <div class="sidebar-item-container"> 
   <a href="../conduct.html" class="sidebar-item-text sidebar-link">
  <span class="menu-text">Code of Conduct</span></a>
   </div>
@@ -579,22 +585,16 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </thead>
 <tbody>
 <tr class="odd">
-<td>sim</td>
-<td><a href="../api/sim.html#starsim.sim.Sim">Sim</a></td>
-<td>the STarsim simulation object</td>
+<td>uids</td>
+<td><a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
+<td>UIDs for agents to assign disease prongoses to</td>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
-<td>uids</td>
-<td><a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
-<td>UIDs for agents to assign disease progoses to</td>
-<td><em>required</em></td>
-</tr>
-<tr class="odd">
-<td>from_uids</td>
+<td>sources</td>
 <td><a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
 <td>Optionally specify the infecting agent</td>
-<td><em>required</em></td>
+<td><code>None</code></td>
 </tr>
 </tbody>
 </table>
@@ -783,12 +783,6 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <section id="parameters-1" class="level6 doc-section doc-section-parameters">
 <h6 class="doc-section doc-section-parameters anchored" data-anchor-id="parameters-1">Parameters</h6>
 <table class="caption-top table">
-<colgroup>
-<col style="width: 9%">
-<col style="width: 9%">
-<col style="width: 67%">
-<col style="width: 13%">
-</colgroup>
 <thead>
 <tr class="header">
 <th>Name</th>
@@ -799,14 +793,14 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 </thead>
 <tbody>
 <tr class="odd">
-<td>uid</td>
-<td></td>
-<td>The UID of the target node (the agent that was infected)</td>
+<td>uids</td>
+<td><a href="https://docs.python.org/3/library/array.html#module-array">array</a></td>
+<td>The UIDs of the target nodes (the agents that were infected)</td>
 <td><em>required</em></td>
 </tr>
 <tr class="even">
 <td>kwargs</td>
-<td></td>
+<td><a href="https://docs.python.org/3/library/stdtypes.html#dict">dict</a></td>
 <td>Remaining arguments are stored as edge data</td>
 <td><code>{}</code></td>
 </tr>
