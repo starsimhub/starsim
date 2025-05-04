@@ -33,8 +33,7 @@ def make_sim():
     random = ss.RandomNet(n_contacts=ss.poisson(4))
 
     sim = ss.Sim(
-        dt = 1,
-        unit = 'day',
+        dt = ss.days(1),
         n_agents = n_agents,
         #total_pop = 9980999,
         start = ss.Date('2024-01-01'),

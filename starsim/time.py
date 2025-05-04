@@ -689,7 +689,7 @@ class DateDur(Dur):
             # We *can* just do self.years/other.years, however this can cause numerical precision losses
             # yet at the same time is not necessary, because the common timebase depends on the durations.
             # For example, DateDur(weeks=1)/DateDur(days=1) should return 7, but we get 6.9999999 if we convert
-            # both for years. Instead though, we can just convert days into weeks instead of days into years, and
+            # both to years. Instead though, we can just convert days into weeks instead of days into years, and
             # then divide 1 week by (1/7) days.
             self_array = self._as_array(self.period)
             other_array = other._as_array(other.period)

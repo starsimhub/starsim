@@ -11,10 +11,9 @@ __all__ = ['HIV', 'ART', 'CD4_analyzer']
 
 class HIV(ss.Infection):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, **kwargs):
         super().__init__()
         self.define_pars(
-            unit = 'year',
             beta = ss.TimeProb(1.0), # Placeholder value
             cd4_min = 100,
             cd4_max = 500,

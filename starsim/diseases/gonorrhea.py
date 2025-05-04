@@ -10,7 +10,7 @@ __all__ = ['Gonorrhea']
 
 class Gonorrhea(ss.Infection):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, **kwargs):
         # Parameters
         super().__init__()
         self.define_pars(

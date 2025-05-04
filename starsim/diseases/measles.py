@@ -12,7 +12,7 @@ __all__ = ['Measles']
 
 class Measles(SIR):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, **kwargs):
         """ Initialize with parameters """
         super().__init__()
         self.define_pars(

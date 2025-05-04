@@ -154,7 +154,6 @@ class Deaths(Demographics):
         """
         super().__init__()
         self.define_pars(
-            unit = 'year',
             rel_death = 1,
             death_rate = ss.peryear(20),  # Default = a fixed rate of 2%/year, overwritten if data provided
             rate_units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
@@ -263,7 +262,6 @@ class Pregnancy(Demographics):
     def __init__(self, metadata=None, **kwargs):
         super().__init__()
         self.define_pars(
-            unit = 'year',
             dur_pregnancy = ss.years(0.75), # Duration for pre-natal transmission
             dur_postpartum = ss.lognorm_ex(mean=ss.years(0.5), std=ss.years(0.5)), # Duration for post-natal transmission (e.g. via breastfeeding)
             fertility_rate = ss.peryear(0), # Can be a number of Pandas DataFrame

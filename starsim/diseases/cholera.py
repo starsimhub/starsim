@@ -14,7 +14,7 @@ class Cholera(ss.Infection):
     """
     Cholera
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, **kwargs):
         """ Initialize with parameters """
         super().__init__()
         self.define_pars(
