@@ -10,7 +10,7 @@ project:
 
 jupyter: python3
 execute:
-  enabled: true
+  enabled: false # TODO: switch this programmatically
   daemon: true  # Use Jupyter daemon mode
   cache: true   # Cache execution results
   freeze: false # Use caching rather than freezing to store results
@@ -21,9 +21,9 @@ execute:
 
 website:
   title: "Starsim"
-  favicon: images/favicon.ico
+  favicon: /assets/favicon.ico
   navbar:
-    logo: images/idm-logo-transparent.png
+    logo: /assets/starsim-logo.png
     left:
       - href: index.qmd
         text: Home
@@ -97,14 +97,14 @@ website:
 format:
   html:
     theme: 
-      light: litera
-      dark: darkly
-    css: styles.css
+      light: [litera, ./assets/styles-light.scss]
+      dark: [darkly, ./assets/styles-dark.scss]
+    css: ./assets/styles.css
     toc: true
     toc-depth: 3
-    page-layout: full
-    code-copy: true
-    code-tools: true
+    # page-layout: full
+    # code-copy: false
+    # code-tools: true
     highlight-style: github
 
 quartodoc:
