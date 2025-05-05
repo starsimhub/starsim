@@ -325,7 +325,7 @@ class Pregnancy(Demographics):
         if isinstance(frd, ss.Rate):
             fertility_rate[uids] = self.fertility_rate_data * self.t.dt # Rate per timestep
         else:
-            year_ind = sc.findnearest(frd.index, self.t.now('year')-self.pars.dur_pregnancy.years) # TODO: make time-unit-aware
+            year_ind = sc.findnearest(frd.index, self.t.now('year')-self.pars.dur_pregnancy.years)
             nearest_year = frd.index[year_ind]
 
             # Assign agents to age bins
