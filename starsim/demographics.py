@@ -511,7 +511,7 @@ class Pregnancy(Demographics):
             # Add connections to any prenatal transmission layers
             for lkey, layer in self.sim.networks.items():
                 if layer.prenatal:
-                    durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy/self.t.dt)
+                    durs = np.full(n_unborn, fill_value=self.pars.dur_pregnancy/layer.t.dt) # Network edge duration is stored in units of timesteps, so we need to convert dur_pregnancy to a number of timesteps here
                     start = np.full(n_unborn, fill_value=self.ti)
                     layer.add_pairs(conceive_uids, new_uids, dur=durs, start=start)
 
