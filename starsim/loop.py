@@ -158,7 +158,6 @@ class Loop:
         self.plan = sc.dataframe(raw)
 
         # Sort it by step_order, a combination of time and function order
-        # self.plan['step_order'] = self.plan.time + ss.options.time_eps*self.plan.func_order
         self.plan['func_label'] = self.plan.module + '.' + self.plan.func_name
         col_order = ['time', 'func_order', 'func', 'func_label', 'module', 'func_name'] # Func in the middle to hide it
         self.plan = self.plan.sort_values(['time','func_order']).reset_index(drop=True)[col_order]
