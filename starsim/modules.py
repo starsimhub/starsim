@@ -194,10 +194,10 @@ class Module(Base):
         if force or not self.pre_initialized:
             self.sim = sim # Link back to the sim object
             ss.link_dists(self, sim, skip=ss.Sim) # Link the distributions to sim and module
+            self.t.init(sim=self.sim) # Initialize time vector
             sim.pars[self.name] = self.pars
             sim.results[self.name] = self.results
             sim.people.add_module(self) # Connect the states to the people
-            self.init_time() # Initialize the modules' time parameters and link them to the sim
             self.init_results()
             self.pre_initialized = True
         return
@@ -213,20 +213,6 @@ class Module(Base):
             if not state.initialized:
                 state.init_vals()
         self.initialized = True
-        return
-
-    def init_time(self, force=False):
-        """ Initialize all time parameters by ensuring all parameters are initialized; part of init_post() """
-        # Update time and initialize
-        self.t.init(sim=self.sim) # Sets the absolute sim time vector
-        #
-        # # Find all time parameters in the module
-        # timepars = sc.search(self.pars, type=ss.TimePar) # Should it be self or self.pars?
-        #
-        # # Initialize them with the parent module
-        # for timepar in timepars.values():
-        #     if force or not timepar.initialized:
-        #         timepar.init(parent=self.t, die=False) # In some cases, the values can't be initialized; that's OK here
         return
 
     def match_time_inds(self, inds=None):
