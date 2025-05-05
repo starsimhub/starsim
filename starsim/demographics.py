@@ -61,6 +61,8 @@ class Births(Demographics):
             return birth_rate.xs(0,level='age')
         if sc.isnumber(birth_rate):
             # If the user has provided a bare number, assume it is per year
+            msg = f'Birth rate was specified as a number rather than a rate - assuming it is {birth_rate} per year'
+            ss.warn(msg)
             return ss.peryear(birth_rate)
         return birth_rate
 
@@ -184,6 +186,8 @@ class Deaths(Demographics):
             assert not death_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
         if sc.isnumber(death_rate):
             # If the user has provided a bare number, assume it is per year
+            msg = f'Death rate was specified as a number rather than a rate - assuming it is {death_rate} per year'
+            ss.warn(msg)
             return ss.peryear(death_rate)
         return death_rate
 
@@ -367,6 +371,8 @@ class Pregnancy(Demographics):
             fertility_rate[max_age + 1] = 0
             assert not fertility_rate.isna().any(axis=None) # For efficiency, we assume that the age bins are the same for all years in the input dataset
         if sc.isnumber(fertility_rate):
+            msg = f'Fertility rate was specified as a number rather than a rate - assuming it is {fertility_rate} per year'
+            ss.warn(msg)
             return ss.peryear(fertility_rate)
         return fertility_rate
 
