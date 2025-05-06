@@ -765,7 +765,7 @@ class DateDur(Dur):
         # but just taking the absolute value of all of the components wouldn't work because this would be on average 1 month + 1 day
         # whereas it should be 1 month - 1 day. This could probably be resolved? But is an edge case, unlikely to be needed
         # (whereas abs(YearDur) arises when comparing dates, which automatically return YearDur)
-        raise NotImplementedError
+        raise NotImplementedError('The absolute value of a DateDur instance is undefined as components (e.g., months, days) may have different signs.')
 
 class Rate():
     """
