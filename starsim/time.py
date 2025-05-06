@@ -353,6 +353,9 @@ class Dur():
     def __rmul__(self, other):
         return self.__mul__(other)
 
+    def __neg__(self):
+        return -1*self
+
     def __lt__(self, other):
         try:
             return self.years < other.years
@@ -792,6 +795,9 @@ class Rate():
             return self.value*other/self.period
         else:
             return Rate(self.value*other, self.period)
+
+    def __neg__(self):
+        return -1*self
 
     def __add__(self, other):
         if self.__class__ == other.__class__:
