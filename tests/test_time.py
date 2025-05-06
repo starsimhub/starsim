@@ -312,24 +312,26 @@ def test_syntax():
 
     # Probabilities
     p = TimeProb(0.1, Dur(years=1))
-    p*Dur(years=2)
-    p * Dur(0.5)
-    p * Dur(months=1)
+    f = lambda factor: 1 - np.exp(-(-np.log(1 - p.value))/factor)
+    assert p*Dur(years=2) == f(0.5)
+    assert p * Dur(0.5) == f(2)
+    assert p * Dur(months=1) == f(12)
 
     p = TimeProb(0.1, Dur(1))
-    p*Dur(years=2)
-    p * Dur(0.5)
-    p * Dur(months=1)
+    assert p*Dur(years=2) == f(0.5)
+    assert p * Dur(0.5 ) == f(2)
+    assert p * Dur(months=1) == f(12)
 
     p = RateProb(0.1, Dur(years=1))
-    p*Dur(years=2)
-    p * Dur(0.5)
-    p * Dur(months=1)
+    f = lambda factor: 1 - np.exp(-p.value/factor)
+    assert p*Dur(years=2) == f(0.5)
+    assert p * Dur(0.5) == f(2)
+    assert p * Dur(months=1) == f(12)
 
     p = RateProb(0.1, Dur(1))
-    p*Dur(years=2)
-    p * Dur(0.5)
-    p * Dur(months=1)
+    assert p*Dur(years=2) == f(0.5)
+    assert p * Dur(0.5) == f(2)
+    assert p * Dur(months=1) == f(12)
 
 # %% Run as a script
 if __name__ == '__main__':
@@ -345,4 +347,5 @@ if __name__ == '__main__':
     o5 = test_mixed_timesteps()
     o6 = test_time_class()
     test_callable_dists()
+    test_syntax()
     T.toc()
