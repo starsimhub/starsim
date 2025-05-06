@@ -321,7 +321,7 @@ class Dur():
     def __hash__(self):
         return hash(self.years)
 
-    def __eq__(self):
+    def __eq__(self, other):
         return self.years == other.years
 
     def __float__(self):
