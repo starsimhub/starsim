@@ -42,6 +42,7 @@ class People(sc.prettyobj):
         self._states = {}
         self.version = ss.__version__  # Store version info
         self.initialized = False
+        self._is_filtered = False # Track whether or not this instance of People is filtered
 
         # Handle the three fundamental arrays: UIDs for tracking agents, slots for
         # tracking random numbers, and AUIDs for tracking alive agents
@@ -266,8 +267,63 @@ class People(sc.prettyobj):
         """
         state['_states'] =  {id(v):v for v in state['_states'].values()}
         self.__dict__ = state
-
         return
+
+    def filter(self, criteria=None, inds=None, split=False):
+        """
+        Store indices to allow for easy filtering of the People object.
+
+        Args:
+            criteria (bool array): a boolean array for the filtering critria
+            inds (array): alternatively, explicitly filter by these indices
+            split (bool): if True, return separate People objects matching both True and False
+
+        Returns:
+            A filtered People object, which works just like a normal People object
+            except only operates on a subset of indices.
+        """
+        if split:
+            raise NotImplementedError('Cannot figure out how to implement this')
+        # Create a new People object with the same properties as the original
+        filtered = object.__new__(self.__class__)  # Create a new People instance
+        # BasePeople.__init__(filtered)  # Perform essential initialization
+        filtered.__dict__ = self.__dict__.copy()  # Copy pointers to the arrays in People
+        filtered._orig_auids = filtered.auids # Copy the original alive UIDs
+        orig_states = filtered.__dict__.pop('_states')
+        filtered.__dict__['_states'] = {}
+
+        # Update people references
+        for key,state in orig_states.items():
+            new_state = object.__new__(state.__class__)
+            new_state.__dict__ = state.__dict__.copy()
+            new_state.people = filtered
+            filtered._states[key] = new_state
+
+        # Perform the filtering
+        if criteria is None: # No filtering: reset
+            filtered.auids = filtered._orig_auids
+            if inds is not None: # Unless indices are supplied directly, in which case use them
+                filtered.auids = inds
+        else: # Main use case: perform filtering
+            len_criteria = len(criteria)
+            if len_criteria == len(self.auids): # Main use case: a new filter applied on an already filtered object, e.g. filtered.filter(filtered.age > 5)
+                new_inds = self.auids[criteria] # Criteria is already filtered, just get the indices
+            # elif len_criteria == self.n_uids: # Alternative: a filter on the underlying People object is applied to the filtered object, e.g. filtered.filter(people.age > 5)
+            #     new_inds = criteria[filtered.inds].nonzero()[0] # Apply filtering before getting the new indices
+            else:
+                errormsg = f'"criteria" must be boolean array matching either current filter length ({len(self)}) or else the total number of people ({self.n_uids}), not {len(criteria)}'
+                raise ValueError(errormsg)
+            filtered.auids = new_inds
+
+        filtered._is_filtered = True
+        return filtered
+
+    def unfilter(self):
+        """ Returns People object to original state """
+        self.auids = self._orig_auids
+        self._is_filtered = False
+        return self
+
 
     def scale_flows(self, inds):
         """
@@ -377,30 +433,30 @@ class People(sc.prettyobj):
         """ Plot the age distribution """
         fig = plt.figure()
         ax = fig.add_subplot(1, 1, 1)
-        
+
         # Create age bins
         bins = np.arange(0, 100, 1)
-        
+
         # Split into male and female ages
         age_m = self.age[~self.female]
         age_f = self.age[self.female]
-        
+
         # Plot male ages on left (negative values) & female on right
         kw = dict(bins=bins, orientation='horizontal', alpha=0.7)
         mc, _, _ = ax.hist(age_m, label='Male', **kw)
         fc, _, _ = ax.hist(age_f, label='Female', **kw)
-        
+
         # Make male counts negative
         for patch in ax.patches[:len(bins)-1]:
             patch.set_x(-patch.get_x())
             patch.set_width(-patch.get_width())
-            
+
         # Add labels and title
         ax.set_xlabel('Count')
         ax.set_ylabel('Age')
         ax.set_title('Age distribution by sex')
         ax.legend()
-        
+
         # Center the plot on 0
         max_count = sc.cat(mc, fc).max()
         ax.set_xlim(-max_count*1.1, max_count*1.1)
