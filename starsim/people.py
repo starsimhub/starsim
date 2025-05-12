@@ -289,12 +289,21 @@ class People(sc.prettyobj):
         # BasePeople.__init__(filtered)  # Perform essential initialization
         filtered.__dict__ = self.__dict__.copy()  # Copy pointers to the arrays in People
         filtered._orig_auids = filtered.auids # Copy the original alive UIDs
-        # orig_states = filtered.__dict__.pop('_states')
-        # filtered.__dict__['_states'] = {}
+        filtered.__dict__.pop('states')
+        orig_states = filtered.__dict__.pop('_states')
+        filtered.__dict__['_states'] = {}
 
-        # Update people references
-        for state in filtered.states.values():
-            state.people = filtered
+        filtered.states = ss.ndict(type=ss.Arr)
+        for state in orig_states.values():
+            filtered.states.append(state, overwrite=False)
+            if hasattr(filtered, state.name):
+                delattr(filtered, state.name)
+            setattr(filtered, state.name, state)
+            state.link_people(filtered)
+
+        # # Update people references
+        # for state in filtered.states.values():
+        #     state.people = filtered
 
         # Perform the filtering
         if criteria is None: # No filtering: reset
