@@ -313,6 +313,7 @@ class Calibration(sc.prettyobj):
 
         msim = ss.MultiSim(self.before_msim.sims + self.after_msim.sims)
         msim.run()
+        self.before_msim, self.after_msim = msim.sims
 
         self.before_fits = self.eval_fn(self.before_msim, **self.eval_kw)
         self.after_fits = self.eval_fn(self.after_msim, **self.eval_kw)
