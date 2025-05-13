@@ -269,13 +269,13 @@ class People(sc.prettyobj):
         self.__dict__ = state
         return
 
-    def filter(self, criteria=None, inds=None, split=False):
+    def filter(self, criteria=None, uids=None, split=False):
         """
         Store indices to allow for easy filtering of the People object.
 
         Args:
             criteria (bool array): a boolean array for the filtering critria
-            inds (array): alternatively, explicitly filter by these indices
+            uids (array): alternatively, explicitly filter by these indices
             split (bool): if True, return separate People objects matching both True and False
 
         Returns:
@@ -283,7 +283,7 @@ class People(sc.prettyobj):
             except only operates on a subset of indices.
         """
         filt = Filter(self)
-        return filt.filter(criteria=criteria, inds=inds, split=split)
+        return filt.filter(criteria=criteria, uids=uids, split=split)
 
     def unfilter(self):
         """ Returns People object to original state """
@@ -445,10 +445,12 @@ class Filter(sc.prettyobj):
     """
     def __init__(self, people):
         self.people = people
-        self.uids = people.auids
+        self._uids = people.auids
         self.orig_uids = people.auids
         self.states = ss.ndict(type=ss.Arr)
         self.is_filtered = False
+        self._key = None
+        self._stale = False
 
         # Copy states
         for key,state in self.people.states.items():
@@ -464,12 +466,55 @@ class Filter(sc.prettyobj):
     def __getattr__(self, key):
         return self.states[key]
 
+    def __call__(self, key):
+        self._key = key
+        self._stale = True
+        return self
+
+    @property
+    def stale(self):
+        return self._key is not None
+
     @property
     def auids(self):
         """ Rename for use as a "people" object """
-        return self.uids
+        return self._uids
 
-    def filter(self, criteria=None, uids=None, split=False):
+    @property
+    def uids(self):
+        """ Get the UIDs, computing if necessary """
+        if self._stale:
+            return self.filter(self._key, new=False)._uids
+        else:
+            return self._uids
+
+    def _func(self, obj, op):
+        if not self.stale:
+            errormsg = "To use logical operations on a Filter object, call first, e.g. filt('age') > 5"
+            raise RuntimeError(errormsg)
+        else:
+            arr = self.states[self._key]
+            self._key = None
+            self._stale = False
+
+        match op:
+            case '==': criteria = arr == obj
+            case '!=': criteria = arr != obj
+            case '<':  criteria = arr <  obj
+            case '<=': criteria = arr <= obj
+            case '>':  criteria = arr >  obj
+            case '>=': criteria = arr >= obj
+
+        return self.filter(criteria=criteria)
+
+    def __eq__(self, obj): return self._func(obj, '==')
+    def __ne__(self, obj): return self._func(obj, '!=')
+    def __lt__(self, obj): return self._func(obj, '<')
+    def __le__(self, obj): return self._func(obj, '<=')
+    def __gt__(self, obj): return self._func(obj, '>')
+    def __ge__(self, obj): return self._func(obj, '>=')
+
+    def filter(self, criteria=None, uids=None, split=False, new=None):
         """
         Store indices to allow for easy filtering of the People object.
 
@@ -478,23 +523,36 @@ class Filter(sc.prettyobj):
             uids (array): alternatively, explicitly filter by these indices
             split (bool): if True, return separate filter objects matching both True and False
         """
-        filtered = Filter(self) if self.is_filtered else self
+        if new is True:
+            filtered = Filter(self)
+        elif new is False:
+            filtered = self
+        else:
+            filtered = Filter(self) if self.is_filtered else self
+
         if split:
             raise NotImplementedError('Cannot figure out how to implement this')
 
         # Perform the filtering
         if criteria is None: # No filtering: reset
-            filtered.uids = self.orig_uids
+            filtered._uids = self.orig_uids
             if uids is not None: # Unless indices are supplied directly, in which case use them
-                filtered.uids = uids
+                filtered._uids = uids
         else: # Main use case: perform filtering
+            if isinstance(criteria, str): # Allow e.g. filter('female')
+                if criteria[0] == '~': # Allow e.g. filter('~female')
+                    key = criteria[1:]
+                    criteria = ~self.states[key]
+                else:
+                    criteria = self.states[criteria]
+                    self._key = criteria
             len_criteria = len(criteria)
-            if len_criteria == len(filtered.uids): # Main use case: a new filter applied on an already filtered object, e.g. filtered.filter(filtered.age > 5)
-                new_uids = filtered.inds[criteria] # Criteria is already filtered, just get the indices
+            if len_criteria == len(filtered._uids): # Main use case: a new filter applied on an already filtered object, e.g. filtered.filter(filtered.age > 5)
+                new_uids = filtered._uids[criteria] # Criteria is already filtered, just get the indices
             else:
                 errormsg = f'"criteria" must be boolean array matching either current filter length ({len(self)}) or else the total number of people ({self.n_uids}), not {len(criteria)}'
                 raise ValueError(errormsg)
-            filtered.uids = new_uids
+            filtered._uids = new_uids
 
         filtered.is_filtered = True
 
