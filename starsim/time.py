@@ -794,7 +794,7 @@ class Rate():
         elif isinstance(other, Dur):
             return self.value*other/self.period
         else:
-            return Rate(self.value*other, self.period)
+            return self.__class__(self.value*other, self.period)
 
     def __neg__(self):
         return -1*self
@@ -836,13 +836,13 @@ class Rate():
         elif isinstance(other, Dur):
             raise Exception('Cannot divide a rate by a duration')
         else:
-            return Rate(self.value/other, self.period)
+            return self.__class__(self.value/other, self.period)
 
     def __rtruediv__(self, other):
         # If a float is divided by a rate
         return other * (self.period/self.value)
 
-    def to_prob(self, v, dur):
+    def to_prob(self, dur, v=1):
         """
         Calculate a time-specific probability value
 
@@ -931,7 +931,7 @@ class TimeProb(Rate):
         else:
             return self.__class__(self.value*other, self.period)
 
-    def to_prob(self, v, dur):
+    def to_prob(self, dur, v=1):
         if isinstance(dur, np.ndarray):
             factor = (dur/self.period).astype(float)
         else:
@@ -996,7 +996,7 @@ class RateProb(Rate):
         else:
             return self.__class__(self.value*other, self.period)
 
-    def to_prob(self, v, dur):
+    def to_prob(self, dur, v=1):
         if isinstance(dur, np.ndarray):
             factor = (dur/self.period).astype(float)
         else:
