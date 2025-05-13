@@ -38,10 +38,7 @@ class HIV(ss.Infection):
     @staticmethod
     def death_prob_func(module, sim, uids):
         p = module.pars
-        death_rateprob = (p.p_death * (module.cd4[uids] - p.cd4_max)**2 / (p.cd4_min - p.cd4_max)**2)
-        p = death_rateprob * module.t.dt # multiply by dt after adjusting the rateprob to get a probability
-        p = np.array(p)
-        return p
+        return p.p_death.to_prob(module.t.dt, (module.cd4[uids] - p.cd4_max)**2 / (p.cd4_min - p.cd4_max)**2)
 
     def step_state(self):
         """ Update CD4 """
