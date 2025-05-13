@@ -42,7 +42,6 @@ class People(sc.prettyobj):
         self._states = {}
         self.version = ss.__version__  # Store version info
         self.initialized = False
-        self._is_filtered = False # Track whether or not this instance of People is filtered
 
         # Handle the three fundamental arrays: UIDs for tracking agents, slots for
         # tracking random numbers, and AUIDs for tracking alive agents
