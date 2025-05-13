@@ -445,8 +445,8 @@ class Filter(sc.prettyobj):
     """
     def __init__(self, people):
         self.people = people
-        self.inds = people.auids
-        self.orig_inds = people.auids
+        self.uids = people.auids
+        self.orig_uids = people.auids
         self.states = ss.ndict(type=ss.Arr)
         self.is_filtered = False
 
@@ -467,15 +467,15 @@ class Filter(sc.prettyobj):
     @property
     def auids(self):
         """ Rename for use as a "people" object """
-        return self.inds
+        return self.uids
 
-    def filter(self, criteria=None, inds=None, split=False):
+    def filter(self, criteria=None, uids=None, split=False):
         """
         Store indices to allow for easy filtering of the People object.
 
         Args:
             criteria (bool array): a boolean array for the filtering critria
-            inds (array): alternatively, explicitly filter by these indices
+            uids (array): alternatively, explicitly filter by these indices
             split (bool): if True, return separate filter objects matching both True and False
         """
         filtered = Filter(self) if self.is_filtered else self
@@ -484,19 +484,17 @@ class Filter(sc.prettyobj):
 
         # Perform the filtering
         if criteria is None: # No filtering: reset
-            filtered.inds = self.orig_inds
-            if inds is not None: # Unless indices are supplied directly, in which case use them
-                filtered.inds = inds
+            filtered.uids = self.orig_uids
+            if uids is not None: # Unless indices are supplied directly, in which case use them
+                filtered.uids = uids
         else: # Main use case: perform filtering
             len_criteria = len(criteria)
-            if len_criteria == len(filtered.inds): # Main use case: a new filter applied on an already filtered object, e.g. filtered.filter(filtered.age > 5)
-                new_inds = filtered.inds[criteria] # Criteria is already filtered, just get the indices
-            # elif len_criteria == self.n_uids: # Alternative: a filter on the underlying People object is applied to the filtered object, e.g. filtered.filter(people.age > 5)
-            #     new_inds = criteria[filtered.inds].nonzero()[0] # Apply filtering before getting the new indices
+            if len_criteria == len(filtered.uids): # Main use case: a new filter applied on an already filtered object, e.g. filtered.filter(filtered.age > 5)
+                new_uids = filtered.inds[criteria] # Criteria is already filtered, just get the indices
             else:
                 errormsg = f'"criteria" must be boolean array matching either current filter length ({len(self)}) or else the total number of people ({self.n_uids}), not {len(criteria)}'
                 raise ValueError(errormsg)
-            filtered.inds = new_inds
+            filtered.uids = new_uids
 
         filtered.is_filtered = True
 
