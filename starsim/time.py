@@ -842,6 +842,34 @@ class Rate():
         # If a float is divided by a rate
         return other * (self.period/self.value)
 
+    def to_prob(self, v, dur):
+        """
+        Calculate a time-specific probability value
+
+        This function is mainly useful for subclasses where the multiplication by a duration is non-linear
+        (e.g., ``TimeProb``) and therefore it is important to apply the factor prior to multiplication by duration.
+        This function avoids creating an intermediate array of rates, and is therefore much higher performance.
+
+        e.g.
+
+        >>> p = ss.TimeProb(0.05)*self.cd4*self.t.dt
+
+        and
+
+        >>> p = ss.TimeProb(0.05).scale(self.cd4,self.t.dt)
+
+        are equivalent, except that the second one is (much) faster.
+
+        :param v: The factor to scale the rate by. This factor is applied before multiplication by the duration
+        :param dur: An ss.Dur instance to scale the rate by (often this is ``dt``)
+        :return: A numpy float array of values
+        """
+        if isinstance(dur, np.ndarray):
+            factor = (dur/self.period).astype(float)
+        else:
+            factor = dur/self.period
+        return (self.value*v)*factor
+
 class TimeProb(Rate):
     """
     ``TimeProb`` represents the probability of an event occurring during a
@@ -903,6 +931,14 @@ class TimeProb(Rate):
         else:
             return self.__class__(self.value*other, self.period)
 
+    def to_prob(self, v, dur):
+        if isinstance(dur, np.ndarray):
+            factor = (dur/self.period).astype(float)
+        else:
+            factor = dur/self.period
+        rate = -np.log(1-(self.value*v))
+        return 1-np.exp(-rate*factor)
+
     def __truediv__(self, other): raise NotImplementedError()
     def __rtruediv__(self, other): raise NotImplementedError()
 
@@ -959,6 +995,14 @@ class RateProb(Rate):
                 return 1 - np.exp(-self.value/factor)
         else:
             return self.__class__(self.value*other, self.period)
+
+    def to_prob(self, v, dur):
+        if isinstance(dur, np.ndarray):
+            factor = (dur/self.period).astype(float)
+        else:
+            factor = dur/self.period
+        rate = self.value*v
+        return 1-np.exp(-rate*factor)
 
     def __truediv__(self, other):
         if isinstance(other, Dur):
