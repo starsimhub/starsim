@@ -284,13 +284,6 @@ class People(sc.prettyobj):
         filt = Filter(self)
         return filt.filter(criteria=criteria, uids=uids, split=split)
 
-    def unfilter(self):
-        """ Returns People object to original state """
-        self.auids = self._orig_auids
-        self._is_filtered = False
-        return self
-
-
     def scale_flows(self, inds):
         """
         Return the scaled versions of the flows -- replacement for len(inds)
@@ -442,9 +435,9 @@ class Filter(sc.prettyobj):
     """
     A filter on states
     """
-    def __init__(self, people):
+    def __init__(self, people, uids=None):
         self.people = people
-        self._uids = people.auids
+        self._uids = uids if uids is not None else people.auids
         self.orig_uids = people.auids
         self.states = ss.ndict(type=ss.Arr)
         self.is_filtered = False
@@ -527,27 +520,35 @@ class Filter(sc.prettyobj):
         elif new is False:
             filtered = self
         else:
-            filtered = Filter(self) if self.is_filtered else self
-
-        if split:
-            raise NotImplementedError('Cannot figure out how to implement this')
+            filtered = Filter(self) if (self.is_filtered and not split) else self
 
         # Perform the filtering
-        if criteria is None: # No filtering: reset
-            filtered._uids = self.orig_uids
-            if uids is not None: # Unless indices are supplied directly, in which case use them
-                filtered._uids = uids
-        else: # Main use case: perform filtering
+        if uids is not None: # Unless indices are supplied directly, in which case use them
+            new_uids = np.intersect1d(self._uids, uids)
+            if split:
+                inv_uids = np.setdiff1d(self._uids, uids)
+                f1 = Filter(self, uids=new_uids)
+                f2 = Filter(self, uids=inv_uids)
+                return f1, f2
+            else:
+                filtered._uids = new_uids
+
+        if criteria is not None: # Main use case: perform filtering
             if isinstance(criteria, str): # Allow e.g. filter('female')
                 if criteria[0] == '~': # Allow e.g. filter('~female')
                     key = criteria[1:]
                     criteria = ~self.states[key]
                 else:
-                    criteria = self.states[criteria]
                     self._key = criteria
+                    criteria = self.states[criteria]
             len_criteria = len(criteria)
             if len_criteria == len(filtered._uids): # Main use case: a new filter applied on an already filtered object, e.g. filtered.filter(filtered.age > 5)
                 new_uids = filtered._uids[criteria] # Criteria is already filtered, just get the indices
+                if split:
+                    inv_uids = filtered._uids[~criteria]
+                    f1 = Filter(self, uids=new_uids)
+                    f2 = Filter(self, uids=inv_uids)
+                    return f1, f2
             else:
                 errormsg = f'"criteria" must be boolean array matching either current filter length ({len(self)}) or else the total number of people ({self.n_uids}), not {len(criteria)}'
                 raise ValueError(errormsg)
