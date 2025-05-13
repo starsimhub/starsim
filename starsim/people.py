@@ -55,7 +55,7 @@ class People(sc.prettyobj):
         self.uid.grow(new_vals=uids)
         self.slot.grow(new_vals=uids)
         self.parent.grow(new_uids=uids, new_vals=np.full(len(uids), self.parent.nan))
-        for state in [self.uid, self.slot]:
+        for state in [self.uid, self.slot, self.parent]:
             state.people = self # Manually link to people since we don't want to link to states
 
         # Handle additional states
@@ -282,47 +282,8 @@ class People(sc.prettyobj):
             A filtered People object, which works just like a normal People object
             except only operates on a subset of indices.
         """
-        if split:
-            raise NotImplementedError('Cannot figure out how to implement this')
-        # Create a new People object with the same properties as the original
-        filtered = object.__new__(self.__class__)  # Create a new People instance
-        # BasePeople.__init__(filtered)  # Perform essential initialization
-        filtered.__dict__ = self.__dict__.copy()  # Copy pointers to the arrays in People
-        filtered._orig_auids = filtered.auids # Copy the original alive UIDs
-        filtered.__dict__.pop('states')
-        orig_states = filtered.__dict__.pop('_states')
-        filtered.__dict__['_states'] = {}
-
-        filtered.states = ss.ndict(type=ss.Arr)
-        for state in orig_states.values():
-            filtered.states.append(state, overwrite=False)
-            if hasattr(filtered, state.name):
-                delattr(filtered, state.name)
-            setattr(filtered, state.name, state)
-            state.link_people(filtered)
-
-        # # Update people references
-        # for state in filtered.states.values():
-        #     state.people = filtered
-
-        # Perform the filtering
-        if criteria is None: # No filtering: reset
-            filtered.auids = filtered._orig_auids
-            if inds is not None: # Unless indices are supplied directly, in which case use them
-                filtered.auids = inds
-        else: # Main use case: perform filtering
-            len_criteria = len(criteria)
-            if len_criteria == len(self.auids): # Main use case: a new filter applied on an already filtered object, e.g. filtered.filter(filtered.age > 5)
-                new_inds = self.auids[criteria] # Criteria is already filtered, just get the indices
-            # elif len_criteria == self.n_uids: # Alternative: a filter on the underlying People object is applied to the filtered object, e.g. filtered.filter(people.age > 5)
-            #     new_inds = criteria[filtered.inds].nonzero()[0] # Apply filtering before getting the new indices
-            else:
-                errormsg = f'"criteria" must be boolean array matching either current filter length ({len(self)}) or else the total number of people ({self.n_uids}), not {len(criteria)}'
-                raise ValueError(errormsg)
-            filtered.auids = new_inds
-
-        filtered._is_filtered = True
-        return filtered
+        filt = Filter(self)
+        return filt.filter(criteria=criteria, inds=inds, split=split)
 
     def unfilter(self):
         """ Returns People object to original state """
@@ -476,3 +437,67 @@ class Person(sc.objdict):
         df = sc.dataframe.from_dict(self, orient='index', columns=['value'])
         df.index.name = 'key'
         return df
+
+
+class Filter(sc.prettyobj):
+    """
+    A filter on states
+    """
+    def __init__(self, people):
+        self.people = people
+        self.inds = people.auids
+        self.orig_inds = people.auids
+        self.states = ss.ndict(type=ss.Arr)
+        self.is_filtered = False
+
+        # Copy states
+        for key,state in self.people.states.items():
+            new_state = object.__new__(state.__class__)
+            new_state.__dict__ = state.__dict__.copy() # Shallow copy
+            new_state.people = self
+            self.states[key] = new_state
+        return
+
+    def __getitem__(self, key):
+        return self.states[key]
+
+    def __getattr__(self, key):
+        return self.states[key]
+
+    @property
+    def auids(self):
+        """ Rename for use as a "people" object """
+        return self.inds
+
+    def filter(self, criteria=None, inds=None, split=False):
+        """
+        Store indices to allow for easy filtering of the People object.
+
+        Args:
+            criteria (bool array): a boolean array for the filtering critria
+            inds (array): alternatively, explicitly filter by these indices
+            split (bool): if True, return separate filter objects matching both True and False
+        """
+        filtered = Filter(self) if self.is_filtered else self
+        if split:
+            raise NotImplementedError('Cannot figure out how to implement this')
+
+        # Perform the filtering
+        if criteria is None: # No filtering: reset
+            filtered.inds = self.orig_inds
+            if inds is not None: # Unless indices are supplied directly, in which case use them
+                filtered.inds = inds
+        else: # Main use case: perform filtering
+            len_criteria = len(criteria)
+            if len_criteria == len(filtered.inds): # Main use case: a new filter applied on an already filtered object, e.g. filtered.filter(filtered.age > 5)
+                new_inds = filtered.inds[criteria] # Criteria is already filtered, just get the indices
+            # elif len_criteria == self.n_uids: # Alternative: a filter on the underlying People object is applied to the filtered object, e.g. filtered.filter(people.age > 5)
+            #     new_inds = criteria[filtered.inds].nonzero()[0] # Apply filtering before getting the new indices
+            else:
+                errormsg = f'"criteria" must be boolean array matching either current filter length ({len(self)}) or else the total number of people ({self.n_uids}), not {len(criteria)}'
+                raise ValueError(errormsg)
+            filtered.inds = new_inds
+
+        filtered.is_filtered = True
+
+        return filtered
