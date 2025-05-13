@@ -832,7 +832,7 @@ class MFNet(SexualNetwork):
 
     def step(self):
         self.end_pairs()
-        self.set_network_states(upper_age=self.t.dt) # TODO: check
+        self.set_network_states(upper_age=float(self.t.dt)) # TODO: check
         self.add_pairs()
         return
 
