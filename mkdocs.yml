@@ -1,0 +1,12 @@
+site_name: Starsim
+nav:
+  - Home: README.md
+  - API: autoapi/starsim
+
+plugins:
+  - search
+  - mkdocs-autoapi:
+      autoapi_ignore:
+        - tests/**/*
+      autoapi_add_nav_entry: False
+  - mkdocstrings
