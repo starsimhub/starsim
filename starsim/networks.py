@@ -1247,9 +1247,9 @@ class MixingPool(Route):
     def remove_uids(self, uids):
         """ If UIDs are supplied explicitly, remove them if people die """
         for key in ['src', 'dst']:
-            inds = self.pars[key]
+            inds = self.pars[key].uids
             if isinstance(inds, ss.uids):
-                self.pars[key] = inds.remove(uids)
+                self.pars[key].uids = inds.remove(uids)
         return
 
     def compute_transmission(self, rel_sus, rel_trans, disease_beta):
