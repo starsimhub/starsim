@@ -114,7 +114,7 @@ def round_tvec(tvec):
 
 def years_to_dates(yearvec):
     """ Convert a numeric year vector to a date vector """
-    datevec = np.array([date(sc.datetoyear(y, reverse=True)) for y in yearvec])
+    datevec = np.array([date(sc.yeartodate(y)) for y in yearvec])
     return datevec
 
 

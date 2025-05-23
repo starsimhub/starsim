@@ -201,7 +201,7 @@ class sir_vaccine(ss.Vx):
         efficacy (float): efficacy of the vaccine (0<=efficacy<=1)
         leaky (bool): see above
     """
-    def __init__(self, pars=None, *args, **kwargs):
+    def __init__(self, pars=None, **kwargs):
         super().__init__()
         self.define_pars(
             efficacy = 0.9,
