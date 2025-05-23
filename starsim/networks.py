@@ -1021,21 +1021,19 @@ class AgeGroup(sc.prettyobj):
     def __init__(self, low, high, do_cache=True):
         self.low = low
         self.high = high
-
-        self.do_cache = do_cache
         self.uids = None # Cached
-        self.ti_cache = -1
-
         self.name = repr(self)
         return
 
+    def update(self, sim):
+        in_group = sim.people.age >= self.low
+        if self.high is not None:
+            in_group = in_group & (sim.people.age < self.high)
+        self.uids = ss.uids(in_group)
+
     def __call__(self, sim):
-        if (not self.do_cache) or (self.ti_cache != sim.ti):
-            in_group = sim.people.age >= self.low
-            if self.high is not None:
-                in_group = in_group & (sim.people.age < self.high)
-            self.uids = ss.uids(in_group)
-            self.ti_cache = sim.ti
+        if self.uids is None:
+            self.update(sim)
         return self.uids
 
     def __repr__(self):
@@ -1054,6 +1052,7 @@ class MixingPools(Route):
         dst (inds): destination agents; as above
         beta (float): overall transmission via these mixing pools
         contacts (array): the relative connectivity between different mixing pools (can be float or Dist)
+        cache_dur_ti (int): duration (in time steps) between updates of MixingPools membership. Default 0 (no caching)
 
     **Example**::
 
@@ -1064,6 +1063,7 @@ class MixingPools(Route):
             src = {'0-15': ss.AgeGroup(0, 15), '15+': ss.AgeGroup(15, None)},
             dst = {'0-15': ss.AgeGroup(0, 15), '15+': ss.AgeGroup(15, None)},
             contacts = [[2.4, 0.49], [0.91, 0.16]],
+            cache_dur_ti = 15
         )
         sim = ss.Sim(diseases='sis', networks=mps).run()
         sim.plot()
@@ -1076,8 +1076,10 @@ class MixingPools(Route):
             dst = None,
             beta = 0.2,
             contacts = None,
+            cache_dur_ti = 0
         )
         self.update_pars(pars, **kwargs)
+        self.ti_cache = -1 - self.pars.cache_dur_ti # make sure updates on first time step
         self.validate_pars()
         self.pools = []
         return
@@ -1113,9 +1115,23 @@ class MixingPools(Route):
 
     def init_pre(self, sim):
         super().init_pre(sim)
+        
+        # Skip MixingPools update if within cache duration
+        if not self.needs_update(sim):
+            return  
+        
+        # otherwise recreate pools
         p = self.pars
-
         self.pools = []
+        
+        # first update AgeGroups
+        processed = set()
+        for ag in list(p.src.values()) + list(p.dst.values()):
+            if (id(ag) not in processed) & (isinstance(ag, AgeGroup)):
+                ag.update(sim)
+                processed.add(id(ag))
+        
+        # then pools
         for i,sk,src in p.src.enumitems():
             for j,dk,dst in p.dst.enumitems():
                 contacts = p.contacts[i,j]
@@ -1125,6 +1141,9 @@ class MixingPools(Route):
                 mp = MixingPool(name=name, diseases=p.diseases, beta=p.beta, contacts=contacts, src=src, dst=dst)
                 mp.init_pre(sim) # Initialize the pool
                 self.pools.append(mp)
+                
+        self.ti_cache = sim.ti # update cache timing
+        
         return
 
     def init_post(self):
@@ -1144,6 +1163,10 @@ class MixingPools(Route):
         for mp in self.pools:
             mp.remove_uids(uids)
         return
+
+    def needs_update(self, sim):
+        """ Determine whether cache duration has been exceeded"""
+        return (self.ti_cache + self.pars.cache_dur_ti) <= sim.ti
 
     def step(self):
         return
