@@ -88,6 +88,7 @@ website:
           - user_guide/basics_model.ipynb
           - user_guide/basics_sim.ipynb
           - user_guide/basics_people.ipynb
+          - user_guide/basics_parameters.ipynb
         - section: "Modules"
           contents:
           - user_guide/modules_diseases.ipynb
@@ -106,7 +107,6 @@ website:
           contents:
           - user_guide/advanced_time.ipynb
           - user_guide/advanced_indexing.ipynb
-          - user_guide/advanced_parameters.ipynb
           - user_guide/advanced_distributions.ipynb
           - user_guide/advanced_random.ipynb
           - user_guide/advanced_profiling.ipynb
