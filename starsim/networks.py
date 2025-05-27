@@ -1114,24 +1114,10 @@ class MixingPools(Route):
         return
 
     def init_pre(self, sim):
-        super().init_pre(sim)
-        
-        # Skip MixingPools update if within cache duration
-        if not self.needs_update(sim):
-            return  
-        
-        # otherwise recreate pools
+        super().init_pre(sim)    
         p = self.pars
+        
         self.pools = []
-        
-        # first update AgeGroups
-        processed = set()
-        for ag in list(p.src.values()) + list(p.dst.values()):
-            if (id(ag) not in processed) & (isinstance(ag, AgeGroup)):
-                ag.update(sim)
-                processed.add(id(ag))
-        
-        # then pools
         for i,sk,src in p.src.enumitems():
             for j,dk,dst in p.dst.enumitems():
                 contacts = p.contacts[i,j]
@@ -1141,9 +1127,6 @@ class MixingPools(Route):
                 mp = MixingPool(name=name, diseases=p.diseases, beta=p.beta, contacts=contacts, src=src, dst=dst)
                 mp.init_pre(sim) # Initialize the pool
                 self.pools.append(mp)
-                
-        self.ti_cache = sim.ti # update cache timing
-        
         return
 
     def init_post(self):
@@ -1169,6 +1152,12 @@ class MixingPools(Route):
         return (self.ti_cache + self.pars.cache_dur_ti) <= sim.ti
 
     def step(self):
+        """ update MixingPool age groups if outside of cache duration """
+        if self.needs_update(self.sim):
+            for mp in self.pools:
+                mp.pars.src.update(self.sim)
+                mp.pars.dst.update(self.sim)
+                self.ti_cache = self.sim.ti # update cache timing
         return
 
 
