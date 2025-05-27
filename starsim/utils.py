@@ -13,7 +13,7 @@ import starsim as ss
 
 # What functions are externally visible
 __all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'standardize_netkey',
-           'standardize_data', 'validate_sim_data', 'load', 'save', 'return_fig']
+           'standardize_data', 'validate_sim_data', 'load', 'save', 'return_fig', 'show']
 
 
 class ndict(sc.objdict):
@@ -433,3 +433,7 @@ def return_fig(fig, **kwargs):
         return None
     else:
         return fig
+
+def show(**kwargs):
+    """ Shortcut for matplotlib.pyplot.show() """
+    return plt.show(**kwargs)
