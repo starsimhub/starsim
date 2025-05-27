@@ -101,8 +101,8 @@ website:
           contents:
           - user_guide/workflows_run.ipynb
           - user_guide/workflows_calibration.ipynb
+          - user_guide/workflows_deploy.ipynb
           - user_guide/workflows_samples.ipynb
-          - user_guide/workflows_cloud.ipynb
         - section: "Advanced topics"
           contents:
           - user_guide/advanced_time.ipynb

@@ -14,7 +14,7 @@ To run these tutorials locally:
 1. Clone the Starsim repository
 2. Install Starsim and its dependencies
 3. Navigate to the `docs/user_guide` folder
-4. Launch Jupyter: `jupyter notebook`
+4. Launch Jupyter: `jupyter lab`
 :::
 
 ## Introduction
@@ -41,8 +41,8 @@ To run these tutorials locally:
 
 - [Running simulations](user_guide/workflows_run.ipynb)
 - [Calibration](user_guide/workflows_calibration.ipynb)
+- [Deployment](user_guide/workflows_deploy.ipynb)
 - [Working with samples](user_guide/workflows_samples.ipynb)
-- [Cloud computing](user_guide/workflows_cloud.ipynb)
 
 ## Advanced topics
 
