@@ -359,7 +359,7 @@ class People(sc.prettyobj):
         return
 
     def to_df(self):
-        df = sc.dataframe(self.states)
+        df = sc.dataframe(uid=self.uid, slot=self.slot, **self.states)
         return df
 
     def finish_step(self):
