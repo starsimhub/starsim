@@ -32,7 +32,7 @@ theme:
 nav:
   - Home: index.md
   - Tutorials: tutorials.md
-  - API reference: api/index.md
+  - API reference: autoapi/index.md
   - What's new: whatsnew.md
 # icons and emojis 
 markdown_extensions:
@@ -63,9 +63,10 @@ markdown_extensions:
 plugins:
   - search
   - include-markdown: # include other files, such as READMEs
- #- gen-files:
-  #    scripts:
-   #     - scripts/gen_ref_pages.py # automatically create md files for each module
+  - mkdocs-autoapi:
+      autoapi_ignore:
+        - tests/**/*
+      autoapi_add_nav_entry: False
   - mkdocstrings: # generate API reference
       enable_inventory: true
       default_handler: python
@@ -73,16 +74,9 @@ plugins:
         python:
           options:
             docstring_style: google
-  #      paths: [.]
-  #- mkdocs-autoapi:
-   #   autoapi_dir: docs/autoapi
-    #  autoapi_add_nav_entry: Reference
-
-  #- literate-nav:
-  #    nav_file: SUMMARY.md
   - mkdocs-jupyter:
       execute: true
-      allow_errors: false
+      allow_errors: true
 
 
 
