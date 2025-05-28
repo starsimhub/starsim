@@ -2,6 +2,6 @@ mkdocs-material # for docs
 mkdocs-include-markdown-plugin # for including files outside /docs
 mkdocstrings-python # For API reference
 mkdocs-autoapi # automatically generate module md files
-mkdocs-jupyter
+mkdocs-jupyter 
 jupyter # For the tutorials
 jupyter-cache # To avoid rebuilding the tutorials

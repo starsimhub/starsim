@@ -1,3 +1,18 @@
+# Cliff's minimal config with working autoapi
+# site_name: Starsim
+# nav:
+#   - Home: README.md
+#   - API: autoapi/starsim
+
+# plugins:
+#   - search
+#   - mkdocs-autoapi:
+#       autoapi_ignore:
+#         - tests/**/*
+#       autoapi_add_nav_entry: False
+#   - mkdocstrings
+
+
 site_name: Starsim
 site_url: https://docs.idmod.org/projects/starsim/en/latest
 theme:
@@ -32,48 +47,48 @@ theme:
 nav:
   - Home: index.md
   - Tutorials: tutorials.md
-  - API reference: autoapi/index.md
+  - API reference: autoapi/starsim
   - What's new: whatsnew.md
 # icons and emojis 
-markdown_extensions:
-  - attr_list
-  - md_in_html #enables grids
-  - admonition
-  - pymdownx.emoji:
-      emoji_index: !!python/name:material.extensions.emoji.twemoji
-      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+# markdown_extensions:
+#   - attr_list
+#   - md_in_html #enables grids
+#   - admonition
+#   - pymdownx.emoji:
+#       emoji_index: !!python/name:material.extensions.emoji.twemoji
+#       emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
-# code formatting
-  - pymdownx.highlight:
-      anchor_linenums: true
-      line_spans: __span
-      pygments_lang_class: true
-      default_lang: 'python'
-  - pymdownx.inlinehilite
-  - pymdownx.snippets
-  - pymdownx.superfences
-  - pymdownx.details
+# # code formatting
+#   #- pymdownx.highlight:
+#       anchor_linenums: true
+#       line_spans: __span
+#       pygments_lang_class: true
+#       default_lang: 'python'
+#   - pymdownx.inlinehilite
+#   - pymdownx.snippets
+#   - pymdownx.superfences
+#   - pymdownx.details
 
 # content tabs
-  - pymdownx.superfences
-  - pymdownx.tabbed:
-      alternate_style: true
+  # - pymdownx.superfences
+  # - pymdownx.tabbed:
+  #     alternate_style: true
 
 
 plugins:
   - search
-  - include-markdown: # include other files, such as READMEs
+  # - include-markdown: # include other files, such as READMEs
   - mkdocs-autoapi:
       autoapi_ignore:
         - tests/**/*
       autoapi_add_nav_entry: False
-  - mkdocstrings: # generate API reference
-      enable_inventory: true
-      default_handler: python
-      handlers: 
-        python:
-          options:
-            docstring_style: google
+  - mkdocstrings # generate API reference
+      #enable_inventory: true
+      #default_handler: python
+      #handlers: 
+      #  python:
+      #    options:
+      #      docstring_style: google
   - mkdocs-jupyter:
       execute: true
       allow_errors: true
