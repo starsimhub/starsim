@@ -2,11 +2,13 @@ site_name: Starsim
 nav:
   - Home: README.md
   - API: autoapi/starsim
+exclude_docs: utils.py
 
 plugins:
   - search
   - mkdocs-autoapi:
       autoapi_ignore:
         - tests/**/*
+        - docs/utils.py
       autoapi_add_nav_entry: False
   - mkdocstrings
