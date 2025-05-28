@@ -1,3 +1,8 @@
+# To install:
+# pip install mkdocs mkdocs-autoapi[python]
+# Then restart the terminal (!).
+# To build, "mkdocs serve"
+
 site_name: Starsim
 nav:
   - Home: README.md
