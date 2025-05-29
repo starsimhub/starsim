@@ -217,7 +217,7 @@ class Arr(BaseArr):
         the raw array (``raw``) or the active agents (``values``), and to convert
         the key to array indices if needed.
         """
-        if isinstance(key, (uids, int, ss_int)):
+        if isinstance(key, (uids, int, ss_int)) or (isinstance(key, cp.ndarray) and key.dtype =='int64'):
             return key
         elif isinstance(key, (BoolArr, IndexArr)):
             return key.uids

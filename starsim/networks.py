@@ -507,9 +507,9 @@ class RandomNet(DynamicNetwork):
     # @nb.njit(fastmath=True, parallel=False, cache=True)
     def get_source(inds, n_contacts):
         """ Optimized helper function for getting contacts """
-        total_number_of_half_edges = np.sum(n_contacts)
+        total_number_of_half_edges = int(cp.sum(n_contacts))
         count = 0
-        source = np.zeros((total_number_of_half_edges,), dtype=ss_int_)
+        source = cp.zeros((total_number_of_half_edges,), dtype=ss_int_)
         for i, person_id in enumerate(inds):
             n = n_contacts[i]
             source[count: count + n] = person_id
@@ -539,7 +539,7 @@ class RandomNet(DynamicNetwork):
         Returns: Two arrays, for source and target
         """
         source = self.get_source(inds, n_contacts)
-        target = self.dist.rng.permutation(source)
+        target = cp.random.permutation(source) # CK: Not CRN safe lol
         self.dist.jump() # Reset the RNG manually; does not auto-jump since using rng directly above # TODO, think if there's a better way
         return source, target
 

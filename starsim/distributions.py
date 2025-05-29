@@ -566,8 +566,12 @@ class Dist:
 
     def make_rvs(self):
         """ Return default random numbers for scalar parameters; not for the user """
-        if self.rvs_func is not None:
-            rvs_func = getattr(self.rng, self.rvs_func) # Can't store this because then it references the wrong RNG after copy
+        if self.rvs_func is not None or self.distname is not None:
+            try:
+                rvs_func = getattr(self.rng, self.rvs_func) # Can't store this because then it references the wrong RNG after copy
+            except Exception as E:
+                print('not found', E)
+                rvs_func = getattr(cp.random, self.distname)
             rvs = rvs_func(size=self._size, **self._pars)
         elif self.dist is not None:
             rvs = self.dist.rvs(self._size)
