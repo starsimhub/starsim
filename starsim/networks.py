@@ -82,11 +82,11 @@ class Network(Route):
         # Initialize the keys of the network
         self.edges = sc.objdict()
         for key, dtype in self.meta.items():
-            self.edges[key] = np.empty((0,), dtype=dtype)
+            self.edges[key] = cp.empty((0,), dtype=dtype)
 
         # Set data, if provided
         for key, value in kwargs.items():
-            self.edges[key] = np.array(value, dtype=self.meta.get(key)) # Overwrite dtype if supplied, else keep original
+            self.edges[key] = cp.array(value, dtype=self.meta.get(key)) # Overwrite dtype if supplied, else keep original
             self.initialized = True
 
         # Define states using placeholder values
