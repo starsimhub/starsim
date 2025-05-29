@@ -241,7 +241,7 @@ class Network(Route):
             except KeyError:
                 errormsg = f'Cannot append edges since required key "{key}" is missing'
                 raise KeyError(errormsg)
-            self.edges[key] = np.concatenate([curr_arr, new_arr])  # Resize to make room, preserving dtype
+            self.edges[key] = cp.concatenate([curr_arr, new_arr])  # Resize to make room, preserving dtype
         self.validate_uids()
         return
 
@@ -550,19 +550,19 @@ class RandomNet(DynamicNetwork):
         if isinstance(self.pars.n_contacts, ss.Dist):
             number_of_contacts = self.pars.n_contacts.rvs(born.uids)  # or people.uid?
         else:
-            number_of_contacts = np.ones(len(people))*self.pars.n_contacts
+            number_of_contacts = cp.ones(len(people))*self.pars.n_contacts
 
         # number_of_contacts = sc.randround(number_of_contacts / 2).astype(ss_int_)  # One-way contacts
         x = number_of_contacts
         number_of_contacts = cp.array(cp.floor(x+cp.random.random(x.shape)), dtype=ss_int_)
 
         p1, p2 = self.get_edges(born.uids, number_of_contacts)
-        beta = np.ones(len(p1), dtype=ss_float_)
+        beta = cp.ones(len(p1), dtype=ss_float_)
 
         if isinstance(self.pars.dur, ss.Dist):
             dur = self.pars.dur.rvs(p1)
         else:
-            dur = np.ones(len(p1))*self.pars.dur # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
+            dur = cp.ones(len(p1))*self.pars.dur # Other option would be np.full(len(p1), self.pars.dur.x), but this is harder to read
 
         self.append(p1=p1, p2=p2, beta=beta, dur=dur)
         return
