@@ -1080,6 +1080,7 @@ class MixingPools(Route):
         self.update_pars(pars, **kwargs)
         self.validate_pars()
         self.pools = []
+        self.postnatal = False # Does not make sense for mixing pools
         return
 
     def __len__(self):
@@ -1114,6 +1115,7 @@ class MixingPools(Route):
     def init_pre(self, sim):
         super().init_pre(sim)
         p = self.pars
+        time_args = {k:p.get(k) for k in ss.time.time_args} # get() allows None
 
         self.pools = []
         for i,sk,src in p.src.enumitems():
@@ -1122,7 +1124,7 @@ class MixingPools(Route):
                 if sc.isnumber(contacts): # If it's a number, convert to a distribution
                     contacts = ss.poisson(lam=contacts)
                 name = f'pool:{sk}->{dk}'
-                mp = MixingPool(name=name, diseases=p.diseases, beta=p.beta, contacts=contacts, src=src, dst=dst)
+                mp = MixingPool(name=name, diseases=p.diseases, beta=p.beta, contacts=contacts, src=src, dst=dst, **time_args)
                 mp.init_pre(sim) # Initialize the pool
                 self.pools.append(mp)
         return
@@ -1146,6 +1148,8 @@ class MixingPools(Route):
         return
 
     def step(self):
+        for mp in self.pools:
+            mp.step()
         return
 
 
@@ -1202,6 +1206,7 @@ class MixingPool(Route):
         self.diseases = None
         self.src_uids = None
         self.dst_uids = None
+        self.postnatal = False # Does not make sense for mixing pools
 
         self.p_acquire = ss.bernoulli(p=0) # Placeholder value
 
@@ -1278,9 +1283,6 @@ class MixingPool(Route):
         if sc.isnumber(beta) and beta == 0:
             return []
 
-        # Get source and target UIDs
-        self.src_uids = self.get_uids(self.pars.src)
-        self.dst_uids = self.get_uids(self.pars.dst)
         if len(self.src_uids) == 0 or len(self.dst_uids) == 0:
             return []
 
@@ -1292,4 +1294,7 @@ class MixingPool(Route):
         return self.p_acquire.filter(self.dst_uids)
 
     def step(self):
+        """ Update source and target UIDs """
+        self.src_uids = self.get_uids(self.pars.src)
+        self.dst_uids = self.get_uids(self.pars.dst)
         return
