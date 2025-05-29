@@ -334,7 +334,7 @@ class Dist:
             self.ready = True
             return self.state
         except Exception as E:
-            print(E)
+            pass # TODO: fix
 
 
     def jump(self, to=None, delta=1, force=False):
@@ -356,8 +356,10 @@ class Dist:
         self.ind = jumps
         self.reset() # First reset back to the initial state (used in case of different numbers of calls)
         if jumps: # Seems to randomize state if jumps=0
-            with sc.tryexcept():
+            try:
                 self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
+            except:
+                pass # TODO: fix
         return self.state
 
     def jump_dt(self, ti=None, force=False):

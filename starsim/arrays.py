@@ -317,7 +317,7 @@ class Arr(BaseArr):
         if orig_len + n_new > self.len_tot:
             n_grow = max(n_new, self.len_tot//2)  # Minimum 50% growth, since growing arrays is slow
             new_empty = cp.empty(n_grow, dtype=self.dtype) # 10x faster than np.zeros()
-            print('TEST', self.name, type(self.raw), type(new_empty))
+            # print('TEST', self.name, type(self.raw), type(new_empty))
             self.raw = cp.concatenate([self.raw, new_empty], axis=0)
             self.len_tot = len(self.raw)
             if n_grow > n_new: # We added extra space at the end, set to NaN
