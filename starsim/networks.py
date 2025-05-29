@@ -447,8 +447,8 @@ class StaticNet(Network):
 
     def init_post(self):
         super().init_post()
-        if 'seed' in self.pars and self.pars.seed is True:
-            self.pars.seed = self.dist.rng
+        # if 'seed' in self.pars and self.pars.seed is True:
+        #     self.pars.seed = self.dist.rng
         if callable(self.graph):
             try:
                 self.graph = self.graph(n=self.n_agents, **self.pars)
@@ -477,7 +477,9 @@ class StaticNet(Network):
             p1, p2 = edge
             p1s.append(p1)
             p2s.append(p2)
-        edges = dict(p1=p1s, p2=p2s, beta=np.ones_like(p1s))
+        p1s = cp.array(p1s)
+        p2s = cp.array(p2s)
+        edges = dict(p1=p1s, p2=p2s, beta=cp.ones_like(p1s))
         self.append(edges)
         return
 
