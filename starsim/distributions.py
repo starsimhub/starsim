@@ -327,11 +327,15 @@ class Dist:
             assert all(r2 == r3)
             assert all(r4 == r1)
         """
-        if not isinstance(state, dict):
-            state = self.history[state]
-        self.rng._bit_generator.state = state.copy()
-        self.ready = True
-        return self.state
+        try:
+            if not isinstance(state, dict):
+                state = self.history[state]
+            self.rng._bit_generator.state = state.copy()
+            self.ready = True
+            return self.state
+        except Exception as E:
+            print(E)
+
 
     def jump(self, to=None, delta=1, force=False):
         """ Advance the RNG, e.g. to timestep "to", by jumping """
@@ -352,7 +356,8 @@ class Dist:
         self.ind = jumps
         self.reset() # First reset back to the initial state (used in case of different numbers of calls)
         if jumps: # Seems to randomize state if jumps=0
-            self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
+            with sc.tryexcept():
+                self.bitgen.state = self.bitgen.jumped(jumps=jumps).state # Now take "jumps" number of jumps
         return self.state
 
     def jump_dt(self, ti=None, force=False):
@@ -774,7 +779,7 @@ class lognorm_im(Dist):
         ss.lognorm_im(mean=2, sigma=1, strict=False).rvs(1000).mean() # Should be roughly 10
     """
     def __init__(self, mean=0.0, sigma=1.0, **kwargs): # Does not accept dtype
-        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, sigma=sigma, **kwargs)
+        super().__init__(distname='lognormal', mean=mean, sigma=sigma, **kwargs)
         return
 
     def sync_pars(self, call=True):
@@ -811,7 +816,7 @@ class lognorm_ex(Dist):
         ss.lognorm_ex(mean=2, std=1, strict=False).rvs(1000).mean() # Should be close to 2
     """
     def __init__(self, mean=1.0, std=1.0, **kwargs): # Does not accept dtype
-        super().__init__(distname='lognormal', dist=sps.lognorm, mean=mean, std=std, **kwargs)
+        super().__init__(distname='lognormal', mean=mean, std=std, **kwargs)
         return
 
     def convert_ex_to_im(self):
