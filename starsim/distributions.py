@@ -1013,10 +1013,10 @@ class constant(Dist):
         return
 
     def make_rvs(self):
-        return np.full(self._size, self._pars.v)
+        return cp.full(self._size, self._pars.v)
 
     def ppf(self, rands): # NB: don't actually need to use random numbers here, but not worth the complexity of avoiding this
-        return np.full(rands.shape, self._pars.v)
+        return cp.full(rands.shape, self._pars.v)
 
 
 class bernoulli(Dist):

@@ -353,7 +353,7 @@ class Arr(BaseArr):
         new.__dict__ = self.__dict__.copy() # Copy pointers
         new.dtype = arr.dtype # Set to correct dtype
         new.name = name # In most cases, the asnew Arr has different values to the original Arr so the original name no longer makes sense
-        new.raw = np.empty(new.raw.shape, dtype=new.dtype) # Copy values, breaking reference
+        new.raw = cp.empty(new.raw.shape, dtype=new.dtype) # Copy values, breaking reference
         new.raw[new.auids] = arr
         return new
 

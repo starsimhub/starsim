@@ -3,6 +3,7 @@ Networks that connect people within a population
 """
 import networkx as nx
 import numpy as np
+import cupy as cp
 import numba as nb
 import sciris as sc
 import starsim as ss
@@ -503,7 +504,7 @@ class RandomNet(DynamicNetwork):
         return
 
     @staticmethod
-    @nb.njit(fastmath=True, parallel=False, cache=True)
+    # @nb.njit(fastmath=True, parallel=False, cache=True)
     def get_source(inds, n_contacts):
         """ Optimized helper function for getting contacts """
         total_number_of_half_edges = np.sum(n_contacts)
@@ -551,7 +552,9 @@ class RandomNet(DynamicNetwork):
         else:
             number_of_contacts = np.ones(len(people))*self.pars.n_contacts
 
-        number_of_contacts = sc.randround(number_of_contacts / 2).astype(ss_int_)  # One-way contacts
+        # number_of_contacts = sc.randround(number_of_contacts / 2).astype(ss_int_)  # One-way contacts
+        x = number_of_contacts
+        number_of_contacts = cp.array(cp.floor(x+cp.random.random(x.shape)), dtype=ss_int_)
 
         p1, p2 = self.get_edges(born.uids, number_of_contacts)
         beta = np.ones(len(p1), dtype=ss_float_)
