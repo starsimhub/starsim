@@ -2,6 +2,7 @@
 Base classes for diseases
 """
 import numpy as np
+import cupy as cp
 import sciris as sc
 import starsim as ss
 import networkx as nx
@@ -304,8 +305,8 @@ class Infection(Disease):
             if isinstance(route, (ss.MixingPool, ss.MixingPools)):
                 target_uids = route.compute_transmission(rel_sus, rel_trans, betamap[nk])
                 new_cases.append(target_uids)
-                sources.append(np.full(len(target_uids), dtype=ss_float_, fill_value=np.nan))
-                networks.append(np.full(len(target_uids), dtype=ss_int_, fill_value=i))
+                sources.append(cp.full(len(target_uids), dtype=ss_float_, fill_value=cp.nan))
+                networks.append(cp.full(len(target_uids), dtype=ss_int_, fill_value=i))
             elif isinstance(route, ss.Network) and len(route): # Skip networks with no edges
                 edges = route.edges
                 p1p2b0 = [edges.p1, edges.p2, betamap[nk][0]] # Person 1, person 2, beta 0
@@ -318,18 +319,18 @@ class Infection(Disease):
                         target_uids, source_uids = self.compute_transmission(*args) # Actually calculate it
                         new_cases.append(target_uids)
                         sources.append(source_uids)
-                        networks.append(np.full(len(target_uids), dtype=ss_int_, fill_value=i))
+                        networks.append(cp.full(len(target_uids), dtype=ss_int_, fill_value=i))
 
         # Finalize
         if len(new_cases) and len(sources):
             new_cases = ss.uids.cat(new_cases)
             new_cases, inds = new_cases.unique(return_index=True)
             sources = ss.uids.cat(sources)[inds]
-            networks = np.concatenate(networks)[inds]
+            networks = cp.concatenate(networks)[inds]
         else:
             new_cases = ss.uids()
             sources = ss.uids()
-            networks = np.empty(0, dtype=ss_int_)
+            networks = cp.empty(0, dtype=ss_int_)
 
         return new_cases, sources, networks
 
