@@ -4,6 +4,7 @@ Define array-handling classes, including agent states
 import numpy as np
 import sciris as sc
 import starsim as ss
+import cupy as cp
 
 # Shorten these for performance
 ss_float = ss.dtypes.float
@@ -24,7 +25,7 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
     An object that acts exactly like a NumPy array, except stores the values in self.values.
     """
     def __init__(self, values, *args, **kwargs):
-        self.values = np.array(values, *args, **kwargs)
+        self.values = None#np.array(values, *args, **kwargs)
         return
 
     def __getattr__(self, attr):
@@ -84,7 +85,7 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
 
     def __array__(self, *args, **kwargs):
         """ To ensure isinstance(arr, BaseArr) passes when creating new instances """
-        return np.array(self.values, *args, **kwargs)
+        return self.values.get(*args, **kwargs)
 
     def __repr__(self):
         return f"{self.__class__.__name__}({self.values})"
@@ -181,7 +182,7 @@ class Arr(BaseArr):
             self.len_used = 0
             self.len_tot = 0
             self.initialized = skip_init
-            self.raw = np.empty(0, dtype=dtype)
+            self.raw = cp.empty(0, dtype=dtype)
         else:
             # This Arr is a temporary object used for intermediate calculations when we want to index an array
             # by UID (e.g., inside an update() method). We allow this state to reference an existing, initialized
@@ -189,7 +190,10 @@ class Arr(BaseArr):
             self.len_used = self.people.uid.len_used
             self.len_tot = self.people.uid.len_tot
             self.initialized = True
-            self.raw = np.full(self.len_tot, dtype=self.dtype, fill_value=self.nan)
+            self.raw = cp.full(self.len_tot, dtype=self.dtype, fill_value=self.nan)
+
+        if self.raw.dtype == 'O':
+            raise Exception('noooo')
 
         return
 
@@ -309,11 +313,12 @@ class Arr(BaseArr):
         # Physically reshape the arrays, if needed
         if orig_len + n_new > self.len_tot:
             n_grow = max(n_new, self.len_tot//2)  # Minimum 50% growth, since growing arrays is slow
-            new_empty = np.empty(n_grow, dtype=self.dtype) # 10x faster than np.zeros()
-            self.raw = np.concatenate([self.raw, new_empty], axis=0)
+            new_empty = cp.empty(n_grow, dtype=self.dtype) # 10x faster than np.zeros()
+            print('TEST', self.name, type(self.raw), type(new_empty))
+            self.raw = cp.concatenate([self.raw, new_empty], axis=0)
             self.len_tot = len(self.raw)
             if n_grow > n_new: # We added extra space at the end, set to NaN
-                nan_uids = np.arange(self.len_used, self.len_tot)
+                nan_uids = cp.arange(self.len_used, self.len_tot)
                 self.set_nan(nan_uids)
 
         # Set new values, and NaN if needed
@@ -469,7 +474,7 @@ class IndexArr(Arr):
         return
 
 
-class uids(np.ndarray):
+class uids(cp.ndarray):
     """
     Class to specify that integers should be interpreted as UIDs.
 
@@ -479,8 +484,10 @@ class uids(np.ndarray):
     UID operations.
     """
     def __new__(cls, arr=None):
-        if isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
+        if isinstance(arr, cp.ndarray): # Shortcut to typical use case, where the input is an array
             return arr.astype(ss_int).view(cls)
+        elif isinstance(arr, np.ndarray): # Shortcut to typical use case, where the input is an array
+            return cp.asarray(arr, dtype=ss_int).view(cls) # TEST
         elif isinstance(arr, BoolArr): # Shortcut for arr.uids
             return arr.uids
         elif isinstance(arr, set):
@@ -489,7 +496,7 @@ class uids(np.ndarray):
             return np.empty(0, dtype=ss_int).view(cls)
         elif isinstance(arr, int): # Convert e.g. ss.uids(0) to ss.uids([0])
             arr = [arr]
-        return np.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
+        return cp.asarray(arr, dtype=ss_int).view(cls) # Handle everything else
 
     def concat(self, other, **kw): # Class and instance methods can't share a name
         """ Equivalent to np.concatenate(), but return correct type """
