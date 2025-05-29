@@ -2,9 +2,10 @@
 Define array-handling classes, including agent states
 """
 import numpy as np
+import cupy as cp
 import sciris as sc
 import starsim as ss
-import cupy as cp
+
 
 # Shorten these for performance
 ss_float = ss.dtypes.float
@@ -16,6 +17,8 @@ type_def = {
     ss_bool: ('bool', bool, np.bool_),
 }
 type_map = {v:k for k,vlist in type_def.items() for v in vlist} # Invert into a full dictionary
+
+array_types = (np.ndarray, cp.ndarray)
 
 __all__ = ['BaseArr', 'Arr', 'FloatArr', 'BoolArr', 'State', 'IndexArr', 'uids']
 
@@ -44,7 +47,7 @@ class BaseArr(np.lib.mixins.NDArrayOperatorsMixin):
 
     def convert(self, obj):
         """ Check if an object is an array, and convert if so """
-        if isinstance(obj, np.ndarray):
+        if isinstance(obj, array_types):
             return self.asnew(obj)
         elif isinstance(obj, BaseArr):
             return self.asnew(obj.values)
@@ -222,9 +225,9 @@ class Arr(BaseArr):
             return self.auids[key]
         elif not np.isscalar(key) and len(key) == 0: # Handle [], np.array([]), etc.
             return uids()
-        elif isinstance(key, np.ndarray) and ss.options.reticulate: # TODO: fix ss.uids
+        elif isinstance(key, array_types) and ss.options.reticulate: # TODO: fix ss.uids
             return key.astype(int)
-        elif isinstance(key, np.ndarray) and key.dtype == bool:
+        elif isinstance(key, array_types) and key.dtype == bool:
             return self.auids[key]
         else:
             errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.'

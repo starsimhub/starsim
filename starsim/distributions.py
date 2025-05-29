@@ -2,6 +2,7 @@
 Define random-number-safe distributions.
 """
 import sciris as sc
+import cupy as cp
 import numpy as np
 import numba as nb
 import scipy.stats as sps
@@ -297,7 +298,8 @@ class Dist:
 
     def get_state(self):
         """ Return a copy of the state """
-        return self.state.copy()
+        try:    return self.state.copy()
+        except: return None
 
     def make_history(self, reset=False):
         """ Store the current state in history """
@@ -379,7 +381,7 @@ class Dist:
         if ss.options._centralized:
             self.rng = np.random.mtrand._rand # If _centralized, return the centralized numpy random number instance
         else:
-            self.rng = np.random.default_rng(seed=self.seed)
+            self.rng = cp.random.default_rng(seed=self.seed)
         self.make_history(reset=True)
 
         # Handle the sim, module, and slots
@@ -474,7 +476,7 @@ class Dist:
                     raise ValueError(errormsg)
                 slots = self.slots[uids]
                 if len(slots): # Handle case where uids is boolean
-                    size = slots.max() + 1
+                    size = int(slots.max()) + 1
                 else:
                     size = 0
             else:
@@ -483,6 +485,8 @@ class Dist:
 
         self._n = n
         self._size = size
+        if isinstance(self._size, cp.ndarray) and self._size.ndim == 0:
+            raise Exception('Nooo')
         self._uids = uids
         self._slots = slots
         return size, slots
@@ -565,11 +569,13 @@ class Dist:
         else:
             errormsg = 'Dist.rvs() failed: no valid NumPy/SciPy function found in this Dist. Has it been created and initialized correctly?'
             raise ValueError(errormsg)
+        assert isinstance(rvs, cp.ndarray)
         return rvs
 
     def ppf(self, rands):
         """ Return default random numbers for array parameters; not for the user """
         rvs = self.dist.ppf(rands)
+        assert isinstance(rvs, cp.ndarray)
         return rvs
 
     def postprocess_timepar(self, rvs):
@@ -617,8 +623,10 @@ class Dist:
         if self.dynamic_pars:
             rands = self.rand(size)[slots] # Get random values
             rvs = self.ppf(rands) # Convert to actual values via the PPF
+            assert isinstance(rvs, cp.ndarray)
         else:
             rvs = self.make_rvs() # Or, just get regular values
+            assert isinstance(rvs, cp.ndarray)
             if self._slots is not None:
                 rvs = rvs[self._slots]
 
