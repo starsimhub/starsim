@@ -1080,7 +1080,8 @@ class MixingPools(Route):
         self.update_pars(pars, **kwargs)
         self.validate_pars()
         self.pools = []
-        self.postnatal = False # Does not make sense for mixing pools
+        self.prenatal = False # Does not make sense for mixing pools
+        self.postnatal = False
         return
 
     def __len__(self):
@@ -1198,18 +1199,13 @@ class MixingPool(Route):
         )
         self.update_pars(pars, **kwargs)
 
-        self.define_states(
-            ss.FloatArr('eff_contacts', default=self.pars.contacts, label='Effective number of contacts')
-        )
-
-        self.pars.diseases = sc.promotetolist(self.pars.diseases)
+        self.pars.diseases = sc.tolist(self.pars.diseases)
         self.diseases = None
         self.src_uids = None
         self.dst_uids = None
-        self.postnatal = False # Does not make sense for mixing pools
-
+        self.prenatal = False # Does not make sense for mixing pools
+        self.postnatal = False
         self.p_acquire = ss.bernoulli(p=0) # Placeholder value
-
         return
 
     def __len__(self):
@@ -1288,7 +1284,8 @@ class MixingPool(Route):
 
         # Calculate transmission
         trans = np.mean(rel_trans[self.src_uids])
-        acq = self.eff_contacts[self.dst_uids] * rel_sus[self.dst_uids]
+        eff_contacts = self.pars.contacts.rvs(self.dst_uids)
+        acq = eff_contacts * rel_sus[self.dst_uids]
         p = beta*disease_beta[0]*trans*acq
         self.p_acquire.set(p=p)
         return self.p_acquire.filter(self.dst_uids)

@@ -110,6 +110,7 @@ class Births(Demographics):
         return new_uids
 
     def update_results(self):
+        """ Calculate new births and crude birth rate """
         # New births -- already calculated
         self.results.new[self.ti] = self.n_births
 
