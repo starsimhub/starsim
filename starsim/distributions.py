@@ -1228,14 +1228,14 @@ class multi_random(sc.prettyobj):
         return
 
     @staticmethod
-    @nb.njit(fastmath=True, parallel=False, cache=True) # Numba is 3x faster, but disabling parallel for efficiency
+    # @nb.njit(fastmath=True, parallel=False, cache=True) # Numba is 3x faster, but disabling parallel for efficiency
     def combine_rvs(rvs_list, int_type, int_max):
         """ Combine inputs into one number """
         # Combine using bitwise-or
         rand_ints = rvs_list[0].view(int_type)
         for rand_floats in rvs_list[1:]:
             rand_ints2 = rand_floats.view(int_type)
-            rand_ints = np.bitwise_xor(rand_ints*rand_ints2, rand_ints-rand_ints2)
+            rand_ints = cp.bitwise_xor(rand_ints*rand_ints2, rand_ints-rand_ints2)
 
         # Normalize
         rvs = rand_ints / int_max
