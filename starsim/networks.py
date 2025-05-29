@@ -1199,6 +1199,10 @@ class MixingPool(Route):
         )
         self.update_pars(pars, **kwargs)
 
+        self.define_states(
+            ss.FloatArr('eff_contacts', default=self.pars.contacts, label='Effective number of contacts')
+        )
+
         self.pars.diseases = sc.tolist(self.pars.diseases)
         self.diseases = None
         self.src_uids = None
@@ -1284,8 +1288,7 @@ class MixingPool(Route):
 
         # Calculate transmission
         trans = np.mean(rel_trans[self.src_uids])
-        eff_contacts = self.pars.contacts.rvs(self.dst_uids)
-        acq = eff_contacts * rel_sus[self.dst_uids]
+        acq = self.eff_contacts[self.dst_uids] * rel_sus[self.dst_uids]
         p = beta*disease_beta[0]*trans*acq
         self.p_acquire.set(p=p)
         return self.p_acquire.filter(self.dst_uids)
