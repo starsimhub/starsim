@@ -492,8 +492,6 @@ class Dist:
 
         self._n = n
         self._size = size
-        if isinstance(self._size, cp.ndarray) and self._size.ndim == 0:
-            raise Exception('Nooo')
         self._uids = uids
         self._slots = slots
         return size, slots
@@ -572,7 +570,7 @@ class Dist:
             try:
                 rvs_func = getattr(self.rng, self.rvs_func) # Can't store this because then it references the wrong RNG after copy
             except Exception as E:
-                print('not found', E)
+                # print('not found', E)
                 rvs_func = getattr(cp.random, self.distname)
             rvs = rvs_func(size=self._size, **self._pars)
         elif self.dist is not None:

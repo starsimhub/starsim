@@ -195,9 +195,6 @@ class Arr(BaseArr):
             self.initialized = True
             self.raw = cp.full(self.len_tot, dtype=self.dtype, fill_value=self.nan)
 
-        if self.raw.dtype == 'O':
-            raise Exception('noooo')
-
         return
 
     def __repr__(self):
