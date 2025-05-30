@@ -1080,7 +1080,8 @@ class MixingPools(Route):
         self.update_pars(pars, **kwargs)
         self.validate_pars()
         self.pools = []
-        self.postnatal = False # Does not make sense for mixing pools
+        self.prenatal = False # Does not make sense for mixing pools
+        self.postnatal = False
         return
 
     def __len__(self):
@@ -1202,14 +1203,13 @@ class MixingPool(Route):
             ss.FloatArr('eff_contacts', default=self.pars.contacts, label='Effective number of contacts')
         )
 
-        self.pars.diseases = sc.promotetolist(self.pars.diseases)
+        self.pars.diseases = sc.tolist(self.pars.diseases)
         self.diseases = None
         self.src_uids = None
         self.dst_uids = None
-        self.postnatal = False # Does not make sense for mixing pools
-
+        self.prenatal = False # Does not make sense for mixing pools
+        self.postnatal = False
         self.p_acquire = ss.bernoulli(p=0) # Placeholder value
-
         return
 
     def __len__(self):
