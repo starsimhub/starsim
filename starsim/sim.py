@@ -177,7 +177,7 @@ class Sim(ss.Base):
         verbose = sc.ifelse(verbose, self.pars.verbose)
         if verbose > 0:
             labelstr = f' "{self.label}"' if self.label else ''
-            print(f'Initializing sim{labelstr} with {n_agents:0n} agents')
+            print(f'Initializing CUDA sim{labelstr} with {n_agents:0n} agents')
 
         # If people have not been supplied, make them -- typical use case
         if people is None:
