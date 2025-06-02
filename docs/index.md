@@ -21,7 +21,7 @@
 
     Full details on all classes and functions.
 
-    [:octicons-arrow-right-24: API reference](api/index.md)
+    [:octicons-arrow-right-24: API reference](autoapi/starsim/index.md)
 
 -   :material-new-box:{ .lg .middle } __What's new__
 

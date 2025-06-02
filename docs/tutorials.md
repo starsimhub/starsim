@@ -12,10 +12,10 @@ These tutorials will guide you through the main features of Starsim. Each tutori
 
     To run these tutorials locally:
 
-    1. Clone the Starsim repository
-    2. Install Starsim and its dependencies
-    3. Navigate to the `docs/tutorials` directory
-    4. Launch Jupyter: `jupyter notebook`
+    1. Clone the Starsim repository.
+    2. Install Starsim and its dependencies.
+    3. Navigate to the `docs/tutorials` directory.
+    4. Launch Jupyter: `jupyter notebook`.
 
 
 ## Tutorials

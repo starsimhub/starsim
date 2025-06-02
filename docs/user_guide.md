@@ -1,0 +1,28 @@
+# User guide
+
+These user guides provide a more in-depth look at each topic compared to the corresponding tutorials.
+
+!!! note
+
+    You can download these tutorials as Jupyter notebooks to run them locally. Look for the download button at the top of each tutorial.
+
+
+!!! tip
+    ## Running tutorials locally
+
+    To run these tutorials locally:
+
+    1. Clone the Starsim repository
+    2. Install Starsim and its dependencies
+    3. Navigate to the `docs/user_guide` folder
+    4. Launch Jupyter: `jupyter notebook`
+
+## Introduction
+
+- [Introduction to Starsim](user_guide/intro/starsim.ipynb)
+- [Starsim "spokes"](user_guide/intro/spokes.ipynb)
+
+## Basics
+
+- [Understanding the model](user_guide/basics/model.ipynb)
+- [The Sim object](user_guide/basics/sim.ipynb)

@@ -1,105 +1,120 @@
-# Cliff's minimal config with working autoapi
-# site_name: Starsim
-# nav:
-#   - Home: README.md
-#   - API: autoapi/starsim
-
-# plugins:
-#   - search
-#   - mkdocs-autoapi:
-#       autoapi_ignore:
-#         - tests/**/*
-#       autoapi_add_nav_entry: False
-#   - mkdocstrings
-
-
-site_name: Starsim
+site_name: Starsim docs
 site_url: https://docs.idmod.org/projects/starsim/en/latest
+repo_name: starsimhub/starsim
+repo_url: https://github.com/starsimhub/starsim
 theme:
   name: material
-  font:
-    text: Noto Sans
-    code: Courier
-  logo: assets/IDM_white.png
+  custom_dir: overrides
+  font: 
+    text: Roboto
+    code: Roboto Mono
+  logo: assets/starsim-logo.png
   favicon: assets/favicon.ico
   features:
     - navigation.footer
 
   palette:
-    # Dark Mode
-    - scheme: slate
-      toggle:
-        icon: material/weather-sunny
-        name: Dark mode
-      primary: blue
-      accent: deep orange
-
     # Light Mode
     - scheme: default
       toggle:
         icon: material/weather-night
         name: Light mode
-      primary: blue
-      accent: deep orange
-      #TODO add IDM theme colors using stylesheets/extra.css
-# images/idm-logo-transparent.png
+      primary: white
+      accent: teal
+
+    # Dark Mode
+    - scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Dark mode
+      primary: white
+      accent: amber
 
 nav:
   - Home: index.md
-  - Tutorials: tutorials.md
-  - API reference: autoapi/starsim
   - What's new: whatsnew.md
+  - Tutorials: tutorials.md
+  - User guide: user_guide.md
+  - Code of conduct: conduct.md
+  - Contributing: contributing.md
+
 # icons and emojis 
-# markdown_extensions:
-#   - attr_list
-#   - md_in_html #enables grids
-#   - admonition
-#   - pymdownx.emoji:
-#       emoji_index: !!python/name:material.extensions.emoji.twemoji
-#       emoji_generator: !!python/name:material.extensions.emoji.to_svg
+markdown_extensions:
+  - toc:
+      toc_depth: 3
 
-# # code formatting
-#   #- pymdownx.highlight:
-#       anchor_linenums: true
-#       line_spans: __span
-#       pygments_lang_class: true
-#       default_lang: 'python'
-#   - pymdownx.inlinehilite
-#   - pymdownx.snippets
-#   - pymdownx.superfences
-#   - pymdownx.details
+  - attr_list # enables HTMl and CSS classes to inline elements
+  - md_in_html # enables grids
+  - admonition # warnings, etc.
+  - pymdownx.emoji: # emojis and icons
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
 
-# content tabs
-  # - pymdownx.superfences
-  # - pymdownx.tabbed:
-  #     alternate_style: true
-
+# markdown formatting
+  - pymdownx.highlight: # syntax highlighting for code blocks
+      linenums: true
+      default_lang: 'python'
+  - pymdownx.inlinehilite # syntax highlighting for inline code
+  - pymdownx.superfences # enables code, diagram fences to be nested in lists, etc.
+  - pymdownx.details # collapsible elements
+  - pymdownx.tabbed: # tabbed content that can be toggled
+      alternate_style: true
 
 plugins:
   - search
-  # - include-markdown: # include other files, such as READMEs
+  - autorefs # automatically create linkable references
+  - include-markdown: # include other files, such as READMEs
   - mkdocs-autoapi:
       autoapi_ignore:
         - tests/**/*
-      autoapi_add_nav_entry: False
-  - mkdocstrings # generate API reference
-      #enable_inventory: true
-      #default_handler: python
-      #handlers: 
-      #  python:
-      #    options:
-      #      docstring_style: google
-  - mkdocs-jupyter:
-      execute: true
-      allow_errors: true
+        - build/**/*
+        - docs/*
+        - setup.py
+      autoapi_add_nav_entry: true # breaks modules into separate pages
+  - mkdocstrings: # process docstrings to generate API reference
+
+  #- mkdocs-jupyter:
+  #    execute: true
+  #    allow_errors: false
 
 
+copyright: Copyright &copy; 2025 Gates Foundation. All rights reserved.
 
-# TODO investigate why icons aren't working, do they need installed?
 extra:
-  # social:
-  #   - icon: simple/youtube
-  #     link: http://www.youtube.com/@institutefordiseasemodelin1987
-  #   - icon: simple/linkedin
-  #     link: https://linkedin.com/company/institute-disease-modeling
-  copyright: Copyright &copy; 2025 Gates Foundation
+  generator: false
+  footer_links:
+    - text: "Privacy and Cookies Notice"
+    - href: "https://www.gatesfoundation.org/Privacy-and-Cookies-Notice"
+    - text: "Terms of Use"
+    - href: "https://www.gatesfoundation.org/Terms-of-Use"
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/starsimhub/starsim
+    - icon: fontawesome/regular/envelope
+      link: mailto:info@starsim.org
+    - icon: fontawesome/brands/slack
+      link: https://starsim-idm.slack.com/
+    - icon: octicons/globe-24
+      link: https://starsim.org
+    - icon: simple/youtube
+      link: http://www.youtube.com/@institutefordiseasemodelin1987
+    - icon: fontawesome/brands/linkedin
+      link: https://linkedin.com/company/institute-disease-modeling
+
+  analytics:
+    provider: google
+    property: GTM-NK4K647
+    feedback:
+      title: Was this page helpful?
+      ratings:
+        - icon: material/emoticon-happy-outline
+          name: This page was helpful
+          data: 1
+          note: >-
+            Thanks for your feedback!
+        - icon: material/emoticon-sad-outline
+          name: This page could be improved
+          data: 0
+          note: >- 
+            Thanks for your feedback! Help us improve this page by
+            using our <a href="..." target="_blank" rel="noopener">feedback form</a>.
