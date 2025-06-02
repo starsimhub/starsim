@@ -73,9 +73,9 @@ plugins:
       autoapi_add_nav_entry: true # breaks modules into separate pages
   - mkdocstrings: # process docstrings to generate API reference
 
-  #- mkdocs-jupyter:
-  #    execute: true
-  #    allow_errors: false
+  - mkdocs-jupyter:
+      execute: true
+      allow_errors: true
 
 
 copyright: Copyright &copy; 2025 Gates Foundation. All rights reserved.
