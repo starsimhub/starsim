@@ -114,7 +114,7 @@ def round_tvec(tvec):
 
 def years_to_dates(yearvec):
     """ Convert a numeric year vector to a date vector """
-    datevec = np.array([date(sc.datetoyear(y, reverse=True)) for y in yearvec])
+    datevec = np.array([date(sc.yeartodate(y)) for y in yearvec])
     return datevec
 
 
@@ -826,12 +826,12 @@ class dur(TimePar):
 
 
 def days(v, parent_unit=None, parent_dt=None):
-    """ Shortcut to ss.dur(value, units='day') """
+    """ Shortcut to [ss.dur(value, units='day')](`starsim.time.dur`) """
     return dur(v=v, unit='day', parent_unit=parent_unit, parent_dt=parent_dt)
 
 
 def years(v, parent_unit=None, parent_dt=None):
-    """ Shortcut to ss.dur(value, units='year') """
+    """ Shortcut to [ss.dur(value, units='year')](`starsim.time.dur`) """
     return dur(v=v, unit='year', parent_unit=parent_unit, parent_dt=parent_dt)
 
 

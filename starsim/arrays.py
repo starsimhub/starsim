@@ -156,10 +156,10 @@ class Arr(BaseArr):
     Args:
         name (str): The name for the state (also used as the dictionary key, so should not have spaces etc.)
         dtype (class): The dtype to use for this instance (if None, infer from value)
-        default (any): Specify default value for new agents. This can be
-        - A scalar with the same dtype (or castable to the same dtype) as the State
-        - A callable, with a single argument for the number of values to produce
-        - A ``ss.Dist`` instance
+        default (any): Specify default value for new agents. This can be:
+            • A scalar with the same dtype (or castable to the same dtype) as the State;
+            • A callable, with a single argument for the number of values to produce;
+            • A [`ss.Dist`](`starsim.distributions.Dist`) instance.
         nan (any): the value to use to represent NaN (not a number); also used as the default value if not supplied
         label (str): The human-readable name for the state
         skip_init (bool): Whether to skip initialization with the People object (used for uid and slot states)
@@ -220,6 +220,8 @@ class Arr(BaseArr):
             return uids()
         elif isinstance(key, np.ndarray) and ss.options.reticulate: # TODO: fix ss.uids
             return key.astype(int)
+        elif isinstance(key, np.ndarray) and key.dtype == bool:
+            return self.auids[key]
         else:
             errormsg = f'Indexing an Arr ({self.name}) by ({key}) is ambiguous or not supported. Use ss.uids() instead, or index Arr.raw or Arr.values.'
             raise Exception(errormsg)
@@ -297,8 +299,8 @@ class Arr(BaseArr):
         This method is normally only called via `People.grow()`.
 
         Args:
-            new_uids: Numpy array of UIDs for the new agents being added
-            new_vals: If provided, assign these state values to the new UIDs
+            new_uids (array): Numpy array of UIDs for the new agents being added
+            new_vals (array): If provided, assign these state values to the new UIDs
         """
         orig_len = self.len_used
         n_new = len(new_uids)

@@ -646,7 +646,7 @@ class Sim(ss.Base):
                 if show_module == -1:
                     label = res.full_label.replace(':', '\n')
                 elif len(res.full_label) > show_module:
-                    label = res.label
+                    label = sc.ifelse(res.label, res.name)
                 else:
                     label = res.full_label
 
