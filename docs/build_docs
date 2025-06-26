@@ -5,7 +5,7 @@ Build documentation with Quarto; usage is simply:
 
 Notebook execution options are:
   ./build_docs jupyter # Execute with jcache in parallel (default)
-  ./build_docs jupyter # Execute with jcache in parallel (default)
+  ./build_docs quarto # Execute with quarto in serial
 
 Additional arguments are passed to quarto render, e.g.:
     ./build_docs quarto --cache-refresh

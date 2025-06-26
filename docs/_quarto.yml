@@ -12,6 +12,7 @@ website:
   title: "Starsim"
   image: /assets/starsim-logo.png
   favicon: /assets/favicon.ico
+  google-analytics: "GTM-NK4K647"
 
   repo-url: https://github.com/starsimhub/starsim
   repo-actions: [issue]
@@ -70,12 +71,12 @@ website:
         text: What's new
       - section: "Tutorials"
         contents:
-          - tutorials/intro.ipynb
-          - tutorials/buildsim.ipynb
-          - tutorials/demographics.ipynb
-          - tutorials/diseases.ipynb
-          - tutorials/transmission.ipynb
-          - tutorials/interventions.ipynb
+          - tutorials/t1_intro.ipynb
+          - tutorials/t2_model.ipynb
+          - tutorials/t3_demographics.ipynb
+          - tutorials/t4_diseases.ipynb
+          - tutorials/t5_transmission.ipynb
+          - tutorials/t6_interventions.ipynb
       - section: "User guide"
         contents:
         - section: "Introduction"
@@ -87,6 +88,7 @@ website:
           - user_guide/basics_model.ipynb
           - user_guide/basics_sim.ipynb
           - user_guide/basics_people.ipynb
+          - user_guide/basics_parameters.ipynb
         - section: "Modules"
           contents:
           - user_guide/modules_diseases.ipynb
@@ -99,13 +101,12 @@ website:
           contents:
           - user_guide/workflows_run.ipynb
           - user_guide/workflows_calibration.ipynb
+          - user_guide/workflows_deploy.ipynb
           - user_guide/workflows_samples.ipynb
-          - user_guide/workflows_cloud.ipynb
         - section: "Advanced topics"
           contents:
           - user_guide/advanced_time.ipynb
           - user_guide/advanced_indexing.ipynb
-          - user_guide/advanced_parameters.ipynb
           - user_guide/advanced_distributions.ipynb
           - user_guide/advanced_random.ipynb
           - user_guide/advanced_profiling.ipynb
