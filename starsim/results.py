@@ -244,7 +244,7 @@ class Result(ss.BaseArr):
         # Make sure we're using a timevec that's in the right format i.e. dates
         if self.timevec is not None:
             if not self.has_dates:
-                timevec = [ss.Date(t) for t in self.timevec]
+                timevec = [ss.date(t) for t in self.timevec]
             else:
                 timevec = self.timevec
         return timevec

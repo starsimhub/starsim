@@ -55,7 +55,7 @@ class Penicillin(ss.Intervention):
     def __init__(self, year=2020, prob=0.8):
         super().__init__() # Initialize the intervention
         self.prob = prob # Store the probability of treatment
-        self.year = ss.Date(year)
+        self.year = ss.date(year)
         return
 
     def step(self):

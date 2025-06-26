@@ -27,8 +27,8 @@ def make_sim():
 
     sim = ss.Sim(
         n_agents = n_agents,
-        start = ss.Date('2020-01-01'),
-        stop = ss.Date('2020-02-12'),
+        start = ss.date('2020-01-01'),
+        stop = ss.date('2020-02-12'),
         dt = ss.days(1),
         diseases = sir,
         networks = random,
@@ -89,7 +89,7 @@ def test_onepar_normal(do_plot=True):
 
         expected = pd.DataFrame({
             'x': [0.13, 0.16, 0.06],    # Prevalence of infection
-        }, index=pd.Index([ss.Date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
+        }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
 
         extract_fn = lambda sim: pd.DataFrame({
             'x': sim.results.sir.n_infected, # Instead of prevalence, let's compute it from infected and n_alive
@@ -166,7 +166,7 @@ def test_onepar_custom(do_plot=True):
         build_kw = dict(n_reps=2), # Two reps per point
         reseed = True,
         eval_fn = eval, # Will call my_function(msim, eval_kwargs)
-        eval_kw = dict(expected=(ss.Date('2020-01-12'), 0.13)), # Will call eval(sim, **eval_kw)
+        eval_kw = dict(expected=(ss.date('2020-01-12'), 0.13)), # Will call eval(sim, **eval_kw)
         total_trials = total_trials,
         n_workers = None, # None indicates to use all available CPUs
         die = True,
@@ -205,7 +205,7 @@ def test_twopar_betabin_gammapois(do_plot=True):
         expected = pd.DataFrame({
             'n': [200, 197, 195], # Number of individuals sampled
             'x': [30, 35, 10],    # Number of individuals found to be infectious
-        }, index=pd.Index([ss.Date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
+        }, index=pd.Index([ss.date(d) for d in ['2020-01-12', '2020-01-25', '2020-02-02']], name='t')), # On these dates
 
         extract_fn = lambda sim: pd.DataFrame({
             'n': sim.results.n_alive,
@@ -224,8 +224,8 @@ def test_twopar_betabin_gammapois(do_plot=True):
         expected = pd.DataFrame({
             'n':  [100, 27, 54],   # Number of person-years
             'x':  [740, 325, 200], # Number of new infections
-            't':  [ss.Date(d) for d in ['2020-01-07', '2020-01-14', '2020-01-27']], # Between t and t1
-            't1': [ss.Date(d) for d in ['2020-01-08', '2020-01-15', '2020-01-29']],
+            't':  [ss.date(d) for d in ['2020-01-07', '2020-01-14', '2020-01-27']], # Between t and t1
+            't1': [ss.date(d) for d in ['2020-01-08', '2020-01-15', '2020-01-29']],
         }).set_index(['t', 't1']),
 
         extract_fn = lambda sim: pd.DataFrame({
@@ -297,8 +297,8 @@ def test_threepar_dirichletmultinomial_10reps(do_plot=True):
 
             # incident conform will compute different in comulative counts between the
             # end of step t1 and the end of step t
-            't': [ss.Date(d) for d in ['2020-01-07', '2020-01-21']],
-            't1': [ss.Date(d) for d in ['2020-01-21', '2020-02-11']],
+            't': [ss.date(d) for d in ['2020-01-07', '2020-01-21']],
+            't1': [ss.date(d) for d in ['2020-01-21', '2020-02-11']],
         }).set_index(['t', 't1']),
 
         extract_fn = by_dow

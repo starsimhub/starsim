@@ -8,11 +8,11 @@ import datetime as dt
 import dateutil as du
 import starsim as ss
 
-__all__ = ['Date', 'Dur', 'YearDur', 'DateDur', 'Rate', 'timeprob', 'RateProb', 'Time', 'years', 'months', 'weeks', 'days', 'perday', 'perweek', 'permonth', 'peryear']
+__all__ = ['date', 'Dur', 'YearDur', 'DateDur', 'Rate', 'timeprob', 'rateprob', 'Time', 'years', 'months', 'weeks', 'days', 'perday', 'perweek', 'permonth', 'peryear']
 
 #%% Base classes
 
-class Date(pd.Timestamp):
+class date(pd.Timestamp):
     """
     Define a point in time, based on ``pd.Timestamp``
 
@@ -22,11 +22,11 @@ class Date(pd.Timestamp):
 
     **Examples**::
 
-        ss.Date(2020) # Returns <2020-01-01>
-        ss.Date(year=2020) # Returns <2020-01-01>
-        ss.Date(year=2024.75) # Returns <2024-10-01>
-        ss.Date('2024-04-04') # Returns <2024-04-04>
-        ss.Date(year=2024, month=4, day=4) # Returns <2024-04-04>
+        ss.date(2020) # Returns <2020-01-01>
+        ss.date(year=2020) # Returns <2020-01-01>
+        ss.date(year=2024.75) # Returns <2024-10-01>
+        ss.date('2024-04-04') # Returns <2024-04-04>
+        ss.date(year=2024, month=4, day=4) # Returns <2024-04-04>
     """
 
     def __new__(cls, *args, **kwargs):
@@ -47,20 +47,20 @@ class Date(pd.Timestamp):
             return cls.from_year(kwargs['year'])
 
         # Otherwise, proceed as normal
-        out = super(Date, cls).__new__(cls, *args, **kwargs)
+        out = super(date, cls).__new__(cls, *args, **kwargs)
         out = cls._reset_class(out)
         return out
 
     @classmethod
     def _reset_class(cls, obj):
-        """ Manually reset the class from pd.Timestamp to ss.Date """
-        obj.__class__ = Date
+        """ Manually reset the class from pd.Timestamp to ss.date """
+        obj.__class__ = date
         return obj
 
     def __reduce__(self):
         # This function is internally used when pickling (rather than getstate/setstate)
         # due to Pandas implementing C functions for this. We can wrap the Pandas unpickler
-        # with a function that wraps calls _reset_class to support unpickling Date
+        # with a function that wraps calls _reset_class to support unpickling date
         # objects at the instance level
         unpickling_func, args = super().__reduce__()
         return (self.__class__._rebuild, (self.__class__, unpickling_func, args))
@@ -91,7 +91,7 @@ class Date(pd.Timestamp):
         return self.__repr__(bracket=False)
 
     def replace(self, *args, **kwargs):
-        """ Returns a new ss.Date(); pd.Timestamp is immutable """
+        """ Returns a new ss.date(); pd.Timestamp is immutable """
         out = super().replace(*args, **kwargs)
         out = self.__class__._reset_class(out)
         return out
@@ -107,8 +107,8 @@ class Date(pd.Timestamp):
 
         **Examples**::
 
-            ss.Date.from_year(2020) # Returns <2020-01-01>
-            ss.Date.from_year(2024.75) # Returns <2024-10-01>
+            ss.date.from_year(2020) # Returns <2020-01-01>
+            ss.date.from_year(2024.75) # Returns <2024-10-01>
         """
 
         if isinstance(year, int):
@@ -124,8 +124,8 @@ class Date(pd.Timestamp):
 
         **Examples**::
 
-            ss.Date('2020-01-01').to_year() # Returns 2020.0
-            ss.Date('2024-10-01').to_year() # Returns 2024.7486
+            ss.date('2020-01-01').to_year() # Returns 2020.0
+            ss.date('2024-10-01').to_year() # Returns 2024.7486
         """
         year_start = pd.Timestamp(year=self.year,month=1,day=1).timestamp()
         year_end = pd.Timestamp(year=self.year+1,month=1,day=1).timestamp()
@@ -149,17 +149,17 @@ class Date(pd.Timestamp):
             return np.vectorize(self.__add__)(other)
 
         if isinstance(other, DateDur):
-            return Date(self.to_pandas() + other.period)
+            return date(self.to_pandas() + other.period)
         elif isinstance(other, YearDur):
-            return Date(self.to_year() + other.period)
+            return date(self.to_year() + other.period)
         elif isinstance(other, pd.DateOffset):
-            return Date(self.to_pandas() + other)
+            return date(self.to_pandas() + other)
         elif isinstance(other, pd.Timestamp):
             raise TypeError('Cannot add a date to another date')
         elif sc.isnumber(other):
-            raise TypeError(f'Attempted to add a number ({other}) to a Date, which is not supported. Only durations can be added to dates e.g., "ss.years({other})" or "ss.days({other})"')
+            raise TypeError(f'Attempted to add a number ({other}) to a date, which is not supported. Only durations can be added to dates e.g., "ss.years({other})" or "ss.days({other})"')
         else:
-            raise TypeError(f'Attempted to add an instance of {other.__class__.__name__} to a Date, which is not supported. Only durations can be added to dates.')
+            raise TypeError(f'Attempted to add an instance of {other.__class__.__name__} to a date, which is not supported. Only durations can be added to dates.')
 
     def __sub__(self, other):
 
@@ -167,12 +167,12 @@ class Date(pd.Timestamp):
             return np.vectorize(self.__sub__)(other)
 
         if isinstance(other, DateDur):
-            return Date(self.to_pandas() - other.period)
+            return date(self.to_pandas() - other.period)
         elif isinstance(other, YearDur):
-            return Date(self.to_year() - other.period)
+            return date(self.to_year() - other.period)
         elif isinstance(other, pd.DateOffset):
-            return Date(self.to_pandas() - other)
-        elif isinstance(other, Date):
+            return date(self.to_pandas() - other)
+        elif isinstance(other, date):
             return YearDur(self.years-other.years)
         else:
             raise TypeError('Unsupported type')
@@ -239,10 +239,10 @@ class Date(pd.Timestamp):
     @classmethod
     def from_array(cls, array):
         """
-        Convert an array of float years into an array of Date instances
+        Convert an array of float years into an array of date instances
 
         :param array: An array of float years
-        :return: An array of Date instances
+        :return: An array of date instances
         """
         return np.vectorize(cls)(array)
 
@@ -251,24 +251,24 @@ class Date(pd.Timestamp):
         """
         Construct an array of dates
 
-        Functions similarly to np.arange, but returns Date objects
+        Functions similarly to np.arange, but returns date objects
 
         Example usage:
 
-        >>> Date.arange(2020, 2025)
+        >>> date.arange(2020, 2025)
             array([<2020.01.01>, <2021.01.01>, <2022.01.01>, <2023.01.01>,
                    <2024.01.01>], dtype=object)
 
         :param low: Lower bound - can be a date or a numerical year
         :param high: Upper bound - can be a date or a numerical year
         :param step: Assumes 1 calendar year steps by default
-        :return: An array of Date instances
+        :return: An array of date instances
         """
 
         if isinstance(step, ss.DateDur):
-            if not isinstance(low, Date):
+            if not isinstance(low, date):
                 low = cls(low)
-            if not isinstance(high, Date):
+            if not isinstance(high, date):
                 high = cls(high)
 
             tvec = []
@@ -278,8 +278,8 @@ class Date(pd.Timestamp):
                 t += step
             return np.array(tvec)
         else:
-            low = low.years if isinstance(low, Date) else low
-            high = high.years if isinstance(high, Date) else high
+            low = low.years if isinstance(low, date) else low
+            high = high.years if isinstance(high, date) else high
             return cls.from_array(np.arange(low, high, step))
 
 
@@ -471,16 +471,16 @@ class YearDur(Dur):
     def __add__(self, other):
         if isinstance(other, Dur):
             return self.__class__(self.period + other.years)
-        elif isinstance(other, Date):
-            return Date.from_year(other.to_year() + self.period)
+        elif isinstance(other, date):
+            return date.from_year(other.to_year() + self.period)
         else:
             return self.__class__(self.period + other)
 
     def __sub__(self, other):
         if isinstance(other, Dur):
             return self.__class__(max(self.period - other.years, 0))
-        elif isinstance(other, Date):
-            return Date.from_year(other.to_year() - self.period)
+        elif isinstance(other, date):
+            return date.from_year(other.to_year() - self.period)
         else:
             return self.__class__(max(self.period - other, 0))
 
@@ -491,7 +491,7 @@ class YearDur(Dur):
             return NotImplemented # Delegate to Rate.__rmul__
         elif isinstance(other, Dur):
             raise Exception('Cannot multiply a duration by a duration')
-        elif isinstance(other, Date):
+        elif isinstance(other, date):
             raise Exception('Cannot multiply a duration by a date')
         return self.__class__(self.period*other)
 
@@ -517,7 +517,7 @@ class YearDur(Dur):
 
 
 class DateDur(Dur):
-    # Date based duration e.g., if requiring a week to be 7 calendar days later
+    # date based duration e.g., if requiring a week to be 7 calendar days later
 
     def __init__(self, *args, **kwargs):
         """
@@ -743,7 +743,7 @@ class DateDur(Dur):
 
 
     def __add__(self, other):
-        if isinstance(other, Date):
+        if isinstance(other, date):
             return other + self.period
         elif isinstance(other, DateDur):
             return self.__class__(**self._as_args(self._as_array(self.period) + self._as_array(other.period)))
@@ -906,7 +906,7 @@ class timeprob(Rate):
     >>> p * 2
     raises an AssertionError because the resulting probability (160%) exceeds 100%.
 
-    Use ``RateProb`` instead if ``timeprob`` if you would prefer to directly
+    Use ``rateprob`` instead if ``timeprob`` if you would prefer to directly
     specify the instantaneous rate.
     """
 
@@ -942,21 +942,21 @@ class timeprob(Rate):
     def __truediv__(self, other): raise NotImplementedError()
     def __rtruediv__(self, other): raise NotImplementedError()
 
-class RateProb(Rate):
+class rateprob(Rate):
     """
-    A ``RateProb`` represents an instantaneous rate of an event occurring. Rates
+    A ``rateprob`` represents an instantaneous rate of an event occurring. Rates
     must be non-negative, but need not be less than 1.
 
     Through multiplication, rate can be modified or converted to a probability,
     depending on the data type of the object being multiplied.
 
-    When a ``RateProb`` is multiplied by a scalar or array, the rate is simply
+    When a ``rateprob`` is multiplied by a scalar or array, the rate is simply
     scaled. Such multiplication occurs frequently in epidemiological models,
     where the base rate is multiplied by "rate ratio" or "relative rate" to
     represent agents experiencing higher (multiplier > 1) or lower (multiplier <
     1) event rates.
 
-    Alternatively, when a ``RateProb`` is multiplied by a duration (type
+    Alternatively, when a ``rateprob`` is multiplied by a duration (type
     ss.Dur), a probability is calculated. The conversion from rate to
     probability on multiplication by a duration is
         ``1 - np.exp(-rate/factor)``,
@@ -964,7 +964,7 @@ class RateProb(Rate):
     period (denominator).
 
     For example, consider
-    >>> p = ss.RateProb(0.8, ss.years(1))
+    >>> p = ss.rateprob(0.8, ss.years(1))
     When multiplied by a duration of 1 year, the calculated probability is
         ``1 - np.exp(-0.8)``, which is approximately 55%.
     >>> p*ss.years(1)
@@ -972,10 +972,10 @@ class RateProb(Rate):
     When multiplied by a scalar, the rate is simply scaled.
     >>> p*2
 
-    The difference between ``timeprob`` and ``RateProb`` is subtle, but important. ``RateProb`` works directly
+    The difference between ``timeprob`` and ``rateprob`` is subtle, but important. ``rateprob`` works directly
     with the instantaneous rate of an event occurring. In contrast, ``timeprob`` starts with a probability and a duration,
     and the underlying rate is calculated. On multiplication by a duration,
-    * RateProb: rate -> probability 
+    * rateprob: rate -> probability 
     * timeprob: probability -> rate -> probability
 
     The behavior of both classes is depending on the data type of the object being multiplied.
@@ -1020,11 +1020,11 @@ class Time(sc.prettyobj):
     Each module can have its own time instance, in the case where the time vector
     is defined by absolute dates, these time vectors are by definition aligned. Otherwise
     they can be specified using Dur objects which express relative times (they can be added
-    to a Date to get an absolute time)
+    to a date to get an absolute time)
 
     Args:
-        start : ss.Date or ss.Dur
-        stop : ss.Date if start is an ss.Date, or an ss.Dur if start is an ss.Dur
+        start : ss.date or ss.Dur
+        stop : ss.date if start is an ss.date, or an ss.Dur if start is an ss.Dur
         dt (ss.Dur): Simulation step size
         pars (dict): if provided, populate parameter values from this dictionary
         parent (obj): if provided, populate missing parameter values from a 'parent" ``Time`` instance
@@ -1036,7 +1036,7 @@ class Time(sc.prettyobj):
 
     - ``ti`` (int): the current timestep
     - ``npts`` (int): the number of timesteps
-    - ``tvec`` (array): time either as absolute `ss.Date` instances, or relative `ss.Dur` instances
+    - ``tvec`` (array): time either as absolute `ss.date` instances, or relative `ss.Dur` instances
     - ``yearvec`` (array): time represented as floating-point years
 
     **Examples**::
@@ -1048,7 +1048,7 @@ class Time(sc.prettyobj):
     # Allowable time arguments
     time_args = ['start', 'stop', 'dt']
     default_dur = Dur(50)
-    default_start = Date(2000)
+    default_start = date(2000)
     default_dt = Dur(1)
 
     def __init__(self, start=None, stop=None, dt=None, dur=None, name=None):
@@ -1059,7 +1059,7 @@ class Time(sc.prettyobj):
         self.dt = dt
         self.dur = dur
         self.ti = 0 # The time index, e.g. 0, 1, 2
-        self._tvec    = None # The time vector for this instance in Date or Dur format
+        self._tvec    = None # The time vector for this instance in date or Dur format
         self._yearvec = None # Time vector as floating point years
         self.initialized = False # Call self.init(sim) to initialise the object
 
@@ -1124,11 +1124,11 @@ class Time(sc.prettyobj):
         """
         Check whether the fundamental simulation unit is absolute
 
-        A time vector is absolute if the start is a Date rather than a Dur
-        A relative time vector can be made absolute by adding a Date to it
+        A time vector is absolute if the start is a date rather than a Dur
+        A relative time vector can be made absolute by adding a date to it
         """
         try:
-            return isinstance(self.start, Date)
+            return isinstance(self.start, date)
         except:
             return False
 
@@ -1186,7 +1186,7 @@ class Time(sc.prettyobj):
                 stop = start+dur
 
             case (start, None, None):
-                start = Date(start)
+                start = date(start)
                 dur = self.default_dur
                 stop = start+dur
 
@@ -1197,7 +1197,7 @@ class Time(sc.prettyobj):
                     stop = Dur(stop)
                     start = Dur(0)
                 else:
-                    stop = Date(stop)
+                    stop = date(stop)
                     start = self.default_start
                 dur = stop-start
 
@@ -1206,30 +1206,30 @@ class Time(sc.prettyobj):
                 stop = start+dur
 
             case (start, None, dur):
-                start = Date(start)
+                start = date(start)
                 stop = start+dur
 
             case (None, stop, dur):
                 if sc.isnumber(stop) and stop < 1900:
                     stop = Dur(stop)
                 else:
-                    stop = Date(stop)
+                    stop = date(stop)
 
             case (start, stop, dur):
                 # Note that this block will run if dur is None and if it is not None, which is fine because
                 # we are ignoring dur in this case (if the user specifies start and stop, they'll be used)
                 if sc.isstring(start):
-                    start = Date(start)
+                    start = date(start)
                 if sc.isstring(stop):
-                    stop = Date(stop)
+                    stop = date(stop)
 
                 if sc.isnumber(start) and sc.isnumber(stop):
                     if stop < 1900:
                         start = Dur(start)
                         stop = Dur(stop)
                     else:
-                        start = Date(start)
-                        stop = Date(stop)
+                        start = date(start)
+                        stop = date(stop)
                 elif sc.isnumber(start):
                     start = stop.__class__(start)
                 elif sc.isnumber(stop):
@@ -1238,8 +1238,8 @@ class Time(sc.prettyobj):
             case _:
                 raise Exception('Failed to match start, stop, and dur') # This should not occur
 
-        assert isinstance(start, (Date, Dur)), 'Start must be a Date or Dur'
-        assert isinstance(stop, (Date, Dur)), 'Stop must be a Date or Dur'
+        assert isinstance(start, (date, Dur)), 'Start must be a date or Dur'
+        assert isinstance(stop, (date, Dur)), 'Stop must be a date or Dur'
         assert type(start) is type(stop), 'Start and stop must be the same type'
         assert start <= stop, 'Start must be before stop'
 
@@ -1268,14 +1268,14 @@ class Time(sc.prettyobj):
             if isinstance(self.stop, Dur):
                 self._tvec = np.array([self.stop.__class__(x) for x in self._yearvec])
             else:
-                self._tvec = np.array([Date(x) for x in self._yearvec])
+                self._tvec = np.array([date(x) for x in self._yearvec])
         else:
             # If dt has been specified as a DateDur then preference setting dates. So first
             # calculate the dates/durations, and then convert them to the equivalent fractional years
             if isinstance(self.stop, Dur):
                 self._tvec = ss.Dur.arange(self.start, self.stop, self.dt)
             else:
-                self._tvec = ss.Date.arange(self.start, self.stop, self.dt)
+                self._tvec = ss.date.arange(self.start, self.stop, self.dt)
             self._yearvec = np.array([x.years for x in self._tvec])
 
         self.initialized = True
@@ -1365,8 +1365,8 @@ if __name__ == '__main__':
     d.init()
     d.rvs(10)
 
-    Date(1500)
-    Date(1500.1)
+    date(1500)
+    date(1500.1)
     YearDur(1)*np.arange(5)
     np.arange(5)*YearDur(1)
 
@@ -1387,9 +1387,9 @@ if __name__ == '__main__':
 
     DateDur(weeks=1) - DateDur(days=1)
 
-    Date(2020.1)
+    date(2020.1)
 
-    ss.Date(2050) - ss.Date(2020)
+    ss.date(2050) - ss.date(2020)
 
 
     print(Dur(weeks=1)+Dur(1/52))
@@ -1397,19 +1397,19 @@ if __name__ == '__main__':
     print(Dur(weeks=1)/Dur(1/52))
     print(DateDur(YearDur(2/52)))
 
-    # Date('2020-01-01') + Dur(weeks=52)  # Should give us 30th December 2020
-    Date('2020-01-01') + 2.5*Dur(weeks=1)  # Should give us 30th December 2020
-    Date('2020-01-01') + 52*Dur(weeks=1)  # Should give us 30th December 2020
-    Date('2020-01-01') + 52*Dur(1/52) # Should give us 1st Jan 2021
+    # date('2020-01-01') + Dur(weeks=52)  # Should give us 30th December 2020
+    date('2020-01-01') + 2.5*Dur(weeks=1)  # Should give us 30th December 2020
+    date('2020-01-01') + 52*Dur(weeks=1)  # Should give us 30th December 2020
+    date('2020-01-01') + 52*Dur(1/52) # Should give us 1st Jan 2021
 
 
     import pickle
-    x = Date('2020-01-01')
+    x = date('2020-01-01')
     s = pickle.dumps(x)
     pickle.loads(s)
 
-    t = Time(Date('2020-01-01'), Date('2020-06-01'), Dur(days=1))
-    t = Time(Date('2020-01-01'), Date('2020-06-01'), Dur(months=1)) # Allowed
+    t = Time(date('2020-01-01'), date('2020-06-01'), Dur(days=1))
+    t = Time(date('2020-01-01'), date('2020-06-01'), Dur(months=1)) # Allowed
 
     t = Time(Dur(days=0), Dur(days=30), Dur(days=1))
     t = Time(Dur(days=0), Dur(months=1), Dur(days=30))
@@ -1419,12 +1419,12 @@ if __name__ == '__main__':
 
 
     t = Time(Dur(0), Dur(1), Dur(1/12)).init()
-    t.tvec+Date(2020)
+    t.tvec+date(2020)
 
-    # Date('2020-01-01')+50*Dur(days=1)
-    t = Time(Date('2020-01-01'), Date('2030-06-01'), Dur(days=1))
+    # date('2020-01-01')+50*Dur(days=1)
+    t = Time(date('2020-01-01'), date('2030-06-01'), Dur(days=1))
 
-    t = Time(Date(2020), Date(2030.5), Dur(0.1)).init()
+    t = Time(date(2020), date(2030.5), Dur(0.1)).init()
     t.tvec + YearDur(1)
 
     print(1/YearDur(1))

@@ -184,7 +184,7 @@ class Loop:
 
         # Convert e.g. '2020-01-01' to an actual date
         if isinstance(until, str):
-            until = ss.Date(until)
+            until = ss.date(until)
 
         # Loop over every function in the integration loop, e.g. disease.step()
         self.store_time()

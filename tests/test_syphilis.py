@@ -160,7 +160,7 @@ def test_syph_intvs(dt=1, n_agents=500, do_plot=False):
         plt.figure()
         plt.plot(syph_b.timevec[burnin:], syph_b.results.prevalence[burnin:], label='Baseline')
         plt.plot(syph_i.timevec[burnin:], syph_i.results.prevalence[burnin:], label='S&T')
-        plt.axvline(x=ss.Date(2020), color='k', ls='--')
+        plt.axvline(x=ss.date(2020), color='k', ls='--')
         plt.title('Syphilis prevalence')
         plt.legend()
         plt.show()

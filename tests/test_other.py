@@ -141,7 +141,7 @@ def test_deepcopy_until():
     s1 = ss.Sim(diseases=ss.SIR(init_prev=0.1), networks='random', n_agents=small)
     s1.init()
 
-    s1.run(until=ss.Date(2005))
+    s1.run(until=ss.date(2005))
 
     s2 = sc.dcp(s1)
 

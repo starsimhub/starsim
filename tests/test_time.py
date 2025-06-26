@@ -136,9 +136,9 @@ def test_multi_timestep(do_plot=False):
     assert len(sim) == twoyears//2
     assert len(sim.diseases.sis) == twoyears
     assert len(sim.demographics.births) == quarters+1
-    assert sim.t.tvec[-1] == ss.Date('2001-12-31') # Every second day, this is the last time point
-    assert sim.diseases.sis.t.tvec[-1] == ss.Date('2002-01-01') # Every day, we can match the last time point exactly
-    assert sim.demographics.births.t.tvec[-1] == ss.Date('2002-01-01') # Every quarter, we can match the last time point exactly
+    assert sim.t.tvec[-1] == ss.date('2001-12-31') # Every second day, this is the last time point
+    assert sim.diseases.sis.t.tvec[-1] == ss.date('2002-01-01') # Every day, we can match the last time point exactly
+    assert sim.demographics.births.t.tvec[-1] == ss.date('2002-01-01') # Every quarter, we can match the last time point exactly
 
     if do_plot:
         sim.plot()
@@ -199,17 +199,17 @@ def test_time_class():
     # assert np.array_equal(s1.t.timevec, s1.t.yearvec)
     assert len(s1.t.timevec) == 21
     assert t1.npts == sc.daydiff('2001-01-01', '2001-06-30')//2 + 1
-    assert isinstance(s1.t.start, ss.Date)
-    assert isinstance(t1.start, ss.Date)
-    assert s1.t.tvec[-1] == ss.Date('2002-01-01')
-    assert t1.tvec[-1] == ss.Date('2001-06-30')
+    assert isinstance(s1.t.start, ss.date)
+    assert isinstance(t1.start, ss.date)
+    assert s1.t.tvec[-1] == ss.date('2002-01-01')
+    assert t1.tvec[-1] == ss.date('2001-06-30')
 
     print('Testing weeks vs. days')
     s2 = sim(start='2000-06-01', stop='2001-05-01', dt=ss.days(1))
     t2 = ss.Time(start='2000-06-01', stop='2001-05-01', dt=ss.weeks(1))
     t2.init(sim=s2)
     assert np.array_equal(s2.t.timevec, s2.t.datevec)
-    assert isinstance(s2.t.start, ss.Date)
+    assert isinstance(s2.t.start, ss.date)
     assert t2.npts*7 == s2.t.npts + 1
 
     print('Testing different units and dt')
@@ -217,7 +217,7 @@ def test_time_class():
     t3 = ss.Time(start='2001-01-01', stop='2003-01-01',dt=ss.days(2))
     t3.init(sim=s3)
     assert np.array_equal(s3.t.timevec, s3.t.datevec)
-    assert s3.t.datevec[-1] == ss.Date('2003-01-01')
+    assert s3.t.datevec[-1] == ss.date('2003-01-01')
     assert s3.t.npts == 21
 
     print('Testing durations 1')
@@ -244,15 +244,15 @@ def test_callable_dists():
 
 def test_pickling():
     import pickle
-    x = ss.Date('2020-01-01')
+    x = ss.date('2020-01-01')
     s = pickle.dumps(x)
     pickle.loads(s)
 
 def test_syntax():
     # Verify that a range of supported operations run without raising an error
 
-    assert float(Date(1500))==1500
-    assert float(Date(1500.1))==1500.1
+    assert float(date(1500))==1500
+    assert float(date(1500.1))==1500.1
 
     assert np.all((YearDur(1)*np.arange(5)) == (np.arange(5)*YearDur(1)))
 
@@ -262,29 +262,29 @@ def test_syntax():
 
     assert np.isclose(float(DateDur(weeks=1) - DateDur(days=1)),6/365.25)
 
-    assert Date(2050) - Date(2020) == YearDur(30)
+    assert date(2050) - date(2020) == YearDur(30)
 
     assert (perweek(1)+perday(1)) == perweek(8)
 
-    assert Date('2020-01-01') + Dur(weeks=52)   == Date('2020-12-30') # Should give us 30th December 2020
-    assert Date('2020-01-01') + 52*Dur(weeks=1)  == Date('2020-12-30')# Should give us 30th December 2020
-    assert Date('2020-01-01') + 52*Dur(1/52) == Date('2021-01-01') # Should give us 1st Jan 2021
-    assert Date('2020-01-01') + Dur(years=1) == Date('2021-01-01') # Should give us 1st Jan 2021
+    assert date('2020-01-01') + Dur(weeks=52)   == date('2020-12-30') # Should give us 30th December 2020
+    assert date('2020-01-01') + 52*Dur(weeks=1)  == date('2020-12-30')# Should give us 30th December 2020
+    assert date('2020-01-01') + 52*Dur(1/52) == date('2021-01-01') # Should give us 1st Jan 2021
+    assert date('2020-01-01') + Dur(years=1) == date('2021-01-01') # Should give us 1st Jan 2021
 
     # These should all work - confirm the sizes
-    assert len(Time(Date('2020-01-01'), Date('2020-06-01'), Dur(days=1)).init()) == 153
-    assert len(Time(Date('2020-01-01'), Date('2020-06-01'), Dur(months=1)).init()) == 6
+    assert len(Time(date('2020-01-01'), date('2020-06-01'), Dur(days=1)).init()) == 153
+    assert len(Time(date('2020-01-01'), date('2020-06-01'), Dur(months=1)).init()) == 6
     assert len(Time(Dur(days=0), Dur(days=30), Dur(days=1)).init()) == 31
     assert len(Time(Dur(days=0), Dur(months=1), Dur(days=30)).init()) == 2
     assert len(Time(Dur(days=0), Dur(years=1), Dur(weeks=1)).init()) == 53
     assert len(Time(Dur(days=0), Dur(years=1), Dur(months=1)) .init()) == 13
     assert len(Time(Dur(0), Dur(1), Dur(1/12)).init()) == 13
-    assert len(Time(Date('2020-01-01'), Date('2030-06-01'), Dur(days=1)).init()) == 3805
-    assert len(Time(Date(2020), Date(2030.5), Dur(0.1)).init()) == 106
+    assert len(Time(date('2020-01-01'), date('2030-06-01'), Dur(days=1)).init()) == 3805
+    assert len(Time(date(2020), date(2030.5), Dur(0.1)).init()) == 106
 
     # Operations on date vectors
-    Date.arange(2020,2030)+YearDur(1) # add YearDur to date array
-    Date.arange(2020,2030)+DateDur(years=1) # add DateDur to date array
+    date.arange(2020,2030)+YearDur(1) # add YearDur to date array
+    date.arange(2020,2030)+DateDur(years=1) # add DateDur to date array
 
     # Construction of various duration ranges and addition with durations and dates
     Dur.arange(Dur(0),Dur(10),Dur(1)) + YearDur(1)
@@ -295,10 +295,10 @@ def test_syntax():
     Dur.arange(Dur(0),Dur(10),Dur(years=1)) + DateDur(years=1)
     Dur.arange(Dur(0),Dur(years=10),Dur(years=1)) + DateDur(years=1)
     Dur.arange(Dur(years=0),Dur(years=10),Dur(years=1)) + DateDur(years=1)
-    Dur.arange(Dur(0),Dur(10),Dur(1)) + Date(2000)
-    Dur.arange(Dur(0),Dur(10),Dur(years=1)) + Date(2000)
-    Dur.arange(Dur(0),Dur(years=10),Dur(years=1)) + Date(2000)
-    Dur.arange(Dur(years=0),Dur(years=10),Dur(years=1)) + Date(2000)
+    Dur.arange(Dur(0),Dur(10),Dur(1)) + date(2000)
+    Dur.arange(Dur(0),Dur(10),Dur(years=1)) + date(2000)
+    Dur.arange(Dur(0),Dur(years=10),Dur(years=1)) + date(2000)
+    Dur.arange(Dur(years=0),Dur(years=10),Dur(years=1)) + date(2000)
 
     # Rates
     assert (1/YearDur(1)) == ss.peryear(1)
@@ -322,13 +322,13 @@ def test_syntax():
     assert p * Dur(0.5 ) == f(2)
     assert p * Dur(months=1) == f(12)
 
-    p = RateProb(0.1, Dur(years=1))
+    p = rateprob(0.1, Dur(years=1))
     f = lambda factor: 1 - np.exp(-p.value/factor)
     assert p*Dur(years=2) == f(0.5)
     assert p * Dur(0.5) == f(2)
     assert p * Dur(months=1) == f(12)
 
-    p = RateProb(0.1, Dur(1))
+    p = rateprob(0.1, Dur(1))
     assert p*Dur(years=2) == f(0.5)
     assert p * Dur(0.5) == f(2)
     assert p * Dur(months=1) == f(12)
