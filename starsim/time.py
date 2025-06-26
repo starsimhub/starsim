@@ -8,7 +8,7 @@ import datetime as dt
 import dateutil as du
 import starsim as ss
 
-__all__ = ['Date', 'Dur', 'YearDur', 'DateDur', 'Rate', 'TimeProb', 'RateProb', 'Time', 'years', 'months', 'weeks', 'days', 'perday', 'perweek', 'permonth', 'peryear']
+__all__ = ['Date', 'Dur', 'YearDur', 'DateDur', 'Rate', 'timeprob', 'RateProb', 'Time', 'years', 'months', 'weeks', 'days', 'perday', 'perweek', 'permonth', 'peryear']
 
 #%% Base classes
 
