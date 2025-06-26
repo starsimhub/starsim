@@ -27,7 +27,7 @@ def run_sir_vaccine(efficacy, leaky=True, do_plot=False):
                 init_prev = 0.01,
                 dur_inf   = ss.years(10),
                 p_death   = 0,
-                beta      = ss.TimeProb(0.06),
+                beta      = ss.timeprob(0.06),
           )
         ),
         dur = ss.years(10),

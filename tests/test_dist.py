@@ -361,7 +361,7 @@ def test_timepar_dists():
 
     print('Testing Bernoulli distribution ...')
     p1 = 0.01
-    p2 = ss.TimeProb(0.1, ss.years(10))
+    p2 = ss.timeprob(0.1, ss.years(10))
     ber1 = ss.bernoulli(p=p1, module=module_year, strict=False).init()
     ber2 = ss.bernoulli(p=p2, module=module_year, strict=False).init()
     mean1 = ber1.rvs(n).mean()

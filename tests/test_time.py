@@ -66,9 +66,9 @@ def test_classes():
     assert r5*ss.days(1) == rval * ss.days(1) / ss.weeks(1) # These should match exactly
     assert r5*ss.Dur(weeks=0.1) == rval * ss.weeks(0.1) / ss.weeks(1)
 
-    # Test TimeProb
+    # Test timeprob
     tpval = 0.1
-    tp0 = ss.TimeProb(tpval)
+    tp0 = ss.timeprob(tpval)
     assert tp0*ss.Dur(1) == tpval, 'Multiplication by the base denominator should not change the value'
     assert np.isclose(tp0*ss.Dur(0.5), tpval/2, rtol=0.1) # These should be close, but not match exactly
     assert np.isclose(tp0*ss.Dur(2), tpval*2, rtol=0.1)
@@ -82,7 +82,7 @@ def test_units(do_plot=False):
     sc.heading('Test behavior of year vs day units')
 
     sis = ss.SIS(
-        beta = ss.TimeProb(0.05, ss.days(1)),
+        beta = ss.timeprob(0.05, ss.days(1)),
         init_prev = ss.bernoulli(p=0.1),
         dur_inf = ss.lognorm_ex(mean=ss.Dur(days=10)),
         waning = ss.Rate(0.05, ss.days(1)),
@@ -121,7 +121,7 @@ def test_multi_timestep(do_plot=False):
     sc.heading('Test behavior of different modules having different timesteps')
 
     pars = dict(
-        diseases = ss.SIS(dt=ss.days(1), init_prev=0.1, beta=ss.TimeProb(0.01)),
+        diseases = ss.SIS(dt=ss.days(1), init_prev=0.1, beta=ss.timeprob(0.01)),
         demographics = ss.Births(dt=0.25),
         networks = ss.RandomNet(dt=ss.weeks(1)),
         n_agents = small,
@@ -149,7 +149,7 @@ def test_multi_timestep(do_plot=False):
 def test_mixed_timesteps():
     sc.heading('Test behavior of different combinations of timesteps')
 
-    siskw = dict(dur_inf=ss.Dur(days=50), beta=ss.TimeProb(0.01, ss.days(1)), waning=ss.Rate(0.005, ss.days(1)))
+    siskw = dict(dur_inf=ss.Dur(days=50), beta=ss.timeprob(0.01, ss.days(1)), waning=ss.Rate(0.005, ss.days(1)))
     kw = dict(n_agents=1000, start='2001-01-01', stop='2001-07-01', networks='random', copy_inputs=False, verbose=0)
 
     print('Year-year')
@@ -311,13 +311,13 @@ def test_syntax():
     assert Rate(0.5)/Rate(1) == 0.5
 
     # Probabilities
-    p = TimeProb(0.1, Dur(years=1))
+    p = timeprob(0.1, Dur(years=1))
     f = lambda factor: 1 - np.exp(-(-np.log(1 - p.value))/factor)
     assert p*Dur(years=2) == f(0.5)
     assert p * Dur(0.5) == f(2)
     assert p * Dur(months=1) == f(12)
 
-    p = TimeProb(0.1, Dur(1))
+    p = timeprob(0.1, Dur(1))
     assert p*Dur(years=2) == f(0.5)
     assert p * Dur(0.5 ) == f(2)
     assert p * Dur(months=1) == f(12)

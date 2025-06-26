@@ -184,7 +184,7 @@ def test_multidisease():
 def test_mtct():
     sc.heading('Test mother-to-child transmission routes')
     ppl = ss.People(n_agents)
-    sis = ss.SIS(beta={'random':[ss.TimeProb(0.005, ss.Dur(months=1)), ss.TimeProb(0.001, ss.Dur(months=1))], 'prenatal':[ss.TimeProb(0.1, ss.Dur(months=1)), 0], 'postnatal':[ss.TimeProb(0.1, ss.Dur(months=1)), 0]})
+    sis = ss.SIS(beta={'random':[ss.timeprob(0.005, ss.Dur(months=1)), ss.timeprob(0.001, ss.Dur(months=1))], 'prenatal':[ss.timeprob(0.1, ss.Dur(months=1)), 0], 'postnatal':[ss.timeprob(0.1, ss.Dur(months=1)), 0]})
     networks = [ss.RandomNet(), ss.PrenatalNet(), ss.PostnatalNet()]
     demographics = ss.Pregnancy(fertility_rate=ss.peryear(20))
     sim = ss.Sim(dt=ss.Dur(1/12), people=ppl, diseases=sis, networks=networks, demographics=demographics)
