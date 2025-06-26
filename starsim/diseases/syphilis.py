@@ -17,7 +17,7 @@ class Syphilis(ss.Infection):
         super().__init__()
         self.define_pars(
             # Initial conditions
-            beta = ss.TimeProb(1), # Placeholder
+            beta = ss.timeprob(1), # Placeholder
             init_prev = ss.bernoulli(p=0.03),
 
             # Adult syphilis natural history, all specified in years

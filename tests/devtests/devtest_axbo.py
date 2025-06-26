@@ -22,7 +22,7 @@ n_agents = 2e3
 
 def make_sim():
     sir = ss.SIR(
-        beta = ss.TimeProb(0.9),
+        beta = ss.timeprob(0.9),
         dur_inf = ss.lognorm_ex(mean=ss.Dur(6)),
         init_prev = ss.bernoulli(0.01),
     )
@@ -51,7 +51,7 @@ def build_sim(sim, calib_pars, **kwargs):
 
     for k, v in calib_pars.items():
         if k == 'beta':
-            sim.diseases.sir.pars['beta'] = ss.TimeProb(v)
+            sim.diseases.sir.pars['beta'] = ss.timeprob(v)
         elif k == 'dur_inf':
             sim.diseases.sir.pars['dur_inf'] = ss.lognorm_ex(mean=ss.Dur(v)),
         elif k == 'n_contacts':
