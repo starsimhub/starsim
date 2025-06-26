@@ -103,6 +103,9 @@ Pre-implemented disease models including HIV, syphilis, gonorrhea, cholera, Ebol
 ## Important Notes
 
 - Follow the style guide here: https://github.com/starsimhub/styleguide/blob/main/README.rst
+- Use built-in Starsim plotting commands if possible, only falling back to Matplotlib if necesary
+- Use Sciris where possible to shorten commands
+- When creating a multiline dictionary, put a space around the equals for arguments (as if it were a class)
 - Set `SCIRIS_BACKEND='agg'` environment variable when running tests to prevent figure display
 - The framework requires Python 3.9-3.13
 - Uses Numba for performance-critical code sections
