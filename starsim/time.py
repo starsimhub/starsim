@@ -148,9 +148,9 @@ class date(pd.Timestamp):
             return np.vectorize(self.__add__)(other)
 
         if isinstance(other, DateDur):
-            return date(self.to_pandas() + other.dt)
+            return date(self.to_pandas() + other.unit)
         elif isinstance(other, YearDur):
-            return date(self.to_year() + other.dt)
+            return date(self.to_year() + other.unit)
         elif isinstance(other, pd.DateOffset):
             return date(self.to_pandas() + other)
         elif isinstance(other, pd.Timestamp):
@@ -166,9 +166,9 @@ class date(pd.Timestamp):
             return np.vectorize(self.__sub__)(other)
 
         if isinstance(other, DateDur):
-            return date(self.to_pandas() - other.dt)
+            return date(self.to_pandas() - other.unit)
         elif isinstance(other, YearDur):
-            return date(self.to_year() - other.dt)
+            return date(self.to_year() - other.unit)
         elif isinstance(other, pd.DateOffset):
             return date(self.to_pandas() - other)
         elif isinstance(other, date):
@@ -396,7 +396,7 @@ class Dur():
         # If a float is divided by a Dur, then we should return a rate
         # If a rate is divided by a Dur, then we will call Rate.__truediv__
         # We also need divide the duration by the numerator when calculating the rate
-        if self.dt == 0:
+        if self.years == 0:
             raise ZeroDivisionError('Cannot divide by a duration of zero') # TODO: consider Rate(Dur(np.inf))
         elif sc.isnumber(other) and other == 0:
             return Rate(0)
@@ -449,16 +449,16 @@ class YearDur(Dur):
         :param years: float, YearDur, DateDur
         """
         if isinstance(years, Dur):
-            self.dt = years.years
+            self.unit = years.years
         else:
-            self.dt = years
+            self.unit = years
 
     def to_numpy(self):
-        return self.dt
+        return self.unit
 
     @property
     def years(self):
-        return self.dt # Needs to return float so matplotlib can plot it correctly
+        return self.unit # Needs to return float so matplotlib can plot it correctly
 
     @property
     def is_variable(self):
@@ -466,19 +466,19 @@ class YearDur(Dur):
 
     def __add__(self, other):
         if isinstance(other, Dur):
-            return self.__class__(self.dt + other.years)
+            return self.__class__(self.unit + other.years)
         elif isinstance(other, date):
-            return date.from_year(other.to_year() + self.dt)
+            return date.from_year(other.to_year() + self.unit)
         else:
-            return self.__class__(self.dt + other)
+            return self.__class__(self.unit + other)
 
     def __sub__(self, other):
         if isinstance(other, Dur):
-            return self.__class__(max(self.dt - other.years, 0))
+            return self.__class__(max(self.unit - other.years, 0))
         elif isinstance(other, date):
-            return date.from_year(other.to_year() - self.dt)
+            return date.from_year(other.to_year() - self.unit)
         else:
-            return self.__class__(max(self.dt - other, 0))
+            return self.__class__(max(self.unit - other, 0))
 
     def __mul__(self, other: float):
         if isinstance(other, np.ndarray):
@@ -489,7 +489,7 @@ class YearDur(Dur):
             raise Exception('Cannot multiply a duration by a duration')
         elif isinstance(other, date):
             raise Exception('Cannot multiply a duration by a date')
-        return self.__class__(self.dt*other)
+        return self.__class__(self.unit*other)
 
     def __truediv__(self, other):
         if isinstance(other, Dur):
@@ -497,19 +497,19 @@ class YearDur(Dur):
         elif isinstance(other, Rate):
             raise Exception('Cannot divide a duration by a rate')
         else:
-            return self.__class__(self.dt / other)
+            return self.__class__(self.unit / other)
 
     def __repr__(self):
-        return f'<YearDur: {self.dt} years>'
+        return f'<YearDur: {self.unit} years>'
 
     def str(self):
-        if self.dt == 1:
+        if self.unit == 1:
             return 'year'
         else:
-            return f'{self.dt} years'
+            return f'{self.unit} years'
 
     def __abs__(self):
-        return self.__class__(abs(self.dt))
+        return self.__class__(abs(self.unit))
 
 
 class DateDur(Dur):
@@ -538,17 +538,17 @@ class DateDur(Dur):
             assert not kwargs
             assert len(args) == 1
             if isinstance(args[0], pd.DateOffset):
-                self.dt = self._round_duration(args[0])
+                self.unit = self._round_duration(args[0])
             elif isinstance(args[0], DateDur):
-                self.dt = args[0].dt # pd.DateOffset is immutable so this should be OK
+                self.unit = args[0].unit # pd.DateOffset is immutable so this should be OK
             elif isinstance(args[0], YearDur):
-                self.dt = self._round_duration({'years': args[0].years})
+                self.unit = self._round_duration({'years': args[0].years})
             elif sc.isnumber(args[0]):
-                self.dt = self._round_duration({'years': args[0]})
+                self.unit = self._round_duration({'years': args[0]})
             else:
                 raise TypeError('Unsupported input')
         else:
-            self.dt = self._round_duration(kwargs)
+            self.unit = self._round_duration(kwargs)
 
     @classmethod
     def _as_array(cls, dateoffset: pd.DateOffset) -> np.ndarray:
@@ -597,12 +597,12 @@ class DateDur(Dur):
         years = 0
         for k, v in self.ratios.items():
             denominator *= v
-            years += self.dt.kwds.get(k, 0)/denominator
+            years += self.unit.kwds.get(k, 0)/denominator
         return years
 
     @property
     def is_variable(self):
-        if self.dt.kwds.get('years',0) or self.dt.kwds.get('months',0):
+        if self.unit.kwds.get('years',0) or self.unit.kwds.get('months',0):
             return True
         else:
             return False
@@ -668,7 +668,7 @@ class DateDur(Dur):
     def to_numpy(self):
         # TODO: This is a quick fix to get plotting to work, but this should do something more sensible
         return self.years
-        # return self.dt.to_numpy()
+        # return self.unit.to_numpy()
 
     def __pow__(self, other):
         raise Exception('Cannot multiply a duration by a duration')
@@ -680,7 +680,7 @@ class DateDur(Dur):
             return NotImplemented # Delegate to Rate.__rmul__
         elif isinstance(other, Dur):
             raise Exception('Cannot multiply a duration by a duration')
-        return self.__class__(self._scale(self.dt, other))
+        return self.__class__(self._scale(self.unit, other))
 
     def __truediv__(self, other):
         if isinstance(other, DateDur):
@@ -690,8 +690,8 @@ class DateDur(Dur):
             # For example, DateDur(weeks=1)/DateDur(days=1) should return 7, but we get 6.9999999 if we convert
             # both to years. Instead though, we can just convert days into weeks instead of days into years, and
             # then divide 1 week by (1/7) days.
-            self_array = self._as_array(self.dt)
-            other_array = other._as_array(other.dt)
+            self_array = self._as_array(self.unit)
+            other_array = other._as_array(other.unit)
             unit = np.argmax((self_array != 0) | (other_array != 0))
             denominator = 1
             a = 0
@@ -708,14 +708,14 @@ class DateDur(Dur):
             return self.years/other.years
         elif isinstance(other, Rate):
             raise Exception('Cannot divide a duration by a rate')
-        return self.__class__(self._scale(self.dt, 1/other))
+        return self.__class__(self._scale(self.unit, 1/other))
 
     def __repr__(self):
         if self.years == 0:
             return '<DateDur: 0>'
         else:
             labels = self.ratios.keys()
-            vals = self._as_array(self.dt).astype(float)
+            vals = self._as_array(self.unit).astype(float)
 
             time_portion = vals[4:]
             time_portion[-4] += time_portion[-1]*1e-9 + time_portion[-2]*1e-6 + time_portion[-3]*1e-3 # Collapse it down to seconds
@@ -726,7 +726,7 @@ class DateDur(Dur):
 
     def str(self):
         # Friendly representation e.g., 'day', '1 year, 2 months, 1 day'
-        vals = self._as_array(self.dt)
+        vals = self._as_array(self.unit)
 
         # If we have only one nonzero value, return 'year', 'month', etc.
         if np.count_nonzero(vals == 1) == 1:
@@ -740,13 +740,13 @@ class DateDur(Dur):
 
     def __add__(self, other):
         if isinstance(other, date):
-            return other + self.dt
+            return other + self.unit
         elif isinstance(other, DateDur):
-            return self.__class__(**self._as_args(self._as_array(self.dt) + self._as_array(other.dt)))
+            return self.__class__(**self._as_args(self._as_array(self.unit) + self._as_array(other.unit)))
         elif isinstance(other, pd.DateOffset):
-            return self.__class__(**self._as_args(self._as_array(self.dt) + self._as_array(other)))
+            return self.__class__(**self._as_args(self._as_array(self.unit) + self._as_array(other)))
         elif isinstance(other, YearDur):
-            kwargs = {k: v for k, v in zip(self.ratios, self._as_array(self.dt))}
+            kwargs = {k: v for k, v in zip(self.ratios, self._as_array(self.unit))}
             kwargs['years'] += other.years
             return self.__class__(**kwargs)
         else:
@@ -768,37 +768,37 @@ class Rate():
     """
     Store a value per unit time e.g., 2 per day
     - self.value - the numerator (e.g., 2) - a scalar float
-    - self.dt - the denominator (e.g., 1 day) - a Dur object
+    - self.unit - the denominator (e.g., 1 day) - a Dur object
     """
 
-    def __init__(self, value:float, dt:Dur=None):
-        if dt is None:
-            self.dt = YearDur(1)
-        elif isinstance(dt, Dur):
-            self.dt = dt
+    def __init__(self, value:float, unit:Dur=None):
+        if unit is None:
+            self.unit = YearDur(1)
+        elif isinstance(unit, Dur):
+            self.unit = unit
         else:
-            self.dt = Dur(dt)
+            self.unit = Dur(unit)
 
         assert sc.isnumber(value), 'Value must be a scalar number'
         self.value = value
 
     def __repr__(self):
-        return f'<{self.__class__.__name__}: {self.value} per {self.dt.str()}>' # Use str to get the friendly representation
+        return f'<{self.__class__.__name__}: {self.value} per {self.unit.str()}>' # Use str to get the friendly representation
 
     def __mul__(self, other):
         if isinstance(other, np.ndarray):
             return other*self
         elif isinstance(other, Dur):
-            return self.value*other/self.dt
+            return self.value*other/self.unit
         else:
-            return self.__class__(self.value*other, self.dt)
+            return self.__class__(self.value*other, self.unit)
 
     def __neg__(self):
         return -1*self
 
     def __add__(self, other):
         if self.__class__ == other.__class__:
-            return self.__class__(self.value+other*self.dt, self.dt)
+            return self.__class__(self.value+other*self.unit, self.unit)
         elif not isinstance(other, Rate):
             if sc.isnumber(other) or isinstance(other, np.ndarray):
                 raise TypeError('Only rates can be added to rates. This error most commonly occurs if the rate needs to be multiplied by `self.t.dt` to get a number of events per timestep.')
@@ -811,7 +811,7 @@ class Rate():
 
     def __sub__(self, other):
         if self.__class__ == other.__class__:
-            return self.__class__(self.value-other*self.dt, self.dt)
+            return self.__class__(self.value-other*self.unit, self.unit)
         elif not isinstance(other, Rate):
             if sc.isnumber(other) or isinstance(other, np.ndarray):
                 raise TypeError('Only rates can be added to rates. This error most commonly occurs if the rate needs to be multiplied by `self.t.dt` to get a number of events per timestep.')
@@ -821,7 +821,7 @@ class Rate():
             raise TypeError('Can only subtract rates of identical types (e.g., Rate+Rate, timeprob+timeprob)')
 
     def __eq__(self, other):
-        return self.value == other.value/other.dt*self.dt
+        return self.value == other.value/other.unit*self.unit
 
     def __rmul__(self, other): return self.__mul__(other)
 
@@ -829,15 +829,15 @@ class Rate():
         # This is for <rate>/<other>
         if isinstance(other, Rate):
             # Convert the other rate onto our dt, then divide the value
-            return self.value/(other.value/other.dt*self.dt)
+            return self.value/(other.value/other.unit*self.unit)
         elif isinstance(other, Dur):
             raise Exception('Cannot divide a rate by a duration')
         else:
-            return self.__class__(self.value/other, self.dt)
+            return self.__class__(self.value/other, self.unit)
 
     def __rtruediv__(self, other):
         # If a float is divided by a rate
-        return other * (self.dt/self.value)
+        return other * (self.unit/self.value)
 
     def to_prob(self, dur, v=1):
         """
@@ -862,9 +862,9 @@ class Rate():
         :return: A numpy float array of values
         """
         if isinstance(dur, np.ndarray):
-            factor = (dur/self.dt).astype(float)
+            factor = (dur/self.unit).astype(float)
         else:
-            factor = dur/self.dt
+            factor = dur/self.unit
         return (self.value*v)*factor
 
 
@@ -908,9 +908,9 @@ class timeprob(Rate):
     specify the instantaneous rate.
     """
 
-    def __init__(self, value, dt=None):
+    def __init__(self, value, unit=None):
         assert 0 <= value <= 1, 'Value must be between 0 and 1'
-        return super().__init__(value, dt)
+        return super().__init__(value, unit)
 
     def __mul__(self, other):
         if isinstance(other, np.ndarray):
@@ -921,19 +921,19 @@ class timeprob(Rate):
             elif self.value == 1:
                 return 1
             else:
-                factor = self.dt/other
+                factor = self.unit/other
                 if factor == 1:
                     return self.value # Avoid expensive calculation and precision issues
                 rate = -np.log(1 - self.value)
                 return 1 - np.exp(-rate/factor)
         else:
-            return self.__class__(self.value*other, self.dt)
+            return self.__class__(self.value*other, self.unit)
 
     def to_prob(self, dur, v=1):
         if isinstance(dur, np.ndarray):
-            factor = (dur/self.dt).astype(float)
+            factor = (dur/self.unit).astype(float)
         else:
-            factor = dur/self.dt
+            factor = dur/self.unit
         rate = -np.log(1-(self.value*v))
         return 1-np.exp(-rate*factor)
 
@@ -979,9 +979,9 @@ class rateprob(Rate):
 
     The behavior of both classes is depending on the data type of the object being multiplied.
     """
-    def __init__(self, value, dt=None):
+    def __init__(self, value, unit=None):
         assert value >= 0, 'Value must be >= 0'
-        return super().__init__(value, dt)
+        return super().__init__(value, unit)
 
     def __mul__(self, other):
         if isinstance(other, np.ndarray):
@@ -990,16 +990,16 @@ class rateprob(Rate):
             if self.value == 0:
                 return 0
             else:
-                factor = self.dt/other
+                factor = self.unit/other
                 return 1 - np.exp(-self.value/factor)
         else:
-            return self.__class__(self.value*other, self.dt)
+            return self.__class__(self.value*other, self.unit)
 
     def to_prob(self, dur, v=1):
         if isinstance(dur, np.ndarray):
-            factor = (dur/self.dt).astype(float)
+            factor = (dur/self.unit).astype(float)
         else:
-            factor = dur/self.dt
+            factor = dur/self.unit
         rate = self.value*v
         return 1-np.exp(-rate*factor)
 
