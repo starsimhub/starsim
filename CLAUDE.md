@@ -38,9 +38,6 @@ pytest test_sim.py
 ```bash
 # Check code style with pylint
 cd tests && ./check_style
-
-# Run specific linting
-cd .. && pylint starsim
 ```
 
 ### Documentation
@@ -101,13 +98,13 @@ Pre-implemented disease models including HIV, syphilis, gonorrhea, cholera, Ebol
 - Follows Google Python style guide with project-specific exceptions
 - Tests use pytest with parallel execution via `pytest-xdist`
 - Documentation built with Quarto and executed via Jupyter
-- All plotting uses matplotlib/seaborn with `SCIRIS_BACKEND='agg'` for non-interactive plots
-- Random number generation is centralized and uses numba for performance
+- Random number generation is centralized and uses Numba for performance
 
 ## Important Notes
 
+- Follow the style guide here: https://github.com/starsimhub/styleguide/blob/main/README.rst
 - Set `SCIRIS_BACKEND='agg'` environment variable when running tests to prevent figure display
 - The framework requires Python 3.9-3.13
-- Uses numba for performance-critical code sections
+- Uses Numba for performance-critical code sections
 - All modules inherit from base classes in `modules.py`
 - Parameter handling is centralized through `parameters.py` and `SimPars` class
