@@ -570,6 +570,8 @@ class Dist:
 
     def rand(self, size):
         """ Simple way to get simple random numbers """
+        if ss.options._centralized:
+            return np.random.mtrand._rand.random(size).astype(ss.dtypes.float)
         return self.rng.random(size, dtype=ss.dtypes.float) # Up to 2x faster with float32
 
     def make_rvs(self):
@@ -615,6 +617,8 @@ class Dist:
             raise DistNotReadyError(self)
 
         # Figure out size, UIDs, and slots
+        if ss.options._centralized and not (np.isscalar(n) or isinstance(n, tuple)):
+            n = len(n) # If centralized, treat n as a size
         size, slots = self.process_size(n)
 
         # Check if size is 0, then we can return

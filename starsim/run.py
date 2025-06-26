@@ -337,7 +337,7 @@ class MultiSim:
 
         return summary
 
-    def plot(self, key=None, fig=None, fig_kw=None, plot_kw=None, fill_kw=None):
+    def plot(self, key=None, fig=None, fig_kw=None, plot_kw=None, fill_kw=None, legend=True):
         """
         Plot all results in the MultiSim object.
 
@@ -359,7 +359,8 @@ class MultiSim:
             with ss.options.context(jupyter=False): # Always return the figure
                 for sim in self.sims:
                     fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw)
-            plt.legend()
+            if legend:
+                plt.legend()
 
         # Has been reduced, plot with uncertainty bounds
         else:
