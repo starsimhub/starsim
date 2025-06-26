@@ -42,7 +42,7 @@ def run_sim(n, idx, intv_cov, rand_seed, rng):
     }
     hiv = ss.HIV(hiv_pars)
 
-    pregnancy = ss.Pregnancy(pars={'fertility_rate': 10})
+    pregnancy = ss.Pregnancy(fertility_rate=10)
     deaths = ss.Deaths()
 
     pars = {

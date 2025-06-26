@@ -94,29 +94,33 @@ class RoutineDelivery(Intervention):
 
         # If start_year and end_year are not provided, figure them out from the provided years or the sim
         if self.years is None:
-            if self.start_year is None: self.start_year = sim.pars.start
-            if self.end_year is None:   self.end_year = sim.pars.stop
+            if self.start_year is None: self.start_year = sim.t.start
+            if self.end_year is None:   self.end_year = sim.t.stop
         else:
             self.years = sc.promotetoarray(self.years)
             self.start_year = self.years[0]
             self.end_year = self.years[-1]
 
         # More validation
+        # TODO: Refactor to be more agnostic about the types - leverage just doing direct comparisons and don't privilege year units
         yearvec = sim.t.yearvec
-        if not(any(np.isclose(self.start_year, yearvec)) and any(np.isclose(self.end_year, yearvec))):
+        start_year = self.start_year.years if isinstance(self.start_year, ss.date) else self.start_year
+        end_year = self.end_year.years if isinstance(self.end_year, ss.date) else self.end_year
+
+        if not(any(np.isclose(start_year, yearvec)) and any(np.isclose(end_year, yearvec))):
             errormsg = 'Years must be within simulation start and end dates.'
             raise ValueError(errormsg)
 
         # Adjustment to get the right end point
-        dt = sim.pars.dt # TODO: need to eventually replace with own timestep, but not initialized yet since super().init_pre() hasn't been called
+        dt = sim.t.dt.years if isinstance(sim.t.dt, ss.Dur) else sim.t.dt # TODO: need to eventually replace with own timestep, but not initialized yet since super().init_pre() hasn't been called
         adj_factor = int(1/dt) - 1 if dt < 1 else 1
 
         # Determine the timepoints at which the intervention will be applied
-        self.start_point = sc.findfirst(yearvec, self.start_year)
-        self.end_point   = sc.findfirst(yearvec, self.end_year) + adj_factor
-        self.years       = sc.inclusiverange(self.start_year, self.end_year)
+        self.start_point = sc.findfirst(yearvec, start_year)
+        self.end_point   = sc.findfirst(yearvec, end_year) + adj_factor
+        self.years       = sc.inclusiverange(start_year, end_year)
         self.timepoints  = sc.inclusiverange(self.start_point, self.end_point)
-        self.yearvec     = np.arange(self.start_year, self.end_year + adj_factor, dt) # TODO: integrate with self.t
+        self.yearvec     = np.arange(start_year, end_year + adj_factor, dt) # TODO: integrate with self.t
 
         # Get the probability input into a format compatible with timepoints
         if len(self.years) != len(self.prob):

@@ -135,11 +135,11 @@ class Loop:
         # Handle the sim and people first
         sim = self.sim
         for key in ['sim', 'people']:
-            self.abs_tvecs[key] = sim.t.abstvec
+            self.abs_tvecs[key] = sim.t.tvec
 
         # Handle all other modules
         for mod in sim.modules:
-            self.abs_tvecs[mod.name] = mod.t.abstvec
+            self.abs_tvecs[mod.name] = mod.t.tvec
 
         return self.abs_tvecs
 
@@ -158,10 +158,9 @@ class Loop:
         self.plan = sc.dataframe(raw)
 
         # Sort it by step_order, a combination of time and function order
-        self.plan['step_order'] = self.plan.time + ss.options.time_eps*self.plan.func_order
         self.plan['func_label'] = self.plan.module + '.' + self.plan.func_name
-        col_order = ['time', 'func_order', 'step_order', 'func', 'func_label', 'module', 'func_name'] # Func in the middle to hide it
-        self.plan = self.plan.sort_values('step_order').reset_index(drop=True)[col_order]
+        col_order = ['time', 'func_order', 'func', 'func_label', 'module', 'func_name'] # Func in the middle to hide it
+        self.plan = self.plan.sort_values(['time','func_order']).reset_index(drop=True)[col_order]
         return
 
     def store_time(self):
@@ -192,7 +191,7 @@ class Loop:
         for f,label in zip(self.plan.func[self.index:], self.plan.func_label[self.index:]):
             if verbose:
                 row = self.plan[self.index]
-                print(f'Running t={row.time:n}, step={row.step_order}, {label}()')
+                print(f'Running t={row.time:n}, step={row.name}, {label}()')
 
             f() # Execute the function -- this is where all of Starsim happens!!
 
@@ -271,7 +270,7 @@ class Loop:
         plt.scatter(x, y, c=colors[mod_int], **scatter_kw)
         plt.yticks(yticks, ylabels)
         plt.title(f'Integration plan ({len(df)} events)')
-        plt.xlabel(f'Time since simulation start (in {self.sim.pars.unit}s)')
+        plt.xlabel(f'Time since simulation start')
         plt.grid(True)
         sc.figlayout()
         sc.boxoff()

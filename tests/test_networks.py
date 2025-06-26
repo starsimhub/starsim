@@ -126,7 +126,7 @@ def test_disk():
 
     # Visualize the path of agents
     nw1 = ss.DiskNet()
-    s1 = ss.Sim(n_agents=5, dur=50, networks=nw1, copy_inputs=False).init() # This initializes the network
+    s1 = ss.Sim(n_agents=5, dur=ss.years(50), networks=nw1, copy_inputs=False).init() # This initializes the network
 
     if sc.options.interactive:
         # Visualize motion:
@@ -139,14 +139,14 @@ def test_disk():
         cmap = mpl.colormaps['plasma']
         colors = cmap(np.linspace(0, 1, s1.pars.n_agents))
         ax.scatter(nw1.x, nw1.y, s=50, c=colors)
-        for i in range(s1.pars.dur):
+        for i in range(s1.t.npts):
             ax.plot([0,1,1,0,0], [0,0,1,1,0], 'k-', lw=1)
             ax.quiver(nw1.x, nw1.y, vdt * np.cos(nw1.theta), vdt * np.sin(nw1.theta), color=colors)
             ax.set_aspect('equal', adjustable='box') #ax.set_xlim([0,1]); ax.set_ylim([0,1])
             s1.run_one_step()
 
     # Simulate SIR on a DiskNet
-    nw2 = ss.DiskNet(r=0.15, v=0.05)
+    nw2 = ss.DiskNet(r=0.15, v=ss.Rate(0.05))
     s2 = ss.Sim(n_agents=small, networks=nw2, diseases='sir').init() # This initializes the network
     s2.run()
 
@@ -185,7 +185,7 @@ def test_null():
     sc.heading('Testing NullNet...')
     people = ss.People(n_agents=small)
     network = ss.NullNet()
-    sir = ss.SIR(pars=dict(dur_inf=10, beta=0.1))
+    sir = ss.SIR(dur_inf=10, beta=0.1)
     sim = ss.Sim(diseases=sir, people=people, networks=network)
     sim.run()
     return sim
@@ -218,12 +218,12 @@ if __name__ == '__main__':
     T = sc.timer()
 
     # Run tests
-    man  = test_manual()
-    rand = test_random()
-    stat = test_static()
-    erdo = test_erdosrenyi()
+    # man  = test_manual()
+    # rand = test_random()
+    # stat = test_static()
+    # erdo = test_erdosrenyi()
     disk = test_disk()
-    null = test_null()
-    oth  = test_other()
+    # null = test_null()
+    # oth  = test_other()
 
     T.toc()

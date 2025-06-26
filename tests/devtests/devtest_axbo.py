@@ -22,8 +22,8 @@ n_agents = 2e3
 
 def make_sim():
     sir = ss.SIR(
-        beta = ss.beta(0.9),
-        dur_inf = ss.lognorm_ex(mean=ss.dur(6)),
+        beta = ss.timeprob(0.9),
+        dur_inf = ss.lognorm_ex(mean=ss.Dur(6)),
         init_prev = ss.bernoulli(0.01),
     )
 
@@ -33,12 +33,11 @@ def make_sim():
     random = ss.RandomNet(n_contacts=ss.poisson(4))
 
     sim = ss.Sim(
-        dt = 1,
-        unit = 'day',
+        dt = ss.days(1),
         n_agents = n_agents,
         #total_pop = 9980999,
-        start = sc.date('2024-01-01'),
-        stop = sc.date('2024-01-31'),
+        start = ss.date('2024-01-01'),
+        stop = ss.date('2024-01-31'),
         diseases = sir,
         networks = random,
         #demographics = [deaths, births],
@@ -52,9 +51,9 @@ def build_sim(sim, calib_pars, **kwargs):
 
     for k, v in calib_pars.items():
         if k == 'beta':
-            sim.diseases.sir.pars['beta'] = ss.beta(v)
+            sim.diseases.sir.pars['beta'] = ss.timeprob(v)
         elif k == 'dur_inf':
-            sim.diseases.sir.pars['dur_inf'] = ss.lognorm_ex(mean=ss.dur(v)), #ss.dur(v)
+            sim.diseases.sir.pars['dur_inf'] = ss.lognorm_ex(mean=ss.Dur(v)),
         elif k == 'n_contacts':
             sim.networks.randomnet.pars.n_contacts = v # Typically a Poisson distribution, but this should set the distribution parameter value appropriately
         else:

@@ -13,8 +13,8 @@ def get_outputs(p_death):
     for i in range(3):
         ppl = ss.People(1000)
         network = ss.RandomNet(n_contacts=ss.poisson(5))
-        sir = ss.SIR(pars={'p_death':p_death})
-        sim = ss.Sim(people=ppl, networks=network, diseases=sir, rand_seed=0, dur=5)
+        sir = ss.SIR(p_death=p_death)
+        sim = ss.Sim(people=ppl, networks=network, diseases=sir, rand_seed=0, dur=ss.years(5))
         sim.run(verbose=0)
         df = sim.to_df()
         summary = {}

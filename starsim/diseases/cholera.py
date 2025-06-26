@@ -14,31 +14,31 @@ class Cholera(ss.Infection):
     """
     Cholera
     """
-    def __init__(self, pars=None, *args, **kwargs):
+    def __init__(self, **kwargs):
         """ Initialize with parameters """
         super().__init__()
         self.define_pars(
             # Initial conditions and beta
-            beta = ss.beta(1.0), # Placeholder value
+            beta = ss.timeprob(1.0, ss.days(1)), # Placeholder value
             init_prev = ss.bernoulli(0.005),
 
             # Natural history parameters, all specified in days
-            dur_exp2inf   = ss.days(ss.lognorm_ex(mean=2.772, std=4.737)), # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
-            dur_asymp2rec = ss.days(ss.uniform(low=1, high=10)), # From WHO cholera fact sheet, asymptomatic individuals shed bacteria for 1-10 days (https://www.who.int/news-room/fact-sheets/detail/cholera)
-            dur_symp2rec  = ss.days(ss.lognorm_ex(mean=5, std=1.8)), # According to Fung most modelling studies assume 5 days of symptoms (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3926264/), but found a range of 2.9-14 days. Distribution approximately fit to these values
-            dur_symp2dead = ss.days(ss.lognorm_ex(mean=1, std=0.5)), # There does not appear to be differences in timing/duration of mild vs severe disease, but death from severe disease happens rapidly https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5767916/
+            dur_exp2inf   = ss.lognorm_ex(mean=ss.days(2.772), std=ss.days(4.737)), # Calculated from Azman et al. estimates https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3677557/
+            dur_asymp2rec = ss.uniform(low=ss.days(1), high=ss.days(10)), # From WHO cholera fact sheet, asymptomatic individuals shed bacteria for 1-10 days (https://www.who.int/news-room/fact-sheets/detail/cholera)
+            dur_symp2rec  = ss.lognorm_ex(mean=ss.days(5), std=ss.days(1.8)), # According to Fung most modelling studies assume 5 days of symptoms (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3926264/), but found a range of 2.9-14 days. Distribution approximately fit to these values
+            dur_symp2dead = ss.lognorm_ex(mean=ss.days(1), std=ss.days(0.5)), # There does not appear to be differences in timing/duration of mild vs severe disease, but death from severe disease happens rapidly https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5767916/
             p_death       = ss.bernoulli(p=0.005), # Probability of death is typically less than 1% when treated
             p_symp        = ss.bernoulli(p=0.5), # Proportion of infected which are symptomatic, mid range of ~25% and 57% estimates from Jaclson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3795095/) and Nelson et al (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/), respectively
             asymp_trans   = 0.01, # Reduction in transmission probability for asymptomatic infection, asymptomatic carriers shed 100-1000 times less bacteria than symptomatic carriers (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3084143/ and https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3842031/). Previous models assume a 10% relative transmissibility (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4238032/)
 
             # Environmental parameters
-            beta_env = ss.beta(0.5 / 3), # Scaling factor for transmission from environment,
-            half_sat_rate = 1_000_000, # Infectious dose in water sufficient to produce infection in 50% of  exposed, from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
-            shedding_rate = ss.rate(10, unit='day'), # Rate at which infectious people shed bacteria to the environment (per day), from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
-            decay_rate = ss.rate(0.033, unit='day'), # Rate at which bacteria in the environment dies (per day), from Chao et al. and Mukandavire et al. citing https://pubmed.ncbi.nlm.nih.gov/8882180/
+            beta_env = ss.timeprob(0.5 / 3), # Scaling factor for transmission from environment,
+            half_sat_rate = 1_000_000, # Infectious dose in water sufficient to produce infection in 50% of exposed, from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
+            shedding_rate = ss.perday(10), # Rate at which infectious people shed bacteria to the environment (per day), from Mukandavire et al. (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC3102413/)
+            decay_rate = ss.perday(0.033), # Rate at which bacteria in the environment dies (per day), from Chao et al. and Mukandavire et al. citing https://pubmed.ncbi.nlm.nih.gov/8882180/
             p_env_transmit = ss.bernoulli(p=0), # Probability of environmental transmission - filled out later
         )
-        self.update_pars(pars, **kwargs)
+        self.update_pars(**kwargs)
 
         # Boolean states
         self.define_states(
@@ -117,8 +117,8 @@ class Cholera(ss.Infection):
         n_asymptomatic = self.asymptomatic.sum()
         old_prev = self.results.env_prev[ti-1]
 
-        new_bacteria = p.shedding_rate * (n_symptomatic + p.asymp_trans * n_asymptomatic)
-        old_bacteria = old_prev * (1 - p.decay_rate)
+        new_bacteria = p.shedding_rate * (n_symptomatic + p.asymp_trans * n_asymptomatic) * self.t.dt
+        old_bacteria = old_prev * np.exp(-(p.decay_rate * self.t.dt))
 
         r.env_prev[ti] = new_bacteria + old_bacteria
         r.env_conc[ti] = r.env_prev[ti] / (r.env_prev[ti] + p.half_sat_rate)
@@ -154,20 +154,24 @@ class Cholera(ss.Infection):
 
         return
 
-    def make_new_cases(self):
+    def infect(self):
         """ Add indirect transmission """
         # Make new cases via direct transmission
-        super().make_new_cases()
+        new_cases, sources, networks = super().infect()
 
         # Make new cases via indirect transmission
         pars = self.pars
         res = self.results
-        p_transmit = res.env_conc[self.ti] * pars.beta_env
+        p_transmit = res.env_conc[self.ti] * pars.beta_env * self.t.dt
         pars.p_env_transmit.set(p=p_transmit)
-        new_cases = pars.p_env_transmit.filter(self.sim.people.uid[self.susceptible]) # TODO: make syntax nicer
-        if new_cases.any():
-            self.set_prognoses(new_cases, source_uids=None)
-        return
+        new_cases_env = pars.p_env_transmit.filter(self.susceptible)
+
+        if len(new_cases_env):
+            new_cases = new_cases + new_cases_env
+            sources = np.concatenate([sources, np.full_like(new_cases_env, fill_value=np.nan)])
+            networks = np.concatenate([networks, np.full_like(new_cases_env, fill_value=np.nan)])
+
+        return new_cases, sources, networks
 
     def step_die(self, uids):
         """ Reset infected/recovered flags for dead agents """

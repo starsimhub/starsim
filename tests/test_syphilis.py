@@ -20,10 +20,8 @@ def make_syph_sim(dt=1, n_agents=500):
     syph.pars.init_prev = ss.bernoulli(p=0.1)
 
     # Make demographic modules
-    fertility_rates = {'fertility_rate': pd.read_csv(datadir/'nigeria_asfr.csv')}
-    pregnancy = ss.Pregnancy(pars=fertility_rates)
-    death_rates = {'death_rate': pd.read_csv(datadir/'nigeria_deaths.csv'), 'rate_units': 1}
-    death = ss.Deaths(death_rates)
+    pregnancy = ss.Pregnancy(fertility_rate=pd.read_csv(datadir/'nigeria_asfr.csv'))
+    death = ss.Deaths(death_rate=pd.read_csv(datadir/'nigeria_deaths.csv'), rate_units=1)
 
     # Make people and networks
     ss.set_seed(1)
@@ -90,32 +88,31 @@ def test_syph(dt=1, n_agents=500, do_plot=False):
 
     # Check plots
     burnin = 0
-    pi = int(burnin/dt)
 
     if do_plot:
-        tvec = sim.timevec[pi:]
+        tvec = sim.timevec[burnin:]
         res = sim.results.syphilis
         fig, ax = plt.subplots(2, 2)
         ax = ax.ravel()
         ax[0].stackplot(
             tvec,
-            # res.n_susceptible[pi:],
-            res.n_congenital[pi:],
-            res.n_exposed[pi:],
-            res.n_primary[pi:],
-            res.n_secondary[pi:],
-            (res.n_latent_temp[pi:]+res.n_latent_long[pi:]),
-            res.n_tertiary[pi:],
+            # res.n_susceptible[burnin:],
+            res.n_congenital[burnin:],
+            res.n_exposed[burnin:],
+            res.n_primary[burnin:],
+            res.n_secondary[burnin:],
+            (res.n_latent_temp[burnin:]+res.n_latent_long[burnin:]),
+            res.n_tertiary[burnin:],
         )
         ax[0].legend(['Congenital', 'Exposed', 'Primary', 'Secondary', 'Latent', 'Tertiary'], loc='lower right')
 
-        ax[1].plot(tvec, res.prevalence[pi:])
+        ax[1].plot(tvec, res.prevalence[burnin:])
         ax[1].set_title('Syphilis prevalence')
 
-        ax[2].plot(tvec, sim.results.n_alive[pi:])
+        ax[2].plot(tvec, sim.results.n_alive[burnin:])
         ax[2].set_title('Population')
 
-        ax[3].plot(tvec, res.new_infections[pi:])
+        ax[3].plot(tvec, res.new_infections[burnin:])
         ax[3].set_title('New infections')
 
         fig.tight_layout()
@@ -159,11 +156,11 @@ def test_syph_intvs(dt=1, n_agents=500, do_plot=False):
         burnin = 10
         syph_b = sim_base.diseases.syphilis
         syph_i = sim_intv.diseases.syphilis
-        pi = int(burnin/syph_b.t.dt)
+
         plt.figure()
-        plt.plot(syph_b.timevec[pi:], syph_b.results.prevalence[pi:], label='Baseline')
-        plt.plot(syph_i.timevec[pi:], syph_i.results.prevalence[pi:], label='S&T')
-        plt.axvline(x=2020, color='k', ls='--')
+        plt.plot(syph_b.timevec[burnin:], syph_b.results.prevalence[burnin:], label='Baseline')
+        plt.plot(syph_i.timevec[burnin:], syph_i.results.prevalence[burnin:], label='S&T')
+        plt.axvline(x=ss.date(2020), color='k', ls='--')
         plt.title('Syphilis prevalence')
         plt.legend()
         plt.show()
@@ -178,7 +175,7 @@ if __name__ == '__main__':
     T = sc.timer()
     do_plot = True
 
-    dt = [1/12, 1][quick_run]
+    dt = [ss.months(1), ss.years(1)][quick_run]
     n_agents = [20e3, 500][quick_run]
 
     sim = test_syph(dt=dt, n_agents=n_agents, do_plot=do_plot)

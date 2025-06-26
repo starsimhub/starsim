@@ -34,8 +34,8 @@ ax_client = AxClient(enforce_sequential_optimization=False)
 
 def make_sim(calib_pars):
     sir = ss.SIR(
-        beta = ss.beta( calib_pars.get('beta', 0.9) ),
-        dur_inf = ss.lognorm_ex(mean=ss.dur( calib_pars.get('dur_inf', 6))),
+        beta = ss.timeprob( calib_pars.get('beta', 0.9) ),
+        dur_inf = ss.lognorm_ex(mean=ss.Dur( calib_pars.get('dur_inf', 6))),
         init_prev = ss.bernoulli(0.01),
     )
 
@@ -45,12 +45,11 @@ def make_sim(calib_pars):
     random = ss.RandomNet(n_contacts=ss.poisson(calib_pars.get('n_contacts', 4)))
 
     sim = ss.Sim(
-        dt = 1,
-        unit = 'day',
+        dt = ss.days(1),
         n_agents = n_agents,
         #total_pop = 9980999,
-        start = sc.date('2024-01-01'),
-        stop = sc.date('2024-01-31'),
+        start = ss.date('2024-01-01'),
+        stop = ss.date('2024-01-31'),
         diseases = sir,
         networks = random,
         #demographics = [deaths, births],

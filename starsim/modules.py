@@ -110,7 +110,7 @@ class Module(Base):
         # Handle parameters
         self.pars = ss.Pars() # Usually populated via self.define_pars()
         self.set_metadata(name, label) # Usually reset as part of self.update_pars()
-        self.t = ss.Time(**kwargs, name=self.name, init=False)
+        self.t = ss.Time(**kwargs, name=self.name)
 
         # Properties to be added by init_pre()
         self.sim = None
@@ -160,9 +160,8 @@ class Module(Base):
             self.pars = ss.Pars(**kwargs)
         return self.pars
 
-    def update_pars(self, pars=None, **kwargs):
+    def update_pars(self, **pars):
         """ Pull out recognized parameters, returning the rest """
-        pars = sc.mergedicts(pars, kwargs)
 
         # Update matching module parameters
         matches = {}
@@ -173,12 +172,12 @@ class Module(Base):
 
         # Update module attributes
         metadata = {key:pars.get(key, self.pars.get(key)) for key in module_args}
-        timepars = {key:pars.get(key, self.pars.get(key)) for key in ss.time.time_args}
+        timepars = {key:pars.get(key, self.pars.get(key)) for key in ss.Time.time_args}
         self.set_metadata(**metadata)
         self.t.update(**timepars)
 
         # Should be no remaining pars
-        remaining = set(pars.keys()) - set(module_args + ss.time.time_args)
+        remaining = set(pars.keys()) - set(module_args) - set(ss.Time.time_args)
         if len(remaining):
             errormsg = f'{len(pars)} unrecognized arguments for {self.name}: {sc.strjoin(remaining)}'
             raise ValueError(errormsg)
@@ -195,10 +194,10 @@ class Module(Base):
         if force or not self.pre_initialized:
             self.sim = sim # Link back to the sim object
             ss.link_dists(self, sim, skip=ss.Sim) # Link the distributions to sim and module
+            self.t.init(sim=self.sim) # Initialize time vector
             sim.pars[self.name] = self.pars
             sim.results[self.name] = self.results
             sim.people.add_module(self) # Connect the states to the people
-            self.init_time() # Initialize the modules' time parameters and link them to the sim
             self.init_results()
             self.pre_initialized = True
         return
@@ -216,24 +215,10 @@ class Module(Base):
         self.initialized = True
         return
 
-    def init_time(self, force=False):
-        """ Initialize all time parameters by ensuring all parameters are initialized; part of init_post() """
-        # Update time and initialize
-        self.t.init(sim=self.sim) # Sets the absolute sim time vector
-
-        # Find all time parameters in the module
-        timepars = sc.search(self.pars, type=ss.TimePar, skip=dict(keys='sim')) # Should it be self or self.pars?
-
-        # Initialize them with the parent module
-        for timepar in timepars.values():
-            if force or not timepar.initialized:
-                timepar.init(parent=self.t, die=False) # In some cases, the values can't be initialized; that's OK here
-        return
-
     def match_time_inds(self, inds=None):
          """ Find the nearest matching sim time indices for the current module """
-         self_tvec = self.t.abstvec
-         sim_tvec = self.sim.t.abstvec
+         self_tvec = self.t.yearvec
+         sim_tvec = self.sim.t.yearvec
          if len(self_tvec) == len(sim_tvec): # Shortcut to avoid doing matching
              return Ellipsis if inds is None else inds
          else:

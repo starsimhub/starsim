@@ -63,14 +63,14 @@ class Pars(sc.objdict):
                     self._update_ndict(key, old, new)
                 elif isinstance(old, ss.Module):  # Update modules
                     self._update_module(key, old, new)
-                elif isinstance(old, ss.TimePar):
-                    self._update_timepar(key, old, new)
                 elif isinstance(old, ss.Dist): # Update a distribution
                     self._update_dist(key, old, new)
                 elif callable(old): # It's a function: update directly
                     self[key] = new
                 elif isinstance(old, dict):
                     self[key] = new # Take dictionaries directly, without warning the user
+                elif isinstance(old, (ss.Dur, ss.Rate)):
+                    self[key] = new
                 else: # Everything else; not used currently but could be
                     warnmsg = f'No known mechanism for handling {type(old)} → {type(new)}; using default'
                     ss.warn(warnmsg)
@@ -99,39 +99,6 @@ class Pars(sc.objdict):
             raise TypeError(errormsg)
         return
 
-    def _update_timepar(self, key, old, new):
-        """ Update a time parameter (duration or rate) """
-
-        # It's a TimePar, e.g. dur_inf = ss.dur(6); use directly
-        if isinstance(new, ss.TimePar):
-            self[key] = new
-
-        # It's a dataframe, allow the update -- used for demographics
-        elif isinstance(new, (pd.Series, pd.DataFrame)):
-            self[key] = new # TODO: add validation or convert to timepar
-
-        # It's a single number, e.g. dur_inf = 6; set parameters
-        elif isinstance(new, Number):
-            old.set(new)
-
-        # It's a list of numbers, e.g. dur_inf = [6, 2]; set parameters
-        elif isinstance(new, list):
-            old.set(*new)
-
-        # It's a dict, figure out what to do
-        elif isinstance(new, dict):
-            if isinstance(old, ss.beta):
-                self[key] = new # TODO: use an actual set here
-            else:
-                old.set(**new)
-
-        # Give up
-        else:
-            errormsg = f'Updating timepar from {type(old)} to {type(new)} is not supported'
-            raise TypeError(errormsg)
-
-        return
-
     def _update_dist(self, key, old, new):
         """ Update a Dist object in the parameters, e.g. sim.pars.diseases.sir.dur_inf """
 
@@ -143,23 +110,13 @@ class Pars(sc.objdict):
             else:
                 self[key] = new
 
-        # It's a single number, e.g. dur_inf = 6; set parameters
-        elif isinstance(new, Number):
+        # It's a single number, e.g. dur_inf = 6; set parameters, or a time parameter
+        elif isinstance(new, (Number, ss.Dur, ss.Rate)):
             old.set(new)
 
         # It's a list of numbers, e.g. dur_inf = [6, 2]; set parameters
         elif isinstance(new, list):
             old.set(*new)
-
-        # It's a timepar, set it like a number, e.g. dur_inf = ss.dur(6)
-        elif isinstance(new, ss.TimePar):
-            oldpar = old.pars[0]
-            if isinstance(oldpar, ss.TimePar): # If changing from one timepar to another, validate
-                dur_mismatch = isinstance(oldpar, ss.dur) != isinstance(new, ss.dur)
-                if dur_mismatch:
-                    errormsg = f'Cannot change a duration to a non-duration vice versa: old={type(oldpar)}, new={type(new)}'
-                    raise TypeError(errormsg)
-            old.set(new)
 
         # It's a dict, figure out what to do
         elif isinstance(new, dict):
@@ -247,11 +204,10 @@ class SimPars(Pars):
         self.pop_scale = None # How much to scale the population
 
         # Simulation parameters
-        self.unit      = ''    # The time unit to use; options are 'year' (default), 'day', 'week', 'month', or 'none'
         self.start     = None  # Start of the simulation (default 2020)
         self.stop      = None  # End of the simulation
         self.dur       = None  # Duration of time to run, if stop isn't specified (default 50 steps of self.unit)
-        self.dt        = 1.0   # Timestep (in units of self.unit)
+        self.dt        = None  # Timestep
         self.rand_seed = 1     # Random seed; if None, don't reset
 
         # Demographic parameters
@@ -291,7 +247,6 @@ class SimPars(Pars):
         self.validate_verbose()
         self.validate_agents()
         self.validate_total_pop()
-        self.validate_time()
         return
 
     def validate_verbose(self):
@@ -333,34 +288,6 @@ class SimPars(Pars):
         self.total_pop = total_pop
         if self.pop_scale is None:
             self.pop_scale = total_pop / self.n_agents
-        return
-
-    def validate_time(self):
-        """ Ensure at least one of dur and stop is defined, but not both """
-
-        # Handle the unit
-        if self.unit == '':
-            self.unit = ss.time.default_unit
-        self.unit = ss.time.validate_unit(self.unit)
-
-        # Handle start
-        if self.start is None:
-            self.start = ss.time.default_start[self.unit]
-
-        # Handle stop and dur
-        if self.stop is not None:
-            if self.dur is None:
-                self.dur = ss.date_diff(self.start, self.stop, self.unit)
-            else:
-                errormsg = f'You can supply either stop ({self.stop}) or dur ({self.dur}) but not both, since one is calculated from the other'
-                raise ValueError(errormsg)
-            if self.dur <= 0:
-                errormsg = f"Duration must be >0, but you supplied start={str(self.start)} and stop={str(self.stop)}, which gives dur={self.dur}"
-                raise ValueError(errormsg)
-        else:
-            if self.dur is None:
-                self.dur = ss.time.default_dur
-            self.stop = ss.date_add(self.start, self.dur, self.unit)
         return
 
     def validate_modules(self):

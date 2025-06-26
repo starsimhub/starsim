@@ -9,7 +9,7 @@ import starsim as ss
 sc.options(interactive=False) # Assume not running interactively
 
 pars = sc.objdict(
-    dur      = 20,
+    dur      = ss.years(20),
     n_agents = 1000,
     diseases = 'sis',
     networks = 'random',

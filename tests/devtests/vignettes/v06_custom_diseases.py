@@ -70,7 +70,7 @@ class CustomDisease(ss.Module):
         """
         Draw len(uids) samples with durations of "source state, to determine the start of "next state".
         """
-        ns_start = sim.ti + self.states[source_state].samples(n) / sim.pars.dt
+        ns_start = sim.ti + self.states[source_state].samples(n) / sim.t.dt
         return ns_start
 
     def next_state_prob(self, sim, n, source_state=None):
@@ -102,7 +102,7 @@ class DurationBasedDisease(CustomDisease):
 
     def set_prognoses(self, sim, uids):
         # Time at which another event will happen (ie, transition from source state to a destination state)
-        #infectious_start = sim.ti + np.random.poisson(self.state_durations['infected'] / sim.pars.dt,
+        #infectious_start = sim.ti + np.random.poisson(self.state_durations['infected'] / sim.t.dt,
         #                                              len(uids[is_infectious]))
 
         # The assumption here is that the infected state is not infectious, but latent. Infected state has a duration

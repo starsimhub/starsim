@@ -31,8 +31,8 @@ def make_run_sim(pr,r):
     # Make the people
     ppl = ss.People(n_agents=n_agents)
     demographics = [
-    ss.Births(pars={'birth_rate': 20}),
-    ss.Deaths(pars={'death_rate': 15})
+    ss.Births(birth_rate=20),
+    ss.Deaths(death_rate=15)
     ]
 
     g=nx.erdos_renyi_graph(n=1000, p=pr[r], directed=True)

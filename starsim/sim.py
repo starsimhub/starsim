@@ -78,7 +78,10 @@ class Sim(ss.Base):
         try:
             labelstr = f'{self.label}; ' if self.label else ''
             n = int(self.pars.n_agents)
-            timestr = f'{self.pars.start}—{self.pars.stop}'
+            if self.initialized:
+                timestr = f'{self.t.start}—{self.t.stop}'
+            else:
+                timestr = f'{self.pars.start}—{self.pars.stop}'
 
             moddict = {}
             for modkey in ss.module_map().keys():
@@ -157,7 +160,8 @@ class Sim(ss.Base):
 
     def init_time(self):
         """ Time indexing; derived values live in the sim rather than in the pars """
-        self.t = ss.Time(pars=self.pars, name='sim', sim=True)
+        self.t = ss.Time(name='sim')
+        self.t.init(self)
         self.results.timevec = self.timevec # Store the timevec in the results for plotting
         return
 
