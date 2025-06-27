@@ -270,13 +270,13 @@ class Loop:
         plt.scatter(x, y, c=colors[mod_int], **scatter_kw)
         plt.yticks(yticks, ylabels)
         plt.title(f'Integration plan ({len(df)} events)')
-        plt.xlabel(f'Time since simulation start')
+        plt.xlabel('Time since simulation start')
         plt.grid(True)
         sc.figlayout()
         sc.boxoff()
         return ss.return_fig(fig)
 
-    def plot_cpu(self, bytime=True, fig_kw=None, bar_kw=None):
+    def plot_cpu(self, bytime=True, max_entries=10, fig_kw=None, bar_kw=None):
         """
         Plot the CPU time spent on each event; visualization of Loop.cpu_df.
 
@@ -310,6 +310,12 @@ class Loop:
             timestr = sc.sigfig(x[i], 3) + f' {unit}'
             pctstr = sc.sigfig(pcts[i], 3) + '%'
             ylabels[i] += f'()\n{timestr}, {pctstr}'
+
+        # Trim if needed
+        if max_entries:
+            x = x[:max_entries]
+            y = y[:max_entries]
+            ylabels = ylabels[:max_entries]
 
         # Do the plotting
         bar_kw = sc.mergedicts(bar_kw)

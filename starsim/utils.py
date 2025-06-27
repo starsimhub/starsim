@@ -13,7 +13,7 @@ import starsim as ss
 
 # What functions are externally visible
 __all__ = ['ndict', 'warn', 'find_contacts', 'set_seed', 'check_requires', 'standardize_netkey',
-           'standardize_data', 'validate_sim_data', 'load', 'save', 'return_fig', 'show']
+           'standardize_data', 'validate_sim_data', 'load', 'save', 'return_fig', 'show', 'Profile']
 
 
 class ndict(sc.objdict):
@@ -379,6 +379,13 @@ def combine_rands(a, b):
     c = np.bitwise_xor(a*b, a-b)
     u = c / np.iinfo(np.uint64).max
     return u
+
+
+#%% Profiling
+
+class Profile(sc.prettyobj):
+
+    def
 
 
 #%% Other helper functions
