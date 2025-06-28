@@ -395,7 +395,7 @@ class Profile(sc.profile):
         if do_run:
             self.init_and_run()
             if plot:
-                self.plot()
+                self.plot_cpu()
         return
 
     def init_and_run(self):
@@ -426,9 +426,8 @@ class Profile(sc.profile):
 
         return self
 
-    def plot(self):
+    def plot_cpu(self):
         """ Shortcut to sim.loop.plot_cpu() """
-        super().plot()
         self.sim.loop.plot_cpu()
         return
 
