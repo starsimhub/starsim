@@ -393,12 +393,12 @@ class Profile(sc.profile):
 
         # Optionally run
         if do_run:
-            self.run()
+            self.init_and_run()
             if plot:
                 self.plot()
         return
 
-    def run(self):
+    def init_and_run(self):
         """ Profile the performance of the simulation """
 
         # Initialize: copy the sim and time initialization
@@ -406,16 +406,24 @@ class Profile(sc.profile):
         self.sim = sim
         self.run_func = sim.run
 
+        # Handle sim init -- both run it and profile it
+        if sim.initialized:
+            init_prof = None
+        else:
+            init_prof = sc.profile(sim.init, verbose=False)
+
         # Get the functions from the initialized sim
         if self.follow is None:
             loop_funcs = [e['func'] for e in sim.loop.funcs]
-            self.follow = []
-            if not sim.initialized:
-                self.follow += [sim.init]
-            self.follow += [sim.run] + loop_funcs
+            self.follow = [sim.run] + loop_funcs
 
         # Run the profiling on the sim run
-        super().run()
+        self.run()
+
+        # Add initialization to the other timings
+        if init_prof:
+            self += init_prof
+
         return self
 
     def plot(self):
