@@ -486,6 +486,11 @@ class Sim(ss.Base):
         df = self.results.to_df(sep=sep, descend=True, **kwargs)
         return df
 
+    def profile(self, do_run=True, plot=True):
+        """ Profile the performance of the simulation """
+        prof = ss.Profile(self, do_run=do_run, plot=plot)
+        return prof
+
     def save(self, filename=None, shrink=None, **kwargs):
         """
         Save to disk as a gzipped pickle.

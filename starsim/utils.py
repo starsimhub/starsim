@@ -383,9 +383,46 @@ def combine_rands(a, b):
 
 #%% Profiling
 
-class Profile(sc.prettyobj):
+class Profile(sc.profile):
+    """ Class to profile the performance of a simulation """
 
-    def
+    def __init__(self, sim, do_run=True, plot=True, **kwargs):
+        assert isinstance(sim, ss.Sim), f'Only an ss.Sim object can be profiled, not {type(sim)}'
+        super().__init__(run=None, do_run=False, **kwargs)
+        self.orig_sim = sim
+
+        # Optionally run
+        if do_run:
+            self.run()
+            if plot:
+                self.plot()
+        return
+
+    def run(self):
+        """ Profile the performance of the simulation """
+
+        # Initialize: copy the sim and time initialization
+        sim = self.orig_sim.copy() # Copy so the sim can be reused
+        self.sim = sim
+        self.run_func = sim.run
+
+        # Get the functions from the initialized sim
+        if self.follow is None:
+            loop_funcs = [e['func'] for e in sim.loop.funcs]
+            self.follow = []
+            if not sim.initialized:
+                self.follow += [sim.init]
+            self.follow += [sim.run] + loop_funcs
+
+        # Run the profiling on the sim run
+        super().run()
+        return self
+
+    def plot(self):
+        """ Shortcut to sim.loop.plot_cpu() """
+        super().plot()
+        self.sim.loop.plot_cpu()
+        return
 
 
 #%% Other helper functions

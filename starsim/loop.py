@@ -20,6 +20,7 @@ class Loop:
     def __init__(self, sim): # TODO: consider eps=1e-6 and round times to this value
         self.sim = sim
         self.funcs = None
+        self.func_list = []
         self.abs_tvecs = None
         self.plan = None
         self.index = 0 # The next function to execute
@@ -52,7 +53,16 @@ class Loop:
         module = parent.name if isinstance(parent, ss.Module) else parent.__class__.__name__.lower()
 
         # Create the row and append it to the function list
-        row = dict(func_order=len(self.funcs), module=module, func_name=func_name, func=func)
+        func_path = f'{parent.__class__.__module__}.{func_name}'
+        unbound = getattr(type(func.__self__), func.__name__) # Get the unbound function too
+        row = dict(
+            func_order = len(self.funcs),
+            module = module,
+            func_name = func_name,
+            func_path = func_path,
+            func = func,
+            unbound = unbound,
+        )
         self.funcs.append(row)
         return self
 
