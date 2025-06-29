@@ -337,7 +337,7 @@ class MultiSim:
 
         return summary
 
-    def plot(self, key=None, fig=None, fig_kw=None, plot_kw=None, fill_kw=None, legend=True):
+    def plot(self, key=None, fig=None, fig_kw=None, plot_kw=None, fill_kw=None, legend_kw=None, legend=True):
         """
         Plot all results in the MultiSim object.
 
@@ -350,6 +350,8 @@ class MultiSim:
             fig_kw (dict): passed to ``plt.subplots()``
             plot_kw (dict): passed to ``plt.plot()``
             fill_kw (dict): passed to ``plt.fill_between()``
+            legend_kw (dict): passed to ``plt.legend()``
+            legend (bool): whether to show the legend
         """
         # Has not been reduced yet, plot individual sim
         if self.which is None:
@@ -360,7 +362,16 @@ class MultiSim:
                 for sim in self.sims:
                     fig = sim.plot(key=key, fig=fig, fig_kw=fig_kw, plot_kw=plot_kw)
             if legend:
-                plt.legend()
+                lkw = sc.mergedicts(legend_kw)
+                leg = None
+                shape = getattr(fig, '_subplots_shape', None) # Sciris-generated figure
+                if shape: # If we have empty space on the bottom right, put the legend there
+                    n = np.prod(shape)
+                    if len(fig.axes) != n: # Bottom-right axes is empty
+                        ax = fig.add_subplot(shape[0], shape[1], n)
+                        leg = sc.movelegend(fig.axes[0], ax, **lkw)
+                if leg is None: # Otherwise, just put it in the last axes anyway
+                    fig.axes[-1].legend(**lkw)
 
         # Has been reduced, plot with uncertainty bounds
         else:
