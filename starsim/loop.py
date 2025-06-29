@@ -54,14 +54,12 @@ class Loop:
 
         # Create the row and append it to the function list
         func_path = f'{parent.__class__.__module__}.{func_name}'
-        unbound = getattr(type(func.__self__), func.__name__) # Get the unbound function too
         row = dict(
             func_order = len(self.funcs),
             module = module,
             func_name = func_name,
             func_path = func_path,
             func = func,
-            unbound = unbound,
         )
         self.funcs.append(row)
         return self
