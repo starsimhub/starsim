@@ -6,8 +6,7 @@ import numpy as np
 import numba as nb
 import sciris as sc
 import starsim as ss
-import scipy.optimize as spo
-import scipy.spatial as spsp
+import matplotlib.pyplot as plt
 
 # This has a significant impact on runtime, surprisingly
 ss_float_ = ss.dtypes.float
@@ -249,9 +248,13 @@ class Network(Route):
         self.results['n_edges'][self.ti] = len(self)
         return
 
-    def to_graph(self): # pragma: no cover
+    def to_graph(self, max_edges=None, random=False): # pragma: no cover
         """
         Convert to a networkx DiGraph
+
+        Args:
+            max_edges (int): the maximum number of edges to show
+            random (bool): if true, select edges randomly; otherwise, show the first N
 
         **Example**::
 
@@ -261,7 +264,13 @@ class Network(Route):
             nx.draw(G)
         """
         keys = [('p1', int), ('p2', int), ('beta', float)]
-        data = [np.array(self.edges[k], dtype=dtype).tolist() for k,dtype in keys]
+        data = [np.array(self.edges[k], dtype=dtype) for k,dtype in keys]
+        if max_edges:
+            if random:
+                inds = np.sort(np.random.choice(len(data[0]), max_edges, replace=False))
+                data = [col[inds] for col in data]
+            else:
+                data = [col[:max_edges] for col in data]
         G = nx.DiGraph()
         G.add_weighted_edges_from(zip(*data), weight='beta')
         nx.set_edge_attributes(G, self.label, name='layer')
@@ -284,6 +293,23 @@ class Network(Route):
         for key in keys:
             self.edges[key] = df[key].to_numpy()
         return self
+
+    def plot(self, max_edges=500, random=False, alpha=0.2, **kwargs):
+        """
+        Plot the network using NetworkX.
+
+        Args:
+            max_edges (int): the maximum number of edges to show
+            random (bool): if true, select edges randomly; otherwise, show the first N
+            alpha (float): the alpha value of the edges
+            kwargs (dict): passed to nx.draw_networkx()
+        """
+        G = self.to_graph(max_edges=max_edges, random=random)
+        fig = nx.draw_networkx(G, alpha=alpha, **kwargs)
+        if max_edges:
+            plt.title(f'{self.label}: {max_edges:n} of {len(self):n} connections shown')
+        return fig
+
 
     def find_contacts(self, inds, as_array=True):
         """
@@ -901,7 +927,10 @@ class MSMNet(SexualNetwork):
 
 class EmbeddingNet(MFNet):
     """
-    Heterosexual age-assortative network based on a one-dimensional embedding. Could be made more generic.
+    Heterosexual age-assortative network based on a one-dimensional embedding.
+
+    Warning: this network is random-number safe, but is very slow compared to
+    RandomNet.
     """
 
     def __init__(self, **kwargs):
@@ -927,6 +956,9 @@ class EmbeddingNet(MFNet):
         return loc
 
     def add_pairs(self):
+        import scipy.optimize as spo
+        import scipy.spatial as spsp
+
         people = self.sim.people
         available_m = self.available(people, 'male')
         available_f = self.available(people, 'female')
