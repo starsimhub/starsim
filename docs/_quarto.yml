@@ -75,7 +75,7 @@ website:
           - tutorials/t2_model.ipynb
           - tutorials/t3_demographics.ipynb
           - tutorials/t4_diseases.ipynb
-          - tutorials/t5_transmission.ipynb
+          - tutorials/t5_networks.ipynb
           - tutorials/t6_interventions.ipynb
       - section: "User guide"
         contents:
