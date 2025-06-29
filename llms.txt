@@ -111,3 +111,4 @@ Pre-implemented disease models including HIV, syphilis, gonorrhea, cholera, Ebol
 - Uses Numba for performance-critical code sections
 - All modules inherit from base classes in `modules.py`
 - Parameter handling is centralized through `parameters.py` and `SimPars` class
+- By default, use "Sentence case", not "Title Case", for headings (e.g. Markdown headings, table column headings, etc)
