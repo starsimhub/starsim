@@ -386,9 +386,9 @@ def combine_rands(a, b):
 class Profile(sc.profile):
     """ Class to profile the performance of a simulation """
 
-    def __init__(self, sim, do_run=True, plot=True, **kwargs):
+    def __init__(self, sim, do_run=True, plot=True, verbose=False, **kwargs):
         assert isinstance(sim, ss.Sim), f'Only an ss.Sim object can be profiled, not {type(sim)}'
-        super().__init__(run=None, do_run=False, **kwargs)
+        super().__init__(run=None, do_run=False, verbose=verbose, **kwargs)
         self.orig_sim = sim
 
         # Optionally run
@@ -407,10 +407,12 @@ class Profile(sc.profile):
         self.run_func = sim.run
 
         # Handle sim init -- both run it and profile it
-        if sim.initialized:
-            init_prof = None
-        else:
-            init_prof = sc.profile(sim.init, verbose=False)
+        init_prof = None
+        if not sim.initialized:
+            if self.follow:
+                sim.init()
+            else:
+                init_prof = sc.profile(sim.init, verbose=False)
 
         # Get the functions from the initialized sim
         if self.follow is None:
@@ -425,6 +427,10 @@ class Profile(sc.profile):
             self += init_prof
 
         return self
+
+    def disp(self, bytime=1, maxentries=10, skiprun=True):
+        """ Same as sc.profile.disp(), but skip the run function by default """
+        return super().disp(bytime=bytime, maxentries=maxentries, skiprun=skiprun)
 
     def plot_cpu(self):
         """ Shortcut to sim.loop.plot_cpu() """

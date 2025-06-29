@@ -486,9 +486,9 @@ class Sim(ss.Base):
         df = self.results.to_df(sep=sep, descend=True, **kwargs)
         return df
 
-    def profile(self, do_run=True, plot=True):
+    def profile(self, do_run=True, plot=True, **kwargs):
         """ Profile the performance of the simulation """
-        prof = ss.Profile(self, do_run=do_run, plot=plot)
+        prof = ss.Profile(self, do_run=do_run, plot=plot, **kwargs)
         return prof
 
     def save(self, filename=None, shrink=None, **kwargs):
