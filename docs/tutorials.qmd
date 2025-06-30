@@ -28,7 +28,7 @@ How to implement disease dynamics.
 :::
 
 ::: {.g-col-4}
-[**T5 - Transmission and networks**](tutorials/t5_transmission.ipynb)
+[**T5 - Networks**](tutorials/t5_networks.ipynb)
 
 How diseases spread between agents: networks and mixing pools.
 :::
