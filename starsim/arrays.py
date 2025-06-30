@@ -208,7 +208,7 @@ class Arr(BaseArr):
     def _convert_key(self, key):
         """
         Used for getitem and setitem to determine whether the key is indexing
-        the raw array (``raw``) or the active agents (``values``), and to convert
+        the raw array (`raw`) or the active agents (`values`), and to convert
         the key to array indices if needed.
         """
         if isinstance(key, (uids, int, ss_int)):

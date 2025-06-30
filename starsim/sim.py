@@ -581,9 +581,9 @@ class Sim(ss.Base):
             show_skipped (bool): show even results that are skipped by default
             show_module (bool): whether to show the module as well as the result name; if an int, show if the label is less than that length; if -1, use a newline
             show_label (str): if 'fig', reset the fignum; if 'title', set the figure suptitle
-            fig_kw (dict): passed to ``plt.subplots()``
-            plot_kw (dict): passed to ``plt.plot()``
-            scatter_kw (dict): passed to ``plt.scatter()``, for plotting the data
+            fig_kw (dict): passed to `plt.subplots()`
+            plot_kw (dict): passed to `plt.plot()`
+            scatter_kw (dict): passed to `plt.scatter()`, for plotting the data
         """
         self.check_results_ready('Please run the sim before plotting')
 
@@ -688,7 +688,7 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
         run (bool): whether to run the sim
         plot (bool): whether to plot the results
         summary (bool): whether to print a summary of the results
-        kwargs (dict): passed to ``ss.Sim()``
+        kwargs (dict): passed to `ss.Sim()`
 
     **Examples**:
 

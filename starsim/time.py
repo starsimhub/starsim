@@ -13,7 +13,7 @@ __all__ = ['date', 'Dur', 'YearDur', 'DateDur', 'Rate', 'timeprob', 'rateprob',
 
 class date(pd.Timestamp):
     """
-    Define a point in time, based on ``pd.Timestamp``
+    Define a point in time, based on `pd.Timestamp`
 
     Args:
         date (int/float/str/datetime): Any type of date input (ints and floats will be interpreted as years)
@@ -865,7 +865,7 @@ class Rate():
         Calculate a time-specific probability value
 
         This function is mainly useful for subclasses where the multiplication by a duration is non-linear
-        (e.g., ``timeprob``) and therefore it is important to apply the factor prior to multiplication by duration.
+        (e.g., `timeprob`) and therefore it is important to apply the factor prior to multiplication by duration.
         This function avoids creating an intermediate array of rates, and is therefore much higher performance.
 
         e.g.
@@ -880,7 +880,7 @@ class Rate():
 
         Args:
             v: The factor to scale the rate by. This factor is applied before multiplication by the duration
-            dur: An ss.Dur instance to scale the rate by (often this is ``dt``)
+            dur: An ss.Dur instance to scale the rate by (often this is `dt`)
 
         Returns:
             A numpy float array of values
@@ -894,7 +894,7 @@ class Rate():
 
 class timeprob(Rate):
     """
-    ``timeprob`` represents the probability of an event occurring during a
+    `timeprob` represents the probability of an event occurring during a
     specified period of time.
 
     The class is designed to allow conversion of a probability from one
@@ -903,10 +903,10 @@ class timeprob(Rate):
 
     When multiplied by a duration (type ss.Dur), the underlying constant rate is
     calculated as
-        ``rate = -np.log(1 - self.value)``.
+        `rate = -np.log(1 - self.value)`.
     Then, the probability over the new duration is
-        ``p = 1 - np.exp(-rate/factor)``,
-    where ``factor`` is the ratio of the new duration to the original duration.
+        `p = 1 - np.exp(-rate/factor)`,
+    where `factor` is the ratio of the new duration to the original duration.
 
     For example,
     >>> p = ss.timeprob(0.8, ss.years(1))
@@ -917,18 +917,18 @@ class timeprob(Rate):
     probability remains unchanged, 80%.
 
     >>> p * ss.years(2)
-    Multiplying ``p`` by ``ss.years(2)`` does not simply double the
+    Multiplying `p` by `ss.years(2)` does not simply double the
     probability to 160% (which is not possible), but rather returns a new
     probability of 96% representing the chance of the event occurring at least
     once over the new duration of two years.
 
-    However, the behavior is different when a ``timeprob`` object is multiplied
+    However, the behavior is different when a `timeprob` object is multiplied
     by a scalar or array. In this case, the probability is simply scaled. This scaling
     may result in a value greater than 1, which is not valid. For example,
     >>> p * 2
     raises an AssertionError because the resulting probability (160%) exceeds 100%.
 
-    Use ``rateprob`` instead if ``timeprob`` if you would prefer to directly
+    Use `rateprob` instead if `timeprob` if you would prefer to directly
     specify the instantaneous rate.
     """
 
@@ -967,36 +967,36 @@ class timeprob(Rate):
 
 class rateprob(Rate):
     """
-    A ``rateprob`` represents an instantaneous rate of an event occurring. Rates
+    A `rateprob` represents an instantaneous rate of an event occurring. Rates
     must be non-negative, but need not be less than 1.
 
     Through multiplication, rate can be modified or converted to a probability,
     depending on the data type of the object being multiplied.
 
-    When a ``rateprob`` is multiplied by a scalar or array, the rate is simply
+    When a `rateprob` is multiplied by a scalar or array, the rate is simply
     scaled. Such multiplication occurs frequently in epidemiological models,
     where the base rate is multiplied by "rate ratio" or "relative rate" to
     represent agents experiencing higher (multiplier > 1) or lower (multiplier <
     1) event rates.
 
-    Alternatively, when a ``rateprob`` is multiplied by a duration (type
+    Alternatively, when a `rateprob` is multiplied by a duration (type
     ss.Dur), a probability is calculated. The conversion from rate to
     probability on multiplication by a duration is
-        ``1 - np.exp(-rate/factor)``,
-    where ``factor`` is the ratio of the multiplied duration to the original
+        `1 - np.exp(-rate/factor)`,
+    where `factor` is the ratio of the multiplied duration to the original
     period (denominator).
 
     For example, consider
     >>> p = ss.rateprob(0.8, ss.years(1))
     When multiplied by a duration of 1 year, the calculated probability is
-        ``1 - np.exp(-0.8)``, which is approximately 55%.
+        `1 - np.exp(-0.8)`, which is approximately 55%.
     >>> p*ss.years(1)
 
     When multiplied by a scalar, the rate is simply scaled.
     >>> p*2
 
-    The difference between ``timeprob`` and ``rateprob`` is subtle, but important. ``rateprob`` works directly
-    with the instantaneous rate of an event occurring. In contrast, ``timeprob`` starts with a probability and a duration,
+    The difference between `timeprob` and `rateprob` is subtle, but important. `rateprob` works directly
+    with the instantaneous rate of an event occurring. In contrast, `timeprob` starts with a probability and a duration,
     and the underlying rate is calculated. On multiplication by a duration,
     * rateprob: rate -> probability
     * timeprob: probability -> rate -> probability
@@ -1051,17 +1051,17 @@ class Time(sc.prettyobj):
         stop : ss.date if start is an ss.date, or an ss.Dur if start is an ss.Dur
         dt (ss.Dur): Simulation step size
         pars (dict): if provided, populate parameter values from this dictionary
-        parent (obj): if provided, populate missing parameter values from a 'parent" ``Time`` instance
-        name (str): if provided, name the ``Time`` object
+        parent (obj): if provided, populate missing parameter values from a 'parent" `Time` instance
+        name (str): if provided, name the `Time` object
         init (bool): whether or not to immediately initialize the Time object
-        sim (bool/Sim): if True, initializes as a sim-specific ``Time`` instance; if a Sim instance, initialize the absolute time vector
+        sim (bool/Sim): if True, initializes as a sim-specific `Time` instance; if a Sim instance, initialize the absolute time vector
 
-    The ``Time`` object, after initialization, has the following attributes:
+    The `Time` object, after initialization, has the following attributes:
 
-    - ``ti`` (int): the current timestep
-    - ``npts`` (int): the number of timesteps
-    - ``tvec`` (array): time either as absolute `ss.date` instances, or relative `ss.Dur` instances
-    - ``yearvec`` (array): time represented as floating-point years
+    - `ti` (int): the current timestep
+    - `npts` (int): the number of timesteps
+    - `tvec` (array): time either as absolute `ss.date` instances, or relative `ss.Dur` instances
+    - `yearvec` (array): time represented as floating-point years
 
     **Examples**:
 

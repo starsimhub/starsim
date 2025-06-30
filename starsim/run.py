@@ -130,7 +130,7 @@ class MultiSim:
 
     def run(self, **kwargs):
         """
-        Run the sims; see ``ss.multi_run()`` for additional arguments
+        Run the sims; see `ss.multi_run()` for additional arguments
 
         Args:
             n_runs (int): how many replicates of each sim to run (if a list of sims is not provided)
@@ -347,10 +347,10 @@ class MultiSim:
         Args:
             key (str): the results key to plot (by default, all)
             fig (Figure): if provided, plot results into an existing figure
-            fig_kw (dict): passed to ``plt.subplots()``
-            plot_kw (dict): passed to ``plt.plot()``
-            fill_kw (dict): passed to ``plt.fill_between()``
-            legend_kw (dict): passed to ``plt.legend()``
+            fig_kw (dict): passed to `plt.subplots()`
+            plot_kw (dict): passed to `plt.plot()`
+            fill_kw (dict): passed to `plt.fill_between()`
+            legend_kw (dict): passed to `plt.legend()`
             legend (bool): whether to show the legend
         """
         # Has not been reduced yet, plot individual sim
@@ -549,7 +549,7 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=N
 
 def parallel(*args, **kwargs):
     """
-    A shortcut to ``ss.MultiSim()``, allowing the quick running of multiple simulations
+    A shortcut to `ss.MultiSim()`, allowing the quick running of multiple simulations
     at once.
 
     Args:
