@@ -251,9 +251,9 @@ class Loop:
 
         Args:
             simplify (bool): if True, skip update_results and finish_step events, which are automatically applied
-            fig_kw (dict): passed to ``plt.figure()``
-            plot_kw (dict): passed to ``plt.plot()``
-            scatter_kw (dict): passed to ``plt.scatter()``
+            fig_kw (dict): passed to `plt.figure()`
+            plot_kw (dict): passed to `plt.plot()`
+            scatter_kw (dict): passed to `plt.scatter()`
         """
 
         # Assemble data
@@ -290,8 +290,8 @@ class Loop:
 
         Args:
             bytime (bool): if True, order events by total time rather than actual order
-            fig_kw (dict): passed to ``plt.figure()``
-            bar_kw (dict): passed to ``plt.bar()``
+            fig_kw (dict): passed to `plt.figure()`
+            bar_kw (dict): passed to `plt.bar()`
         """
         # Assemble data
         if self.cpu_df is None:

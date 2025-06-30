@@ -18,7 +18,7 @@ class Pars(sc.objdict):
     """
     Dict-like container of parameters
 
-    Acts like an ``sc.objdict()``, except that adding new keys are disallowed by
+    Acts like an `sc.objdict()`, except that adding new keys are disallowed by
     default, and auto-updates known types.
     """
     def __init__(self, pars=None, **kwargs):
