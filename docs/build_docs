@@ -47,8 +47,12 @@ sc.heading(f'Building docs with Quarto and execute="{execute}"', divider='★')
 sc.heading('Updating docs version number...')
 filename = '_variables.yml'
 data = dict(version=ss.__version__, versiondate=ss.__versiondate__)
-sc.saveyaml(filename, data)
-print('Version updated to:', data)
+orig = sc.loadyaml(filename)
+if data != orig:
+    sc.saveyaml(filename, data)
+    print('Version updated to:', data)
+else:
+    print('Version already correct:', orig)
 
 # Generate API documentation using quartodoc
 sc.heading('Building API documentation...')

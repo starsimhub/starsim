@@ -83,6 +83,7 @@ class Cholera(ss.Infection):
         ti = self.ti
         infected = (self.exposed & (self.ti_infected <= ti)).uids
         self.infected[infected] = True
+        self.exposed[infected] = False
 
         # Progress infected -> symptomatic
         symptomatic = (self.infected & (self.ti_symptomatic <= ti)).uids

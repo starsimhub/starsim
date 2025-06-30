@@ -372,7 +372,14 @@ class People(sc.prettyobj):
         return
 
     def person(self, ind):
-        """ Get all the properties for a single person """
+        """
+        Get all the properties for a single person.
+
+        **Example**:
+
+            sim = ss.Sim(diseases='sir', networks='random', n_agents=100).run()
+            print(sim.people.person(5)) # The 5th agent in the simulation
+        """
         person = Person()
         for key in ['uid', 'slot']:
             person[key] = self[key][ind]

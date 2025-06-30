@@ -22,8 +22,20 @@ class Demographics(ss.Module):
 
 
 class Births(Demographics):
-    """ Create births based on rates, rather than based on pregnancy """
     def __init__(self, metadata=None, **kwargs):
+        """
+        Create births based on rates, rather than based on pregnancy.
+
+        Births are generated using population-level birth rates that can vary
+        by year. The number of births per timestep is determined by applying
+        the birth rate to the current population size.
+
+        Args:
+            birth_rate (float/rate/dataframe): value for birth rate, or birth rate data
+            rel_birth (float): constant used to scale all birth rates
+            rate_units (float): units for birth rates (default assumes per 1000)
+            metadata (dict): dict with data column mappings for birth rate data (if birth_rate is a dataframe)
+        """
         super().__init__()
         self.define_pars(
             birth_rate = ss.peryear(20),
@@ -133,8 +145,8 @@ class Deaths(Demographics):
 
         The probability of death for each agent on each timestep is determined
         by the `death_rate` parameter and the time step. The default value of
-        this parameter is 0.02, indicating that all agents will
-        face a 2% chance of death per year.
+        this parameter is 0.01, indicating that all agents will
+        face a 1% chance of death per year.
 
         However, this function can be made more realistic by using a dataframe
         for the `death_rate` parameter, to allow it to vary by year, sex, and
@@ -158,7 +170,7 @@ class Deaths(Demographics):
         super().__init__()
         self.define_pars(
             rel_death = 1,
-            death_rate = ss.peryear(20),  # Default = a fixed rate of 2%/year, overwritten if data provided
+            death_rate = ss.peryear(10),  # Default = a fixed rate of 2%/year, overwritten if data provided
             rate_units = 1e-3,  # assumes death rates are per 1000. If using percentages, switch this to 1
         )
         self.update_pars(**kwargs)
@@ -263,8 +275,29 @@ class Deaths(Demographics):
 
 
 class Pregnancy(Demographics):
-    """ Create births via pregnancies """
     def __init__(self, metadata=None, **kwargs):
+        """
+        Create births via pregnancies for each agent.
+
+        This module models conception, pregnancy, and birth at the individual level using
+        age-specific fertility rates. Supports prenatal and postnatal transmission
+        networks, maternal and neonatal mortality, and burn-in of existing
+        pregnancies at simulation start.
+
+        Args:
+            dur_pregnancy (float/dur): duration of pregnancy (default 9 months)
+            dur_postpartum (float/dur): duration of postpartum period for postnatal transmission (default 6 months)
+            fertility_rate (float/dataframe): value or dataframe with age-specific fertility rates
+            rel_fertility (float): constant used to scale all fertility rates
+            p_maternal_death (float): probability of maternal death during pregnancy (default 0.0)
+            p_neonatal_death (float): probability of neonatal death (default 0.0)
+            sex_ratio (float): probability of female births (default 0.5)
+            min_age (float): minimum age for pregnancy (default 15)
+            max_age (float): maximum age for pregnancy (default 50)
+            rate_units (float): units for fertility rates (default assumes per 1000)
+            burnin (bool): whether to seed pregnancies from before simulation start (default true)
+            metadata (dict): data column mappings for fertility rate data if a dataframe is supplied
+        """
         super().__init__()
         self.define_pars(
             dur_pregnancy = ss.years(0.75), # Duration for pre-natal transmission
