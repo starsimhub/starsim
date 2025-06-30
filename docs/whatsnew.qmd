@@ -1,1 +1,5 @@
-../CHANGELOG.md
+---
+pagetitle: "What's new"
+---
+
+{{< include ../CHANGELOG.md >}}
