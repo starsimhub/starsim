@@ -92,8 +92,11 @@ def test_erdosrenyi():
         f_obs = np.histogram(counts, bins=bins)[0] # Form the degree distribution
         pp = sps.binom.pmf(bins[:-1], n=n, p=p) # Computed the theoretical probability distribution
         f_exp = f_obs.sum()*pp / pp.sum() # Scale
-        p_value = sps.chisquare(f_obs, f_exp).pvalue # Compute the X2 p-value
-        assert not p_value < alpha
+        if f_obs.sum() and f_exp.sum(): # Skip if zero
+            p_value = sps.chisquare(f_obs, f_exp).pvalue # Compute the X2 p-value
+            assert not p_value < alpha
+        else:
+            p_value = 1.0
         return p_value
 
     # Manual creation
@@ -134,7 +137,7 @@ def test_disk():
         import matplotlib as mpl
 
         fig, ax = plt.subplots()
-        vdt = nw1.pars.v * s1.pars.dt
+        vdt = nw1.pars.v * s1.t.dt
 
         cmap = mpl.colormaps['plasma']
         colors = cmap(np.linspace(0, 1, s1.pars.n_agents))
@@ -218,12 +221,12 @@ if __name__ == '__main__':
     T = sc.timer()
 
     # Run tests
-    # man  = test_manual()
-    # rand = test_random()
-    # stat = test_static()
-    # erdo = test_erdosrenyi()
+    man  = test_manual()
+    rand = test_random()
+    stat = test_static()
+    erdo = test_erdosrenyi()
     disk = test_disk()
-    # null = test_null()
-    # oth  = test_other()
+    null = test_null()
+    oth  = test_other()
 
     T.toc()
