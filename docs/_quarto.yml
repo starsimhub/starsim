@@ -3,10 +3,6 @@ project:
   output-dir: _build
   title: "Starsim"
   execute-dir: file
-  render:
-    - "*.md"
-    - "*.qmd"
-    - "*.ipynb"
 
 website:
   title: "Starsim"
