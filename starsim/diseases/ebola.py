@@ -53,10 +53,6 @@ class Ebola(SIR):
         )
         return
 
-    @property
-    def infectious(self):
-        return self.infected | self.exposed
-
     def step_state(self):
 
         # Progress exposed -> infected
