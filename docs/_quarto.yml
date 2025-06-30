@@ -121,8 +121,8 @@ website:
 format:
   html:
     theme: 
-      light: [litera, ./assets/styles-light.scss]
-      dark: [darkly, ./assets/styles-dark.scss]
+      light: [cosmo, ./assets/styles-light.scss]
+      dark: [cosmo, ./assets/styles-dark.scss]
     css: ./assets/styles.css
     toc: true
     toc-depth: 3
