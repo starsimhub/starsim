@@ -54,6 +54,8 @@ library(starsim)
 init_starsim()
 ````
 
+See [r.starsim.org](https://r.starsim.org) for more information.
+
 ## Usage and documentation
 
 Full documentation, including tutorials and an API reference, is available at [docs.starsim.org](https://docs.starsim.org).
