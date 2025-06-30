@@ -83,7 +83,7 @@ class MultiSim:
         Args:
             output (bool): if true, return a string instead of printing output
 
-        **Example**::
+        **Example**:
 
             msim = ss.MultiSim(ss.demo(run=False), label='Example multisim')
             msim.run()
@@ -220,7 +220,7 @@ class MultiSim:
             bounds (float): if use_mean=True, the multiplier on the standard deviation for upper and lower bounds (default 2)
             output (bool): whether to return the "reduced" sim (in any case, modify the multisim in-place)
 
-        **Example**::
+        **Example**:
 
             msim = ss.MultiSim(ss.Sim())
             msim.run()
@@ -424,7 +424,7 @@ def single_run(sim, ind=0, reseed=True, shrink=True, run_args=None, sim_args=Non
     Returns:
         sim (Sim): a single sim object with results
 
-    **Example**::
+    **Example**:
 
         import starsim as ss
         sim = ss.Sim() # Create a default simulation
@@ -492,7 +492,7 @@ def multi_run(sim, n_runs=4, reseed=None, iterpars=None, shrink=None, run_args=N
         If combine is True, a single sim object with the combined results from each sim.
         Otherwise, a list of sim objects (default).
 
-    **Example**::
+    **Example**:
 
         import starsim as ss
         sim = ss.Sim()
@@ -559,7 +559,7 @@ def parallel(*args, **kwargs):
     Returns:
         A run MultiSim object.
 
-    **Examples**::
+    **Examples**:
 
         s1 = ss.Sim(n_agents=1000, label='Small', diseases='sis', networks='random')
         s2 = ss.Sim(n_agents=2000, label='Large', diseases='sis', networks='random')

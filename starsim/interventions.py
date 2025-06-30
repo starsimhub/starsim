@@ -267,7 +267,7 @@ class routine_screening(BaseScreening, RoutineDelivery):
     Routine screening - an instance of base screening combined with routine delivery.
     See base classes for a description of input arguments.
 
-    **Examples**::
+    **Examples**:
 
         screen1 = ss.routine_screening(product=my_prod, prob=0.02) # Screen 2% of the eligible population every year
         screen2 = ss.routine_screening(product=my_prod, prob=0.02, start_year=2020) # Screen 2% every year starting in 2020
@@ -281,7 +281,7 @@ class campaign_screening(BaseScreening, CampaignDelivery):
     Campaign screening - an instance of base screening combined with campaign delivery.
     See base classes for a description of input arguments.
 
-    **Examples**::
+    **Examples**:
 
         screen1 = ss.campaign_screening(product=my_prod, prob=0.2, years=2030) # Screen 20% of the eligible population in 2020
         screen2 = ss.campaign_screening(product=my_prod, prob=0.02, years=[2025,2030]) # Screen 20% of the eligible population in 2025 and again in 2030

@@ -19,7 +19,7 @@ class date(pd.Timestamp):
         date (int/float/str/datetime): Any type of date input (ints and floats will be interpreted as years)
         kwargs (dict): passed to pd.Timestamp()
 
-    **Examples**::
+    **Examples**:
 
         ss.date(2020) # Returns <2020-01-01>
         ss.date(year=2020) # Returns <2020-01-01>
@@ -104,7 +104,7 @@ class date(pd.Timestamp):
         """
         Convert an int or float year to a date.
 
-        **Examples**::
+        **Examples**:
 
             ss.date.from_year(2020) # Returns <2020-01-01>
             ss.date.from_year(2024.75) # Returns <2024-10-01>
@@ -121,7 +121,7 @@ class date(pd.Timestamp):
         """
         Convert a date to a floating-point year
 
-        **Examples**::
+        **Examples**:
 
             ss.date('2020-01-01').to_year() # Returns 2020.0
             ss.date('2024-10-01').to_year() # Returns 2024.7486
@@ -240,8 +240,11 @@ class date(pd.Timestamp):
         """
         Convert an array of float years into an array of date instances
 
-        :param array: An array of float years
-        :return: An array of date instances
+        Args:
+            array: An array of float years
+
+        Returns:
+            An array of date instances
         """
         return np.vectorize(cls)(array)
 
@@ -258,10 +261,13 @@ class date(pd.Timestamp):
             array([<2020.01.01>, <2021.01.01>, <2022.01.01>, <2023.01.01>,
                    <2024.01.01>], dtype=object)
 
-        :param low: Lower bound - can be a date or a numerical year
-        :param high: Upper bound - can be a date or a numerical year
-        :param step: Assumes 1 calendar year steps by default
-        :return: An array of date instances
+        Args:
+            low: Lower bound - can be a date or a numerical year
+            high: Upper bound - can be a date or a numerical year
+            step: Assumes 1 calendar year steps by default
+
+        Returns:
+            An array of date instances
         """
 
         if isinstance(step, ss.DateDur):
@@ -416,10 +422,12 @@ class Dur():
         For this function, the low, high, and step must ALL be specified, and they must
         all be Dur instances. Mixing Dur types (YearDur and DateDur) is permitted.
 
-        :param low: Starting point e.g., ss.Dur(0)
-        :param high:
-        :param step:
-        :return:
+        Args:
+            low: Starting point e.g., ss.Dur(0)
+            high:
+            step:
+
+        Returns:
         """
 
         assert isinstance(low, Dur), 'Low input must be an ss.Dur'
@@ -446,7 +454,8 @@ class YearDur(Dur):
             - A YearDur instance (as a copy-constructor)
             - A DateDur instance (to convert from date-based to fixed representation)
 
-        :param years: float, YearDur, DateDur
+        Args:
+            years: float, YearDur, DateDur
         """
         if isinstance(years, Dur):
             self.unit = years.years
@@ -531,8 +540,9 @@ class DateDur(Dur):
 
         If no arguments are specified, a DateDur with zero duration will be produced
 
-        :param args:
-        :param kwargs:
+        Args:
+            args:
+            kwargs:
         """
         if args:
             assert not kwargs
@@ -558,8 +568,11 @@ class DateDur(Dur):
         In the array representation, each element corresponds to one of the time units
         in self.ratios e.g., a 1 year, 2 week duration would be [1, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0]
 
-        :param dateoffset: A pd.DateOffset object
-        :return: A numpy array with as many elements as `DateDur.ratios`
+        Args:
+            dateoffset: A pd.DateOffset object
+
+        Returns:
+            A numpy array with as many elements as `DateDur.ratios`
         """
         return np.array([dateoffset.kwds.get(k, 0) for k in cls.ratios.keys()])
 
@@ -572,8 +585,11 @@ class DateDur(Dur):
         a dictionary with the same keys as `DateDur.ratios` and the values from the input. The
         output of this function can be passed to the `Dur()` constructor to create a new DateDur object.
 
-        :param x: A pd.DateOffset or an array with the same number of elements as `DateDur.ratios`
-        :return: Dictionary with keys from `DateDur.ratios` and values from the input
+        Args:
+            x: A pd.DateOffset or an array with the same number of elements as `DateDur.ratios`
+
+        Returns:
+            Dictionary with keys from `DateDur.ratios` and values from the input
         """
         if isinstance(x, pd.DateOffset):
             x = cls._as_array(x)
@@ -591,7 +607,8 @@ class DateDur(Dur):
         The conversion is based on `DateDur.ratios` which defines the conversion from each time unit
         to the next
 
-        :return: A float representing the duration in years
+        Returns:
+            A float representing the duration in years
         """
         denominator = 1
         years = 0
@@ -623,7 +640,8 @@ class DateDur(Dur):
 
         Negative values are supported - -1.5 weeks for example will become (-1w, -3d, -12h)
 
-        :return: A pd.DateOffset
+        Returns:
+            A pd.DateOffset
         """
         if isinstance(vals, np.ndarray):
             d = sc.objdict({k:v for k,v in zip(cls.ratios, vals)})
@@ -659,9 +677,12 @@ class DateDur(Dur):
         example 2.5 weeks would first become 2 weeks and 0.5*7 = 3.5 days,
         and then become 3 days + 0.5*24 = 12 hours.
 
-        :param dateoffset: A pd.DateOffset instance
-        :param scale: A float scaling factor (must be positive)
-        :return: A pd.DateOffset instance scaled by the requested amount
+        Args:
+            dateoffset: A pd.DateOffset instance
+            scale: A float scaling factor (must be positive)
+
+        Returns:
+            A pd.DateOffset instance scaled by the requested amount
         """
         return self._round_duration(self._as_array(dateoffset) * scale)
 
@@ -857,9 +878,12 @@ class Rate():
 
         are equivalent, except that the second one is (much) faster.
 
-        :param v: The factor to scale the rate by. This factor is applied before multiplication by the duration
-        :param dur: An ss.Dur instance to scale the rate by (often this is ``dt``)
-        :return: A numpy float array of values
+        Args:
+            v: The factor to scale the rate by. This factor is applied before multiplication by the duration
+            dur: An ss.Dur instance to scale the rate by (often this is ``dt``)
+
+        Returns:
+            A numpy float array of values
         """
         if isinstance(dur, np.ndarray):
             factor = (dur/self.unit).astype(float)
@@ -1039,7 +1063,7 @@ class Time(sc.prettyobj):
     - ``tvec`` (array): time either as absolute `ss.date` instances, or relative `ss.Dur` instances
     - ``yearvec`` (array): time represented as floating-point years
 
-    **Examples**::
+    **Examples**:
 
         t1 = ss.Time(start=2000, stop=2020, dt=1.0)
         t2 = ss.Time(start='2021-01-01', stop='2021-04-04', dt=ss.days(2))
@@ -1288,7 +1312,7 @@ class Time(sc.prettyobj):
         Args:
             which (str): which type of time to get: default (None), "year", "date", "tvec", or "str"
 
-        **Examples**::
+        **Examples**:
 
             t = ss.Time(start='2021-01-01', stop='2022-02-02', dt=1, unit='week')
             t.ti = 25

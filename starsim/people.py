@@ -27,7 +27,7 @@ class People(sc.prettyobj):
         age_data (dataframe): a dataframe of years and population sizes, if available
         extra_states (list): non-default states to initialize
 
-    **Examples**::
+    **Examples**:
         ppl = ss.People(2000)
     """
 
@@ -305,8 +305,11 @@ class People(sc.prettyobj):
         record state changes associated with death. It is therefore important that they can
         guarantee that after requesting death, the death is guaranteed to occur.
 
-        :param uids: Agent IDs to request deaths for
-        :return: UIDs of agents that have been scheduled to die on this timestep
+        Args:
+            uids: Agent IDs to request deaths for
+
+        Returns:
+            UIDs of agents that have been scheduled to die on this timestep
         """
         self.ti_dead[uids] = self.sim.ti
         return

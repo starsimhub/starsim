@@ -45,7 +45,7 @@ class Network(Route):
     although not all have to be supplied at the time of creation (they must all
     be the same at the time of initialization, though, or else validation will fail).
 
-    **Examples**::
+    **Examples**:
 
         # Generate an average of 10 contacts for 1000 people
         n_contacts_pp = 10
@@ -256,7 +256,7 @@ class Network(Route):
             max_edges (int): the maximum number of edges to show
             random (bool): if true, select edges randomly; otherwise, show the first N
 
-        **Example**::
+        **Example**:
 
             import networkx as nx
             sim = ss.Sim(n_agents=100, networks='mf').init()
@@ -439,7 +439,7 @@ class StaticNet(Network):
     If "seed=True" is passed as a keyword argument or a parameter in pars, it is replaced with the built-in RNG.
     The parameter "n" is supplied automatically to be equal to n_agents.
 
-    **Examples**::
+    **Examples**:
         # Generate a networkx graph and pass to Starsim
         import networkx as nx
         import starsim as ss
@@ -1089,7 +1089,7 @@ class MixingPools(Route):
         beta (float): overall transmission via these mixing pools
         contacts (array): the relative connectivity between different mixing pools (can be float or Dist)
 
-    **Example**::
+    **Example**:
 
         import starsim as ss
         mps = ss.MixingPools(
@@ -1199,7 +1199,7 @@ class MixingPool(Route):
         beta (float): overall transmission (note: use a float, not a TimePar; the time component is usually handled by the disease beta)
         contacts (Dist): the number of effective contacts of the destination agents
 
-    **Example**::
+    **Example**:
 
         import starsim as ss
 

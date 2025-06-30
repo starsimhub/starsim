@@ -26,7 +26,7 @@ class ndict(sc.objdict):
         strict (bool): If True, only items with the specified attribute will be accepted.
         overwrite (bool): whether to allow adding a key when one has already been added
 
-    **Examples**::
+    **Examples**:
 
         networks = ss.ndict(ss.MFNet(), ss.MaternalNet())
         networks = ss.ndict([ss.MFNet(), ss.MaternalNet()])

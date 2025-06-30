@@ -32,7 +32,7 @@ class Sim(ss.Base):
         data (df): a dataframe (or dict) of data, with a column "time" plus data of the form "module.result", e.g. "hiv.new_infections" (used for plotting only)
         kwargs (dict): merged with pars; see ss.SimPars for all parameter values
 
-    **Examples**::
+    **Examples**:
 
         sim = ss.Sim(diseases='sir', networks='random') # Simplest Starsim sim; equivalent to ss.demo()
         sim = ss.Sim(diseases=ss.SIR(), networks=ss.RandomNet()) # Equivalent using objects instead of strings
@@ -503,7 +503,7 @@ class Sim(ss.Base):
         Returns:
             filename (str): the validated absolute path to the saved file
 
-        **Example**::
+        **Example**:
 
             sim.save() # Saves to a .sim file
         """
@@ -536,7 +536,7 @@ class Sim(ss.Base):
             A dictionary representation of the parameters and/or summary results
             (or write that dictionary to a file)
 
-        **Examples**::
+        **Examples**:
 
             json = sim.to_json()
             sim.to_json('results.json')
@@ -690,7 +690,7 @@ def demo(run=True, plot=True, summary=True, show=True, **kwargs):
         summary (bool): whether to print a summary of the results
         kwargs (dict): passed to ``ss.Sim()``
 
-    **Examples**::
+    **Examples**:
 
         ss.demo() # Run, plot, and show results
         ss.demo(diseases='hiv', networks='mf') # Run with different defaults
@@ -725,7 +725,7 @@ def diff_sims(sim1, sim2, skip_key_diffs=False, skip=None, full=False, output=Fa
         die (bool): whether to raise an exception if the sims don't match
         require_run (bool): require that the simulations have been run
 
-    **Example**::
+    **Example**:
 
         s1 = ss.Sim(rand_seed=1).run()
         s2 = ss.Sim(rand_seed=2).run()
@@ -879,7 +879,7 @@ def check_sims_match(*args, full=False):
         args (list): a list of 2 or more sims to compare
         full (bool): if True, return whether each sim matches the first
 
-    **Example**::
+    **Example**:
 
         s1 = ss.Sim(diseases='sir', networks='random')
         s2 = ss.Sim(pars=dict(diseases='sir', networks='random'))
