@@ -118,7 +118,6 @@ website:
           text: "**Code of Conduct**"
         - href: contributing.qmd
           text: "**Contributing**"
-          
     - id: api
       collapse-level: 2
       contents:
