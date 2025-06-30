@@ -440,6 +440,7 @@ class StaticNet(Network):
     The parameter "n" is supplied automatically to be equal to n_agents.
 
     **Examples**:
+
         # Generate a networkx graph and pass to Starsim
         import networkx as nx
         import starsim as ss
@@ -448,8 +449,6 @@ class StaticNet(Network):
 
         # Pass a networkx graph generator to Starsim
         ss.StaticNet(graph=nx.erdos_renyi_graph, p=0.0001, seed=True)
-
-        # Just create a default graph
     """
 
     def __init__(self, graph=None, pars=None, **kwargs):
